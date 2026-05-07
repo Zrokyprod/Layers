@@ -52,7 +52,7 @@ function SortTh({
       onClick={() => onSort(col)}
     >
       {label}
-      {active ? (order === "desc" ? " ↓" : " ↑") : " ↕"}
+      {active ? (order === "desc" ? " Î“Ã¥Ã´" : " Î“Ã¥Ã¦") : " Î“Ã¥Ã²"}
     </th>
   );
 }
@@ -260,15 +260,15 @@ function CallsPageContent() {
 
   return (
     <>
-      {/* ── Filter panel ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Filter panel Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       <section className="panel">
         <header className="panel-header">
           <div>
             <h3>Calls</h3>
             <p>
               {callsQuery.data
-                ? `${formatCount(total)} total · page ${page + 1} of ${totalPages}`
-                : "Loading…"}
+                ? `${formatCount(total)} total â”¬â•– page ${page + 1} of ${totalPages}`
+                : "LoadingÎ“Ã‡Âª"}
             </p>
           </div>
           <div className="actions">
@@ -287,7 +287,7 @@ function CallsPageContent() {
               disabled={exportingJson}
               title="Download current filter as JSON (up to 2,000 rows)"
             >
-              {exportingJson ? "Exporting…" : "Export JSON"}
+              {exportingJson ? "ExportingÎ“Ã‡Âª" : "Export JSON"}
             </button>
             <button type="button" className="btn btn-soft" onClick={() => void callsQuery.refetch()}>
               Refresh
@@ -361,11 +361,11 @@ function CallsPageContent() {
         ) : null}
       </section>
 
-      {/* ── Bulk action bar ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Bulk action bar Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       {selectedIds.size > 0 ? (
         <div className="bulk-bar">
           <span className="bulk-bar-count">
-            {selectedIds.size} selected · {selectedDiagnosisIds.length} linked diagnosis{selectedDiagnosisIds.length !== 1 ? "es" : ""}
+            {selectedIds.size} selected â”¬â•– {selectedDiagnosisIds.length} linked diagnosis{selectedDiagnosisIds.length !== 1 ? "es" : ""}
           </span>
           <button
             type="button"
@@ -373,7 +373,7 @@ function CallsPageContent() {
             onClick={() => void handleBulkResolve()}
             disabled={resolveDiagnosisMutation.isPending || selectedDiagnosisIds.length === 0}
           >
-            {resolveDiagnosisMutation.isPending ? "Resolving…" : "Resolve linked diagnoses"}
+            {resolveDiagnosisMutation.isPending ? "ResolvingÎ“Ã‡Âª" : "Resolve linked diagnoses"}
           </button>
           <button
             type="button"
@@ -409,7 +409,7 @@ function CallsPageContent() {
         </section>
       ) : null}
 
-      {/* ── Table ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Table Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       {!loading && rows.length > 0 ? (
         <section className="panel">
           <div className="table-wrap">
@@ -468,7 +468,7 @@ function CallsPageContent() {
             </table>
           </div>
 
-          {/* ── Pagination ── */}
+          {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Pagination Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
           <div className="pagination">
             <button
               type="button"
@@ -476,7 +476,7 @@ function CallsPageContent() {
               disabled={page === 0}
               onClick={() => { setPage(0); setSelectedIds(new Set()); }}
             >
-              «
+              â”¬Â½
             </button>
             <button
               type="button"
@@ -484,7 +484,7 @@ function CallsPageContent() {
               disabled={page === 0}
               onClick={() => { setPage((p) => p - 1); setSelectedIds(new Set()); }}
             >
-              ‹ Prev
+              Î“Ã‡â•£ Prev
             </button>
             <span className="pagination-info">
               Page {page + 1} / {totalPages}
@@ -495,7 +495,7 @@ function CallsPageContent() {
               disabled={page >= totalPages - 1}
               onClick={() => { setPage((p) => p + 1); setSelectedIds(new Set()); }}
             >
-              Next ›
+              Next Î“Ã‡â•‘
             </button>
             <button
               type="button"
@@ -503,7 +503,7 @@ function CallsPageContent() {
               disabled={page >= totalPages - 1}
               onClick={() => { setPage(totalPages - 1); setSelectedIds(new Set()); }}
             >
-              »
+              â”¬â•—
             </button>
           </div>
         </section>
@@ -534,41 +534,6 @@ function CallsPageContent() {
                 Open onboarding
               </Link>
             </div>
-          </div>
-        </section>
-      ) : null}
-    </>
-  );
-}
-
-export default function CallsPage() {
-  return (
-    <Suspense fallback={<section className="panel"><div className="loading" /></section>}>
-      <CallsPageContent />
-    </Suspense>
-  );
-}
-                    <td className="mono">{formatUsd(row.cost_usd)}</td>
-                    <td className="mono">{row.latency_ms ?? "-"}</td>
-                    <td>
-                      <StatusPill value={row.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      {!loading && rows.length === 0 ? (
-        <section className="panel">
-          <div className="empty mono">
-            <p>No calls found for current filters.</p>
-            <p>Quickstart:</p>
-            <p>pip install zroky-sdk</p>
-            <p>zroky init --project your-project-id</p>
-            <p>zroky run --agent your-agent.py</p>
           </div>
         </section>
       ) : null}

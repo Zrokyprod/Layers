@@ -1,236 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-
-type WebhookType = "slack" | "pagerduty" | "custom";
-type WebhookStatus = "unknown" | "testing" | "ok" | "failed";
-
-interface Webhook {
-  id: string;
-  name: string;
-  type: WebhookType;
-  url: string;
-  status?: WebhookStatus;
-  lastTestedAt?: string | null;
-}
-
-interface AlertRule {
-  id: string;
-  metric: "failure_rate" | "error_count" | "latency_p99";
-  operator: ">" | ">=" | "<" | "<=";
-  threshold: number;
-  window_hours: number;
-  enabled: boolean;
-}
-
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
-
-export default function SettingsGeneralPage() {
-  const [webhooks, setWebhooks] = useState<Webhook[]>(() => {
-    try {
-      const raw = localStorage.getItem("settings.webhooks");
-      return raw ? (JSON.parse(raw) as Webhook[]) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [rules, setRules] = useState<AlertRule[]>(() => {
-    try {
-      const raw = localStorage.getItem("settings.alertRules");
-      return raw ? (JSON.parse(raw) as AlertRule[]) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("settings.webhooks", JSON.stringify(webhooks));
-    } catch {}
-  }, [webhooks]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("settings.alertRules", JSON.stringify(rules));
-    } catch {}
-  }, [rules]);
-
-  function addWebhook() {
-    setWebhooks((s) => [...s, { id: uid(), name: "New webhook", type: "custom", url: "", status: "unknown", lastTestedAt: null }]);
-  }
-
-  function updateWebhook(id: string, patch: Partial<Webhook>) {
-    setWebhooks((s) => s.map((w) => (w.id === id ? { ...w, ...patch } : w)));
-  }
-
-  function removeWebhook(id: string) {
-    setWebhooks((s) => s.filter((w) => w.id !== id));
-  }
-
-  function testWebhook(id: string) {
-    updateWebhook(id, { status: "testing" });
-    // Simulate a lightweight test: succeed if url looks valid
-    const w = webhooks.find((x) => x.id === id);
-    const looksOk = w && typeof w.url === "string" && w.url.startsWith("http");
-    window.setTimeout(() => {
-      updateWebhook(id, {
-        status: looksOk ? "ok" : "failed",
-        lastTestedAt: new Date().toISOString(),
-      });
-    }, 700);
-  }
-
-  function addRule() {
-    setRules((s) => [
-      ...s,
-      { id: uid(), metric: "failure_rate", operator: ">", threshold: 5, window_hours: 60, enabled: true },
-    ]);
-  }
-
-  function updateRule(id: string, patch: Partial<AlertRule>) {
-    setRules((s) => s.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }
-
-  function removeRule(id: string) {
-    setRules((s) => s.filter((r) => r.id !== id));
-  }
-
-  function saveAll() {
-    try {
-      localStorage.setItem("settings.webhooks", JSON.stringify(webhooks));
-      localStorage.setItem("settings.alertRules", JSON.stringify(rules));
-      // lightweight user feedback
-      // eslint-disable-next-line no-alert
-      alert("Settings saved locally (persisted to browser storage).");
-    } catch (e) {
-      // eslint-disable-next-line no-alert
-      alert("Failed to save settings.");
-    }
-  }
-
-  return (
-    <section className="panel">
-      <header className="panel-header">
-        <div>
-          <h3>Settings — General</h3>
-          <p>Integrations, alert thresholds, and commonly-used settings grouped for clarity.</p>
-        </div>
-        <div>
-          <button className="btn btn-primary" type="button" onClick={saveAll}>Save</button>
-        </div>
-      </header>
-
-      <div className="panel-body" style={{ display: "grid", gridTemplateColumns: "1fr 420px", gap: 20 }}>
-        <div>
-          <section className="panel" style={{ marginBottom: 12 }}>
-            <header className="panel-header">
-              <div>
-                <h4>Integrations & Webhooks</h4>
-                <p>Add Slack, PagerDuty, or custom HTTP endpoints to receive alerts and notifications.</p>
-              </div>
-              <div>
-                <button className="btn btn-soft" onClick={addWebhook}>Add webhook</button>
-              </div>
-            </header>
-
-            <div style={{ padding: 12 }}>
-              {webhooks.length === 0 ? (
-                <div className="empty">No webhooks configured.</div>
-              ) : (
-                webhooks.map((w) => (
-                  <div key={w.id} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                    <select value={w.type} onChange={(e) => updateWebhook(w.id, { type: e.target.value as WebhookType })}>
-                      <option value="slack">Slack</option>
-                      <option value="pagerduty">PagerDuty</option>
-                      <option value="custom">Custom HTTP</option>
-                    </select>
-                    <input value={w.name} onChange={(e) => updateWebhook(w.id, { name: e.target.value })} placeholder="Name" />
-                    <input value={w.url} onChange={(e) => updateWebhook(w.id, { url: e.target.value })} placeholder="https://..." style={{ flex: 1 }} />
-                    <button className="btn btn-soft" onClick={() => testWebhook(w.id)}>Test</button>
-                    <button className="btn btn-danger" onClick={() => removeWebhook(w.id)}>Remove</button>
-                    <div style={{ minWidth: 88, textAlign: "right", fontSize: 12 }}>
-                      <div>{w.status ?? "unknown"}</div>
-                      <div className="mono" style={{ fontSize: 11 }}>{w.lastTestedAt ? new Date(w.lastTestedAt).toLocaleString() : ""}</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="panel">
-            <header className="panel-header">
-              <div>
-                <h4>Alert Rule Thresholds</h4>
-                <p>Create simple alert rules such as "Alert me when failure rate &gt; 5% in last 60 minutes".</p>
-              </div>
-              <div>
-                <button className="btn btn-soft" onClick={addRule}>Add rule</button>
-              </div>
-            </header>
-
-            <div style={{ padding: 12 }}>
-              {rules.length === 0 ? (
-                <div className="empty">No alert rules configured.</div>
-              ) : (
-                rules.map((r) => (
-                  <div key={r.id} style={{ display: "grid", gridTemplateColumns: "160px 60px 1fr 90px 80px", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                    <select value={r.metric} onChange={(e) => updateRule(r.id, { metric: e.target.value as AlertRule["metric"] })}>
-                      <option value="failure_rate">Failure rate (%)</option>
-                      <option value="error_count">Error count</option>
-                      <option value="latency_p99">Latency (P99 ms)</option>
-                    </select>
-                    <select value={r.operator} onChange={(e) => updateRule(r.id, { operator: e.target.value as AlertRule["operator"] })}>
-                      <option value=">">&gt;</option>
-                      <option value=">=">&gt;=</option>
-                      <option value="<">&lt;</option>
-                      <option value="<=">&lt;=</option>
-                    </select>
-                    <input type="number" value={r.threshold} onChange={(e) => updateRule(r.id, { threshold: Number(e.target.value) })} />
-                    <input type="number" min={1} value={r.window_hours} onChange={(e) => updateRule(r.id, { window_hours: Number(e.target.value) })} />
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="checkbox" checked={r.enabled} onChange={(e) => updateRule(r.id, { enabled: e.target.checked })} /> Enabled</label>
-                      <button className="btn btn-soft" onClick={() => removeRule(r.id)}>Remove</button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-
-        <aside>
-          <section className="panel" style={{ marginBottom: 12 }}>
-            <header className="panel-header"><div><h4>Quick Links</h4><p>Organize settings into focused pages.</p></div></header>
-            <div style={{ padding: 12 }}>
-              <ul>
-                <li><Link href="/settings/profile">Profile & Security</Link></li>
-                <li><Link href="/settings/retention">PII & Retention</Link></li>
-                <li><Link href="/settings/github">GitHub</Link></li>
-                <li><Link href="/settings/notifications">Notifications</Link></li>
-                <li><Link href="/settings/pricing">Pricing</Link></li>
-                <li><Link href="/settings/rollback">Rollback</Link></li>
-              </ul>
-            </div>
-          </section>
-
-          <section className="panel">
-            <header className="panel-header"><div><h4>Storage</h4><p>Current settings are stored locally in your browser for now.</p></div></header>
-            <div style={{ padding: 12 }}>
-              <p className="hint">To persist these settings across devices, we can add backend endpoints to save and load organization-level configuration.</p>
-            </div>
-          </section>
-        </aside>
-      </div>
-    </section>
-  );
-}
-"use client";
-
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -801,7 +570,7 @@ export default function SettingsPage() {
                           <div className="list-main">
                             <strong>{key.name}</strong>
                             <span className="mono">
-                              {key.key_prefix} · {formatDateTime(key.created_at)}
+                              {key.key_prefix} ┬╖ {formatDateTime(key.created_at)}
                             </span>
                           </div>
                           <div className="actions">
@@ -924,7 +693,7 @@ export default function SettingsPage() {
               {detectorResult ? (
                 <div className="settings-inset">
                   <p className="hint">
-                    Valid: {String(detectorResult.valid)} · Matches: {detectorResult.match_count}
+                    Valid: {String(detectorResult.valid)} ┬╖ Matches: {detectorResult.match_count}
                   </p>
                   {detectorResult.error ? <p className="hint">Error: {detectorResult.error}</p> : null}
                 </div>
@@ -990,7 +759,7 @@ export default function SettingsPage() {
                       <div className="list-main">
                         <strong>Last Erasure Summary</strong>
                         <span>
-                          {eraseSummary.dry_run ? "Dry Run" : "Applied"} · total deleted: {eraseSummary.total_deleted}
+                          {eraseSummary.dry_run ? "Dry Run" : "Applied"} ┬╖ total deleted: {eraseSummary.total_deleted}
                         </span>
                       </div>
                     </div>
@@ -1220,7 +989,7 @@ export default function SettingsPage() {
                 {rollbackVerificationResult ? (
                   <div className="settings-inset">
                     <p className="hint">
-                      Last verification: {rollbackVerificationResult.phase} · {rollbackVerificationResult.passed ? "passed" : "failed"} · {formatDateTime(rollbackVerificationResult.verified_at)}
+                      Last verification: {rollbackVerificationResult.phase} ┬╖ {rollbackVerificationResult.passed ? "passed" : "failed"} ┬╖ {formatDateTime(rollbackVerificationResult.verified_at)}
                     </p>
                     <div className="list">
                       {rollbackVerificationResult.checks.map((check) => (
@@ -1353,7 +1122,7 @@ export default function SettingsPage() {
                     <div className="list-main">
                       <strong>{provider.provider}</strong>
                       <span>
-                        tracked calls: {provider.tracked_call_count} · checked: {formatDateTime(provider.last_checked_at)}
+                        tracked calls: {provider.tracked_call_count} ┬╖ checked: {formatDateTime(provider.last_checked_at)}
                       </span>
                     </div>
                     <div className="actions">

@@ -1,4 +1,4 @@
-﻿/* Tailwind v4 — import utilities only (no base/preflight reset)
+/* Tailwind v4 — import utilities only (no base/preflight reset)
    to preserve the existing custom design-system classes below. */
 @import "tailwindcss/utilities";
 
@@ -2512,11 +2512,6 @@ tr:hover td {
   color: var(--color-primary, #2563eb);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-
-  display: grid;
-  gap: var(--space-3);
 }
 
 /* Fixes page top-level layout container */

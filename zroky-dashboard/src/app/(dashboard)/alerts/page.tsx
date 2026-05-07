@@ -42,7 +42,7 @@ function EvidenceDisplay({ evidence }: { evidence: AlertItemResponse["evidence"]
             {typeof v === "object" && v !== null ? (
               <pre className="struct-pre">{JSON.stringify(v, null, 2)}</pre>
             ) : (
-              String(v ?? "—")
+              String(v ?? "Î“Ã‡Ã¶")
             )}
           </dd>
         </div>
@@ -124,7 +124,7 @@ export default function AlertsPage() {
 
   return (
     <>
-      {/* ── KPI strip ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ KPI strip Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       <div className="kpi-grid alert-kpi-grid">
         <article className="kpi-card">
           <span className="kpi-label">Total</span>
@@ -148,7 +148,7 @@ export default function AlertsPage() {
         </article>
       </div>
 
-      {/* ── Filters ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Filters Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -204,7 +204,7 @@ export default function AlertsPage() {
 
       {error ? <section className="panel"><p>{error}</p></section> : null}
 
-      {/* ── Alert list ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Alert list Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -245,7 +245,7 @@ export default function AlertsPage() {
         )}
       </section>
 
-      {/* ── Detail drawer ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Detail drawer Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       {selectedAlert && (
         <>
           <button type="button" className="alert-drawer-backdrop" aria-label="Close alert drawer" onClick={() => setSelectedAlertId(null)} />
@@ -254,9 +254,9 @@ export default function AlertsPage() {
             <header className="alert-drawer-header">
               <div>
                 <h3>{selectedAlert.title}</h3>
-                <p>{selectedAlert.category} · {selectedAlert.source}</p>
+                <p>{selectedAlert.category} â”¬â•– {selectedAlert.source}</p>
               </div>
-              <button type="button" className="ai-close-btn" onClick={() => setSelectedAlertId(null)}>✕</button>
+              <button type="button" className="ai-close-btn" onClick={() => setSelectedAlertId(null)}>Î“Â£Ã²</button>
             </header>
 
             <div className="alert-drawer-content">
@@ -287,7 +287,7 @@ export default function AlertsPage() {
                 )}
                 <div className="struct-row">
                   <dt className="struct-key">Diagnosis ID</dt>
-                  <dd className="struct-val mono">{selectedAlert.diagnosis_id || "—"}</dd>
+                  <dd className="struct-val mono">{selectedAlert.diagnosis_id || "Î“Ã‡Ã¶"}</dd>
                 </div>
               </dl>
 
@@ -295,7 +295,7 @@ export default function AlertsPage() {
               {selectedAlert.diagnosis_id && (
                 <div className="alert-drawer-links">
                   <Link href={`/calls/${selectedAlert.diagnosis_id}`} className="btn btn-primary btn-sm" onClick={() => setSelectedAlertId(null)}>
-                    Open Call →
+                    Open Call Î“Ã¥Ã†
                   </Link>
                   <Link href={`/calls/${selectedAlert.diagnosis_id}#fix-guidance`} className="btn btn-soft btn-sm" onClick={() => setSelectedAlertId(null)}>
                     Fix Guidance
@@ -317,7 +317,7 @@ export default function AlertsPage() {
                   disabled={isMutating || selectedAlert.status === "ACKNOWLEDGED"}
                   onClick={() => applyAction("ack", selectedAlert.alert_id)}
                 >
-                  {ackMutation.isPending ? "Saving…" : "Acknowledge"}
+                  {ackMutation.isPending ? "SavingÎ“Ã‡Âª" : "Acknowledge"}
                 </button>
                 <button
                   className="btn btn-primary"
@@ -325,7 +325,7 @@ export default function AlertsPage() {
                   disabled={isMutating || selectedAlert.status === "RESOLVED"}
                   onClick={() => applyAction("resolve", selectedAlert.alert_id)}
                 >
-                  {resolveMutation.isPending ? "Saving…" : "Resolve"}
+                  {resolveMutation.isPending ? "SavingÎ“Ã‡Âª" : "Resolve"}
                 </button>
                 <button
                   className="btn btn-danger"
@@ -333,7 +333,7 @@ export default function AlertsPage() {
                   disabled={isMutating || selectedAlert.status === "OPEN"}
                   onClick={() => applyAction("reopen", selectedAlert.alert_id)}
                 >
-                  {reopenMutation.isPending ? "Saving…" : "Re-open"}
+                  {reopenMutation.isPending ? "SavingÎ“Ã‡Âª" : "Re-open"}
                 </button>
               </div>
             </div>
@@ -341,7 +341,7 @@ export default function AlertsPage() {
         </>
       )}
 
-      {/* ── Channel tests ── */}
+      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Channel tests Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -360,190 +360,9 @@ export default function AlertsPage() {
 
         {channelResult && (
           <p className={`alert-channel-result${channelResult.ok ? " ok" : " err"}`}>
-            {channelResult.ok ? "✓" : "✕"} {channelResult.text}
+            {channelResult.ok ? "Î“Â£Ã´" : "Î“Â£Ã²"} {channelResult.text}
           </p>
         )}
-      </section>
-    </>
-  );
-}
-
-          <div className="field">
-            <label htmlFor="categoryFilter">Category</label>
-            <input
-              id="categoryFilter"
-              value={filters.category}
-              onChange={(event) => setFilters((prev) => ({ ...prev, category: event.target.value }))}
-              placeholder="TOKEN_OVERFLOW"
-            />
-          </div>
-
-          <div className="actions" style={{ alignItems: "end" }}>
-            <button
-              type="button"
-              className="btn btn-soft"
-              onClick={() => {
-                setFilters({ status: "", severity: "", category: "" });
-              }}
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {error ? <section className="panel"><p>{error}</p></section> : null}
-
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Alert List</h3>
-            <p>{(alertsQuery.data?.items ?? []).length} items</p>
-          </div>
-        </header>
-
-        {loading ? (
-          <div className="loading" />
-        ) : (alertsQuery.data?.items ?? []).length === 0 ? (
-          <div className="empty">No alerts matched current filters.</div>
-        ) : (
-          <div className="list">
-            {(alertsQuery.data?.items ?? []).map((alert) => (
-              <button
-                type="button"
-                key={alert.alert_id}
-                className="list-row"
-                onClick={() => void openDetail(alert.alert_id)}
-                style={{ cursor: "pointer", textAlign: "left", border: "1px solid var(--line-soft)" }}
-              >
-                <div className="list-main">
-                  <strong>{alert.title}</strong>
-                  <span>
-                    {alert.category} · {formatDateTime(alert.created_at)}
-                  </span>
-                </div>
-                <div className="actions">
-                  <StatusPill value={alert.severity} />
-                  <StatusPill value={alert.status} />
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {selectedAlert ? (
-        <>
-          <button
-            type="button"
-            className="alert-drawer-backdrop"
-            aria-label="Close alert drawer"
-            onClick={closeDrawer}
-          />
-
-          <aside className="alert-drawer" role="dialog" aria-modal="true" aria-label="Alert detail drawer">
-            <header className="alert-drawer-header">
-              <div>
-                <h3>Alert Detail Drawer</h3>
-                <p>Evidence, lifecycle actions, and linked resources.</p>
-              </div>
-              <button type="button" className="btn btn-soft" onClick={closeDrawer}>
-                Close
-              </button>
-            </header>
-
-            <div className="alert-drawer-content">
-              <div className="list">
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>{selectedAlert.title}</strong>
-                    <span>{selectedAlert.category}</span>
-                  </div>
-                  <StatusPill value={selectedAlert.status} />
-                </div>
-
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Severity</strong>
-                  </div>
-                  <StatusPill value={selectedAlert.severity} />
-                </div>
-
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Created</strong>
-                  </div>
-                  <span className="mono">{formatDateTime(selectedAlert.created_at)}</span>
-                </div>
-
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Updated</strong>
-                  </div>
-                  <span className="mono">{formatDateTime(selectedAlert.updated_at)}</span>
-                </div>
-
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Linked Diagnosis</strong>
-                    <span className="mono">{selectedAlert.diagnosis_id}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="actions">
-                <Link href={`/calls/${selectedAlert.diagnosis_id}`} className="btn btn-primary" onClick={closeDrawer}>
-                  Open Call
-                </Link>
-                <Link href={`/calls/${selectedAlert.diagnosis_id}#failure-summary`} className="btn btn-soft" onClick={closeDrawer}>
-                  Open Diagnosis
-                </Link>
-              </div>
-
-              <section className="alert-evidence-block">
-                <h4>Evidence</h4>
-                {selectedAlert.evidence && Object.keys(selectedAlert.evidence).length > 0 ? (
-                  <pre className="panel" style={{ padding: 12, borderRadius: 12, overflowX: "auto" }}>
-                    {JSON.stringify(selectedAlert.evidence, null, 2)}
-                  </pre>
-                ) : (
-                  <div className="empty">No evidence payload attached to this alert.</div>
-                )}
-              </section>
-
-              <div className="actions">
-                <button className="btn btn-soft" type="button" onClick={() => void applyAction("ack", selectedAlert.alert_id)}>
-                  Acknowledge
-                </button>
-                <button className="btn btn-primary" type="button" onClick={() => void applyAction("resolve", selectedAlert.alert_id)}>
-                  Resolve
-                </button>
-                <button className="btn btn-danger" type="button" onClick={() => void applyAction("reopen", selectedAlert.alert_id)}>
-                  Re-open
-                </button>
-              </div>
-            </div>
-          </aside>
-        </>
-      ) : null}
-
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Channel Tests</h3>
-            <p>Validate email, slack, browser, and terminal routing.</p>
-          </div>
-        </header>
-
-        <div className="actions">
-          {channelOptions.map((channel) => (
-            <button key={channel} type="button" className="btn btn-soft" onClick={() => void runChannelTest(channel)}>
-              Test {safeString(channel)}
-            </button>
-          ))}
-        </div>
-
-        {channelResult ? <p className="hint">{channelResult}</p> : null}
       </section>
     </>
   );
