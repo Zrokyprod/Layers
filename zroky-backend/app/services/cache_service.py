@@ -211,7 +211,7 @@ class CacheService:
         """Batch fetch raw string values."""
         namespaced = [self._key(k) for k in keys]
         try:
-            results = self._backend.get if not hasattr(self._backend, "mget") else self._backend.mget
+            _results = self._backend.get if not hasattr(self._backend, "mget") else self._backend.mget
             if hasattr(self._backend, "_client"):
                 raw = self._backend._client.mget(namespaced)
                 return [v if isinstance(v, str) else None for v in raw]

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -10,8 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.authorization import require_project_role
-from app.api.dependencies.tenant import require_tenant_context, TenantContext
-from app.db.models import Call, Project, SubscriptionPlan, TenantSubscription
+from app.db.models import Call, SubscriptionPlan, TenantSubscription
 from app.db.session import get_db_session
 from app.schemas.billing import (
     BillingUsageSummaryResponse,

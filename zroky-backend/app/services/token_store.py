@@ -7,7 +7,6 @@ Used for short-lived tokens that must survive a single process restart:
 In tests (TESTING=true) or when Redis is unreachable, falls back to an
 in-process dict so the test suite never needs a live Redis server.
 """
-import os
 import time
 from typing import Optional
 

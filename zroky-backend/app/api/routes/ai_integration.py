@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.tenant import require_tenant_id, require_tenant_role
+from app.api.dependencies.tenant import require_tenant_id
 from app.db.session import get_db_session
 from app.services.embedding_service import get_embedding_service
 from app.services.nl_analytics import get_nl_analytics_service

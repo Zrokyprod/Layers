@@ -1576,7 +1576,7 @@ def _auth_failure_diff_from_snippet(snippet: str, *, status_code: int) -> str:
     if line and "=" in line:
         return _before_after_diff(
             before=line,
-            after=f"api_key = <existing_credential_manager>.get_valid_key()  # Rotatable, validated",
+            after="api_key = <existing_credential_manager>.get_valid_key()  # Rotatable, validated",
         )
     return _before_after_diff(
         before="# Original authentication code",
@@ -1594,7 +1594,7 @@ def _cost_spike_diff_from_snippet(snippet: str) -> str:
     if line and "=" in line:
         return _before_after_diff(
             before=line,
-            after=f"# Add cost tracking and model selection based on cost\nresponse = <existing_cost_aware_client>.request_with_budget(",
+            after="# Add cost tracking and model selection based on cost\nresponse = <existing_cost_aware_client>.request_with_budget(",
         )
     return _before_after_diff(
         before="# Original model request",

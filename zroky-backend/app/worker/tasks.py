@@ -1513,7 +1513,6 @@ def notify_fix_watch_recurrences() -> dict:
     session = SessionLocal()
     notified = 0
     errors = 0
-    settings = get_settings()
 
     try:
         now = datetime.now(timezone.utc)

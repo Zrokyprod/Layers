@@ -5,7 +5,6 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -20,7 +19,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from sqlalchemy import event
-from sqlalchemy.orm import Mapper
 
 from app.db.base import Base
 from app.db.encrypted_types import EncryptedSearchableString

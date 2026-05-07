@@ -51,7 +51,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
 
 CORRELATION_ID_HEADER = "X-Correlation-Id"
 

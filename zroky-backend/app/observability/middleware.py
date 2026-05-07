@@ -8,7 +8,6 @@ from fastapi import FastAPI, Request, Response
 
 from app.core.config import get_settings
 from app.observability.context import (
-    get_correlation_id,
     reset_request_context,
     set_request_context,
 )

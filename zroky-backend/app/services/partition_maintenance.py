@@ -12,7 +12,7 @@ PostgreSQL only — silently no-ops on other dialects (SQLite tests).
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session

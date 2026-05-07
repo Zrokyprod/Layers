@@ -1,6 +1,4 @@
 import json
-import os
-import requests
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError

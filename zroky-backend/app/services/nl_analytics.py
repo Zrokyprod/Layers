@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -391,7 +390,7 @@ Be concise but informative. Highlight key insights."""
                 "data": results,
             }
 
-        except Exception as e:
+        except Exception:
             # Fallback to simple response
             result_type = results.get("type", "unknown")
 

@@ -1110,10 +1110,10 @@ def _loop_false_positive_guard(payload: Mapping[str, Any], now: datetime) -> str
     if _as_bool(_pick(payload, ("loop", "idempotent_retry"), ("idempotent_retry",)), fallback=False):
         return "idempotent_retry"
 
-    retry_attempts = _as_int(
+    _retry_attempts = _as_int(
         _pick(payload, ("retry", "sdk_attempts"), ("sdk_retry_attempts",), ("retry_attempt",)),
     )
-    backoff_attempts = _as_int(
+    _backoff_attempts = _as_int(
         _pick(payload, ("retry", "backoff_attempts"), ("backoff_attempts",)),
     )
     known_sdk_retry = _as_bool(

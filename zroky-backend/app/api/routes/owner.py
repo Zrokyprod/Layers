@@ -22,7 +22,7 @@ from app.api.dependencies.provisioning import require_provisioning_access
 from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import (
-    ApiKey, AuditLog, Call, FeatureFlag, Notification,
+    AuditLog, Call, Notification,
     PlatformLlmUsage, Project, ProjectMembership,
     SubscriptionPlan, SupportMessage, SupportTicket,
     TenantSubscription, User,
@@ -196,14 +196,12 @@ def owner_health(
 
     # Maintenance mode
     maintenance = False
-    maintenance_msg = None
     if redis_ok:
         try:
             raw = get_redis_client().get(_MAINTENANCE_KEY)
             if raw:
                 data = json.loads(raw)
                 maintenance = bool(data.get("enabled", False))
-                maintenance_msg = data.get("message")
         except Exception:
             pass
 

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.authorization import require_project_role
 from app.api.dependencies.tenant import require_tenant_context, TenantContext
 from app.core.limiter import limiter
-from app.db.models import Project, ProjectInvitation, ProjectMembership, User
+from app.db.models import Project, ProjectInvitation, User
 from app.db.session import get_db_session
 from app.schemas.invitation import (
     AcceptInvitationRequest,
