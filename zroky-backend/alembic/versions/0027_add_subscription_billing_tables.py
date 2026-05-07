@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "0027"
-down_revision = "0026"
+down_revision = "0026_add_invitations_notifications_platform_llm"
 branch_labels = None
 depends_on = None
 
