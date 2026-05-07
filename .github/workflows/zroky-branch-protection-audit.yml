@@ -21,6 +21,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: zroky-branch-protection-audit-${{ github.ref }}
   cancel-in-progress: false
