@@ -1,0 +1,143 @@
+name: Zroky SDK Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repository:
+        description: "Publish destination"
+        required: true
+        default: "testpypi"
+        type: choice
+        options:
+          - testpypi
+          - pypi
+      expected_version:
+        description: "Optional version check (example: 0.1.0)"
+        required: false
+        type: string
+  push:
+    tags:
+      - "zroky-sdk-v*"
+
+concurrency:
+  group: zroky-sdk-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zroky-sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SDK dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install build twine
+
+      - name: Run SDK test suite
+        run: python -m pytest -q
+
+      - name: Verify version constraints for dispatch or tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_VERSION_INPUT: ${{ github.event.inputs.expected_version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import tomllib
+
+          with open("pyproject.toml", "rb") as fh:
+              version = tomllib.load(fh)["project"]["version"]
+
+          expected_input = (os.getenv("EXPECTED_VERSION_INPUT") or "").strip()
+          if expected_input and expected_input != version:
+              print(
+                  f"Version mismatch: expected_version={expected_input!r}, pyproject={version!r}",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+
+          event_name = os.getenv("EVENT_NAME") or ""
+          ref_name = os.getenv("REF_NAME") or ""
+          if event_name == "push" and ref_name.startswith("zroky-sdk-v"):
+              tag_version = ref_name[len("zroky-sdk-v"):]
+              if tag_version != version:
+                  print(
+                      f"Tag version mismatch: tag={tag_version!r}, pyproject={version!r}",
+                      file=sys.stderr,
+                  )
+                  raise SystemExit(1)
+
+          print(f"Version checks passed for {version}")
+          PY
+
+      - name: Build distribution artifacts
+        run: python -m build
+
+      - name: Twine metadata check
+        run: python -m twine check dist/*
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zroky-sdk-dist
+          path: zroky-sdk/dist/*
+
+  publish-testpypi:
+    runs-on: ubuntu-latest
+    needs: build-and-verify
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target_repository == 'testpypi'
+    permissions:
+      contents: read
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zroky-sdk-dist
+          path: dist
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages-dir: dist
+
+  publish-pypi:
+    runs-on: ubuntu-latest
+    needs: build-and-verify
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_repository == 'pypi') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/zroky-sdk-v'))
+    permissions:
+      contents: read
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zroky-sdk-dist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist

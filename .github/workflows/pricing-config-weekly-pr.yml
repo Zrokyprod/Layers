@@ -1,0 +1,53 @@
+name: Weekly Pricing Config Refresh
+
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh-pricing-config:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Refresh pricing config
+        env:
+          OPENAI_PRICING_SNAPSHOT_URL: ${{ secrets.OPENAI_PRICING_SNAPSHOT_URL }}
+          ANTHROPIC_PRICING_SNAPSHOT_URL: ${{ secrets.ANTHROPIC_PRICING_SNAPSHOT_URL }}
+          GOOGLE_PRICING_SNAPSHOT_URL: ${{ secrets.GOOGLE_PRICING_SNAPSHOT_URL }}
+        run: |
+          python scripts/refresh_pricing_config.py --config pricing_config.json
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(pricing): refresh pricing_config"
+          branch: "chore/pricing-config-refresh"
+          delete-branch: true
+          title: "chore(pricing): weekly pricing config refresh"
+          body: |
+            Automated weekly pricing refresh.
+
+            What this PR does:
+            - Runs scripts/refresh_pricing_config.py
+            - Updates pricing_config.json if provider snapshots changed
+
+            Review checklist:
+            - Verify provider rates are correct
+            - Confirm effective_from/retrieved_at metadata
+            - Merge only after human validation
+          labels: |
+            chore
+            pricing

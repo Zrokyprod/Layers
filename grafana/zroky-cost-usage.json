@@ -1,0 +1,83 @@
+{
+  "dashboard": {
+    "title": "ZROKY Cost & Usage",
+    "tags": ["zroky", "cost", "usage"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate by Path",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by (path) (rate(zroky_http_requests_total[1m]))",
+            "legendFormat": "{{path}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Request Latency Heatmap",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "rate(zroky_http_request_duration_seconds_bucket[1m])",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 3,
+        "title": "Diagnosis Jobs by Status",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_diagnosis_jobs_total[1m])",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "Retention Rows Processed",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_retention_rows_total[1m])",
+            "legendFormat": "{{table}} {{mode}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 }
+      },
+      {
+        "id": 5,
+        "title": "Exchange Rate Events",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(zroky_exchange_rate_events_total[1m])",
+            "legendFormat": "{{source}} {{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }
+      },
+      {
+        "id": 6,
+        "title": "Retention Runs by Status",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_retention_runs_total[1m])",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }
+      }
+    ],
+    "time": { "from": "now-7d", "to": "now" },
+    "refresh": "1m"
+  }
+}

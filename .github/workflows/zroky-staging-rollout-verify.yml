@@ -1,0 +1,133 @@
+name: Zroky Staging Rollout Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Staging backend base URL
+        required: true
+        default: https://api-staging.example.com
+      project_id:
+        description: Project id used by rollback verification
+        required: true
+      phase:
+        description: Which verification phase to execute
+        required: true
+        type: choice
+        default: deploy
+        options:
+          - deploy
+          - rollback
+          - both
+      deploy_revision:
+        description: Deploy revision id (required for deploy/both)
+        required: false
+        default: ""
+      rollback_revision:
+        description: Rollback revision id (required for rollback/both)
+        required: false
+        default: ""
+      allow_skipped_ready_checks:
+        description: Allow readiness checks to be skipped during smoke check
+        required: true
+        type: boolean
+        default: false
+      timeout_seconds:
+        description: HTTP timeout used by smoke and rollback verification scripts
+        required: true
+        default: "20"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zroky-staging-rollout-verify-${{ github.ref }}-${{ github.event.inputs.phase }}
+  cancel-in-progress: false
+
+jobs:
+  verify-rollout:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zroky-backend
+    env:
+      PYTHONPATH: .
+      BASE_URL: ${{ github.event.inputs.base_url }}
+      PROJECT_ID: ${{ github.event.inputs.project_id }}
+      PHASE: ${{ github.event.inputs.phase }}
+      DEPLOY_REVISION: ${{ github.event.inputs.deploy_revision }}
+      ROLLBACK_REVISION: ${{ github.event.inputs.rollback_revision }}
+      TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds }}
+      ALLOW_SKIPPED_READY_CHECKS: ${{ github.event.inputs.allow_skipped_ready_checks }}
+      STAGING_ADMIN_JWT: ${{ secrets.ZROKY_STAGING_ADMIN_JWT }}
+      STAGING_PROVISIONING_TOKEN: ${{ secrets.ZROKY_STAGING_PROVISIONING_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate required inputs and secrets
+        run: |
+          if [ -z "${STAGING_ADMIN_JWT}" ]; then
+            echo "::error::Missing secret ZROKY_STAGING_ADMIN_JWT"
+            exit 1
+          fi
+
+          if [ -z "${STAGING_PROVISIONING_TOKEN}" ]; then
+            echo "::error::Missing secret ZROKY_STAGING_PROVISIONING_TOKEN"
+            exit 1
+          fi
+
+          if [ "${PHASE}" = "deploy" ] || [ "${PHASE}" = "both" ]; then
+            if [ -z "${DEPLOY_REVISION}" ]; then
+              echo "::error::deploy_revision is required for deploy/both phase"
+              exit 1
+            fi
+          fi
+
+          if [ "${PHASE}" = "rollback" ] || [ "${PHASE}" = "both" ]; then
+            if [ -z "${ROLLBACK_REVISION}" ]; then
+              echo "::error::rollback_revision is required for rollback/both phase"
+              exit 1
+            fi
+          fi
+
+      - name: Run staging smoke checks
+        run: |
+          EXTRA_ARGS=""
+          if [ "${ALLOW_SKIPPED_READY_CHECKS}" = "true" ]; then
+            EXTRA_ARGS="--allow-skipped-ready-checks"
+          fi
+
+          python scripts/railway_smoke_check.py \
+            --base-url "${BASE_URL}" \
+            --provisioning-token "${STAGING_PROVISIONING_TOKEN}" \
+            --timeout-seconds "${TIMEOUT_SECONDS}" \
+            ${EXTRA_ARGS}
+
+      - name: Verify deploy phase
+        if: ${{ github.event.inputs.phase == 'deploy' || github.event.inputs.phase == 'both' }}
+        run: |
+          python scripts/rollback_drill_verify.py \
+            --base-url "${BASE_URL}" \
+            --project-id "${PROJECT_ID}" \
+            --phase deploy \
+            --deploy-revision "${DEPLOY_REVISION}" \
+            --access-token "${STAGING_ADMIN_JWT}" \
+            --timeout-seconds "${TIMEOUT_SECONDS}"
+
+      - name: Verify rollback phase
+        if: ${{ github.event.inputs.phase == 'rollback' || github.event.inputs.phase == 'both' }}
+        run: |
+          python scripts/rollback_drill_verify.py \
+            --base-url "${BASE_URL}" \
+            --project-id "${PROJECT_ID}" \
+            --phase rollback \
+            --rollback-revision "${ROLLBACK_REVISION}" \
+            --access-token "${STAGING_ADMIN_JWT}" \
+            --timeout-seconds "${TIMEOUT_SECONDS}"

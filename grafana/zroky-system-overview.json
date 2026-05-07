@@ -1,0 +1,93 @@
+{
+  "dashboard": {
+    "title": "ZROKY System Overview",
+    "tags": ["zroky", "infrastructure", "health"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_http_requests_total[1m])",
+            "legendFormat": "{{method}} {{path}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Ingest Latency p95",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(zroky_http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{method}} {{path}} p95"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Diagnosis Jobs by Status",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_diagnosis_jobs_total[1m])",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "Diagnosis Rule Hits",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_diagnosis_rule_hits_total[1m])",
+            "legendFormat": "{{category}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      },
+      {
+        "id": 5,
+        "title": "Error Rate by Status Code",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_http_requests_total{status_code!~\"2..\"}[1m])",
+            "legendFormat": "{{status_code}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+      },
+      {
+        "id": 6,
+        "title": "Retention Runs",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "sum(rate(zroky_retention_runs_total[1m]))"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 }
+      },
+      {
+        "id": 7,
+        "title": "Exchange Rate Events",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "sum(rate(zroky_exchange_rate_events_total[1m]))"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 16 }
+      }
+    ],
+    "time": { "from": "now-1h", "to": "now" },
+    "refresh": "30s"
+  }
+}

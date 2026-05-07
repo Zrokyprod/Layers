@@ -1,0 +1,54 @@
+name: API Contract Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'zroky-backend/app/**'
+      - 'zroky-backend/app/api/**'
+      - 'zroky-backend/app/schemas/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'zroky-backend/app/**'
+      - 'zroky-backend/app/api/**'
+      - 'zroky-backend/app/schemas/**'
+
+jobs:
+  generate-and-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zroky-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Generate OpenAPI contract
+        env:
+          APP_ENV: development
+          DATABASE_URL: sqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/0
+          AUTH_JWT_SECRET: ci-test-secret
+          GITHUB_TOKEN_ENCRYPTION_KEY: ci-test-key
+          OPENAI_API_KEY: ci-test-key
+          PII_ENCRYPTION_KEY: ci-test-key
+        run: |
+          python scripts/export_openapi.py
+
+      - name: Check for drift
+        run: |
+          if ! diff -q api-contracts/zroky-api-v1.openapi.json <(cat ../api-contracts/zroky-api-v1.openapi.json 2>/dev/null || echo "MISSING"); then
+            echo "::error::API contract drift detected. Run 'python scripts/export_openapi.py' locally and commit the updated spec."
+            exit 1
+          fi
+        working-directory: .

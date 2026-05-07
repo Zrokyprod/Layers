@@ -1,0 +1,182 @@
+name: Zroky Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "zroky-backend/**"
+      - ".github/workflows/zroky-backend-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "zroky-backend/**"
+      - ".github/workflows/zroky-backend-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: zroky-backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-type:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+    defaults:
+      run:
+        working-directory: zroky-backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run lint
+        run: ruff check app tests alembic scripts
+
+      - name: Run type checks
+        run: mypy --config-file mypy.ini
+
+  sqlite-fast:
+    runs-on: ubuntu-latest
+    needs: lint-type
+    env:
+      PYTHONPATH: .
+    defaults:
+      run:
+        working-directory: zroky-backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run fast tests (SQLite)
+        run: pytest -q -m "not postgres_rls"
+
+      - name: Verify migrations (SQLite)
+        run: alembic upgrade head
+
+  postgres-security:
+    runs-on: ubuntu-latest
+    needs:
+      - lint-type
+      - sqlite-fast
+    env:
+      PYTHONPATH: .
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/zroky_test
+      REDIS_URL: redis://localhost:6379/0
+      RUN_POSTGRES_RLS_TESTS: "1"
+      APP_ENV: development
+    defaults:
+      run:
+        working-directory: zroky-backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: zroky_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d zroky_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Apply migrations (PostgreSQL)
+        run: alembic upgrade head
+
+      - name: Run Postgres security tests
+        run: pytest -q -m postgres_rls tests/test_postgres_rls.py
+
+  security-audit-optional:
+    runs-on: ubuntu-latest
+    needs:
+      - lint-type
+      - sqlite-fast
+    continue-on-error: true
+    env:
+      PYTHONPATH: .
+    defaults:
+      run:
+        working-directory: zroky-backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and security tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit pip-audit
+
+      - name: Run optional security scans
+        id: security_scans
+        run: |
+          mkdir -p .artifacts
+          set +e
+          bandit -q -r app -f txt -o .artifacts/bandit.txt
+          BANDIT_EXIT=$?
+          pip-audit --progress-spinner off --format columns > .artifacts/pip-audit.txt
+          PIP_AUDIT_EXIT=$?
+          set -e
+
+          echo "bandit_exit=${BANDIT_EXIT}" >> $GITHUB_OUTPUT
+          echo "pip_audit_exit=${PIP_AUDIT_EXIT}" >> $GITHUB_OUTPUT
+
+          if [ "${BANDIT_EXIT}" -ne 0 ] || [ "${PIP_AUDIT_EXIT}" -ne 0 ]; then
+            echo "Optional security scans reported findings."
+            exit 1
+          fi
+
+      - name: Upload optional security scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zroky-backend-security-audit
+          path: |
+            zroky-backend/.artifacts/bandit.txt
+            zroky-backend/.artifacts/pip-audit.txt

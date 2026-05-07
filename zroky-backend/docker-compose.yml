@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: zroky
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      PORT: 8000
+      ENABLE_READY_DB_CHECK: "true"
+      ENABLE_READY_REDIS_CHECK: "true"
+    command: ["sh", "scripts/start-api.sh"]
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+    env_file:
+      - .env
+    command: ["sh", "scripts/start-worker.sh"]
+    depends_on:
+      - postgres
+      - redis
+
+  beat:
+    build:
+      context: .
+    env_file:
+      - .env
+    command: ["sh", "scripts/start-beat.sh"]
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:

@@ -1,0 +1,71 @@
+{
+  "dashboard": {
+    "title": "ZROKY Diagnosis Engine",
+    "tags": ["zroky", "diagnosis", "alerts"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Diagnosis Jobs by Status",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_diagnosis_jobs_total[1m])",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Diagnosis Rule Hits by Category",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_diagnosis_rule_hits_total[1m])",
+            "legendFormat": "{{category}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 3,
+        "title": "Retention Runs by Status",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "zroky_retention_runs_total",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "Retention Rows by Table",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_retention_rows_total[1m])",
+            "legendFormat": "{{table}} {{mode}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+      },
+      {
+        "id": 5,
+        "title": "Exchange Rate Events",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(zroky_exchange_rate_events_total[1m])",
+            "legendFormat": "{{source}} {{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+      }
+    ],
+    "time": { "from": "now-6h", "to": "now" },
+    "refresh": "30s"
+  }
+}

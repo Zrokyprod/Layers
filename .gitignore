@@ -1,0 +1,101 @@
+# ──────────────────────────────────────────────────────────────────────────────
+#  Zroky AI — Root .gitignore
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Large binaries & installers ───────────────────────────────────────────────
+*.exe
+*.war
+*.zip
+*.dmg
+*.pkg
+*.msi
+*.AppImage
+*.iso
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+*.whl
+
+# ── Environment / Secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+secrets/
+.secrets/
+
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.yarn/
+.pnp.*
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+.pytest_cache/
+.pytest_tmp/
+pytest_temp_privacy2/
+.coverage
+coverage.xml
+htmlcov/
+.hypothesis/
+*.cover
+
+# ── Linting / Type checking ───────────────────────────────────────────────────
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+.pytype/
+
+# ── IDE / Editors ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Temp / AI assistant artifacts ─────────────────────────────────────────────
+claude-mem/
+claude-code-page.md
+claude-code-readme.txt
+claude-code-snapshot.txt
+docfx_temp/
+.playwright-mcp/
+
+# ── Database ──────────────────────────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+ehthumbs.db
