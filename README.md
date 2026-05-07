@@ -38,8 +38,6 @@ Use this as the upfront expectation guide before onboarding developers.
 | LangChain agent | 80% | Supported for LLM-call capture only |
 | Multi-agent custom | 85% | Supported with agent tags and trace linkage |
 | LangGraph | 65% | Manual wrapper required |
-| CrewAI and AutoGen | V1.1 | Not supported in V1 |
-| OpenAI Assistants | V2 | Not supported in V1 |
 
 Why this exists:
 
