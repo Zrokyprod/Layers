@@ -75,10 +75,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create SQLite data directory
+        run: mkdir -p .data
+
       - name: Run fast tests (SQLite)
+        env:
+          DATABASE_URL: "sqlite:///./.data/test_shared.db"
+          AUTH_JWT_SECRET: "ci-test-secret-key-32-characters"
+          ALLOW_PROJECT_HEADER_CONTEXT: "true"
+          REQUIRE_PROVISIONING_TOKEN: "false"
+          TESTING: "true"
         run: pytest -q -m "not postgres_rls"
 
       - name: Verify migrations (SQLite)
+        env:
+          DATABASE_URL: "sqlite:///./.data/test_migrations.db"
+          AUTH_JWT_SECRET: "ci-test-secret-key-32-characters"
         run: alembic upgrade head
 
   postgres-security:

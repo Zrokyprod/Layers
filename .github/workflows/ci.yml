@@ -38,6 +38,9 @@ jobs:
       - name: pip-audit security check
         run: pip-audit --require-hashes -r requirements.txt || true
 
+      - name: Create SQLite data directory
+        run: mkdir -p .data
+
       - name: Run pytest
         env:
           TESTING: "true"
