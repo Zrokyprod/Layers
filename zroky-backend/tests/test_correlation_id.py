@@ -1,7 +1,6 @@
 """Tests for request correlation-id middleware."""
 import os
 
-import pytest
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./.data/test_correlation_id.db")

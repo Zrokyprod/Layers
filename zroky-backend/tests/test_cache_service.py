@@ -1,8 +1,6 @@
 """Tests for unified cache service with Redis and in-process backends."""
 import os
-from typing import Generator
 
-import pytest
 
 os.environ["TESTING"] = "true"
 

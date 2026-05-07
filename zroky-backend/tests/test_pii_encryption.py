@@ -15,13 +15,13 @@ os.environ.setdefault("ALLOW_PROJECT_HEADER_CONTEXT", "true")
 os.environ.setdefault("REQUIRE_PROVISIONING_TOKEN", "false")
 
 # Clear settings cache to pick up env changes
-from app.core.config import get_settings
+from app.core.config import get_settings  # noqa: E402
 get_settings.cache_clear()
 
-from app.db.base import Base
-from app.db.models import User, compute_email_hash
-from app.db.encrypted_types import EncryptedSearchableString, EncryptedString
-from app.db.session import SessionLocal, engine
+from app.db.base import Base  # noqa: E402
+from app.db.models import User, compute_email_hash  # noqa: E402
+from app.db.encrypted_types import EncryptedSearchableString  # noqa: E402
+from app.db.session import SessionLocal, engine  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
