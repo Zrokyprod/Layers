@@ -37,9 +37,6 @@ def upgrade() -> None:
             batch_op.alter_column("reasoning_cost_total", type_=_NUMERIC_18_8, existing_type=sa.Float(), existing_nullable=False)
             batch_op.alter_column("cache_savings_total", type_=_NUMERIC_18_8, existing_type=sa.Float(), existing_nullable=False)
 
-        with op.batch_alter_table("tenant_settings") as batch_op:
-            batch_op.alter_column("monthly_budget_usd", type_=_NUMERIC_18_8, existing_type=sa.Float(), existing_nullable=True)
-            batch_op.alter_column("budget_threshold_percentage", type_=_NUMERIC_6_3, existing_type=sa.Float(), existing_nullable=False)
     else:
         # PostgreSQL: direct ALTER COLUMN with USING cast
         for col in ("cost_total", "reasoning_cost_total", "cache_savings_total"):
@@ -52,23 +49,6 @@ def upgrade() -> None:
                 existing_nullable=False,
             )
 
-        op.alter_column(
-            "tenant_settings",
-            "monthly_budget_usd",
-            type_=_NUMERIC_18_8,
-            existing_type=sa.Float(),
-            postgresql_using="monthly_budget_usd::numeric",
-            existing_nullable=True,
-        )
-        op.alter_column(
-            "tenant_settings",
-            "budget_threshold_percentage",
-            type_=_NUMERIC_6_3,
-            existing_type=sa.Float(),
-            postgresql_using="budget_threshold_percentage::numeric",
-            existing_nullable=False,
-        )
-
 
 def downgrade() -> None:
     bind = op.get_bind()
@@ -80,9 +60,6 @@ def downgrade() -> None:
             batch_op.alter_column("reasoning_cost_total", type_=sa.Float(), existing_type=_NUMERIC_18_8, existing_nullable=False)
             batch_op.alter_column("cache_savings_total", type_=sa.Float(), existing_type=_NUMERIC_18_8, existing_nullable=False)
 
-        with op.batch_alter_table("tenant_settings") as batch_op:
-            batch_op.alter_column("monthly_budget_usd", type_=sa.Float(), existing_type=_NUMERIC_18_8, existing_nullable=True)
-            batch_op.alter_column("budget_threshold_percentage", type_=sa.Float(), existing_type=_NUMERIC_6_3, existing_nullable=False)
     else:
         for col in ("cost_total", "reasoning_cost_total", "cache_savings_total"):
             op.alter_column(
@@ -93,19 +70,3 @@ def downgrade() -> None:
                 postgresql_using=f"{col}::double precision",
                 existing_nullable=False,
             )
-        op.alter_column(
-            "tenant_settings",
-            "monthly_budget_usd",
-            type_=sa.Float(),
-            existing_type=_NUMERIC_18_8,
-            postgresql_using="monthly_budget_usd::double precision",
-            existing_nullable=True,
-        )
-        op.alter_column(
-            "tenant_settings",
-            "budget_threshold_percentage",
-            type_=sa.Float(),
-            existing_type=_NUMERIC_6_3,
-            postgresql_using="budget_threshold_percentage::double precision",
-            existing_nullable=False,
-        )
