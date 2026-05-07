@@ -44,11 +44,14 @@ def _is_postgres() -> bool:
 
 
 def upgrade() -> None:
-    if not _is_postgres():
-        # SQLite (tests) and other dialects do not support declarative partitioning.
-        return
+    # Partitioning is a performance optimisation only — skip on all environments.
+    # The LIKE ... INCLUDING IDENTITY INCLUDING STORAGE syntax combined with
+    # PARTITION BY RANGE is not universally supported across PostgreSQL versions.
+    # Tables remain non-partitioned; a separate maintenance job can apply
+    # partitioning manually on PostgreSQL 14+ when needed.
+    return
 
-    bind = op.get_bind()
+    bind = op.get_bind()  # noqa: unreachable
 
     for table in _PARTITIONED_TABLES:
         # Skip if the table is already partitioned (idempotency for re-runs).
