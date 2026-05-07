@@ -12,32 +12,26 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users",
-        sa.Column("password_hash", sa.String(255), nullable=True),
+    try:
+        op.add_column("users", sa.Column("password_hash", sa.String(255), nullable=True))
+    except Exception:
+        pass
+    try:
+        op.add_column("users", sa.Column("github_id", sa.String(64), nullable=True))
+    except Exception:
+        pass
+    try:
+        op.add_column("users", sa.Column("display_name", sa.String(120), nullable=True))
+    except Exception:
+        pass
+    # ux_users_subject unique index already created in 0003 — do not re-add.
+    # ux_users_email: add unique constraint if not present (0003 only adds a non-unique ix).
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email ON users (email)"
     )
-    op.add_column(
-        "users",
-        sa.Column("github_id", sa.String(64), nullable=True),
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_github_id ON users (github_id)"
     )
-    op.add_column(
-        "users",
-        sa.Column("display_name", sa.String(120), nullable=True),
-    )
-    # Unique constraint on email (may already have non-unique index from 0003)
-    with op.batch_alter_table("users") as batch_op:
-        try:
-            batch_op.create_unique_constraint("ux_users_email", ["email"])
-        except Exception:
-            pass  # already exists in some DB backends
-        try:
-            batch_op.create_unique_constraint("ux_users_github_id", ["github_id"])
-        except Exception:
-            pass
-        try:
-            batch_op.create_unique_constraint("ux_users_subject", ["subject"])
-        except Exception:
-            pass
 
 
 def downgrade() -> None:
