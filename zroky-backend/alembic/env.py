@@ -69,7 +69,10 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
+    # Use begin() so the outer context manager COMMITS on normal exit.
+    # connect() in SQLAlchemy 2.0 rolls back uncommitted work on exit,
+    # which silently discarded all migration DDL.
+    with connectable.begin() as connection:
         if connection.dialect.name == "postgresql":
             connection.execute(text("SET search_path TO public"))
 
@@ -93,8 +96,7 @@ def run_migrations_online() -> None:
             compare_type=True,
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        context.run_migrations()
 
 
 if context.is_offline_mode():
