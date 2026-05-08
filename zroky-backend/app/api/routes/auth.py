@@ -24,13 +24,14 @@ from sqlalchemy.orm import Session
 from app.auth.identity import extract_bearer_token
 from app.core.config import get_settings
 from app.core.limiter import limiter
-from app.db.models import User, compute_email_hash
+from app.db.models import Project, ProjectMembership, User, compute_email_hash
 from app.db.session import get_db_session as get_db
 from app.services import token_store
 from app.services.email_sender import send_email
 from app.services.security import (
     decode_session_token,
     generate_oauth_state,
+    generate_project_id,
     hash_password,
     issue_access_token,
     issue_refresh_token,
@@ -193,6 +194,22 @@ def register(request: Request, body: RegisterRequest, db: Annotated[Session, Dep
         email_verification_token=verification_token,
     )
     db.add(user)
+    db.flush()  # get user.id without committing
+
+    # Auto-create a default project + owner membership so dashboard works immediately
+    project = Project(
+        id=generate_project_id(),
+        name="My Project",
+        owner_ref=user.subject,
+    )
+    db.add(project)
+    db.flush()
+    membership = ProjectMembership(
+        project_id=project.id,
+        user_id=user.id,
+        role="owner",
+    )
+    db.add(membership)
     db.commit()
     db.refresh(user)
 

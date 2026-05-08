@@ -109,7 +109,7 @@ function buildAuthHeader(token: string): string {
 async function refreshAuthSession(): Promise<boolean> {
   const refreshToken = readRefreshTokenFromBrowser();
   if (!refreshToken) {
-    return false;
+    return false;  // no token in storage — don't clear session, just fail silently
   }
 
   try {
@@ -123,17 +123,18 @@ async function refreshAuthSession(): Promise<boolean> {
     });
 
     if (!response.ok) {
-      clearAuthSession();
+      if (response.status === 401) {
+        clearAuthSession(); // refresh token genuinely rejected — log out
+      }
       return false;
     }
 
     const payload = (await response.json()) as AuthTokenResponse;
     if (!payload.access_token || !payload.refresh_token) {
-      clearAuthSession();
       return false;
     }
 
-    storeAuthSession(payload);
+    void storeAuthSession(payload);
     return true;
   } catch {
     return false;
@@ -190,9 +191,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const refreshed = await refreshAuthSession();
     if (refreshed) {
       response = await performRequest();
-    } else {
-      clearAuthSession();
     }
+    // If refresh failed, let the original 401 bubble up as an error — don't force logout
   }
 
   if (!response.ok) {

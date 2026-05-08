@@ -13,10 +13,10 @@ from app.auth.identity import (
     resolve_project_from_identity,
 )
 from app.core.config import get_settings
-from app.db.models import ApiKey, Project
+from app.db.models import ApiKey, Project, ProjectMembership
 from app.db.session import get_db_session, set_db_tenant_context
 from app.services.membership import get_membership
-from app.services.security import hash_api_key
+from app.services.security import decode_session_token, hash_api_key
 
 
 @dataclass(frozen=True)
@@ -36,21 +36,54 @@ def _resolve_project_from_bearer(
         return None
 
     settings = get_settings()
-    claims = decode_jwt_claims(token)
-    identity = build_identity_context(claims)
-    project_id = resolve_project_from_identity(identity, selected_project_id)
 
-    membership = get_membership(db, project_id=project_id, subject=identity.subject)
-
-    if settings.ENFORCE_JWT_PROJECT_MEMBERSHIP:
-        if membership is None:
+    # --- Path A: external JWT (RS256/JWKS) ---
+    try:
+        claims = decode_jwt_claims(token)
+        identity = build_identity_context(claims)
+        project_id = resolve_project_from_identity(identity, selected_project_id)
+        membership = get_membership(db, project_id=project_id, subject=identity.subject)
+        if settings.ENFORCE_JWT_PROJECT_MEMBERSHIP and membership is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Identity is not a member of the requested project.",
             )
+        resolved_role = membership.role if membership is not None else "viewer"
+        return TenantContext(tenant_id=project_id, role=resolved_role, subject=identity.subject)
+    except HTTPException:
+        pass  # External JWT failed — try internal session token below
 
-    resolved_role = membership.role if membership is not None else "viewer"
-    return TenantContext(tenant_id=project_id, role=resolved_role, subject=identity.subject)
+    # --- Path B: internal HS256 session JWT (AUTH_JWT_SECRET) ---
+    if not settings.AUTH_JWT_SECRET:
+        return None
+
+    try:
+        claims = decode_session_token(token, settings.AUTH_JWT_SECRET)
+    except Exception:
+        return None
+
+    user_id = str(claims.get("user_id") or "").strip()
+    subject = str(claims.get("sub") or "").strip()
+    if not user_id:
+        return None
+
+    # Resolve the user's project from their membership row
+    membership_row = db.execute(
+        select(ProjectMembership)
+        .join(Project, Project.id == ProjectMembership.project_id)
+        .where(
+            ProjectMembership.user_id == user_id,
+            ProjectMembership.is_active.is_(True),
+            Project.is_active.is_(True),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if membership_row is None:
+        return None
+
+    set_db_tenant_context(db, membership_row.project_id)
+    return TenantContext(tenant_id=membership_row.project_id, role=membership_row.role, subject=subject)
 
 
 def _resolve_project_from_api_key(api_key_value: str, db: Session) -> str | None:
