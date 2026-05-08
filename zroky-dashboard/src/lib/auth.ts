@@ -3,6 +3,8 @@ import type { AuthTokenResponse } from "@/lib/types";
 const ACCESS_TOKEN_COOKIE = "zroky_access_token";
 const REFRESH_TOKEN_COOKIE = "zroky_refresh_token";
 const AUTH_SESSION_STORAGE_KEY = "zroky_auth_session";
+const LS_ACCESS_TOKEN_KEY = "zroky_at";
+const LS_REFRESH_TOKEN_KEY = "zroky_rt";
 const POST_AUTH_REDIRECT_STORAGE_KEY = "zroky_post_auth_redirect";
 const DEFAULT_ACCESS_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 72;
 const DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -65,10 +67,18 @@ function readCookie(name: string): string | null {
 }
 
 export function readAccessTokenFromBrowser(): string | null {
+  if (typeof window !== "undefined") {
+    const ls = window.localStorage.getItem(LS_ACCESS_TOKEN_KEY);
+    if (ls) return ls;
+  }
   return readCookie(ACCESS_TOKEN_COOKIE);
 }
 
 export function readRefreshTokenFromBrowser(): string | null {
+  if (typeof window !== "undefined") {
+    const ls = window.localStorage.getItem(LS_REFRESH_TOKEN_KEY);
+    if (ls) return ls;
+  }
   return readCookie(REFRESH_TOKEN_COOKIE);
 }
 
@@ -156,7 +166,13 @@ export async function storeAuthSession(tokens: AuthTokenResponse): Promise<void>
     Number.isFinite(tokens.refresh_expires_in_seconds) ? tokens.refresh_expires_in_seconds : DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS,
   );
 
-  // Set HttpOnly cookies via server route — MUST be awaited before navigating
+  // Store tokens in localStorage so client-side reads work (httpOnly cookies are invisible to JS)
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(LS_ACCESS_TOKEN_KEY, tokens.access_token);
+    window.localStorage.setItem(LS_REFRESH_TOKEN_KEY, tokens.refresh_token);
+  }
+
+  // Also set HttpOnly cookies via server route for middleware + proxy auth
   await fetch("/api/auth/set-session", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -181,6 +197,10 @@ export function storeAccessToken(token: string, maxAgeSeconds = DEFAULT_ACCESS_T
   const refreshExpiry = readSessionMetadata().refreshTokenExpiresAtEpochSeconds;
   const refreshMaxAge = refreshExpiry ? Math.max(0, refreshExpiry - Math.floor(Date.now() / 1000)) : DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS;
   const refreshToken = readRefreshTokenFromBrowser() ?? "";
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(LS_ACCESS_TOKEN_KEY, token);
+  }
 
   void fetch("/api/auth/set-session", {
     method: "POST",
@@ -207,6 +227,8 @@ export function clearAuthSession(): void {
   void fetch("/api/auth/clear-session", { method: "POST" });
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+    window.localStorage.removeItem(LS_ACCESS_TOKEN_KEY);
+    window.localStorage.removeItem(LS_REFRESH_TOKEN_KEY);
   }
 }
 
