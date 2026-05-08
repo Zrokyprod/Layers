@@ -40,7 +40,7 @@ export default function RegisterPage() {
     setError("");
     try {
       const res = await registerWithPassword(data.email, data.password, data.confirm_password);
-      storeAuthSession(res);
+      await storeAuthSession(res);
       router.push("/home");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");

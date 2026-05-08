@@ -28,7 +28,7 @@ function LoginForm() {
     setError("");
     try {
       const res = await loginWithPassword(data.email, data.password);
-      storeAuthSession(res);
+      await storeAuthSession(res);
       const next = searchParams.get("next");
       router.push(next && next.startsWith("/") ? next : "/home");
     } catch (err: unknown) {

@@ -146,7 +146,7 @@ function readSessionMetadata(): {
   }
 }
 
-export function storeAuthSession(tokens: AuthTokenResponse): void {
+export async function storeAuthSession(tokens: AuthTokenResponse): Promise<void> {
   const accessMaxAgeSeconds = Math.max(
     60,
     Number.isFinite(tokens.access_expires_in_seconds) ? tokens.access_expires_in_seconds : DEFAULT_ACCESS_TOKEN_MAX_AGE_SECONDS,
@@ -156,8 +156,8 @@ export function storeAuthSession(tokens: AuthTokenResponse): void {
     Number.isFinite(tokens.refresh_expires_in_seconds) ? tokens.refresh_expires_in_seconds : DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS,
   );
 
-  // Set HttpOnly cookies via server route (prevents XSS token theft)
-  void fetch("/api/auth/set-session", {
+  // Set HttpOnly cookies via server route — MUST be awaited before navigating
+  await fetch("/api/auth/set-session", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

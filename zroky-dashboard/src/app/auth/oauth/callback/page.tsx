@@ -24,17 +24,20 @@ function OAuthCallbackHandler() {
       return;
     }
 
-    storeAuthSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      access_expires_in_seconds: Number(expiresIn) || 3600,
-      refresh_expires_in_seconds: 604800,
-      token_type: "bearer",
-      user_id: userId || "",
-      email: null,
-    });
+    const finish = async () => {
+      await storeAuthSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        access_expires_in_seconds: Number(expiresIn) || 3600,
+        refresh_expires_in_seconds: 604800,
+        token_type: "bearer",
+        user_id: userId || "",
+        email: null,
+      });
+      router.replace("/home");
+    };
 
-    router.replace("/home");
+    void finish();
   }, [router, searchParams]);
 
   return (
