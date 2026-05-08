@@ -4,9 +4,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { forgotPasswordSchema, type ForgotPasswordFormData } from "@/lib/schemas";
+import { forgotPassword } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
   const [message, setMessage] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const {
     register,
@@ -19,14 +21,12 @@ export default function ForgotPasswordPage() {
   const onSubmit = handleSubmit(async (data) => {
     setMessage("");
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
-      setMessage("If that email exists, a password reset link has been sent.");
+      await forgotPassword(data.email);
+      setIsSuccess(true);
+      setMessage("If that email is registered, a reset link was sent. Check your inbox.");
     } catch {
-      setMessage("An error occurred. Please try again.");
+      setIsSuccess(true);
+      setMessage("If that email is registered, a reset link was sent. Check your inbox.");
     }
   });
 
@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
           <h2 className="auth-heading">Reset your password</h2>
           <p className="auth-sub">Enter your email and we will send you a reset link.</p>
         </div>
-        {message && <div className="auth-banner auth-banner-info">{message}</div>}
+        {message && <div className={`auth-banner ${isSuccess ? "auth-banner-success" : "auth-banner-error"}`}>{message}</div>}
         <form onSubmit={onSubmit} className="auth-form">
           <div className="field">
             <label htmlFor="fp-email">Email address</label>

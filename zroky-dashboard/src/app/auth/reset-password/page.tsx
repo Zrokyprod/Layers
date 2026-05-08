@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { resetPasswordSchema, type ResetPasswordFormData } from "@/lib/schemas";
+import { resetPassword } from "@/lib/api";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -29,17 +30,11 @@ function ResetPasswordForm() {
   const onSubmit = handleSubmit(async (data) => {
     setError(""); setMessage("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, new_password: data.password })
-      });
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.detail || "Reset failed");
-      setMessage("Password reset successful! Redirecting to login...");
+      await resetPassword(token, data.password);
+      setMessage("Password reset successful! Redirecting to login…");
       setTimeout(() => router.push("/auth/login?reset=true"), 2000);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Reset failed");
+      setError(err instanceof Error ? err.message : "Reset failed. The link may have expired.");
     }
   });
 

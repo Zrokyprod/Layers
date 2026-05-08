@@ -228,6 +228,20 @@ export function registerWithPassword(
   });
 }
 
+export function forgotPassword(email: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/v1/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/v1/auth/reset-password", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+  });
+}
+
 export function completeGithubLogin(code: string, state: string): Promise<AuthTokenResponse> {
   return request<AuthTokenResponse>("/v1/auth/github/callback", {
     query: {
