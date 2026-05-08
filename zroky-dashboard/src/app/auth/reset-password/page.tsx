@@ -1,5 +1,6 @@
 "use client";
 import { useState, Suspense } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -14,6 +15,7 @@ function ResetPasswordForm() {
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [showPw, setShowPw] = useState(false);
 
   const {
     register,
@@ -44,7 +46,12 @@ function ResetPasswordForm() {
       {message && <div className="auth-banner auth-banner-success">{message}</div>}
       <div className="field">
         <label htmlFor="rp-password">New Password</label>
-        <input id="rp-password" type="password" {...register("password")} />
+        <div className="input-eye-wrap">
+          <input id="rp-password" type={showPw ? "text" : "password"} autoComplete="new-password" placeholder="Min 8 chars, uppercase, number" {...register("password")} />
+          <button type="button" className="input-eye-btn" tabIndex={-1} aria-label={showPw ? "Hide" : "Show"} onClick={() => setShowPw((v) => !v)}>
+            {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
         {errors.password && <span className="field-error">{errors.password.message}</span>}
       </div>
       <button type="submit" disabled={isSubmitting} className="btn btn-primary auth-submit-btn">

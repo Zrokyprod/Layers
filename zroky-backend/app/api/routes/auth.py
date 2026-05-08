@@ -185,15 +185,101 @@ def register(request: Request, body: RegisterRequest, db: Annotated[Session, Dep
             detail="An account with this email already exists.",
         )
 
+    verification_token = secrets.token_urlsafe(48)
     user = User(
         subject=f"email:{body.email}",
         email=body.email,
         password_hash=hash_password(body.password),
+        email_verification_token=verification_token,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Send verification email (non-blocking — failure doesn't prevent registration)
+    settings = get_settings()
+    frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
+    verify_url = f"{frontend_url}/auth/verify-email?token={verification_token}"
+    send_email(
+        to=[body.email],
+        subject="Verify your Zroky AI email address",
+        html_body=f"""
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;">
+          <h2 style="color:#111;">Welcome to Zroky AI!</h2>
+          <p style="color:#444;">Please verify your email address to complete your registration.</p>
+          <a href="{verify_url}" style="display:inline-block;margin:24px 0;padding:12px 28px;background:#4f46e5;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">Verify Email</a>
+          <p style="color:#888;font-size:13px;">This link expires in 24 hours. If you didn't create this account, you can ignore this email.</p>
+        </div>
+        """,
+        plain_body=f"Welcome to Zroky AI! Verify your email: {verify_url}",
+    )
+
     return _issue_token(user)
+
+
+# ---------------------------------------------------------------------------
+# Verify Email
+# ---------------------------------------------------------------------------
+
+@router.get("/verify-email")
+@limiter.limit("10/minute")
+def verify_email(
+    request: Request,
+    token: Annotated[str, Query()],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, str]:
+    user = db.execute(
+        select(User).where(User.email_verification_token == token)
+    ).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link.",
+        )
+    if user.email_verified_at is not None:
+        return {"detail": "Email already verified."}
+    user.email_verified_at = datetime.now(UTC)
+    user.email_verification_token = None
+    db.commit()
+    return {"detail": "Email verified successfully."}
+
+
+# ---------------------------------------------------------------------------
+# Resend Verification Email
+# ---------------------------------------------------------------------------
+
+@router.post("/resend-verification")
+@limiter.limit("2/minute")
+def resend_verification(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict[str, str]:
+    user = _get_current_user(authorization=authorization, db=db)
+    if user.email_verified_at is not None:
+        return {"detail": "Email is already verified."}
+    if not user.email:
+        raise HTTPException(status_code=400, detail="No email on this account.")
+    token = secrets.token_urlsafe(48)
+    user.email_verification_token = token
+    db.commit()
+    settings = get_settings()
+    frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
+    verify_url = f"{frontend_url}/auth/verify-email?token={token}"
+    send_email(
+        to=[user.email],
+        subject="Verify your Zroky AI email address",
+        html_body=f"""
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;">
+          <h2 style="color:#111;">Verify your email</h2>
+          <p style="color:#444;">Click below to verify your Zroky AI email address.</p>
+          <a href="{verify_url}" style="display:inline-block;margin:24px 0;padding:12px 28px;background:#4f46e5;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">Verify Email</a>
+          <p style="color:#888;font-size:13px;">This link expires in 24 hours.</p>
+        </div>
+        """,
+        plain_body=f"Verify your email: {verify_url}",
+    )
+    return {"detail": "Verification email sent."}
 
 
 # ---------------------------------------------------------------------------
@@ -221,16 +307,18 @@ def login(request: Request, body: LoginRequest, db: Annotated[Session, Depends(g
 
     if user.password_hash and password_hash_needs_upgrade(user.password_hash):
         user.password_hash = hash_password(body.password)
-        db.add(user)
         db.commit()
-        db.refresh(user)
 
     return _issue_token(user)
 
 
+# ---------------------------------------------------------------------------
+# Refresh token
+# ---------------------------------------------------------------------------
+
 @router.post("/refresh", response_model=AuthTokenResponse)
 @limiter.limit("20/minute")
-def refresh_auth_session(
+def refresh_token(
     request: Request,
     body: RefreshTokenRequest,
     db: Annotated[Session, Depends(get_db)],
@@ -393,7 +481,7 @@ def github_oauth_start() -> RedirectResponse:
 # GitHub OAuth — callback
 # ---------------------------------------------------------------------------
 
-@router.get("/github/callback", response_model=AuthTokenResponse)
+@router.get("/github/callback")
 @limiter.limit("10/minute")
 def github_oauth_callback(
     request: Request,
@@ -575,7 +663,7 @@ def google_oauth_start() -> RedirectResponse:
     }
     return RedirectResponse(url=f"{_GOOGLE_AUTH_URL}?{urlencode(params)}")
 
-@router.get("/google/callback", response_model=AuthTokenResponse)
+@router.get("/google/callback")
 @limiter.limit("10/minute")
 def google_oauth_callback(
     request: Request,
@@ -650,7 +738,18 @@ def google_oauth_callback(
     db.commit()
     db.refresh(user)
 
-    return _issue_token(user)
+    # Redirect to frontend with tokens
+    settings = get_settings()
+    frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
+    token = _issue_token(user)
+    params = urlencode({
+        "access_token": token.access_token,
+        "refresh_token": token.refresh_token,
+        "expires_in": token.access_expires_in_seconds,
+        "user_id": token.user_id,
+    })
+    return RedirectResponse(url=f"{frontend_url}/auth/oauth/callback?{params}", status_code=302)
+
 
 def _exchange_google_code(
     *,
@@ -712,6 +811,7 @@ class MeResponse(BaseModel):
     google_id: str | None
     has_password: bool
     is_active: bool
+    email_verified: bool
     created_at: str
 
 
@@ -763,6 +863,7 @@ def get_current_user_profile(
         google_id=user.google_id,
         has_password=bool(user.password_hash),
         is_active=bool(user.is_active),
+        email_verified=user.email_verified_at is not None,
         created_at=user.created_at.isoformat() if hasattr(user, "created_at") and user.created_at else "",
     )
 

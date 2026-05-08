@@ -228,6 +228,12 @@ export function registerWithPassword(
   });
 }
 
+export function verifyEmail(token: string): Promise<{ detail: string }> {
+  return request<{ detail: string }>(`/v1/auth/verify-email?token=${encodeURIComponent(token)}`, {
+    method: "GET",
+  });
+}
+
 export function forgotPassword(email: string): Promise<{ message: string }> {
   return request<{ message: string }>("/v1/auth/forgot-password", {
     method: "POST",

@@ -434,6 +434,8 @@ class User(Base):
     github_token_connected_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     github_token_updated_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    email_verification_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, server_default=func.now()

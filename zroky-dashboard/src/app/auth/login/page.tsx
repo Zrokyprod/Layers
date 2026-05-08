@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { Suspense, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,6 +12,7 @@ import { loginSchema, type LoginFormData } from "@/lib/schemas";
 
 function LoginForm() {
   const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -62,7 +64,12 @@ function LoginForm() {
             <label htmlFor="login-password">Password</label>
             <Link href="/auth/forgot-password" className="auth-link">Forgot password?</Link>
           </div>
-          <input id="login-password" type="password" {...register("password")} placeholder="password" />
+          <div className="input-eye-wrap">
+            <input id="login-password" type={showPw ? "text" : "password"} autoComplete="current-password" {...register("password")} placeholder="Your password" />
+            <button type="button" className="input-eye-btn" tabIndex={-1} aria-label={showPw ? "Hide password" : "Show password"} onClick={() => setShowPw((v) => !v)}>
+              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
           {errors.password && <span className="field-error">{errors.password.message}</span>}
         </div>
         <button type="submit" disabled={isSubmitting} className="btn btn-primary auth-submit-btn">

@@ -2383,6 +2383,81 @@ tr:hover td {
   color: var(--text-secondary);
 }
 
+/* ── Password eye-toggle ─────────────────────────────────────── */
+
+.input-eye-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-eye-wrap input {
+  flex: 1;
+  padding-right: 40px;
+}
+
+.input-eye-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.input-eye-btn:hover {
+  color: var(--text-primary);
+}
+
+/* ── Password strength chips ─────────────────────────────────── */
+
+.password-strength {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.strength-chip {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid transparent;
+}
+
+.strength-met {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.strength-unmet {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  color: #6b7280;
+}
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line-soft, #e5e7eb);
+  border-top-color: var(--color-primary, #4f46e5);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Onboarding empty state ─────────────────────────────────── */
 
 .onboarding-empty-state {
