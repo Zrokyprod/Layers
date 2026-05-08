@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "node -e \"try{require('fs').unlinkSync('./src/middleware.ts')}catch(e){}\" && next build",
+    "vercel-build": "node -e \"try{require('fs').unlinkSync('./src/proxy.ts')}catch(e){}\" && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
