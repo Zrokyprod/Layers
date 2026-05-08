@@ -91,6 +91,7 @@ class AuthTokenResponse(BaseModel):
     token_type: str = "bearer"
     user_id: str
     email: str | None
+    email_verified: bool = True
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -163,6 +164,7 @@ def _issue_token(user: User) -> AuthTokenResponse:
         refresh_expires_in_seconds=refresh_expire_hours * 60 * 60,
         user_id=user.id,
         email=user.email,
+        email_verified=user.email_verified_at is not None,
     )
 
 

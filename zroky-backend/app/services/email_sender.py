@@ -33,7 +33,15 @@ def send_email(
     settings = get_settings()
     recipients = [r for r in to if r and r.strip()]
     if not settings.SMTP_HOST or not recipients:
-        logger.debug("send_email: SMTP not configured or no recipients — skipping")
+        if recipients:
+            logger.warning(
+                "UNSENT EMAIL (SMTP not configured) — To: %s | Subject: %s | Body: %s",
+                ", ".join(recipients),
+                subject,
+                (plain_body or html_body)[:500],
+            )
+        else:
+            logger.debug("send_email: no recipients — skipping")
         return False
 
     try:
@@ -65,6 +73,12 @@ def send_email(
 
     except Exception as exc:  # noqa: BLE001
         logger.error("send_email failed: %s", exc)
+        logger.warning(
+            "UNSENT EMAIL — To: %s | Subject: %s | Body: %s",
+            ", ".join(recipients),
+            subject,
+            (plain_body or html_body)[:500],
+        )
         return False
 
 

@@ -5,6 +5,7 @@ const REFRESH_TOKEN_COOKIE = "zroky_refresh_token";
 const AUTH_SESSION_STORAGE_KEY = "zroky_auth_session";
 const LS_ACCESS_TOKEN_KEY = "zroky_at";
 const LS_REFRESH_TOKEN_KEY = "zroky_rt";
+const LS_EMAIL_VERIFIED_KEY = "zroky_ev";
 const POST_AUTH_REDIRECT_STORAGE_KEY = "zroky_post_auth_redirect";
 const DEFAULT_ACCESS_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 72;
 const DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -170,6 +171,7 @@ export async function storeAuthSession(tokens: AuthTokenResponse): Promise<void>
   if (typeof window !== "undefined") {
     window.localStorage.setItem(LS_ACCESS_TOKEN_KEY, tokens.access_token);
     window.localStorage.setItem(LS_REFRESH_TOKEN_KEY, tokens.refresh_token);
+    window.localStorage.setItem(LS_EMAIL_VERIFIED_KEY, String(tokens.email_verified ?? true));
   }
 
   // Also set HttpOnly cookies via server route for middleware + proxy auth
@@ -222,6 +224,13 @@ export function storeAccessToken(token: string, maxAgeSeconds = DEFAULT_ACCESS_T
   });
 }
 
+export function readEmailVerifiedFromBrowser(): boolean | null {
+  if (typeof window === "undefined") return null;
+  const val = window.localStorage.getItem(LS_EMAIL_VERIFIED_KEY);
+  if (val === null) return null;
+  return val === "true";
+}
+
 export function clearAuthSession(): void {
   // Clear HttpOnly cookies via server route
   void fetch("/api/auth/clear-session", { method: "POST" });
@@ -229,6 +238,7 @@ export function clearAuthSession(): void {
     window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
     window.localStorage.removeItem(LS_ACCESS_TOKEN_KEY);
     window.localStorage.removeItem(LS_REFRESH_TOKEN_KEY);
+    window.localStorage.removeItem(LS_EMAIL_VERIFIED_KEY);
   }
 }
 

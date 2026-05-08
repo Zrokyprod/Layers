@@ -8,6 +8,7 @@ export interface AuthTokenResponse {
   token_type: string;
   user_id: string;
   email: string | null;
+  email_verified: boolean;
 }
 
 export interface MeResponse {

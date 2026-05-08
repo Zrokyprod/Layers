@@ -41,7 +41,11 @@ export default function RegisterPage() {
     try {
       const res = await registerWithPassword(data.email, data.password, data.confirm_password);
       await storeAuthSession(res);
-      router.push("/home");
+      if (!res.email_verified) {
+        router.push(`/auth/check-email?email=${encodeURIComponent(data.email)}`);
+      } else {
+        router.push("/home");
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
     }

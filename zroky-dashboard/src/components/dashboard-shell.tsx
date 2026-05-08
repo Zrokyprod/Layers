@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Menu, X } from "lucide-react";
 
-import { clearAccessToken } from "@/lib/auth";
+import { clearAccessToken, readEmailVerifiedFromBrowser } from "@/lib/auth";
+import { resendVerification } from "@/lib/api";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
 import { useOwnerProjects, useProjectSettings } from "@/lib/hooks";
@@ -103,6 +104,14 @@ function navClass(pathname: string, href: string): string {
   return isActive ? "nav-link nav-link-active" : "nav-link";
 }
 
+function useEmailVerifiedStatus(): boolean | null {
+  const [verified, setVerified] = useState<boolean | null>(null);
+  useEffect(() => {
+    setVerified(readEmailVerifiedFromBrowser());
+  }, []);
+  return verified;
+}
+
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -158,6 +167,20 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
     return Array.from(items.entries()).map(([id, name]) => ({ id, name }));
   }, [ownerProjectsQuery.data?.projects, projectQuery.data, selectedProject]);
+
+  const emailVerified = useEmailVerifiedStatus();
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "done">("idle");
+
+  const handleResendBanner = async () => {
+    setResendState("sending");
+    try {
+      await resendVerification();
+      setResendState("done");
+    } catch {
+      setResendState("idle");
+    }
+  };
 
   function onLogout() {
     clearAccessToken();
@@ -267,6 +290,33 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
+        {emailVerified === false && !bannerDismissed && (
+          <div style={{
+            background: "#fffbeb",
+            borderBottom: "1px solid #fcd34d",
+            padding: "10px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
+            fontSize: "0.84rem",
+            color: "#92400e",
+          }}>
+            <span>⚠️ <strong>Email not verified.</strong> Check your inbox and click the verification link to secure your account.</span>
+            <button
+              onClick={handleResendBanner}
+              disabled={resendState !== "idle"}
+              style={{ fontSize: "0.82rem", fontWeight: 600, color: "#b45309", background: "none", border: "1px solid #fbbf24", borderRadius: "4px", padding: "2px 10px", cursor: "pointer" }}
+            >
+              {resendState === "sending" ? "Sending…" : resendState === "done" ? "Sent ✓" : "Resend email"}
+            </button>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#b45309", fontWeight: 700 }}
+              aria-label="Dismiss"
+            >✕</button>
+          </div>
+        )}
         <main className="content-inner page-enter">{children}</main>
       </section>
       <CommandPalette />
