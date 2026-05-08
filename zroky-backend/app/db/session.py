@@ -41,12 +41,33 @@ def _attach_statement_timeout(target_engine: Engine) -> None:
             cursor.close()
 
 
+def _attach_search_path(target_engine: Engine) -> None:
+    """Ensure search_path=public on every Postgres connection.
+
+    Railway (and some managed Postgres providers) set a non-public default
+    search_path. This makes all tables created by Alembic (which explicitly
+    sets search_path=public) invisible to the app engine.
+    """
+    if target_engine.dialect.name != "postgresql":
+        return
+
+    @event.listens_for(target_engine, "connect")
+    def _set_search_path(dbapi_conn, _connection_record):  # noqa: ANN001
+        cursor = dbapi_conn.cursor()
+        try:
+            cursor.execute("SET search_path TO public")
+        finally:
+            cursor.close()
+
+
 engine = create_engine(settings.DATABASE_URL, **_build_engine_kwargs(settings.DATABASE_URL))
+_attach_search_path(engine)
 _attach_statement_timeout(engine)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 _read_url = settings.DATABASE_READ_REPLICA_URL or settings.DATABASE_URL
 read_engine = create_engine(_read_url, **_build_engine_kwargs(_read_url))
+_attach_search_path(read_engine)
 _attach_statement_timeout(read_engine)
 SessionLocalRead = sessionmaker(bind=read_engine, autoflush=False, autocommit=False, future=True)
 
