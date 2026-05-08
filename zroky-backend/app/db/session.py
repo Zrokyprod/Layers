@@ -10,6 +10,22 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
+def _inject_search_path(url: str) -> str:
+    """Append search_path=public to PostgreSQL connection URLs.
+
+    Railway (and many hosted providers) configure a non-public default
+    search_path at the database level.  Embedding it in the URL is the
+    most reliable way to override it — it is handled by the driver's own
+    connection-string parser before SQLAlchemy adds anything else.
+    """
+    if not url.startswith("postgresql"):
+        return url
+    if "search_path" in url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}options=-c%20search_path%3Dpublic"
+
+
 def _build_engine_kwargs(url: str) -> dict[str, Any]:
     """Build SQLAlchemy engine kwargs with connection pool tuning per dialect."""
     kwargs: dict[str, Any] = {"pool_pre_ping": True, "future": True}
@@ -21,9 +37,6 @@ def _build_engine_kwargs(url: str) -> dict[str, Any]:
         kwargs["max_overflow"] = settings.DB_MAX_OVERFLOW
         kwargs["pool_timeout"] = settings.DB_POOL_TIMEOUT_SECONDS
         kwargs["pool_recycle"] = settings.DB_POOL_RECYCLE_SECONDS
-        # Force search_path=public so tables are visible regardless of
-        # the provider's default schema (Railway sets a non-public path).
-        kwargs["connect_args"] = {"options": "-c search_path=public"}
     return kwargs
 
 
@@ -63,12 +76,13 @@ def _attach_search_path(target_engine: Engine) -> None:
             cursor.close()
 
 
-engine = create_engine(settings.DATABASE_URL, **_build_engine_kwargs(settings.DATABASE_URL))
+_db_url = _inject_search_path(settings.DATABASE_URL)
+engine = create_engine(_db_url, **_build_engine_kwargs(_db_url))
 _attach_search_path(engine)
 _attach_statement_timeout(engine)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
-_read_url = settings.DATABASE_READ_REPLICA_URL or settings.DATABASE_URL
+_read_url = _inject_search_path(settings.DATABASE_READ_REPLICA_URL or settings.DATABASE_URL)
 read_engine = create_engine(_read_url, **_build_engine_kwargs(_read_url))
 _attach_search_path(read_engine)
 _attach_statement_timeout(read_engine)
