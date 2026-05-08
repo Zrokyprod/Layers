@@ -21,6 +21,9 @@ def _build_engine_kwargs(url: str) -> dict[str, Any]:
         kwargs["max_overflow"] = settings.DB_MAX_OVERFLOW
         kwargs["pool_timeout"] = settings.DB_POOL_TIMEOUT_SECONDS
         kwargs["pool_recycle"] = settings.DB_POOL_RECYCLE_SECONDS
+        # Force search_path=public so tables are visible regardless of
+        # the provider's default schema (Railway sets a non-public path).
+        kwargs["connect_args"] = {"options": "-c search_path=public"}
     return kwargs
 
 
