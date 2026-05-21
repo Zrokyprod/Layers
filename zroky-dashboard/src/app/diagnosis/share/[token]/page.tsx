@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { getSharedDiagnosis } from "@/lib/api";
 import type { DiagnosisShareReadResponse } from "@/lib/types";
-
-interface Props {
-  params: { token: string };
-}
 
 type LoadState =
   | { status: "loading" }
@@ -99,8 +96,9 @@ function ResultPanel({ result }: { result: Record<string, unknown> }) {
   );
 }
 
-export default function DiagnosisSharePage({ params }: Props) {
-  const { token } = params;
+export default function DiagnosisSharePage() {
+  const params = useParams<{ token: string }>();
+  const token = params.token;
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
   useEffect(() => {
