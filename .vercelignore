@@ -1,0 +1,8 @@
+pytest_temp_privacy2/
+pytest_temp_*/
+**/.pytest_basetemp/
+**/.pytest_run_temp_payload/
+**/.pytest_tmp_privacy/
+**/node_modules/
+**/.next/
+**/coverage/
