@@ -22,6 +22,60 @@ export interface MeResponse {
 
 export type HealthStatusBand = "perfect" | "green" | "yellow" | "red";
 
+// ── Judge Health (Layer 3 — verdict + per-dimension drift) ───────────────────
+
+export interface VerdictDriftView {
+  judge_model: string;
+  sample_count: number;
+  disagreement_count: number;
+  disagreement_rate: number;
+  threshold: number;
+  breached: boolean;
+}
+
+export interface DimensionDriftView {
+  judge_model: string;
+  dimension: string;
+  sample_count: number;
+  older_mean: number;
+  recent_mean: number;
+  drift: number;
+  threshold: number;
+  breached: boolean;
+}
+
+export interface JudgeHealthResponse {
+  project_id: string;
+  window_hours: number;
+  enabled: boolean;
+  primary_model: string | null;
+  ensemble_models: string[];
+  verdict_drift: VerdictDriftView[];
+  dimension_drift: DimensionDriftView[];
+  any_breached: boolean;
+}
+
+/**
+ * Aggregate ROI summary from /v1/analytics/savings.
+ *
+ * Distinct figures intentionally — the dashboard surfaces them with
+ * different framing:
+ *   - cumulative_wasted_usd → "still bleeding" (open issues)
+ *   - cumulative_resolved_blast_usd → "already saved" (resolved blast)
+ *   - projected_averted_usd → "would have lost" (6h forward projection)
+ */
+export interface SavingsSummaryResponse {
+  window_days: number;
+  total_caught_count: number;
+  total_resolved_count: number;
+  cumulative_wasted_usd: number;
+  cumulative_resolved_blast_usd: number;
+  projected_averted_usd: number;
+  affected_calls: number;
+  incidents_by_severity: Record<string, number>;
+  updated_at: string;
+}
+
 export type AlertStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 
 export type ProviderVerificationStatus = "verified" | "unverified" | "failed";
@@ -485,6 +539,7 @@ export interface RetentionDataErasureResponse {
 export interface NotificationSettingsResponse {
   email_enabled: boolean;
   slack_enabled: boolean;
+  teams_enabled: boolean;
   browser_enabled: boolean;
   terminal_enabled: boolean;
   updated_at: string;
@@ -497,6 +552,42 @@ export interface GithubConnectionStatusResponse {
   scopes: string[];
   connected_at: string | null;
   updated_at: string | null;
+}
+
+export interface SlackInstallStatusResponse {
+  connected: boolean;
+  team_id: string | null;
+  team_name: string | null;
+  channel_id: string | null;
+  channel_name: string | null;
+  bot_user_id: string | null;
+  scopes: string[];
+  installed_by_user: string | null;
+  installed_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SlackInstallStartResponse {
+  authorization_url: string;
+}
+
+export interface SlackTestMessageResponse {
+  ok: boolean;
+  message: string;
+}
+
+export interface TeamsInstallStatusResponse {
+  connected: boolean;
+  channel_name: string | null;
+  connector_type: string | null;
+  installed_by_user: string | null;
+  installed_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TeamsTestMessageResponse {
+  ok: boolean;
+  message: string;
 }
 
 export type PricingModelDecision = "tiered" | "usage_based" | "undecided";
@@ -1003,4 +1094,116 @@ export interface FeatureFlagListResponse {
 
 export interface TenantFeatureFlagsResponse {
   flags: Record<string, boolean>;
+}
+
+// ── Issues ────────────────────────────────────────────────────────────────────
+
+export type IssueStatus = "open" | "resolved" | "ignored";
+
+export interface IssueItem {
+  id: string;
+  project_id: string;
+  failure_code: string;
+  prompt_fingerprint: string | null;
+  agent_name: string | null;
+  status: IssueStatus;
+  severity: string;
+  occurrence_count: number;
+  blast_radius_usd: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  sample_call_id: string | null;
+  sample_diagnosis_id: string | null;
+  last_fix_id: string | null;
+  resolved_at: string | null;
+  resolution_source: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IssueListResponse {
+  items: IssueItem[];
+  next_cursor: string | null;
+  total_in_page: number;
+}
+
+// ── Detectors ─────────────────────────────────────────────────────────────────
+
+export interface DetectorInfo {
+  name: string;
+  failure_code: string;
+  label: string;
+  speed_class: string;
+  confidence_threshold: number;
+  description: string;
+  loaded: boolean;
+}
+
+export interface DetectorListResponse {
+  count: number;
+  items: DetectorInfo[];
+}
+
+// ── Feature-interest voting (Module 9 smoke-test) ──────────────────────────
+
+export type FeatureVoteValue = "interested" | "not_interested";
+
+export interface FeatureVoteResponse {
+  feature_key: string;
+  vote: FeatureVoteValue;
+  use_case: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeatureVoteRequest {
+  feature_key: string;
+  vote: FeatureVoteValue;
+  use_case?: string | null;
+}
+
+// ── Provider Drift Watch ──────────────────────────────────────────────────────
+
+export interface DriftModelView {
+  id: string;
+  provider: string;
+  model_id: string;
+  display_name: string;
+  family: string | null;
+  active: boolean;
+}
+
+export interface AlertView {
+  id: string;
+  model_id: string;
+  category: string;
+  severity: "info" | "warn" | "critical";
+  headline: string;
+  evidence: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface StatusResponse {
+  date: string;
+  models: DriftModelView[];
+  alerts: AlertView[];
+  total_alerts: number;
+  critical_count: number;
+  warn_count: number;
+  info_count: number;
+}
+
+export interface MetricPoint {
+  run_date: string;
+  judge_pass_rate: number | null;
+  embedding_mean_cosine: number | null;
+  probe_count: number;
+  ok_count: number;
+}
+
+export interface ModelHistoryResponse {
+  model_id: string;
+  display_name: string;
+  category: string;
+  points: MetricPoint[];
 }

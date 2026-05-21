@@ -13,6 +13,7 @@ import {
 
 const NAV = [
   { href: "/owner", label: "Overview" },
+  { href: "/owner/ops", label: "Founder Ops" },
   { href: "/owner/infrastructure", label: "Infrastructure" },
   { href: "/owner/users", label: "Users" },
   { href: "/owner/projects", label: "Projects" },
@@ -21,6 +22,7 @@ const NAV = [
   { href: "/owner/audit", label: "Audit Log" },
   { href: "/owner/platform-llm", label: "LLM Usage" },
   { href: "/owner/feature-flags", label: "Feature Flags" },
+  { href: "/owner/feature-votes", label: "Feature Votes" },
 ];
 
 export default function OwnerLayout({ children }: { children: React.ReactNode }) {

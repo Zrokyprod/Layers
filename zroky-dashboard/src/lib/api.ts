@@ -27,6 +27,7 @@ import type {
   AuthSummaryResponse,
   LoopIncidentsResponse,
   LoopSummaryResponse,
+  TraceListItem,
   TraceListResponse,
   DiagnosisResolveResponse,
   DiagnosisShareCreateResponse,
@@ -52,7 +53,14 @@ import type {
   RetentionDataErasureResponse,
   RetentionPolicyResponse,
   HealthScoreResponse,
+  JudgeHealthResponse,
+  SavingsSummaryResponse,
   GithubConnectionStatusResponse,
+  SlackInstallStartResponse,
+  SlackInstallStatusResponse,
+  SlackTestMessageResponse,
+  TeamsInstallStatusResponse,
+  TeamsTestMessageResponse,
   CostForecastResponse,
   CostAnomalyRiskResponse,
   ChangePasswordResponse,
@@ -72,6 +80,14 @@ import type {
   FeatureFlagListResponse,
   FeatureFlag,
   TenantFeatureFlagsResponse,
+  IssueItem,
+  IssueListResponse,
+  DetectorListResponse,
+  FeatureVoteRequest,
+  FeatureVoteResponse,
+  DriftModelView,
+  StatusResponse,
+  ModelHistoryResponse,
 } from "@/lib/types";
 import {
   clearAuthSession,
@@ -272,6 +288,29 @@ export function getAnalyticsSummary(windowDays = 1, signal?: AbortSignal): Promi
 
 export function getHealthScore(signal?: AbortSignal): Promise<HealthScoreResponse> {
   return request<HealthScoreResponse>("/v1/analytics/health-score", { signal });
+}
+
+export function getJudgeHealth(
+  options: { includeZeroSample?: boolean; signal?: AbortSignal } = {},
+): Promise<JudgeHealthResponse> {
+  return request<JudgeHealthResponse>("/v1/judge/health", {
+    query: options.includeZeroSample ? { include_zero_sample: "true" } : undefined,
+    signal: options.signal,
+  });
+}
+
+/**
+ * Aggregate "what Zroky saved you" figures over the given window.
+ * Used by the top-bar Saved-You badge in `DashboardShell`.
+ */
+export function getSavingsSummary(
+  days = 30,
+  signal?: AbortSignal,
+): Promise<SavingsSummaryResponse> {
+  return request<SavingsSummaryResponse>("/v1/analytics/savings", {
+    query: { days },
+    signal,
+  });
 }
 
 export function getFixAnalytics(days = 30, signal?: AbortSignal): Promise<FixAnalyticsResponse> {
@@ -689,6 +728,7 @@ export function getNotifications(signal?: AbortSignal): Promise<NotificationSett
 export function updateNotifications(body: {
   email_enabled: boolean;
   slack_enabled: boolean;
+  teams_enabled: boolean;
   browser_enabled: boolean;
   terminal_enabled: boolean;
 }): Promise<NotificationSettingsResponse> {
@@ -712,6 +752,56 @@ export function completeGithubRepoConnect(code: string, state: string): Promise<
 export function disconnectGithubRepoConnection(): Promise<GithubConnectionStatusResponse> {
   return request<GithubConnectionStatusResponse>("/v1/settings/github/disconnect", {
     method: "POST",
+  });
+}
+
+export function getSlackInstallStatus(signal?: AbortSignal): Promise<SlackInstallStatusResponse> {
+  return request<SlackInstallStatusResponse>("/v1/integrations/slack/status", { signal });
+}
+
+export function startSlackInstall(): Promise<SlackInstallStartResponse> {
+  return request<SlackInstallStartResponse>("/v1/integrations/slack/install", {
+    method: "POST",
+  });
+}
+
+export function disconnectSlackInstall(): Promise<SlackInstallStatusResponse> {
+  return request<SlackInstallStatusResponse>("/v1/integrations/slack/install", {
+    method: "DELETE",
+  });
+}
+
+export function sendSlackTestMessage(text?: string): Promise<SlackTestMessageResponse> {
+  return request<SlackTestMessageResponse>("/v1/integrations/slack/test", {
+    method: "POST",
+    body: { text },
+  });
+}
+
+export function getTeamsInstallStatus(signal?: AbortSignal): Promise<TeamsInstallStatusResponse> {
+  return request<TeamsInstallStatusResponse>("/v1/integrations/teams/status", { signal });
+}
+
+export function upsertTeamsInstall(body: {
+  webhook_url: string;
+  channel_name?: string | null;
+}): Promise<TeamsInstallStatusResponse> {
+  return request<TeamsInstallStatusResponse>("/v1/integrations/teams/install", {
+    method: "PUT",
+    body,
+  });
+}
+
+export function disconnectTeamsInstall(): Promise<TeamsInstallStatusResponse> {
+  return request<TeamsInstallStatusResponse>("/v1/integrations/teams/install", {
+    method: "DELETE",
+  });
+}
+
+export function sendTeamsTestMessage(text?: string): Promise<TeamsTestMessageResponse> {
+  return request<TeamsTestMessageResponse>("/v1/integrations/teams/test", {
+    method: "POST",
+    body: { text },
   });
 }
 
@@ -829,6 +919,13 @@ export function changePassword(
   });
 }
 
+export function deleteAccount(confirmEmail: string): Promise<{ detail: string }> {
+  return request<{ detail: string }>("/v1/auth/me", {
+    method: "DELETE",
+    body: { confirm_email: confirmEmail },
+  });
+}
+
 // ── Shared diagnosis (public — no auth required) ─────────────────────────────
 
 export async function getSharedDiagnosis(shareToken: string): Promise<DiagnosisShareReadResponse> {
@@ -874,10 +971,10 @@ export function upsertProjectMember(
 ): Promise<ProjectMembershipResponse> {
   // Accept both `subject` and legacy `user_subject` keys for compatibility.
   const payload: { subject?: string; email?: string | null; role?: string; is_active?: boolean } = {
-    subject: (body as any).subject ?? (body as any).user_subject,
-    email: (body as any).email ?? null,
-    role: (body as any).role,
-    is_active: (body as any).is_active,
+    subject: body.subject ?? body.user_subject,
+    email: body.email ?? null,
+    role: body.role,
+    is_active: body.is_active,
   };
   return request<ProjectMembershipResponse>(`/v1/projects/${encodeURIComponent(projectId)}/memberships`, {
     method: "POST",
@@ -1057,4 +1154,667 @@ export function deleteFeatureFlag(flagId: string): Promise<void> {
 
 export function getTenantFeatureFlags(signal?: AbortSignal): Promise<TenantFeatureFlagsResponse> {
   return request<TenantFeatureFlagsResponse>("/v1/feature-flags/tenant", { signal });
+}
+
+// ── Issues ────────────────────────────────────────────────────────────────────
+
+export function listIssues(
+  params: {
+    status?: "open" | "resolved" | "ignored" | "all";
+    failure_code?: string;
+    agent_name?: string;
+    severity?: string;
+    has_fix?: boolean;
+    cursor?: string;
+    limit?: number;
+  },
+  signal?: AbortSignal,
+): Promise<IssueListResponse> {
+  const { has_fix, ...rest } = params;
+  return request<IssueListResponse>("/v1/issues", {
+    query: { ...rest, ...(has_fix !== undefined ? { has_fix: String(has_fix) } : {}) },
+    signal,
+  });
+}
+
+export function getIssue(issueId: string, signal?: AbortSignal): Promise<IssueItem> {
+  return request<IssueItem>(`/v1/issues/${encodeURIComponent(issueId)}`, { signal });
+}
+
+export function resolveIssue(
+  issueId: string,
+  body: { fix_id?: string; resolution_source?: string },
+): Promise<IssueItem> {
+  return request<IssueItem>(`/v1/issues/${encodeURIComponent(issueId)}/resolve`, {
+    method: "POST",
+    body,
+  });
+}
+
+// ── Replay ────────────────────────────────────────────────────────────────────
+
+export interface ReplayJobResponse {
+  id: string;
+  tenant_id: string;
+  call_id: string | null;
+  pr_id: string | null;
+  status: "pending" | "running" | "pass" | "fail" | "error";
+  diff_metric: number | null;
+  error_message: string | null;
+  stdout_tail: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export function createReplayJob(
+  body: { call_id: string; pr_id?: string; candidate_fix_diff?: string; timeout_seconds?: number },
+): Promise<ReplayJobResponse> {
+  return request<ReplayJobResponse>("/v1/replay/jobs", { method: "POST", body });
+}
+
+export function getReplayJob(replayId: string, signal?: AbortSignal): Promise<ReplayJobResponse> {
+  return request<ReplayJobResponse>(`/v1/replay/jobs/${encodeURIComponent(replayId)}`, { signal });
+}
+
+// ── Detectors ─────────────────────────────────────────────────────────────────
+
+export function listDetectors(signal?: AbortSignal): Promise<DetectorListResponse> {
+  return request<DetectorListResponse>("/v1/detectors", { signal });
+}
+
+// ── Feature-interest voting (Module 9 smoke-test) ─────────────────────────────
+
+export function submitFeatureVote(
+  body: FeatureVoteRequest,
+): Promise<FeatureVoteResponse> {
+  return request<FeatureVoteResponse>("/v1/feature-interest", {
+    method: "POST",
+    body,
+  });
+}
+
+export function getMyFeatureVote(
+  featureKey: string,
+  signal?: AbortSignal,
+): Promise<FeatureVoteResponse> {
+  return request<FeatureVoteResponse>("/v1/feature-interest/me", {
+    query: { feature_key: featureKey },
+    signal,
+  });
+}
+
+// ── Provider Drift Watch ──────────────────────────────────────────────────────
+
+export function listDriftModels(signal?: AbortSignal): Promise<DriftModelView[]> {
+  return request<DriftModelView[]>("/v1/drift/models", { signal });
+}
+
+export function getDriftStatus(signal?: AbortSignal): Promise<StatusResponse> {
+  return request<StatusResponse>("/v1/drift/status", { signal });
+}
+
+export function getDriftHistory(
+  modelId: string,
+  signal?: AbortSignal,
+): Promise<ModelHistoryResponse[]> {
+  return request<ModelHistoryResponse[]>(`/v1/drift/history/${encodeURIComponent(modelId)}`, { signal });
+}
+
+// ── Judge Calibration ────────────────────────────────────────────────────────
+
+export interface CalibrationPerClassMetric {
+  label: string;
+  precision: number;
+  recall: number;
+  f1: number;
+  support: number;
+}
+
+export interface CalibrationRunView {
+  id: string;
+  project_id: string;
+  judge_model: string;
+  run_date: string;
+  status: string;
+  sample_count: number;
+  agreement_count: number;
+  accuracy: number;
+  kappa: number;
+  low_confidence_pct: number;
+  per_class_metrics: CalibrationPerClassMetric[];
+  confusion_matrix: Record<string, Record<string, number>>;
+  cost_usd: number;
+  completed_at: string | null;
+}
+
+export interface CalibrationModeView {
+  project_id: string;
+  judge_model: string;
+  mode: string;
+  reason: string | null;
+  accuracy: number | null;
+  sample_count: number | null;
+  last_run_date: string | null;
+}
+
+export interface CalibrationRunNowResponse {
+  run_id: string;
+  status: string;
+  message: string;
+}
+
+export function getCalibrationLatest(
+  judgeModel?: string,
+  signal?: AbortSignal,
+): Promise<CalibrationRunView[]> {
+  return request<CalibrationRunView[]>("/v1/judge/calibration/latest", {
+    query: judgeModel ? { judge_model: judgeModel } : undefined,
+    signal,
+  });
+}
+
+export function getCalibrationHistory(
+  judgeModel: string,
+  days = 30,
+  signal?: AbortSignal,
+): Promise<CalibrationRunView[]> {
+  return request<CalibrationRunView[]>("/v1/judge/calibration/history", {
+    query: { judge_model: judgeModel, days },
+    signal,
+  });
+}
+
+export function getCalibrationMode(
+  judgeModel: string,
+  signal?: AbortSignal,
+): Promise<CalibrationModeView> {
+  return request<CalibrationModeView>(
+    `/v1/judge/calibration/mode/${encodeURIComponent(judgeModel)}`,
+    { signal },
+  );
+}
+
+export function triggerCalibrationRunNow(
+  judgeModel?: string,
+  signal?: AbortSignal,
+): Promise<CalibrationRunNowResponse> {
+  return request<CalibrationRunNowResponse>("/v1/judge/calibration/run-now", {
+    method: "POST",
+    query: judgeModel ? { judge_model: judgeModel } : undefined,
+    signal,
+  });
+}
+
+export interface LabelView {
+  id: string;
+  golden_trace_id: string;
+  labeler_user_id: string | null;
+  verdict: string;
+  rationale: string | null;
+  version: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface LabelCreate {
+  golden_trace_id: string;
+  verdict: "pass" | "fail" | "inconclusive";
+  rationale?: string;
+}
+
+export function listCalibrationLabels(
+  traceId?: string,
+  signal?: AbortSignal,
+): Promise<LabelView[]> {
+  return request<LabelView[]>("/v1/judge/calibration/labels", {
+    query: traceId ? { trace_id: traceId } : undefined,
+    signal,
+  });
+}
+
+export function createOrUpdateCalibrationLabel(
+  body: LabelCreate,
+  signal?: AbortSignal,
+): Promise<LabelView> {
+  return request<LabelView>("/v1/judge/calibration/labels", {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+export function deleteCalibrationLabel(
+  labelId: string,
+  signal?: AbortSignal,
+): Promise<{ message: string; label_id: string }> {
+  return request<{ message: string; label_id: string }>(
+    `/v1/judge/calibration/labels/${encodeURIComponent(labelId)}`,
+    { method: "DELETE", signal },
+  );
+}
+
+// ── Cost-of-Failure Attribution ───────────────────────────────────────────────
+
+export interface OutcomeTypeRow {
+  outcome_type: string;
+  total_usd: number;
+  count: number;
+  avg_usd: number;
+}
+
+export interface AttributionClusterRow {
+  agent_name: string | null;
+  detector: string | null;
+  outcome_cost_usd: number;
+  outcome_count: number;
+  failure_count: number;
+  estimated_monthly_savings_usd: number;
+  top_outcome_type: string | null;
+}
+
+export interface OutcomeSummaryResponse {
+  window_days: number;
+  total_outcome_usd: number;
+  linked_outcome_count: number;
+  unlinked_outcome_count: number;
+  avg_cost_per_linked: number;
+  by_type: OutcomeTypeRow[];
+  by_cluster: AttributionClusterRow[];
+}
+
+export interface ReplaySavingsResponse {
+  run_id: string;
+  prevented_outcome_cost_usd: number;
+  message: string;
+}
+
+export interface OutcomeIngestPayload {
+  call_id?: string;
+  outcome_type: string;
+  amount_usd: number;
+  occurred_at?: string;
+  external_ref?: string;
+  idempotency_key?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface OutcomeView {
+  id: string;
+  project_id: string;
+  call_id: string | null;
+  outcome_type: string;
+  amount_usd: number;
+  source: string;
+  occurred_at: string;
+  external_ref: string | null;
+  created_at: string;
+}
+
+export function getOutcomeSummary(
+  days = 30,
+  signal?: AbortSignal,
+): Promise<OutcomeSummaryResponse> {
+  return request<OutcomeSummaryResponse>("/v1/outcomes/summary", {
+    query: { days: String(days) },
+    signal,
+  });
+}
+
+export function getReplaySavings(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ReplaySavingsResponse> {
+  return request<ReplaySavingsResponse>(`/v1/outcomes/replay/${encodeURIComponent(runId)}`, {
+    signal,
+  });
+}
+
+export function ingestOutcome(
+  payload: OutcomeIngestPayload,
+  signal?: AbortSignal,
+): Promise<OutcomeView> {
+  return request<OutcomeView>("/v1/outcomes", {
+    method: "POST",
+    body: payload,
+    signal,
+  });
+}
+
+// ── Ablation Root-Cause Attribution ──────────────────────────────────────────
+
+export interface AblationAxisView {
+  id: string;
+  axis_type: string;
+  axis_label: string;
+  failing_value: string | null;
+  confidence: number;
+  evidence: Record<string, unknown> | null;
+}
+
+export interface AblationJobView {
+  id: string;
+  project_id: string;
+  call_id: string;
+  diagnosis_job_id: string | null;
+  status: string;
+  determinism_class: string | null;
+  control_group_size: number;
+  root_cause_narrative: string | null;
+  fix_suggestion: string | null;
+  fix_difficulty: string | null;
+  synthesis_confidence: number | null;
+  error_message: string | null;
+  axes: AblationAxisView[];
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface TriggerAblationPayload {
+  call_id: string;
+  diagnosis_job_id?: string;
+}
+
+export interface TriggerAblationResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+export function triggerAblation(
+  payload: TriggerAblationPayload,
+  signal?: AbortSignal,
+): Promise<TriggerAblationResponse> {
+  return request<TriggerAblationResponse>("/v1/ablation", {
+    method: "POST",
+    body: payload,
+    signal,
+  });
+}
+
+export function getAblationJob(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<AblationJobView> {
+  return request<AblationJobView>(`/v1/ablation/${encodeURIComponent(jobId)}`, { signal });
+}
+
+export function getAblationJobsForCall(
+  callId: string,
+  signal?: AbortSignal,
+): Promise<AblationJobView[]> {
+  return request<AblationJobView[]>(`/v1/ablation/by-call/${encodeURIComponent(callId)}`, { signal });
+}
+
+export function listAblationJobs(
+  statusFilter?: string,
+  limit = 20,
+  signal?: AbortSignal,
+): Promise<AblationJobView[]> {
+  return request<AblationJobView[]>("/v1/ablation", {
+    query: {
+      ...(statusFilter ? { status: statusFilter } : {}),
+      limit: String(limit),
+    },
+    signal,
+  });
+}
+
+// ── Agent Reliability Scorecard ───────────────────────────────────────────────
+
+export interface AgentScoreView {
+  agent_name: string;
+  score_date: string;
+  health_score: number;
+  fail_rate: number;
+  fail_rate_score: number;
+  cost_efficiency_score: number;
+  determinism_score: number;
+  regression_trend_score: number;
+  call_count: number;
+  avg_cost_usd: number;
+  p95_latency_ms: number | null;
+  prev_week_fail_rate: number | null;
+  determinism_breakdown: {
+    deterministic: number;
+    stochastic: number;
+    environmental: number;
+    unknown: number;
+  } | null;
+  top_failure_axis: string | null;
+  computed_at: string;
+}
+
+export interface ProjectReliabilitySummary {
+  project_id: string;
+  agent_count: number;
+  avg_health_score: number;
+  worst_agent: string | null;
+  best_agent: string | null;
+  total_deterministic_failures: number;
+  total_stochastic_failures: number;
+  score_date: string;
+}
+
+export interface ComputeReliabilityResponse {
+  agents_computed: number;
+  score_date: string;
+  message: string;
+}
+
+export function getReliabilityLeaderboard(
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<AgentScoreView[]> {
+  return request<AgentScoreView[]>("/v1/reliability/leaderboard", {
+    query: { limit: String(limit) },
+    signal,
+  });
+}
+
+export function getReliabilitySummary(
+  signal?: AbortSignal,
+): Promise<ProjectReliabilitySummary> {
+  return request<ProjectReliabilitySummary>("/v1/reliability/summary", { signal });
+}
+
+export function getAgentReliabilityHistory(
+  agentName: string,
+  days = 30,
+  signal?: AbortSignal,
+): Promise<AgentScoreView[]> {
+  return request<AgentScoreView[]>(
+    `/v1/reliability/agent/${encodeURIComponent(agentName)}`,
+    { query: { days: String(days) }, signal },
+  );
+}
+
+export function triggerReliabilityCompute(
+  signal?: AbortSignal,
+): Promise<ComputeReliabilityResponse> {
+  return request<ComputeReliabilityResponse>("/v1/reliability/compute", {
+    method: "POST",
+    signal,
+  });
+}
+
+// ── Reliability Intelligence Queue ────────────────────────────────────────────
+
+export interface RecView {
+  id: string;
+  agent_name: string;
+  recommendation_type: string;
+  priority: "critical" | "high" | "medium" | "low";
+  title: string;
+  detail: string | null;
+  fix_suggestion: string | null;
+  fix_difficulty: "easy" | "medium" | "hard" | null;
+  top_axis: string | null;
+  axis_confidence: number | null;
+  estimated_monthly_impact_usd: number | null;
+  impact_score: number;
+  health_score_at_generation: number | null;
+  fail_rate_at_generation: number | null;
+  call_count_window: number | null;
+  ablation_job_id: string | null;
+  status: "open" | "acknowledged" | "resolved" | "dismissed" | "snoozed";
+  actioned_by: string | null;
+  actioned_at: string | null;
+  snoozed_until: string | null;
+  generated_date: string;
+  created_at: string;
+}
+
+export interface RecSummaryView {
+  project_id: string;
+  total_open: number;
+  critical_count: number;
+  high_count: number;
+  total_estimated_saving_usd: number;
+  top_agents: string[];
+}
+
+export function listRecommendations(
+  params: {
+    status?: string;
+    priority?: string;
+    agent_name?: string;
+    limit?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<RecView[]> {
+  return request<RecView[]>("/v1/recommendations", {
+    query: {
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.priority ? { priority: params.priority } : {}),
+      ...(params.agent_name ? { agent_name: params.agent_name } : {}),
+      limit: String(params.limit ?? 50),
+    },
+    signal,
+  });
+}
+
+export function getRecSummary(signal?: AbortSignal): Promise<RecSummaryView> {
+  return request<RecSummaryView>("/v1/recommendations/summary", { signal });
+}
+
+export function updateRecStatus(
+  recId: string,
+  body: { status: string; actioned_by?: string; snoozed_until?: string },
+  signal?: AbortSignal,
+): Promise<RecView> {
+  return request<RecView>(`/v1/recommendations/${recId}/status`, {
+    method: "PATCH",
+    body,
+    signal,
+  });
+}
+
+export function generateRecommendations(
+  signal?: AbortSignal,
+): Promise<{ generated: number; message: string }> {
+  return request("/v1/recommendations/generate", { method: "POST", signal });
+}
+
+// ── Golden Sets (Pilot) ──────────────────────────────────────────────────────
+
+export interface GoldenSetView {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  judge_config_json: string | null;
+  trace_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoldenSetListResponse {
+  items: GoldenSetView[];
+  next_cursor: string | null;
+  total_in_page: number;
+}
+
+export interface GoldenTraceView {
+  id: string;
+  golden_set_id: string;
+  project_id: string;
+  call_id: string | null;
+  expected_output_text: string | null;
+  expected_tokens: number | null;
+  expected_cost_usd: number | null;
+  expected_latency_ms: number | null;
+  criteria_json: string | null;
+  weight: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoldenTraceListResponse {
+  items: GoldenTraceView[];
+  total_in_page: number;
+}
+
+export function listGoldenSets(
+  params: { limit?: number; cursor?: string } = {},
+  signal?: AbortSignal,
+): Promise<GoldenSetListResponse> {
+  return request<GoldenSetListResponse>("/v1/goldens", {
+    query: {
+      limit: String(params.limit ?? 20),
+      ...(params.cursor ? { cursor: params.cursor } : {}),
+    },
+    signal,
+  });
+}
+
+export function createGoldenSet(
+  body: { name: string; description?: string },
+  signal?: AbortSignal,
+): Promise<GoldenSetView> {
+  return request<GoldenSetView>("/v1/goldens", {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+export function getGoldenSet(
+  id: string,
+  signal?: AbortSignal,
+): Promise<GoldenSetView> {
+  return request<GoldenSetView>(`/v1/goldens/${encodeURIComponent(id)}`, { signal });
+}
+
+export function listGoldenTraces(
+  goldenSetId: string,
+  params: { limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<GoldenTraceListResponse> {
+  return request<GoldenTraceListResponse>(
+    `/v1/goldens/${encodeURIComponent(goldenSetId)}/traces`,
+    { query: { limit: String(params.limit ?? 50) }, signal },
+  );
+}
+
+export function addGoldenTrace(
+  goldenSetId: string,
+  body: { call_id?: string; expected_output_text?: string; weight?: number },
+  signal?: AbortSignal,
+): Promise<GoldenTraceView> {
+  return request<GoldenTraceView>(
+    `/v1/goldens/${encodeURIComponent(goldenSetId)}/traces`,
+    { method: "POST", body, signal },
+  );
+}
+
+export function deleteGoldenTrace(
+  goldenSetId: string,
+  traceId: string,
+  signal?: AbortSignal,
+): Promise<{ message: string }> {
+  return request<{ message: string }>(
+    `/v1/goldens/${encodeURIComponent(goldenSetId)}/traces/${encodeURIComponent(traceId)}`,
+    { method: "DELETE", signal },
+  );
 }

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """LangChain callback handler for ZROKY SDK."""
 from __future__ import annotations
 

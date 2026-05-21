@@ -1,0 +1,54 @@
+name: Schema Drift Check (Rule 1)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'api-contracts/ingest-event.schema.json'
+      - 'scripts/gen_from_schema.py'
+      - 'zroky-backend/app/schemas/ingest_event_v2.py'
+      - 'zroky-dashboard/src/lib/ingest-types.ts'
+      - 'zroky-backend/app/observability/otel_mapping.py'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'api-contracts/ingest-event.schema.json'
+      - 'scripts/gen_from_schema.py'
+      - 'zroky-backend/app/schemas/ingest_event_v2.py'
+      - 'zroky-dashboard/src/lib/ingest-types.ts'
+      - 'zroky-backend/app/observability/otel_mapping.py'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  schema-drift-check:
+    name: IngestEvent v2 Schema Drift Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install minimal deps for generator
+        run: pip install pydantic
+
+      - name: Regenerate artifacts from schema
+        run: python scripts/gen_from_schema.py
+
+      - name: Check for drift (fail if generated files differ from committed)
+        run: |
+          if ! git diff --exit-code \
+            zroky-backend/app/schemas/ingest_event_v2.py \
+            zroky-dashboard/src/lib/ingest-types.ts \
+            zroky-backend/app/observability/otel_mapping.py; then
+            echo ""
+            echo "::error::Schema drift detected. Generated files are out of sync with api-contracts/ingest-event.schema.json."
+            echo "::error::Run 'python scripts/gen_from_schema.py' locally and commit the updated generated files."
+            exit 1
+          fi
+          echo "OK — all generated artifacts match the schema."

@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.ingest_event_v2 import IngestEventV2
+
 
 class IngestEvent(BaseModel):
     call_id: str = Field(min_length=1, max_length=64)
@@ -82,7 +84,7 @@ class IngestEvent(BaseModel):
 
 
 class IngestBatchRequest(BaseModel):
-    events: list[IngestEvent] = Field(min_length=1, max_length=100)
+    events: list[IngestEventV2] = Field(min_length=1, max_length=100)
 
 
 class IngestBatchResponse(BaseModel):

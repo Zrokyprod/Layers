@@ -1,0 +1,48 @@
+name: postgres-failover
+description: |
+  Drop Postgres connectivity for 20 s while ingest is active.
+  Validates zero data loss on in-flight events and reconnection.
+
+toxiproxy:
+  upstream: postgres:5432
+  listen: 0.0.0.0:15432
+  toxics:
+    - name: failover
+      type: timeout
+      attributes:
+        timeout: 0
+      toxicity: 1.0
+
+steps:
+  - name: start_ingest_load
+    cmd: "python chaos-tests/helpers/ingest_load.py --rps=20 --duration=60"
+    background: true
+
+  - name: apply_failover
+    delay_seconds: 10
+    cmd: "toxiproxy-cli toxic add postgres-proxy --type=timeout --toxicity=1.0 --attribute=timeout=0"
+
+  - name: wait_during_failover
+    delay_seconds: 20
+
+  - name: remove_failover
+    cmd: "toxiproxy-cli toxic remove postgres-proxy --toxicName=failover"
+
+  - name: wait_for_recovery
+    delay_seconds: 15
+
+assertions:
+  - name: zero_data_loss
+    type: script
+    cmd: "python chaos-tests/helpers/verify_ingest_count.py"
+    expect: exit_zero
+
+  - name: no_panic
+    type: log_pattern
+    pattern: "panic"
+    expect: absent
+
+  - name: health_recovers
+    type: http
+    url: "http://localhost:8000/health/live"
+    expect: status_200_within_30s

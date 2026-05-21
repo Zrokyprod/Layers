@@ -17,7 +17,7 @@ from app.api.routes import live as live_routes
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import Call, DiagnosisJob
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.worker import tasks as worker_tasks
 from app.worker.celery_app import celery_app
@@ -57,6 +57,8 @@ def integration_ctx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     }
 
     app.dependency_overrides[get_db_session] = override_get_db_session
+    app.dependency_overrides[get_db_session_read] = override_get_db_session
+    monkeypatch.setattr("app.api.routes.live.SessionLocal", testing_session_local)
     monkeypatch.setattr(worker_tasks, "SessionLocal", testing_session_local)
     monkeypatch.setattr(worker_tasks, "idempotency_guard", _always_acquired)
     monkeypatch.setattr(worker_tasks, "set_db_tenant_context", lambda *_args, **_kwargs: None)

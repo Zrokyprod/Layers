@@ -1,0 +1,249 @@
+groups:
+  - name: zroky_slo_burn_rates
+    interval: 60s
+    rules:
+
+      # ── zroky-backend ────────────────────────────────────────────────────────
+      - alert: BackendSLOBurn1h
+        expr: |
+          (
+            sum(rate(http_requests_total{job="zroky-backend",status=~"5.."}[1h]))
+            /
+            sum(rate(http_requests_total{job="zroky-backend"}[1h]))
+          ) > 0.02
+        for: 2m
+        labels:
+          service: zroky-backend
+          severity: page
+        annotations:
+          summary: "zroky-backend: >2% error budget burned in 1h"
+          description: "Error rate {{ $value | humanizePercentage }} in last 1h. SLO window: 99.5% success. 2% budget in 1h = page."
+          runbook_url: "https://docs.zroky.dev/runbooks/backend-slo-burn"
+
+      - alert: BackendSLOBurn6h
+        expr: |
+          (
+            sum(rate(http_requests_total{job="zroky-backend",status=~"5.."}[6h]))
+            /
+            sum(rate(http_requests_total{job="zroky-backend"}[6h]))
+          ) > 0.05
+        for: 5m
+        labels:
+          service: zroky-backend
+          severity: page
+        annotations:
+          summary: "zroky-backend: >5% error budget burned in 6h"
+          description: "Error rate {{ $value | humanizePercentage }} in last 6h."
+          runbook_url: "https://docs.zroky.dev/runbooks/backend-slo-burn"
+
+      - alert: BackendSLOBurn24h
+        expr: |
+          (
+            sum(rate(http_requests_total{job="zroky-backend",status=~"5.."}[24h]))
+            /
+            sum(rate(http_requests_total{job="zroky-backend"}[24h]))
+          ) > 0.10
+        for: 10m
+        labels:
+          service: zroky-backend
+          severity: ticket
+        annotations:
+          summary: "zroky-backend: >10% error budget burned in 24h"
+          description: "Error rate {{ $value | humanizePercentage }} in last 24h."
+          runbook_url: "https://docs.zroky.dev/runbooks/backend-slo-burn"
+
+      # ── worker-diagnose ───────────────────────────────────────────────────────
+      - alert: WorkerDiagnoseSLOBurn1h
+        expr: |
+          (
+            sum(rate(celery_task_failures_total{job="worker-diagnose"}[1h]))
+            /
+            sum(rate(celery_task_total{job="worker-diagnose"}[1h]))
+          ) > 0.02
+        for: 2m
+        labels:
+          service: worker-diagnose
+          severity: page
+        annotations:
+          summary: "worker-diagnose: >2% task failure budget burned in 1h"
+          description: "Task failure rate {{ $value | humanizePercentage }} in last 1h."
+          runbook_url: "https://docs.zroky.dev/runbooks/worker-diagnose-slo"
+
+      - alert: WorkerDiagnoseSLOBurn6h
+        expr: |
+          (
+            sum(rate(celery_task_failures_total{job="worker-diagnose"}[6h]))
+            /
+            sum(rate(celery_task_total{job="worker-diagnose"}[6h]))
+          ) > 0.05
+        for: 5m
+        labels:
+          service: worker-diagnose
+          severity: page
+        annotations:
+          summary: "worker-diagnose: >5% task failure budget burned in 6h"
+          description: "Task failure rate {{ $value | humanizePercentage }} in last 6h."
+          runbook_url: "https://docs.zroky.dev/runbooks/worker-diagnose-slo"
+
+      - alert: WorkerDiagnoseSLOBurn24h
+        expr: |
+          (
+            sum(rate(celery_task_failures_total{job="worker-diagnose"}[24h]))
+            /
+            sum(rate(celery_task_total{job="worker-diagnose"}[24h]))
+          ) > 0.10
+        for: 10m
+        labels:
+          service: worker-diagnose
+          severity: ticket
+        annotations:
+          summary: "worker-diagnose: >10% task failure budget burned in 24h"
+          description: "Task failure rate {{ $value | humanizePercentage }} in last 24h."
+          runbook_url: "https://docs.zroky.dev/runbooks/worker-diagnose-slo"
+
+      # ── worker-fixes ──────────────────────────────────────────────────────────
+      - alert: WorkerFixesSLOBurn1h
+        expr: |
+          (
+            sum(rate(celery_task_failures_total{job="worker-fixes"}[1h]))
+            /
+            sum(rate(celery_task_total{job="worker-fixes"}[1h]))
+          ) > 0.02
+        for: 2m
+        labels:
+          service: worker-fixes
+          severity: page
+        annotations:
+          summary: "worker-fixes: >2% task failure budget burned in 1h"
+          description: "Task failure rate {{ $value | humanizePercentage }} in last 1h."
+          runbook_url: "https://docs.zroky.dev/runbooks/worker-fixes-slo"
+
+      - alert: WorkerFixesSLOBurn6h
+        expr: |
+          (
+            sum(rate(celery_task_failures_total{job="worker-fixes"}[6h]))
+            /
+            sum(rate(celery_task_total{job="worker-fixes"}[6h]))
+          ) > 0.05
+        for: 5m
+        labels:
+          service: worker-fixes
+          severity: page
+        annotations:
+          summary: "worker-fixes: >5% task failure budget burned in 6h"
+          description: "Task failure rate {{ $value | humanizePercentage }} in last 6h."
+          runbook_url: "https://docs.zroky.dev/runbooks/worker-fixes-slo"
+
+      - alert: WorkerFixesSLOBurn24h
+        expr: |
+          (
+            sum(rate(celery_task_failures_total{job="worker-fixes"}[24h]))
+            /
+            sum(rate(celery_task_total{job="worker-fixes"}[24h]))
+          ) > 0.10
+        for: 10m
+        labels:
+          service: worker-fixes
+          severity: ticket
+        annotations:
+          summary: "worker-fixes: >10% task failure budget burned in 24h"
+          description: "Task failure rate {{ $value | humanizePercentage }} in last 24h."
+          runbook_url: "https://docs.zroky.dev/runbooks/worker-fixes-slo"
+
+      # ── gateway ────────────────────────────────────────────────────────────────
+      - alert: GatewaySLOBurn1h
+        expr: |
+          (
+            sum(rate(gateway_requests_total{job="zroky-gateway",status=~"5.."}[1h]))
+            /
+            sum(rate(gateway_requests_total{job="zroky-gateway"}[1h]))
+          ) > 0.02
+        for: 2m
+        labels:
+          service: gateway
+          severity: page
+        annotations:
+          summary: "gateway: >2% error budget burned in 1h"
+          description: "Error rate {{ $value | humanizePercentage }} in last 1h."
+          runbook_url: "https://docs.zroky.dev/runbooks/gateway-slo"
+
+      - alert: GatewaySLOBurn6h
+        expr: |
+          (
+            sum(rate(gateway_requests_total{job="zroky-gateway",status=~"5.."}[6h]))
+            /
+            sum(rate(gateway_requests_total{job="zroky-gateway"}[6h]))
+          ) > 0.05
+        for: 5m
+        labels:
+          service: gateway
+          severity: page
+        annotations:
+          summary: "gateway: >5% error budget burned in 6h"
+          description: "Error rate {{ $value | humanizePercentage }} in last 6h."
+          runbook_url: "https://docs.zroky.dev/runbooks/gateway-slo"
+
+      - alert: GatewaySLOBurn24h
+        expr: |
+          (
+            sum(rate(gateway_requests_total{job="zroky-gateway",status=~"5.."}[24h]))
+            /
+            sum(rate(gateway_requests_total{job="zroky-gateway"}[24h]))
+          ) > 0.10
+        for: 10m
+        labels:
+          service: gateway
+          severity: ticket
+        annotations:
+          summary: "gateway: >10% error budget burned in 24h"
+          description: "Error rate {{ $value | humanizePercentage }} in last 24h."
+          runbook_url: "https://docs.zroky.dev/runbooks/gateway-slo"
+
+      # ── clickhouse ─────────────────────────────────────────────────────────────
+      - alert: ClickhouseSLOBurn1h
+        expr: |
+          (
+            sum(rate(clickhouse_query_errors_total{job="clickhouse"}[1h]))
+            /
+            sum(rate(clickhouse_queries_total{job="clickhouse"}[1h]))
+          ) > 0.02
+        for: 2m
+        labels:
+          service: clickhouse
+          severity: page
+        annotations:
+          summary: "clickhouse: >2% query error budget burned in 1h"
+          description: "Query error rate {{ $value | humanizePercentage }} in last 1h."
+          runbook_url: "https://docs.zroky.dev/runbooks/clickhouse-slo"
+
+      - alert: ClickhouseSLOBurn6h
+        expr: |
+          (
+            sum(rate(clickhouse_query_errors_total{job="clickhouse"}[6h]))
+            /
+            sum(rate(clickhouse_queries_total{job="clickhouse"}[6h]))
+          ) > 0.05
+        for: 5m
+        labels:
+          service: clickhouse
+          severity: page
+        annotations:
+          summary: "clickhouse: >5% query error budget burned in 6h"
+          description: "Query error rate {{ $value | humanizePercentage }} in last 6h."
+          runbook_url: "https://docs.zroky.dev/runbooks/clickhouse-slo"
+
+      - alert: ClickhouseSLOBurn24h
+        expr: |
+          (
+            sum(rate(clickhouse_query_errors_total{job="clickhouse"}[24h]))
+            /
+            sum(rate(clickhouse_queries_total{job="clickhouse"}[24h]))
+          ) > 0.10
+        for: 10m
+        labels:
+          service: clickhouse
+          severity: ticket
+        annotations:
+          summary: "clickhouse: >10% query error budget burned in 24h"
+          description: "Query error rate {{ $value | humanizePercentage }} in last 24h."
+          runbook_url: "https://docs.zroky.dev/runbooks/clickhouse-slo"

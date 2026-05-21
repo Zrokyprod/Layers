@@ -9,7 +9,7 @@ from sqlalchemy.orm import load_only, selectinload
 
 from app.core.config import get_settings
 from app.realtime.publisher import publish_diagnosis, publish_loop_alert, publish_auth_failure_alert, publish_rate_limit_alert, publish_cost_spike
-from app.db.models import AuditLog, Call, DiagnosisFixWatch, DiagnosisJob, Project, ProjectDashboardConfig
+from app.db.models import AuditLog, Call, DiagnosisFixWatch, DiagnosisJob, Project, ProjectDashboardConfig, ReplayRun
 from app.db.session import SessionLocal, set_db_tenant_context
 from app.observability.metrics import (
     record_diagnosis_job,
@@ -45,18 +45,15 @@ from app.services.retention import (
     normalize_retention_days,
     purge_project_retention_data,
 )
-from app.services.currency import refresh_live_usd_to_inr_rate
 from app.worker.celery_app import celery_app
 from app.worker.idempotency import idempotency_guard
 from app.services.email_sender import send_email, send_slack_message
-from app.services.error_ai_parser import get_error_ai_parser
 from app.services.weekly_impact import (
     WeeklyImpactSummary,
     compute_weekly_impact,
     render_weekly_impact_html,
     render_weekly_impact_plain,
 )
-
 logger = logging.getLogger(__name__)
 
 LOOP_REPEAT_THRESHOLD = 5
@@ -1028,6 +1025,69 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                 job.error_message = None
                 sync_alerts_from_jobs(session, tenant_id, [job])
                 session.commit()
+                # Group each detected failure code into the issues triage table
+                # AND, in parallel, into the new anomalies table (Module 3 Phase B
+                # of the issues→anomalies rename — plan §3.1, §6.1). The two
+                # writes share the same source-of-truth iteration; demoted codes
+                # per plan §6.1 (AUTH_FAILURE, TOKEN_OVERFLOW, RATE_LIMIT,
+                # PROVIDER_ERROR) are skipped on the anomalies side via the
+                # `map_failure_code_to_detector` helper but still recorded in
+                # the legacy issues table for backwards compat.
+                try:
+                    from app.services.issues import upsert_issue
+                    from app.services.anomalies import (
+                        map_failure_code_to_detector,
+                        upsert_anomaly,
+                    )
+                    _call_cost = float(getattr(call, "cost_total", None) or 0.0) if call else 0.0
+                    _occurred_at = getattr(job, "created_at", None) or datetime.now(timezone.utc)
+                    _prompt_fp = _as_text(payload_with_db_context.get("prompt_fingerprint"))
+                    _agent_name = _as_text(payload_with_db_context.get("agent_name"))
+                    _seen_codes: set[str] = set()
+                    for _diag_item in result.get("diagnoses", []):
+                        if not isinstance(_diag_item, dict):
+                            continue
+                        _code = str(_diag_item.get("category", "")).strip().upper()
+                        if not _code or _code in ("UNKNOWN", "") or _code in _seen_codes:
+                            continue
+                        _seen_codes.add(_code)
+                        _evidence = {
+                            "confidence": _diag_item.get("confidence"),
+                            "summary": _diag_item.get("summary") or _diag_item.get("title"),
+                        }
+                        upsert_issue(
+                            session,
+                            project_id=tenant_id,
+                            failure_code=_code,
+                            prompt_fingerprint=_prompt_fp,
+                            agent_name=_agent_name,
+                            call_id=str(job.call_id or ""),
+                            diagnosis_id=diagnosis_id,
+                            occurred_at=_occurred_at,
+                            call_cost_usd=_call_cost,
+                            evidence=_evidence,
+                        )
+                        _detector = map_failure_code_to_detector(_code)
+                        if _detector is not None:
+                            try:
+                                upsert_anomaly(
+                                    session,
+                                    project_id=tenant_id,
+                                    detector=_detector,
+                                    prompt_fingerprint=_prompt_fp,
+                                    agent_name=_agent_name,
+                                    call_id=str(job.call_id or "") or None,
+                                    occurred_at=_occurred_at,
+                                    evidence=_evidence,
+                                )
+                            except Exception:
+                                logger.warning(
+                                    "anomaly_upsert_failed",
+                                    extra={"code": _code, "detector": _detector},
+                                    exc_info=True,
+                                )
+                except Exception:
+                    logger.warning("issue_upsert_failed", exc_info=True)
                 # Write shown event so the fix appears in adoption funnel analytics.
                 try:
                     _result_payload = _fix_safe_json_object(job.result_json)
@@ -1120,6 +1180,32 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                             "diagnosis_id": diagnosis_id,
                         },
                     )
+
+                try:
+                    from app.services.judge_shadow import should_run_shadow_judge
+                    for _code in diagnosis_categories:
+                        if should_run_shadow_judge(db=session, tenant_id=tenant_id, failure_code=_code):
+                            _call_prompt = None
+                            _call_response = None
+                            if job.call is not None:
+                                _raw = _safe_json_object(job.call.payload_json)
+                                _call_prompt = _as_text(_raw.get("prompt"))
+                                _call_response = _as_text(_raw.get("response"))
+                            run_shadow_judge_task.apply_async(
+                                kwargs={
+                                    "tenant_id": tenant_id,
+                                    "call_id": str(job.call_id or ""),
+                                    "failure_code": _code,
+                                    "call_prompt": _call_prompt,
+                                    "call_response": _call_response,
+                                    "diagnosis_summary": str(diagnosis_id),
+                                },
+                                queue="diagnosis_pattern",
+                                countdown=5,
+                            )
+                            break
+                except Exception:
+                    logger.debug("shadow_judge_dispatch_failed", exc_info=True)
 
             return result
         except Exception as exc:
@@ -1261,25 +1347,6 @@ def requeue_pending_diagnosis_jobs(
         raise
     finally:
         session.close()
-
-
-@celery_app.task(name="app.worker.tasks.refresh_exchange_rate_cache", queue="diagnosis_fast")
-def refresh_exchange_rate_cache(*, force: bool = False) -> dict[str, Any]:
-    summary = refresh_live_usd_to_inr_rate(force=force)
-    status = str(summary.get("status") or "unknown")
-    log_payload = {
-        "event": "exchange_rate_refresh",
-        "status": status,
-        "force": bool(force),
-        "exchange_rate_source": summary.get("exchange_rate_source"),
-        "exchange_rate_timestamp": summary.get("exchange_rate_timestamp"),
-        "exchange_rate_usd_to_inr": summary.get("exchange_rate_usd_to_inr"),
-    }
-    if status in {"ok", "cached_fresh", "disabled"}:
-        logger.info("exchange_rate_refresh_completed", extra=log_payload)
-    else:
-        logger.warning("exchange_rate_refresh_degraded", extra=log_payload)
-    return summary
 
 
 @celery_app.task(name="app.worker.tasks.purge_project_retention", queue="diagnosis_fast")
@@ -1427,20 +1494,6 @@ def run_retention_enforcement(
         return summary_payload
     finally:
         session.close()
-
-
-@celery_app.task(name="app.worker.tasks.analyze_failed_call_with_ai", queue="diagnosis_pattern")
-def analyze_failed_call_with_ai(call_id: str, error_log: str) -> dict | None:
-    parser = get_error_ai_parser()
-    if not parser:
-        # LLM client not configured; skip AI analysis gracefully
-        return None
-
-    result = parser.analyze_error_with_deepseek(error_log)
-    if not result:
-        return None
-    # Here we would save it to DB, but returning is enough for testing
-    return result
 
 
 @celery_app.task(name="app.worker.tasks.send_weekly_impact_emails", queue="diagnosis_fast")
@@ -1600,5 +1653,572 @@ def notify_fix_watch_recurrences() -> dict:
                 logger.error("notify_fix_watch_recurrences: error for watch %s: %s", watch.id, exc)
 
         return {"watches_scanned": len(watches), "notifications_sent": notified, "errors": errors}
+    finally:
+        session.close()
+
+
+@celery_app.task(name="app.worker.tasks.sync_clickhouse", queue="diagnosis_fast", ignore_result=True)
+def sync_clickhouse() -> dict:
+    """Beat task: pull new Call rows from Postgres → insert into ClickHouse."""
+    from app.services.clickhouse_sync import sync_calls_to_clickhouse
+    session = SessionLocal()
+    try:
+        return sync_calls_to_clickhouse(session)
+    finally:
+        session.close()
+
+
+@celery_app.task(
+    name="app.worker.tasks.run_shadow_judge_task",
+    queue="diagnosis_pattern",
+    max_retries=0,
+    ignore_result=True,
+)
+def run_shadow_judge_task(
+    *,
+    tenant_id: str,
+    call_id: str,
+    failure_code: str,
+    call_prompt: str | None = None,
+    call_response: str | None = None,
+    diagnosis_summary: str | None = None,
+) -> dict:
+    """Background shadow judge — fire-and-forget, never retried, never blocks production."""
+    from app.services.judge_shadow import run_shadow_judge
+    verdict = run_shadow_judge(
+        tenant_id=tenant_id,
+        call_id=call_id,
+        failure_code=failure_code,
+        call_prompt=call_prompt,
+        call_response=call_response,
+        diagnosis_summary=diagnosis_summary,
+    )
+    logger.info(
+        "shadow_judge_completed tenant=%s call=%s code=%s verdict=%s conf=%.2f",
+        tenant_id,
+        call_id,
+        failure_code,
+        verdict.get("verdict"),
+        verdict.get("confidence", 0.0),
+    )
+    return verdict
+
+
+@celery_app.task(
+    name="app.worker.tasks.process_replay_run",
+    queue="diagnosis_pattern",
+    bind=True,
+    max_retries=2,
+)
+def process_replay_run(
+    self,
+    tenant_id: str,
+    run_id: str,
+    *,
+    record_calibration: bool = False,
+) -> dict:
+    """Execute a pending ReplayRun (Module 8; plan §6.4).
+
+    Grades every GoldenTrace in the parent set against the configured
+    judge_engine evaluator and writes one ReplayRunTrace row per trace.
+
+    Idempotent on the (tenant_id, run_id) pair via the standard
+    idempotency_guard; once a run is non-pending the executor itself
+    short-circuits, so retries are safe.
+
+    Resolves the right evaluator based on the org's plan + entitlements
+    so Pro gets single-judge (Haiku-4) and Team+ gets ensemble per locked
+    decision #4.
+    """
+    task_key = f"replay:{tenant_id}:{run_id}"
+    with idempotency_guard(task_key) as acquired:
+        if not acquired:
+            return {
+                "status": "duplicate_ignored",
+                "tenant_id": tenant_id,
+                "run_id": run_id,
+            }
+
+        session = SessionLocal()
+        try:
+            set_db_tenant_context(session, tenant_id)
+
+            # Resolve the right evaluator for this org. Resolver lookups
+            # are cached (60s TTL) so this is a cheap call. Failure to
+            # resolve (e.g. cache layer down) falls through to the
+            # plan-code default path in get_evaluator.
+            from app.services import judge_engine
+            from app.services.entitlements_resolver import (
+                get_plan_code,
+                resolve_all,
+            )
+            from app.services.replay_executor import (
+                ReplayBudgetTracker,
+                default_resolver,
+                execute_replay_run,
+                make_live_llm_resolver,
+            )
+            from app.services.replay_runs import (
+                REPLAY_MODE_REAL_LLM,
+                parse_summary,
+            )
+
+            try:
+                ents = resolve_all(session, tenant_id)
+                plan = get_plan_code(session, tenant_id)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "process_replay_run.entitlements_lookup_failed tenant=%s",
+                    tenant_id,
+                    exc_info=True,
+                )
+                ents = None
+                plan = None
+            evaluator = judge_engine.get_evaluator(
+                plan_code=plan, entitlements_dict=ents
+            )
+
+            # ── Option B: resolve replay mode + overrides from summary ────
+            run = session.execute(
+                select(ReplayRun).where(
+                    ReplayRun.project_id == tenant_id,
+                    ReplayRun.id == run_id,
+                )
+            ).scalar_one_or_none()
+            if run is None:
+                logger.warning(
+                    "process_replay_run.run_not_found tenant=%s run=%s",
+                    tenant_id, run_id,
+                )
+                return {
+                    "status": "not_found",
+                    "tenant_id": tenant_id,
+                    "run_id": run_id,
+                }
+
+            summary = parse_summary(run.summary_json)
+            replay_mode = summary.get("replay_mode", "stub")
+            candidate_prompt_override = summary.get("candidate_prompt_override")
+            candidate_model_override = summary.get("candidate_model_override")
+
+            # Plan gate: real-LLM replay requires Team+ or Enterprise.
+            # Pro and below fall back to stub with a warning log.
+            use_live_resolver = False
+            if replay_mode == REPLAY_MODE_REAL_LLM:
+                from app.services.entitlements_resolver import has
+
+                real_llm_entitled = has(
+                    session, tenant_id, "pilot.real_llm_replay_enabled"
+                )
+                if not real_llm_entitled:
+                    logger.warning(
+                        "process_replay_run.plan_gate_blocked tenant=%s run=%s "
+                        "plan=%s — falling back to stub resolver",
+                        tenant_id, run_id, plan,
+                    )
+                    use_live_resolver = False
+                else:
+                    use_live_resolver = True
+
+            # Budget tracker only matters when we're doing live calls.
+            budget_tracker = None
+            if use_live_resolver:
+                from app.core.config import get_settings
+
+                budget_usd = float(
+                    get_settings().REPLAY_REAL_LLM_BUDGET_USD
+                )
+                budget_tracker = ReplayBudgetTracker(budget_usd=budget_usd)
+
+            actual_output_resolver = (
+                make_live_llm_resolver(
+                    candidate_prompt_override=candidate_prompt_override,
+                    candidate_model_override=candidate_model_override,
+                    budget_tracker=budget_tracker,
+                )
+                if use_live_resolver
+                else default_resolver
+            )
+
+            run = execute_replay_run(
+                session,
+                project_id=tenant_id,
+                run_id=run_id,
+                evaluator=evaluator,
+                record_calibration=record_calibration,
+                actual_output_resolver=actual_output_resolver,
+                budget_tracker=budget_tracker,
+            )
+            if run is None:
+                logger.warning(
+                    "process_replay_run.run_not_found tenant=%s run=%s",
+                    tenant_id, run_id,
+                )
+                return {
+                    "status": "not_found",
+                    "tenant_id": tenant_id,
+                    "run_id": run_id,
+                }
+
+            # ── Auto-fix PR generation (most advanced — Enterprise) ──
+            # Trigger only when a real-LLM replay with overrides fails.
+            if replay_mode == REPLAY_MODE_REAL_LLM and run.status in ("fail", "error"):
+                from app.services.replay_pr_dispatch import (
+                    dispatch_replay_fix_pr,
+                )
+
+                try:
+                    outcome = dispatch_replay_fix_pr(
+                        session, replay_run=run
+                    )
+                    logger.info(
+                        "process_replay_run.autofix_outcome tenant=%s run=%s "
+                        "decision=%s pr_url=%s",
+                        tenant_id,
+                        run_id,
+                        outcome.decision,
+                        (outcome.action.pr_url or "")
+                        if outcome.action
+                        else None,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "process_replay_run.autofix_failed tenant=%s run=%s",
+                        tenant_id, run_id,
+                    )
+
+            return {
+                "status": run.status,
+                "tenant_id": tenant_id,
+                "run_id": run_id,
+                "summary": json.loads(run.summary_json) if run.summary_json else {},
+            }
+        except Exception as exc:
+            session.rollback()
+            retry_count = _current_retry_count(self)
+            if retry_count < 2:
+                logger.warning(
+                    "process_replay_run.retry tenant=%s run=%s attempt=%d",
+                    tenant_id, run_id, retry_count + 1,
+                )
+                raise self.retry(exc=exc, countdown=30)
+            logger.exception(
+                "process_replay_run.failed tenant=%s run=%s",
+                tenant_id, run_id,
+            )
+            # Best-effort: mark the run as error so the dashboard stops
+            # polling a pending row indefinitely.
+            try:
+                from app.services.replay_executor import _finalize_error  # type: ignore[attr-defined]
+
+                run = session.execute(
+                    select(ReplayRun).where(
+                        ReplayRun.project_id == tenant_id,
+                        ReplayRun.id == run_id,
+                    )
+                ).scalar_one_or_none()
+                if run is not None and run.status in ("pending", "running"):
+                    _finalize_error(
+                        session, run, reason=f"worker_error:{type(exc).__name__}"
+                    )
+            except Exception:  # noqa: BLE001
+                logger.debug("process_replay_run.finalize_error_failed", exc_info=True)
+            return {
+                "status": "error",
+                "tenant_id": tenant_id,
+                "run_id": run_id,
+                "error_message": mask_error_message(exc),
+            }
+        finally:
+            session.close()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Module 12 — Subscription lifecycle automation (plan §11.4)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Two beat-driven sweeps that close the gap between Stripe's event
+# stream and section 11.4's locked transition rules:
+#
+#   * expire_trials                — application-managed (no-card) trials
+#   * expire_past_due_grace        — 7-day grace cap on past_due
+#
+# Both tasks are thin wrappers over `services.subscription_lifecycle`.
+# The actual transition logic, audit-log writes, and resolver-cache
+# invalidation live in the service module so unit tests can drive the
+# same code paths without Celery.
+#
+# Cadence: hourly. The trial-expiry worst case (one row that became
+# eligible at 00:01) sees its downgrade by 01:07 — well under the
+# customer-perception bound of "starts working within an hour".
+#
+# Idempotency: the eligibility filters in the service guarantee
+# re-entry safety. Concurrent sweeps would each pick the same rows
+# and the second would find the rows already transitioned. We do
+# NOT add a distributed lock — the cost is one wasted SELECT per
+# duplicate run, which is cheap.
+
+
+@celery_app.task(
+    name="app.worker.tasks.expire_trials", queue="diagnosis_fast"
+)
+def expire_trials(limit: int | None = None) -> dict:
+    """Beat task: downgrade `trialing` subscriptions whose `trial_end`
+    has passed AND that have no Stripe subscription. See
+    `services.subscription_lifecycle.sweep_expired_trials` for the
+    eligibility contract.
+
+    Returns a summary dict so beat logs surface counts.
+    """
+    from app.services.subscription_lifecycle import sweep_expired_trials
+
+    settings = get_settings()
+    if not settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
+        logger.info("expire_trials: BILLING_LIFECYCLE_SWEEP_ENABLED=false — skipping")
+        return {"skipped": True, "reason": "BILLING_LIFECYCLE_SWEEP_ENABLED=false"}
+
+    effective_limit = (
+        int(limit)
+        if limit is not None and limit > 0
+        else int(settings.BILLING_LIFECYCLE_SWEEP_LIMIT)
+    )
+
+    session = SessionLocal()
+    try:
+        result = sweep_expired_trials(session, limit=effective_limit)
+        logger.info(
+            "expire_trials.completed",
+            extra={
+                "event": "subscription_lifecycle",
+                "task": "expire_trials",
+                "examined": result.examined,
+                "transitioned": result.transitioned,
+                "failed": result.failed,
+            },
+        )
+        # Strip per-row transitions from the dict to keep the Celery
+        # result envelope small. Operators read counts from logs.
+        out = result.to_dict()
+        out.pop("transitions", None)
+        return out
+    finally:
+        session.close()
+
+
+@celery_app.task(
+    name="app.worker.tasks.expire_past_due_grace", queue="diagnosis_fast"
+)
+def expire_past_due_grace(
+    grace_days: int | None = None,
+    limit: int | None = None,
+) -> dict:
+    """Beat task: hard-downgrade `past_due` subscriptions whose
+    `current_period_end + grace_days` has passed. See
+    `services.subscription_lifecycle.sweep_expired_past_due_grace`
+    for the eligibility contract.
+
+    grace_days defaults to BILLING_PAST_DUE_GRACE_DAYS (locked at 7
+    per plan §11.4 binding); the kwarg exists so an operator can run
+    a one-off sweep with a longer window during a Stripe outage.
+    """
+    from app.services.subscription_lifecycle import sweep_expired_past_due_grace
+
+    settings = get_settings()
+    if not settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
+        logger.info(
+            "expire_past_due_grace: BILLING_LIFECYCLE_SWEEP_ENABLED=false — skipping"
+        )
+        return {"skipped": True, "reason": "BILLING_LIFECYCLE_SWEEP_ENABLED=false"}
+
+    effective_grace = (
+        int(grace_days)
+        if grace_days is not None and grace_days >= 0
+        else int(settings.BILLING_PAST_DUE_GRACE_DAYS)
+    )
+    effective_limit = (
+        int(limit)
+        if limit is not None and limit > 0
+        else int(settings.BILLING_LIFECYCLE_SWEEP_LIMIT)
+    )
+
+    session = SessionLocal()
+    try:
+        result = sweep_expired_past_due_grace(
+            session, grace_days=effective_grace, limit=effective_limit,
+        )
+        logger.info(
+            "expire_past_due_grace.completed",
+            extra={
+                "event": "subscription_lifecycle",
+                "task": "expire_past_due_grace",
+                "grace_days": effective_grace,
+                "examined": result.examined,
+                "transitioned": result.transitioned,
+                "failed": result.failed,
+            },
+        )
+        out = result.to_dict()
+        out.pop("transitions", None)
+        return out
+    finally:
+        session.close()
+
+
+@celery_app.task(name="app.worker.tasks.run_judge_calibration_all_projects")
+def run_judge_calibration_all_projects() -> dict:
+    """Beat task: run judge calibration for every active project with
+    labeled golden traces.
+
+    Idempotent per (project_id, judge_model, run_date) — the runner
+    short-circuits if a complete row already exists.
+    """
+    from datetime import date as _date
+
+    from sqlalchemy import select
+
+    from app.db.models import Project
+    from app.services.judge_calibration_runner import run_calibration
+
+    settings = get_settings()
+    if not settings.JUDGE_CALIBRATION_ENABLED:
+        logger.info("judge_calibration_all_projects: JUDGE_CALIBRATION_ENABLED=false — skipping")
+        return {"skipped": True, "reason": "JUDGE_CALIBRATION_ENABLED=false"}
+
+    today = _date.today()
+    session = SessionLocal()
+    results = []
+    try:
+        projects = session.execute(select(Project).where(Project.active.is_(True))).scalars().all()
+        for project in projects:
+            set_db_tenant_context(project.id)
+            try:
+                run = run_calibration(
+                    db=session,
+                    project_id=project.id,
+                    judge_model=settings.JUDGE_SINGLE_MODEL,
+                )
+                results.append(
+                    {
+                        "project_id": project.id,
+                        "run_id": run.id,
+                        "status": run.status,
+                        "accuracy": run.accuracy,
+                        "sample_count": run.sample_count,
+                    }
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "judge_calibration.project_failed",
+                    extra={
+                        "project_id": project.id,
+                        "error": str(exc),
+                    },
+                )
+                results.append(
+                    {
+                        "project_id": project.id,
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
+    finally:
+        session.close()
+
+    logger.info(
+        "judge_calibration_all_projects.completed",
+        extra={
+            "event": "judge_calibration_all_projects",
+            "task": "run_judge_calibration_all_projects",
+            "date": str(today),
+            "projects": len(results),
+            "completed": sum(1 for r in results if r.get("status") == "complete"),
+        },
+    )
+    return {"date": str(today), "results": results}
+
+
+@celery_app.task(name="app.worker.tasks.run_provider_drift_watch")
+def run_provider_drift_watch() -> dict:
+    """Beat task: dispatch probe suite for every active model, then run
+    the aggregator for today's date.
+
+    Two-phase so probes and alerts are never in an inconsistent state:
+      1. Runner: one (model, date) at a time, budget-capped.
+      2. Aggregator: compute drift metrics, upsert alerts.
+
+    Returns:
+        {"runs": list of RunOutcome dicts, "aggregator": AggregatorOutcome dict}
+    """
+    from datetime import date as _date
+
+    from app.services.provider_drift.aggregator import run_aggregator
+    from app.services.provider_drift.models import ModelSpec
+    from app.services.provider_drift.prompt_suite import load_active_prompts
+    from app.services.provider_drift.runner import execute_run, load_active_models as _load_active_models
+
+    settings = get_settings()
+    if not settings.PROVIDER_DRIFT_WATCH_ENABLED:
+        logger.info("run_provider_drift_watch: PROVIDER_DRIFT_WATCH_ENABLED=false — skipping")
+        return {"skipped": True, "reason": "PROVIDER_DRIFT_WATCH_ENABLED=false"}
+
+    today = _date.today()
+    session = SessionLocal()
+    run_results = []
+    try:
+        models = _load_active_models(session)
+        prompts = load_active_prompts(session)
+        for model_row in models:
+            model_spec = ModelSpec(
+                id=model_row.id,
+                provider=model_row.provider,
+                model_id=model_row.model_id,
+                display_name=model_row.display_name,
+                family=model_row.family,
+                active=model_row.active,
+            )
+            outcome = execute_run(
+                db=session,
+                model_spec=model_spec,
+                run_date=today,
+                prompts=prompts,
+                provider_client=None,
+                embedder=None,
+                budget_usd=settings.PROVIDER_DRIFT_WATCH_BUDGET_USD,
+            )
+            run_results.append({
+                "run_id": outcome.run_id,
+                "model_id": outcome.model_id,
+                "status": outcome.status,
+                "prompts_total": outcome.prompts_total,
+                "prompts_ok": outcome.prompts_ok,
+                "cost_usd": outcome.cost_usd,
+            })
+
+        agg = run_aggregator(db=session, current_date=today)
+
+        logger.info(
+            "provider_drift_watch.completed",
+            extra={
+                "event": "provider_drift_watch",
+                "task": "run_provider_drift_watch",
+                "date": str(today),
+                "runs": len(run_results),
+                "metrics_evaluated": agg.metrics_evaluated,
+                "alerts_published": agg.alerts_published,
+                "candidates": agg.candidates_recorded,
+                "skipped": agg.skipped_for_coverage,
+            },
+        )
+
+        return {
+            "date": str(today),
+            "runs": run_results,
+            "aggregator": {
+                "metrics_evaluated": agg.metrics_evaluated,
+                "alerts_published": agg.alerts_published,
+                "candidates_recorded": agg.candidates_recorded,
+                "skipped_for_coverage": agg.skipped_for_coverage,
+            },
+        }
     finally:
         session.close()

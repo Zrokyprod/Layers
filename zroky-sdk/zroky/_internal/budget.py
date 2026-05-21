@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Real-time budget enforcement engine.
 
 Prevents runaway AI spending with configurable limits at three scopes

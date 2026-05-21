@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """
 Local mode writer — persists call events to a local SQLite database
 when ZROKY_MODE=local. No cloud account required.

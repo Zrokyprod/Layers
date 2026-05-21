@@ -1,11 +1,13 @@
+import json as _json
+import logging as _logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -15,6 +17,73 @@ from app.core.limiter import limiter
 from app.core.logging import setup_logging
 from app.observability.context import get_correlation_id
 from app.observability.middleware import install_observability_middleware
+
+_startup_logger = _logging.getLogger(__name__)
+_drift_sink_registered = False
+
+
+def _register_judge_drift_alert_sink() -> None:
+    """Wire judge calibration drift breaches → project_alerts table.
+
+    Registered once at startup. The callback opens its own DB session so it
+    is safe to call from any thread (Celery worker, sync route, test runner).
+    Already-open alerts are silently skipped via the unique constraint.
+    """
+    global _drift_sink_registered
+    if _drift_sink_registered:
+        return
+    _drift_sink_registered = True
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.db.models import ProjectAlert
+    from app.db.session import SessionLocal
+    from app.services.judge_calibration import DriftStatus, register_alert_callback
+
+    def _on_drift(status: DriftStatus) -> None:
+        diagnosis_id = f"judge_drift:{status.judge_model}"[:64]
+        title = (
+            f"Judge drift: {status.judge_model} disagreement "
+            f"{status.disagreement_rate:.1%} ≥ threshold {status.threshold:.1%}"
+        )[:255]
+        evidence = _json.dumps(
+            {
+                "judge_model": status.judge_model,
+                "disagreement_rate": round(status.disagreement_rate, 4),
+                "disagreement_count": status.disagreement_count,
+                "sample_count": status.sample_count,
+                "threshold": status.threshold,
+            },
+            separators=(",", ":"),
+        )
+        db = SessionLocal()
+        try:
+            db.add(
+                ProjectAlert(
+                    tenant_id=status.project_id,
+                    diagnosis_id=diagnosis_id,
+                    category="JUDGE_DRIFT",
+                    severity="high",
+                    status="OPEN",
+                    source="judge_calibration",
+                    title=title,
+                    evidence_json=evidence,
+                )
+            )
+            db.commit()
+        except IntegrityError:
+            db.rollback()  # alert already open — ignore duplicate
+        except Exception:
+            db.rollback()
+            _startup_logger.exception(
+                "judge_drift_alert_sink: failed to persist alert project=%s model=%s",
+                status.project_id,
+                status.judge_model,
+            )
+        finally:
+            db.close()
+
+    register_alert_callback(_on_drift)
 
 settings = get_settings()
 validate_runtime_settings(settings)
@@ -34,6 +103,7 @@ if not _allowed_origins and not _is_production:
 async def lifespan(_: FastAPI):
     if settings.DATABASE_URL.startswith("sqlite"):
         Path(".data").mkdir(parents=True, exist_ok=True)
+    _register_judge_drift_alert_sink()
     yield
 
 
@@ -57,9 +127,18 @@ CORRELATION_ID_HEADER = "X-Correlation-Id"
 
 
 async def _correlation_error_handler(_request: Request, exc: StarletteHTTPException) -> Response:
-    """Return correlation_id in every HTTP error response for distributed tracing."""
+    """Return correlation_id in every HTTP error response for distributed tracing.
+
+    Merges any headers set on the HTTPException (e.g. X-Zroky-Plan-Hint on 402,
+    WWW-Authenticate on 401) so route-level header semantics survive this handler.
+    """
     correlation_id = get_correlation_id()
-    headers = {CORRELATION_ID_HEADER: correlation_id} if correlation_id and correlation_id != "-" else {}
+    headers: dict[str, str] = {}
+    exc_headers = getattr(exc, "headers", None)
+    if exc_headers:
+        headers.update(exc_headers)
+    if correlation_id and correlation_id != "-":
+        headers[CORRELATION_ID_HEADER] = correlation_id
     return JSONResponse(
         status_code=exc.status_code,
         content={

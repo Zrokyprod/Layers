@@ -1,150 +1,118 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  listNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
-  deleteNotification,
-} from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bell } from "lucide-react";
+
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/api";
 import type { NotificationItem } from "@/lib/types";
+import { useDashboardStore } from "@/lib/store";
+
+function formatRelative(value: string) {
+  const timestamp = new Date(value).getTime();
+  const deltaSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (deltaSeconds < 60) return "now";
+  if (deltaSeconds < 3600) return `${Math.floor(deltaSeconds / 60)}m ago`;
+  if (deltaSeconds < 86400) return `${Math.floor(deltaSeconds / 3600)}h ago`;
+  return `${Math.floor(deltaSeconds / 86400)}d ago`;
+}
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState("");
+  const unreadNotifications = useDashboardStore((state) => state.unreadNotifications);
+  const setUnreadNotifications = useDashboardStore((state) => state.setUnreadNotifications);
 
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
+  const load = useCallback(async () => {
     setLoading(true);
-    listNotifications({ limit: 20 })
-      .then((data) => {
-        setItems(data.items);
-        setUnreadCount(data.unread_count);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [open]);
+    setError("");
+    try {
+      const payload = await listNotifications({ limit: 5 });
+      setItems(payload.items);
+      setUnreadNotifications(payload.unread_count);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load notifications.");
+    } finally {
+      setLoading(false);
+    }
+  }, [setUnreadNotifications]);
 
   useEffect(() => {
-    if (open) return;
-    const id = setInterval(() => {
-      listNotifications({ unread_only: true, limit: 1 })
-        .then((data) => setUnreadCount(data.unread_count))
-        .catch(() => {});
-    }, 30000);
-    return () => clearInterval(id);
-  }, [open]);
+    void load();
+    const id = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(id);
+  }, [load]);
 
-  async function onMarkRead(id: string) {
-    await markNotificationRead(id);
-    setItems((prev) =>
-      prev.map((n) => (n.notification_id === id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n))
-    );
-    setUnreadCount((c) => Math.max(0, c - 1));
+  const unreadItems = useMemo(() => items.filter((item) => !item.is_read), [items]);
+
+  async function markOneRead(item: NotificationItem) {
+    if (item.is_read) return;
+    await markNotificationRead(item.notification_id);
+    setItems((prev) => prev.map((entry) => entry.notification_id === item.notification_id ? { ...entry, is_read: true, read_at: new Date().toISOString() } : entry));
+    setUnreadNotifications(Math.max(0, unreadNotifications - 1));
   }
 
-  async function onMarkAllRead() {
+  async function markAllRead() {
     await markAllNotificationsRead();
-    setItems((prev) => prev.map((n) => ({ ...n, is_read: true, read_at: new Date().toISOString() })));
-    setUnreadCount(0);
-  }
-
-  async function onDelete(id: string) {
-    await deleteNotification(id);
-    const removed = items.find((n) => n.notification_id === id);
-    setItems((prev) => prev.filter((n) => n.notification_id !== id));
-    if (removed && !removed.is_read) {
-      setUnreadCount((c) => Math.max(0, c - 1));
-    }
+    setItems((prev) => prev.map((item) => ({ ...item, is_read: true, read_at: item.read_at ?? new Date().toISOString() })));
+    setUnreadNotifications(0);
   }
 
   return (
-    <div className="nbell-root" ref={ref}>
+    <div className="notification-bell-wrap">
       <button
         type="button"
-        className="nbell-trigger"
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Notifications"
+        className="notification-bell-btn"
+        aria-label={`Notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ""}`}
+        onClick={() => {
+          setOpen((value) => !value);
+          if (!open) void load();
+        }}
       >
-        <span className="nbell-icon" aria-hidden="true">≡ƒöö</span>
-        {unreadCount > 0 && (
-          <span className="nbell-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
-        )}
+        <Bell className="notification-bell-icon" aria-hidden="true" />
+        {unreadNotifications > 0 ? <span className="notification-bell-count">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}
       </button>
 
-      {open && (
-        <div className="nbell-dropdown">
-          <div className="nbell-header">
-            <span className="nbell-title">Notifications</span>
-            {unreadCount > 0 && (
-              <button type="button" className="nbell-mark-all" onClick={() => void onMarkAllRead()}>
-                Γ£ô Mark all read
-              </button>
-            )}
+      {open ? (
+        <div className="notification-popover">
+          <div className="notification-popover-head">
+            <div>
+              <strong>Notifications</strong>
+              <span>{unreadItems.length} unread in latest batch</span>
+            </div>
+            <button type="button" className="link-button" onClick={() => void markAllRead()} disabled={unreadNotifications === 0}>
+              Mark all read
+            </button>
           </div>
 
-          <div className="nbell-list">
-            {loading && <div className="empty">LoadingΓÇª</div>}
-            {!loading && items.length === 0 && <div className="empty">No notifications</div>}
-            {items.map((n) => (
-              <div key={n.notification_id} className={`nbell-item${n.is_read ? " nbell-item-read" : " nbell-item-unread"}`}>
-                <div className="nbell-item-body">
-                  <p className="nbell-item-title">{n.title}</p>
-                  {n.body && <p className="nbell-item-text">{n.body}</p>}
-                  <p className="nbell-item-time">{new Date(n.created_at).toLocaleString()}</p>
-                  {n.action_url && (
-                    <Link href={n.action_url} className="nbell-item-link" onClick={() => setOpen(false)}>
-                      View ΓåÆ
-                    </Link>
-                  )}
+          {loading ? <p className="hint notification-empty">Loading…</p> : null}
+          {error ? <p className="hint notification-error">{error}</p> : null}
+          {!loading && !error && items.length === 0 ? <p className="hint notification-empty">No notifications yet.</p> : null}
+
+          <div className="notification-list-mini">
+            {items.map((item) => (
+              <Link
+                key={item.notification_id}
+                className={item.is_read ? "notification-mini notification-mini-read" : "notification-mini"}
+                href={item.action_url || "/notifications"}
+                onClick={() => void markOneRead(item)}
+              >
+                <div>
+                  <strong>{item.title}</strong>
+                  {item.body ? <span>{item.body}</span> : null}
                 </div>
-                <div className="nbell-item-actions">
-                  {!n.is_read && (
-                    <button
-                      type="button"
-                      className="nbell-icon-btn"
-                      onClick={() => void onMarkRead(n.notification_id)}
-                      aria-label="Mark as read"
-                      title="Mark as read"
-                    >
-                      Γ£ô
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="nbell-icon-btn nbell-icon-btn-del"
-                    onClick={() => void onDelete(n.notification_id)}
-                    aria-label="Delete"
-                    title="Delete"
-                  >
-                    Γ£ò
-                  </button>
-                </div>
-              </div>
+                <small>{formatRelative(item.created_at)}</small>
+              </Link>
             ))}
           </div>
 
-          <div className="nbell-footer">
-            <Link href="/notifications" className="nbell-view-all" onClick={() => setOpen(false)}>
-              View all notifications
-            </Link>
-          </div>
+          <Link className="notification-view-all" href="/notifications" onClick={() => setOpen(false)}>
+            View all notifications
+          </Link>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

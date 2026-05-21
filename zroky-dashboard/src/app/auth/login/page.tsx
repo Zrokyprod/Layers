@@ -86,7 +86,7 @@ export default function LoginPage() {
       <div className="auth-card">
         <div className="auth-header">
           <h2 className="auth-heading">Sign in to Zroky</h2>
-          <p className="auth-sub">Enterprise AI Rate Limit and Trust Engine</p>
+          <p className="auth-sub">AI Agent Reliability Platform</p>
         </div>
         <Suspense fallback={<p className="hint">Loading…</p>}>
           <LoginForm />

@@ -60,3 +60,8 @@ def get(key: str) -> Optional[str]:
 
 def delete(key: str) -> None:
     _cache.delete(key)
+
+
+def revoke_all_user_tokens(user_id: str) -> None:
+    """Blacklist marker for a user — downstream token validation checks this key."""
+    _cache.set(f"jwt_blacklisted_user:{user_id}", "1", ttl_seconds=86400 * 30)

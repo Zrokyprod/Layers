@@ -2,37 +2,102 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Menu, X } from "lucide-react";
+import { useEffect, useMemo, type ReactNode } from "react";
+import {
+  Activity,
+  AlertTriangle,
+  BadgeCheck,
+  Bell,
+  Coins,
+  Database,
+  DollarSign,
+  GitBranch,
+  Home,
+  LogOut,
+  Menu,
+  Network,
+  PhoneCall,
+  Radio,
+  Rocket,
+  RotateCcw,
+  Scale,
+  Settings,
+  ShieldCheck,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
-import { clearAccessToken, readEmailVerifiedFromBrowser } from "@/lib/auth";
-import { resendVerification } from "@/lib/api";
+import { clearAccessToken } from "@/lib/auth";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
 import { useOwnerProjects, useProjectSettings } from "@/lib/hooks";
 import { ThemeToggle } from "./theme-toggle";
-import { NotificationBell } from "./notification-bell";
 import { CommandPalette } from "./command-palette";
+import { NotificationBell } from "./notification-bell";
 import { ShortcutsHelp } from "./shortcuts-help";
-import { AiAssistant } from "./ai-assistant";
+import { SavedYouBadge } from "./saved-you-badge";
 
-const dashboardLinks = [
-  { href: "/home", label: "Home" },
-  { href: "/calls", label: "Calls" },
-  { href: "/fixes", label: "Fixes" },
-  { href: "/cost", label: "Cost" },
-  { href: "/loops", label: "Loops" },
-  { href: "/auth-health", label: "Auth Health" },
-  { href: "/trace", label: "Traces" },
-  { href: "/alerts", label: "Alerts" },
-  { href: "/settings", label: "Settings" },
-  { href: "/notifications", label: "Notifications" },
-  { href: "/account", label: "Account" },
+// Nav layout per ZROKY-TECHNICAL-PLAN-V2.md §10.3.
+// Pilot-section items will gain <PlanGate> wrapping in Module 8.
+type NavItem = { href: string; label: string; section: "watch" | "pilot" | "settings"; icon: LucideIcon; pilotPlaceholder?: boolean };
+const dashboardLinks: ReadonlyArray<NavItem> = [
+  // Watch (free)
+  { href: "/home", label: "Home", section: "watch", icon: Home },
+  { href: "/live", label: "Live", section: "watch", icon: Radio, pilotPlaceholder: true },
+  { href: "/calls", label: "Calls", section: "watch", icon: PhoneCall },
+  { href: "/trace", label: "Traces", section: "watch", icon: Network },
+  { href: "/issues", label: "Anomalies", section: "watch", icon: AlertTriangle },
+  { href: "/cost", label: "Cost Explorer", section: "watch", icon: DollarSign },
+  // Pilot (paid) — pages ship in M3..M7. Until then these resolve to a coming-soon placeholder.
+  { href: "/pilot", label: "Pilot", section: "pilot", icon: Rocket, pilotPlaceholder: true },
+  { href: "/goldens", label: "Goldens", section: "pilot", icon: Database, pilotPlaceholder: true },
+  { href: "/replay", label: "Replay Runs", section: "pilot", icon: RotateCcw },
+  { href: "/judge", label: "Judge Calibration", section: "pilot", icon: Scale },
+  { href: "/calibration", label: "Calibration", section: "pilot", icon: BadgeCheck },
+  { href: "/outcomes", label: "Cost Attribution", section: "pilot", icon: Coins },
+  { href: "/root-cause", label: "Root Cause", section: "pilot", icon: GitBranch },
+  { href: "/reliability", label: "Reliability", section: "pilot", icon: ShieldCheck },
+  { href: "/recommendations", label: "Fix Queue", section: "pilot", icon: Wrench },
+  { href: "/drift", label: "Provider Drift", section: "watch", icon: Activity },
+  // Always-on auxiliaries
+  { href: "/alerts", label: "Alerts", section: "watch", icon: Bell },
+  { href: "/settings", label: "Settings", section: "settings", icon: Settings },
 ] as const;
 
 function getTitle(pathname: string): string {
   if (pathname.startsWith("/calls/")) {
     return "Call Detail";
+  }
+  if (pathname.startsWith("/anomalies/")) {
+    return "Anomaly Detail";
+  }
+  if (pathname.startsWith("/replay/")) {
+    return "Replay Run";
+  }
+  if (pathname.startsWith("/goldens/")) {
+    return "Golden Set";
+  }
+  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
+    return "Judge Calibration";
+  }
+  if (pathname === "/outcomes" || pathname.startsWith("/outcomes/")) {
+    return "Cost Attribution";
+  }
+  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
+    return "Root-Cause Ablation";
+  }
+  if (pathname === "/reliability" || pathname.startsWith("/reliability/")) {
+    return "Agent Reliability";
+  }
+  if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
+    return "Fix Queue";
+  }
+  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
+    return "Calibration Score";
+  }
+  if (pathname === "/drift" || pathname.startsWith("/drift/")) {
+    return "Provider Drift";
   }
 
   const match = dashboardLinks.find((item) => item.href === pathname);
@@ -49,52 +114,85 @@ function getTitle(pathname: string): string {
 
 function getSubTitle(pathname: string): string {
   if (pathname === "/home") {
-    return "Command center for health, activity, and fast fixes.";
-  }
-  if (pathname.startsWith("/calls")) {
-    return "Trace and fix failed calls in context.";
-  }
-  if (pathname === "/fixes") {
-    return "Fix health, trust, adoption, and action queue.";
+    return "Health, activity, and pilot impact at a glance.";
   }
   if (pathname === "/cost") {
-    return "Spend trust, model mix, and budget controls.";
+    return "Spend, waste, forecast, and what-if savings — unified view.";
   }
-  if (pathname === "/loops") {
-    return "Agent loop incidents, waste estimate, and pattern breakdown.";
+  if (pathname === "/live") {
+    return "Real-time stream of incoming calls.";
   }
-  if (pathname === "/auth-health") {
-    return "Auth failure trend, MTTA, provider breakdown, and incident triage.";
+  if (pathname.startsWith("/calls")) {
+    return "Search and inspect captured calls.";
   }
-  if (pathname === "/trace") {
-    return "Provider-agnostic multi-agent trace tree — which agent did what, in order, with costs and failures.";
+  if (pathname === "/trace" || pathname.startsWith("/trace/")) {
+    return "Multi-agent trace trees with parent/child lineage.";
+  }
+  if (pathname === "/anomalies" || pathname.startsWith("/anomalies/")) {
+    return "Detector-driven anomalies with diagnose evidence.";
+  }
+  if (pathname === "/pilot") {
+    return "Autopilot policy, action feed, and goldens.";
+  }
+  if (pathname === "/goldens" || pathname.startsWith("/goldens/")) {
+    return "Production-trace canonicals used for replay.";
+  }
+  if (pathname === "/replay" || pathname.startsWith("/replay/")) {
+    return "Replay runs against golden sets.";
+  }
+  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
+    return "LLM-as-judge accuracy scoreboard, confusion matrix, and mode control.";
+  }
+  if (pathname === "/outcomes" || pathname.startsWith("/outcomes/")) {
+    return "Cost-of-failure attribution — every bad outcome mapped to its dollar cost.";
+  }
+  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
+    return "Statistical causal ablation — identify which axis explains each AI failure.";
+  }
+  if (pathname === "/reliability" || pathname.startsWith("/reliability/")) {
+    return "Composite 0-100 health score per agent — fail rate, cost, determinism, trend.";
+  }
+  if (pathname === "/drift" || pathname.startsWith("/drift/")) {
+    return "Daily benchmark results across providers — latency, quality, and cost drift.";
+  }
+  if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
+    return "Ranked actionable fix items — causal axis failures, determinism spikes, cost overruns.";
+  }
+  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
+    return "Public judge accuracy score — per-model, per-class F1, mode status.";
+  }
+  if (pathname === "/digest") {
+    return "Weekly impact summaries.";
   }
   if (pathname === "/alerts") {
     return "Priority incidents with lifecycle actions.";
   }
+  if (pathname === "/notifications") {
+    return "Account inbox for alerts, product updates, and reliability events.";
+  }
   if (pathname === "/settings") {
-    return "Project, policies, providers, and notifications.";
+    return "Project, members, providers, plan & billing.";
   }
   if (pathname === "/settings/keys") {
     return "Create and revoke API keys for this project.";
   }
   if (pathname === "/settings/providers") {
-    return "Upstream AI provider connectivity and call tracking.";
+    return "Upstream provider keys vault for replay execution.";
+  }
+  if (pathname === "/settings/integrations/slack") {
+    return "Connect Slack alerts and reliability events to your incident channel.";
+  }
+  if (pathname === "/settings/integrations/teams") {
+    return "Connect Microsoft Teams alerts and reliability events to your team channel.";
   }
   if (pathname === "/settings/billing") {
-    return "Plan, spend limits, and invoice history.";
+    return "Plan, usage, and Stripe-managed billing.";
   }
   if (pathname === "/settings/profile") {
-    return "Your identity, password, security, and account deletion.";
+    return "Identity, password, 2FA, account deletion.";
   }
   if (pathname === "/settings/team") {
-    return "Invite, manage, and remove project members.";
-  }
-  if (pathname === "/account") {
-    return "Your profile, password, and login methods.";
-  }
-  if (pathname === "/notifications") {
-    return "Activity alerts and system messages.";
+    return "Invite and remove project members.";
   }
   return "Operational view";
 }
@@ -104,12 +202,38 @@ function navClass(pathname: string, href: string): string {
   return isActive ? "nav-link nav-link-active" : "nav-link";
 }
 
-function useEmailVerifiedStatus(): boolean | null {
-  const [verified, setVerified] = useState<boolean | null>(null);
-  useEffect(() => {
-    setVerified(readEmailVerifiedFromBrowser());
-  }, []);
-  return verified;
+// Renders a navigable `<Link>` for real routes, or a non-navigable `<span>` for
+// placeholders. We never let users click into a route that doesn't yet exist —
+// the previous implementation rendered placeholders as real `<Link>`s and gave
+// users 404s. The "soon" badge is preserved either way.
+function NavEntry({ pathname, item }: { pathname: string; item: NavItem }) {
+  const Icon = item.icon;
+  const label = (
+    <>
+      <span className="nav-link-main">
+        <Icon className="nav-link-icon" aria-hidden="true" />
+        <span>{item.label}</span>
+      </span>
+      {item.pilotPlaceholder ? <span className="nav-link-soon">soon</span> : null}
+    </>
+  );
+  if (item.pilotPlaceholder) {
+    return (
+      <span
+        className="nav-link nav-link-placeholder"
+        role="link"
+        aria-disabled="true"
+        title={`${item.label} is on the roadmap — coming soon.`}
+      >
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link href={item.href} className={navClass(pathname, item.href)}>
+      {label}
+    </Link>
+  );
 }
 
 export function DashboardShell({ children }: { children: ReactNode }) {
@@ -168,20 +292,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     return Array.from(items.entries()).map(([id, name]) => ({ id, name }));
   }, [ownerProjectsQuery.data?.projects, projectQuery.data, selectedProject]);
 
-  const emailVerified = useEmailVerifiedStatus();
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-  const [resendState, setResendState] = useState<"idle" | "sending" | "done">("idle");
-
-  const handleResendBanner = async () => {
-    setResendState("sending");
-    try {
-      await resendVerification();
-      setResendState("done");
-    } catch {
-      setResendState("idle");
-    }
-  };
-
   function onLogout() {
     clearAccessToken();
     router.replace("/auth/login?logged_out=1");
@@ -197,24 +307,39 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="nav-links" aria-label="Primary">
-          {dashboardLinks.map((item) => (
-            <Link key={item.href} href={item.href} className={navClass(pathname, item.href)}>
-              <span>{item.label}</span>
-            </Link>
-          ))}
+          {dashboardLinks.filter((i) => i.section === "watch").length > 0 && (
+            <div className="nav-section-label">Watch</div>
+          )}
+          {dashboardLinks
+            .filter((i) => i.section === "watch")
+            .map((item) => (
+              <NavEntry key={item.href} pathname={pathname} item={item} />
+            ))}
+          {dashboardLinks.filter((i) => i.section === "pilot").length > 0 && (
+            <div className="nav-section-label">Pilot</div>
+          )}
+          {dashboardLinks
+            .filter((i) => i.section === "pilot")
+            .map((item) => (
+              <NavEntry key={item.href} pathname={pathname} item={item} />
+            ))}
+          {dashboardLinks
+            .filter((i) => i.section === "settings")
+            .map((item) => (
+              <NavEntry key={item.href} pathname={pathname} item={item} />
+            ))}
         </nav>
 
         <div className="sidebar-foot">
           <div className="sidebar-actions">
             <ThemeToggle />
           </div>
-          <Link href="/onboarding" className={navClass(pathname, "/onboarding")}>
-            <span>Onboarding</span>
-          </Link>
           <button type="button" className="nav-link nav-link-button" onClick={onLogout}>
-            <span>Logout</span>
+            <span className="nav-link-main">
+              <LogOut className="nav-link-icon" aria-hidden="true" />
+              <span>Logout</span>
+            </span>
           </button>
-          <span className="pill">V1 Scope Locked</span>
         </div>
       </aside>
 
@@ -244,6 +369,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <span className="cp-trigger-text">Search…</span>
               <kbd className="cp-trigger-kbd">Ctrl+K</kbd>
             </button>
+            <SavedYouBadge />
+            <NotificationBell />
             <span
               className={`sdk-badge ${sdkConnected ? "sdk-badge-connected" : "sdk-badge-idle"}`}
               title={sdkConnected ? "SDK is sending live data" : "No live data received yet"}
@@ -261,7 +388,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             >
               ?
             </button>
-            <NotificationBell />
             <label className="project-switch-wrap" aria-label="Project selector">
               <span className="project-switch-label">Project</span>
               <select
@@ -284,44 +410,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
         <nav className="mobile-nav" aria-label="Mobile Primary">
           {dashboardLinks.map((item) => (
-            <Link key={item.href} href={item.href} className={navClass(pathname, item.href)}>
-              <span>{item.label}</span>
-            </Link>
+            <NavEntry key={item.href} pathname={pathname} item={item} />
           ))}
         </nav>
 
-        {emailVerified === false && !bannerDismissed && (
-          <div style={{
-            background: "#fffbeb",
-            borderBottom: "1px solid #fcd34d",
-            padding: "10px 20px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            flexWrap: "wrap",
-            fontSize: "0.84rem",
-            color: "#92400e",
-          }}>
-            <span>⚠️ <strong>Email not verified.</strong> Check your inbox and click the verification link to secure your account.</span>
-            <button
-              onClick={handleResendBanner}
-              disabled={resendState !== "idle"}
-              style={{ fontSize: "0.82rem", fontWeight: 600, color: "#b45309", background: "none", border: "1px solid #fbbf24", borderRadius: "4px", padding: "2px 10px", cursor: "pointer" }}
-            >
-              {resendState === "sending" ? "Sending…" : resendState === "done" ? "Sent ✓" : "Resend email"}
-            </button>
-            <button
-              onClick={() => setBannerDismissed(true)}
-              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#b45309", fontWeight: 700 }}
-              aria-label="Dismiss"
-            >✕</button>
-          </div>
-        )}
         <main className="content-inner page-enter">{children}</main>
       </section>
       <CommandPalette />
       <ShortcutsHelp />
-      <AiAssistant />
     </div>
   );
 }

@@ -85,11 +85,40 @@ _NATURAL_SECRET_RE = re.compile(
     r")\s*(?:is|=|:)\s*([^\s,;]{4,}|.{8,80}?)(?=$|[.;,\n])"
 )
 
+# ── India-specific identifier patterns (DPDP Act / Aadhaar Act compliance) ────
+# Mirrors the SDK-side patterns in zroky-sdk/zroky/_internal/pii.py for
+# defense-in-depth: redact at the backend boundary even when an SDK build
+# predates these rules.
+_AADHAAR_FORMATTED_RE = re.compile(
+    r"(?<!\d)\d{4}[\s-]\d{4}[\s-]\d{4}(?!\d)"
+)
+_AADHAAR_CONTEXT_RE = re.compile(
+    r"(?i)\b(aadhaar|aadhar|uidai)\b"
+    r"\s*(?:no\.?|number|#|:|is|=)?\s*"
+    r"\d{4}[\s-]?\d{4}[\s-]?\d{4}"
+)
+_PAN_RE = re.compile(r"(?i)\b[A-Z]{5}\d{4}[A-Z]\b")
+_GSTIN_RE = re.compile(r"(?i)\b\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]\b")
+_IFSC_RE = re.compile(r"(?i)\b[A-Z]{4}0[A-Z0-9]{6}\b")
+_INDIAN_PHONE_RE = re.compile(
+    r"(?<!\d)\+?91[\s\-.]?[6-9]\d{9}(?!\d)"
+)
+
 _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", re.IGNORECASE),
         "[REDACTED_EMAIL]",
     ),
+    # India: PAN / GSTIN / IFSC — strict alphanumeric formats, very low FP risk.
+    (_GSTIN_RE, "[REDACTED_GSTIN]"),
+    (_IFSC_RE, "[REDACTED_IFSC]"),
+    (_PAN_RE, "[REDACTED_PAN]"),
+    # India: Aadhaar — context-cued first (preserves label), then formatted.
+    (_AADHAAR_CONTEXT_RE, "[REDACTED_AADHAAR]"),
+    (_AADHAAR_FORMATTED_RE, "[REDACTED_AADHAAR]"),
+    # India: +91-prefixed mobile — must precede the US phone regex so that
+    # the country code is not partially consumed by the generic pattern.
+    (_INDIAN_PHONE_RE, "[REDACTED_PHONE]"),
     (
         re.compile(
             r"(?<!\w)(\+?1[\s\-.]?)?"

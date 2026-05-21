@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Tests for SDK init + call error classification."""
 from copy import deepcopy
 from unittest.mock import MagicMock, patch

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """ZROKY SDK integrations.
 
 Integrations are imported lazily so optional extras do not break base SDK usage.

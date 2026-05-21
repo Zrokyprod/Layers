@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Prompt fingerprint generation for LOOP_DETECTED pattern grouping.
 
 The fingerprint intentionally captures logical intent rather than exact raw text.

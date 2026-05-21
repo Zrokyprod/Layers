@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """SDK configuration — reads from env vars or explicit init() params."""
 from __future__ import annotations
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -177,6 +178,7 @@ export default function SettingsPage() {
     return {
       email_enabled: state.notifications?.email_enabled ?? true,
       slack_enabled: state.notifications?.slack_enabled ?? false,
+      teams_enabled: state.notifications?.teams_enabled ?? false,
       browser_enabled: state.notifications?.browser_enabled ?? true,
       terminal_enabled: state.notifications?.terminal_enabled ?? true,
     };
@@ -334,7 +336,7 @@ export default function SettingsPage() {
   }
 
   async function onToggleNotification(
-    key: "email_enabled" | "slack_enabled" | "browser_enabled" | "terminal_enabled",
+    key: "email_enabled" | "slack_enabled" | "teams_enabled" | "browser_enabled" | "terminal_enabled",
   ) {
     const current = state.notifications;
     if (!current) {
@@ -795,6 +797,34 @@ export default function SettingsPage() {
                     onChange={() => void onToggleNotification("slack_enabled")}
                   />
                 </label>
+                <div className="list-row">
+                  <div className="list-main">
+                    <strong>Slack App</strong>
+                    <span>Connect a workspace and channel for alert delivery.</span>
+                  </div>
+                  <Link className="btn btn-soft" href="/settings/integrations/slack">
+                    Manage Slack
+                  </Link>
+                </div>
+
+                <label className="list-row" htmlFor="teamsEnabled">
+                  <span>Microsoft Teams</span>
+                  <input
+                    id="teamsEnabled"
+                    type="checkbox"
+                    checked={notificationDraft.teams_enabled}
+                    onChange={() => void onToggleNotification("teams_enabled")}
+                  />
+                </label>
+                <div className="list-row">
+                  <div className="list-main">
+                    <strong>Teams Webhook</strong>
+                    <span>Connect a Teams channel for alert delivery.</span>
+                  </div>
+                  <Link className="btn btn-soft" href="/settings/integrations/teams">
+                    Manage Teams
+                  </Link>
+                </div>
 
                 <label className="list-row" htmlFor="browserEnabled">
                   <span>Browser</span>

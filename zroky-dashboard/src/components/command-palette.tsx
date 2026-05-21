@@ -14,23 +14,34 @@ interface CommandItem {
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
   return [
-    { id: "home", label: "Go to Home", description: "Command center", shortcut: "Ctrl+H", action: () => router.push("/home") },
-    { id: "calls", label: "Go to Calls", description: "Browse and filter all LLM calls", shortcut: "Ctrl+C", action: () => router.push("/calls") },
-    { id: "fixes", label: "Go to Fixes", description: "Fix health, trust, and action queue", shortcut: "Ctrl+F", action: () => router.push("/fixes") },
-    { id: "cost", label: "Go to Cost", description: "Spend trust, model mix, budget", action: () => router.push("/cost") },
-    { id: "loops", label: "Go to Loops", description: "Agent loop incidents and waste", action: () => router.push("/loops") },
-    { id: "auth-health", label: "Go to Auth Health", description: "Auth failure trend and MTTA", action: () => router.push("/auth-health") },
+    // Watch
+    { id: "home", label: "Go to Home", description: "Health, activity, and pilot impact", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "calls", label: "Go to Calls", description: "Search and inspect captured calls", shortcut: "Ctrl+C", action: () => router.push("/calls") },
     { id: "trace", label: "Go to Traces", description: "Multi-agent trace tree", action: () => router.push("/trace") },
+    { id: "anomalies", label: "Go to Anomalies", description: "Detector-driven anomalies and diagnoses", shortcut: "Ctrl+I", action: () => router.push("/anomalies") },
     { id: "alerts", label: "Go to Alerts", description: "Priority incidents", shortcut: "Ctrl+A", action: () => router.push("/alerts") },
-    { id: "settings", label: "Go to Settings", description: "Project, policies, providers", shortcut: "Ctrl+S", action: () => router.push("/settings") },
+    // Pilot (paid)
+    { id: "pilot", label: "Go to Pilot", description: "Autopilot policy and action feed", action: () => router.push("/pilot") },
+    { id: "goldens", label: "Go to Goldens", description: "Production-trace canonicals", action: () => router.push("/goldens") },
+    { id: "replay", label: "Go to Replay Runs", description: "Replay run history", action: () => router.push("/replay") },
+    { id: "judge", label: "Go to Judge Calibration", description: "Accuracy scoreboard, confusion matrix, mode control", action: () => router.push("/judge") },
+    { id: "calibration", label: "Go to Calibration Score", description: "Public per-model accuracy, F1 per class, blocking/advisory mode", action: () => router.push("/calibration") },
+    { id: "outcomes", label: "Go to Cost Attribution", description: "Dollar cost of every bad AI outcome — by type, cluster, and replay savings", action: () => router.push("/outcomes") },
+    { id: "root-cause", label: "Go to Root Cause", description: "Statistical causal ablation — identify which axis explains each AI failure", action: () => router.push("/root-cause") },
+    { id: "reliability", label: "Go to Reliability", description: "Composite 0-100 health score per agent — fail rate, cost, determinism, trend", action: () => router.push("/reliability") },
+    { id: "recommendations", label: "Go to Fix Queue", description: "Ranked actionable fix items — causal axis failures, determinism spikes, cost overruns", action: () => router.push("/recommendations") },
+    { id: "digest", label: "Go to Digest", description: "Weekly impact summaries", action: () => router.push("/digest") },
+    { id: "drift", label: "Go to Provider Drift", description: "Silent-update alerts for major LLM providers", action: () => router.push("/drift") },
+    { id: "notifications", label: "Go to Notifications", description: "Account inbox for alerts and product updates", action: () => router.push("/notifications") },
+    // Settings
+    { id: "settings", label: "Go to Settings", description: "Project, members, providers, plan & billing", shortcut: "Ctrl+S", action: () => router.push("/settings") },
     { id: "settings-keys", label: "Settings → API Keys", description: "Create and revoke API keys", action: () => router.push("/settings/keys") },
-    { id: "settings-billing", label: "Settings → Billing", description: "Plan and spend limits", action: () => router.push("/settings/billing") },
-    { id: "settings-team", label: "Settings → Team", description: "Invite and manage members", action: () => router.push("/settings/team") },
-    { id: "settings-providers", label: "Settings → Providers", description: "AI provider connections", action: () => router.push("/settings/providers") },
-    { id: "settings-support", label: "Settings → Support", description: "Create and manage support tickets", action: () => router.push("/settings/support") },
-    { id: "notifications", label: "Go to Notifications", description: "Activity alerts and messages", action: () => router.push("/notifications") },
-    { id: "account", label: "Go to Account", description: "Profile, password, login methods", action: () => router.push("/account") },
-    { id: "onboarding", label: "Go to Onboarding", description: "First-time setup wizard", action: () => router.push("/onboarding") },
+    { id: "settings-billing", label: "Settings → Plan & Billing", description: "Plan, usage, Stripe portal", action: () => router.push("/settings/billing") },
+    { id: "settings-team", label: "Settings → Members", description: "Invite and remove members", action: () => router.push("/settings/team") },
+    { id: "settings-providers", label: "Settings → Providers", description: "Provider keys vault for replay", action: () => router.push("/settings/providers") },
+    { id: "settings-slack", label: "Settings → Slack", description: "Connect Slack alerts and reliability events", action: () => router.push("/settings/integrations/slack") },
+    { id: "settings-teams", label: "Settings → Microsoft Teams", description: "Connect Teams alerts and reliability events", action: () => router.push("/settings/integrations/teams") },
+    { id: "settings-profile", label: "Settings → Profile", description: "Identity, password, 2FA, account deletion", action: () => router.push("/settings/profile") },
   ];
 }
 
@@ -40,7 +51,6 @@ export function CommandPalette() {
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const router = useRouter();
   const allItems = useCommandItems();
 
   const filtered = query.trim()

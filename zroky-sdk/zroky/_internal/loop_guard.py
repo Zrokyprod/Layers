@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 # ---------------------------------------------------------------------------
 # Loop Guard — Real-Time Agent Loop Detection & Kill
 # ---------------------------------------------------------------------------

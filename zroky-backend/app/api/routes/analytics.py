@@ -10,13 +10,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only
 
 from app.api.dependencies.tenant import require_tenant_role
-from app.db.models import AuditLog, Call, DiagnosisFeedback, DiagnosisJob, ProjectAlert, ProjectDashboardConfig
+from app.db.models import AuditLog, Call, DiagnosisFeedback, DiagnosisJob, Issue, ProjectAlert, ProjectDashboardConfig
 from app.db.session import get_db_session, get_db_session_read
 from app.schemas.dashboard import (
     ActivityFeedItemResponse,
     ActivityFeedResponse,
     AnalyticsSummaryResponse,
     AuthSummaryResponse,
+    SavingsSummaryResponse,
     AuthTrendPoint,
     BudgetConfigResponse,
     BudgetConfigUpdateRequest,
@@ -74,7 +75,6 @@ from app.services.currency import (
 )
 from app.services.privacy import mask_error_message
 from app.services.fix_analytics import build_fix_analytics
-from app.services.predictive_cost import PredictiveCostService
 
 router = APIRouter(prefix="/v1/analytics")
 
@@ -735,11 +735,27 @@ def get_cost_daily_trend(
         for day, values in sorted(by_day.items())
     ]
 
+    data_source = "postgres"
+    from app.services.clickhouse_analytics import get_cost_daily_from_ch
+    ch_rows = get_cost_daily_from_ch(tenant_id, days=days)
+    if ch_rows is not None:
+        points = [
+            CostDailyTrendPoint(
+                day=r["day"],
+                total_cost_usd=round(r["cost_usd"], 6),
+                total_cost_display=round(r["cost_usd"], 6),
+                call_count=r["calls"],
+            )
+            for r in ch_rows
+        ]
+        data_source = "clickhouse"
+
     return CostDailyTrendResponse(
         days=days,
         points=points,
-        cost_total_usd=round(sum(_stored_cost(call) for call in calls), 6),
-        cost_total_display=aggregate_display_total(calls, _stored_cost, context=currency_context),
+        cost_total_usd=round(sum(p.total_cost_usd for p in points), 6),
+        cost_total_display=round(sum(p.total_cost_display for p in points), 6),
+        data_source=data_source,
         **_cost_response_metadata(cost_trust, currency_context),
     )
 
@@ -1022,23 +1038,12 @@ def get_budget_status(
     else:
         budget_status = "no_limit"
 
-    # Forecast using predictive service
+    # Forecast removed in Module 1 cuts (predictive_cost service deleted; not
+    # statistically defensible without training data per ZROKY-PLAN-V2 §1.3).
+    # The COST_SPIKE detector handles real-time anomaly signal instead.
     forecast_exhaust_in_days: float | None = None
     forecast_risk_level = "normal"
     forecast_recommendation = "Cost is within expected range."
-    try:
-        svc = PredictiveCostService(forecast_horizon_hours=24)
-        anomaly = svc.detect_anomaly_risk(db, tenant_id)
-        forecast_risk_level = str(anomaly.get("risk_level", "normal"))
-        forecast_recommendation = str(anomaly.get("recommendation", "Cost is within expected range."))
-        if limit_usd is not None and limit_usd > 0:
-            remaining_budget = max(0.0, limit_usd - spent_usd)
-            current_hourly = float(anomaly.get("current_avg_hourly", 0.0))
-            if current_hourly > 0:
-                hours_until_exhaust = remaining_budget / current_hourly
-                forecast_exhaust_in_days = round(hours_until_exhaust / 24.0, 1)
-    except Exception:
-        pass
 
     return BudgetStatusResponse(
         spent_usd=spent_usd,
@@ -1760,4 +1765,93 @@ def get_trace_by_id(
         total_cost_usd=round(total_cost, 6),
         has_failure=has_failure,
         root_failure_category=root_failure_category,
+    )
+
+
+# ── Savings ("what Zroky saved you") ─────────────────────────────────────────
+#
+# This route aggregates the legacy `issues` table — the canonical projection
+# for resolved-incident value. Numbers shown:
+#   - cumulative_wasted_usd: sum of blast_radius_usd across OPEN issues in
+#                            the window (the "still bleeding" figure)
+#   - cumulative_resolved_blast_usd: sum across RESOLVED issues in the window
+#                                    (the "already saved" figure)
+#   - projected_averted_usd: optimistic 6h forward-projection on resolved
+#                            issues — frames the "you would have lost X more
+#                            if Zroky hadn't caught it" story
+#
+# Projection multiplier of 1.5 picked deliberately conservative: we don't want
+# to over-promise. A real incident left untriaged for 6h typically continues
+# burning at its observed rate; multiplying the already-wasted blast by 1.5
+# represents "continued at the same rate for ~6h until manual catch".
+#
+# All currency values are USD raw — display-currency conversion happens
+# client-side via the dashboard locale layer.
+
+
+_SAVINGS_PROJECTION_MULTIPLIER = 1.5
+
+
+@router.get("/savings", response_model=SavingsSummaryResponse)
+def get_savings_summary(
+    days: int = Query(default=30, ge=1, le=365),
+    tenant_id: str = Depends(require_tenant_role("viewer")),
+    db: Session = Depends(get_db_session_read),
+) -> SavingsSummaryResponse:
+    now = utc_now()
+    window_start = now - timedelta(days=days)
+
+    # Issues touching the window: created in window OR resolved in window OR
+    # still open and first_seen in window. We bias to inclusion — a single
+    # extra row doesn't materially change the headline figure but missing a
+    # row makes the "saved you" total look smaller than reality.
+    rows = (
+        db.execute(
+            select(Issue).where(
+                Issue.project_id == tenant_id,
+                or_(
+                    Issue.last_seen_at >= window_start,
+                    Issue.resolved_at >= window_start,
+                    Issue.first_seen_at >= window_start,
+                ),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    total_caught = 0
+    total_resolved = 0
+    cumulative_open_wasted = 0.0
+    cumulative_resolved_blast = 0.0
+    affected_calls = 0
+    severity_counts: dict[str, int] = defaultdict(int)
+
+    for issue in rows:
+        # `blast_radius_usd` may be a Decimal (Numeric column) — coerce.
+        blast = float(issue.blast_radius_usd or 0.0)
+        occurrences = int(issue.occurrence_count or 0)
+        severity = (issue.severity or "low").lower()
+        severity_counts[severity] += 1
+        affected_calls += occurrences
+        total_caught += 1
+
+        if (issue.status or "").lower() == "resolved":
+            total_resolved += 1
+            cumulative_resolved_blast += blast
+        else:
+            cumulative_open_wasted += blast
+
+    projected_averted = cumulative_resolved_blast * _SAVINGS_PROJECTION_MULTIPLIER
+
+    return SavingsSummaryResponse(
+        window_days=days,
+        total_caught_count=total_caught,
+        total_resolved_count=total_resolved,
+        cumulative_wasted_usd=round(cumulative_open_wasted, 4),
+        cumulative_resolved_blast_usd=round(cumulative_resolved_blast, 4),
+        projected_averted_usd=round(projected_averted, 4),
+        affected_calls=affected_calls,
+        incidents_by_severity=dict(severity_counts),
+        updated_at=now,
     )

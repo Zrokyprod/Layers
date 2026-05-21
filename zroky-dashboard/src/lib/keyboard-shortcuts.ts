@@ -50,10 +50,10 @@ export function useKeyboardShortcuts() {
         action: () => router.push("/calls"),
       },
       {
-        key: "f",
+        key: "i",
         ctrl: true,
-        description: "Go to fixes",
-        action: () => router.push("/fixes"),
+        description: "Go to anomalies",
+        action: () => router.push("/anomalies"),
       },
       {
         key: "a",

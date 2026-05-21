@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Intelligent response caching.
 
 Two-tier cache (in-memory LRU + optional SQLite) that deduplicates

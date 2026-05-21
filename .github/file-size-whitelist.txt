@@ -1,0 +1,25 @@
+# ZROKY file-size lint whitelist (Rule 3 — ZROKY-Q1-90DAY-PLAN.md)
+#
+# Files listed here exceed the 30 KB limit but are accepted until their
+# split ticket ships. When the split lands, DELETE the entry — that's the
+# proof the ticket is done.
+#
+# Format: one POSIX-relative path per line (from repo root). Comments on same
+# line after the path are ignored.
+#
+# Adding a NEW entry requires a ticket reference comment.
+# Entries with no matching file produce a stale-whitelist warning (non-failing).
+
+# ── Q1 Sprint 1–2 splits (deadline: Week 6) ──────────────────────────────────
+
+# ── Q2 split queue (pre-existing tech debt; DO NOT add new siblings) ─────────
+zroky-backend/app/api/routes/analytics.py     # ZROKY-Q2-201 — split by sub-domain
+zroky-backend/app/worker/tasks.py             # ZROKY-Q2-202 — split by worker domain
+zroky-backend/app/api/routes/owner.py         # ZROKY-Q2-203 — split by sub-resource
+zroky-backend/app/services/fix_adoption.py    # ZROKY-Q2-204 — split metrics / tracking
+zroky-backend/app/db/models.py                # ZROKY-Q2-205 — split by ORM domain module
+zroky-backend/app/api/routes/settings.py      # ZROKY-Q2-206 — split by sub-route
+zroky-backend/app/api/routes/diagnosis.py     # ZROKY-Q2-207 — split by sub-resource
+zroky-backend/app/api/routes/auth.py          # ZROKY-Q2-208 — split oauth / password / session
+zroky-backend/app/api/routes/ingest.py        # ZROKY-Q2-209 — split intake / enrichment
+zroky-sdk/zroky/_async.py                     # ZROKY-Q2-210 — split queue / batcher / flusher

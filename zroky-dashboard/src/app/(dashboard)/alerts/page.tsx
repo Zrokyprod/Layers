@@ -14,6 +14,13 @@ import {
   useReopenAlert,
 } from "@/lib/hooks";
 import { StatusPill } from "@/components/status-pill";
+import {
+  QUICK_FILTER_CATEGORIES,
+  allDetectorCategories,
+  detectorBadgeClass,
+  detectorLabel,
+  getDetectorMeta,
+} from "@/lib/detector-meta";
 
 type Filters = { status: string; severity: string; category: string };
 
@@ -42,7 +49,7 @@ function EvidenceDisplay({ evidence }: { evidence: AlertItemResponse["evidence"]
             {typeof v === "object" && v !== null ? (
               <pre className="struct-pre">{JSON.stringify(v, null, 2)}</pre>
             ) : (
-              String(v ?? "Î“Ã‡Ã¶")
+              String(v ?? "—")
             )}
           </dd>
         </div>
@@ -51,13 +58,9 @@ function EvidenceDisplay({ evidence }: { evidence: AlertItemResponse["evidence"]
   );
 }
 
-const QUICK_CATEGORIES = [
-  "AUTH_FAILURE",
-  "LOOP_DETECTED",
-  "RATE_LIMIT",
-  "TOKEN_OVERFLOW",
-  "COST_SPIKE",
-] as const;
+// Quick-filter chips above the full category dropdown. Sourced from the
+// central detector vocab so a single edit there propagates to every page.
+const QUICK_CATEGORIES = QUICK_FILTER_CATEGORIES;
 
 export default function AlertsPage() {
   const [filters, setFilters] = useState<Filters>({ status: "", severity: "", category: "" });
@@ -124,7 +127,7 @@ export default function AlertsPage() {
 
   return (
     <>
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ KPI strip Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── KPI strip ── */}
       <div className="kpi-grid alert-kpi-grid">
         <article className="kpi-card">
           <span className="kpi-label">Total</span>
@@ -148,7 +151,7 @@ export default function AlertsPage() {
         </article>
       </div>
 
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Filters Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── Filters ── */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -191,7 +194,18 @@ export default function AlertsPage() {
 
           <div className="field">
             <label htmlFor="categoryFilter">Category</label>
-            <input id="categoryFilter" value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} placeholder="TOKEN_OVERFLOW" />
+            <select
+              id="categoryFilter"
+              value={filters.category}
+              onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+            >
+              <option value="">All categories</option>
+              {allDetectorCategories().map((meta) => (
+                <option key={meta.code} value={meta.code}>
+                  {meta.label} ({meta.code})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="actions alert-filter-actions">
@@ -204,7 +218,7 @@ export default function AlertsPage() {
 
       {error ? <section className="panel"><p>{error}</p></section> : null}
 
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Alert list Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── Alert list ── */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -230,7 +244,13 @@ export default function AlertsPage() {
                 <div className="list-main">
                   <strong>{alert.title}</strong>
                   <span className="alert-row-meta">
-                    <span className="alert-cat-badge">{alert.category}</span>
+                    <span
+                      className={detectorBadgeClass(alert.category)}
+                      title={getDetectorMeta(alert.category).description}
+                    >
+                      <span aria-hidden="true">{getDetectorMeta(alert.category).icon}</span>{" "}
+                      {detectorLabel(alert.category)}
+                    </span>
                     <span>{alert.source}</span>
                     <span>{formatDateTime(alert.created_at)}</span>
                   </span>
@@ -245,7 +265,7 @@ export default function AlertsPage() {
         )}
       </section>
 
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Detail drawer Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── Detail drawer ── */}
       {selectedAlert && (
         <>
           <button type="button" className="alert-drawer-backdrop" aria-label="Close alert drawer" onClick={() => setSelectedAlertId(null)} />
@@ -254,9 +274,24 @@ export default function AlertsPage() {
             <header className="alert-drawer-header">
               <div>
                 <h3>{selectedAlert.title}</h3>
-                <p>{selectedAlert.category} â”¬â•– {selectedAlert.source}</p>
+                <p>
+                  <span
+                    className={detectorBadgeClass(selectedAlert.category)}
+                    title={getDetectorMeta(selectedAlert.category).description}
+                  >
+                    <span aria-hidden="true">{getDetectorMeta(selectedAlert.category).icon}</span>{" "}
+                    {detectorLabel(selectedAlert.category)}
+                  </span>
+                  <span
+                    className={`detector-layer-chip layer-${getDetectorMeta(selectedAlert.category).layer}`}
+                    style={{ marginLeft: "0.4rem" }}
+                  >
+                    {getDetectorMeta(selectedAlert.category).layer}
+                  </span>
+                  <span style={{ marginLeft: "0.5rem" }}>· {selectedAlert.source}</span>
+                </p>
               </div>
-              <button type="button" className="ai-close-btn" onClick={() => setSelectedAlertId(null)}>Î“Â£Ã²</button>
+              <button type="button" className="ai-close-btn" onClick={() => setSelectedAlertId(null)}>✕</button>
             </header>
 
             <div className="alert-drawer-content">
@@ -287,7 +322,7 @@ export default function AlertsPage() {
                 )}
                 <div className="struct-row">
                   <dt className="struct-key">Diagnosis ID</dt>
-                  <dd className="struct-val mono">{selectedAlert.diagnosis_id || "Î“Ã‡Ã¶"}</dd>
+                  <dd className="struct-val mono">{selectedAlert.diagnosis_id || "—"}</dd>
                 </div>
               </dl>
 
@@ -295,7 +330,7 @@ export default function AlertsPage() {
               {selectedAlert.diagnosis_id && (
                 <div className="alert-drawer-links">
                   <Link href={`/calls/${selectedAlert.diagnosis_id}`} className="btn btn-primary btn-sm" onClick={() => setSelectedAlertId(null)}>
-                    Open Call Î“Ã¥Ã†
+                    Open Call →
                   </Link>
                   <Link href={`/calls/${selectedAlert.diagnosis_id}#fix-guidance`} className="btn btn-soft btn-sm" onClick={() => setSelectedAlertId(null)}>
                     Fix Guidance
@@ -317,7 +352,7 @@ export default function AlertsPage() {
                   disabled={isMutating || selectedAlert.status === "ACKNOWLEDGED"}
                   onClick={() => applyAction("ack", selectedAlert.alert_id)}
                 >
-                  {ackMutation.isPending ? "SavingÎ“Ã‡Âª" : "Acknowledge"}
+                  {ackMutation.isPending ? "Saving…" : "Acknowledge"}
                 </button>
                 <button
                   className="btn btn-primary"
@@ -325,7 +360,7 @@ export default function AlertsPage() {
                   disabled={isMutating || selectedAlert.status === "RESOLVED"}
                   onClick={() => applyAction("resolve", selectedAlert.alert_id)}
                 >
-                  {resolveMutation.isPending ? "SavingÎ“Ã‡Âª" : "Resolve"}
+                  {resolveMutation.isPending ? "Saving…" : "Resolve"}
                 </button>
                 <button
                   className="btn btn-danger"
@@ -333,7 +368,7 @@ export default function AlertsPage() {
                   disabled={isMutating || selectedAlert.status === "OPEN"}
                   onClick={() => applyAction("reopen", selectedAlert.alert_id)}
                 >
-                  {reopenMutation.isPending ? "SavingÎ“Ã‡Âª" : "Re-open"}
+                  {reopenMutation.isPending ? "Saving…" : "Re-open"}
                 </button>
               </div>
             </div>
@@ -341,7 +376,7 @@ export default function AlertsPage() {
         </>
       )}
 
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Channel tests Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── Channel tests ── */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -360,7 +395,7 @@ export default function AlertsPage() {
 
         {channelResult && (
           <p className={`alert-channel-result${channelResult.ok ? " ok" : " err"}`}>
-            {channelResult.ok ? "Î“Â£Ã´" : "Î“Â£Ã²"} {channelResult.text}
+            {channelResult.ok ? "✓" : "✕"} {channelResult.text}
           </p>
         )}
       </section>

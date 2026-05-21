@@ -246,6 +246,43 @@ export interface AuditLogResponse {
   total: number;
 }
 
+export interface OwnerBillingPlanBreakdown {
+  plan: string;
+  slug: string;
+  tenant_count: number;
+}
+
+export interface OwnerBillingStatusBreakdown {
+  status: string;
+  count: number;
+}
+
+export interface OwnerBillingSummary {
+  total_subscriptions: number;
+  overdue: number;
+  canceled: number;
+  by_plan: OwnerBillingPlanBreakdown[];
+  by_status: OwnerBillingStatusBreakdown[];
+}
+
+export interface OwnerSupportTicketItem {
+  ticket_id: string;
+  tenant_id: string | null;
+  title: string;
+  category: string | null;
+  priority: string;
+  status: string;
+  assigned_to: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface OwnerSupportTicketsResponse {
+  items: OwnerSupportTicketItem[];
+  total: number;
+}
+
 export function fetchAuditLog(
   opts: { limit?: number; offset?: number; action?: string; tenant_id?: string } = {}
 ): Promise<AuditLogResponse> {
@@ -256,6 +293,34 @@ export function fetchAuditLog(
   if (opts.tenant_id) params.set("tenant_id", opts.tenant_id);
   const qs = params.toString();
   return ownerRequest<AuditLogResponse>(`/v1/owner/audit-log${qs ? "?" + qs : ""}`);
+}
+
+export function fetchOwnerBillingSummary(): Promise<OwnerBillingSummary> {
+  return ownerRequest<OwnerBillingSummary>("/v1/owner/billing/summary");
+}
+
+export function fetchOwnerSupportTickets(
+  opts: { status?: string; priority?: string; tenant_id?: string; assigned_to?: string; limit?: number; offset?: number } = {},
+): Promise<OwnerSupportTicketsResponse> {
+  const params = new URLSearchParams();
+  if (opts.status) params.set("status", opts.status);
+  if (opts.priority) params.set("priority", opts.priority);
+  if (opts.tenant_id) params.set("tenant_id", opts.tenant_id);
+  if (opts.assigned_to) params.set("assigned_to", opts.assigned_to);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return ownerRequest<OwnerSupportTicketsResponse>(`/v1/owner/support/tickets${qs ? "?" + qs : ""}`);
+}
+
+export async function updateOwnerSupportTicket(
+  ticketId: string,
+  body: { status?: string; priority?: string; assigned_to?: string },
+): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/support/tickets/${encodeURIComponent(ticketId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 /** Ping /v1/owner/stats with the given token to verify it works */
@@ -269,4 +334,74 @@ export async function verifyOwnerToken(token: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ─── Feature-interest voting (Module 9 smoke-test) ──────────────────────────
+
+export type AdminVoteStatus = "below_threshold" | "above_threshold" | "no_votes";
+
+export interface AdminVoteSummary {
+  feature_key: string;
+  name: string;
+  description: string;
+  total: number;
+  interested: number;
+  not_interested: number;
+  interested_pct: number;
+  ships_after_threshold: number;
+  status: AdminVoteStatus;
+  last_voted_at: string | null;
+}
+
+export interface AdminVoteRow {
+  vote_id: string;
+  feature_key: string;
+  vote: "interested" | "not_interested";
+  use_case: string | null;
+  user_email_masked: string | null;
+  user_subject: string;
+  project_id: string;
+  project_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminAllFeaturesResponse {
+  features: AdminVoteSummary[];
+  generated_at: string;
+}
+
+export interface AdminFeatureDetailResponse {
+  summary: AdminVoteSummary;
+  recent_votes: AdminVoteRow[];
+  next_cursor: string | null;
+}
+
+export function fetchFeatureInterestList(
+  signal?: AbortSignal,
+): Promise<AdminAllFeaturesResponse> {
+  return ownerRequest<AdminAllFeaturesResponse>(
+    "/v1/admin/feature-interest",
+    { signal },
+  );
+}
+
+export function fetchFeatureInterestDetail(
+  featureKey: string,
+  opts: { limit?: number; vote?: "interested" | "not_interested" | "" } = {},
+  signal?: AbortSignal,
+): Promise<AdminFeatureDetailResponse> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.vote) params.set("vote", opts.vote);
+  const qs = params.toString();
+  return ownerRequest<AdminFeatureDetailResponse>(
+    `/v1/admin/feature-interest/${encodeURIComponent(featureKey)}${qs ? "?" + qs : ""}`,
+    { signal },
+  );
+}
+
+/** URL to the CSV export endpoint (browser navigates to download). */
+export function featureInterestExportUrl(featureKey: string): string {
+  return `${BASE}/v1/admin/feature-interest/${encodeURIComponent(featureKey)}/export.csv`;
 }

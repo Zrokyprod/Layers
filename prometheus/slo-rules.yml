@@ -1,0 +1,155 @@
+groups:
+  - name: zroky_slo_burn_rates
+    interval: 1m
+    rules:
+
+      # ── zroky-backend SLO: 99.5% success rate (30-day window) ───────────────
+
+      - record: job:request_error_rate1m:ratio_rate1m
+        expr: |
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway", status=~"5.."}[1m]))
+            /
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway"}[1m]))
+
+      - record: job:request_error_rate5m:ratio_rate5m
+        expr: |
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway", status=~"5.."}[5m]))
+            /
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway"}[5m]))
+
+      - record: job:request_error_rate1h:ratio_rate1h
+        expr: |
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway", status=~"5.."}[1h]))
+            /
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway"}[1h]))
+
+      - record: job:request_error_rate6h:ratio_rate6h
+        expr: |
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway", status=~"5.."}[6h]))
+            /
+          sum(rate(http_requests_total{job=~"zroky-backend|zroky-gateway"}[6h]))
+
+      # ── Burn-rate alerts (multi-window, multi-burn-rate) ────────────────────
+      # Error budget = 0.5% over 30 days. Burn rates: 1h fast + 6h slow page;
+      # 24h slow ticket. Thresholds from Google SRE Workbook ch.5.
+
+      - alert: ZrokyBackendSLOBurnRateFast
+        expr: |
+          (
+            job:request_error_rate1m:ratio_rate1m > (14.4 * 0.005)
+            and
+            job:request_error_rate5m:ratio_rate5m > (14.4 * 0.005)
+          )
+        for: 2m
+        labels:
+          severity: page
+          service: zroky-backend
+        annotations:
+          summary: "Fast burn — zroky-backend SLO consuming > 2% error budget / hour"
+          description: >
+            Error rate {{ $value | humanizePercentage }} exceeds 14.4× SLO target.
+            At this rate the 30-day error budget is exhausted in ~1 hour.
+          runbook_url: "https://docs.zroky.ai/runbooks/slo-burn-fast"
+
+      - alert: ZrokyBackendSLOBurnRateSlow
+        expr: |
+          (
+            job:request_error_rate1h:ratio_rate1h > (6 * 0.005)
+            and
+            job:request_error_rate6h:ratio_rate6h > (6 * 0.005)
+          )
+        for: 15m
+        labels:
+          severity: page
+          service: zroky-backend
+        annotations:
+          summary: "Slow burn — zroky-backend SLO consuming > 5% error budget / 6 h"
+          description: >
+            Error rate {{ $value | humanizePercentage }} exceeds 6× SLO target.
+            At this rate the 30-day error budget is exhausted in ~5 days.
+          runbook_url: "https://docs.zroky.ai/runbooks/slo-burn-slow"
+
+      - alert: ZrokyBackendSLOBurnRateTicket
+        expr: |
+          job:request_error_rate6h:ratio_rate6h > (3 * 0.005)
+        for: 1h
+        labels:
+          severity: ticket
+          service: zroky-backend
+        annotations:
+          summary: "Slow burn ticket — zroky-backend consuming > 10% error budget / 24 h"
+          description: >
+            Error rate {{ $value | humanizePercentage }} exceeds 3× SLO target.
+            File a ticket; monitor for escalation.
+          runbook_url: "https://docs.zroky.ai/runbooks/slo-burn-ticket"
+
+  - name: zroky_worker_slo
+    interval: 1m
+    rules:
+
+      # ── worker-diagnose SLO: task success rate ≥ 99% ───────────────────────
+
+      - record: worker:task_failure_rate1m:ratio_rate1m
+        expr: |
+          sum(rate(celery_tasks_total{state="failure", queue=~"diagnose|fixes"}[1m]))
+            /
+          sum(rate(celery_tasks_total{queue=~"diagnose|fixes"}[1m]))
+
+      - record: worker:task_failure_rate1h:ratio_rate1h
+        expr: |
+          sum(rate(celery_tasks_total{state="failure", queue=~"diagnose|fixes"}[1h]))
+            /
+          sum(rate(celery_tasks_total{queue=~"diagnose|fixes"}[1h]))
+
+      - alert: ZrokyWorkerSLOBurnRateFast
+        expr: |
+          worker:task_failure_rate1m:ratio_rate1m > (14.4 * 0.01)
+        for: 2m
+        labels:
+          severity: page
+          service: worker-diagnose
+        annotations:
+          summary: "Fast burn — worker-diagnose task failure rate exceeds 14.4× SLO"
+          description: >
+            Task failure rate {{ $value | humanizePercentage }} on diagnose/fixes queues.
+            Error budget will be exhausted in ~1 hour.
+          runbook_url: "https://docs.zroky.ai/runbooks/worker-slo-fast"
+
+      - alert: ZrokyWorkerSLOBurnRateSlow
+        expr: |
+          worker:task_failure_rate1h:ratio_rate1h > (3 * 0.01)
+        for: 30m
+        labels:
+          severity: ticket
+          service: worker-diagnose
+        annotations:
+          summary: "Slow burn — worker-diagnose task failure rate exceeds 3× SLO"
+          description: >
+            Task failure rate {{ $value | humanizePercentage }} on diagnose/fixes queues.
+            File a ticket; monitor for escalation.
+          runbook_url: "https://docs.zroky.ai/runbooks/worker-slo-slow"
+
+  - name: zroky_latency_slo
+    interval: 1m
+    rules:
+
+      # ── p95 latency SLO: /api/v1/ingest < 200 ms ────────────────────────────
+
+      - alert: ZrokyIngestLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{
+              job="zroky-backend",
+              handler=~".*ingest.*"
+            }[5m])) by (le)
+          ) > 0.200
+        for: 5m
+        labels:
+          severity: page
+          service: zroky-backend
+        annotations:
+          summary: "p95 ingest latency > 200 ms"
+          description: >
+            p95 latency on /ingest is {{ $value | humanizeDuration }}.
+            SLO target is 200 ms. Investigate DB/Redis/worker backlog.
+          runbook_url: "https://docs.zroky.ai/runbooks/ingest-latency"

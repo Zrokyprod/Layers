@@ -11,6 +11,7 @@ import { formatCount, formatDateTime, formatUsd, safeString } from "@/lib/format
 import { useListCalls, useResolveDiagnosis } from "@/lib/hooks";
 import { callsFilterSchema, type CallsFilterFormData } from "@/lib/schemas";
 import { StatusPill } from "@/components/status-pill";
+import type { CallListItem } from "@/lib/types";
 
 const PAGE_SIZE = 50;
 
@@ -52,12 +53,12 @@ function SortTh({
       onClick={() => onSort(col)}
     >
       {label}
-      {active ? (order === "desc" ? " Î“Ã¥Ã´" : " Î“Ã¥Ã¦") : " Î“Ã¥Ã²"}
+      {active ? (order === "desc" ? " ↓" : " ↑") : " ↕"}
     </th>
   );
 }
 
-function downloadSelectedCallsJson(rows: ReturnType<typeof useListCalls>["data"] extends { items: infer T } ? T : never, selectedIds: Set<string>) {
+function downloadSelectedCallsJson(rows: CallListItem[], selectedIds: Set<string>) {
   const selectedRows = rows.filter((row) => selectedIds.has(row.call_id));
   const blob = new Blob([
     JSON.stringify(
@@ -260,15 +261,15 @@ function CallsPageContent() {
 
   return (
     <>
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Filter panel Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── Filter panel ── */}
       <section className="panel">
         <header className="panel-header">
           <div>
             <h3>Calls</h3>
             <p>
               {callsQuery.data
-                ? `${formatCount(total)} total â”¬â•– page ${page + 1} of ${totalPages}`
-                : "LoadingÎ“Ã‡Âª"}
+                ? `${formatCount(total)} total · page ${page + 1} of ${totalPages}`
+                : "Loading…"}
             </p>
           </div>
           <div className="actions">
@@ -287,7 +288,7 @@ function CallsPageContent() {
               disabled={exportingJson}
               title="Download current filter as JSON (up to 2,000 rows)"
             >
-              {exportingJson ? "ExportingÎ“Ã‡Âª" : "Export JSON"}
+              {exportingJson ? "Exporting…" : "Export JSON"}
             </button>
             <button type="button" className="btn btn-soft" onClick={() => void callsQuery.refetch()}>
               Refresh
@@ -361,11 +362,11 @@ function CallsPageContent() {
         ) : null}
       </section>
 
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Bulk action bar Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── Bulk action bar ── */}
       {selectedIds.size > 0 ? (
         <div className="bulk-bar">
           <span className="bulk-bar-count">
-            {selectedIds.size} selected â”¬â•– {selectedDiagnosisIds.length} linked diagnosis{selectedDiagnosisIds.length !== 1 ? "es" : ""}
+            {selectedIds.size} selected · {selectedDiagnosisIds.length} linked diagnosis{selectedDiagnosisIds.length !== 1 ? "es" : ""}
           </span>
           <button
             type="button"
@@ -373,7 +374,7 @@ function CallsPageContent() {
             onClick={() => void handleBulkResolve()}
             disabled={resolveDiagnosisMutation.isPending || selectedDiagnosisIds.length === 0}
           >
-            {resolveDiagnosisMutation.isPending ? "ResolvingÎ“Ã‡Âª" : "Resolve linked diagnoses"}
+            {resolveDiagnosisMutation.isPending ? "Resolving…" : "Resolve linked diagnoses"}
           </button>
           <button
             type="button"
@@ -409,7 +410,7 @@ function CallsPageContent() {
         </section>
       ) : null}
 
-      {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Table Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+      {/* ── Table ── */}
       {!loading && rows.length > 0 ? (
         <section className="panel">
           <div className="table-wrap">
@@ -468,7 +469,7 @@ function CallsPageContent() {
             </table>
           </div>
 
-          {/* Î“Ã¶Ã‡Î“Ã¶Ã‡ Pagination Î“Ã¶Ã‡Î“Ã¶Ã‡ */}
+          {/* ── Pagination ── */}
           <div className="pagination">
             <button
               type="button"
@@ -476,7 +477,7 @@ function CallsPageContent() {
               disabled={page === 0}
               onClick={() => { setPage(0); setSelectedIds(new Set()); }}
             >
-              â”¬Â½
+              «
             </button>
             <button
               type="button"
@@ -484,7 +485,7 @@ function CallsPageContent() {
               disabled={page === 0}
               onClick={() => { setPage((p) => p - 1); setSelectedIds(new Set()); }}
             >
-              Î“Ã‡â•£ Prev
+              ← Prev
             </button>
             <span className="pagination-info">
               Page {page + 1} / {totalPages}
@@ -495,7 +496,7 @@ function CallsPageContent() {
               disabled={page >= totalPages - 1}
               onClick={() => { setPage((p) => p + 1); setSelectedIds(new Set()); }}
             >
-              Next Î“Ã‡â•‘
+              Next →
             </button>
             <button
               type="button"
@@ -503,7 +504,7 @@ function CallsPageContent() {
               disabled={page >= totalPages - 1}
               onClick={() => { setPage(totalPages - 1); setSelectedIds(new Set()); }}
             >
-              â”¬â•—
+              »
             </button>
           </div>
         </section>
@@ -530,8 +531,8 @@ function CallsPageContent() {
               >
                 Reset filters
               </button>
-              <Link href="/onboarding" className="btn btn-primary">
-                Open onboarding
+              <Link href="/settings/keys" className="btn btn-primary">
+                Get API key
               </Link>
             </div>
           </div>

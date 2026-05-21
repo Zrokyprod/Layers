@@ -15,6 +15,14 @@ import type {
   HealthScoreResponse,
 } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
+import { ComingSoonPoll } from "@/components/coming-soon-poll";
+import { JudgeHealthPanel } from "@/components/judge-health-panel";
+import { PriorityQueue } from "@/components/priority-queue";
+import {
+  detectorBadgeClass,
+  detectorLabel,
+  getDetectorMeta,
+} from "@/lib/detector-meta";
 
 const pollMs = 10000;
 const liveRetryMs = 5000;
@@ -375,13 +383,13 @@ export default function HomePage() {
               <code>zroky run --agent your_agent.py</code>
             </li>
             <li>
-              <strong>Trigger a test event</strong> — visit the{" "}
-              <Link href="/onboarding" className="link" onClick={markOnboardingWizardOpened}>Onboarding Wizard</Link> to send a synthetic failure and confirm the pipeline works.
+              <strong>Verify on the Live stream</strong> — captured calls land on{" "}
+              <Link href="/calls" className="link">Calls</Link> within seconds.
             </li>
           </ol>
           <div className="actions home-onboarding-actions">
-            <Link href="/onboarding" className="btn btn-primary" onClick={markOnboardingWizardOpened}>Open Onboarding Wizard</Link>
-            <Link href="/settings" className="btn btn-soft">Settings</Link>
+            <Link href="/settings/keys" className="btn btn-primary">Get API key</Link>
+            <Link href="/calls" className="btn btn-soft">Open Calls</Link>
           </div>
         </section>
       ) : null}
@@ -452,9 +460,9 @@ export default function HomePage() {
         </article>
 
         <article className="kpi-card">
-          <span className="kpi-label">Open Issues</span>
+          <span className="kpi-label">Open Alerts</span>
           <strong className="kpi-value">{summary ? formatCount(summary.open_issues) : "0"}</strong>
-          <div className="kpi-helper">Needs triage or fix</div>
+          <div className="kpi-helper">Detector-driven, needs triage</div>
         </article>
 
         <article className="kpi-card">
@@ -472,8 +480,8 @@ export default function HomePage() {
         <article className="panel">
           <header className="panel-header">
             <div>
-              <h3>Open Issues Quick Fix</h3>
-              <p>High-signal incidents from latest completed diagnoses.</p>
+              <h3>Active Alerts</h3>
+              <p>Highest-priority open alerts from the detector pipeline.</p>
             </div>
             <Link href="/alerts" className="btn btn-soft">
               See All
@@ -484,17 +492,28 @@ export default function HomePage() {
             {alerts.length === 0 ? (
               <div className="empty">No active alerts. System is quiet.</div>
             ) : (
-              alerts.slice(0, 6).map((alert) => (
-                <Link href="/alerts" key={alert.alert_id} className="list-row">
-                  <div className="list-main">
-                    <strong>{alert.title}</strong>
-                    <span>
-                      {alert.category} · {formatDateTime(alert.created_at)}
-                    </span>
-                  </div>
-                  <StatusPill value={alert.severity} />
-                </Link>
-              ))
+              alerts.slice(0, 6).map((alert) => {
+                const meta = getDetectorMeta(alert.category);
+                return (
+                  <Link href="/alerts" key={alert.alert_id} className="list-row">
+                    <div className="list-main">
+                      <strong>{alert.title}</strong>
+                      <span>
+                        <span
+                          className={detectorBadgeClass(alert.category)}
+                          title={meta.description}
+                          style={{ marginRight: "0.4rem" }}
+                        >
+                          <span aria-hidden="true">{meta.icon}</span>{" "}
+                          {detectorLabel(alert.category)}
+                        </span>
+                        · {formatDateTime(alert.created_at)}
+                      </span>
+                    </div>
+                    <StatusPill value={alert.severity} />
+                  </Link>
+                );
+              })
             )}
           </div>
         </article>
@@ -697,6 +716,15 @@ export default function HomePage() {
           )}
         </article>
       </section>
+{/* ── Today's Priority queue ──
+          Top-5 actionable open alerts, ranked by severity × occurrence ×
+          blast × recency. Pure client-side ranking on top of /v1/alerts
+          — no new backend route needed. Placed BEFORE Judge Health so
+          users hit the actionable list first. */}
+      <PriorityQueue />
+
+      
+      <JudgeHealthPanel />
 
       <section className="panel">
         <header className="panel-header">
@@ -787,6 +815,21 @@ export default function HomePage() {
             )}
           </article>
         </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-header">
+          <div>
+            <h3>What&apos;s coming next</h3>
+            <p>Vote on features we&apos;re evaluating. Your feedback shapes the roadmap.</p>
+          </div>
+        </header>
+        <ComingSoonPoll
+          featureKey="pilot.tier1_autonomy"
+          title="Tier-1 Autonomy"
+          description="Auto-apply safe config fixes (model rollback, fallback swap, retry tune) without a PR. Fully reversible, kill-switch protected. Today: only Tier-2 PR-based fixes ship."
+          useCasePrompt="What's the #1 AI agent failure you'd want fixed without a PR? (your answer shapes what we build)"
+        />
       </section>
 
       <section className="panel">

@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import DiagnosisJob, DiagnosisPullRequest, FixEvent
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 
 _WEBHOOK_SECRET = "test-github-webhook-secret"
@@ -43,6 +43,7 @@ def client_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         id = "task-test-github-webhook"
 
     app.dependency_overrides[get_db_session] = override_get_db_session
+    app.dependency_overrides[get_db_session_read] = override_get_db_session
     monkeypatch.setattr("app.api.routes.diagnosis.process_diagnosis.delay", lambda *_args, **_kwargs: _MockTaskResult())
 
     with TestClient(app) as client:

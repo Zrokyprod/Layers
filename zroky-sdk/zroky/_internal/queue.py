@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """
 Async event queue — batches call events and flushes to the ingest client
 without blocking the application request path.

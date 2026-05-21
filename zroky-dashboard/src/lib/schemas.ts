@@ -72,8 +72,8 @@ export const callsFilterSchema = z.object({
   agent_name: z.string(),
   date_from: z.string(),
   date_to: z.string(),
-  sort_by: z.enum(["created_at", "cost_usd", "total_tokens", "latency_ms"]).default("created_at"),
-  sort_order: z.enum(["asc", "desc"]).default("desc"),
+  sort_by: z.enum(["created_at", "cost_usd", "total_tokens", "latency_ms"]),
+  sort_order: z.enum(["asc", "desc"]),
 });
 
 export type CallsFilterFormData = z.infer<typeof callsFilterSchema>;

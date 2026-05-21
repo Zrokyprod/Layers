@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Deterministic PII masking applied before any telemetry leaves the SDK."""
 from __future__ import annotations
 
@@ -52,12 +55,53 @@ _NATURAL_SECRET_RE = re.compile(
     r")\s*(?:is|=|:)\s*([^\s,;]{4,}|.{8,80}?)(?=$|[.;,\n])"
 )
 
+# ── India-specific identifier patterns (DPDP Act / Aadhaar Act compliance) ────
+# Aadhaar: 12 digits. We require explicit separators (space or hyphen) to
+# bound false-positive rate — pure unformatted 12-digit runs are common
+# (timestamps, transaction IDs) and we'd over-redact without a cue.
+_AADHAAR_FORMATTED_RE = re.compile(
+    r"(?<!\d)\d{4}[\s-]\d{4}[\s-]\d{4}(?!\d)"
+)
+# Context-cued Aadhaar: any 12-digit run preceded by an Aadhaar/UIDAI label
+# is treated as Aadhaar even without separators. Captures the label so we
+# can preserve it in the redaction output.
+_AADHAAR_CONTEXT_RE = re.compile(
+    r"(?i)\b(aadhaar|aadhar|uidai)\b"
+    r"\s*(?:no\.?|number|#|:|is|=)?\s*"
+    r"\d{4}[\s-]?\d{4}[\s-]?\d{4}"
+)
+# PAN: 5 letters + 4 digits + 1 letter — Income Tax permanent account number.
+_PAN_RE = re.compile(r"(?i)\b[A-Z]{5}\d{4}[A-Z]\b")
+# GSTIN: 15 chars — 2-digit state + 10-char PAN + entity + literal Z + checksum.
+_GSTIN_RE = re.compile(r"(?i)\b\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]\b")
+# IFSC: 4 letters + literal 0 + 6 alphanumeric — bank branch routing code.
+_IFSC_RE = re.compile(r"(?i)\b[A-Z]{4}0[A-Z0-9]{6}\b")
+# Indian mobile (with +91 country code). Indian mobile numbers always start
+# with 6, 7, 8, or 9 (TRAI numbering plan). The generic US-style phone
+# regex below catches bare 10-digit Indian numbers without the +91 prefix.
+_INDIAN_PHONE_RE = re.compile(
+    r"(?<!\d)\+?91[\s\-.]?[6-9]\d{9}(?!\d)"
+)
+
 # Replacement tokens are intentionally irreversible and stable across SDK/backend.
+# Order matters: India-specific patterns precede the generic US/global patterns
+# so they win matching when both could fire (e.g. Indian +91 phone vs. generic
+# 10-digit phone).
 _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", re.IGNORECASE),
         "[REDACTED_EMAIL]",
     ),
+    # India: PAN / GSTIN / IFSC — strict alphanumeric formats, very low FP risk.
+    (_GSTIN_RE, "[REDACTED_GSTIN]"),
+    (_IFSC_RE, "[REDACTED_IFSC]"),
+    (_PAN_RE, "[REDACTED_PAN]"),
+    # India: Aadhaar — context-cued first (preserves label), then formatted.
+    (_AADHAAR_CONTEXT_RE, "[REDACTED_AADHAAR]"),
+    (_AADHAAR_FORMATTED_RE, "[REDACTED_AADHAAR]"),
+    # India: +91-prefixed mobile — must precede the US phone regex so that
+    # the country code is not partially consumed by the generic pattern.
+    (_INDIAN_PHONE_RE, "[REDACTED_PHONE]"),
     (
         re.compile(
             r"(?<!\w)(\+?1[\s\-.]?)?"

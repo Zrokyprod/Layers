@@ -1,0 +1,156 @@
+"""Billing quota service — fast event-count checks against plan limits.
+
+Uses the ``event_counts`` metering ledger (upserted on every accepted ingest)
+for O(1) current-month lookups instead of scanning the ``calls`` table.
+
+Public API
+----------
+check_quota(db, tenant_id) -> QuotaDecision
+    Call this in the ingest path (best-effort, never raises).
+
+get_usage(db, tenant_id) -> UsageSummary
+    Full summary for GET /v1/billing/usage.
+"""
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db.models import EventCount, SubscriptionPlan, TenantSubscription
+
+logger = logging.getLogger(__name__)
+
+
+# ── public types ──────────────────────────────────────────────────────────────
+
+
+@dataclass
+class QuotaDecision:
+    allowed: bool
+    current_count: int
+    plan_limit: int | None
+    overage: int | None
+    reason: str
+
+
+@dataclass
+class UsageSummary:
+    tenant_id: str
+    month: str
+    current_count: int
+    plan_limit_calls: int | None
+    overage_calls: int | None
+    plan_slug: str | None
+    plan_name: str | None
+
+
+# ── public functions ──────────────────────────────────────────────────────────
+
+
+def check_quota(db: Session, tenant_id: str) -> QuotaDecision:
+    """Fast quota check — reads event_counts ledger (one index seek).
+
+    Returns QuotaDecision(allowed=True) on any error so a DB hiccup
+    never accidentally blocks ingest.
+    """
+    try:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+        current = _current_month_count(db, tenant_id, month)
+        limit = _plan_call_limit(db, tenant_id)
+
+        if limit is None:
+            return QuotaDecision(
+                allowed=True,
+                current_count=current,
+                plan_limit=None,
+                overage=None,
+                reason="no_limit",
+            )
+
+        if current >= limit:
+            return QuotaDecision(
+                allowed=False,
+                current_count=current,
+                plan_limit=limit,
+                overage=current - limit,
+                reason="monthly_quota_exceeded",
+            )
+
+        return QuotaDecision(
+            allowed=True,
+            current_count=current,
+            plan_limit=limit,
+            overage=None,
+            reason="within_quota",
+        )
+    except Exception as exc:
+        logger.warning("billing_quota.check_quota failed (allowing): %s", exc)
+        return QuotaDecision(
+            allowed=True,
+            current_count=0,
+            plan_limit=None,
+            overage=None,
+            reason="check_error",
+        )
+
+
+def get_usage(db: Session, tenant_id: str) -> UsageSummary:
+    """Full usage summary for the current billing month."""
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    current = _current_month_count(db, tenant_id, month)
+    limit = _plan_call_limit(db, tenant_id)
+    plan_slug, plan_name = _plan_meta(db, tenant_id)
+
+    overage: int | None = None
+    if limit is not None and current > limit:
+        overage = current - limit
+
+    return UsageSummary(
+        tenant_id=tenant_id,
+        month=month,
+        current_count=current,
+        plan_limit_calls=limit,
+        overage_calls=overage,
+        plan_slug=plan_slug,
+        plan_name=plan_name,
+    )
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _current_month_count(db: Session, tenant_id: str, month: str) -> int:
+    row = db.execute(
+        select(EventCount.event_count).where(
+            EventCount.tenant_id == tenant_id,
+            EventCount.month == month,
+        )
+    ).scalar_one_or_none()
+    return int(row or 0)
+
+
+def _plan_call_limit(db: Session, tenant_id: str) -> int | None:
+    row: Any = db.execute(
+        select(SubscriptionPlan.max_calls_per_month)
+        .join(TenantSubscription, TenantSubscription.plan_id == SubscriptionPlan.id)
+        .where(TenantSubscription.tenant_id == tenant_id)
+        .where(TenantSubscription.status == "active")
+    ).scalar_one_or_none()
+    return int(row) if row is not None else None
+
+
+def _plan_meta(db: Session, tenant_id: str) -> tuple[str | None, str | None]:
+    row = db.execute(
+        select(SubscriptionPlan.slug, SubscriptionPlan.name)
+        .join(TenantSubscription, TenantSubscription.plan_id == SubscriptionPlan.id)
+        .where(TenantSubscription.tenant_id == tenant_id)
+        .where(TenantSubscription.status == "active")
+    ).one_or_none()
+    if row is None:
+        return None, None
+    return row.slug, row.name

@@ -22,6 +22,9 @@ import {
 import { prGenerationSchema, type PrGenerationFormData } from "@/lib/schemas";
 import type { JsonMap, TraceTreeNode } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
+import { JudgeScorecard } from "@/components/judge-scorecard";
+import { JudgeNarrativeCard } from "@/components/judge-narrative-card";
+import { CounterfactualImpact } from "@/components/counterfactual-impact";
 
 function asObject(value: unknown): JsonMap {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -640,6 +643,25 @@ export default function CallDetailPage() {
           <p className="diagnosis-root-cause">{safeString(diagnosis.root_cause, "")}</p>
         </section>
       )}
+
+      {/* ── Counterfactual ROI ──
+          "If Zroky hadn't caught this, X dollars and Y calls would have
+          continued to burn." Renders silently when we can't ground the
+          projection in real numbers — never fabricates figures. */}
+      <CounterfactualImpact diagnosis={diagnosis as Record<string, unknown>} />
+
+      {/* ── Layer 3 judge surfaces ──
+          The narrative card is the screenshot-worthy hero — verbatim judge
+          reasoning as a blockquote with a copy-to-clipboard CTA. The
+          scorecard underneath shows per-dimension bars + reasons. Both
+          render conditionally, silent when no judge data is present, so
+          they're safe on calls that never went through Layer 3. */}
+      <JudgeNarrativeCard
+        source={evidence as Record<string, unknown>}
+        category={typeof diagnosis.category === "string" ? diagnosis.category : null}
+      />
+      <JudgeScorecard source={evidence as Record<string, unknown>} />
+
 
       <section className="grid-two">
         <article className="panel" id="evidence">

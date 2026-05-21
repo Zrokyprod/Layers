@@ -33,6 +33,7 @@ function OAuthCallbackHandler() {
         token_type: "bearer",
         user_id: userId || "",
         email: null,
+        email_verified: true,
       });
       router.replace("/home");
     };

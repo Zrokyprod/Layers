@@ -1,0 +1,559 @@
+
+────────────────────────────────────────────────────────────────────────
+Module 9 — GitHub Action dispatch surface  (2026-05-14)
+────────────────────────────────────────────────────────────────────────
+Scope (locked):
+  - Idempotent replay dispatch endpoint suitable for the
+    `zroky/regression-ci@v1` GitHub Action.
+  - Default golden set per project (migration 0060) so the Action can
+    POST without naming a set.
+  - `summary_url` returned on every dispatch so the Action can post a
+    PR-check `details_url` pointing at the dashboard.
+
+Decisions (with reasoning):
+
+  - Idempotency key = (project_id, golden_set_id, git_sha). NOT a
+    client-supplied Idempotency-Key header. The Action retries on
+    network failures and re-runs of the same workflow run, both of
+    which share the same git SHA; a server-side key removes one
+    failure mode (mis-implemented Idempotency-Key generation in the
+    Action) and matches the natural "one grade per commit-against-set"
+    cardinality.
+
+  - Idempotency horizon split by run status:
+        * non-terminal (pending/running): ALWAYS reuses (no time bound)
+        * terminal     (pass/fail/error): reuses only if <60 min old
+    Older terminal runs are intentionally NOT reused — a customer
+    re-running the same commit after fixing a judge model or
+    upgrading the model gets a fresh row. 60-min default lives in
+    `IDEMPOTENCY_TERMINAL_HORIZON_MINUTES`.
+
+  - Manual triggers (git_sha=None) are NEVER deduped. A human
+    pressing "Run" twice means they want two runs. Whitespace-only
+    git_sha values are normalized to None so " " can't masquerade as
+    a real key.
+
+  - branch_name / pr_number / commit_message stored in summary_json,
+    NOT as new columns. Cardinality is tied to git_sha (already
+    indexed), they're display-only, and the dashboard reads
+    summary_json anyway. Truncated: branch_name 255 / commit_message
+    200 (first line only) to keep the row bounded.
+
+  - New `POST /v1/replay/dispatch` is its own router file
+    (`app/api/routes/replay_dispatch.py`) — not folded into
+    `replay_runs.py` because the surfaces have different auth
+    expectations long-term (Action surface may grow signed-payload
+    verification later). Default trigger here is "github" vs.
+    "manual" on the goldens-router endpoint.
+
+  - Default-set resolution priority:
+        1) explicit golden_set_id in body
+        2) projects.default_golden_set_id (new column, migration 0060)
+        3) 422 with diagnostic message
+    No "first golden set wins" fallback — silently picking would
+    cause cross-set replays. Forces explicit configuration.
+
+  - No FK on projects.default_golden_set_id → golden_sets.id, matching
+    the migration 0049/0050/0052/0053/0054 convention (RLS on
+    golden_sets.project_id is the actual tenant boundary). Service
+    layer cascades the clear: delete_golden_set() now zeroes any
+    Project.default_golden_set_id pointing at it within the same
+    project. Dangling pointers from race conditions map to 422 with
+    "update the project's default_golden_set_id".
+
+  - was_idempotent_hit() stamps a transient `_zroky_was_new` attribute
+    on the returned ReplayRun rather than changing the return type
+    of dispatch_replay_run. Keeps the existing service signature and
+    caller code unchanged; route reads the flag to populate the new
+    response field `idempotent: bool`.
+
+  - Idempotent hits skip the Celery enqueue. The original dispatch
+    already enqueued (or the run already finished). Re-enqueueing
+    would race with the existing worker and waste a slot.
+
+  - build_summary_url() reads FRONTEND_URL at call time (not
+    import time). Test settings overrides work without
+    cache_clear(). Falls back to https://zroky.ai when unset.
+
+Files touched:
+
+  - NEW   alembic/versions/0060_add_project_default_golden_set.py  (~65 lines)
+  - MOD   app/db/models.py                                          (Project + default_golden_set_id col)
+  - MOD   app/services/replay_runs.py                               (idempotency + metadata + helpers, ~120 lines net)
+  - MOD   app/services/goldens.py                                   (delete cascade, ~15 lines)
+  - MOD   app/api/routes/goldens.py                                 (schema + summary_url + idempotent flag)
+  - NEW   app/api/routes/replay_dispatch.py                         (~235 lines)
+  - MOD   app/api/router.py                                         (wire new router)
+  - NEW   tests/test_replay_dispatch.py                             (27 tests, ~625 lines)
+
+Tests: 27 new (idempotency / default-set resolution / cascade clear /
+       summary_url / route-level 404/422 paths / metadata persistence).
+       Impacted-subset run: 298 passed across replay_runs +
+       replay_executor + goldens + judge_engine + judge_calibration +
+       judge_shadow + plan_gates + entitlements_resolver +
+       new replay_dispatch. Zero regressions.
+
+OpenAPI: TWO new schemas + one new endpoint:
+   ReplayDispatchRequest, ReplayDispatchResponse, POST /v1/replay/dispatch
+   Plus extended GoldenRunRequest / GoldenRunDispatchResponse with
+   summary_url + idempotent + branch_name + pr_number + commit_message.
+Alembic chain: head moved 0059 → 0060.
+
+Exit criteria for Module 9:
+  [x] Migration 0060 adds projects.default_golden_set_id (nullable VARCHAR(64))
+  [x] Project ORM model carries the new column
+  [x] dispatch_replay_run is idempotent on (project, set, sha) with horizon
+  [x] Optional CI-context metadata (branch / pr / commit) flows to summary_json
+  [x] build_summary_url() exposes the dashboard URL for PR-check linking
+  [x] New POST /v1/replay/dispatch endpoint with default-set resolution
+  [x] Legacy POST /v1/goldens/{id}/run keeps backward-compat AND gains the
+      new response fields (summary_url + idempotent)
+  [x] 27 new tests + 298 impacted tests pass; zero regressions
+  [x] No upstream caller signature breakage
+==============================================================================
+Module 10 � Pilot v3 Tier-2 (auto-PR pipeline behind a protocol seam)
+==============================================================================
+Date: 2026-05-14
+Status: COMPLETE � plumbing-only per locked decision.
+
+LOCKED DECISION (DEFERRED):
+  Plan �17.3 #2 (GitHub App vs OAuth for the auto-PR flow) intentionally
+  remains OPEN. Module 10 ships the entire Tier-2 pipeline behind the
+  `GitHubPRClient` protocol in app/services/pilot_pr_client.py. When the
+  team commits to App-vs-OAuth, ONE new file (~200 lines) replaces the
+  factory return value in `_build_backend_from_settings`. Nothing else
+  changes � payload, dispatch, idempotency, gates, routes, audit are all
+  decoupled from the transport.
+
+  Rationale: the hard 80% of Module 10 is the policy / safety surface
+  (replay-pass gate, daily cap, kill switch, idempotency, fail-CLOSED
+  posture). The HTTP plumbing is a self-contained 200-line side quest.
+  Building behind the seam landed the high-value work today and keeps
+  the auth decision reversible.
+
+DELIVERABLES:
+  - NEW   alembic/versions/0061_extend_pilot_actions_for_tier2.py
+            adds pr_url / pr_fingerprint / replay_run_id_gate columns +
+            ix_pilot_actions_project_pr_fingerprint index for O(1)
+            idempotency lookup. 0060 ? 0061.
+  - MOD   app/db/models.py � PilotAction ORM gets the three new columns
+            and matching index declaration.
+  - NEW   app/services/pilot_pr_payload.py (~340 lines)
+            Pure-functional patch + title + body generator.
+            SUPPORTED_TIER2_ACTIONS = {prompt_revert_pr, schema_fix_pr}.
+            compute_pr_fingerprint() = SHA-256 over (project, anomaly,
+            action_type, files) � stable across processes / platforms.
+            UnsupportedActionTypeError + InsufficientEvidenceError keep
+            the contract tight (plan �17.1 risk #1: false-positive
+            auto-revert is the top risk; payload validation is part of
+            the mitigation).
+  - NEW   app/services/pilot_pr_client.py (~190 lines)
+            GitHubPRClient runtime-checkable Protocol. Three impls:
+              DryRunPRClient   � test default; records calls; returns
+                                 dry-run:// sentinel URLs.
+              RecordingPRClient� staging; structured-log every call.
+              RaisingPRClient  � defense-in-depth tests for fail-CLOSED.
+            Singleton factory `get_pr_client()` driven by
+            Settings.PILOT_PR_CLIENT_BACKEND. Unknown values ? fall
+            back to DryRunPRClient (fail-CLOSED: a typo in env vars
+            must NEVER silently start opening PRs on customer repos).
+  - NEW   app/services/pilot_pr_dispatch.py (~520 lines)
+            evaluate_tier2_dispatch() � the decision pipeline.
+            Gates in order: cross-tenant guard ? entitlement
+            (pilot.tier2_pr_enabled) ? kill_switch ? tier2_enabled ?
+            tier2_actions allow-list ? SUPPORTED_TIER2_ACTIONS vocab ?
+            daily cap (real PRs only � dry-run rows excluded so cap
+            protects the customer's repo, not log noise) ? replay-pass
+            gate (>= PILOT_TIER2_REPLAY_PASS_GATE = 0.95) ? payload
+            build ? idempotency by (project, pr_fingerprint) ? reserve
+            row (pending) ? client.open_pr ? mark applied.
+            EVERY exit writes a pilot_actions row � skipped/failed paths
+            included � so the audit trail is exhaustive.
+            cancel_pilot_action() marks pending ? skipped.
+            DispatchOutcome carries a `decision` token from a closed
+            vocabulary (DECISION_*) so callers `==` without typos.
+  - MOD   app/services/pilot.py � DEFAULT_POLICY gains tier2_daily_cap
+            (None means fall back to PILOT_TIER2_DAILY_PR_CAP setting;
+            int >= 0 overrides; 0 disables Tier-2 entirely without
+            flipping tier2_enabled off). _POLICY_FIELDS + validator
+            updated.
+  - MOD   app/core/config.py � three new settings:
+              PILOT_PR_CLIENT_BACKEND       default "dry_run"
+              PILOT_TIER2_REPLAY_PASS_GATE  default 0.95
+              PILOT_TIER2_DAILY_PR_CAP      default 10
+  - MOD   app/api/routes/pilot.py
+              PilotActionResponse extended with pr_url / pr_fingerprint
+                / replay_run_id_gate.
+              PilotPolicyPayload extended with tier2_daily_cap.
+              POST /v1/pilot/actions/{id}/cancel  � 200 / 404 / 409
+              POST /v1/pilot/actions/{id}/retry   � 200 / 404 / 409 / 422
+                Re-dispatches a failed/skipped Tier-2 row by reading
+                anomaly_id + replay_run_id_gate off the original.
+  - NEW   tests/test_pilot_pr.py (~880 lines, 42 tests)
+
+TESTS � 42 new, all green:
+  Payload: prompt_revert + schema_fix happy paths, unsupported action,
+           missing/insufficient evidence, fingerprint determinism +
+           sensitivity to evidence change, to_json() round-trip,
+           vocab cross-check with DEFAULT_POLICY.
+  Client: DryRun records + reset, Recording sentinel, Raising raises,
+          factory default, factory fail-CLOSED on unknown backend,
+          factory honours "recording" override.
+  Dispatch gates: applied happy path, skipped_entitlement,
+                  skipped_kill_switch, skipped_tier_disabled,
+                  skipped_action_not_allowed, skipped_replay_gate
+                  (below threshold + zero traces),
+                  skipped_replay_gate bypass when policy disables it,
+                  skipped_insufficient_evidence, cross-tenant guard.
+  Dispatch idempotency: idempotent_hit returns existing row, client
+                        not called twice.
+  Dispatch failures: PRClientError ? failed_transient,
+                     PRClientPermanentError ? failed_permanent,
+                     unexpected RuntimeError ? failed_permanent.
+  Daily cap: dry-run rows excluded; real PR rows count ? skipped.
+  Routes: /cancel pending?skipped, /cancel applied?409, /cancel
+          tier-1?409, /cancel missing?404, /retry happy path,
+          /retry missing?404, /retry tier-1?409, /retry applied?409,
+          /retry without gate evidence?422.
+
+Impacted-subset run: 276 passed across pilot + pilot_pr +
+   plan_gates + billing_v2 + entitlements_resolver + replay_runs.
+   Zero regressions.
+
+OpenAPI: TWO new endpoints + extended schemas:
+   POST /v1/pilot/actions/{id}/cancel ? PilotActionResponse
+   POST /v1/pilot/actions/{id}/retry  ? PilotActionRetryResponse
+   PilotActionResponse.{pr_url, pr_fingerprint, replay_run_id_gate}
+   PilotPolicyPayload.tier2_daily_cap
+
+Alembic chain: head moved 0060 ? 0061.
+
+EXIT CRITERIA (Module 10):
+  [x] Migration 0061 + ORM extension for Tier-2 columns
+  [x] Pure payload generator with deterministic fingerprint
+  [x] Protocol seam (GitHubPRClient) + 3 reference impls + factory
+  [x] Dispatch pipeline: 11 distinct decision tokens; every exit
+      persists a pilot_actions row
+  [x] Replay-pass gate >= 0.95 (configurable per project + globally)
+  [x] Daily cap protects real PRs only (dry-run excluded)
+  [x] Idempotency by (project, pr_fingerprint) � second dispatch of
+      same patch returns existing row, never calls client twice
+  [x] Founder-console intervention: /cancel + /retry routes
+  [x] Audit trail uniform across applied / skipped / failed paths
+  [x] Plan-gate (pilot.tier2_pr_enabled) checked at dispatch level
+  [x] Fail-CLOSED on entitlement-resolver outage + unknown env vars
+  [x] 42 new tests + 276 impacted tests pass; zero regressions
+
+PENDING (out-of-scope per locked decision):
+  - GitHubPRClient implementation against a real auth strategy
+    (GitHub App with JWT-signed installation tokens recommended).
+    Single new file under app/services/pilot_pr_github_app.py;
+    factory branch wired in `_build_backend_from_settings`.
+  - GitHub App marketplace install UX + installation_created /
+    installation_deleted webhook handlers (extend existing
+    github_webhooks.py).
+  - Customer repo binding model (project_id ? owner/repo) � should
+    reuse existing users.github_* columns or introduce
+    project_repo_bindings, depending on the App-vs-OAuth decision.
+
+
+----------------------------------------------------------------
+Module 11 -- Weekly digest pipeline (compute + render + send)  (2026-05-14)
+----------------------------------------------------------------
+
+Scope (locked, plan section 10.5):
+  - Promote weekly_impact.py -> digest_engine.py (M11.1 was done
+    in Module 4.4 read-side; this module ships the WRITE side).
+  - Audience-aware summary: engineer / manager / executive.
+  - Pre-rendered HTML + on-the-fly plain-text fallback.
+  - Two-stage Celery split (generate, then send) so a send-side
+    SMTP outage cannot strand digest generation.
+  - Admin trigger route for ops-driven regen.
+
+Decisions (with reasoning):
+
+  - AUDIENCE VOCAB COLOCATED. `digest_engine.AUDIENCES` and
+    `billing_plans.DIGEST_AUDIENCE_VALUES` are the same vocabulary
+    seen from two sides. A startup-time assertion
+    (`_check_audience_vocab_in_sync`) catches drift in CI so a
+    rename in one place crashes loudly instead of silently
+    serving the wrong tier.
+
+  - AUDIENCE RESOLVER FAIL-OPEN. `resolve_audience` returns
+    DEFAULT_AUDIENCE ('engineer') on resolver failure or unknown
+    value. Legacy weekly_impact did not consult entitlements at
+    all, so degrading to 'engineer' is strictly better than
+    skipping the project on a transient entitlement outage.
+
+  - SUMMARY SHAPE = AUDIENCE FILTER. compute_summary RETURNS the
+    blocks the audience is entitled to see -- engineer omits
+    `pilot`/`replay`/`trend`; manager omits `trend`; executive
+    omits `trend` when no prior digest row exists (no misleading
+    "+0%" tile for brand-new projects). Renderers re-check the
+    audience key as a defence-in-depth seam.
+
+  - PREVENTED-WASTE PROXY. cost.prevented_waste_usd = sum of
+    cost_total over failed calls whose error_code matches the
+    fingerprint of an anomaly touched by an applied/reverted
+    PilotAction in the window. Approximation (Anomaly has no
+    direct call_id link in 0051) but the proxy is intentional:
+    better to undercount prevented waste than invent a number.
+
+  - TIER-2 PR URL SANITISER. Dry-run / recording sentinels
+    (`dry-run://...`, `recording://...`) are filtered from the
+    manager-tier `tier2_pr_urls` list. They are not real PRs the
+    manager can review and surfacing them would erode trust.
+
+  - REPLAY PASS-RATE DENOMINATOR DISCIPLINE. Replay runs whose
+    summary_json lacks `trace_count_at_dispatch` are EXCLUDED
+    from the rate calc, not counted as failures. Unknown
+    denominator -> unknown rate (returns None), not 0.
+
+  - WoW TREND OMITS BLOCK ON NO PRIOR. trend section is None for
+    brand-new projects so the executive email does not render a
+    confusing "+0%" tile for week 1. Renderer omits the section
+    entirely.
+
+  - HTML RENDERER IS ESCAPE-FIRST. recommendation + all dynamic
+    strings pass through `html_escape` even though they are
+    server-built today -- if a future change ever sources from
+    user input the boundary already exists.
+
+  - UPSERT PRESERVES sent_at. generate_weekly_digest UPDATES the
+    existing row on regen (matched by project_id + week_start)
+    and INTENTIONALLY DOES NOT TOUCH sent_at or sent_to_emails.
+    A regen after the email task ran must not reset sent_at --
+    otherwise the next send beat would email the same digest
+    twice. Test: test_regen_preserves_sent_at.
+
+  - TWO-STAGE CRON SPLIT. generate_weekly_digests (Mon 02:00 UTC)
+    and send_pending_digests (every 5 min) are SEPARATE Celery
+    tasks. An SMTP outage strands rows with sent_at=NULL; the
+    next beat tick retries automatically. Conflating them would
+    couple compute-side failures to send-side failures.
+
+  - send_pending_digests SKIPS ROWS WITH NO RECIPIENTS. A project
+    with no active admin/owner gets the row left untouched
+    (sent_at stays NULL) -- the row simply waits for an admin
+    to be invited. Logged via `digest_send_skipped_no_recipients`.
+
+  - send_email RETURNING FALSE DOES NOT STAMP. Transient SMTP
+    failure means sent_at stays NULL so the row retries on the
+    next beat. Stamped only on send_email -> True.
+
+  - ADMIN TRIGGER LIVES AT /internal (NOT /v1/internal). Plan
+    section 10.5 names the route /v1/internal/digests/generate;
+    the actual mount lives under the existing `/internal` router
+    prefix to stay co-located with /internal/owner/* admin
+    endpoints. Same auth seam (require_provisioning_access).
+
+  - ADMIN TRIGGER DOES NOT SEND. The route only regenerates --
+    operators who want an immediate send run send_pending_digests
+    separately. Conflating "rebuild this week's digest" with
+    "email it now" is the kind of footgun that loses customer
+    trust on day one.
+
+  - DIGEST_ENABLED KILL-SWITCH. Both Celery tasks short-circuit
+    with `{"skipped": True, "reason": "DIGEST_ENABLED=false"}`
+    when the setting is False. Lets ops disable the pipeline
+    without touching beat schedule or revoking the binding.
+
+Files (delta):
+  + app/services/digest_engine.py    (M11.1 read + M11.2 compute
+                                       + M11.3 renderers + M11.4
+                                       generate + recipients)
+  + app/worker/tasks.py              (generate_weekly_digests +
+                                       send_pending_digests; old
+                                       weekly_impact task retired)
+  + app/core/config.py               (DIGEST_ENABLED,
+                                       DIGEST_SEND_BATCH_SIZE)
+  + app/celery_app.py / beat schedule (split, 5-min send tick)
+  + app/api/routes/internal.py       (POST /internal/digests/
+                                       generate; inline + cohort)
+  + tests/test_digest_engine.py      (52 new binding tests)
+
+OpenAPI delta:
+  POST /internal/digests/generate   (include_in_schema=False --
+                                     ops surface, not customer-
+                                     facing)
+
+Tests:
+  52 new tests across:
+    TestComputeSummaryAudience     (5)
+    TestComputeSummaryBlocks       (8)
+    TestRenderHtml                 (5)
+    TestRenderPlain                (4)
+    TestGenerateWeeklyDigest       (5)
+    TestListPendingDigests         (4)
+    TestMarkDigestSent             (1)
+    TestResolveRecipientEmails     (3)
+    TestResolveAudience            (2)
+    TestGenerateWeeklyDigestsTask  (3)
+    TestSendPendingDigestsTask     (4)
+    TestAdminTriggerRoute          (7)
+    audience-vocab-in-sync         (1)
+
+Impacted-subset run: 238 passed across digest + digest_engine +
+   replay_dispatch + pilot_pr + pilot + internal_exchange_rate.
+   Zero regressions.
+
+EXIT CRITERIA (Module 11):
+  [x] M11.1 service consolidation (already shipped in 4.4)
+  [x] M11.2 compute_summary -- audience-shaped aggregation
+  [x] M11.3 render_html + render_plain -- audience-aware bodies
+  [x] M11.4 generate_weekly_digest UPSERT + sent_at preservation
+  [x] M11.4 list_pending_digests + mark_digest_sent
+  [x] M11.4 resolve_recipient_emails (admin/owner, active only)
+  [x] M11.5 Celery split + DIGEST_ENABLED kill-switch
+  [x] M11.5 legacy `send_weekly_impact_emails` retired
+  [x] M11.6 admin trigger route /internal/digests/generate
+  [x] M11.7 52 new tests + 238 impacted tests pass; zero regressions
+
+PENDING (deferred):
+  - send_pending_digests batch-size respect (currently drains
+    the entire pending queue per tick -- fine until project
+    count grows past the SMTP host's per-connection budget).
+  - Per-audience subject-line templates (today: prevented-waste
+    USD is the universal subject hook).
+  - Digest snapshot tests (HTML golden files) -- would add
+    fingerprinting drift detection but the audience-aware unit
+    tests cover the same behaviour today.
+
+
+────────────────────────────────────────────────────────────────────────
+Module 12 -- Subscription lifecycle automation + sla_tier  (2026-05-15)
+────────────────────────────────────────────────────────────────────────
+Scope (locked, plan section 11.4):
+  - Pull-driven sweepers for the two non-event transitions Stripe
+    will never tell us about: no-card trial expiry and 7-day past-
+    due grace expiry. Hourly Celery beat ticks, offset 7 minutes.
+  - subscriptions.sla_tier ('none' | 'team' | 'enterprise') as a
+    persistent column so reliability-SLA refund eligibility
+    survives auto-downgrade and is queryable from /v1/billing/me.
+  - FEATURE_LEGACY_BILLING flipped to False; legacy /v1/billing/
+    {plans,subscription,usage} routes split into a separate
+    legacy_router gated by the flag while the §11.3 surface
+    (checkout/portal/webhook/me) is always mounted.
+
+Decisions (with reasoning):
+
+  - TRIAL EXPIRY ELIGIBILITY = stripe_sub_id IS NULL.
+    Application-managed (no-card) trials only. Paid-trial rows
+    transition through Stripe's customer.subscription.updated;
+    sweeping them here would race the webhook AND the
+    _is_stale_event guard in stripe_sync would then drop the
+    legitimate post-trial upgrade. Test
+    test_skips_paid_trial_with_stripe_sub_id pins this.
+
+  - PAST-DUE GRACE CLEARS stripe_sub_id ON DOWNGRADE.
+    Customers with a paid-then-failed subscription have a real
+    stripe_sub_id. After the 7-day grace cap we null it so a
+    delayed invoice.paid for the dead subscription cannot
+    resurrect Pro entitlements (invoice handler looks up by
+    stripe_sub_id; missing row -> no-op). stripe_customer_id is
+    retained for support and re-checkout convenience.
+
+  - sla_tier IS PRESERVED ACROSS AUTO-DOWNGRADE.
+    A customer who was on Team during the missed-SLA window
+    keeps sla_tier='team' even after the row flips to
+    (free, active). Refund-eligibility audits then remain
+    reconstructable from a single row. Two tests pin this
+    (TestSweepExpiredTrials::test_sla_tier_preserved and
+    TestSweepExpiredPastDueGrace::test_sla_tier_preserved).
+
+  - AUDIT ROW PER TRANSITION.
+    actor_role='system', action='subscription.auto_downgrade_*',
+    before_json/after_json snapshots of plan_code, status,
+    trial_end, current_period_end, stripe_sub_id. Founder
+    Console (Module 13) reads this for support investigations
+    so the audit shape matches AuditLogAdmin already in use.
+
+  - IDEMPOTENT BY ELIGIBILITY FILTER, NOT BY KEY.
+    Once status flips out of trialing/past_due, the next sweep
+    finds no eligible rows. No need for a stripe_event_id-style
+    dedupe key -- the state machine itself is the gate.
+
+  - BILLING_LIFECYCLE_SWEEP_ENABLED KILL-SWITCH.
+    Both Celery wrappers short-circuit with
+    {"skipped": True, "reason": "BILLING_LIFECYCLE_SWEEP_ENABLED=false"}
+    so ops can disable the pipeline without revoking the beat
+    binding. Mirrors DIGEST_ENABLED from Module 11.
+
+  - LEGACY ROUTER SPLIT, NOT DELETION.
+    legacy_router is its own APIRouter mounted only when
+    FEATURE_LEGACY_BILLING=True. Code path stays in tree for
+    one release window so a flag-flip rollback is one env-var
+    change, not a redeploy. Two router-shape tests pin the
+    boundary so accidental re-merge is caught at test time.
+
+Files (delta):
+  + alembic/versions/0062_add_subscription_sla_tier.py  (new col +
+                                                         CHECK)
+  + app/db/models.py                          (Subscription.sla_tier)
+  + app/services/subscription_lifecycle.py    (sweep_expired_trials,
+                                                sweep_expired_past_due_grace,
+                                                _transition_to_free,
+                                                audit writers)
+  + app/worker/tasks.py                       (expire_trials,
+                                                expire_past_due_grace
+                                                Celery wrappers)
+  + app/worker/celery_app.py                  (beat schedule entries
+                                                hourly + 7-min offset,
+                                                gated by sweep flag)
+  + app/core/config.py                        (BILLING_LIFECYCLE_SWEEP_*
+                                                + FEATURE_LEGACY_BILLING
+                                                default flipped to False)
+  + app/api/routes/billing.py                 (BillingMeResponse.sla_tier;
+                                                /v1/billing/me surfaces
+                                                it; router split into
+                                                router + legacy_router)
+  + app/api/router.py                         (always-mount router;
+                                                conditionally mount
+                                                legacy_router on flag)
+  + tests/test_subscription_lifecycle.py      (24 new binding tests)
+
+OpenAPI delta:
+  GET /v1/billing/me  -> response now includes sla_tier
+                         (default 'none', backward-compatible
+                          additive field).
+
+Tests:
+  24 new tests across:
+    TestSweepExpiredTrials          (9)
+    TestSweepExpiredPastDueGrace    (9)
+    TestKillSwitch                  (2)
+    TestRouterSeparation            (2)
+    TestBillingMeSlaTier            (1)
+    + an idempotency + an audit-payload spot-check
+
+Impacted-subset run:
+  test_subscription_lifecycle.py  : 24 / 24 passed (113s)
+  test_billing_v2.py              : 73 / 73 passed (158s) -- no
+                                     regressions on the §11.3
+                                     surface or webhook handling.
+
+EXIT CRITERIA (Module 12):
+  [x] subscriptions.sla_tier column + CHECK constraint
+  [x] sweep_expired_trials with no-card eligibility filter
+  [x] sweep_expired_past_due_grace with 7d grace + sub_id clear
+  [x] audit_log_admin rows on every transition
+  [x] sla_tier preserved across auto-downgrade
+  [x] Celery wrappers + BILLING_LIFECYCLE_SWEEP_ENABLED kill-switch
+  [x] beat schedule hourly + 7-min offset
+  [x] /v1/billing/me surfaces sla_tier (additive, no breakage)
+  [x] FEATURE_LEGACY_BILLING flipped to False
+  [x] legacy router split + structural tests pin the boundary
+  [x] 24 new tests + 73 billing_v2 tests pass; zero regressions
+
+PENDING (deferred):
+  - Per-org BILLING_PAST_DUE_GRACE_DAYS override (today: a single
+    setting). Useful only once we have an enterprise contract that
+    negotiates a different grace window.
+  - sla_tier write path -- today the column exists and round-
+    trips, but the only writer is Stripe webhook code that already
+    knew the customer's contract. A console editor + audit row
+    will land with the Founder Console expansion (Module 13).
+  - Notification on auto-downgrade (email the org owner). Out of
+    scope here; the digest pipeline (Module 11) already surfaces
+    plan changes in the next weekly digest, which is acceptable
+    for v1.

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "zroky-backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+# ── Detector plugins ──────────────────────────────────────────────────────────
+# Entry-point name   = human-readable code used as registry key
+# Entry-point value  = module:callable  (must satisfy Detector Protocol)
+[project.entry-points."zroky.detectors"]
+token_overflow  = "app.services.detectors.token_overflow:detect"
+rate_limit      = "app.services.detectors.rate_limit:detect"
+auth_failure    = "app.services.detectors.auth_failure:detect"
+provider_error  = "app.services.detectors.provider_error:detect"
+loop_detected   = "app.services.detectors.loop:detect_entry"
+cost_spike      = "app.services.detectors.cost_spike:detect_entry"
+empty_output    = "app.services.detectors.empty_output:detect"
+output_truncated = "app.services.detectors.output_truncated:detect"
+schema_violation = "app.services.detectors.schema_violation:detect"
+latency_anomaly = "app.services.detectors.latency_anomaly:detect"
+repeated_output = "app.services.detectors.repeated_output:detect_entry"
+# Layer 2 — statistical baseline drift detectors (pattern rules)
+output_length_drift = "app.services.detectors.output_length_drift:detect_entry"
+latency_drift   = "app.services.detectors.latency_drift:detect_entry"
+error_rate_drift = "app.services.detectors.error_rate_drift:detect_entry"
+token_usage_drift = "app.services.detectors.token_usage_drift:detect_entry"
+# Layer 3 — judge-engine output bridged into the diagnosis surface (pattern rules)
+hallucination_risk = "app.services.detectors.hallucination_risk:detect_entry"
+accuracy_regression = "app.services.detectors.accuracy_regression:detect_entry"
+
+# ── Fix-strategy plugins ──────────────────────────────────────────────────────
+# Entry-point value  = module:callable  (must satisfy FixStrategy Protocol)
+[project.entry-points."zroky.fix_strategies"]
+token_overflow  = "app.services.strategies.token_overflow:generate"
+loop_detected   = "app.services.strategies.loop_detected:generate"
+rate_limit      = "app.services.strategies.rate_limit:generate"
+auth_failure    = "app.services.strategies.auth_failure:generate"
+cost_spike      = "app.services.strategies.cost_spike:generate"
+generic         = "app.services.strategies.generic:generate"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

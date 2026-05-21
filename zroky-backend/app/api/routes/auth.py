@@ -838,12 +838,9 @@ class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
-    @field_validator("new_password")
-    @classmethod
-    def validate_new_password(cls, v: str) -> str:
-        if len(v) < _MIN_PW_LEN:
-            raise ValueError(f"Password must be at least {_MIN_PW_LEN} characters.")
-        return v
+
+class DeleteAccountRequest(BaseModel):
+    confirm_email: str
 
 
 def _get_current_user(authorization: str | None = None, db: Session | None = None) -> User:
@@ -911,3 +908,37 @@ def change_password(
     user.password_hash = hash_password(body.new_password)
     db.commit()
     return {"detail": "Password changed successfully."}
+
+
+@router.delete("/me", status_code=status.HTTP_200_OK)
+@limiter.limit("2/hour")
+def delete_account(
+    request: Request,
+    body: DeleteAccountRequest,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict[str, str]:
+    user = _get_current_user(authorization=authorization, db=db)
+
+    # Confirm email matches the authenticated user
+    if not user.email or body.confirm_email.strip().lower() != user.email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmation email does not match your account email.",
+        )
+
+    # Soft-delete: deactivate the user and scrub PII
+    user.is_active = False
+    user.email = f"deleted_{user.id}@redacted.local"
+    user.email_hash = None
+    user.password_hash = None
+    user.github_login = None
+    user.github_id = None
+    user.google_id = None
+    user.display_name = None
+
+    # Revoke all active tokens for this user
+    token_store.revoke_all_user_tokens(user.id)
+
+    db.commit()
+    return {"detail": "Account deleted successfully."}

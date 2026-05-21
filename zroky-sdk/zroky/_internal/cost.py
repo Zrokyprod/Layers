@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """
 Cost calculation engine.
 Applies pricing_config.json rates to captured token usage.

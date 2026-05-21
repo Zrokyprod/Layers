@@ -6,6 +6,46 @@ import {
   UseMutationOptions,
 } from "@tanstack/react-query";
 import {
+  getCalibrationHistory,
+  getCalibrationLatest,
+  getCalibrationMode,
+  triggerCalibrationRunNow,
+  listCalibrationLabels,
+  createOrUpdateCalibrationLabel,
+  deleteCalibrationLabel,
+  getOutcomeSummary,
+  getReplaySavings,
+  ingestOutcome,
+  listAblationJobs,
+  getAblationJob,
+  triggerAblation,
+  getReliabilityLeaderboard,
+  getReliabilitySummary,
+  getAgentReliabilityHistory,
+  triggerReliabilityCompute,
+  type CalibrationModeView,
+  type CalibrationRunView,
+  type CalibrationRunNowResponse,
+  type LabelView,
+  type LabelCreate,
+  type OutcomeSummaryResponse,
+  type ReplaySavingsResponse,
+  type OutcomeIngestPayload,
+  type OutcomeView,
+  type AblationJobView,
+  type TriggerAblationPayload,
+  type TriggerAblationResponse,
+  type AgentScoreView,
+  type ProjectReliabilitySummary,
+  type ComputeReliabilityResponse,
+  type RecView,
+  type RecSummaryView,
+  listRecommendations,
+  getRecSummary,
+  updateRecStatus,
+  generateRecommendations,
+} from "./api";
+import {
   getActivityFeed,
   listProviderVerifications,
   testProviderConnection,
@@ -35,6 +75,10 @@ import {
   getCallDetail,
   getCallTraceTree,
   getDiagnosisFixWatch,
+  getDiagnosisState,
+  setDiagnosisAssignment,
+  setDiagnosisDismissed,
+  setDiagnosisSnooze,
   listDiagnosisPrLinks,
   submitDiagnosisFeedback,
   markDiagnosisFixCopied,
@@ -47,6 +91,9 @@ import {
   getRecentTraces,
   getTraceById,
   getCostForecast,
+  listDriftModels,
+  getDriftStatus,
+  getDriftHistory,
   getCostAnomalyRisk,
   listSupportTickets,
   createSupportTicket,
@@ -72,7 +119,10 @@ import {
   setRateLimitOverrides,
   clearRateLimitOverrides,
   fetchAuditLog,
+  fetchOwnerBillingSummary,
+  fetchOwnerSupportTickets,
   setMaintenanceMode,
+  updateOwnerSupportTicket,
 } from "./owner-api";
 import type {
   CostDailyTrendResponse,
@@ -103,6 +153,9 @@ import type {
   MeResponse,
   TraceListResponse,
   CostForecastResponse,
+  DriftModelView,
+  StatusResponse,
+  ModelHistoryResponse,
   CostAnomalyRiskResponse,
   ProjectMemberListResponse,
   ProjectInviteResponse,
@@ -624,6 +677,36 @@ export function useAuditLog(opts: {
   });
 }
 
+export function useOwnerBillingSummary() {
+  return useQuery({
+    queryKey: ["owner", "billing", "summary"],
+    queryFn: () => fetchOwnerBillingSummary(),
+  });
+}
+
+export function useOwnerSupportTickets(opts: {
+  status?: string;
+  priority?: string;
+  tenant_id?: string;
+  assigned_to?: string;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  return useQuery({
+    queryKey: ["owner", "support", "tickets", opts],
+    queryFn: () => fetchOwnerSupportTickets(opts),
+  });
+}
+
+export function useUpdateOwnerSupportTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, body }: { ticketId: string; body: { status?: string; priority?: string; assigned_to?: string } }) =>
+      updateOwnerSupportTicket(ticketId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["owner", "support", "tickets"] }),
+  });
+}
+
 export function useToggleMaintenance() {
   const qc = useQueryClient();
   return useMutation<void, Error, { enabled: boolean; message?: string }>({
@@ -720,5 +803,279 @@ export function useSupportTickets(opts?: { status?: string; limit?: number; offs
   return useQuery<SupportTicketListResponse, Error>({
     queryKey: ["support-tickets", opts ?? {}],
     queryFn: () => listSupportTickets(opts ?? {}),
+  });
+}
+
+// ─── Judge Calibration ────────────────────────────────────────────────────────
+
+export function useCalibrationLatest(judgeModel?: string) {
+  return useQuery<CalibrationRunView[], Error>({
+    queryKey: ["calibration", "latest", judgeModel ?? "all"],
+    queryFn: () => getCalibrationLatest(judgeModel),
+    staleTime: 60_000,
+  });
+}
+
+export function useCalibrationHistory(judgeModel: string, days = 30) {
+  return useQuery<CalibrationRunView[], Error>({
+    queryKey: ["calibration", "history", judgeModel, days],
+    queryFn: () => getCalibrationHistory(judgeModel, days),
+    enabled: !!judgeModel,
+    staleTime: 60_000,
+  });
+}
+
+export function useCalibrationMode(judgeModel: string) {
+  return useQuery<CalibrationModeView, Error>({
+    queryKey: ["calibration", "mode", judgeModel],
+    queryFn: () => getCalibrationMode(judgeModel),
+    enabled: !!judgeModel,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useTriggerCalibrationRunNow() {
+  const qc = useQueryClient();
+  return useMutation<CalibrationRunNowResponse, Error, string | undefined>({
+    mutationFn: (judgeModel) => triggerCalibrationRunNow(judgeModel),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["calibration"] });
+    },
+  });
+}
+
+export function useCalibrationLabels(traceId?: string) {
+  return useQuery<LabelView[], Error>({
+    queryKey: ["calibration", "labels", traceId ?? "all"],
+    queryFn: ({ signal }) => listCalibrationLabels(traceId, signal),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateCalibrationLabel() {
+  const qc = useQueryClient();
+  return useMutation<LabelView, Error, LabelCreate>({
+    mutationFn: (body) => createOrUpdateCalibrationLabel(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["calibration", "labels"] });
+    },
+  });
+}
+
+export function useDeleteCalibrationLabel() {
+  const qc = useQueryClient();
+  return useMutation<{ message: string; label_id: string }, Error, string>({
+    mutationFn: (labelId) => deleteCalibrationLabel(labelId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["calibration", "labels"] });
+    },
+  });
+}
+
+// ── Cost-of-Failure Attribution hooks ────────────────────────────────────────
+
+export function useOutcomeSummary(
+  days = 30,
+  options?: Partial<UseQueryOptions<OutcomeSummaryResponse, Error>>,
+) {
+  return useQuery<OutcomeSummaryResponse, Error>({
+    queryKey: ["outcomes", "summary", days],
+    queryFn: ({ signal }) => getOutcomeSummary(days, signal),
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useReplaySavings(
+  runId: string,
+  options?: Partial<UseQueryOptions<ReplaySavingsResponse, Error>>,
+) {
+  return useQuery<ReplaySavingsResponse, Error>({
+    queryKey: ["outcomes", "replay", runId],
+    queryFn: ({ signal }) => getReplaySavings(runId, signal),
+    enabled: !!runId,
+    staleTime: 300_000,
+    ...options,
+  });
+}
+
+export function useIngestOutcome() {
+  const qc = useQueryClient();
+  return useMutation<OutcomeView, Error, OutcomeIngestPayload>({
+    mutationFn: (payload) => ingestOutcome(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["outcomes"] });
+    },
+  });
+}
+
+export function useAblationJobs(
+  statusFilter?: string,
+  limit = 20,
+  options?: Partial<UseQueryOptions<AblationJobView[]>>,
+) {
+  return useQuery<AblationJobView[]>({
+    queryKey: ["ablation", "list", statusFilter, limit],
+    queryFn: ({ signal }) => listAblationJobs(statusFilter, limit, signal),
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useAblationJob(
+  jobId: string | null | undefined,
+  options?: Partial<UseQueryOptions<AblationJobView>>,
+) {
+  return useQuery<AblationJobView>({
+    queryKey: ["ablation", "job", jobId],
+    queryFn: ({ signal }) => getAblationJob(jobId!, signal),
+    enabled: !!jobId,
+    staleTime: 15_000,
+    refetchInterval: (q) =>
+      q.state.data?.status === "pending" || q.state.data?.status === "running" ? 3_000 : false,
+    ...options,
+  });
+}
+
+export function useTriggerAblation() {
+  const qc = useQueryClient();
+  return useMutation<TriggerAblationResponse, Error, TriggerAblationPayload>({
+    mutationFn: (payload) => triggerAblation(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ablation"] });
+    },
+  });
+}
+
+export function useReliabilityLeaderboard(
+  limit = 50,
+  options?: Partial<UseQueryOptions<AgentScoreView[]>>,
+) {
+  return useQuery<AgentScoreView[]>({
+    queryKey: ["reliability", "leaderboard", limit],
+    queryFn: ({ signal }) => getReliabilityLeaderboard(limit, signal),
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useReliabilitySummary(
+  options?: Partial<UseQueryOptions<ProjectReliabilitySummary>>,
+) {
+  return useQuery<ProjectReliabilitySummary>({
+    queryKey: ["reliability", "summary"],
+    queryFn: ({ signal }) => getReliabilitySummary(signal),
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useAgentReliabilityHistory(
+  agentName: string | null | undefined,
+  days = 30,
+  options?: Partial<UseQueryOptions<AgentScoreView[]>>,
+) {
+  return useQuery<AgentScoreView[]>({
+    queryKey: ["reliability", "agent", agentName, days],
+    queryFn: ({ signal }) => getAgentReliabilityHistory(agentName!, days, signal),
+    enabled: !!agentName,
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useTriggerReliabilityCompute() {
+  const qc = useQueryClient();
+  return useMutation<ComputeReliabilityResponse, Error, void>({
+    mutationFn: () => triggerReliabilityCompute(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reliability"] });
+    },
+  });
+}
+
+export function useRecommendations(
+  params: { status?: string; priority?: string; agent_name?: string; limit?: number } = {},
+  options?: Partial<UseQueryOptions<RecView[]>>,
+) {
+  return useQuery<RecView[]>({
+    queryKey: ["recommendations", params],
+    queryFn: ({ signal }) => listRecommendations(params, signal),
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useRecSummary(
+  options?: Partial<UseQueryOptions<RecSummaryView>>,
+) {
+  return useQuery<RecSummaryView>({
+    queryKey: ["recommendations", "summary"],
+    queryFn: ({ signal }) => getRecSummary(signal),
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useUpdateRecStatus() {
+  const qc = useQueryClient();
+  return useMutation<
+    RecView,
+    Error,
+    { recId: string; status: string; actioned_by?: string }
+  >({
+    mutationFn: ({ recId, status, actioned_by }) =>
+      updateRecStatus(recId, { status, actioned_by }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recommendations"] });
+    },
+  });
+}
+
+export function useGenerateRecommendations() {
+  const qc = useQueryClient();
+  return useMutation<{ generated: number; message: string }, Error, void>({
+    mutationFn: () => generateRecommendations(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recommendations"] });
+    },
+  });
+}
+
+// ── Provider Drift Watch ──────────────────────────────────────────────────────
+
+export function useDriftStatus(
+  options?: Partial<UseQueryOptions<StatusResponse>>,
+) {
+  return useQuery<StatusResponse>({
+    queryKey: ["drift", "status"],
+    queryFn: ({ signal }) => getDriftStatus(signal),
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useDriftModels(
+  options?: Partial<UseQueryOptions<DriftModelView[]>>,
+) {
+  return useQuery<DriftModelView[]>({
+    queryKey: ["drift", "models"],
+    queryFn: ({ signal }) => listDriftModels(signal),
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useDriftHistory(
+  modelId: string | null,
+  options?: Partial<UseQueryOptions<ModelHistoryResponse[]>>,
+) {
+  return useQuery<ModelHistoryResponse[]>({
+    queryKey: ["drift", "history", modelId],
+    queryFn: ({ signal }) => getDriftHistory(modelId!, signal),
+    enabled: !!modelId,
+    staleTime: 60_000,
+    ...options,
   });
 }

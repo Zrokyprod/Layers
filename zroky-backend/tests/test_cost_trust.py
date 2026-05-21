@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import Call
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 
 
@@ -34,6 +34,7 @@ def client(tmp_path: Path):
             session.close()
 
     app.dependency_overrides[get_db_session] = override_get_db_session
+    app.dependency_overrides[get_db_session_read] = override_get_db_session
 
     with TestClient(app) as test_client:
         yield test_client, testing_session_local

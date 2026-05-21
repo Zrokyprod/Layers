@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Event data models for the ZROKY SDK."""
 from __future__ import annotations
 

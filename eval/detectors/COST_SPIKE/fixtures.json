@@ -1,0 +1,22 @@
+[
+  {"id":"cs_p01","expected":"DETECT","rationale":"cost_usd exceeds per-call spike threshold of $1.00","input":{"cost_usd":1.50,"model":"gpt-4","agent_name":"document_analyzer","status":"success"}},
+  {"id":"cs_p02","expected":"DETECT","rationale":"cost_total field variant — cost $2.50 is a clear spike","input":{"cost_total":2.50,"model":"gpt-4-turbo","agent_name":"code_reviewer"}},
+  {"id":"cs_p03","expected":"DETECT","rationale":"extremely high token count driving cost","input":{"cost_usd":5.00,"total_tokens":500000,"model":"gpt-4","agent_name":"bulk_processor"}},
+  {"id":"cs_p04","expected":"DETECT","rationale":"cost spike on cheap model — $1.50 on gpt-3.5 is abnormal","input":{"cost_usd":1.50,"model":"gpt-3.5-turbo","agent_name":"simple_agent"}},
+  {"id":"cs_p05","expected":"DETECT","rationale":"reasoning tokens driving excessive cost","input":{"cost_usd":3.00,"reasoning_tokens":50000,"model":"o1-preview","agent_name":"reasoner"}},
+  {"id":"cs_p06","expected":"DETECT","rationale":"repeated calls accumulating — per_session_cost_usd spike","input":{"cost_usd":1.20,"per_session_cost_usd":12.00,"model":"gpt-4","agent_name":"chat_session"}},
+  {"id":"cs_p07","expected":"DETECT","rationale":"cost spike with loop — doubly anomalous","input":{"cost_usd":2.00,"loop":{"repeat_count":3},"model":"gpt-4","agent_name":"looping_analyzer"}},
+  {"id":"cs_p08","expected":"DETECT","rationale":"cost above spike threshold on claude-3-opus","input":{"cost_usd":4.50,"model":"claude-3-opus","agent_name":"premium_agent"}},
+  {"id":"cs_p09","expected":"DETECT","rationale":"total_cost field maps to spike","input":{"total_cost":1.80,"model":"gpt-4","status":"success"}},
+  {"id":"cs_p10","expected":"DETECT","rationale":"cache_savings_total still leaves net cost above threshold","input":{"cost_usd":1.10,"cache_savings_total":0.20,"model":"gpt-4","agent_name":"cached_agent"}},
+  {"id":"cs_n01","expected":"SKIP","rationale":"cost below threshold — normal call","input":{"cost_usd":0.05,"model":"gpt-4","status":"success"}},
+  {"id":"cs_n02","expected":"SKIP","rationale":"zero cost — free tier or caching","input":{"cost_usd":0.00,"model":"gpt-3.5-turbo","status":"success"}},
+  {"id":"cs_n03","expected":"SKIP","rationale":"failed call — no cost incurred","input":{"cost_usd":0.00,"status_code":429,"error_code":"rate_limit_exceeded"}},
+  {"id":"cs_n04","expected":"SKIP","rationale":"typical GPT-4 call cost","input":{"cost_usd":0.30,"model":"gpt-4","agent_name":"typical_agent"}},
+  {"id":"cs_n05","expected":"SKIP","rationale":"cost field missing — not a cost event","input":{"model":"gpt-4","prompt_tokens":500,"status":"success"}},
+  {"id":"cs_n06","expected":"SKIP","rationale":"empty payload","input":{}},
+  {"id":"cs_n07","expected":"SKIP","rationale":"auth failure — no cost","input":{"status_code":401,"cost_usd":0.00}},
+  {"id":"cs_n08","expected":"SKIP","rationale":"0.99 is just below $1.00 threshold","input":{"cost_usd":0.99,"model":"gpt-4","agent_name":"borderline_agent"}},
+  {"id":"cs_n09","expected":"SKIP","rationale":"token overflow — cost is typically 0 on overflow","input":{"cost_usd":0.00,"error_code":"context_length_exceeded"}},
+  {"id":"cs_n10","expected":"SKIP","rationale":"small cost on expensive model — still within normal range","input":{"cost_usd":0.50,"model":"gpt-4-turbo","status":"success"}}
+]

@@ -1,0 +1,22 @@
+[
+  {"id":"af_p01","expected":"DETECT","rationale":"401 Unauthorized is the canonical auth failure HTTP status","input":{"status_code":401,"error_code":"invalid_api_key","model":"gpt-4"}},
+  {"id":"af_p02","expected":"DETECT","rationale":"403 Forbidden indicates insufficient permissions","input":{"status_code":403,"error_message":"You don't have access to this model","model":"gpt-4"}},
+  {"id":"af_p03","expected":"DETECT","rationale":"error_code=authentication_error maps to auth failure","input":{"error_code":"authentication_error","model":"gpt-4"}},
+  {"id":"af_p04","expected":"DETECT","rationale":"Anthropic auth error — invalid x-api-key","input":{"provider":"anthropic","status_code":401,"error_message":"Invalid API key provided"}},
+  {"id":"af_p05","expected":"DETECT","rationale":"permission_denied error code","input":{"error_code":"permission_denied","status_code":403,"model":"gpt-4"}},
+  {"id":"af_p06","expected":"DETECT","rationale":"expired API key message","input":{"error_message":"Your API key has expired. Please generate a new one.","status_code":401}},
+  {"id":"af_p07","expected":"DETECT","rationale":"org access revoked — auth failure","input":{"status_code":401,"error_message":"Organization access revoked","model":"gpt-4-turbo"}},
+  {"id":"af_p08","expected":"DETECT","rationale":"Google invalid credentials error","input":{"provider":"google","status_code":401,"error_message":"API key not valid. Please pass a valid API key."}},
+  {"id":"af_p09","expected":"DETECT","rationale":"account_deactivated is auth failure variant","input":{"error_code":"account_deactivated","status_code":403}},
+  {"id":"af_p10","expected":"DETECT","rationale":"billing_not_active maps to auth failure","input":{"error_code":"billing_not_active","status_code":403,"model":"gpt-4"}},
+  {"id":"af_n01","expected":"SKIP","rationale":"successful call","input":{"status_code":200,"status":"success","model":"gpt-4"}},
+  {"id":"af_n02","expected":"SKIP","rationale":"rate limit — not auth","input":{"status_code":429,"error_code":"rate_limit_exceeded"}},
+  {"id":"af_n03","expected":"SKIP","rationale":"server error — not auth","input":{"status_code":500,"error_message":"Internal server error"}},
+  {"id":"af_n04","expected":"SKIP","rationale":"token overflow — not auth","input":{"status_code":400,"error_code":"context_length_exceeded"}},
+  {"id":"af_n05","expected":"SKIP","rationale":"400 bad request without auth signal","input":{"status_code":400,"error_message":"Invalid parameter: temperature must be between 0 and 2"}},
+  {"id":"af_n06","expected":"SKIP","rationale":"empty payload","input":{}},
+  {"id":"af_n07","expected":"SKIP","rationale":"loop detected — not auth","input":{"loop":{"repeat_count":5},"status":"success"}},
+  {"id":"af_n08","expected":"SKIP","rationale":"provider 503 — not auth","input":{"status_code":503,"error_message":"Service temporarily unavailable"}},
+  {"id":"af_n09","expected":"SKIP","rationale":"cost spike — not auth","input":{"cost_usd":9.99,"status":"success"}},
+  {"id":"af_n10","expected":"SKIP","rationale":"null status_code — not an error event","input":{"model":"gpt-4","prompt_tokens":500}}
+]

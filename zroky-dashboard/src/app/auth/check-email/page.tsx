@@ -39,16 +39,7 @@ function CheckEmailContent() {
 
         <div className="auth-form" style={{ marginTop: "8px" }}>
           {msg && (
-            <div
-              style={{
-                padding: "10px 14px",
-                borderRadius: "6px",
-                fontSize: "0.85rem",
-                background: status === "error" ? "#fef2f2" : "#f0fdf4",
-                color: status === "error" ? "#dc2626" : "#166534",
-                border: `1px solid ${status === "error" ? "#fca5a5" : "#86efac"}`,
-              }}
-            >
+            <div className={`auth-banner ${status === "error" ? "auth-banner-error" : "auth-banner-success"}`}>
               {msg}
             </div>
           )}

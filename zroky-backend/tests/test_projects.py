@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
 from app.core.config import get_settings
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 
 
@@ -38,6 +38,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         return _MockTaskResult()
 
     app.dependency_overrides[get_db_session] = override_get_db_session
+    app.dependency_overrides[get_db_session_read] = override_get_db_session
     monkeypatch.setattr("app.api.routes.diagnosis.process_diagnosis.delay", _mock_delay)
 
     with TestClient(app) as test_client:

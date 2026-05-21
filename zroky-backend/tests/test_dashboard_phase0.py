@@ -9,8 +9,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, DiagnosisFeedback, DiagnosisJob, DiagnosisShareToken
-from app.db.session import get_db_session
+from app.db.models import Call, DiagnosisFeedback, DiagnosisJob, DiagnosisShareToken, Issue
+from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 
 
@@ -40,8 +40,9 @@ def test_ctx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         return _MockTaskResult()
 
     app.dependency_overrides[get_db_session] = override_get_db_session
+    app.dependency_overrides[get_db_session_read] = override_get_db_session
+    monkeypatch.setattr("app.api.routes.live.SessionLocal", testing_session_local)
     monkeypatch.setattr("app.api.routes.diagnosis.process_diagnosis.delay", _mock_delay)
-    monkeypatch.setattr("app.api.routes.onboarding.process_diagnosis.delay", _mock_delay)
 
     with TestClient(app) as client:
         yield {
@@ -1389,3 +1390,111 @@ def test_settings_pii_test_alias_path(test_ctx) -> None:
     payload = response.json()
     assert payload["valid"] is True
     assert payload["match_count"] == 1
+
+
+def test_savings_summary_aggregates_open_and_resolved_issues(test_ctx) -> None:
+    """The /v1/analytics/savings route is the data backing the dashboard's
+    "Saved You" top-bar counter. It must:
+      - count BOTH open + resolved issues in the window
+      - keep `cumulative_wasted_usd` (open) separate from
+        `cumulative_resolved_blast_usd` (resolved) — those drive different
+        framing in the UI ("still bleeding" vs "already saved")
+      - apply the 6h projection multiplier ONLY to resolved blast radius
+      - bucket counts by severity
+      - silently ignore issues outside the window
+    """
+    client: TestClient = test_ctx["client"]
+    session_local = test_ctx["SessionLocal"]
+    project_id = _create_project(client, "savings-test")
+
+    now = datetime.now(timezone.utc)
+    recent = now - timedelta(days=2)
+    ancient = now - timedelta(days=120)
+
+    with session_local() as session:
+        # Open issue inside window — counts toward "still bleeding".
+        session.add(
+            Issue(
+                project_id=project_id,
+                failure_code="LOOP_DETECTED",
+                prompt_fingerprint="fp1",
+                agent_name=None,
+                status="open",
+                severity="high",
+                occurrence_count=5,
+                blast_radius_usd=10.0,
+                first_seen_at=recent,
+                last_seen_at=recent,
+            )
+        )
+        # Resolved issue inside window — drives "already saved" + projection.
+        session.add(
+            Issue(
+                project_id=project_id,
+                failure_code="COST_SPIKE",
+                prompt_fingerprint="fp2",
+                agent_name=None,
+                status="resolved",
+                severity="critical",
+                occurrence_count=3,
+                blast_radius_usd=20.0,
+                first_seen_at=recent,
+                last_seen_at=recent,
+                resolved_at=recent,
+            )
+        )
+        # Ancient issue OUTSIDE window — must be excluded.
+        session.add(
+            Issue(
+                project_id=project_id,
+                failure_code="AUTH_FAILURE",
+                prompt_fingerprint="fp3",
+                agent_name=None,
+                status="resolved",
+                severity="low",
+                occurrence_count=1,
+                blast_radius_usd=999.0,
+                first_seen_at=ancient,
+                last_seen_at=ancient,
+                resolved_at=ancient,
+            )
+        )
+        session.commit()
+
+    response = client.get(
+        "/v1/analytics/savings?days=30",
+        headers={"X-Project-Id": project_id},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["window_days"] == 30
+    assert payload["total_caught_count"] == 2  # ancient row excluded
+    assert payload["total_resolved_count"] == 1
+    assert payload["cumulative_wasted_usd"] == pytest.approx(10.0)
+    assert payload["cumulative_resolved_blast_usd"] == pytest.approx(20.0)
+    # 1.5x projection multiplier on resolved blast
+    assert payload["projected_averted_usd"] == pytest.approx(30.0)
+    assert payload["affected_calls"] == 8  # 5 + 3
+    assert payload["incidents_by_severity"] == {"high": 1, "critical": 1}
+
+
+def test_savings_summary_empty_for_clean_project(test_ctx) -> None:
+    """When a project has no issues, all aggregates must be zero — never
+    null and never absent — so the dashboard counter renders deterministically."""
+    client: TestClient = test_ctx["client"]
+    project_id = _create_project(client, "clean-savings-test")
+
+    response = client.get(
+        "/v1/analytics/savings?days=7",
+        headers={"X-Project-Id": project_id},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_caught_count"] == 0
+    assert payload["total_resolved_count"] == 0
+    assert payload["cumulative_wasted_usd"] == 0.0
+    assert payload["cumulative_resolved_blast_usd"] == 0.0
+    assert payload["projected_averted_usd"] == 0.0
+    assert payload["affected_calls"] == 0
+    assert payload["incidents_by_severity"] == {}

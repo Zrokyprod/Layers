@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.provisioning import require_provisioning_access
 from app.core.config import get_settings
 from app.db.models import Call, Project, ProjectMembership, User
-from app.db.session import get_db_session
-from app.services.currency import get_exchange_rate_debug_snapshot
+from app.db.session import get_db_session, set_db_tenant_context
 
 router = APIRouter(prefix="/internal")
 
@@ -181,8 +180,3 @@ def require_internal_debug_access(request: Request) -> None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal debug credentials")
 
 
-@router.get("/exchange-rate", include_in_schema=False)
-def internal_exchange_rate(
-    _: None = Depends(require_internal_debug_access),
-) -> dict[str, object]:
-    return get_exchange_rate_debug_snapshot()

@@ -1,0 +1,22 @@
+[
+  {"id":"pe_p01","expected":"DETECT","rationale":"5xx status code is the canonical provider error signal","input":{"status_code":500,"error_message":"Internal server error","model":"gpt-4"}},
+  {"id":"pe_p02","expected":"DETECT","rationale":"503 Service Unavailable — provider outage","input":{"status_code":503,"error_message":"The model is currently overloaded","model":"gpt-4"}},
+  {"id":"pe_p03","expected":"DETECT","rationale":"502 Bad Gateway from provider proxy","input":{"status_code":502,"error_message":"Bad Gateway","model":"gpt-3.5-turbo"}},
+  {"id":"pe_p04","expected":"DETECT","rationale":"provider_error error code explicit","input":{"error_code":"provider_error","model":"gpt-4","status_code":500}},
+  {"id":"pe_p05","expected":"DETECT","rationale":"Anthropic server_error type","input":{"provider":"anthropic","error_code":"server_error","status_code":529}},
+  {"id":"pe_p06","expected":"DETECT","rationale":"504 Gateway Timeout from upstream provider","input":{"status_code":504,"error_message":"Gateway Timeout","model":"claude-3-opus"}},
+  {"id":"pe_p07","expected":"DETECT","rationale":"model_not_available is a provider error","input":{"error_code":"model_not_available","status_code":503,"model":"gpt-4"}},
+  {"id":"pe_p08","expected":"DETECT","rationale":"engine_overloaded maps to provider error","input":{"error_code":"engine_overloaded","status_code":503}},
+  {"id":"pe_p09","expected":"DETECT","rationale":"Google 500 internal error","input":{"provider":"google","status_code":500,"error_message":"INTERNAL: Internal error occurred"}},
+  {"id":"pe_p10","expected":"DETECT","rationale":"service_unavailable code with 5xx","input":{"error_code":"service_unavailable","status_code":503,"model":"gpt-4-turbo"}},
+  {"id":"pe_n01","expected":"SKIP","rationale":"successful call","input":{"status_code":200,"status":"success","model":"gpt-4"}},
+  {"id":"pe_n02","expected":"SKIP","rationale":"rate limit 429 — not provider error","input":{"status_code":429,"error_code":"rate_limit_exceeded"}},
+  {"id":"pe_n03","expected":"SKIP","rationale":"auth failure 401 — not provider error","input":{"status_code":401,"error_code":"invalid_api_key"}},
+  {"id":"pe_n04","expected":"SKIP","rationale":"400 bad request — client error, not provider","input":{"status_code":400,"error_message":"Invalid model"}},
+  {"id":"pe_n05","expected":"SKIP","rationale":"token overflow 400 — not provider error","input":{"status_code":400,"error_code":"context_length_exceeded"}},
+  {"id":"pe_n06","expected":"SKIP","rationale":"empty payload","input":{}},
+  {"id":"pe_n07","expected":"SKIP","rationale":"loop signal — not provider error","input":{"loop":{"repeat_count":5}}},
+  {"id":"pe_n08","expected":"SKIP","rationale":"cost spike — not provider error","input":{"cost_usd":9.99,"status":"success"}},
+  {"id":"pe_n09","expected":"SKIP","rationale":"missing status code and no error signal","input":{"model":"gpt-4","prompt_tokens":500}},
+  {"id":"pe_n10","expected":"SKIP","rationale":"4xx client error — not provider-side","input":{"status_code":422,"error_message":"Unprocessable entity"}}
+]

@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.tenant import require_tenant_role
+from pydantic import BaseModel, Field
+
+from app.api.dependencies.entitlements import require_entitlement
+from app.api.dependencies.tenant import require_tenant_id, require_tenant_role
+from app.core.limiter import limiter
 from app.db.models import Call, DiagnosisFeedback, DiagnosisJob
 from app.db.session import get_db_session
 from app.schemas.dashboard import (
@@ -824,3 +828,75 @@ def get_call_detail(
             not_helpful_count=not_helpful_count,
         ),
     )
+
+
+# ── mark-as-golden (Module 4.2; plan §3.2) ───────────────────────────────────
+
+
+class MarkGoldenRequest(BaseModel):
+    golden_set_id: str = Field(min_length=1)
+    weight: float = Field(default=1.0, gt=0)
+    expected_output_text: str | None = None
+    criteria_json: str | None = None
+
+
+class MarkGoldenResponse(BaseModel):
+    id: str
+    golden_set_id: str
+    project_id: str
+    call_id: str | None
+    expected_tokens: int | None
+    expected_cost_usd: float | None
+    expected_latency_ms: int | None
+    expected_output_text: str | None
+    criteria_json: str | None
+    weight: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.post(
+    "/{call_id}/mark-golden",
+    response_model=MarkGoldenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_entitlement("pilot.autopilot_enabled"))],
+)
+@limiter.limit("30/minute")
+def mark_call_as_golden_endpoint(
+    request: Request,
+    call_id: str,
+    body: MarkGoldenRequest,
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> MarkGoldenResponse:
+    """Promote a Call into an existing GoldenSet by snapshotting its
+    baseline tokens/cost/latency. Powers the dashboard "Create golden"
+    CTA on call detail and anomaly detail pages (plan §3.2, §6.4).
+
+    Returns 404 if either the call or the golden set is missing for this
+    project. Returns 422 on invalid weight.
+    """
+    # Local import to avoid a circular module load at startup
+    from app.services.replay_runs import mark_call_as_golden
+
+    try:
+        trace = mark_call_as_golden(
+            db,
+            project_id=tenant_id,
+            call_id=call_id,
+            golden_set_id=body.golden_set_id,
+            weight=body.weight,
+            expected_output_text=body.expected_output_text,
+            criteria_json=body.criteria_json,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if trace is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call or golden set not found for this project",
+        )
+    return MarkGoldenResponse.model_validate(trace)

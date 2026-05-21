@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """
 Ingest HTTP client — sends batched call events to the ZROKY backend.
 Includes retry with exponential backoff (with jitter) and circuit breaker integration.

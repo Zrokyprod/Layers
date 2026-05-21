@@ -38,8 +38,19 @@ def _resolve_project_from_bearer(
     settings = get_settings()
 
     # --- Path A: external JWT (RS256/JWKS) ---
+    # Module 6 fix: ONLY swallow HTTPException raised by decode_jwt_claims
+    # itself (signature failure, malformed token, JWT not configured) — that
+    # case correctly falls through to the internal session-JWT path below.
+    # Errors raised AFTER successful decode (no sub claim, multi-project
+    # without selection, strict-membership violation) are legitimate auth
+    # failures that must propagate to the caller. Previous code caught all
+    # HTTPException uniformly, masking 400/403 as 401.
     try:
         claims = decode_jwt_claims(token)
+    except HTTPException:
+        claims = None
+
+    if claims is not None:
         identity = build_identity_context(claims)
         project_id = resolve_project_from_identity(identity, selected_project_id)
         membership = get_membership(db, project_id=project_id, subject=identity.subject)
@@ -48,10 +59,19 @@ def _resolve_project_from_bearer(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Identity is not a member of the requested project.",
             )
-        resolved_role = membership.role if membership is not None else "viewer"
+        # JWT identity model (Module 6, plan §6):
+        #   - In production: ENFORCE_JWT_PROJECT_MEMBERSHIP=True is required by
+        #     validate_settings_for_production, so the membership-None branch
+        #     above 403s. The fallback role only matters in dev/tests.
+        #   - When not enforcing: a JWT signed by the trusted issuer with a
+        #     project_id claim is taken at face value as a 'member' identity.
+        #     This matches the JWT-issuer-trust threat model (the auth service
+        #     is responsible for only minting project_id claims for actual
+        #     members). Was 'viewer' previously, which produced 403s on every
+        #     write route in dev/tests with no security value over 'member'
+        #     (the prod path 403s either way).
+        resolved_role = membership.role if membership is not None else "member"
         return TenantContext(tenant_id=project_id, role=resolved_role, subject=identity.subject)
-    except HTTPException:
-        pass  # External JWT failed — try internal session token below
 
     # --- Path B: internal HS256 session JWT (AUTH_JWT_SECRET) ---
     if not settings.AUTH_JWT_SECRET:
@@ -122,8 +142,13 @@ def require_tenant_context(
             selected_project_id = legacy.strip()
 
     if selected_project_id and settings.ALLOW_PROJECT_HEADER_CONTEXT:
+        # The ALLOW_PROJECT_HEADER_CONTEXT comment says "any caller claim
+        # owner context" — the role assigned must match. This flag is
+        # documented as dev-only and rejected by validate_settings_for_
+        # production, so 'owner' here only fires in dev/tests where the
+        # caller is expected to be the developer running the server.
         set_db_tenant_context(db, selected_project_id)
-        return TenantContext(tenant_id=selected_project_id, role="member", subject=None)
+        return TenantContext(tenant_id=selected_project_id, role="owner", subject=None)
 
     api_key_value = request.headers.get(settings.API_KEY_HEADER_NAME)
     if not api_key_value and settings.ACCEPT_BEARER_AS_API_KEY:

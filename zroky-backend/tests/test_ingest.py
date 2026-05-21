@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import get_settings
 from app.api.routes import ingest as ingest_routes
 from app.db.base import Base
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.privacy import hash_identifier
 
@@ -40,6 +40,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         return _MockTaskResult()
 
     app.dependency_overrides[get_db_session] = override_get_db_session
+    app.dependency_overrides[get_db_session_read] = override_get_db_session
     monkeypatch.setattr("app.api.routes.ingest.process_diagnosis.delay", _mock_delay)
 
     with TestClient(app) as test_client:

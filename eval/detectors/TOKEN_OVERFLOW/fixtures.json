@@ -1,0 +1,22 @@
+[
+  {"id":"tok_p01","expected":"DETECT","rationale":"error_code=context_length_exceeded is the canonical OpenAI overflow signal","input":{"error_code":"context_length_exceeded","model":"gpt-4","prompt_tokens":8200,"context_limit":8192}},
+  {"id":"tok_p02","expected":"DETECT","rationale":"error message contains 'maximum context length' — pattern match trigger","input":{"error_message":"This model's maximum context length is 4096 tokens. You have 5000 tokens.","model":"gpt-3.5-turbo"}},
+  {"id":"tok_p03","expected":"DETECT","rationale":"prompt_tokens > context_limit with ratio > 0.90 threshold","input":{"prompt_tokens":7800,"context_limit":8192,"model":"gpt-4","usage":{"prompt_tokens":7800,"total_tokens":7800}}},
+  {"id":"tok_p04","expected":"DETECT","rationale":"status_code 400 + error_code token_limit_exceeded","input":{"status_code":400,"error_code":"token_limit_exceeded","prompt_tokens":16400,"context_limit":16384,"model":"gpt-4-turbo"}},
+  {"id":"tok_p05","expected":"DETECT","rationale":"Anthropic token_limit error pattern","input":{"provider":"anthropic","error_message":"prompt is too long: 100001 tokens > 100000 token limit","model":"claude-3-opus"}},
+  {"id":"tok_p06","expected":"DETECT","rationale":"estimated_prompt_tokens exceeds limit even without actual usage","input":{"estimated_prompt_tokens":32800,"context_limit":32768,"model":"gpt-4-32k"}},
+  {"id":"tok_p07","expected":"DETECT","rationale":"nested usage.prompt_tokens path exceeds 90% threshold","input":{"usage":{"prompt_tokens":15900,"completion_tokens":0,"total_tokens":15900},"context_limit":16384,"model":"gpt-4"}},
+  {"id":"tok_p08","expected":"DETECT","rationale":"Gemini variant 'context window exceeded'","input":{"provider":"google","error_message":"context window exceeded: 1048576 tokens limit","model":"gemini-1.5-pro"}},
+  {"id":"tok_p09","expected":"DETECT","rationale":"system_prompt_tokens alone near limit (common with injected context)","input":{"system_prompt_tokens":8100,"context_limit":8192,"model":"gpt-4"}},
+  {"id":"tok_p10","expected":"DETECT","rationale":"token_usage nested path — SDK v1 compat","input":{"token_usage":{"prompt_tokens":4050,"total_tokens":4050},"context_limit":4096,"model":"gpt-3.5-turbo"}},
+  {"id":"tok_n01","expected":"SKIP","rationale":"zero tokens and no error","input":{"prompt_tokens":0,"model":"gpt-4","status":"success"}},
+  {"id":"tok_n02","expected":"SKIP","rationale":"well under limit — 50% usage","input":{"prompt_tokens":4000,"context_limit":8192,"model":"gpt-4"}},
+  {"id":"tok_n03","expected":"SKIP","rationale":"rate limit error is not an overflow","input":{"status_code":429,"error_code":"rate_limit_exceeded","model":"gpt-4"}},
+  {"id":"tok_n04","expected":"SKIP","rationale":"generic 500 server error, no token signal","input":{"status_code":500,"error_message":"Internal server error","model":"gpt-4"}},
+  {"id":"tok_n05","expected":"SKIP","rationale":"auth failure, not token overflow","input":{"status_code":401,"error_code":"invalid_api_key","model":"gpt-4"}},
+  {"id":"tok_n06","expected":"SKIP","rationale":"successful call with high tokens but below limit","input":{"prompt_tokens":7500,"context_limit":8192,"status":"success","model":"gpt-4"}},
+  {"id":"tok_n07","expected":"SKIP","rationale":"missing context_limit — cannot determine overflow","input":{"prompt_tokens":9000,"status":"success","model":"unknown-model"}},
+  {"id":"tok_n08","expected":"SKIP","rationale":"loop signal, not overflow","input":{"loop":{"repeat_count":5},"model":"gpt-4","status":"success"}},
+  {"id":"tok_n09","expected":"SKIP","rationale":"empty payload","input":{}},
+  {"id":"tok_n10","expected":"SKIP","rationale":"exactly at 89% threshold — below 90% trigger","input":{"prompt_tokens":7290,"context_limit":8192,"model":"gpt-4","status":"success"}}
+]

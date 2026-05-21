@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Token overflow constants and lightweight model-limit overrides."""
 
 from __future__ import annotations

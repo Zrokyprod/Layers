@@ -1,0 +1,55 @@
+name: provider-5xx-storm
+description: |
+  Inject 503 responses from the upstream OpenAI proxy for 45 s.
+  Validates per-tenant circuit breaking and clean recovery.
+
+toxiproxy:
+  upstream: api.openai.com:443
+  listen: 0.0.0.0:19443
+  toxics:
+    - name: provider_storm
+      type: reset_peer
+      attributes:
+        timeout: 0
+      toxicity: 1.0
+
+steps:
+  - name: reroute_gateway_to_proxy
+    cmd: "export OPENAI_API_BASE=http://localhost:19443/v1"
+
+  - name: apply_storm
+    cmd: "toxiproxy-cli toxic add openai-proxy --type=reset_peer --toxicity=1.0"
+
+  - name: send_requests
+    cmd: "python chaos-tests/helpers/send_requests.py --rps=10 --duration=45 --tenant=t1"
+    background: true
+
+  - name: wait_during_storm
+    delay_seconds: 45
+
+  - name: remove_storm
+    cmd: "toxiproxy-cli toxic remove openai-proxy --toxicName=provider_storm"
+
+  - name: wait_for_recovery
+    delay_seconds: 15
+
+assertions:
+  - name: circuit_breaker_opened
+    type: metric
+    query: "zroky_gateway_circuit_breaker_state{state='open'}"
+    expect: "value_1_during_storm"
+
+  - name: no_cascading_failure
+    type: metric
+    query: "zroky_backend_error_rate"
+    expect: "below_0.01_during_storm"
+
+  - name: circuit_closes_after_recovery
+    type: metric
+    query: "zroky_gateway_circuit_breaker_state{state='closed'}"
+    expect: "value_1_within_30s_after_recovery"
+
+  - name: no_panic
+    type: log_pattern
+    pattern: "panic"
+    expect: absent

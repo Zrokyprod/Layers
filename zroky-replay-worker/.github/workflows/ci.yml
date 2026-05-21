@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  test:
+    name: lint + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" || pip install -e . && pip install pytest pytest-asyncio httpx ruff
+
+      - name: License header check (CI rule 16)
+        run: |
+          missing=$(grep -rL "SPDX-License-Identifier: FSL-1.1-MIT" app/ --include="*.py" 2>/dev/null || true)
+          if [ -n "$missing" ]; then
+            echo "Missing SPDX header in:"; echo "$missing"; exit 1
+          fi
+
+      - name: Lint (ruff)
+        run: ruff check app/
+
+      - name: Test
+        run: pytest -x --tb=short
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: zroky-replay-worker:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

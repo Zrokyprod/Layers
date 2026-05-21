@@ -1,0 +1,56 @@
+name: 'Zroky Regression CI'
+description: 'Replay past production traffic against a PR to detect regressions before deploy.'
+author: 'Zroky AI'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  api_key:
+    description: 'Zroky API key (project-scoped)'
+    required: true
+  project_id:
+    description: 'Zroky project id'
+    required: true
+  base_url:
+    description: 'Zroky API base URL'
+    required: false
+    default: 'https://api.zroky.com'
+  threshold:
+    description: 'Regression threshold (0.0–1.0)'
+    required: false
+    default: '0.02'
+  sample_window_days:
+    description: 'How far back to sample traces (1–365)'
+    required: false
+    default: '30'
+  poll_interval_seconds:
+    description: 'Seconds between status polls'
+    required: false
+    default: '5'
+  timeout_seconds:
+    description: 'Maximum seconds to wait for run completion'
+    required: false
+    default: '300'
+  post_pr_comment:
+    description: 'Post a markdown comment on the PR with results'
+    required: false
+    default: 'true'
+  fail_on_regression:
+    description: 'Fail the GitHub check if regressions are detected'
+    required: false
+    default: 'true'
+
+outputs:
+  run_id:
+    description: 'Replay run id'
+  status:
+    description: 'Terminal status (pass, fail, error)'
+  regression_rate:
+    description: 'Fraction of traces that regressed'
+  pr_comment_markdown:
+    description: 'Rendered markdown comment body'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

@@ -4,7 +4,10 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { useRouter } from "next/navigation";
 import { useMe, useChangePassword } from "@/lib/hooks";
+import { deleteAccount } from "@/lib/api";
+import { clearAccessToken } from "@/lib/auth";
 import { passwordChangeSchema, type PasswordChangeFormData } from "@/lib/schemas";
 
 export default function ProfilePage() {
@@ -17,6 +20,9 @@ export default function ProfilePage() {
   // Delete account
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const router = useRouter();
 
   const {
     register,
@@ -245,6 +251,7 @@ export default function ProfilePage() {
           </button>
         ) : (
           <div className="profile-form-narrow">
+            {deleteError && <div className="auth-banner auth-banner-error">{deleteError}</div>}
             <p className="profile-danger-hint">
               Type your email address to confirm deletion.
             </p>
@@ -261,10 +268,22 @@ export default function ProfilePage() {
               <button
                 type="button"
                 className="btn btn-danger"
-                disabled={!me?.email || deleteInput !== me?.email}
-                onClick={() => alert("Account deletion requires backend API. Coming in next release.")}
+                disabled={!me?.email || deleteInput !== me?.email || deleteLoading}
+                onClick={async () => {
+                  setDeleteError("");
+                  setDeleteLoading(true);
+                  try {
+                    await deleteAccount(deleteInput);
+                    await clearAccessToken();
+                    router.push("/auth/login");
+                  } catch (err: unknown) {
+                    setDeleteError(err instanceof Error ? err.message : "Deletion failed.");
+                  } finally {
+                    setDeleteLoading(false);
+                  }
+                }}
               >
-                Permanently delete account
+                {deleteLoading ? "Deleting…" : "Permanently delete account"}
               </button>
               <button
                 type="button"

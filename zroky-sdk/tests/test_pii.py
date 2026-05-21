@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Tests for PII masking."""
 from zroky._internal.pii import (
     hash_identifier,
@@ -124,3 +127,92 @@ def test_masks_free_form_name_address_and_secret():
     assert "[REDACTED_NAME]" in masked
     assert "[REDACTED_ADDRESS]" in masked
     assert "[REDACTED]" in masked
+
+
+# ── India-specific PII patterns ──────────────────────────────────────────────
+# DPDP Act / Aadhaar Act compliance — these identifiers must never leave the
+# SDK boundary in plaintext.
+
+
+def test_masks_aadhaar_with_space_separators():
+    masked = mask_text("Aadhaar number on file: 1234 5678 9012")
+    assert "1234 5678 9012" not in masked
+    assert "[REDACTED_AADHAAR]" in masked
+
+
+def test_masks_aadhaar_with_hyphen_separators():
+    masked = mask_text("UID: 1234-5678-9012 verified.")
+    assert "1234-5678-9012" not in masked
+    assert "[REDACTED_AADHAAR]" in masked
+
+
+def test_masks_unformatted_aadhaar_when_context_label_present():
+    masked = mask_text("aadhaar 123456789012 on the file")
+    assert "123456789012" not in masked
+    assert "[REDACTED_AADHAAR]" in masked
+
+
+def test_does_not_mask_unformatted_12_digit_run_without_aadhaar_context():
+    # Plain 12-digit timestamps / IDs must not be over-redacted.
+    masked = mask_text("transaction id 123456789012 logged at server")
+    assert "123456789012" in masked
+
+
+def test_masks_pan_number():
+    masked = mask_text("My PAN is ABCDE1234F for tax filing.")
+    assert "ABCDE1234F" not in masked
+    assert "[REDACTED_PAN]" in masked
+
+
+def test_masks_pan_number_lowercase():
+    masked = mask_text("pan abcde1234f noted.")
+    assert "abcde1234f" not in masked
+    assert "[REDACTED_PAN]" in masked
+
+
+def test_masks_gstin_number():
+    masked = mask_text("Vendor GSTIN: 27AAPFU0939F1ZV — invoice #123")
+    assert "27AAPFU0939F1ZV" not in masked
+    assert "[REDACTED_GSTIN]" in masked
+
+
+def test_masks_ifsc_code():
+    masked = mask_text("Branch routing IFSC HDFC0001234 confirmed.")
+    assert "HDFC0001234" not in masked
+    assert "[REDACTED_IFSC]" in masked
+
+
+def test_masks_indian_phone_with_plus_91_prefix():
+    masked = mask_text("Call me on +91 9876543210 anytime.")
+    assert "9876543210" not in masked
+    assert "[REDACTED_PHONE]" in masked
+
+
+def test_masks_indian_phone_with_91_dash_prefix():
+    masked = mask_text("Helpdesk: +91-9876543210 (24x7)")
+    assert "9876543210" not in masked
+    assert "[REDACTED_PHONE]" in masked
+
+
+def test_masks_bare_indian_mobile_via_generic_phone_regex():
+    # Bare 10-digit Indian mobile gets caught by the generic US-style phone
+    # regex (10 digits in 3-3-4 grouping) — same redaction outcome.
+    masked = mask_text("Reach 9876543210 for support.")
+    assert "9876543210" not in masked
+    assert "[REDACTED_PHONE]" in masked
+
+
+def test_india_patterns_compose_in_a_single_message():
+    text = (
+        "Customer Aadhaar 1234 5678 9012, PAN ABCDE1234F, "
+        "GSTIN 27AAPFU0939F1ZV, paid into HDFC0001234 from +919876543210."
+    )
+    masked = mask_text(text)
+
+    for raw in ("1234 5678 9012", "ABCDE1234F", "27AAPFU0939F1ZV", "HDFC0001234", "9876543210"):
+        assert raw not in masked
+    assert "[REDACTED_AADHAAR]" in masked
+    assert "[REDACTED_PAN]" in masked
+    assert "[REDACTED_GSTIN]" in masked
+    assert "[REDACTED_IFSC]" in masked
+    assert "[REDACTED_PHONE]" in masked

@@ -1,0 +1,168 @@
+version: "3.9"
+
+# Zroky self-host stack (Rule 8 — ZROKY-007)
+# Usage: make self-host
+# First run: copies zroky-backend/.env.self-host.example → zroky-backend/.env.self-host
+#            (edit that file to set real API keys before starting)
+
+services:
+
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zroky
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zroky"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: zroky
+      CLICKHOUSE_USER: zroky
+      CLICKHOUSE_PASSWORD: zroky_ch_pw
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    profiles: [full]
+
+  # ── Backend ─────────────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: ./zroky-backend
+    restart: unless-stopped
+    env_file:
+      - ./zroky-backend/.env.self-host
+    environment:
+      PORT: "8000"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/zroky"
+      REDIS_URL: "redis://redis:6379/0"
+      ENABLE_READY_DB_CHECK: "true"
+      ENABLE_READY_REDIS_CHECK: "true"
+      APP_ENV: "production"
+    command: ["sh", "scripts/start-api.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    build:
+      context: ./zroky-backend
+    restart: unless-stopped
+    env_file:
+      - ./zroky-backend/.env.self-host
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/zroky"
+      REDIS_URL: "redis://redis:6379/0"
+      APP_ENV: "production"
+    command: ["sh", "scripts/start-worker.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build:
+      context: ./zroky-backend
+    restart: unless-stopped
+    env_file:
+      - ./zroky-backend/.env.self-host
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/zroky"
+      REDIS_URL: "redis://redis:6379/0"
+      APP_ENV: "production"
+    command: ["sh", "scripts/start-beat.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Dashboard ───────────────────────────────────────────────────────────────
+
+  dashboard:
+    build:
+      context: ./zroky-dashboard
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8000"
+      ZROKY_API_BASE_URL: "http://api:8000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ── Gateway (Week 11) ────────────────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: ./zroky-gateway
+    restart: unless-stopped
+    profiles: [gateway]
+    environment:
+      PORT: "8090"
+      REDIS_URL: "redis://redis:6379/0"
+      REDIS_STREAM: "zroky:ingest:v2"
+      ZROKY_API_URL: "http://api:8000"
+      LOG_LEVEL: "info"
+    ports:
+      - "8090:8090"
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8090/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres_data:
+  clickhouse_data:

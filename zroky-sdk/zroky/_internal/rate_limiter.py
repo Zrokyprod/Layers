@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Client-side rate management.
 
 Prevents 429s by tracking per-provider/model rate limits and waiting

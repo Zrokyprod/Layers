@@ -56,7 +56,7 @@ export default function RegisterPage() {
       <div className="auth-card">
         <div className="auth-header">
           <h2 className="auth-heading">Create an account</h2>
-          <p className="auth-sub">Join Zroky AI Rate Limit Engine</p>
+          <p className="auth-sub">AI Agent Reliability Platform</p>
         </div>
 
         <div className="auth-oauth-stack">

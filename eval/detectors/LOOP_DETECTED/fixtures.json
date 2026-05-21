@@ -1,0 +1,22 @@
+[
+  {"id":"ld_p01","expected":"DETECT","rationale":"repeat_count >= 3 within window is the core loop signal","input":{"loop":{"repeat_count":5,"window_seconds":90},"agent_name":"planner","prompt_fingerprint":"fp_abc123"}},
+  {"id":"ld_p02","expected":"DETECT","rationale":"tool_chain_repeat_cycles >= 3 indicates a tool-call loop","input":{"loop":{"tool_chain_repeat_cycles":4,"tool_window_seconds":120},"agent_name":"executor"}},
+  {"id":"ld_p03","expected":"DETECT","rationale":"no_progress=true with repeat_count is strong loop signal","input":{"loop":{"repeat_count":3,"no_progress":true,"window_seconds":90},"agent_name":"analyzer"}},
+  {"id":"ld_p04","expected":"DETECT","rationale":"repeat_count at exact threshold of 3","input":{"loop":{"repeat_count":3,"window_seconds":60},"prompt_fingerprint":"fp_xyz789","agent_name":"router"}},
+  {"id":"ld_p05","expected":"DETECT","rationale":"high repeat_count with no_progress reasons","input":{"loop":{"repeat_count":7,"no_progress":true,"no_progress_reasons":["no_new_information","repeated_tool_call"]},"agent_name":"researcher"}},
+  {"id":"ld_p06","expected":"DETECT","rationale":"tool chain cycle with short window","input":{"loop":{"tool_chain_repeat_cycles":5,"tool_window_seconds":60},"agent_name":"web_scraper"}},
+  {"id":"ld_p07","expected":"DETECT","rationale":"loop with sample timestamps spread across window","input":{"loop":{"repeat_count":4,"window_seconds":90,"sample_timestamps":["2024-01-01T00:00:00Z","2024-01-01T00:01:00Z","2024-01-01T00:02:00Z","2024-01-01T00:03:00Z"]},"agent_name":"planner"}},
+  {"id":"ld_p08","expected":"DETECT","rationale":"repeat_count via top-level field (backward compat)","input":{"repeat_count":6,"repeat_window_seconds":90,"agent_name":"fixer"}},
+  {"id":"ld_p09","expected":"DETECT","rationale":"very high repeat_count with no_progress across multiple agents","input":{"loop":{"repeat_count":12,"no_progress":true,"window_seconds":300},"agent_name":"orchestrator"}},
+  {"id":"ld_p10","expected":"DETECT","rationale":"dual signal: both repeat_count and tool_chain_cycles exceed threshold","input":{"loop":{"repeat_count":4,"tool_chain_repeat_cycles":3,"window_seconds":120},"agent_name":"complex_agent"}},
+  {"id":"ld_n01","expected":"SKIP","rationale":"loop_resolved=true — loop already handled","input":{"loop":{"repeat_count":5,"loop_resolved":true},"agent_name":"planner"}},
+  {"id":"ld_n02","expected":"SKIP","rationale":"repeat_count below threshold of 3","input":{"loop":{"repeat_count":2,"window_seconds":90},"agent_name":"planner"}},
+  {"id":"ld_n03","expected":"SKIP","rationale":"no loop key at all — clean call","input":{"status":"success","model":"gpt-4","agent_name":"planner"}},
+  {"id":"ld_n04","expected":"SKIP","rationale":"loop key present but all fields zero","input":{"loop":{"repeat_count":0,"tool_chain_repeat_cycles":0},"agent_name":"planner"}},
+  {"id":"ld_n05","expected":"SKIP","rationale":"empty payload","input":{}},
+  {"id":"ld_n06","expected":"SKIP","rationale":"rate limit error — not a loop","input":{"status_code":429,"error_code":"rate_limit_exceeded"}},
+  {"id":"ld_n07","expected":"SKIP","rationale":"auth failure — not a loop","input":{"status_code":401,"error_code":"invalid_api_key"}},
+  {"id":"ld_n08","expected":"SKIP","rationale":"tool chain cycles below threshold","input":{"loop":{"tool_chain_repeat_cycles":2},"agent_name":"executor"}},
+  {"id":"ld_n09","expected":"SKIP","rationale":"repeat_count present but no_progress false and under threshold","input":{"loop":{"repeat_count":1,"no_progress":false},"agent_name":"planner"}},
+  {"id":"ld_n10","expected":"SKIP","rationale":"cost spike only — not a loop","input":{"cost_usd":8.50,"status":"success","agent_name":"expensive_agent"}}
+]

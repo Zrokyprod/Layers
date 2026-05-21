@@ -1,0 +1,41 @@
+{
+  "name": "@zroky/sdk",
+  "version": "0.1.0",
+  "description": "Zroky AI SDK — capture + preflight for OpenAI and compatible providers.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --minify",
+    "test": "node --import tsx/esm --test tests/",
+    "size": "node scripts/bench_js_sdk_size.js",
+    "prepublishOnly": "npm run build && npm run size"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  },
+  "peerDependencies": {
+    "openai": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "openai": { "optional": true }
+  },
+  "keywords": ["zroky", "ai", "observability", "openai", "proxy"],
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zroky-ai/zroky-sdk-js"
+  }
+}

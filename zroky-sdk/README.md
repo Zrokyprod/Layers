@@ -18,8 +18,8 @@ pip install -e "./zroky-sdk[langchain]"
 
 ### Package publish status
 
-The SDK is currently consumed via local install in this repository.
-No public PyPI release is published yet.
+The SDK is published on PyPI as [`zroky`](https://pypi.org/project/zroky/).
+Install the latest stable release with `pip install zroky`.
 
 ## Dependency policy
 
@@ -29,33 +29,33 @@ No public PyPI release is published yet.
 
 ## Release and publish
 
-GitHub Actions workflow for SDK publish:
+### Tag-driven publish to PyPI
 
-- [.github/workflows/zroky-sdk-publish.yml](../.github/workflows/zroky-sdk-publish.yml)
+The repository ships a GitHub Actions workflow (`ci.yml`) that publishes to
+PyPI automatically when a version tag is pushed:
 
-### Required GitHub repository secrets
+```bash
+# 1. Bump version in pyproject.toml
+# 2. Commit and push, then:
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+### Manual publish
+
+```bash
+pip install build twine
+python -m build
+# Test publish first:
+twine upload --repository testpypi dist/*
+# Then production:
+twine upload dist/*
+```
+
+### Required repository secrets
 
 - `TEST_PYPI_API_TOKEN`
 - `PYPI_API_TOKEN`
-
-### Manual publish (recommended for first release)
-
-1. Bump `version` in [pyproject.toml](pyproject.toml).
-2. Open GitHub Actions and run `Zroky SDK Publish`.
-3. Choose `target_repository=testpypi` first.
-4. Validate install from TestPyPI.
-5. Re-run workflow with `target_repository=pypi`.
-
-### Tag-driven publish to PyPI
-
-Push a tag in this format after version bump:
-
-```bash
-git tag zroky-sdk-v0.1.0
-git push origin zroky-sdk-v0.1.0
-```
-
-The workflow enforces that tag version matches [pyproject.toml](pyproject.toml).
 
 ## Preflight validation
 
@@ -168,3 +168,11 @@ Behavior:
   available.
 - Auth preflight can block before the provider call and records a `blocked`
   telemetry event, so dashboard evidence still exists.
+
+---
+
+## License
+
+[FSL-1.1-MIT](LICENSE) — free for any use except building a competing product.
+Converts to plain MIT on the second anniversary of each release.
+See [fsl.software](https://fsl.software/) for the full terms.

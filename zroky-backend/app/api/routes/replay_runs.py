@@ -1,0 +1,249 @@
+"""
+/v1/replay/runs — read-only golden-set replay run surface (Pilot tier).
+
+API surface per ZROKY-TECHNICAL-PLAN-V2 §13:
+
+  GET  /v1/replay/runs           — list (cursor-paginated; filters by
+                                   golden_set_id and status)
+  GET  /v1/replay/runs/{id}      — detail with per-trace verdicts embedded
+
+The dispatch endpoint (`POST /v1/goldens/{id}/run`) lives on the goldens
+router so it composes naturally as a sub-resource of the parent set.
+
+Distinct from the legacy `/v1/replay/jobs` surface in `routes/replay.py`
+which tracks single-fix replay jobs run by the customer-hosted worker.
+
+Entitlements plan-gate (402 Payment Required) — Module 6 attaches
+`require_entitlement("pilot.autopilot_enabled")` at the router level
+so every endpoint here is gated uniformly per plan §10.x.
+"""
+from __future__ import annotations
+
+import base64
+import json
+import logging
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.api.dependencies.entitlements import require_entitlement
+from app.api.dependencies.tenant import require_tenant_id
+from app.core.limiter import limiter
+from app.db.session import get_db_session
+from app.services.replay_runs import (
+    VALID_RUN_STATUSES,
+    get_replay_run,
+    list_replay_runs,
+    list_run_traces,
+    parse_summary,
+)
+from app.services.outcome_attribution import get_replay_prevented_savings
+
+router = APIRouter(
+    prefix="/v1/replay/runs",
+    dependencies=[Depends(require_entitlement("pilot.autopilot_enabled"))],
+)
+logger = logging.getLogger(__name__)
+
+_DEFAULT_LIMIT = 20
+_MAX_LIMIT = 100
+
+
+# ── schemas ──────────────────────────────────────────────────────────────────
+
+
+class ReplayRunSummary(BaseModel):
+    trace_count_at_dispatch: int = 0
+    pass_count: int = 0
+    fail_count: int = 0
+    error_count: int = 0
+
+
+class ReplayRunResponse(BaseModel):
+    id: str
+    project_id: str
+    golden_set_id: str
+    trigger: str
+    git_sha: str | None
+    status: str
+    started_at: datetime | None
+    completed_at: datetime | None
+    summary: ReplayRunSummary
+    created_at: datetime
+    # Option A (honesty fix): "stub" = recorded response was re-graded
+    # (cannot detect prompt-edit regressions); "real_llm" = a real
+    # provider call was issued with optional overrides. Always populated
+    # for runs dispatched after Option A landed; older rows default to
+    # "stub" in the helper.
+    replay_mode: str = "stub"
+    # Human-readable banner text on stub-mode runs. None on real-LLM runs.
+    replay_mode_warning: str | None = None
+    # Echo the override values so the dashboard can render "Replay used
+    # this edited prompt:" and surface the experiment context. Truncated
+    # to 4000 chars by the dispatcher.
+    candidate_prompt_override: str | None = None
+    candidate_model_override: str | None = None
+    prevented_outcome_cost_usd: float | None = None
+
+
+class ReplayRunListResponse(BaseModel):
+    items: list[ReplayRunResponse]
+    next_cursor: str | None
+    total_in_page: int
+
+
+class ReplayRunTraceResponse(BaseModel):
+    id: str
+    replay_run_id: str
+    golden_trace_id: str | None
+    project_id: str
+    call_id_replayed: str | None
+    judge_scores_json: str | None
+    status: str
+    diff_metric: float | None
+    output_text: str | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReplayRunDetailResponse(ReplayRunResponse):
+    traces: list[ReplayRunTraceResponse]
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _encode_cursor(created_at: datetime, run_id: str) -> str:
+    payload = json.dumps(
+        {"t": created_at.isoformat(), "id": run_id}, separators=(",", ":")
+    )
+    return base64.urlsafe_b64encode(payload.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, str] | None:
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+        ts = datetime.fromisoformat(payload["t"])
+        return ts, str(payload["id"])
+    except Exception:
+        return None
+
+
+def _to_run_response(run) -> ReplayRunResponse:
+    summary = parse_summary(run.summary_json)
+    # Default older rows (pre-Option-A) to stub mode with the same
+    # warning text — there is no way they ran in real-LLM mode and the
+    # dashboard banner should still surface the limitation.
+    replay_mode = str(summary.get("replay_mode") or "stub")
+    replay_mode_warning = summary.get("replay_mode_warning")
+    if replay_mode == "stub" and not replay_mode_warning:
+        # Backfill the warning so legacy rows still render the banner.
+        from app.services.replay_runs import _STUB_MODE_WARNING  # local; avoid cycle at import
+
+        replay_mode_warning = _STUB_MODE_WARNING
+    return ReplayRunResponse(
+        id=run.id,
+        project_id=run.project_id,
+        golden_set_id=run.golden_set_id,
+        trigger=run.trigger,
+        git_sha=run.git_sha,
+        status=run.status,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        summary=ReplayRunSummary(
+            trace_count_at_dispatch=int(summary.get("trace_count_at_dispatch", 0) or 0),
+            pass_count=int(summary.get("pass_count", 0) or 0),
+            fail_count=int(summary.get("fail_count", 0) or 0),
+            error_count=int(summary.get("error_count", 0) or 0),
+        ),
+        created_at=run.created_at,
+        replay_mode=replay_mode,
+        replay_mode_warning=replay_mode_warning if replay_mode == "stub" else None,
+        candidate_prompt_override=summary.get("candidate_prompt_override"),
+        candidate_model_override=summary.get("candidate_model_override"),
+    )
+
+
+# ── routes ───────────────────────────────────────────────────────────────────
+
+
+@router.get("", response_model=ReplayRunListResponse)
+@limiter.limit("60/minute")
+def list_runs(
+    request: Request,
+    golden_set_id: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> ReplayRunListResponse:
+    if status_filter is not None and status_filter not in VALID_RUN_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "status must be one of: " + ", ".join(sorted(VALID_RUN_STATUSES))
+            ),
+        )
+
+    before_created_at: datetime | None = None
+    before_id: str | None = None
+    if cursor:
+        decoded = _decode_cursor(cursor)
+        if decoded is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid cursor value.",
+            )
+        before_created_at, before_id = decoded
+
+    rows = list_replay_runs(
+        db,
+        project_id=tenant_id,
+        golden_set_id=golden_set_id,
+        status=status_filter,
+        limit=limit + 1,
+        before_created_at=before_created_at,
+        before_id=before_id,
+    )
+    has_next = len(rows) > limit
+    page = rows[:limit]
+
+    next_cursor: str | None = None
+    if has_next and page:
+        last = page[-1]
+        next_cursor = _encode_cursor(last.created_at, last.id)
+
+    return ReplayRunListResponse(
+        items=[_to_run_response(r) for r in page],
+        next_cursor=next_cursor,
+        total_in_page=len(page),
+    )
+
+
+@router.get("/{run_id}", response_model=ReplayRunDetailResponse)
+@limiter.limit("120/minute")
+def get_run(
+    request: Request,
+    run_id: str,
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> ReplayRunDetailResponse:
+    run = get_replay_run(db, project_id=tenant_id, run_id=run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Replay run not found"
+        )
+    traces = list_run_traces(db, project_id=tenant_id, run_id=run_id) or []
+    base = _to_run_response(run)
+    prevented = get_replay_prevented_savings(db, project_id=tenant_id, run_id=run_id)
+    dumped = base.model_dump()
+    dumped["prevented_outcome_cost_usd"] = prevented if prevented > 0 else None
+    return ReplayRunDetailResponse(
+        **dumped,
+        traces=[ReplayRunTraceResponse.model_validate(t) for t in traces],
+    )

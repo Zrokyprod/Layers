@@ -41,11 +41,6 @@ RETENTION_ROWS_TOTAL = Counter(
     ("table", "mode"),
 )
 
-EXCHANGE_RATE_EVENTS_TOTAL = Counter(
-    "zroky_exchange_rate_events_total",
-    "Exchange-rate lifecycle events by source and status.",
-    ("source", "status"),
-)
 
 
 def record_http_request(*, method: str, path: str, status_code: int, duration_seconds: float) -> None:
@@ -82,11 +77,6 @@ def record_retention_rows(table_name: str, rows: int, *, dry_run: bool) -> None:
     mode = "dry_run" if dry_run else "delete"
     RETENTION_ROWS_TOTAL.labels(table=normalized_table, mode=mode).inc(max(0, int(rows)))
 
-
-def record_exchange_rate_event(source: str, status: str) -> None:
-    normalized_source = source.strip().lower() if source else "unknown"
-    normalized_status = status.strip().lower() if status else "unknown"
-    EXCHANGE_RATE_EVENTS_TOTAL.labels(source=normalized_source, status=normalized_status).inc()
 
 
 def render_metrics() -> bytes:

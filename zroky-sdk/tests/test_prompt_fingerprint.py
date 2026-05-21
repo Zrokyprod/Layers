@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Tests for prompt fingerprint normalization and hashing behavior."""
 
 from zroky._internal.prompt_fingerprint import (

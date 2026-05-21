@@ -1,0 +1,47 @@
+name: judge-timeout
+description: |
+  Add 10× latency to the judge LLM endpoint for 60 s.
+  Validates that call path is unblocked and verdict = LOW_CONFIDENCE on timeout.
+
+toxiproxy:
+  upstream: api.openrouter.ai:443
+  listen: 0.0.0.0:18443
+  toxics:
+    - name: slow_judge
+      type: latency
+      attributes:
+        latency: 60000   # 60 s — well above any LLM timeout
+        jitter: 1000
+      toxicity: 1.0
+
+steps:
+  - name: reroute_judge_to_proxy
+    cmd: "export OPENROUTER_BASE_URL=http://localhost:18443"
+
+  - name: apply_latency
+    cmd: "toxiproxy-cli toxic add judge-proxy --type=latency --toxicity=1.0 --attribute=latency=60000 --attribute=jitter=1000"
+
+  - name: trigger_diagnosis
+    cmd: "python chaos-tests/helpers/trigger_diagnosis.py --failure-code=LOW_CONFIDENCE --count=5"
+
+  - name: wait
+    delay_seconds: 30
+
+  - name: remove_latency
+    cmd: "toxiproxy-cli toxic remove judge-proxy --toxicName=slow_judge"
+
+assertions:
+  - name: call_path_unblocked
+    type: metric
+    query: "zroky_diagnosis_duration_seconds"
+    expect: "completes_within_35s"
+
+  - name: verdict_low_confidence
+    type: db_query
+    sql: "SELECT COUNT(*) FROM diagnosis_jobs WHERE judge_verdict='LOW_CONFIDENCE' AND created_at > NOW() - INTERVAL '2 minutes'"
+    expect: "count >= 5"
+
+  - name: no_blocked_workers
+    type: metric
+    query: "celery_worker_tasks_active"
+    expect: "returns_to_baseline_within_10s"

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Pre-execution payload validation for upcoming LLM calls.
 
 This module is advisory-only and never mutates input payloads.

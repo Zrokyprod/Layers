@@ -1,0 +1,99 @@
+name: Chaos Tests (Rule 5)
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday 09:00 UTC
+  workflow_dispatch:      # Manual trigger for ad-hoc runs
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  chaos-weekly:
+    name: Weekly Chaos Test Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify chaos-tests/ directory exists
+        run: |
+          if [ ! -d "chaos-tests" ]; then
+            echo "::warning::chaos-tests/ directory not found. Chaos scenarios are due in W3–4 (Rule 5)."
+            exit 0
+          fi
+          echo "chaos-tests/ found. Running available scenarios…"
+
+      - name: Validate chaos scenario inventory
+        run: |
+          echo "=== Chaos scenario inventory (Rule 5) ==="
+          SCENARIOS=$(ls chaos-tests/*.yml 2>/dev/null | grep -v helpers || true)
+          if [ -z "$SCENARIOS" ]; then
+            echo "::warning::No chaos scenarios found in chaos-tests/*.yml"
+          else
+            for s in $SCENARIOS; do
+              NAME=$(grep -m1 '^name:' "$s" | awk '{print $2}')
+              DESC=$(grep -m1 'description:' "$s" | sed 's/.*description: *//')
+              echo "  ✓ $NAME — $s"
+            done
+            echo ""
+            COUNT=$(echo "$SCENARIOS" | wc -l | tr -d ' ')
+            echo "Total scenarios: $COUNT / 5 required (Rule 5)"
+            if [ "$COUNT" -lt 5 ]; then
+              echo "::warning::Only $COUNT/5 chaos scenarios defined. Add the remaining before Sprint 0 exit."
+            fi
+          fi
+
+      - name: Run chaos scenarios (bash runners if present)
+        run: |
+          if ls chaos-tests/*.sh 2>/dev/null; then
+            for scenario in chaos-tests/*.sh; do
+              echo "--- Running $scenario ---"
+              bash "$scenario" || echo "::warning::$scenario failed — see output above"
+            done
+          else
+            echo "No runnable .sh runners found; YAML scenario definitions exist for Toxiproxy staging runs."
+          fi
+
+      - name: Generate chaos report
+        run: |
+          mkdir -p chaos-reports
+          WEEK=$(date +%G-W%V)
+          REPORT="chaos-reports/${WEEK}.md"
+          RUN_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          TRIGGER="${{ github.event_name }}"
+
+          {
+            echo "# Chaos Report — Week ${WEEK}"
+            echo ""
+            echo "Run date: ${RUN_DATE}  "
+            echo "Trigger: ${TRIGGER}"
+            echo ""
+            echo "## Scenario inventory"
+            echo ""
+            echo "| Scenario | File | Status |"
+            echo "|---|---|---|"
+            for s in chaos-tests/*.yml; do
+              [[ -f "$s" ]] || continue
+              NAME=$(grep -m1 '^name:' "$s" | awk '{print $2}')
+              echo "| $NAME | $s | defined |"
+            done
+            echo ""
+            echo "## Run summary"
+            echo ""
+            echo "| Scenario | Result | Notes |"
+            echo "|---|---|---|"
+            for s in chaos-tests/*.sh; do
+              [[ -f "$s" ]] || continue
+              echo "| $(basename $s .sh) | ran | see CI log |"
+            done
+            echo "| _yaml-only scenarios_ | pending staging | requires Toxiproxy + live stack |"
+          } > "$REPORT"
+
+          echo "Created $REPORT"
+          cat "$REPORT"

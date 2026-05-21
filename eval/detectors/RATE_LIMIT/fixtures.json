@@ -1,0 +1,22 @@
+[
+  {"id":"rl_p01","expected":"DETECT","rationale":"status_code 429 is the canonical rate-limit HTTP status","input":{"status_code":429,"error_code":"rate_limit_exceeded","model":"gpt-4"}},
+  {"id":"rl_p02","expected":"DETECT","rationale":"error_message contains 'rate limit' phrase","input":{"error_message":"Rate limit reached for model gpt-4 on tokens per minute","model":"gpt-4"}},
+  {"id":"rl_p03","expected":"DETECT","rationale":"Anthropic overload_error maps to rate limit","input":{"provider":"anthropic","error_code":"overload_error","status_code":529,"model":"claude-3-opus"}},
+  {"id":"rl_p04","expected":"DETECT","rationale":"retry_after header present implies rate limit","input":{"status_code":429,"retry_after":30,"model":"gpt-3.5-turbo"}},
+  {"id":"rl_p05","expected":"DETECT","rationale":"requests_per_minute exceeded signal","input":{"error_code":"requests_per_minute_exceeded","model":"gpt-4"}},
+  {"id":"rl_p06","expected":"DETECT","rationale":"tokens_per_minute_exceeded error code","input":{"error_code":"tokens_per_minute_exceeded","model":"gpt-4-turbo"}},
+  {"id":"rl_p07","expected":"DETECT","rationale":"429 with no error_code still triggers rate limit detection","input":{"status_code":429,"model":"gpt-4","error_message":"Too Many Requests"}},
+  {"id":"rl_p08","expected":"DETECT","rationale":"Google quota exceeded maps to rate limit","input":{"provider":"google","status_code":429,"error_message":"Quota exceeded for quota metric 'generate_content_free_tier_requests'"}},
+  {"id":"rl_p09","expected":"DETECT","rationale":"concurrent request limit — also a rate limit variant","input":{"error_code":"concurrent_requests_exceeded","model":"gpt-4"}},
+  {"id":"rl_p10","expected":"DETECT","rationale":"daily_limit_exceeded is a rate-limit variant","input":{"error_code":"daily_limit_exceeded","model":"claude-3-haiku","status_code":429}},
+  {"id":"rl_n01","expected":"SKIP","rationale":"successful call — no limit signal","input":{"status_code":200,"model":"gpt-4","status":"success"}},
+  {"id":"rl_n02","expected":"SKIP","rationale":"token overflow, not rate limit","input":{"status_code":400,"error_code":"context_length_exceeded","model":"gpt-4"}},
+  {"id":"rl_n03","expected":"SKIP","rationale":"server error 500 is not rate limiting","input":{"status_code":500,"error_message":"Internal server error","model":"gpt-4"}},
+  {"id":"rl_n04","expected":"SKIP","rationale":"auth failure is not rate limiting","input":{"status_code":401,"error_code":"invalid_api_key","model":"gpt-4"}},
+  {"id":"rl_n05","expected":"SKIP","rationale":"400 bad request without rate limit signal","input":{"status_code":400,"error_message":"Invalid model specified","model":"fake-model"}},
+  {"id":"rl_n06","expected":"SKIP","rationale":"empty payload","input":{}},
+  {"id":"rl_n07","expected":"SKIP","rationale":"loop signal, not rate limit","input":{"loop":{"repeat_count":5},"model":"gpt-4"}},
+  {"id":"rl_n08","expected":"SKIP","rationale":"503 service unavailable is provider error, not rate limit","input":{"status_code":503,"error_message":"Service unavailable","model":"gpt-4"}},
+  {"id":"rl_n09","expected":"SKIP","rationale":"cost spike signal with successful call","input":{"cost_usd":5.0,"status":"success","model":"gpt-4"}},
+  {"id":"rl_n10","expected":"SKIP","rationale":"null status code, no rate limit indicator","input":{"model":"gpt-4","prompt_tokens":100}}
+]

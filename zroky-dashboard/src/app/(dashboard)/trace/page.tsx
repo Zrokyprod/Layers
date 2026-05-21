@@ -261,7 +261,7 @@ export default function TracePage() {
               <option value="">All agents</option>
               {agentNames.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "ANY" | "FAILED" | "OK")}>
               <option value="ANY">Any status</option>
               <option value="FAILED">Failed only</option>
               <option value="OK">Successful only</option>

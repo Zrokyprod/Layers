@@ -3,9 +3,44 @@ import { NextRequest, NextResponse } from "next/server";
 const ACCESS_TOKEN_COOKIE = "zroky_access_token";
 
 const AUTH_PATH_PREFIX = "/auth";
-const PUBLIC_PATHS = new Set<string>(["/auth", "/auth/login", "/auth/register", "/auth/github/callback", "/auth/forgot-password", "/auth/reset-password", "/onboarding"]);
+const PUBLIC_PATHS = new Set<string>([
+  "/auth",
+  "/auth/login",
+  "/auth/register",
+  "/auth/github/callback",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/onboarding",
+]);
 const AUTH_CALLBACK_PASSTHROUGH_PATHS = new Set<string>(["/auth/github/callback", "/auth/github/connect/callback"]);
-const PROTECTED_PREFIXES = ["/home", "/calls", "/cost", "/alerts", "/settings", "/account", "/fixes", "/loops", "/trace", "/auth-health"];
+const PROTECTED_PREFIXES = [
+  "/home",
+  "/calls",
+  "/cost",
+  "/alerts",
+  "/settings",
+  "/account",
+  "/fixes",
+  "/loops",
+  "/trace",
+  "/auth-health",
+  "/issues",
+  "/replay",
+  "/diagnoses",
+  "/diagnos",
+  "/pilot",
+  "/goldens",
+  "/judge",
+  "/calibration",
+  "/outcomes",
+  "/root-cause",
+  "/reliability",
+  "/recommendations",
+  "/anomalies",
+  "/live",
+  "/digest",
+  "/drift",
+];
 // /owner has its own token-gate UI — exclude from cookie auth entirely
 const OWNER_PREFIX = "/owner";
 

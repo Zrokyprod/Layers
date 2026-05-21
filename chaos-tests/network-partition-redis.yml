@@ -1,0 +1,53 @@
+name: network-partition-redis
+description: |
+  Drop Redis connectivity for 30 s while the gateway + worker are under load.
+  Validates backpressure, event buffering, and eventual consistency after reconnect.
+
+toxiproxy:
+  upstream: redis:6379
+  listen: 0.0.0.0:16379
+  toxics:
+    - name: partition
+      type: timeout
+      attributes:
+        timeout: 0          # timeout=0 means connection hangs (simulates partition)
+      toxicity: 1.0
+
+steps:
+  - name: start_load
+    cmd: "wrk -t4 -c50 -d60s http://localhost:8090/v1/chat/completions"
+    background: true
+
+  - name: apply_partition
+    delay_seconds: 5
+    cmd: "toxiproxy-cli toxic add redis-proxy --type=timeout --toxicity=1.0 --attribute=timeout=0"
+
+  - name: wait_during_partition
+    delay_seconds: 30
+
+  - name: remove_partition
+    cmd: "toxiproxy-cli toxic remove redis-proxy --toxicName=partition"
+
+  - name: wait_for_recovery
+    delay_seconds: 10
+
+assertions:
+  - name: no_data_loss
+    type: metric
+    query: "zroky_ingest_events_total"
+    expect: "monotonically_increasing"
+
+  - name: backpressure_activated
+    type: log_pattern
+    pattern: "backpressure"
+    expect: present
+
+  - name: no_panic
+    type: log_pattern
+    pattern: "panic"
+    expect: absent
+
+  - name: eventual_consistency
+    type: metric
+    query: "zroky_redis_stream_lag"
+    expect: "reaches_zero_within_60s"

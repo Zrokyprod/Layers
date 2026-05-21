@@ -1,0 +1,45 @@
+name: clickhouse-down
+description: |
+  Stop the ClickHouse container entirely.
+  Validates that /cost and /issues fall back to Postgres with data_source=postgres_fallback.
+
+steps:
+  - name: stop_clickhouse
+    cmd: "docker compose stop clickhouse"
+
+  - name: wait
+    delay_seconds: 5
+
+  - name: hit_cost_endpoint
+    cmd: |
+      curl -sf -H "x-api-key: $TEST_API_KEY" \
+        "http://localhost:8000/api/v1/analytics/cost/daily-trend?days=7" \
+        | jq -r '.data_source' > /tmp/cost_source.txt
+
+  - name: hit_issues_endpoint
+    cmd: |
+      curl -sf -H "x-api-key: $TEST_API_KEY" \
+        "http://localhost:8000/api/v1/issues?limit=5" \
+        > /tmp/issues_response.txt
+
+  - name: restart_clickhouse
+    cmd: "docker compose start clickhouse"
+
+  - name: wait_for_ch_healthy
+    delay_seconds: 15
+
+assertions:
+  - name: cost_uses_postgres_fallback
+    type: file_contains
+    path: /tmp/cost_source.txt
+    expect: "postgres"
+
+  - name: issues_responds_200
+    type: file_exists
+    path: /tmp/issues_response.txt
+    expect: non_empty
+
+  - name: no_500_errors
+    type: log_pattern
+    pattern: "\"status\":500"
+    expect: absent

@@ -22,12 +22,25 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  typescript: { ignoreBuildErrors: true },
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: securityHeaders,
+      },
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: "/account",
+        destination: "/settings/profile",
+        permanent: true,
+      },
+      {
+        source: "/notifications",
+        destination: "/issues?tab=open",
+        permanent: true,
       },
     ];
   },

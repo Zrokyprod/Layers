@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
 """Automatic model fallback engine.
 
 When a provider call fails (even after retries), transparently cascade

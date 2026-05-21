@@ -321,6 +321,7 @@ class CostDailyTrendResponse(BaseModel):
     points: list[CostDailyTrendPoint]
     cost_total_usd: float = 0.0
     cost_total_display: float = 0.0
+    data_source: str = "postgres"
     display_currency: Literal["USD", "INR"] = "USD"
     display_currency_code: Literal["USD", "INR"] = "USD"
     display_currency_symbol: str = "$"
@@ -553,6 +554,24 @@ class AuthTrendPoint(BaseModel):
     count: int
 
 
+class SavingsSummaryResponse(BaseModel):
+    """Aggregate ROI surface — "what Zroky saved you" across a time window.
+
+    Sourced from the legacy `issues` table for the present surface; the
+    aggregation logic intentionally lives at the route layer so it can be
+    repointed to `anomalies` once the Phase B migration finishes.
+    """
+    window_days: int
+    total_caught_count: int = 0  # number of issues raised in the window
+    total_resolved_count: int = 0  # number of issues resolved in the window
+    cumulative_wasted_usd: float = 0.0  # sum of blast_radius_usd while open
+    cumulative_resolved_blast_usd: float = 0.0  # blast_radius_usd for closed issues
+    projected_averted_usd: float = 0.0  # 6h forward projection on resolved issues
+    affected_calls: int = 0  # sum of occurrence_count across issues in window
+    incidents_by_severity: dict[str, int] = Field(default_factory=dict)
+    updated_at: datetime
+
+
 class AuthSummaryResponse(BaseModel):
     window_hours: int
     total_auth_failures: int
@@ -676,6 +695,7 @@ class RetentionDataErasureResponse(BaseModel):
 class NotificationSettingsUpdateRequest(BaseModel):
     email_enabled: bool
     slack_enabled: bool
+    teams_enabled: bool = False
     browser_enabled: bool
     terminal_enabled: bool
 
@@ -683,6 +703,7 @@ class NotificationSettingsUpdateRequest(BaseModel):
 class NotificationSettingsResponse(BaseModel):
     email_enabled: bool
     slack_enabled: bool
+    teams_enabled: bool = False
     browser_enabled: bool
     terminal_enabled: bool
     updated_at: datetime

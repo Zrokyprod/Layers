@@ -480,6 +480,7 @@ def get_notification_settings_route(
     return NotificationSettingsResponse(
         email_enabled=bool(settings.get("email_enabled", True)),
         slack_enabled=bool(settings.get("slack_enabled", False)),
+        teams_enabled=bool(settings.get("teams_enabled", False)),
         browser_enabled=bool(settings.get("browser_enabled", True)),
         terminal_enabled=bool(settings.get("terminal_enabled", True)),
         updated_at=config.updated_at,
@@ -499,6 +500,7 @@ def update_notification_settings_route(
         {
             "email_enabled": body.email_enabled,
             "slack_enabled": body.slack_enabled,
+            "teams_enabled": body.teams_enabled,
             "browser_enabled": body.browser_enabled,
             "terminal_enabled": body.terminal_enabled,
         },
@@ -510,6 +512,7 @@ def update_notification_settings_route(
     return NotificationSettingsResponse(
         email_enabled=bool(settings.get("email_enabled", True)),
         slack_enabled=bool(settings.get("slack_enabled", False)),
+        teams_enabled=bool(settings.get("teams_enabled", False)),
         browser_enabled=bool(settings.get("browser_enabled", True)),
         terminal_enabled=bool(settings.get("terminal_enabled", True)),
         updated_at=config.updated_at,

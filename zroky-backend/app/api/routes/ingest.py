@@ -8,15 +8,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_role
-from app.db.models import Call, DiagnosisJob, ProjectAlert, ProjectDashboardConfig
+from app.db.models import Call, DiagnosisJob, EventCount, ProjectAlert, ProjectDashboardConfig
 from app.db.session import get_db_session
 from app.observability.metrics import record_diagnosis_job
 from app.schemas.ingest import IngestBatchRequest, IngestBatchResponse
+from app.schemas.ingest_event_v2 import IngestEventV2
 from app.services.currency import BASE_CURRENCY, TOKEN_UNIT, resolve_ingest_exchange_rate
 from app.services.cost_buckets import enrich_payload_with_cost_buckets
+from app.core.config import get_settings
+from app.core.limiter import limiter
+from app.services.billing_quota import check_quota
 from app.services.ingest_protection import IngestRateLimitDecision, evaluate_ingest_rate_limit
 from app.services.loop_signals import output_signal, summarize_tool_lifecycle, normalize_retry_metadata
-from app.core.limiter import limiter
 from app.services.privacy import mask_error_message, mask_metadata, mask_payload
 from app.services.redis_client import get_redis_client
 from app.worker.tasks import process_diagnosis
@@ -76,96 +79,87 @@ def _is_production_event(payload: dict) -> bool:
     return not any(marker in provider for marker in _TEST_PROVIDER_MARKERS)
 
 
-def _build_payload_from_event(event: dict) -> dict:
-    prompt_tokens = int(event.get("prompt_tokens", 0) or 0)
-    completion_tokens = int(event.get("completion_tokens", 0) or 0)
-    reasoning_tokens = int(event.get("reasoning_tokens", 0) or 0)
-    cache_creation_tokens = int(event.get("cache_creation_tokens", 0) or 0)
-    cache_read_tokens = int(event.get("cache_read_tokens", 0) or 0)
+def _payload_from_ingest_event(event: IngestEventV2) -> dict:
+    """Build the internal processing payload from a validated IngestEventV2 model.
 
+    Uses typed attribute access instead of dict.get() to ensure all fields
+    are sourced from the canonical v2 schema.
+    """
+    prompt_tokens = event.prompt_tokens
+    completion_tokens = event.completion_tokens
+    reasoning_tokens = event.reasoning_tokens
     total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
 
-    payload = {
+    return {
         "source": "sdk_ingest",
-        "call_id": event.get("call_id"),
-        "event_id": event.get("event_id"),
-        "request_id": event.get("request_id"),
-        "provider": event.get("provider"),
-        "model": event.get("model"),
-        "call_type": event.get("call_type"),
-        "status": event.get("status"),
-        "latency_ms": event.get("latency_ms"),
+        "schema_version": event.schema_version,
+        "call_id": event.call_id,
+        "event_id": event.event_id,
+        "request_id": event.request_id,
+        "provider": event.provider,
+        "model": event.model,
+        "call_type": event.call_type,
+        "status": event.status,
+        "latency_ms": event.latency_ms,
         "prompt_tokens": prompt_tokens,
-        "estimated_prompt_tokens": event.get("estimated_prompt_tokens"),
-        "model_context_limit": event.get("model_context_limit"),
-        "model_context_limit_source": event.get("model_context_limit_source"),
-        "model_context_limit_source_detail": event.get(
-            "model_context_limit_source_detail"
-        ),
-        "model_context_limit_confidence": event.get("model_context_limit_confidence"),
-        "model_context_limit_catalog_version": event.get(
-            "model_context_limit_catalog_version"
-        ),
-        "model_context_limit_catalog_updated_at": event.get(
-            "model_context_limit_catalog_updated_at"
-        ),
-        "model_context_limit_catalog_stale": event.get(
-            "model_context_limit_catalog_stale"
-        ),
-        "model_context_limit_catalog_stale_after_days": event.get(
-            "model_context_limit_catalog_stale_after_days"
-        ),
-        "token_estimator_version": event.get("token_estimator_version"),
-        "token_rules_version": event.get("token_rules_version"),
+        "estimated_prompt_tokens": event.estimated_prompt_tokens,
+        "model_context_limit": event.model_context_limit,
+        "model_context_limit_source": event.model_context_limit_source,
+        "model_context_limit_source_detail": event.model_context_limit_source_detail,
+        "model_context_limit_confidence": event.model_context_limit_confidence,
+        "model_context_limit_catalog_version": event.model_context_limit_catalog_version,
+        "model_context_limit_catalog_updated_at": event.model_context_limit_catalog_updated_at,
+        "model_context_limit_catalog_stale": event.model_context_limit_catalog_stale,
+        "model_context_limit_catalog_stale_after_days": event.model_context_limit_catalog_stale_after_days,
+        "token_estimator_version": event.token_estimator_version,
+        "token_rules_version": event.token_rules_version,
         "completion_tokens": completion_tokens,
         "reasoning_tokens": reasoning_tokens,
-        "cache_creation_tokens": cache_creation_tokens,
-        "cache_read_tokens": cache_read_tokens,
-        "estimated_cost_usd": event.get("estimated_cost_usd"),
-        "actual_cost_usd": event.get("actual_cost_usd"),
-        "budget_remaining_usd": event.get("budget_remaining_usd"),
-        "budget_action_taken": event.get("budget_action_taken"),
-        "loop_action_taken": event.get("loop_action_taken"),
-        "loop_call_count": int(event.get("loop_call_count", 0) or 0),
-        "loop_cumulative_cost_usd": event.get("loop_cumulative_cost_usd"),
-        "exchange_rate_usd_to_inr": event.get("exchange_rate_usd_to_inr"),
-        "exchange_rate_timestamp": event.get("exchange_rate_timestamp"),
-        "exchange_rate_source": event.get("exchange_rate_source"),
+        "cache_creation_tokens": event.cache_creation_tokens,
+        "cache_read_tokens": event.cache_read_tokens,
         "total_tokens": total_tokens,
-        "normalized_output": event.get("normalized_output"),
-        "output_content": event.get("output_content"),
-        "output_fingerprint": event.get("output_fingerprint"),
-        "tool_definitions": event.get("tool_definitions"),
-        "tool_calls_made": event.get("tool_calls_made"),
-        "tool_lifecycle_summary": event.get("tool_lifecycle_summary"),
-        "retry_metadata": event.get("retry_metadata"),
-        "cache_hit": bool(event.get("cache_hit")),
-        "timeout_triggered": bool(event.get("timeout_triggered")),
-        "resolved_model": event.get("resolved_model"),
-        "fallback_chain": event.get("fallback_chain")
-        if isinstance(event.get("fallback_chain"), list)
-        else None,
-        "fallback_attempts": int(event.get("fallback_attempts", 0) or 0),
-        "circuit_open_models": event.get("circuit_open_models")
-        if isinstance(event.get("circuit_open_models"), list)
-        else None,
-        "trace_id": event.get("trace_id"),
-        "parent_call_id": event.get("parent_call_id"),
-        "agent_name": event.get("agent_name"),
-        "prompt_fingerprint": event.get("prompt_fingerprint"),
-        "user_id": event.get("user_id"),
-        "is_synthetic": bool(event.get("is_synthetic")),
-        "is_production": event.get("is_production"),
-        "environment": event.get("environment"),
-        "metadata": event.get("metadata") if isinstance(event.get("metadata"), dict) else None,
-        "error_code": event.get("error_code"),
-        "error_message": event.get("error_message"),
-        "failure_reason": event.get("failure_reason")
-        if isinstance(event.get("failure_reason"), dict)
-        else None,
-        "created_at": event.get("created_at"),
+        "estimated_cost_usd": event.estimated_cost_usd,
+        "actual_cost_usd": event.actual_cost_usd,
+        "budget_remaining_usd": event.budget_remaining_usd,
+        "budget_action_taken": event.budget_action_taken,
+        "loop_action_taken": event.loop_action_taken,
+        "loop_call_count": event.loop_call_count,
+        "loop_cumulative_cost_usd": event.loop_cumulative_cost_usd,
+        "exchange_rate_usd_to_inr": event.exchange_rate_usd_to_inr,
+        "exchange_rate_timestamp": event.exchange_rate_timestamp,
+        "exchange_rate_source": event.exchange_rate_source,
+        "normalized_output": event.normalized_output,
+        "output_content": event.output_content,
+        "output_fingerprint": event.output_fingerprint,
+        "tool_definitions": event.tool_definitions,
+        "tool_calls_made": event.tool_calls_made,
+        "tool_lifecycle_summary": event.tool_lifecycle_summary,
+        "retry_metadata": event.retry_metadata,
+        "cache_hit": event.cache_hit,
+        "timeout_triggered": event.timeout_triggered,
+        "resolved_model": event.resolved_model,
+        "fallback_chain": event.fallback_chain,
+        "fallback_attempts": event.fallback_attempts,
+        "circuit_open_models": event.circuit_open_models,
+        "trace_id": event.trace_id,
+        "parent_call_id": event.parent_call_id,
+        "agent_name": event.agent_name,
+        "prompt_fingerprint": event.prompt_fingerprint,
+        "user_id": event.user_id,
+        "is_synthetic": event.is_synthetic,
+        "is_production": event.is_production,
+        "environment": event.environment,
+        "metadata": event.metadata,
+        "error_code": event.error_code,
+        "error_message": event.error_message,
+        "failure_reason": event.failure_reason,
+        "created_at": event.created_at,
+        # v2 fields
+        "session_id": event.session_id,
+        "workflow_id": event.workflow_id,
+        "step_index": event.step_index,
+        "agent_framework": event.agent_framework,
     }
-    return payload
 
 
 def _ensure_loop_signal_payload(payload: dict) -> dict:
@@ -585,6 +579,32 @@ def _enqueue_diagnosis_job(job: DiagnosisJob) -> None:
     process_diagnosis.delay(job.tenant_id, job.diagnosis_id, None if job.call_id else {})
 
 
+def _increment_event_count(db: Session, tenant_id: str) -> None:
+    """Best-effort increment of the per-tenant monthly event counter."""
+    try:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+        now = datetime.now(timezone.utc)
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from app.db.models import EventCount as _EC
+        from uuid import uuid4 as _uuid4
+        stmt = (
+            pg_insert(_EC)
+            .values(id=str(_uuid4()), tenant_id=tenant_id, month=month, event_count=1, last_event_at=now)
+            .on_conflict_do_update(
+                constraint="ux_event_counts_tenant_month",
+                set_={"event_count": _EC.event_count + 1, "last_event_at": now},
+            )
+        )
+        db.execute(stmt)
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.debug("event_count_increment_failed", exc_info=True)
+
+
 def _retry_enqueue_for_existing_call(*, db: Session, tenant_id: str, call: Call) -> str:
     job = _find_job_for_call(db=db, tenant_id=tenant_id, call=call)
     if job is None:
@@ -734,6 +754,20 @@ def ingest_events(
             headers["Retry-After"] = str(decision.retry_after_seconds)
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail, headers=headers)
 
+    settings = get_settings()
+    if settings.BILLING_ENFORCE_QUOTA:
+        quota = check_quota(db, tenant_id)
+        if not quota.allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Monthly event quota exceeded: {quota.current_count:,} of "
+                    f"{quota.plan_limit:,} calls used this month. "
+                    "Upgrade your plan or contact support."
+                ),
+                headers={"X-Quota-Used": str(quota.current_count), "X-Quota-Limit": str(quota.plan_limit)},
+            )
+
     accepted = 0
     queued = 0
     duplicates = 0
@@ -755,7 +789,7 @@ def ingest_events(
             continue
 
         event_id, event_id_source = _resolve_idempotency_key(event=event_payload, call_id=diagnosis_id)
-        payload = _build_payload_from_event(event_payload)
+        payload = _payload_from_ingest_event(event)
         payload["event_id"] = event_id
         payload["idempotency_key_source"] = event_id_source
         payload = mask_payload(payload, custom_patterns=custom_pii_patterns)
@@ -839,6 +873,7 @@ def ingest_events(
             queued += 1
             record_diagnosis_job("queued")
             _set_redis_idempotency(idempotency_key)
+            _increment_event_count(db, tenant_id)
         except Exception as exc:
             logger.exception("Failed to enqueue ingest diagnosis task")
             job.error_message = mask_error_message(exc)
