@@ -1,5 +1,5 @@
 .PHONY: self-host self-host-seed self-host-down self-host-logs self-host-ps \
-        self-host-rebuild lint-sizes api-contract-check schema-check help
+        self-host-rebuild capture-e2e-local capture-smoke-local lint-sizes api-contract-check schema-check help
 
 ENV_FILE := zroky-backend/.env.self-host
 ENV_EXAMPLE := zroky-backend/.env.self-host.example
@@ -54,6 +54,14 @@ self-host-rebuild:
 	docker compose up -d --build
 
 # ── CI / lint targets ────────────────────────────────────────────────────────
+
+## capture-e2e-local: run Docker-free capture checks for gateway, backend, SDK, and dashboard
+capture-e2e-local:
+	python scripts/run_capture_e2e_local.py
+
+## capture-smoke-local: run live Docker-free smoke with backend, gateway, and mock upstream
+capture-smoke-local:
+	python scripts/run_capture_smoke_no_docker.py
 
 ## lint-sizes: run file-size lint (Rule 3)
 lint-sizes:

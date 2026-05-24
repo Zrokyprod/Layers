@@ -1,0 +1,108 @@
+name: Capture E2E Local
+
+on:
+  pull_request:
+    paths:
+      - "zroky-gateway/**"
+      - "zroky-backend/app/api/routes/capture.py"
+      - "zroky-backend/app/api/routes/ingest.py"
+      - "zroky-backend/app/services/gateway_stream_consumer.py"
+      - "zroky-backend/app/services/prompt_fingerprint.py"
+      - "zroky-backend/tests/test_capture_health.py"
+      - "zroky-backend/tests/test_gateway_stream_consumer.py"
+      - "zroky-backend/tests/test_js_sdk_ingest_contract.py"
+      - "zroky-sdk-js/**"
+      - "zroky-dashboard/src/app/(dashboard)/home/page.tsx"
+      - "zroky-dashboard/src/lib/api.ts"
+      - "zroky-dashboard/src/lib/types.ts"
+      - "scripts/run_capture_e2e_local.py"
+      - "scripts/run_capture_smoke_no_docker.py"
+      - "make.ps1"
+      - "Makefile"
+      - ".github/workflows/capture-e2e-local.yml"
+  push:
+    branches: ["main", "develop"]
+    paths:
+      - "zroky-gateway/**"
+      - "zroky-backend/app/api/routes/capture.py"
+      - "zroky-backend/app/api/routes/ingest.py"
+      - "zroky-backend/app/services/gateway_stream_consumer.py"
+      - "zroky-backend/app/services/prompt_fingerprint.py"
+      - "zroky-backend/tests/test_capture_health.py"
+      - "zroky-backend/tests/test_gateway_stream_consumer.py"
+      - "zroky-backend/tests/test_js_sdk_ingest_contract.py"
+      - "zroky-sdk-js/**"
+      - "zroky-dashboard/src/app/(dashboard)/home/page.tsx"
+      - "zroky-dashboard/src/lib/api.ts"
+      - "zroky-dashboard/src/lib/types.ts"
+      - "scripts/run_capture_e2e_local.py"
+      - "scripts/run_capture_smoke_no_docker.py"
+      - "make.ps1"
+      - "Makefile"
+      - ".github/workflows/capture-e2e-local.yml"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture-e2e-local:
+    name: Capture contract without Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: zroky-gateway/go.sum
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            zroky-backend/requirements.txt
+            zroky-backend/requirements-dev.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            zroky-sdk-js/package-lock.json
+            zroky-dashboard/package-lock.json
+
+      - name: Install Go modules
+        working-directory: zroky-gateway
+        run: go mod download
+
+      - name: Install backend dependencies
+        working-directory: zroky-backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install JS SDK dependencies
+        working-directory: zroky-sdk-js
+        run: npm install
+
+      - name: Install dashboard dependencies
+        working-directory: zroky-dashboard
+        run: npm ci
+
+      - name: Run Docker-free capture E2E
+        env:
+          AUTH_JWT_SECRET: "ci-test-secret-key-32-characters"
+          ALLOW_PROJECT_HEADER_CONTEXT: "true"
+          REQUIRE_PROVISIONING_TOKEN: "false"
+        run: python scripts/run_capture_e2e_local.py

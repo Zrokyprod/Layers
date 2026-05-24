@@ -92,6 +92,24 @@ Ten rules, every one CI-enforced. See [ZROKY-Q1-90DAY-PLAN.md](ZROKY-Q1-90DAY-PL
 
 ## Development
 
+### Local capture verification without Docker
+
+Use this when changing the gateway, backend ingest path, JS SDK capture contract, or dashboard capture health UI.
+
+```powershell
+.\make.ps1 capture-e2e-local
+```
+
+On macOS/Linux, or any shell with Python available:
+
+```bash
+python scripts/run_capture_e2e_local.py
+```
+
+This runs the gateway Go tests, backend capture ingest tests, JS SDK tests/build/size gate, and targeted dashboard lint.
+It also runs a live no-Docker smoke test that starts the backend, gateway, and a mock OpenAI upstream, then verifies `/capture/health` reports a gateway event.
+The same command is enforced in `.github/workflows/capture-e2e-local.yml`.
+
 ```bash
 # Backend
 cd zroky-backend
