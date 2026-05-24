@@ -22,7 +22,6 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// ── Logger ────────────────────────────────────────────────────────────
 	level, err := zerolog.ParseLevel(cfg.LogLevel)
 	if err != nil {
 		level = zerolog.InfoLevel
@@ -32,46 +31,84 @@ func main() {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
 
-	// ── Redis ─────────────────────────────────────────────────────────────
-	opts, err := redis.ParseURL(cfg.RedisURL)
+	emitMode, err := emit.ParseMode(cfg.EmitMode)
 	if err != nil {
-		log.Fatal().Err(err).Msg("invalid REDIS_URL")
+		log.Fatal().Err(err).Msg("invalid emit mode")
 	}
-	rdb := redis.NewClient(opts)
-	ctx := context.Background()
-	if pingErr := rdb.Ping(ctx).Err(); pingErr != nil {
-		log.Warn().Err(pingErr).Msg("Redis ping failed — emit will fail silently")
-	}
-	emitter := emit.New(rdb, cfg.RedisStream)
 
-	// ── Routes ────────────────────────────────────────────────────────────
+	var rdb *redis.Client
+	if emitMode.UsesRedis() {
+		opts, redisErr := redis.ParseURL(cfg.RedisURL)
+		if redisErr != nil {
+			log.Fatal().Err(redisErr).Msg("invalid REDIS_URL")
+		}
+		rdb = redis.NewClient(opts)
+		ctx := context.Background()
+		if pingErr := rdb.Ping(ctx).Err(); pingErr != nil {
+			log.Warn().Err(pingErr).Msg("Redis ping failed; Redis emit will fail")
+		}
+	}
+
+	emitter, err := emit.NewWithOptions(emit.Options{
+		Mode:        emitMode,
+		RedisClient: rdb,
+		RedisStream: cfg.RedisStream,
+		IngestURL:   cfg.ZrokyIngestURL,
+		APIKey:      cfg.ZrokyAPIKey,
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to configure emitter")
+	}
+
 	mux := http.NewServeMux()
-
-	// Health
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// OpenAI-shape routes
+	openAI := proxy.OpenAI
+	openAI.BaseURL = cfg.OpenAIBaseURL
+	anthropic := proxy.Anthropic
+	anthropic.BaseURL = cfg.AnthropicBaseURL
+	google := proxy.Google
+	google.BaseURL = cfg.GoogleBaseURL
+
 	for _, route := range []struct {
 		path     string
 		callType string
+		apiKey   string
 	}{
-		{"/v1/chat/completions", "chat"},
-		{"/v1/responses", "response"},
-		{"/v1/embeddings", "embedding"},
+		{"/v1/chat/completions", "chat", cfg.OpenAIAPIKey},
+		{"/v1/responses", "response", cfg.OpenAIAPIKey},
+		{"/v1/embeddings", "embedding", cfg.OpenAIAPIKey},
 	} {
-		mux.Handle(route.path, proxy.Handler(proxy.OpenAI, route.callType, emitter, cfg.MaxBodyBytes, log.Logger))
+		mux.Handle(route.path, proxy.HandlerWithOptions(openAI, route.callType, emitter, proxy.Options{
+			MaxBodyBytes:         cfg.MaxBodyBytes,
+			GatewayAuthToken:     cfg.GatewayAuthToken,
+			AllowedProjectIDs:    cfg.AllowedProjectIDs,
+			UpstreamAPIKey:       route.apiKey,
+			DefaultWorkflowName:  cfg.WorkflowName,
+			DefaultPromptVersion: cfg.PromptVersion,
+		}, log.Logger))
 	}
 
-	// Anthropic-shape route
-	mux.Handle("/v1/messages", proxy.Handler(proxy.Anthropic, "chat", emitter, cfg.MaxBodyBytes, log.Logger))
+	mux.Handle("/v1/messages", proxy.HandlerWithOptions(anthropic, "chat", emitter, proxy.Options{
+		MaxBodyBytes:         cfg.MaxBodyBytes,
+		GatewayAuthToken:     cfg.GatewayAuthToken,
+		AllowedProjectIDs:    cfg.AllowedProjectIDs,
+		UpstreamAPIKey:       cfg.AnthropicAPIKey,
+		DefaultWorkflowName:  cfg.WorkflowName,
+		DefaultPromptVersion: cfg.PromptVersion,
+	}, log.Logger))
+	mux.Handle("/v1beta/models/", proxy.HandlerWithOptions(google, "chat", emitter, proxy.Options{
+		MaxBodyBytes:         cfg.MaxBodyBytes,
+		GatewayAuthToken:     cfg.GatewayAuthToken,
+		AllowedProjectIDs:    cfg.AllowedProjectIDs,
+		UpstreamAPIKey:       cfg.GoogleAPIKey,
+		DefaultWorkflowName:  cfg.WorkflowName,
+		DefaultPromptVersion: cfg.PromptVersion,
+	}, log.Logger))
 
-	// Google-shape route (Gemini generateContent)
-	mux.Handle("/v1beta/models/", proxy.Handler(proxy.Google, "chat", emitter, cfg.MaxBodyBytes, log.Logger))
-
-	// ── Server ────────────────────────────────────────────────────────────
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      mux,
@@ -81,13 +118,12 @@ func main() {
 	}
 
 	go func() {
-		log.Info().Str("port", cfg.Port).Msg("zroky-gateway starting")
+		log.Info().Str("port", cfg.Port).Str("emit_mode", string(emitMode)).Msg("zroky-gateway starting")
 		if serveErr := srv.ListenAndServe(); serveErr != nil && serveErr != http.ErrServerClosed {
 			log.Fatal().Err(serveErr).Msg("server error")
 		}
 	}()
 
-	// ── Graceful shutdown ─────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -96,6 +132,8 @@ func main() {
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
-	_ = rdb.Close()
+	if rdb != nil {
+		_ = rdb.Close()
+	}
 	log.Info().Msg("bye")
 }
