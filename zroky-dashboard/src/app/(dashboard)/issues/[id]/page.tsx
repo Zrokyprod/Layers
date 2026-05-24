@@ -7,6 +7,8 @@ import { getIssue, ignoreIssue, resolveIssue } from "@/lib/api";
 import { useCreateReplayRunFromIssue } from "@/lib/hooks";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel } from "@/lib/issue-format";
+import { REPLAY_MODE_OPTIONS, replayModeProof } from "@/lib/replay-mode";
+import type { ReplayMode } from "@/lib/api";
 import type { IssueEvidenceTrace, IssueItem } from "@/lib/types";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
 
@@ -21,7 +23,7 @@ export default function IssueDetailPage() {
   const [acceptingRisk, setAcceptingRisk] = useState(false);
   const [assignment, setAssignment] = useState("");
   const [deployLink, setDeployLink] = useState("");
-  const [replayMode, setReplayMode] = useState<"stub" | "mocked-tool" | "live-sandbox" | "shadow">("stub");
+  const [replayMode, setReplayMode] = useState<ReplayMode>("stub");
   const createReplay = useCreateReplayRunFromIssue({
     onSuccess: (run) => router.push(`/replay/${run.id}`),
   });
@@ -190,11 +192,15 @@ export default function IssueDetailPage() {
               className="input"
               style={{ maxWidth: 170 }}
             >
-              <option value="stub">Stub sanity check</option>
-              <option value="mocked-tool">Mocked-tool</option>
-              <option value="live-sandbox">Live sandbox</option>
-              <option value="shadow">Shadow</option>
+              {REPLAY_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+            <span className="alert-cat-badge badge-gray" title={replayMode === "stub" ? "Stub replay is a sanity check, not a verified fix." : undefined}>
+              {replayModeProof(replayMode)}
+            </span>
             <button className="btn btn-primary" onClick={onCreateReplay} disabled={createReplay.isPending}>
               {createReplay.isPending ? "Creating..." : "Create Replay"}
             </button>

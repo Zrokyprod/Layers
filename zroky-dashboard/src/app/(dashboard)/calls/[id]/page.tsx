@@ -22,11 +22,13 @@ import {
   useCreateReplayRunFromCall,
 } from "@/lib/hooks";
 import { prGenerationSchema, type PrGenerationFormData } from "@/lib/schemas";
+import type { ReplayMode } from "@/lib/api";
 import type { JsonMap, TraceTreeNode } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 import { JudgeScorecard } from "@/components/judge-scorecard";
 import { JudgeNarrativeCard } from "@/components/judge-narrative-card";
 import { CounterfactualImpact } from "@/components/counterfactual-impact";
+import { REPLAY_MODE_OPTIONS, replayModeProof } from "@/lib/replay-mode";
 
 function asObject(value: unknown): JsonMap {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -333,7 +335,7 @@ export default function CallDetailPage() {
   const [feedbackNote, setFeedbackNote] = useState<string>("");
   const [resolveNote, setResolveNote] = useState<string>("");
   const [shareNote, setShareNote] = useState<string>("");
-  const [replayMode, setReplayMode] = useState<"stub" | "mocked-tool" | "live-sandbox" | "shadow">("stub");
+  const [replayMode, setReplayMode] = useState<ReplayMode>("stub");
 
   const {
     register,
@@ -529,11 +531,15 @@ export default function CallDetailPage() {
               className="input"
               style={{ maxWidth: 160 }}
             >
-              <option value="stub">Stub</option>
-              <option value="mocked-tool">Mocked-tool</option>
-              <option value="live-sandbox">Live sandbox</option>
-              <option value="shadow">Shadow</option>
+              {REPLAY_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+            <span className="alert-cat-badge badge-gray" title={replayMode === "stub" ? "Stub replay is a sanity check, not a verified fix." : undefined}>
+              {replayModeProof(replayMode)}
+            </span>
             <button type="button" className="btn btn-primary btn-sm" onClick={createReplay} disabled={createReplayMutation.isPending}>
               {createReplayMutation.isPending ? "Creating..." : "Replay"}
             </button>

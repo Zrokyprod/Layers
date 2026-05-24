@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useReplayRuns, useReplayQuota } from "@/lib/hooks";
 import type { ReplayRunItem } from "@/lib/api";
+import { replayModeLabel, replayModeProof, replayVerificationLabel, replayVerifiedFix } from "@/lib/replay-mode";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,12 +35,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function modeLabel(mode: string) {
-  if (mode === "mocked-tool") return "mocked tool";
-  if (mode === "live-sandbox") return "live sandbox";
-  if (mode === "real_llm") return "real LLM";
-  return mode;
-}
 
 function proofLabel(value: boolean | null | undefined) {
   if (value === true) return "yes";
@@ -63,9 +58,11 @@ function RunRow({ run }: { run: ReplayRunItem }) {
   const total = run.summary.trace_count_at_dispatch;
   const executed = run.summary.trace_count_executed;
   const passRate = total > 0 ? Math.round((run.summary.pass_count / total) * 100) : null;
-  const verificationTone = run.summary.verified_fix
+  const isVerifiedFix = replayVerifiedFix(run.replay_mode, run.summary.verified_fix);
+  const verificationLabel = replayVerificationLabel(run.replay_mode, run.summary.verified_fix, run.summary.verification_status);
+  const verificationTone = isVerifiedFix
     ? "text-emerald-400"
-    : run.summary.verification_status === "sanity_check_only"
+    : run.replay_mode === "stub" || run.summary.verification_status === "sanity_check_only"
     ? "text-amber-400"
     : "text-slate-400";
   const costDelta = moneyDeltaLabel(run.summary.cost_delta_usd);
@@ -81,9 +78,9 @@ function RunRow({ run }: { run: ReplayRunItem }) {
           <div className="flex items-center gap-2 flex-wrap">
             <code className="text-xs font-mono text-slate-400">{run.id.slice(0, 16)}...</code>
             <StatusBadge status={run.status} />
-            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{modeLabel(run.replay_mode)}</span>
+            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{replayModeLabel(run.replay_mode)}</span>
             <span className={`rounded bg-slate-900 px-1.5 py-0.5 text-[10px] ${verificationTone}`}>
-              {run.summary.verified_fix ? "verified fix" : run.summary.verification_status}
+              {verificationLabel}
             </span>
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
@@ -94,8 +91,9 @@ function RunRow({ run }: { run: ReplayRunItem }) {
             <span>golden set: <code className="font-mono text-slate-400">{run.golden_set_id.slice(0, 12)}...</code></span>
             <span>{timeAgo(run.created_at)}</span>
           </div>
-          {run.replay_mode_warning && (
-            <p className="text-xs text-amber-300">{run.replay_mode_warning}</p>
+          <p className="text-xs text-slate-500">proof: <span className="text-slate-300">{replayModeProof(run.replay_mode)}</span></p>
+          {(run.replay_mode_warning || run.replay_mode === "stub") && (
+            <p className="text-xs text-amber-300">{run.replay_mode === "stub" ? "Stub replay is a sanity check, not a verified fix." : run.replay_mode_warning}</p>
           )}
         </div>
 

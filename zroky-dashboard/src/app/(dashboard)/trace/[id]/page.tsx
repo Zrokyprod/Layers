@@ -7,6 +7,7 @@ import { useRecentTraces, useCallTraceTree, useTraceById, useCreateReplayRunFrom
 import { formatUsd, formatDateTime, formatCount } from "@/lib/format";
 import { StatusPill } from "@/components/status-pill";
 import type { ReplayMode } from "@/lib/api";
+import { REPLAY_MODE_OPTIONS, replayModeProof } from "@/lib/replay-mode";
 import type { TraceTreeNode } from "@/lib/types";
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -213,11 +214,15 @@ export default function TraceDetailPage() {
             style={{ maxWidth: 170 }}
             disabled={!rootCallId || createReplayMutation.isPending}
           >
-            <option value="stub">Stub</option>
-            <option value="mocked-tool">Mocked-tool</option>
-            <option value="live-sandbox">Live sandbox</option>
-            <option value="shadow">Shadow</option>
+            {REPLAY_MODE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
+          <span className="alert-cat-badge badge-gray" title={replayMode === "stub" ? "Stub replay is a sanity check, not a verified fix." : undefined}>
+            {replayModeProof(replayMode)}
+          </span>
           <button
             type="button"
             className="btn btn-primary"

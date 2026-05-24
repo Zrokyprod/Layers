@@ -1924,7 +1924,7 @@ export interface ReplayRunListResponse {
   total_in_page: number;
 }
 
-export type ReplayMode = "stub" | "mocked-tool" | "live-sandbox" | "shadow";
+export type ReplayMode = "stub" | "real_llm" | "mocked-tool" | "live-sandbox" | "shadow";
 
 export interface ReplayCreatePayload {
   replay_mode: ReplayMode;

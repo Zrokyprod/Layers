@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 
 import { useReplayRunDetail } from "@/lib/hooks";
 import { formatDateTime, formatUsd } from "@/lib/format";
+import { replayModeLabel, replayModeProof, replayVerificationLabel, replayVerifiedFix } from "@/lib/replay-mode";
 
 const STATUS_CLASS: Record<string, string> = {
   pending: "badge-yellow",
@@ -69,6 +70,8 @@ export default function ReplayRunDetailPage() {
 
   const summary = run.summary;
   const isStub = run.replay_mode === "stub";
+  const isVerifiedFix = replayVerifiedFix(run.replay_mode, summary.verified_fix);
+  const verificationLabel = replayVerificationLabel(run.replay_mode, summary.verified_fix, summary.verification_status);
 
   return (
     <div>
@@ -87,19 +90,20 @@ export default function ReplayRunDetailPage() {
           </span>
         </header>
 
-        {run.replay_mode_warning && (
+        {(run.replay_mode_warning || isStub) && (
           <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", borderRadius: 8, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.1)" }}>
             <strong>{isStub ? "Stub replay is a sanity check, not a verified fix." : "Replay mode warning"}</strong>
-            <p style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}>{run.replay_mode_warning}</p>
+            <p style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}>{isStub ? "Stub replay is a sanity check, not a verified fix." : run.replay_mode_warning}</p>
           </div>
         )}
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
-        <ProofCard title="Mode" value={run.replay_mode} />
+        <ProofCard title="Mode" value={replayModeLabel(run.replay_mode)} />
+        <ProofCard title="Proof badge" value={replayModeProof(run.replay_mode)} tone={isStub ? "warn" : "neutral"} />
         <ProofCard title="Original failure reproduced" value={boolLabel(summary.reproduced_original_failure)} />
         <ProofCard title="Fix passed" value={boolLabel(summary.fix_passed)} />
-        <ProofCard title="Verification" value={summary.verified_fix ? "Verified fix" : summary.verification_status} tone={summary.verified_fix ? "good" : isStub ? "warn" : "neutral"} />
+        <ProofCard title="Verification" value={verificationLabel} tone={isVerifiedFix ? "good" : isStub ? "warn" : "neutral"} />
         <ProofCard title="Replay cost" value={summary.replay_cost_usd == null ? "-" : formatUsd(summary.replay_cost_usd)} />
         <ProofCard title="Cost delta" value={summary.cost_delta_usd == null ? "-" : formatUsd(summary.cost_delta_usd)} />
         <ProofCard title="Latency delta" value={formatMs(summary.latency_delta_ms)} />
