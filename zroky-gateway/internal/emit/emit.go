@@ -197,7 +197,6 @@ func canonicalHTTPEventPayload(ev *IngestEventV2) (json.RawMessage, error) {
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return nil, err
 	}
-	delete(event, "project_id")
 	delete(event, "timestamp_utc")
 	delete(event, "status_code")
 	delete(event, "request_body")

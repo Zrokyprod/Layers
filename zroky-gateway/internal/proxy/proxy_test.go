@@ -446,7 +446,7 @@ func TestHandlerProxiesAndEmitsDirectHTTPBatch(t *testing.T) {
 
 	select {
 	case headers := <-upstreamSeen:
-		if headers.Get("X-Zroky-Project-Id") != "" || headers.Get("X-Zroky-Trace-Id") != "" {
+		if hasZrokyInternalHeaders(headers) {
 			t.Fatalf("zroky headers leaked upstream: %+v", headers)
 		}
 		if headers.Get("Authorization") != "Bearer provider-key" {
@@ -483,8 +483,8 @@ func TestHandlerProxiesAndEmitsDirectHTTPBatch(t *testing.T) {
 	if ev.CallID != "call_gateway" || ev.EventID != "call_gateway:gateway" {
 		t.Fatalf("event identity = %+v", ev)
 	}
-	if ev.ProjectID != "" {
-		t.Fatalf("direct HTTP canonical event leaked project_id in body: %+v", ev)
+	if ev.ProjectID != "proj_gateway" {
+		t.Fatalf("project_id = %q, want proj_gateway", ev.ProjectID)
 	}
 	if ev.AgentName != "planner" || ev.TraceID != "trace_gateway" {
 		t.Fatalf("event context missing: %+v", ev)
@@ -604,6 +604,16 @@ func responseContent(resp map[string]interface{}) string {
 	message, _ := first["message"].(map[string]interface{})
 	content, _ := message["content"].(string)
 	return content
+}
+
+func hasZrokyInternalHeaders(headers http.Header) bool {
+	for key := range headers {
+		normalized := strings.ToLower(key)
+		if strings.HasPrefix(normalized, "x-zroky-") || normalized == "x-project-id" {
+			return true
+		}
+	}
+	return false
 }
 
 type failingWriter struct{}

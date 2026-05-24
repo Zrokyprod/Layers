@@ -142,8 +142,8 @@ func TestHTTPEmitterPostsCanonicalIngestBatch(t *testing.T) {
 	if _, ok := got["output_tokens"]; ok {
 		t.Fatal("direct HTTP event leaked legacy output_tokens")
 	}
-	if _, ok := got["project_id"]; ok {
-		t.Fatal("direct HTTP event leaked project_id")
+	if got["project_id"] != "proj_123" {
+		t.Fatalf("project_id = %v, want proj_123", got["project_id"])
 	}
 	if _, ok := got["tool_calls_made"]; ok {
 		t.Fatal("direct HTTP event leaked legacy tool_calls_made")
