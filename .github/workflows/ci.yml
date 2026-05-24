@@ -187,6 +187,13 @@ jobs:
           mkdir -p .data
           python ../scripts/check_api_v1_frozen.py
 
+      - name: Check OpenAPI generated summaries are real
+        run: |
+          if grep -E "MagicMock|Magicmock|MagicMocks" ../api-contracts/zroky-api-v1.openapi.json; then
+            echo "::error::OpenAPI contract contains MagicMock-generated summaries or descriptions."
+            exit 1
+          fi
+
   ingest-event-v2-lint:
     name: IngestEvent v2 Lint (Rule 1)
     runs-on: ubuntu-latest

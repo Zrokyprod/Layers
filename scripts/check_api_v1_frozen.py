@@ -106,7 +106,17 @@ def _patch_heavy_deps() -> None:
     slowapi_errors.RateLimitExceeded = type("RateLimitExceeded", (Exception,), {})  # type: ignore[attr-defined]
     slowapi_mod.errors = slowapi_errors  # type: ignore[attr-defined]
     slowapi_mod._rate_limit_exceeded_handler = lambda request, exc: None  # type: ignore[attr-defined]
-    slowapi_mod.Limiter = MagicMock  # type: ignore[attr-defined]
+
+    class _MockLimiter:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def limit(self, *args: Any, **kwargs: Any) -> Any:
+            def decorator(func: Any) -> Any:
+                return func
+            return decorator
+
+    slowapi_mod.Limiter = _MockLimiter  # type: ignore[attr-defined]
     sys.modules.setdefault("slowapi", slowapi_mod)
     sys.modules.setdefault("slowapi.errors", slowapi_errors)
     slowapi_util = types.ModuleType("slowapi.util")

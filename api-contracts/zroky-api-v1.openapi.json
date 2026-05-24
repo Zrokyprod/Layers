@@ -160,7 +160,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes__internal__OwnerProjectsResponse"
+                  "$ref": "#/components/schemas/OwnerProjectsResponse"
                 }
               }
             }
@@ -9516,7 +9516,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes__owner__OwnerStatsResponse"
+                  "$ref": "#/components/schemas/OwnerStatsResponse"
                 }
               }
             }
@@ -9595,7 +9595,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes__owner__OwnerUsersResponse"
+                  "$ref": "#/components/schemas/OwnerUsersResponse"
                 }
               }
             }
@@ -11171,10 +11171,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "null",
-                  "title": "Response Revoke Invitation V1 Invitations Projects  Project Id  Invitations  Invitation Id  Delete"
-                }
+                "schema": {}
               }
             }
           },
@@ -12156,7 +12153,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes__internal__OwnerProjectsResponse"
+                  "$ref": "#/components/schemas/OwnerProjectsResponse"
                 }
               }
             }
@@ -21512,7 +21509,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes__owner__OwnerStatsResponse"
+                  "$ref": "#/components/schemas/OwnerStatsResponse"
                 }
               }
             }
@@ -21591,7 +21588,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes__owner__OwnerUsersResponse"
+                  "$ref": "#/components/schemas/OwnerUsersResponse"
                 }
               }
             }
@@ -23167,10 +23164,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "null",
-                  "title": "Response Revoke Invitation Api V1 Invitations Projects  Project Id  Invitations  Invitation Id  Delete"
-                }
+                "schema": {}
               }
             }
           },
@@ -34148,6 +34142,126 @@
         ],
         "title": "OutcomeView"
       },
+      "OwnerProjectItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "owner_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Ref"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "call_count": {
+            "type": "integer",
+            "title": "Call Count"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "title": "Total Cost Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "owner_ref",
+          "is_active",
+          "created_at",
+          "call_count",
+          "total_cost_usd"
+        ],
+        "title": "OwnerProjectItem"
+      },
+      "OwnerProjectsResponse": {
+        "properties": {
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerProjectItem"
+            },
+            "type": "array",
+            "title": "Projects"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "projects",
+          "total"
+        ],
+        "title": "OwnerProjectsResponse"
+      },
+      "OwnerStatsResponse": {
+        "properties": {
+          "total_users": {
+            "type": "integer",
+            "title": "Total Users"
+          },
+          "total_projects": {
+            "type": "integer",
+            "title": "Total Projects"
+          },
+          "total_calls": {
+            "type": "integer",
+            "title": "Total Calls"
+          },
+          "calls_last_7d": {
+            "type": "integer",
+            "title": "Calls Last 7D"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "title": "Total Cost Usd"
+          },
+          "cost_last_7d_usd": {
+            "type": "number",
+            "title": "Cost Last 7D Usd"
+          },
+          "new_users_last_7d": {
+            "type": "integer",
+            "title": "New Users Last 7D"
+          },
+          "active_users_last_7d": {
+            "type": "integer",
+            "title": "Active Users Last 7D"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_users",
+          "total_projects",
+          "total_calls",
+          "calls_last_7d",
+          "total_cost_usd",
+          "cost_last_7d_usd",
+          "new_users_last_7d",
+          "active_users_last_7d"
+        ],
+        "title": "OwnerStatsResponse"
+      },
       "OwnerSupportReplyRequest": {
         "properties": {
           "body": {
@@ -34204,6 +34318,80 @@
         },
         "type": "object",
         "title": "OwnerSupportTicketUpdateRequest"
+      },
+      "OwnerUserItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "github_login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Login"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "project_count": {
+            "type": "integer",
+            "title": "Project Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "github_login",
+          "is_active",
+          "created_at",
+          "project_count"
+        ],
+        "title": "OwnerUserItem"
+      },
+      "OwnerUsersResponse": {
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/app__api__routes__owner__OwnerUserItem"
+            },
+            "type": "array",
+            "title": "Users"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "users",
+          "total"
+        ],
+        "title": "OwnerUsersResponse"
       },
       "PiiDetectorTestRequest": {
         "properties": {
@@ -39276,78 +39464,6 @@
         ],
         "title": "WorkerResultPayload"
       },
-      "app__api__routes__internal__OwnerProjectItem": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "owner_ref": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Ref"
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "call_count": {
-            "type": "integer",
-            "title": "Call Count"
-          },
-          "total_cost_usd": {
-            "type": "number",
-            "title": "Total Cost Usd"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "owner_ref",
-          "is_active",
-          "created_at",
-          "call_count",
-          "total_cost_usd"
-        ],
-        "title": "OwnerProjectItem"
-      },
-      "app__api__routes__internal__OwnerProjectsResponse": {
-        "properties": {
-          "projects": {
-            "items": {
-              "$ref": "#/components/schemas/app__api__routes__internal__OwnerProjectItem"
-            },
-            "type": "array",
-            "title": "Projects"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "projects",
-          "total"
-        ],
-        "title": "OwnerProjectsResponse"
-      },
       "app__api__routes__internal__OwnerStatsResponse": {
         "properties": {
           "total_users": {
@@ -39391,64 +39507,11 @@
         ],
         "title": "OwnerStatsResponse"
       },
-      "app__api__routes__internal__OwnerUserItem": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "github_login": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Github Login"
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "project_count": {
-            "type": "integer",
-            "title": "Project Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "email",
-          "github_login",
-          "is_active",
-          "created_at",
-          "project_count"
-        ],
-        "title": "OwnerUserItem"
-      },
       "app__api__routes__internal__OwnerUsersResponse": {
         "properties": {
           "users": {
             "items": {
-              "$ref": "#/components/schemas/app__api__routes__internal__OwnerUserItem"
+              "$ref": "#/components/schemas/OwnerUserItem"
             },
             "type": "array",
             "title": "Users"
@@ -39542,54 +39605,6 @@
         ],
         "title": "OwnerProjectsResponse"
       },
-      "app__api__routes__owner__OwnerStatsResponse": {
-        "properties": {
-          "total_users": {
-            "type": "integer",
-            "title": "Total Users"
-          },
-          "total_projects": {
-            "type": "integer",
-            "title": "Total Projects"
-          },
-          "total_calls": {
-            "type": "integer",
-            "title": "Total Calls"
-          },
-          "calls_last_7d": {
-            "type": "integer",
-            "title": "Calls Last 7D"
-          },
-          "total_cost_usd": {
-            "type": "number",
-            "title": "Total Cost Usd"
-          },
-          "cost_last_7d_usd": {
-            "type": "number",
-            "title": "Cost Last 7D Usd"
-          },
-          "new_users_last_7d": {
-            "type": "integer",
-            "title": "New Users Last 7D"
-          },
-          "active_users_last_7d": {
-            "type": "integer",
-            "title": "Active Users Last 7D"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total_users",
-          "total_projects",
-          "total_calls",
-          "calls_last_7d",
-          "total_cost_usd",
-          "cost_last_7d_usd",
-          "new_users_last_7d",
-          "active_users_last_7d"
-        ],
-        "title": "OwnerStatsResponse"
-      },
       "app__api__routes__owner__OwnerUserItem": {
         "properties": {
           "id": {
@@ -39654,27 +39669,6 @@
           "project_count"
         ],
         "title": "OwnerUserItem"
-      },
-      "app__api__routes__owner__OwnerUsersResponse": {
-        "properties": {
-          "users": {
-            "items": {
-              "$ref": "#/components/schemas/app__api__routes__owner__OwnerUserItem"
-            },
-            "type": "array",
-            "title": "Users"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "users",
-          "total"
-        ],
-        "title": "OwnerUsersResponse"
       }
     }
   }
