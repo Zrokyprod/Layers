@@ -58,8 +58,12 @@ pytest_temp_privacy2/
 .coverage
 coverage.xml
 htmlcov/
+coverage/
+**/coverage/
 .hypothesis/
 *.cover
+test_results.txt
+lint_output.txt
 
 # ── Linting / Type checking ───────────────────────────────────────────────────
 .ruff_cache/
@@ -84,6 +88,9 @@ claude-code-readme.txt
 claude-code-snapshot.txt
 docfx_temp/
 .playwright-mcp/
+.gocache/
+**/.gocache/
+.data/
 
 # ── Database ──────────────────────────────────────────────────────────────────
 *.sqlite
