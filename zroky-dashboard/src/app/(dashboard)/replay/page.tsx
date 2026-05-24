@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useReplayRuns, useReplayQuota } from "@/lib/hooks";
 import type { ReplayRunItem } from "@/lib/api";
 import { replayModeLabel, replayModeProof, replayVerificationLabel, replayVerifiedFix } from "@/lib/replay-mode";
@@ -134,8 +135,17 @@ function RunRow({ run }: { run: ReplayRunItem }) {
 // ── main page ─────────────────────────────────────────────────────────────────
 
 export default function ReplayPage() {
+  return (
+    <Suspense fallback={<p className="py-12 text-center text-sm text-slate-500">Loading replay runs...</p>}>
+      <ReplayPageContent />
+    </Suspense>
+  );
+}
+
+function ReplayPageContent() {
+  const searchParams = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [goldenSetId, setGoldenSetId] = useState("");
+  const [goldenSetId, setGoldenSetId] = useState(searchParams.get("golden_set_id") ?? "");
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [pages, setPages] = useState<string[]>([]); // cursor stack
 

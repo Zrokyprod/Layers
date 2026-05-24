@@ -1849,6 +1849,38 @@ export function deleteGoldenTrace(
   );
 }
 
+export interface GoldenRunDispatchResponse {
+  id: string;
+  project_id: string;
+  golden_set_id: string;
+  trigger: string;
+  git_sha: string | null;
+  status: string;
+  created_at: string;
+  summary_url: string;
+  idempotent: boolean;
+}
+
+export function runGoldenSet(
+  goldenSetId: string,
+  body: {
+    trigger?: string;
+    git_sha?: string;
+    branch_name?: string;
+    pr_number?: number;
+    commit_message?: string;
+    replay_mode?: ReplayMode;
+    candidate_prompt_override?: string;
+    candidate_model_override?: string;
+  } = {},
+  signal?: AbortSignal,
+): Promise<GoldenRunDispatchResponse> {
+  return request<GoldenRunDispatchResponse>(
+    `/v1/goldens/${encodeURIComponent(goldenSetId)}/run`,
+    { method: "POST", body, signal },
+  );
+}
+
 
 // -- Ask Zroky -----------------------------------------------------------------
 
