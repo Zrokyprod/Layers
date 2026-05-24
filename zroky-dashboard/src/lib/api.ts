@@ -1821,7 +1821,15 @@ export function listGoldenTraces(
 
 export function addGoldenTrace(
   goldenSetId: string,
-  body: { call_id?: string; expected_output_text?: string; weight?: number },
+  body: {
+    call_id?: string;
+    expected_output_text?: string;
+    expected_tokens?: number;
+    expected_cost_usd?: number;
+    expected_latency_ms?: number;
+    criteria_json?: string;
+    weight?: number;
+  },
   signal?: AbortSignal,
 ): Promise<GoldenTraceView> {
   return request<GoldenTraceView>(
