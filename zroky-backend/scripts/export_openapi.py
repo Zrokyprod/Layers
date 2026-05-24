@@ -86,7 +86,17 @@ def _patch_heavy_deps() -> None:
     slowapi_errors.RateLimitExceeded = type("RateLimitExceeded", (Exception,), {})
     slowapi_mod.errors = slowapi_errors
     slowapi_mod._rate_limit_exceeded_handler = lambda request, exc: None
-    slowapi_mod.Limiter = MagicMock
+
+    class _MockLimiter:
+        def __init__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            pass
+
+        def limit(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            def decorator(func):  # type: ignore[no-untyped-def]
+                return func
+            return decorator
+
+    slowapi_mod.Limiter = _MockLimiter
     sys.modules["slowapi"] = slowapi_mod
     sys.modules["slowapi.errors"] = slowapi_errors
     slowapi_ext = types.ModuleType("slowapi.util")
@@ -163,7 +173,7 @@ def main() -> int:
     output_path = Path(backend_root).parent / "api-contracts" / "zroky-api-v1.openapi.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w", encoding="utf-8") as f:
+    with open(output_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(schema, f, indent=2, ensure_ascii=False)
 
     print(f"Exported OpenAPI schema to {output_path}")
