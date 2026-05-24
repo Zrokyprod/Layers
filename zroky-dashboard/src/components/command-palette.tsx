@@ -14,22 +14,19 @@ interface CommandItem {
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
   return [
-    // Watch (Observability)
-    { id: "home", label: "Go to Home", description: "Health check + live agent activity", shortcut: "Ctrl+H", action: () => router.push("/home") },
-    { id: "calls", label: "Go to Calls", description: "What your agent said — prompts, responses, latency", shortcut: "Ctrl+C", action: () => router.push("/calls") },
-    { id: "alerts", label: "Go to Alerts", description: "Triage open alerts — acknowledge, resolve, reopen", shortcut: "Ctrl+I", action: () => router.push("/alerts") },
-    { id: "cost", label: "Go to Cost", description: "Spend, waste, and cost of failures", action: () => router.push("/cost") },
-    { id: "outcomes", label: "Go to Outcomes", description: "Business cost of failures — refunds, escalations, churn attributed by agent", action: () => router.push("/outcomes") },
-    // Pilot (Actionable)
-    { id: "recommendations", label: "Go to Fix Queue", description: "What to fix next, ranked by impact ($)", action: () => router.push("/recommendations") },
+    { id: "agents", label: "Go to Agents", description: "Agent launchpad with real health, reliability, cost, and determinism data", shortcut: "Ctrl+A", action: () => router.push("/agents") },
+    { id: "issues", label: "Go to Issues", description: "Grouped production issues with root cause and action context", shortcut: "Ctrl+I", action: () => router.push("/issues") },
     { id: "replay", label: "Go to Replay", description: "Test a fix against past data before deploying", action: () => router.push("/replay") },
-    { id: "calibration", label: "Go to Calibration", description: "LLM judge calibration — golden sets, accuracy, run history", action: () => router.push("/calibration") },
-    { id: "calibration-goldens", label: "Calibration → Golden Sets", description: "Add production traces and label pass/fail/inconclusive", action: () => router.push("/calibration?tab=goldens") },
-    { id: "calibration-judge", label: "Calibration → Judge Results", description: "Run calibration, check accuracy gauge and confusion matrix", action: () => router.push("/calibration?tab=judge") },
-    { id: "calibration-score", label: "Calibration → Score Overview", description: "Per-model accuracy rings and blocking/advisory mode", action: () => router.push("/calibration?tab=score") },
-    // Ask Zroky
-    { id: "ask", label: "Ask Zroky", description: "Ask anything about your agent — natural language Q&A", shortcut: "Ctrl+K", action: () => window.dispatchEvent(new CustomEvent("open-ask-zroky")) },
-    // Settings
+    { id: "goldens", label: "Go to Goldens", description: "Golden datasets for regression-safe evaluation", action: () => router.push("/goldens") },
+    { id: "drift", label: "Go to Drift", description: "Provider and model behavior drift over time", action: () => router.push("/drift") },
+    { id: "calls", label: "Go to Calls", description: "What your agent said — prompts, responses, latency", shortcut: "Ctrl+C", action: () => router.push("/calls") },
+    { id: "cost", label: "Go to Cost", description: "Spend, waste, and cost of failures", action: () => router.push("/cost") },
+    { id: "alerts", label: "Go to Alerts", description: "Triage open alerts — acknowledge, resolve, reopen", action: () => router.push("/alerts") },
+    { id: "home", label: "Open Command Center", description: "Secondary operational command center", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "settings-evaluation", label: "Settings → Evaluation", description: "Calibration and judge controls live in settings", action: () => router.push("/settings/evaluation") },
+    { id: "settings-evaluation-calibration", label: "Settings → Evaluation → Calibration", description: "Open the secondary calibration workspace", action: () => router.push("/calibration") },
+    { id: "settings-evaluation-judge", label: "Settings → Evaluation → Judge", description: "Open secondary judge diagnostics", action: () => router.push("/judge") },
+    { id: "ask", label: "Ask Zroky", description: "Ask anything about your agent — natural language Q&A", shortcut: "Ctrl+J", action: () => window.dispatchEvent(new CustomEvent("open-ask-zroky")) },
     { id: "settings", label: "Go to Settings", description: "Project, members, providers, plan & billing", shortcut: "Ctrl+S", action: () => router.push("/settings") },
     { id: "settings-keys", label: "Settings → API Keys", description: "Create and revoke API keys", action: () => router.push("/settings/keys") },
     { id: "settings-billing", label: "Settings → Plan & Billing", description: "Plan, usage, Stripe portal", action: () => router.push("/settings/billing") },

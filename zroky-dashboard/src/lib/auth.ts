@@ -261,7 +261,7 @@ export function setPendingPostAuthRedirectPath(path: string): void {
   window.sessionStorage.setItem(POST_AUTH_REDIRECT_STORAGE_KEY, path);
 }
 
-export function consumePendingPostAuthRedirectPath(fallback = "/home"): string {
+export function consumePendingPostAuthRedirectPath(fallback = "/agents"): string {
   if (typeof window === "undefined") {
     return fallback;
   }
@@ -276,7 +276,7 @@ export function consumePendingPostAuthRedirectPath(fallback = "/home"): string {
   return fallback;
 }
 
-export function getPostAuthRedirectPath(fallback = "/home"): string {
+export function getPostAuthRedirectPath(fallback = "/agents"): string {
   if (typeof window === "undefined") {
     return fallback;
   }
@@ -298,7 +298,7 @@ export function getPostAuthRedirectPath(fallback = "/home"): string {
   return next;
 }
 
-export function resolvePostAuthRedirectPath(fallback = "/home"): string {
+export function resolvePostAuthRedirectPath(fallback = "/agents"): string {
   const fromQuery = getPostAuthRedirectPath("");
   if (fromQuery) {
     return fromQuery;

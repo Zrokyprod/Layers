@@ -32,7 +32,7 @@ function CallbackContent() {
           return;
         }
         storeAuthSession(auth);
-        router.replace(getPostAuthRedirectPath("/home"));
+        router.replace(getPostAuthRedirectPath("/agents"));
         router.refresh();
       } catch (callbackError) {
         if (cancelled) {

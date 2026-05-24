@@ -35,7 +35,7 @@ function OAuthCallbackHandler() {
         email: null,
         email_verified: true,
       });
-      router.replace("/home");
+      router.replace("/agents");
     };
 
     void finish();

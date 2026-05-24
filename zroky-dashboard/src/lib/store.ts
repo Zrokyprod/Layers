@@ -77,7 +77,7 @@ export const useDashboardStore = create<DashboardState>()(
         set((state) => ({ realTimeEnabled: !state.realTimeEnabled })),
 
       // Last visited
-      lastVisitedPage: "/home",
+      lastVisitedPage: "/agents",
       setLastVisitedPage: (page) => set({ lastVisitedPage: page }),
 
       // SDK connection status

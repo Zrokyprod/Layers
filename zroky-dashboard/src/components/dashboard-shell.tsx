@@ -4,17 +4,18 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, type ReactNode } from "react";
 import {
+  Activity,
   AlertTriangle,
-  CircleDollarSign,
+  Bell,
+  Bot,
   DollarSign,
   FlaskConical,
-  Home,
+  List,
   LogOut,
   Menu,
   RotateCcw,
   Settings,
   Sparkles,
-  Wrench,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -29,23 +30,17 @@ import { ShortcutsHelp } from "./shortcuts-help";
 import { SavedYouBadge } from "./saved-you-badge";
 import { AskZroky } from "./ask-zroky";
 
-// Nav layout per ZROKY-TECHNICAL-PLAN-V2.md §10.3.
-// Pilot-section items will gain <PlanGate> wrapping in Module 8.
-type NavItem = { href: string; label: string; section: "watch" | "pilot" | "settings"; icon: LucideIcon; pilotPlaceholder?: boolean };
+type NavItem = { href: string; label: string; icon: LucideIcon; pilotPlaceholder?: boolean };
 const dashboardLinks: ReadonlyArray<NavItem> = [
-  // Watch — what is happening
-  { href: "/home", label: "Home", section: "watch", icon: Home },
-  { href: "/issues", label: "Issues", section: "watch", icon: AlertTriangle },
-  { href: "/cost", label: "Cost", section: "watch", icon: DollarSign },
-  { href: "/outcomes", label: "Outcomes", section: "watch", icon: CircleDollarSign },
-
-  // Pilot — what to do about it
-  { href: "/recommendations", label: "Fix Queue", section: "pilot", icon: Wrench },
-  { href: "/replay", label: "Replay", section: "pilot", icon: RotateCcw },
-  { href: "/calibration", label: "Calibration", section: "pilot", icon: FlaskConical },
-
-  // Settings
-  { href: "/settings", label: "Settings", section: "settings", icon: Settings },
+  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/issues", label: "Issues", icon: AlertTriangle },
+  { href: "/replay", label: "Replay", icon: RotateCcw },
+  { href: "/goldens", label: "Goldens", icon: FlaskConical },
+  { href: "/drift", label: "Drift", icon: Activity },
+  { href: "/calls", label: "Calls", icon: List },
+  { href: "/cost", label: "Cost", icon: DollarSign },
+  { href: "/alerts", label: "Alerts", icon: Bell },
+  { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 function getTitle(pathname: string): string {
@@ -55,6 +50,12 @@ function getTitle(pathname: string): string {
   if (pathname.startsWith("/anomalies/") || pathname.startsWith("/issues/")) {
     return "Issue Detail";
   }
+  if (pathname === "/home") {
+    return "Command Center";
+  }
+  if (pathname === "/reliability") {
+    return "Agents";
+  }
   if (pathname === "/issues") {
     return "Issues";
   }
@@ -63,6 +64,21 @@ function getTitle(pathname: string): string {
   }
   if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
     return "Fix Queue";
+  }
+  if (pathname === "/settings/evaluation") {
+    return "Evaluation Settings";
+  }
+  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
+    return "Calibration";
+  }
+  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
+    return "Judge";
+  }
+  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
+    return "Root Cause";
+  }
+  if (pathname === "/trace" || pathname.startsWith("/trace/")) {
+    return "Trace";
   }
   if (pathname === "/cost" || pathname.startsWith("/cost/")) {
     return "Cost";
@@ -82,7 +98,10 @@ function getTitle(pathname: string): string {
 
 function getSubTitle(pathname: string): string {
   if (pathname === "/home") {
-    return "Is your agent healthy right now?";
+    return "Secondary command center for project-wide operational context.";
+  }
+  if (pathname === "/agents" || pathname.startsWith("/agents/") || pathname === "/reliability") {
+    return "Launch from real agent health, reliability, cost, and determinism data.";
   }
   if (pathname === "/cost" || pathname.startsWith("/cost/")) {
     return "What you spent — and what failures cost you.";
@@ -95,6 +114,15 @@ function getSubTitle(pathname: string): string {
   }
   if (pathname === "/replay" || pathname.startsWith("/replay/")) {
     return "Test your fix against past data before deploying.";
+  }
+  if (pathname === "/goldens" || pathname.startsWith("/goldens/")) {
+    return "Golden datasets for regression-safe evaluation.";
+  }
+  if (pathname === "/drift" || pathname.startsWith("/drift/")) {
+    return "Provider and model behavior drift over time.";
+  }
+  if (pathname === "/alerts" || pathname.startsWith("/alerts/")) {
+    return "Alert routing, triage, acknowledgement, and resolution.";
   }
   if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
     return "What to fix next, ranked by dollar impact.";
@@ -123,11 +151,23 @@ function getSubTitle(pathname: string): string {
   if (pathname === "/settings/team") {
     return "Invite and remove project members.";
   }
+  if (pathname === "/settings/evaluation") {
+    return "Calibration and judge controls live here.";
+  }
   if (pathname === "/outcomes" || pathname.startsWith("/outcomes/")) {
     return "Business cost of every failure — refunds, escalations, churn, attributed by agent.";
   }
   if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
-    return "Golden sets, judge accuracy, calibration runs — all in one place.";
+    return "Secondary evaluation workspace linked from Settings.";
+  }
+  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
+    return "Secondary judge diagnostics linked from Settings.";
+  }
+  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
+    return "Root-cause analysis belongs in issue context.";
+  }
+  if (pathname === "/trace" || pathname.startsWith("/trace/")) {
+    return "Deep-linked trace evidence for calls and issues.";
   }
   return "Operational view";
 }
@@ -242,27 +282,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="nav-links" aria-label="Primary">
-          {dashboardLinks.filter((i) => i.section === "watch").length > 0 && (
-            <div className="nav-section-label">Watch</div>
-          )}
-          {dashboardLinks
-            .filter((i) => i.section === "watch")
-            .map((item) => (
-              <NavEntry key={item.href} pathname={pathname} item={item} />
-            ))}
-          {dashboardLinks.filter((i) => i.section === "pilot").length > 0 && (
-            <div className="nav-section-label">Pilot</div>
-          )}
-          {dashboardLinks
-            .filter((i) => i.section === "pilot")
-            .map((item) => (
-              <NavEntry key={item.href} pathname={pathname} item={item} />
-            ))}
-          {dashboardLinks
-            .filter((i) => i.section === "settings")
-            .map((item) => (
-              <NavEntry key={item.href} pathname={pathname} item={item} />
-            ))}
+          {dashboardLinks.map((item) => (
+            <NavEntry key={item.href} pathname={pathname} item={item} />
+          ))}
         </nav>
 
         <div className="sidebar-foot">

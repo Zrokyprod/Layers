@@ -43,7 +43,7 @@ export default function RegisterPage() {
       if (!res.email_verified) {
         router.push(`/auth/check-email?email=${encodeURIComponent(data.email)}`);
       } else {
-        router.push("/home");
+        router.push("/agents");
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");

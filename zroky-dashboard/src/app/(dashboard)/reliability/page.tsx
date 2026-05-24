@@ -303,9 +303,9 @@ export default function ReliabilityPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
         <div>
-          <h1 className="text-base font-semibold text-white">Agent Reliability Scorecard</h1>
+          <h1 className="text-base font-semibold text-white">Agents Launchpad</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Composite 0-100 health score per agent — fail rate, cost, determinism, trend
+            Launch from real agent health, fail rate, cost, determinism, and trend data.
           </p>
         </div>
         <div className="flex items-center gap-2">

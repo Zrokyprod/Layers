@@ -12,6 +12,7 @@ const SETTINGS_TABS = [
   { href: "/settings/providers", label: "Providers" },
   { href: "/settings/team", label: "Members" },
   { href: "/settings/billing", label: "Plan & Billing" },
+  { href: "/settings/evaluation", label: "Evaluation" },
   { href: "/settings/profile", label: "Profile" },
 ] as const;
 

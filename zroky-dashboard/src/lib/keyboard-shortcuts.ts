@@ -46,9 +46,15 @@ export function useKeyboardShortcuts() {
         action: toggleSidebar,
       },
       {
+        key: "a",
+        ctrl: true,
+        description: "Go to agents",
+        action: () => router.push("/agents"),
+      },
+      {
         key: "h",
         ctrl: true,
-        description: "Go to home",
+        description: "Open command center",
         action: () => router.push("/home"),
       },
       {
@@ -60,14 +66,8 @@ export function useKeyboardShortcuts() {
       {
         key: "i",
         ctrl: true,
-        description: "Go to anomalies",
-        action: () => router.push("/anomalies"),
-      },
-      {
-        key: "f",
-        ctrl: true,
-        description: "Go to fix queue",
-        action: () => router.push("/recommendations"),
+        description: "Go to issues",
+        action: () => router.push("/issues"),
       },
       {
         key: "s",
@@ -136,10 +136,10 @@ export const KEYBOARD_SHORTCUTS_HELP = [
   { keys: ["Ctrl", "J"], description: "Ask Zroky (natural-language Q&A)" },
   { keys: ["Ctrl", "K"], description: "Open command palette" },
   { keys: ["Ctrl", "B"], description: "Toggle sidebar" },
-  { keys: ["Ctrl", "H"], description: "Go to home" },
+  { keys: ["Ctrl", "A"], description: "Go to agents" },
+  { keys: ["Ctrl", "H"], description: "Open Command Center" },
   { keys: ["Ctrl", "C"], description: "Go to calls" },
-  { keys: ["Ctrl", "I"], description: "Go to anomalies" },
-  { keys: ["Ctrl", "F"], description: "Go to fix queue" },
+  { keys: ["Ctrl", "I"], description: "Go to issues" },
   { keys: ["Ctrl", "S"], description: "Go to settings" },
   { keys: ["Ctrl", "Shift", "R"], description: "Refresh data" },
   { keys: ["Shift", "?"], description: "Show this help" },
