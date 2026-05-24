@@ -153,6 +153,10 @@ def _generate_current_spec(repo_root: Path) -> dict[str, Any]:
     os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-for-check")
     os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key-for-check")
     os.environ.setdefault("PII_ENCRYPTION_KEY", "test-pii-key-for-check")
+    # The frozen v1 spec still includes legacy billing paths. Keep them
+    # visible during the contract check so the checker verifies the full
+    # compatibility surface, independent of production feature defaults.
+    os.environ.setdefault("FEATURE_LEGACY_BILLING", "true")
 
     _patch_heavy_deps()
 
@@ -303,6 +307,10 @@ def _check_operation(
         if isinstance(p, dict)
     }
     for name in frozen_params:
+        if name in {"args", "kwargs"}:
+            # Historical specs captured decorator implementation details from
+            # wrappers. These were never public query parameters.
+            continue
         if name not in current_params:
             breaking.append(f"REQUIRED PARAMETER REMOVED: {label} ?{name}")
 

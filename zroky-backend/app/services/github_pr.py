@@ -222,13 +222,13 @@ def create_pull_request_with_patch(
 
     if not owner or not repo:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="repository_owner and repository_name are required.",
         )
 
     if not branch:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="branch_name is required.",
         )
 
