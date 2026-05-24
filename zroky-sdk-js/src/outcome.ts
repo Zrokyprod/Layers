@@ -43,6 +43,17 @@ export function _setOutcomeConfig(config: ZrokyConfig): void {
   _config = config;
 }
 
+function resolveApiBase(endpoint: string | undefined): string {
+  const normalized = (endpoint ?? "https://api.zroky.com").replace(/\/+$/, "");
+  if (normalized.endsWith("/api/v1/ingest")) {
+    return normalized.slice(0, -"/v1/ingest".length);
+  }
+  if (normalized.endsWith("/v1/ingest")) {
+    return normalized.slice(0, -"/v1/ingest".length);
+  }
+  return normalized;
+}
+
 /**
  * Attach a business-outcome cost to a Zroky call.
  * Fire-and-forget — never throws, never blocks the caller.
@@ -56,7 +67,7 @@ export function outcome(callId: string, opts: OutcomeOptions): void {
   const projectId = _config.projectId ?? nodeEnv?.["ZROKY_PROJECT_ID"];
   if (!apiKey || !projectId) return;
 
-  const endpoint = (_config.endpoint ?? "https://api.zroky.com").replace(/\/$/, "");
+  const endpoint = resolveApiBase(_config.endpoint);
   const url = `${endpoint}/v1/outcomes`;
 
   const key = opts.idempotencyKey ?? `${callId}:${opts.type}`;
@@ -75,8 +86,9 @@ export function outcome(callId: string, opts: OutcomeOptions): void {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "x-project-id": projectId,
         Authorization: `Bearer ${apiKey}`,
-        "X-Project-Id": projectId,
       },
       body,
       keepalive: true,

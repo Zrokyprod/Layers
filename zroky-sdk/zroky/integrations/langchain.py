@@ -64,7 +64,7 @@ class ZROKYCallbackHandler(BaseCallbackHandler):
         provider = _infer_provider(serialized)
         messages = [{"role": "user", "content": p} for p in prompts]
 
-        zroky._ensure_init()
+        cfg, _ = zroky._ensure_init()
         messages = mask_messages(messages)
 
         event = CallEvent(
@@ -74,6 +74,12 @@ class ZROKYCallbackHandler(BaseCallbackHandler):
             call_type=CallType.CHAT,
             trace_id=self._trace_id,
             agent_name=self._agent_name or zroky._get_agent(),
+            agent_framework=cfg.agent_framework or "langchain",
+            prompt_version=cfg.prompt_version,
+            session_id=cfg.session_id,
+            workflow_id=cfg.workflow_id,
+            workflow_name=cfg.workflow_name,
+            environment=cfg.environment,
         )
         self._pending[str(run_id)] = (event, time.perf_counter_ns())
 

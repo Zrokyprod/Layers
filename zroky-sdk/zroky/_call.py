@@ -89,6 +89,14 @@ def call(
     trace_id: str | None = None,
     parent_call_id: str | None = None,
     user_id: str | None = None,
+    session_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_name: str | None = None,
+    prompt_version: str | None = None,
+    agent_framework: str | None = None,
+    environment: str | None = None,
+    step_index: int | None = None,
+    metadata: dict[str, Any] | None = None,
     max_retries: int | None = None,
     fallback: list[str] | None = None,
     no_cache: bool = False,
@@ -140,7 +148,15 @@ def call(
         call_type=call_type,
         trace_id=trace_id, parent_call_id=parent_call_id,
         agent_name=_get_agent() or cfg.default_agent,
+        agent_framework=agent_framework or cfg.agent_framework,
         prompt_fingerprint=prompt_fingerprint, user_id=user_id,
+        prompt_version=prompt_version or cfg.prompt_version,
+        session_id=session_id or cfg.session_id,
+        workflow_id=workflow_id or cfg.workflow_id,
+        workflow_name=workflow_name or cfg.workflow_name,
+        step_index=step_index,
+        environment=environment or cfg.environment,
+        metadata=metadata,
         retry_metadata=_private_retry_metadata(kwargs),
         tool_lifecycle_summary=_private_tool_lifecycle(kwargs),
     )
@@ -381,6 +397,14 @@ def record(
     trace_id: str | None = None,
     parent_call_id: str | None = None,
     user_id: str | None = None,
+    session_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_name: str | None = None,
+    prompt_version: str | None = None,
+    agent_framework: str | None = None,
+    environment: str | None = None,
+    step_index: int | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Manually record a provider call made outside of zroky.call()."""
     import zroky as _z  # lazy
@@ -417,7 +441,15 @@ def record(
         call_type=CallType.TOOL_CALL if tools else CallType.CHAT,
         trace_id=trace_id, parent_call_id=parent_call_id,
         agent_name=_get_agent() or cfg.default_agent,
+        agent_framework=agent_framework or cfg.agent_framework,
         prompt_fingerprint=prompt_fingerprint, user_id=user_id,
+        prompt_version=prompt_version or cfg.prompt_version,
+        session_id=session_id or cfg.session_id,
+        workflow_id=workflow_id or cfg.workflow_id,
+        workflow_name=workflow_name or cfg.workflow_name,
+        step_index=step_index,
+        environment=environment or cfg.environment,
+        metadata=metadata,
         latency_ms=latency_ms,
         retry_metadata=normalize_retry_metadata(request.get("retry_metadata")),
         tool_lifecycle_summary=summarize_tool_lifecycle(_record_tool_lifecycle(request)),
@@ -438,6 +470,185 @@ def record(
     _notify_event(event)
     if error is not None:
         _notify_error(event, error)
+
+
+def _compact_documents(documents: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    if not documents:
+        return None
+    compacted: list[dict[str, Any]] = []
+    for doc in documents[:20]:
+        compacted.append(
+            {
+                "id": doc.get("id"),
+                "title": doc.get("title"),
+                "source": doc.get("source"),
+                "score": doc.get("score"),
+                "metadata": doc.get("metadata"),
+                "contentPreview": str(doc.get("contentPreview") or doc.get("content_preview") or "")[:500] or None,
+            }
+        )
+    return compacted
+
+
+def _document_summary(documents: list[dict[str, Any]] | None) -> str | None:
+    if not documents:
+        return None
+    values: list[str] = []
+    for doc in documents[:20]:
+        value = doc.get("id") or doc.get("title") or doc.get("source")
+        if value:
+            values.append(str(value))
+    return "\n".join(values)[:4000] or None
+
+
+def capture_retrieval(
+    *,
+    query: str,
+    index_name: str | None = None,
+    retriever_version: str | None = None,
+    documents: list[dict[str, Any]] | None = None,
+    latency_ms: float | None = None,
+    status: str = "success",
+    error_code: str | None = None,
+    error_message: str | None = None,
+    call_id: str | None = None,
+    trace_id: str | None = None,
+    parent_call_id: str | None = None,
+    session_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_name: str | None = None,
+    prompt_version: str | None = None,
+    step_index: int | None = None,
+    user_id: str | None = None,
+    environment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Capture a first-class retrieval/RAG span."""
+    import zroky as _z  # lazy
+
+    if _z._config is None or _z._queue is None:
+        _z.init()
+    cfg = _z._config
+    queue = _z._queue
+
+    compacted = _compact_documents(mask_value(documents))
+    output = _document_summary(compacted)
+    event = CallEvent(
+        provider="retrieval",
+        model=index_name or "unknown",
+        messages=[{"role": "user", "content": mask_text(query) if cfg.mask_pii else query}],
+        call_type="retrieval",
+        call_id=call_id or CallEvent(provider="retrieval", model="unknown", messages=[]).call_id,
+        status=status,
+        latency_ms=latency_ms,
+        prompt_fingerprint=generate_prompt_fingerprint(
+            messages=[{"role": "user", "content": query}],
+            tools=None,
+            model=index_name or "unknown",
+        ),
+        output_content=output,
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+        agent_name=_get_agent() or cfg.default_agent,
+        agent_framework=cfg.agent_framework,
+        prompt_version=prompt_version or cfg.prompt_version,
+        session_id=session_id or cfg.session_id,
+        workflow_id=workflow_id or cfg.workflow_id,
+        workflow_name=workflow_name or cfg.workflow_name,
+        step_index=step_index,
+        user_id=user_id,
+        environment=environment or cfg.environment,
+        error_code=error_code,
+        error_message=mask_error_message(error_message) if error_message else None,
+        metadata={
+            **(metadata or {}),
+            "span_type": "retrieval",
+            "index_name": index_name,
+            "retriever_version": retriever_version,
+            "result_count": len(compacted or []),
+            "documents": compacted,
+        },
+    )
+    queue.enqueue(event)
+    _notify_event(event)
+    return event.call_id
+
+
+def capture_memory(
+    *,
+    operation: str,
+    namespace: str | None = None,
+    keys: list[str] | None = None,
+    item_count: int | None = None,
+    bytes_count: int | None = None,
+    value_preview: str | None = None,
+    latency_ms: float | None = None,
+    status: str = "success",
+    error_code: str | None = None,
+    error_message: str | None = None,
+    call_id: str | None = None,
+    trace_id: str | None = None,
+    parent_call_id: str | None = None,
+    session_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_name: str | None = None,
+    prompt_version: str | None = None,
+    step_index: int | None = None,
+    user_id: str | None = None,
+    environment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Capture a first-class memory operation span."""
+    import zroky as _z  # lazy
+
+    if _z._config is None or _z._queue is None:
+        _z.init()
+    cfg = _z._config
+    queue = _z._queue
+    resolved_namespace = namespace or "memory"
+    bounded_keys = keys[:50] if keys else None
+    fingerprint_text = ":".join([operation, resolved_namespace, *(sorted(bounded_keys or []))])
+
+    event = CallEvent(
+        provider="memory",
+        model=resolved_namespace,
+        messages=[],
+        call_type="memory",
+        call_id=call_id or CallEvent(provider="memory", model="unknown", messages=[]).call_id,
+        status=status,
+        latency_ms=latency_ms,
+        prompt_fingerprint=generate_prompt_fingerprint(
+            messages=[{"role": "user", "content": fingerprint_text}],
+            tools=None,
+            model=resolved_namespace,
+        ),
+        output_content=(mask_text(value_preview) if cfg.mask_pii else value_preview)[:4000] if value_preview else None,
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+        agent_name=_get_agent() or cfg.default_agent,
+        agent_framework=cfg.agent_framework,
+        prompt_version=prompt_version or cfg.prompt_version,
+        session_id=session_id or cfg.session_id,
+        workflow_id=workflow_id or cfg.workflow_id,
+        workflow_name=workflow_name or cfg.workflow_name,
+        step_index=step_index,
+        user_id=user_id,
+        environment=environment or cfg.environment,
+        error_code=error_code,
+        error_message=mask_error_message(error_message) if error_message else None,
+        metadata={
+            **(metadata or {}),
+            "span_type": "memory",
+            "operation": operation,
+            "namespace": resolved_namespace,
+            "keys": bounded_keys,
+            "item_count": item_count,
+            "bytes": bytes_count,
+        },
+    )
+    queue.enqueue(event)
+    _notify_event(event)
+    return event.call_id
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +682,12 @@ def trace(_fn: Any = None, *, name: str | None = None) -> Any:
                     provider="unknown", model="unknown", messages=[],
                     call_type=CallType.CHAT,
                     agent_name=_get_agent() or cfg.default_agent or fn_name,
+                    agent_framework=cfg.agent_framework,
+                    prompt_version=cfg.prompt_version,
+                    session_id=cfg.session_id,
+                    workflow_id=cfg.workflow_id,
+                    workflow_name=cfg.workflow_name,
+                    environment=cfg.environment,
                     latency_ms=latency_ms,
                     status="failed" if exc_to_raise else "success",
                 )

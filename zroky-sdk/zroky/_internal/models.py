@@ -35,12 +35,22 @@ class CallEvent:
     call_type: str = CallType.CHAT
 
     # Identifiers
+    schema_version: str = "v2"
     call_id: str = field(default_factory=lambda: str(uuid4()))
+    event_id: str | None = None
+    request_id: str | None = None
     trace_id: str | None = None
     parent_call_id: str | None = None
     agent_name: str | None = None
+    agent_framework: str | None = None
     prompt_fingerprint: str | None = None
+    prompt_version: str | None = None
+    session_id: str | None = None
+    workflow_id: str | None = None
+    workflow_name: str | None = None
+    step_index: int | None = None
     user_id: str | None = None
+    environment: str | None = None
 
     # Request
     tools: list[dict] | None = None
@@ -67,6 +77,10 @@ class CallEvent:
     output_content: str | None = None
     normalized_output: str | None = None
     output_fingerprint: str | None = None
+    tool_calls: list[dict] | None = None
+    # Deprecated alias for tool_calls. Accepted for backward compatibility with
+    # SDK consumers/internals that still write to tool_calls_made directly.
+    # Reconciled with tool_calls at emit time in to_ingest_payload().
     tool_calls_made: list[dict] | None = None
     tool_lifecycle_summary: list[dict] | None = None
     retry_metadata: dict | None = None
@@ -98,13 +112,18 @@ class CallEvent:
     error_code: str | None = None
     error_message: str | None = None
     failure_reason: dict | None = None
+    metadata: dict | None = None
 
     # Timestamps
     created_at: float = field(default_factory=time.time)
 
     def to_ingest_payload(self) -> dict:
+        tool_calls = self.tool_calls if self.tool_calls is not None else self.tool_calls_made
         return mask_value({
+            "schema_version": self.schema_version,
             "call_id": self.call_id,
+            "event_id": self.event_id or f"{self.call_id}:capture",
+            "request_id": self.request_id,
             "provider": self.provider,
             "model": self.model,
             "call_type": self.call_type,
@@ -133,7 +152,7 @@ class CallEvent:
             "normalized_output": self.normalized_output,
             "output_fingerprint": self.output_fingerprint,
             "tool_definitions": self.tools,
-            "tool_calls_made": self.tool_calls_made,
+            "tool_calls": tool_calls,
             "tool_lifecycle_summary": self.tool_lifecycle_summary,
             "retry_metadata": self.retry_metadata,
             "cache_hit": self.cache_hit,
@@ -152,8 +171,16 @@ class CallEvent:
             "trace_id": self.trace_id,
             "parent_call_id": self.parent_call_id,
             "agent_name": self.agent_name,
+            "agent_framework": self.agent_framework,
             "prompt_fingerprint": self.prompt_fingerprint,
+            "prompt_version": self.prompt_version,
+            "session_id": self.session_id,
+            "workflow_id": self.workflow_id,
+            "workflow_name": self.workflow_name,
+            "step_index": self.step_index,
             "user_id": hash_identifier(self.user_id),
+            "environment": self.environment,
+            "metadata": self.metadata,
             "error_code": self.error_code,
             "error_message": mask_error_message(self.error_message) if self.error_message else None,
             "failure_reason": self.failure_reason,

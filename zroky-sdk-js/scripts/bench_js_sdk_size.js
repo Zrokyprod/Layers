@@ -3,13 +3,14 @@
  * Rule 4 benchmark: @zroky/sdk bundle gzipped < 30 KB.
  * Run: node scripts/bench_js_sdk_size.js
  */
-import { createReadStream, statSync } from "node:fs";
-import { createGzip } from "node:zlib";
-import { pipeline } from "node:stream/promises";
-import { Writable } from "node:stream";
+const { createReadStream, statSync } = require("node:fs");
+const { join } = require("node:path");
+const { createGzip } = require("node:zlib");
+const { pipeline } = require("node:stream/promises");
+const { Writable } = require("node:stream");
 
 const LIMIT_KB = 30;
-const ENTRY = new URL("../dist/index.mjs", import.meta.url).pathname;
+const ENTRY = join(__dirname, "..", "dist", "index.mjs");
 
 let raw;
 try {
@@ -27,14 +28,17 @@ const counter = new Writable({
   },
 });
 
-await pipeline(createReadStream(ENTRY), createGzip({ level: 9 }), counter);
+pipeline(createReadStream(ENTRY), createGzip({ level: 9 }), counter).then(() => {
+  const rawKB = (raw / 1024).toFixed(2);
+  const gzKB = (gzBytes / 1024).toFixed(2);
+  console.log(`Bundle: ${rawKB} KB raw | ${gzKB} KB gzipped | limit: ${LIMIT_KB} KB`);
 
-const rawKB = (raw / 1024).toFixed(2);
-const gzKB = (gzBytes / 1024).toFixed(2);
-console.log(`Bundle: ${rawKB} KB raw | ${gzKB} KB gzipped | limit: ${LIMIT_KB} KB`);
-
-if (gzBytes / 1024 > LIMIT_KB) {
-  console.error(`FAIL: gzipped bundle ${gzKB} KB exceeds ${LIMIT_KB} KB limit (Rule 4)`);
+  if (gzBytes / 1024 > LIMIT_KB) {
+    console.error(`FAIL: gzipped bundle ${gzKB} KB exceeds ${LIMIT_KB} KB limit (Rule 4)`);
+    process.exit(1);
+  }
+  console.log("PASS: bundle size within Rule 4 limit");
+}).catch((err) => {
+  console.error(err);
   process.exit(1);
-}
-console.log("PASS: bundle size within Rule 4 limit");
+});

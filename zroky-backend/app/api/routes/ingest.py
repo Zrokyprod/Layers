@@ -20,6 +20,7 @@ from app.core.limiter import limiter
 from app.services.billing_quota import check_quota
 from app.services.ingest_protection import IngestRateLimitDecision, evaluate_ingest_rate_limit
 from app.services.loop_signals import output_signal, summarize_tool_lifecycle, normalize_retry_metadata
+from app.services.outcome_attribution import ingest_outcome
 from app.services.privacy import mask_error_message, mask_metadata, mask_payload
 from app.services.redis_client import get_redis_client
 from app.worker.tasks import process_diagnosis
@@ -89,6 +90,7 @@ def _payload_from_ingest_event(event: IngestEventV2) -> dict:
     completion_tokens = event.completion_tokens
     reasoning_tokens = event.reasoning_tokens
     total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
+    tool_calls = event.tool_calls or event.tool_calls_made
 
     return {
         "source": "sdk_ingest",
@@ -130,9 +132,14 @@ def _payload_from_ingest_event(event: IngestEventV2) -> dict:
         "exchange_rate_source": event.exchange_rate_source,
         "normalized_output": event.normalized_output,
         "output_content": event.output_content,
+        "finish_reason": event.finish_reason,
+        "stop_reason": event.stop_reason,
         "output_fingerprint": event.output_fingerprint,
         "tool_definitions": event.tool_definitions,
-        "tool_calls_made": event.tool_calls_made,
+        "tool_calls": tool_calls,
+        "tool_calls_made": tool_calls,
+        "retrieval": event.retrieval,
+        "outcome": event.outcome,
         "tool_lifecycle_summary": event.tool_lifecycle_summary,
         "retry_metadata": event.retry_metadata,
         "cache_hit": event.cache_hit,
@@ -145,6 +152,7 @@ def _payload_from_ingest_event(event: IngestEventV2) -> dict:
         "parent_call_id": event.parent_call_id,
         "agent_name": event.agent_name,
         "prompt_fingerprint": event.prompt_fingerprint,
+        "prompt_version": event.prompt_version,
         "user_id": event.user_id,
         "is_synthetic": event.is_synthetic,
         "is_production": event.is_production,
@@ -157,6 +165,7 @@ def _payload_from_ingest_event(event: IngestEventV2) -> dict:
         # v2 fields
         "session_id": event.session_id,
         "workflow_id": event.workflow_id,
+        "workflow_name": event.workflow_name,
         "step_index": event.step_index,
         "agent_framework": event.agent_framework,
     }
@@ -171,7 +180,7 @@ def _ensure_loop_signal_payload(payload: dict) -> dict:
         enriched["output_fingerprint"] = signal["output_fingerprint"]
 
     if not enriched.get("tool_lifecycle_summary"):
-        tool_calls = enriched.get("tool_calls_made")
+        tool_calls = enriched.get("tool_calls") or enriched.get("tool_calls_made")
         if isinstance(tool_calls, list):
             enriched["tool_lifecycle_summary"] = summarize_tool_lifecycle(tool_calls)
 
@@ -281,6 +290,52 @@ def _parse_created_at(value: object) -> datetime | None:
     return None
 
 
+def _persist_inline_outcome(
+    *,
+    db: Session,
+    tenant_id: str,
+    call_id: str,
+    payload: dict,
+) -> None:
+    outcome = payload.get("outcome")
+    if not isinstance(outcome, dict):
+        return
+
+    outcome_type = _as_bounded_text(
+        _first_present(outcome.get("outcome_type"), outcome.get("type"), outcome.get("name")),
+        max_length=64,
+    )
+    if not outcome_type:
+        return
+
+    amount_usd = _as_float(_first_present(outcome.get("amount_usd"), outcome.get("amountUsd"), outcome.get("cost_usd")))
+    occurred_at = _parse_created_at(_first_present(outcome.get("occurred_at"), outcome.get("occurredAt"), payload.get("created_at")))
+    metadata = outcome.get("metadata") if isinstance(outcome.get("metadata"), dict) else None
+    idempotency_key = _as_bounded_text(
+        _first_present(outcome.get("idempotency_key"), outcome.get("idempotencyKey"), f"{call_id}:{outcome_type}"),
+        max_length=255,
+    )
+    source = _as_bounded_text(outcome.get("source"), max_length=32) or "sdk"
+    external_ref = _as_bounded_text(_first_present(outcome.get("external_ref"), outcome.get("externalRef")), max_length=255)
+
+    try:
+        ingest_outcome(
+            db,
+            project_id=tenant_id,
+            call_id=call_id,
+            outcome_type=outcome_type,
+            amount_usd=amount_usd,
+            source=source,
+            external_ref=external_ref,
+            idempotency_key=idempotency_key,
+            occurred_at=occurred_at,
+            metadata=metadata,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to persist inline ingest outcome", extra={"call_id": call_id, "tenant_id": tenant_id})
+
+
 def _build_call_metadata(payload: dict, *, custom_patterns: list[str] | None = None) -> dict:
     metadata = dict(payload.get("metadata") or {}) if isinstance(payload.get("metadata"), dict) else {}
     metadata.update(
@@ -290,6 +345,10 @@ def _build_call_metadata(payload: dict, *, custom_patterns: list[str] | None = N
             "parent_call_id": payload.get("parent_call_id"),
             "agent_name": payload.get("agent_name"),
             "prompt_fingerprint": payload.get("prompt_fingerprint"),
+            "prompt_version": payload.get("prompt_version"),
+            "has_outcome": bool(payload.get("outcome")),
+            "workflow_id": payload.get("workflow_id"),
+            "workflow_name": payload.get("workflow_name"),
             "user_id": payload.get("user_id"),
             "idempotency_key_source": payload.get("idempotency_key_source"),
             "is_synthetic": bool(payload.get("is_synthetic")),
@@ -644,8 +703,24 @@ def _extract_redis_idempotency_key(
 
     Priority: X-Idempotency-Key header → event_id / request_id → call_id.
     """
+    return _build_redis_idempotency_key(
+        event=event,
+        call_id=call_id,
+        tenant_id=tenant_id,
+        header_key=request.headers.get("X-Idempotency-Key"),
+    )
+
+
+def _build_redis_idempotency_key(
+    *,
+    event: dict,
+    call_id: str,
+    tenant_id: str,
+    header_key: str | None = None,
+) -> str:
+    """Return the Redis idempotency key for HTTP and trusted stream ingest."""
     event_key, _ = _resolve_idempotency_key(event=event, call_id=call_id)
-    header_key = (request.headers.get("X-Idempotency-Key") or "").strip()
+    header_key = (header_key or "").strip()
     if header_key:
         return f"{tenant_id}:{header_key[:128]}:{event_key}"
     return f"{tenant_id}:{event_key}"
@@ -728,34 +803,37 @@ def _upsert_backpressure_alert(
         raise
 
 
-@router.post("/ingest", response_model=IngestBatchResponse, status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("100/minute")
-def ingest_events(
-    request: Request,
+def process_ingest_batch_for_tenant(
+    *,
     body: IngestBatchRequest,
-    tenant_id: str = Depends(require_tenant_role("member")),
-    db: Session = Depends(get_db_session),
+    tenant_id: str,
+    db: Session,
+    idempotency_header: str | None = None,
+    enforce_rate_limit: bool = True,
+    enforce_quota: bool = True,
 ) -> IngestBatchResponse:
-    decision = evaluate_ingest_rate_limit(tenant_id)
-    if not decision.allowed:
-        if decision.backpressure_activated:
-            try:
-                _upsert_backpressure_alert(db=db, tenant_id=tenant_id, decision=decision)
-            except Exception:
-                logger.exception("Failed to upsert backpressure alert")
+    """Persist a canonical ingest batch for HTTP routes and trusted workers."""
+    if enforce_rate_limit:
+        decision = evaluate_ingest_rate_limit(tenant_id)
+        if not decision.allowed:
+            if decision.backpressure_activated:
+                try:
+                    _upsert_backpressure_alert(db=db, tenant_id=tenant_id, decision=decision)
+                except Exception:
+                    logger.exception("Failed to upsert backpressure alert")
 
-        detail = (
-            "Ingest backpressure active for this project. Please retry after cooldown."
-            if decision.backpressure_active
-            else "Ingest rate limit exceeded for this project. Please retry shortly."
-        )
-        headers = {}
-        if decision.retry_after_seconds is not None:
-            headers["Retry-After"] = str(decision.retry_after_seconds)
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail, headers=headers)
+            detail = (
+                "Ingest backpressure active for this project. Please retry after cooldown."
+                if decision.backpressure_active
+                else "Ingest rate limit exceeded for this project. Please retry shortly."
+            )
+            headers = {}
+            if decision.retry_after_seconds is not None:
+                headers["Retry-After"] = str(decision.retry_after_seconds)
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail, headers=headers)
 
     settings = get_settings()
-    if settings.BILLING_ENFORCE_QUOTA:
+    if enforce_quota and settings.BILLING_ENFORCE_QUOTA:
         quota = check_quota(db, tenant_id)
         if not quota.allowed:
             raise HTTPException(
@@ -777,11 +855,11 @@ def ingest_events(
     for event in body.events:
         diagnosis_id = event.call_id.strip()
         event_payload = event.model_dump()
-        idempotency_key = _extract_redis_idempotency_key(
-            request=request,
+        idempotency_key = _build_redis_idempotency_key(
             event=event_payload,
             call_id=diagnosis_id,
             tenant_id=tenant_id,
+            header_key=idempotency_header,
         )
         if _check_redis_idempotency(idempotency_key):
             duplicates += 1
@@ -810,7 +888,6 @@ def ingest_events(
                 enqueue_failed += 1
             continue
 
-        # Enrich cost data before creating the record for atomic insert
         try:
             payload = enrich_payload_with_cost_buckets(tenant_id=tenant_id, payload=payload)
         except Exception as exc:
@@ -863,6 +940,7 @@ def ingest_events(
                 enqueue_failed += 1
             continue
 
+        _persist_inline_outcome(db=db, tenant_id=tenant_id, call_id=call.id, payload=payload)
         accepted += 1
 
         try:
@@ -891,4 +969,20 @@ def ingest_events(
         queued=queued,
         duplicates=duplicates,
         enqueue_failed=enqueue_failed,
+    )
+
+
+@router.post("/ingest", response_model=IngestBatchResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("100/minute")
+def ingest_events(
+    request: Request,
+    body: IngestBatchRequest,
+    tenant_id: str = Depends(require_tenant_role("member")),
+    db: Session = Depends(get_db_session),
+) -> IngestBatchResponse:
+    return process_ingest_batch_for_tenant(
+        body=body,
+        tenant_id=tenant_id,
+        db=db,
+        idempotency_header=request.headers.get("X-Idempotency-Key"),
     )

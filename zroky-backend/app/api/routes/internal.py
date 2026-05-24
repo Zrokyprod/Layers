@@ -1,5 +1,5 @@
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -10,6 +10,13 @@ from app.api.dependencies.provisioning import require_provisioning_access
 from app.core.config import get_settings
 from app.db.models import Call, Project, ProjectMembership, User
 from app.db.session import get_db_session, set_db_tenant_context
+from app.services.digest_engine import (
+    AUDIENCES,
+    UnknownAudienceError,
+    generate_weekly_digest,
+    monday_of,
+    serialize_digest,
+)
 
 router = APIRouter(prefix="/internal")
 
@@ -56,6 +63,12 @@ class OwnerProjectItem(BaseModel):
 class OwnerProjectsResponse(BaseModel):
     projects: list[OwnerProjectItem]
     total: int
+
+
+class DigestGenerateRequest(BaseModel):
+    project_id: str | None = None
+    week_start: date | None = None
+    audience: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +168,49 @@ def owner_projects(
         )
 
     return OwnerProjectsResponse(projects=result, total=total)
+
+
+@router.post("/digests/generate", include_in_schema=False)
+def generate_digest_internal(
+    payload: DigestGenerateRequest,
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    week_start = monday_of(payload.week_start or datetime.now(UTC).date())
+    audience = payload.audience.strip().lower() if payload.audience else None
+    if audience is not None and audience not in AUDIENCES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid audience")
+
+    if payload.project_id:
+        project = db.get(Project, payload.project_id)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        if not project.is_active:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Project is inactive")
+        set_db_tenant_context(db, project.id)
+        try:
+            digest = generate_weekly_digest(
+                db,
+                project_id=project.id,
+                week_start=week_start,
+                audience=audience,
+            )
+        except UnknownAudienceError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        return {
+            "mode": "inline",
+            "week_start": week_start.isoformat(),
+            "digest": serialize_digest(digest),
+        }
+
+    from app.worker import tasks as task_module
+
+    async_result = task_module.generate_weekly_digests.delay(week_start_iso=week_start.isoformat())
+    return {
+        "mode": "async",
+        "week_start": week_start.isoformat(),
+        "task_id": async_result.id,
+    }
 
 
 # ---------------------------------------------------------------------------

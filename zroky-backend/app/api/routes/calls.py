@@ -4,17 +4,16 @@ import io
 from typing import Any, Mapping
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, select
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from pydantic import BaseModel, Field
-
-from app.api.dependencies.entitlements import require_entitlement
-from app.api.dependencies.tenant import require_tenant_id, require_tenant_role
-from app.core.limiter import limiter
+from app.api.dependencies.tenant import require_tenant_role
 from app.db.models import Call, DiagnosisFeedback, DiagnosisJob
 from app.db.session import get_db_session
 from app.schemas.dashboard import (
+    AdjacentCallItem,
+    AdjacentCallsResponse,
     CallTraceTreeResponse,
     CallDetailResponse,
     CallFeedbackSummary,
@@ -37,6 +36,7 @@ from app.services.dashboard_data import (
 )
 from app.services.privacy import hash_identifier
 from app.services.cost_trust import cost_audit_from_call
+from app.services.replay_runs import mark_call_as_golden
 
 router = APIRouter(prefix="/v1/calls")
 FAILED_STATUSES = {"failed", "error", "errored", "timeout", "dead_lettered", "enqueue_failed"}
@@ -46,6 +46,30 @@ STATUS_FILTER_ALIASES = {
     "failed": {"failed", "error", "errored", "timeout", "dead_lettered", "enqueue_failed"},
     "error": {"failed", "error", "errored", "dead_lettered", "enqueue_failed"},
 }
+
+
+class MarkCallGoldenRequest(BaseModel):
+    golden_set_id: str = Field(min_length=1)
+    weight: float = Field(default=1.0, gt=0)
+    expected_output_text: str | None = None
+    criteria_json: str | None = None
+
+
+class MarkCallGoldenResponse(BaseModel):
+    id: str
+    golden_set_id: str
+    project_id: str
+    call_id: str | None
+    expected_output_text: str | None
+    expected_tokens: int | None
+    expected_cost_usd: float | None
+    expected_latency_ms: int | None
+    criteria_json: str | None
+    weight: float
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -313,6 +337,8 @@ def list_calls(
     display_currency: str = Query(default="USD", pattern="^(USD|INR|usd|inr)$"),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
+    min_cost_usd: float | None = Query(default=None),
+    max_cost_usd: float | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     tenant_id: str = Depends(require_tenant_role("viewer")),
@@ -336,12 +362,19 @@ def list_calls(
         call_query = call_query.where(func.lower(Call.user_id).in_(user_values))
     if call_type is not None and call_type.strip():
         call_query = call_query.where(
-            func.lower(Call.call_type) == call_type.strip().lower()
+            or_(
+                func.lower(Call.call_type) == call_type.strip().lower(),
+                Call.call_type.is_(None),
+            )
         )
     if agent_name is not None and agent_name.strip():
         call_query = call_query.where(
             func.lower(Call.agent_name).contains(agent_name.strip().lower())
         )
+    if min_cost_usd is not None:
+        call_query = call_query.where(Call.cost_total >= min_cost_usd)
+    if max_cost_usd is not None:
+        call_query = call_query.where(Call.cost_total <= max_cost_usd)
     # Dynamic sort
     _sort_col_map = {
         "created_at": Call.created_at,
@@ -407,6 +440,10 @@ def list_calls(
         if agent_name and agent_name.strip():
             if not (item.agent_name and agent_name.strip().lower() in item.agent_name.lower()):
                 continue
+        if min_cost_usd is not None and item.cost_usd < min_cost_usd:
+            continue
+        if max_cost_usd is not None and item.cost_usd > max_cost_usd:
+            continue
         filtered_items.append(item)
 
     total = len(filtered_items)
@@ -421,7 +458,6 @@ def list_calls(
 
 
 _CSV_EXPORT_LIMIT = 5000
-
 
 @router.get("/export/csv")
 def export_calls_csv(
@@ -736,6 +772,102 @@ def get_call_trace_tree(
     )
 
 
+@router.get("/{call_id}/adjacent", response_model=AdjacentCallsResponse)
+def get_adjacent_calls(
+    call_id: str,
+    tenant_id: str = Depends(require_tenant_role("viewer")),
+    db: Session = Depends(get_db_session),
+) -> AdjacentCallsResponse:
+    call = db.execute(
+        select(Call).where(Call.project_id == tenant_id, Call.id == call_id)
+    ).scalar_one_or_none()
+
+    if call is not None:
+        created_at = _as_utc(call.created_at)
+        prev_call = db.execute(
+            select(Call).where(
+                Call.project_id == tenant_id,
+                Call.created_at < created_at,
+            ).order_by(Call.created_at.desc()).limit(1)
+        ).scalar_one_or_none()
+        next_call = db.execute(
+            select(Call).where(
+                Call.project_id == tenant_id,
+                Call.created_at > created_at,
+            ).order_by(Call.created_at.asc()).limit(1)
+        ).scalar_one_or_none()
+        return AdjacentCallsResponse(
+            prev=AdjacentCallItem(id=prev_call.id, model=prev_call.model, status=prev_call.status) if prev_call else None,
+            next=AdjacentCallItem(id=next_call.id, model=next_call.model, status=next_call.status) if next_call else None,
+        )
+
+    job = db.execute(
+        select(DiagnosisJob).where(
+            DiagnosisJob.tenant_id == tenant_id,
+            DiagnosisJob.diagnosis_id == call_id,
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Call not found")
+
+    created_at = _as_utc(job.created_at)
+    prev_job = db.execute(
+        select(DiagnosisJob).where(
+            DiagnosisJob.tenant_id == tenant_id,
+            DiagnosisJob.call_id.is_(None),
+            DiagnosisJob.created_at < created_at,
+        ).order_by(DiagnosisJob.created_at.desc()).limit(1)
+    ).scalar_one_or_none()
+    next_job = db.execute(
+        select(DiagnosisJob).where(
+            DiagnosisJob.tenant_id == tenant_id,
+            DiagnosisJob.call_id.is_(None),
+            DiagnosisJob.created_at > created_at,
+        ).order_by(DiagnosisJob.created_at.asc()).limit(1)
+    ).scalar_one_or_none()
+
+    def _model_from_job(j: DiagnosisJob) -> str | None:
+        return _extract_model(extract_payload(j))
+
+    return AdjacentCallsResponse(
+        prev=AdjacentCallItem(id=prev_job.diagnosis_id, model=_model_from_job(prev_job), status=prev_job.status) if prev_job else None,
+        next=AdjacentCallItem(id=next_job.diagnosis_id, model=_model_from_job(next_job), status=next_job.status) if next_job else None,
+    )
+
+
+@router.post(
+    "/{call_id}/mark-golden",
+    response_model=MarkCallGoldenResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def mark_call_golden_route(
+    call_id: str,
+    body: MarkCallGoldenRequest,
+    tenant_id: str = Depends(require_tenant_role("member")),
+    db: Session = Depends(get_db_session),
+) -> MarkCallGoldenResponse:
+    try:
+        trace = mark_call_as_golden(
+            db,
+            project_id=tenant_id,
+            call_id=call_id,
+            golden_set_id=body.golden_set_id,
+            weight=body.weight,
+            expected_output_text=body.expected_output_text,
+            criteria_json=body.criteria_json,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    if trace is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call or golden set not found",
+        )
+    return MarkCallGoldenResponse.model_validate(trace)
+
+
 @router.get("/{call_id}", response_model=CallDetailResponse)
 def get_call_detail(
     call_id: str,
@@ -828,75 +960,3 @@ def get_call_detail(
             not_helpful_count=not_helpful_count,
         ),
     )
-
-
-# ── mark-as-golden (Module 4.2; plan §3.2) ───────────────────────────────────
-
-
-class MarkGoldenRequest(BaseModel):
-    golden_set_id: str = Field(min_length=1)
-    weight: float = Field(default=1.0, gt=0)
-    expected_output_text: str | None = None
-    criteria_json: str | None = None
-
-
-class MarkGoldenResponse(BaseModel):
-    id: str
-    golden_set_id: str
-    project_id: str
-    call_id: str | None
-    expected_tokens: int | None
-    expected_cost_usd: float | None
-    expected_latency_ms: int | None
-    expected_output_text: str | None
-    criteria_json: str | None
-    weight: float
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-@router.post(
-    "/{call_id}/mark-golden",
-    response_model=MarkGoldenResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_entitlement("pilot.autopilot_enabled"))],
-)
-@limiter.limit("30/minute")
-def mark_call_as_golden_endpoint(
-    request: Request,
-    call_id: str,
-    body: MarkGoldenRequest,
-    tenant_id: str = Depends(require_tenant_id),
-    db: Session = Depends(get_db_session),
-) -> MarkGoldenResponse:
-    """Promote a Call into an existing GoldenSet by snapshotting its
-    baseline tokens/cost/latency. Powers the dashboard "Create golden"
-    CTA on call detail and anomaly detail pages (plan §3.2, §6.4).
-
-    Returns 404 if either the call or the golden set is missing for this
-    project. Returns 422 on invalid weight.
-    """
-    # Local import to avoid a circular module load at startup
-    from app.services.replay_runs import mark_call_as_golden
-
-    try:
-        trace = mark_call_as_golden(
-            db,
-            project_id=tenant_id,
-            call_id=call_id,
-            golden_set_id=body.golden_set_id,
-            weight=body.weight,
-            expected_output_text=body.expected_output_text,
-            criteria_json=body.criteria_json,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
-    if trace is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Call or golden set not found for this project",
-        )
-    return MarkGoldenResponse.model_validate(trace)

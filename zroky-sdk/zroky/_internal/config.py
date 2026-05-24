@@ -22,6 +22,12 @@ class SDKConfig:
     batch_size: int
     flush_interval_seconds: float
     max_queue_size: int  # Max events in memory queue before dropping
+    agent_framework: str | None = None
+    session_id: str | None = None
+    workflow_id: str | None = None
+    workflow_name: str | None = None
+    prompt_version: str | None = None
+    environment: str | None = None
     validate_preflight: bool = False
     validate_preflight_sample_rate: float = 1.0
     preflight_blocking_warning_types: tuple[str, ...] = ()
@@ -62,6 +68,12 @@ def load_config(
     mode: str | None = None,
     mask_pii: bool | None = None,
     ingest_url: str | None = None,
+    agent_framework: str | None = None,
+    session_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_name: str | None = None,
+    prompt_version: str | None = None,
+    environment: str | None = None,
     validate_preflight: bool | None = None,
     validate_preflight_sample_rate: float | None = None,
     preflight_blocking_warning_types: list[str] | tuple[str, ...] | None = None,
@@ -108,6 +120,12 @@ def load_config(
     batch_size = int(os.environ.get("ZROKY_BATCH_SIZE", "10"))
     flush_interval = float(os.environ.get("ZROKY_FLUSH_INTERVAL", "5"))
     max_queue_size = int(os.environ.get("ZROKY_MAX_QUEUE_SIZE", "10000"))
+    resolved_agent_framework = agent_framework or os.environ.get("ZROKY_AGENT_FRAMEWORK")
+    resolved_session_id = session_id or os.environ.get("ZROKY_SESSION_ID")
+    resolved_workflow_id = workflow_id or os.environ.get("ZROKY_WORKFLOW_ID")
+    resolved_workflow_name = workflow_name or os.environ.get("ZROKY_WORKFLOW_NAME")
+    resolved_prompt_version = prompt_version or os.environ.get("ZROKY_PROMPT_VERSION")
+    resolved_environment = environment or os.environ.get("ZROKY_ENVIRONMENT")
     resolved_validate_preflight = (
         validate_preflight
         if validate_preflight is not None
@@ -270,6 +288,12 @@ def load_config(
         batch_size=batch_size,
         flush_interval_seconds=flush_interval,
         max_queue_size=max_queue_size,
+        agent_framework=resolved_agent_framework,
+        session_id=resolved_session_id,
+        workflow_id=resolved_workflow_id,
+        workflow_name=resolved_workflow_name,
+        prompt_version=resolved_prompt_version,
+        environment=resolved_environment,
         validate_preflight=resolved_validate_preflight,
         validate_preflight_sample_rate=resolved_validate_preflight_sample_rate,
         preflight_blocking_warning_types=resolved_preflight_blocking_warning_types,

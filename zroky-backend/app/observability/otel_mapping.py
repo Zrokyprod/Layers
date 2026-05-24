@@ -34,6 +34,7 @@ INGEST_EVENT_OTEL_ATTRIBUTES: dict[str, str] = {
     "loop_action_taken": "zroky.loop.action",
     "loop_call_count": "zroky.loop.call_count",
     "loop_cumulative_cost_usd": "zroky.loop.cumulative_cost_usd",
+    "finish_reason": "gen_ai.response.finish_reasons",
     "output_fingerprint": "zroky.output.fingerprint",
     "cache_hit": "zroky.cache.hit",
     "timeout_triggered": "zroky.call.timeout_triggered",
@@ -43,6 +44,7 @@ INGEST_EVENT_OTEL_ATTRIBUTES: dict[str, str] = {
     "parent_call_id": "zroky.call.parent_id",
     "agent_name": "zroky.agent.name",
     "prompt_fingerprint": "zroky.prompt.fingerprint",
+    "prompt_version": "zroky.prompt.version",
     "user_id": "enduser.id",
     "is_synthetic": "zroky.call.is_synthetic",
     "is_production": "zroky.call.is_production",
@@ -52,6 +54,7 @@ INGEST_EVENT_OTEL_ATTRIBUTES: dict[str, str] = {
     "error_message": "zroky.error.message",
     "session_id": "zroky.session.id",
     "workflow_id": "zroky.workflow.id",
+    "workflow_name": "zroky.workflow.name",
     "step_index": "zroky.workflow.step_index",
     "agent_framework": "zroky.agent.framework",
 }

@@ -43,7 +43,7 @@ from zroky._internal import validation as _validation  # noqa: F401
 from zroky._errors import ZrokyPreflightError  # noqa: F401
 
 # Re-export call-surface from _call.py
-from zroky._call import agent, call, record, trace  # noqa: F401
+from zroky._call import agent, call, capture_memory, capture_retrieval, record, trace  # noqa: F401
 
 # Re-export outcome() — Cost-of-Failure Attribution
 from zroky._outcome import outcome  # noqa: F401
@@ -115,6 +115,12 @@ def init(
     mode: str | None = None,
     mask_pii: bool | None = None,
     ingest_url: str | None = None,
+    agent_framework: str | None = None,
+    session_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_name: str | None = None,
+    prompt_version: str | None = None,
+    environment: str | None = None,
     validate_preflight: bool | None = None,
     validate_preflight_sample_rate: float | None = None,
     preflight_blocking_warning_types: list[str] | tuple[str, ...] | None = None,
@@ -155,7 +161,10 @@ def init(
     with _lock:
         cfg = load_config(
             api_key=api_key, project=project, mode=mode, mask_pii=mask_pii,
-            ingest_url=ingest_url, validate_preflight=validate_preflight,
+            ingest_url=ingest_url, agent_framework=agent_framework,
+            session_id=session_id, workflow_id=workflow_id,
+            workflow_name=workflow_name, prompt_version=prompt_version,
+            environment=environment, validate_preflight=validate_preflight,
             validate_preflight_sample_rate=validate_preflight_sample_rate,
             preflight_blocking_warning_types=preflight_blocking_warning_types,
             circuit_breaker_failure_threshold=circuit_breaker_failure_threshold,

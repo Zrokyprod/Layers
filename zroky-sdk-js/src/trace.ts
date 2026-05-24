@@ -13,12 +13,18 @@
 import type { ZrokyConfig } from "./types";
 import { promptFingerprint } from "./fingerprint";
 import { emit } from "./emitter";
+import { newCallId, newEventId } from "./ids";
+import { resolveConfig } from "./config";
+import { _setOutcomeConfig } from "./outcome";
 
 type AnyFn = (...args: unknown[]) => unknown;
 
 export function trace<T extends AnyFn>(fn: T, config: ZrokyConfig = {}): T {
+  const resolvedConfig = resolveConfig(config);
+  _setOutcomeConfig(resolvedConfig);
   return (async (...args: Parameters<T>) => {
     const startMs = Date.now();
+    const callId = newCallId();
     const firstArg = args[0];
     const promptText =
       typeof firstArg === "string"
@@ -33,6 +39,17 @@ export function trace<T extends AnyFn>(fn: T, config: ZrokyConfig = {}): T {
 
     try {
       result = await fn(...args);
+      if (result !== null && (typeof result === "object" || typeof result === "function")) {
+        try {
+          Object.defineProperty(result, "_zroky_call_id", {
+            value: callId,
+            enumerable: false,
+            configurable: true,
+          });
+        } catch {
+          // Capture must never mutate application behavior.
+        }
+      }
     } catch (err: unknown) {
       statusCode = 500;
       errorMessage = String((err as { message?: unknown })?.message ?? err);
@@ -40,22 +57,37 @@ export function trace<T extends AnyFn>(fn: T, config: ZrokyConfig = {}): T {
     } finally {
       void emit(
         {
+          schema_version: "v2",
+          call_id: callId,
+          event_id: newEventId(callId),
           provider: "custom",
           model: "unknown",
           call_type: "trace",
           latency_ms: Date.now() - startMs,
           prompt_tokens: 0,
-          output_tokens: 0,
+          completion_tokens: 0,
           total_tokens: 0,
           status: errorMessage ? "error" : "success",
-          status_code: statusCode,
+          error_code: errorMessage ? "UNKNOWN_ERROR" : undefined,
           error_message: errorMessage,
           prompt_fingerprint: promptFingerprint(promptText),
-          agent_name: config.agentName,
-          session_id: config.sessionId,
-          workflow_id: config.workflowId,
+          agent_name: resolvedConfig.agentName,
+          agent_framework: resolvedConfig.agentFramework,
+          session_id: resolvedConfig.sessionId,
+          workflow_id: resolvedConfig.workflowId,
+          workflow_name: resolvedConfig.workflowName,
+          prompt_version: resolvedConfig.promptVersion,
+          trace_id: resolvedConfig.traceId,
+          parent_call_id: resolvedConfig.parentCallId,
+          user_id: resolvedConfig.userId,
+          environment: resolvedConfig.environment,
+          step_index: resolvedConfig.stepIndex,
+          metadata: {
+            ...(resolvedConfig.metadata ?? {}),
+            status_code: statusCode,
+          },
         },
-        config,
+        resolvedConfig,
       );
     }
 

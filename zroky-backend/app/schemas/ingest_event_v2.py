@@ -65,12 +65,22 @@ class IngestEventV2(BaseModel):
     exchange_rate_source: str | None = Field(default=None, max_length=64)
     # Tool schemas available to the model for this call
     tool_definitions: list[dict[str, Any]] | None = Field(default=None)
-    # Tool invocations emitted by the model in this call
+    # Canonical tool invocations emitted by the model or captured as tool spans
+    tool_calls: list[dict[str, Any]] | None = Field(default=None)
+    # Deprecated alias for tool_calls. Accepted for backward compatibility
     tool_calls_made: list[dict[str, Any]] | None = Field(default=None)
+    # Structured retrieval/RAG evidence for retrieval spans
+    retrieval: dict[str, Any] | None = Field(default=None)
+    # Structured task or business outcome signal linked to this call
+    outcome: dict[str, Any] | None = Field(default=None)
     # Normalized/cleaned model output (PII masked)
     normalized_output: str | None = Field(default=None, max_length=4000)
     # Raw model output content (PII masked)
     output_content: str | None = Field(default=None, max_length=4000)
+    # Provider termination reason for generated output (e.g. stop, length, tool_calls)
+    finish_reason: str | None = Field(default=None, max_length=64)
+    # Provider stop reason alias, especially for Anthropic streams (e.g. end_turn, max_tokens)
+    stop_reason: str | None = Field(default=None, max_length=64)
     # Stable hash of the output (excluding variable content)
     output_fingerprint: str | None = Field(default=None, max_length=64)
     tool_lifecycle_summary: list[dict[str, Any]] | None = Field(default=None)
@@ -92,6 +102,8 @@ class IngestEventV2(BaseModel):
     agent_name: str | None = Field(default=None, max_length=255)
     # Stable hash of the prompt template (excluding variable/user content)
     prompt_fingerprint: str | None = Field(default=None, max_length=64)
+    # Human-readable or deploy-system prompt version tag (e.g. support-v42, git SHA, release ID)
+    prompt_version: str | None = Field(default=None, max_length=128)
     user_id: str | None = Field(default=None, max_length=255)
     # True for replay or test calls; excluded from cost aggregations
     is_synthetic: bool = Field(default=False)
@@ -111,6 +123,8 @@ class IngestEventV2(BaseModel):
     session_id: str | None = Field(default=None, max_length=128)
     # [v2] Parent workflow or pipeline run identifier. Groups calls across agent steps
     workflow_id: str | None = Field(default=None, max_length=128)
+    # [v2] Human-readable workflow, graph, or pipeline name
+    workflow_name: str | None = Field(default=None, max_length=255)
     # [v2] Zero-based step position within a workflow. Used for ordering and cross-step loop detection
     step_index: int | None = Field(default=None, ge=0)
     # [v2] Agent orchestration framework, if known

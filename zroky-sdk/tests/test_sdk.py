@@ -36,6 +36,31 @@ def test_init_sets_config(tmp_path, monkeypatch):
     _reset_sdk()
 
 
+def test_init_reads_capture_context_fields(monkeypatch):
+    _reset_sdk()
+    monkeypatch.setenv("ZROKY_MODE", "local")
+    monkeypatch.setenv("ZROKY_AGENT_FRAMEWORK", "langgraph")
+    monkeypatch.setenv("ZROKY_SESSION_ID", "sess_1")
+    monkeypatch.setenv("ZROKY_WORKFLOW_ID", "wf_1")
+    monkeypatch.setenv("ZROKY_WORKFLOW_NAME", "support-resolution")
+    monkeypatch.setenv("ZROKY_PROMPT_VERSION", "support-v42")
+    monkeypatch.setenv("ZROKY_ENVIRONMENT", "production")
+
+    with patch("zroky._internal.queue.LocalWriter"):
+        zroky.init()
+
+    assert zroky._config is not None
+    assert zroky._config.agent_framework == "langgraph"
+    assert zroky._config.session_id == "sess_1"
+    assert zroky._config.workflow_id == "wf_1"
+    assert zroky._config.workflow_name == "support-resolution"
+    assert zroky._config.prompt_version == "support-v42"
+    assert zroky._config.environment == "production"
+
+    zroky.shutdown()
+    _reset_sdk()
+
+
 def test_agent_context_sets_agent_name(monkeypatch):
     _reset_sdk()
     monkeypatch.setenv("ZROKY_API_KEY", "test-key")
@@ -208,6 +233,96 @@ def test_record_manual_capture(monkeypatch):
     )
     assert ingest_payload["token_estimator_version"] == "chars_per_token_v1"
     assert ingest_payload["token_rules_version"] == "token_rules_v2"
+
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_python_sdk_payload_uses_ingest_event_v2_context(monkeypatch):
+    _reset_sdk()
+    monkeypatch.setenv("ZROKY_MODE", "local")
+    captured = []
+
+    with patch("zroky._internal.queue.LocalWriter"):
+        zroky.init(
+            agent_framework="custom",
+            session_id="sess_1",
+            workflow_id="wf_1",
+            workflow_name="support-resolution",
+            prompt_version="support-v42",
+            environment="production",
+        )
+
+    zroky._queue.enqueue = lambda e: captured.append(e)  # type: ignore[union-attr]
+
+    zroky.record(
+        provider="openai",
+        model="gpt-4o",
+        request={"messages": [{"role": "user", "content": "hi"}]},
+        response=None,
+        latency_ms=42.0,
+        metadata={"release": "2026.05.23"},
+    )
+
+    payload = captured[0].to_ingest_payload()
+    assert payload["schema_version"] == "v2"
+    assert payload["event_id"] == f"{payload['call_id']}:capture"
+    assert payload["agent_framework"] == "custom"
+    assert payload["session_id"] == "sess_1"
+    assert payload["workflow_id"] == "wf_1"
+    assert payload["workflow_name"] == "support-resolution"
+    assert payload["prompt_version"] == "support-v42"
+    assert payload["environment"] == "production"
+    assert payload["metadata"] == {"release": "2026.05.23"}
+
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_python_sdk_captures_retrieval_and_memory_spans(monkeypatch):
+    _reset_sdk()
+    monkeypatch.setenv("ZROKY_MODE", "local")
+    captured = []
+
+    with patch("zroky._internal.queue.LocalWriter"):
+        zroky.init(
+            workflow_name="support-resolution",
+            prompt_version="support-v42",
+        )
+
+    zroky._queue.enqueue = lambda e: captured.append(e)  # type: ignore[union-attr]
+
+    retrieval_id = zroky.capture_retrieval(
+        query="refund policy",
+        index_name="support-kb",
+        retriever_version="hybrid-v3",
+        documents=[{"id": "doc_1", "title": "Refunds", "score": 0.91}],
+        parent_call_id="parent_call",
+    )
+    memory_id = zroky.capture_memory(
+        operation="write",
+        namespace="customer-memory",
+        keys=["user_123:preferences"],
+        item_count=1,
+        bytes_count=512,
+        value_preview="prefers email updates",
+    )
+
+    assert [event.call_id for event in captured] == [retrieval_id, memory_id]
+    retrieval_payload = captured[0].to_ingest_payload()
+    assert retrieval_payload["provider"] == "retrieval"
+    assert retrieval_payload["call_type"] == "retrieval"
+    assert retrieval_payload["workflow_name"] == "support-resolution"
+    assert retrieval_payload["prompt_version"] == "support-v42"
+    assert retrieval_payload["parent_call_id"] == "parent_call"
+    assert retrieval_payload["metadata"]["span_type"] == "retrieval"
+    assert retrieval_payload["metadata"]["documents"][0]["id"] == "doc_1"
+
+    memory_payload = captured[1].to_ingest_payload()
+    assert memory_payload["provider"] == "memory"
+    assert memory_payload["call_type"] == "memory"
+    assert memory_payload["metadata"]["span_type"] == "memory"
+    assert memory_payload["metadata"]["operation"] == "write"
 
     zroky.shutdown()
     _reset_sdk()
