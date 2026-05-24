@@ -74,3 +74,34 @@ def test_call_to_row_infers_status_code_when_no_metadata_code() -> None:
 
     assert row["status_code"] == 408
     assert row["failure_code"] == "TIMEOUT"
+
+
+def test_call_to_row_handles_empty_payload_json() -> None:
+    call = SimpleNamespace(
+        id="call_3",
+        project_id="proj_1",
+        provider="openai",
+        model="gpt-4o-mini",
+        call_type="chat",
+        created_at=None,
+        latency_ms=None,
+        input_tokens=3,
+        output_tokens=4,
+        total_tokens=7,
+        cost_total=Decimal("0.00000123"),
+        status="completed",
+        error_code=None,
+        agent_name="support-agent",
+        metadata_json=None,
+        payload_json="",
+    )
+
+    row = _call_to_row(call)
+
+    assert row["prompt_tokens"] == 3
+    assert row["output_tokens"] == 4
+    assert row["total_tokens"] == 7
+    assert row["cost_usd"] == float(Decimal("0.00000123"))
+    assert row["status"] == "completed"
+    assert row["status_code"] == 200
+    assert row["failure_code"] == ""
