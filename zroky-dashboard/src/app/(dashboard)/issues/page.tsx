@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ignoreIssue, listIssues, resolveIssue } from "@/lib/api";
 import { formatDateTime, formatUsd } from "@/lib/format";
+import { replayLabel } from "@/lib/issue-format";
+import { useCreateReplayRunFromIssue } from "@/lib/hooks";
 import type { IssueItem, IssueStatus } from "@/lib/types";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
 
@@ -113,14 +115,22 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (filters
 }
 
 function IssueList({ status }: { status: IssueStatus }) {
+  const router = useRouter();
   const [items, setItems] = useState<IssueItem[]>([]);
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [ignoringId, setIgnoringId] = useState<string | null>(null);
+  const [acceptingRiskId, setAcceptingRiskId] = useState<string | null>(null);
+  const [replayingId, setReplayingId] = useState<string | null>(null);
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [deployLinks, setDeployLinks] = useState<Record<string, string>>({});
   const [filters, setFilters] = useState<Filters>({ severity: "", has_fix: "" });
   const abortRef = useRef<AbortController | null>(null);
+  const createReplay = useCreateReplayRunFromIssue({
+    onSuccess: (run) => router.push(`/replay/${run.id}`),
+  });
 
   const loadPage = useCallback(
     async (nextCursor?: string | null, activeFilters: Filters = filters) => {
@@ -176,6 +186,18 @@ function IssueList({ status }: { status: IssueStatus }) {
     }
   }
 
+  async function onAcceptedRisk(event: MouseEvent, issueId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setAcceptingRiskId(issueId);
+    try {
+      const updated = await resolveIssue(issueId, { resolution_source: "accepted_risk" });
+      setItems((prev) => prev.filter((issue) => issue.id !== updated.id));
+    } finally {
+      setAcceptingRiskId(null);
+    }
+  }
+
   async function onIgnore(event: MouseEvent, issueId: string) {
     event.preventDefault();
     event.stopPropagation();
@@ -186,6 +208,44 @@ function IssueList({ status }: { status: IssueStatus }) {
     } finally {
       setIgnoringId(null);
     }
+  }
+
+  function onCreateReplay(event: MouseEvent, issueId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setReplayingId(issueId);
+    createReplay.mutate(
+      { issueId, payload: { replay_mode: "stub" } },
+      { onSettled: () => setReplayingId(null) },
+    );
+  }
+
+  function onAssign(event: MouseEvent, issueId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    const assignee = window.prompt("Assign this issue to:", assignments[issueId] ?? "");
+    if (assignee === null) return;
+    const trimmed = assignee.trim();
+    setAssignments((prev) => {
+      const next = { ...prev };
+      if (trimmed) next[issueId] = trimmed;
+      else delete next[issueId];
+      return next;
+    });
+  }
+
+  function onLinkDeploy(event: MouseEvent, issueId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    const link = window.prompt("Paste deploy or PR URL:", deployLinks[issueId] ?? "");
+    if (link === null) return;
+    const trimmed = link.trim();
+    setDeployLinks((prev) => {
+      const next = { ...prev };
+      if (trimmed) next[issueId] = trimmed;
+      else delete next[issueId];
+      return next;
+    });
   }
 
   return (
@@ -214,8 +274,16 @@ function IssueList({ status }: { status: IssueStatus }) {
               status={status}
               resolving={resolvingId === issue.id}
               ignoring={ignoringId === issue.id}
+              acceptingRisk={acceptingRiskId === issue.id}
+              replaying={replayingId === issue.id}
+              assignment={assignments[issue.id]}
+              deployLink={deployLinks[issue.id]}
               onResolve={onResolve}
               onIgnore={onIgnore}
+              onAcceptedRisk={onAcceptedRisk}
+              onCreateReplay={onCreateReplay}
+              onAssign={onAssign}
+              onLinkDeploy={onLinkDeploy}
             />
           ))}
 
@@ -237,18 +305,35 @@ function IssueCard({
   status,
   resolving,
   ignoring,
+  acceptingRisk,
+  replaying,
+  assignment,
+  deployLink,
   onResolve,
   onIgnore,
+  onAcceptedRisk,
+  onCreateReplay,
+  onAssign,
+  onLinkDeploy,
 }: {
   issue: IssueItem;
   status: IssueStatus;
   resolving: boolean;
   ignoring: boolean;
+  acceptingRisk: boolean;
+  replaying: boolean;
+  assignment?: string;
+  deployLink?: string;
   onResolve: (event: MouseEvent, issueId: string) => void;
   onIgnore: (event: MouseEvent, issueId: string) => void;
+  onAcceptedRisk: (event: MouseEvent, issueId: string) => void;
+  onCreateReplay: (event: MouseEvent, issueId: string) => void;
+  onAssign: (event: MouseEvent, issueId: string) => void;
+  onLinkDeploy: (event: MouseEvent, issueId: string) => void;
 }) {
   const firstTrace = issue.evidence_traces[0];
   const traceTarget = firstTrace?.trace_id ?? firstTrace?.call_id ?? issue.sample_call_id;
+  const canCreateReplay = Boolean(issue.sample_call_id || issue.evidence_traces.length > 0);
 
   return (
     <article className="panel">
@@ -275,6 +360,8 @@ function IssueCard({
             <span>{issue.affected_workflow ?? "Workflow not captured"}</span>
             <span>{issue.occurrence_count} affected calls</span>
             <span>{formatDateTime(issue.last_seen_at)}</span>
+            {assignment && <span>assigned to {assignment}</span>}
+            {deployLink && <a href={deployLink} target="_blank" rel="noreferrer" className="notif-action-link">deploy/PR linked</a>}
           </div>
 
           <p style={{ margin: "0.75rem 0 0", fontSize: "0.9rem", lineHeight: 1.45 }}>
@@ -282,17 +369,18 @@ function IssueCard({
           </p>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.65rem", marginTop: "0.85rem" }}>
-            <InfoCell label="Impact" value={issue.user_impact} />
+            <InfoCell label="Impact" value={`${issue.user_impact} · ${formatUsd(issue.cost_impact_usd)} blast radius`} />
             <InfoCell label="Replay" value={replayLabel(issue.replay_coverage_status)} />
             <InfoCell label="Next action" value={issue.recommended_next_action} />
           </div>
 
           {firstTrace && (
-            <div className="mono notif-meta" style={{ marginTop: "0.85rem", fontSize: "0.72rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            <div className="mono notif-meta" style={{ marginTop: "0.85rem", fontSize: "0.72rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
               <span>evidence: {issue.evidence_traces.length} trace{issue.evidence_traces.length === 1 ? "" : "s"}</span>
               {firstTrace.prompt_version && <span>prompt {firstTrace.prompt_version}</span>}
               {firstTrace.model && <span>{firstTrace.provider ?? "provider"} / {firstTrace.model}</span>}
-              {traceTarget && <span>trace {traceTarget.slice(0, 18)}</span>}
+              {traceTarget && <Link href={`/trace/${traceTarget}`} className="notif-action-link">trace {traceTarget.slice(0, 18)}</Link>}
+              {issue.sample_call_id && <Link href={`/calls/${issue.sample_call_id}`} className="notif-action-link">sample call</Link>}
             </div>
           )}
         </div>
@@ -304,6 +392,21 @@ function IssueCard({
           <Link href={`/issues/${issue.id}`} className="btn btn-soft btn-sm">
             Open issue
           </Link>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={(event) => onCreateReplay(event, issue.id)}
+            disabled={!canCreateReplay || replaying}
+            title={canCreateReplay ? "Create replay from issue evidence" : "No issue evidence available for replay"}
+          >
+            {replaying ? "Creating..." : "Create Replay"}
+          </button>
+          <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onAssign(event, issue.id)}>
+            {assignment ? "Reassign" : "Assign"}
+          </button>
+          <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onLinkDeploy(event, issue.id)}>
+            {deployLink ? "Edit Deploy/PR" : "Link Deploy/PR"}
+          </button>
           <button
             type="button"
             className="btn btn-soft btn-sm"
@@ -322,11 +425,14 @@ function IssueCard({
           </button>
           {status === "open" && (
             <>
-              <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onIgnore(event, issue.id)} disabled={ignoring}>
-                {ignoring ? "..." : "Ignore"}
+              <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onAcceptedRisk(event, issue.id)} disabled={acceptingRisk}>
+                {acceptingRisk ? "..." : "Accepted Risk"}
               </button>
               <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onResolve(event, issue.id)} disabled={resolving}>
                 {resolving ? "..." : "Resolve"}
+              </button>
+              <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onIgnore(event, issue.id)} disabled={ignoring}>
+                {ignoring ? "..." : "Ignore/Mute"}
               </button>
             </>
           )}
@@ -351,31 +457,4 @@ function severityBadge(severity: string) {
       {severity}
     </span>
   );
-}
-
-function replayLabel(status: string): string {
-  switch (status) {
-    case "verified_fix":
-      return "Verified fix";
-    case "sanity_replay_passed":
-      return "Sanity replay passed";
-    case "real_replay_passed":
-      return "Real replay passed";
-    case "real_replay_missing_tool_proof":
-      return "Real replay missing tool proof";
-    case "covered_passed":
-      return "Covered, last replay passed";
-    case "covered_failed":
-      return "Covered, replay still failing";
-    case "replay_running":
-      return "Replay running";
-    case "covered_not_run":
-      return "Golden trace exists, not replayed yet";
-    case "fix_pending_replay":
-      return "Fix exists, replay missing";
-    case "not_covered":
-      return "Not covered by replay";
-    default:
-      return status.replace(/_/g, " ");
-  }
 }

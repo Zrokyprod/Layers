@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getIssue, resolveIssue } from "@/lib/api";
+import { getIssue, ignoreIssue, resolveIssue } from "@/lib/api";
 import { useCreateReplayRunFromIssue } from "@/lib/hooks";
 import { formatDateTime, formatUsd } from "@/lib/format";
+import { replayLabel } from "@/lib/issue-format";
 import type { IssueEvidenceTrace, IssueItem } from "@/lib/types";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
 
@@ -16,6 +17,10 @@ export default function IssueDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [ignoring, setIgnoring] = useState(false);
+  const [acceptingRisk, setAcceptingRisk] = useState(false);
+  const [assignment, setAssignment] = useState("");
+  const [deployLink, setDeployLink] = useState("");
   const [replayMode, setReplayMode] = useState<"stub" | "mocked-tool" | "live-sandbox" | "shadow">("stub");
   const createReplay = useCreateReplayRunFromIssue({
     onSuccess: (run) => router.push(`/replay/${run.id}`),
@@ -47,9 +52,43 @@ export default function IssueDetailPage() {
     }
   }
 
+  async function onAcceptedRisk() {
+    if (!issue) return;
+    setAcceptingRisk(true);
+    try {
+      await resolveIssue(issue.id, { resolution_source: "accepted_risk" });
+      router.push("/issues?tab=resolved");
+    } finally {
+      setAcceptingRisk(false);
+    }
+  }
+
+  async function onIgnore() {
+    if (!issue) return;
+    setIgnoring(true);
+    try {
+      await ignoreIssue(issue.id);
+      router.push("/issues?tab=ignored");
+    } finally {
+      setIgnoring(false);
+    }
+  }
+
   function onCreateReplay() {
     if (!issue) return;
     createReplay.mutate({ issueId: issue.id, payload: { replay_mode: replayMode } });
+  }
+
+  function onAssign() {
+    const assignee = window.prompt("Assign this issue to:", assignment);
+    if (assignee === null) return;
+    setAssignment(assignee.trim());
+  }
+
+  function onLinkDeploy() {
+    const link = window.prompt("Paste deploy or PR URL:", deployLink);
+    if (link === null) return;
+    setDeployLink(link.trim());
   }
 
   if (loading) return <div className="loading" />;
@@ -90,6 +129,8 @@ export default function IssueDetailPage() {
               <span>{issue.affected_workflow ?? "Workflow not captured"}</span>
               <span>First: {formatDateTime(issue.first_seen_at)}</span>
               <span>Last: {formatDateTime(issue.last_seen_at)}</span>
+              {assignment && <span>Assigned to {assignment}</span>}
+              {deployLink && <a href={deployLink} target="_blank" rel="noreferrer" className="notif-action-link">Deploy/PR linked</a>}
             </div>
           </div>
 
@@ -155,14 +196,28 @@ export default function IssueDetailPage() {
               <option value="shadow">Shadow</option>
             </select>
             <button className="btn btn-primary" onClick={onCreateReplay} disabled={createReplay.isPending}>
-              {createReplay.isPending ? "Creating..." : "Create replay"}
+              {createReplay.isPending ? "Creating..." : "Create Replay"}
             </button>
           </>
         )}
+        <button className="btn btn-soft" onClick={onAssign}>
+          {assignment ? "Reassign" : "Assign"}
+        </button>
+        <button className="btn btn-soft" onClick={onLinkDeploy}>
+          {deployLink ? "Edit Deploy/PR" : "Link Deploy/PR"}
+        </button>
         {issue.status === "open" && (
-          <button className="btn btn-soft" onClick={() => void onResolve()} disabled={resolving}>
-            {resolving ? "Resolving..." : "Mark resolved"}
-          </button>
+          <>
+            <button className="btn btn-soft" onClick={() => void onAcceptedRisk()} disabled={acceptingRisk}>
+              {acceptingRisk ? "Accepting..." : "Accepted Risk"}
+            </button>
+            <button className="btn btn-soft" onClick={() => void onResolve()} disabled={resolving}>
+              {resolving ? "Resolving..." : "Resolve"}
+            </button>
+            <button className="btn btn-soft" onClick={() => void onIgnore()} disabled={ignoring}>
+              {ignoring ? "Muting..." : "Ignore/Mute"}
+            </button>
+          </>
         )}
       </div>
 
@@ -249,31 +304,4 @@ function severityBadge(severity: string) {
       {severity}
     </span>
   );
-}
-
-function replayLabel(status: string): string {
-  switch (status) {
-    case "verified_fix":
-      return "Verified fix";
-    case "sanity_replay_passed":
-      return "Sanity replay passed";
-    case "real_replay_passed":
-      return "Real replay passed";
-    case "real_replay_missing_tool_proof":
-      return "Real replay missing tool proof";
-    case "covered_passed":
-      return "Covered, last replay passed";
-    case "covered_failed":
-      return "Covered, replay still failing";
-    case "replay_running":
-      return "Replay running";
-    case "covered_not_run":
-      return "Golden trace exists, not replayed yet";
-    case "fix_pending_replay":
-      return "Fix exists, replay missing";
-    case "not_covered":
-      return "Not covered by replay";
-    default:
-      return status.replace(/_/g, " ");
-  }
 }
