@@ -1,134 +1,88 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { listIssues, resolveIssue, listDetectors } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
-import type { IssueItem, IssueStatus, DetectorInfo } from "@/lib/types";
-import {
-  allDetectorCategories,
-  detectorBadgeClass,
-  detectorLabel,
-  getDetectorMeta,
-  severityBadgeColor,
-} from "@/lib/detector-meta";
+import type { MouseEvent } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ignoreIssue, listIssues, resolveIssue } from "@/lib/api";
+import { formatDateTime, formatUsd } from "@/lib/format";
+import type { IssueItem, IssueStatus } from "@/lib/types";
+import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
 
-// ── Tab definition ────────────────────────────────────────────────────────────
-
-type Tab = "open" | "resolved" | "ignored" | "rules";
+type Tab = "open" | "resolved" | "ignored";
 
 const TABS: { id: Tab; label: string; helper: string }[] = [
-  { id: "open", label: "Open", helper: "Untriaged issues needing fix." },
-  { id: "resolved", label: "Resolved", helper: "Closed via fix or auto-resolve." },
-  { id: "ignored", label: "Ignored", helper: "Muted by triage — not actionable but tracked." },
-  { id: "rules", label: "Rules", helper: "Detector vocabulary + thresholds." },
+  { id: "open", label: "Top problems", helper: "The highest-impact open issues right now." },
+  { id: "resolved", label: "Resolved", helper: "Problems already fixed or manually closed." },
+  { id: "ignored", label: "Ignored", helper: "Problems muted by triage but still tracked." },
 ];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-//
-// Vocab + colors come from `@/lib/detector-meta` so every page renders the same
-// label and badge color for any backend-emitted category — including the 11
-// new Layer 1-3 detectors that didn't exist when this page was first written.
-
-function codeLabel(code: string): string {
-  return detectorLabel(code);
-}
-
-function codeBadgeClass(code: string): string {
-  return detectorBadgeClass(code);
-}
-
-function severityBadge(sev: string) {
-  const color = severityBadgeColor(sev);
-  return (
-    <span
-      className={`alert-cat-badge badge-${color}`}
-      style={{ fontSize: "0.65rem", padding: "1px 6px" }}
-    >
-      {sev}
-    </span>
-  );
-}
-
-function formatUsd(val: number): string {
-  if (val === 0) return "$0";
-  if (val < 0.01) return `<$0.01`;
-  return `$${val.toFixed(2)}`;
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-
-function IssuesPageContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const rawTab = searchParams.get("tab") as Tab | null;
-  const activeTab: Tab = rawTab && ["open", "resolved", "rules"].includes(rawTab) ? rawTab : "open";
-
-  function setTab(tab: Tab) {
-    router.replace(`/issues?tab=${tab}`);
-  }
-
-  return (
-    <div>
-      <div className="tab-bar" role="tablist" aria-label="Issues tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={activeTab === t.id}
-            className={`tab-btn${activeTab === t.id ? " tab-btn-active" : ""}`}
-            onClick={() => setTab(t.id)}
-            title={t.helper}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === "open" && <IssueList status="open" />}
-      {activeTab === "resolved" && <IssueList status="resolved" />}
-      {activeTab === "ignored" && <IssueList status="ignored" />}
-      {activeTab === "rules" && <RulesPanel />}
-    </div>
-  );
+interface Filters {
+  severity: string;
+  has_fix: "" | "true" | "false";
 }
 
 export default function IssuesPage() {
   return (
-    <Suspense fallback={<p className="hint">Loading issues…</p>}>
+    <Suspense fallback={<p className="hint">Loading issues...</p>}>
       <IssuesPageContent />
     </Suspense>
   );
 }
 
-// ── Filter toolbar ─────────────────────────────────────────────────────────────
+function IssuesPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const rawTab = searchParams.get("tab") as Tab | null;
+  const activeTab: Tab = rawTab && ["open", "resolved", "ignored"].includes(rawTab) ? rawTab : "open";
 
-interface Filters {
-  failure_code: string;
-  severity: string;
-  has_fix: "" | "true" | "false";
+  function setTab(tab: Tab) {
+    router.replace(tab === "open" ? "/issues" : `/issues?tab=${tab}`);
+  }
+
+  return (
+    <div>
+      <header style={{ marginBottom: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: "1.35rem" }}>Issues</h1>
+            <p className="notif-meta" style={{ marginTop: "0.35rem" }}>
+              Top grouped production problems, not raw traces.
+            </p>
+          </div>
+          <div className="mono notif-meta" style={{ fontSize: "0.75rem" }}>
+            default view: top 5
+          </div>
+        </div>
+      </header>
+
+      <div className="tab-bar" role="tablist" aria-label="Issues tabs">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`tab-btn${activeTab === tab.id ? " tab-btn-active" : ""}`}
+            onClick={() => setTab(tab.id)}
+            title={tab.helper}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <IssueList status={activeTab} />
+    </div>
+  );
 }
 
-function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filters) => void }) {
+function FilterBar({ filters, onChange }: { filters: Filters; onChange: (filters: Filters) => void }) {
   return (
     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", padding: "0.75rem 0" }}>
       <select
         className="input input-sm"
-        value={filters.failure_code}
-        onChange={(e) => onChange({ ...filters, failure_code: e.target.value })}
-        aria-label="Filter by code"
-      >
-        <option value="">All codes</option>
-        {allDetectorCategories().map((meta) => (
-          <option key={meta.code} value={meta.code}>{meta.label}</option>
-        ))}
-      </select>
-
-      <select
-        className="input input-sm"
         value={filters.severity}
-        onChange={(e) => onChange({ ...filters, severity: e.target.value })}
+        onChange={(event) => onChange({ ...filters, severity: event.target.value })}
         aria-label="Filter by severity"
       >
         <option value="">All severities</option>
@@ -141,19 +95,16 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filt
       <select
         className="input input-sm"
         value={filters.has_fix}
-        onChange={(e) => onChange({ ...filters, has_fix: e.target.value as Filters["has_fix"] })}
+        onChange={(event) => onChange({ ...filters, has_fix: event.target.value as Filters["has_fix"] })}
         aria-label="Filter by fix status"
       >
-        <option value="">Fix: any</option>
-        <option value="true">Has fix</option>
-        <option value="false">No fix</option>
+        <option value="">Replay/fix: any</option>
+        <option value="true">Fix attached</option>
+        <option value="false">No fix yet</option>
       </select>
 
-      {(filters.failure_code || filters.severity || filters.has_fix) && (
-        <button
-          className="btn btn-soft btn-sm"
-          onClick={() => onChange({ failure_code: "", severity: "", has_fix: "" })}
-        >
+      {(filters.severity || filters.has_fix) && (
+        <button className="btn btn-soft btn-sm" onClick={() => onChange({ severity: "", has_fix: "" })}>
           Clear
         </button>
       )}
@@ -161,49 +112,45 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filt
   );
 }
 
-// ── Issue list ─────────────────────────────────────────────────────────────────
-
 function IssueList({ status }: { status: IssueStatus }) {
   const [items, setItems] = useState<IssueItem[]>([]);
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Filters>({ failure_code: "", severity: "", has_fix: "" });
+  const [ignoringId, setIgnoringId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>({ severity: "", has_fix: "" });
   const abortRef = useRef<AbortController | null>(null);
 
   const loadPage = useCallback(
-    async (nextCursor?: string | null, activeFilters?: Filters) => {
+    async (nextCursor?: string | null, activeFilters: Filters = filters) => {
       if (nextCursor === null) return;
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       setLoading(true);
       setError(null);
-      const f = activeFilters ?? filters;
       try {
         const data = await listIssues(
           {
             status,
             cursor: nextCursor ?? undefined,
-            limit: 25,
-            ...(f.failure_code ? { failure_code: f.failure_code } : {}),
-            ...(f.severity ? { severity: f.severity } : {}),
-            ...(f.has_fix ? { has_fix: f.has_fix === "true" } : {}),
+            limit: 5,
+            ...(activeFilters.severity ? { severity: activeFilters.severity } : {}),
+            ...(activeFilters.has_fix ? { has_fix: activeFilters.has_fix === "true" } : {}),
           },
           ctrl.signal,
         );
         setItems((prev) => (nextCursor ? [...prev, ...data.items] : data.items));
         setCursor(data.next_cursor);
-      } catch (e: unknown) {
-        if ((e as { name?: string }).name === "AbortError") return;
-        setError((e as { message?: string }).message ?? "Failed to load issues.");
+      } catch (error: unknown) {
+        if ((error as { name?: string }).name === "AbortError") return;
+        setError((error as { message?: string }).message ?? "Failed to load issues.");
       } finally {
         setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [status],
+    [filters, status],
   );
 
   useEffect(() => {
@@ -211,26 +158,33 @@ function IssueList({ status }: { status: IssueStatus }) {
     setCursor(undefined);
     void loadPage(undefined, filters);
     return () => abortRef.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [filters, loadPage, status]);
 
-  function applyFilters(f: Filters) {
-    setFilters(f);
-    setItems([]);
-    setCursor(undefined);
-    void loadPage(undefined, f);
+  function applyFilters(nextFilters: Filters) {
+    setFilters(nextFilters);
   }
 
-  async function onResolve(e: React.MouseEvent, issueId: string) {
-    e.preventDefault();
-    e.stopPropagation();
+  async function onResolve(event: MouseEvent, issueId: string) {
+    event.preventDefault();
+    event.stopPropagation();
     setResolvingId(issueId);
     try {
       const updated = await resolveIssue(issueId, { resolution_source: "manual" });
-      setItems((prev) => prev.filter((i) => i.id !== updated.id));
-    } catch {
+      setItems((prev) => prev.filter((issue) => issue.id !== updated.id));
     } finally {
       setResolvingId(null);
+    }
+  }
+
+  async function onIgnore(event: MouseEvent, issueId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIgnoringId(issueId);
+    try {
+      const updated = await ignoreIssue(issueId);
+      setItems((prev) => prev.filter((issue) => issue.id !== updated.id));
+    } finally {
+      setIgnoringId(null);
     }
   }
 
@@ -243,82 +197,32 @@ function IssueList({ status }: { status: IssueStatus }) {
       ) : error ? (
         <div className="panel">
           <p className="notif-error">{error}</p>
-          <button className="btn btn-soft" onClick={() => void loadPage(undefined, filters)}>Retry</button>
+          <button className="btn btn-soft" onClick={() => void loadPage(undefined, filters)}>
+            Retry
+          </button>
         </div>
       ) : items.length === 0 ? (
         <div className="empty">
-          {status === "open" ? "No open issues — all clear." : "No resolved issues."}
+          {status === "open" ? "No open product issues." : status === "resolved" ? "No resolved issues." : "No ignored issues."}
         </div>
       ) : (
-        <div className="panel">
-          <div className="list">
-            {items.map((issue) => (
-              <Link key={issue.id} href={`/issues/${issue.id}`} className="notif-row" style={{ textDecoration: "none", color: "inherit" }}>
-                <div className="notif-body">
-                  <div className="notif-title-row">
-                    <span
-                      className={codeBadgeClass(issue.failure_code)}
-                      title={getDetectorMeta(issue.failure_code).description}
-                    >
-                      <span aria-hidden="true">{getDetectorMeta(issue.failure_code).icon}</span>{" "}
-                      {codeLabel(issue.failure_code)}
-                    </span>
-                    <span
-                      className={`detector-layer-chip layer-${getDetectorMeta(issue.failure_code).layer}`}
-                      title={`Layer ${getDetectorMeta(issue.failure_code).layer}`}
-                    >
-                      {getDetectorMeta(issue.failure_code).layer}
-                    </span>
-                    {severityBadge(issue.severity)}
-                    {issue.agent_name && (
-                      <span className="mono" style={{ fontSize: "0.75rem" }}>
-                        {issue.agent_name}
-                      </span>
-                    )}
-                    <span className="notif-meta" style={{ marginLeft: "auto", display: "flex", gap: "1rem" }}>
-                      <span title="Occurrences">{issue.occurrence_count}×</span>
-                      <span title="Blast radius (cumulative cost)" style={{ color: issue.blast_radius_usd > 1 ? "var(--color-red)" : "inherit" }}>
-                        {formatUsd(issue.blast_radius_usd)}
-                      </span>
-                    </span>
-                  </div>
-
-                  <div className="notif-meta" style={{ marginTop: "0.25rem" }}>
-                    <span>First: {formatDateTime(issue.first_seen_at)}</span>
-                    <span style={{ marginLeft: "1rem" }}>Last: {formatDateTime(issue.last_seen_at)}</span>
-                    {issue.prompt_fingerprint && (
-                      <span className="mono" style={{ marginLeft: "1rem", fontSize: "0.7rem" }}>
-                        fp:{issue.prompt_fingerprint.slice(0, 8)}
-                      </span>
-                    )}
-                    {issue.last_fix_id && (
-                      <span style={{ marginLeft: "1rem", fontSize: "0.75rem", color: "var(--color-green)" }}>
-                        ✓ fix pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {status === "open" && (
-                  <div className="notif-actions" onClick={(e) => e.preventDefault()}>
-                    <button
-                      type="button"
-                      className="btn btn-soft btn-sm"
-                      onClick={(e) => void onResolve(e, issue.id)}
-                      disabled={resolvingId === issue.id}
-                    >
-                      {resolvingId === issue.id ? "…" : "Resolve"}
-                    </button>
-                  </div>
-                )}
-              </Link>
-            ))}
-          </div>
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+          {items.map((issue) => (
+            <IssueCard
+              key={issue.id}
+              issue={issue}
+              status={status}
+              resolving={resolvingId === issue.id}
+              ignoring={ignoringId === issue.id}
+              onResolve={onResolve}
+              onIgnore={onIgnore}
+            />
+          ))}
 
           {cursor && (
-            <div style={{ padding: "1rem", textAlign: "center" }}>
-              <button className="btn btn-soft" onClick={() => void loadPage(cursor)} disabled={loading}>
-                {loading ? "Loading…" : "Load more"}
+            <div style={{ textAlign: "center", padding: "0.5rem" }}>
+              <button className="btn btn-soft" onClick={() => void loadPage(cursor, filters)} disabled={loading}>
+                {loading ? "Loading..." : "Load next 5"}
               </button>
             </div>
           )}
@@ -328,67 +232,150 @@ function IssueList({ status }: { status: IssueStatus }) {
   );
 }
 
-// ── Rules panel ────────────────────────────────────────────────────────────────
-
-function RulesPanel() {
-  const [detectors, setDetectors] = useState<DetectorInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    listDetectors(ctrl.signal)
-      .then((res) => setDetectors(res.items))
-      .catch((e: unknown) => {
-        if ((e as { name?: string }).name === "AbortError") return;
-        setError((e as { message?: string }).message ?? "Failed to load detectors.");
-      })
-      .finally(() => setLoading(false));
-    return () => ctrl.abort();
-  }, []);
+function IssueCard({
+  issue,
+  status,
+  resolving,
+  ignoring,
+  onResolve,
+  onIgnore,
+}: {
+  issue: IssueItem;
+  status: IssueStatus;
+  resolving: boolean;
+  ignoring: boolean;
+  onResolve: (event: MouseEvent, issueId: string) => void;
+  onIgnore: (event: MouseEvent, issueId: string) => void;
+}) {
+  const firstTrace = issue.evidence_traces[0];
+  const traceTarget = firstTrace?.trace_id ?? firstTrace?.call_id ?? issue.sample_call_id;
 
   return (
-    <section className="panel">
-      <header className="panel-header">
-        <div>
-          <h3>Detection Rules</h3>
-          <p>Live from the entry-point registry — {loading ? "loading…" : `${detectors.length} loaded`}</p>
-        </div>
-      </header>
+    <article className="panel">
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "1rem", alignItems: "start" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.55rem" }}>
+            {severityBadge(issue.severity)}
+            <span className="alert-cat-badge badge-gray" style={{ fontSize: "0.65rem" }}>
+              {detectorLabel(issue.failure_code)}
+            </span>
+            <span className="mono notif-meta" style={{ fontSize: "0.72rem" }}>
+              score {issue.priority_score.toFixed(0)}
+            </span>
+          </div>
 
-      {loading && <div className="loading" />}
+          <h2 style={{ margin: 0, fontSize: "1.05rem", lineHeight: 1.25 }}>
+            <Link href={`/issues/${issue.id}`} style={{ color: "inherit", textDecoration: "none" }}>
+              {issue.title}
+            </Link>
+          </h2>
 
-      {error && <p className="notif-error" style={{ padding: "0.75rem" }}>{error}</p>}
+          <div className="notif-meta" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.45rem" }}>
+            <span>{issue.affected_agent ?? "Agent not captured"}</span>
+            <span>{issue.affected_workflow ?? "Workflow not captured"}</span>
+            <span>{issue.occurrence_count} affected calls</span>
+            <span>{formatDateTime(issue.last_seen_at)}</span>
+          </div>
 
-      {!loading && !error && (
-        <div className="list">
-          {detectors.map((d) => (
-            <div key={d.name} className="notif-row">
-              <div className="notif-body">
-                <div className="notif-title-row">
-                  <span className={codeBadgeClass(d.failure_code)}>{d.label}</span>
-                  <span className="mono" style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>
-                    {d.speed_class}
-                  </span>
-                  <span className="mono" style={{ fontSize: "0.7rem", color: "var(--color-muted)" }}>
-                    conf ≥ {(d.confidence_threshold * 100).toFixed(0)}%
-                  </span>
-                  {!d.loaded && (
-                    <span
-                      className="alert-cat-badge badge-gray"
-                      style={{ fontSize: "0.65rem", marginLeft: "auto" }}
-                      title="Registered in metadata but not loaded at runtime"
-                    >
-                      not loaded
-                    </span>
-                  )}
-                </div>
-                <p style={{ marginTop: "0.25rem", fontSize: "0.85rem" }}>{d.description}</p>
-              </div>
+          <p style={{ margin: "0.75rem 0 0", fontSize: "0.9rem", lineHeight: 1.45 }}>
+            <strong>Root cause:</strong> {issue.root_cause}
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.65rem", marginTop: "0.85rem" }}>
+            <InfoCell label="Impact" value={issue.user_impact} />
+            <InfoCell label="Replay" value={replayLabel(issue.replay_coverage_status)} />
+            <InfoCell label="Next action" value={issue.recommended_next_action} />
+          </div>
+
+          {firstTrace && (
+            <div className="mono notif-meta" style={{ marginTop: "0.85rem", fontSize: "0.72rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+              <span>evidence: {issue.evidence_traces.length} trace{issue.evidence_traces.length === 1 ? "" : "s"}</span>
+              {firstTrace.prompt_version && <span>prompt {firstTrace.prompt_version}</span>}
+              {firstTrace.model && <span>{firstTrace.provider ?? "provider"} / {firstTrace.model}</span>}
+              {traceTarget && <span>trace {traceTarget.slice(0, 18)}</span>}
             </div>
-          ))}
+          )}
         </div>
-      )}
-    </section>
+
+        <div style={{ display: "grid", gap: "0.45rem", minWidth: "132px", justifyItems: "stretch" }}>
+          <div style={{ textAlign: "right", fontWeight: 700, color: issue.cost_impact_usd > 1 ? "var(--color-red)" : "inherit" }}>
+            {formatUsd(issue.cost_impact_usd)}
+          </div>
+          <Link href={`/issues/${issue.id}`} className="btn btn-soft btn-sm">
+            Open issue
+          </Link>
+          <button
+            type="button"
+            className="btn btn-soft btn-sm"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              window.dispatchEvent(new CustomEvent("open-ask-zroky", {
+                detail: {
+                  context: { issue_id: issue.id },
+                  prefill: `Why is this happening: ${issue.title}`,
+                },
+              }));
+            }}
+          >
+            Ask Zroky
+          </button>
+          {status === "open" && (
+            <>
+              <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onIgnore(event, issue.id)} disabled={ignoring}>
+                {ignoring ? "..." : "Ignore"}
+              </button>
+              <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onResolve(event, issue.id)} disabled={resolving}>
+                {resolving ? "..." : "Resolve"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </article>
   );
+}
+
+function InfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.55rem" }}>
+      <div className="notif-meta" style={{ fontSize: "0.68rem", marginBottom: "0.25rem" }}>{label}</div>
+      <div style={{ fontSize: "0.82rem", lineHeight: 1.35 }}>{value}</div>
+    </div>
+  );
+}
+
+function severityBadge(severity: string) {
+  return (
+    <span className={`alert-cat-badge badge-${severityBadgeColor(severity)}`} style={{ fontSize: "0.65rem", padding: "1px 6px" }}>
+      {severity}
+    </span>
+  );
+}
+
+function replayLabel(status: string): string {
+  switch (status) {
+    case "verified_fix":
+      return "Verified fix";
+    case "sanity_replay_passed":
+      return "Sanity replay passed";
+    case "real_replay_passed":
+      return "Real replay passed";
+    case "real_replay_missing_tool_proof":
+      return "Real replay missing tool proof";
+    case "covered_passed":
+      return "Covered, last replay passed";
+    case "covered_failed":
+      return "Covered, replay still failing";
+    case "replay_running":
+      return "Replay running";
+    case "covered_not_run":
+      return "Golden trace exists, not replayed yet";
+    case "fix_pending_replay":
+      return "Fix exists, replay missing";
+    case "not_covered":
+      return "Not covered by replay";
+    default:
+      return status.replace(/_/g, " ");
+  }
 }

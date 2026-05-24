@@ -267,3 +267,26 @@ def resolve_issue(
     db.commit()
     db.refresh(issue)
     return issue
+
+
+# ── ignore ────────────────────────────────────────────────────────────────────
+
+def ignore_issue(
+    db: Session,
+    *,
+    project_id: str,
+    issue_id: str,
+) -> Issue | None:
+    """Mark an open issue as ignored. Returns the updated issue or None if not found."""
+    issue = db.execute(
+        select(Issue).where(Issue.project_id == project_id, Issue.id == issue_id)
+    ).scalar_one_or_none()
+    if issue is None:
+        return None
+    now = datetime.now(timezone.utc)
+    issue.status = _IGNORED
+    issue.updated_at = now
+    db.add(issue)
+    db.commit()
+    db.refresh(issue)
+    return issue
