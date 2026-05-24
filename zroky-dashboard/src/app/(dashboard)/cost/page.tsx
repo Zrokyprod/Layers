@@ -18,6 +18,7 @@ import { CostHeroChart } from "@/components/cost-explorer/hero-chart";
 import { CostPerOutcome } from "@/components/cost-explorer/per-outcome";
 import { CostWhatIfCalculator } from "@/components/cost-explorer/what-if-calculator";
 import { CostParetoBreakdown } from "@/components/cost-explorer/pareto-breakdown";
+import { CostTopCallsTable } from "@/components/cost-explorer/top-calls-table";
 
 type WindowDays = 1 | 7 | 14 | 30;
 
@@ -67,6 +68,8 @@ export default function CostExplorerPage() {
       </div>
 
       <CostParetoBreakdown windowDays={windowDays} />
+
+      <CostTopCallsTable windowDays={windowDays} />
     </div>
   );
 }

@@ -37,8 +37,7 @@ function LoginForm() {
   });
 
   const handleOAuthLogin = (provider: "github" | "google") => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    window.location.href = `${backendUrl}/v1/auth/${provider}/start`;
+    window.location.href = `/api/zroky/v1/auth/${provider}/start`;
   };
 
   return (

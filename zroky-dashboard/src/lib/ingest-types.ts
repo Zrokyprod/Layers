@@ -57,12 +57,22 @@ export interface IngestEventV2 {
   exchange_rate_source?: string | null;
   /** Tool schemas available to the model for this call */
   tool_definitions?: unknown[] | null;
-  /** Tool invocations emitted by the model in this call */
+  /** Canonical tool invocations emitted by the model or captured as tool spans */
+  tool_calls?: unknown[] | null;
+  /** Deprecated alias for tool_calls. Accepted for backward compatibility */
   tool_calls_made?: unknown[] | null;
+  /** Structured retrieval/RAG evidence for retrieval spans */
+  retrieval?: Record<string, unknown> | null;
+  /** Structured task or business outcome signal linked to this call */
+  outcome?: Record<string, unknown> | null;
   /** Normalized/cleaned model output (PII masked) */
   normalized_output?: string | null;
   /** Raw model output content (PII masked) */
   output_content?: string | null;
+  /** Provider termination reason for generated output (e.g. stop, length, tool_calls) */
+  finish_reason?: string | null;
+  /** Provider stop reason alias, especially for Anthropic streams (e.g. end_turn, max_tokens) */
+  stop_reason?: string | null;
   /** Stable hash of the output (excluding variable content) */
   output_fingerprint?: string | null;
   tool_lifecycle_summary?: unknown[] | null;
@@ -84,6 +94,8 @@ export interface IngestEventV2 {
   agent_name?: string | null;
   /** Stable hash of the prompt template (excluding variable/user content) */
   prompt_fingerprint?: string | null;
+  /** Human-readable or deploy-system prompt version tag (e.g. support-v42, git SHA, release ID) */
+  prompt_version?: string | null;
   user_id?: string | null;
   /** True for replay or test calls; excluded from cost aggregations */
   is_synthetic?: boolean;
@@ -103,6 +115,8 @@ export interface IngestEventV2 {
   session_id?: string | null;
   /** [v2] Parent workflow or pipeline run identifier. Groups calls across agent steps */
   workflow_id?: string | null;
+  /** [v2] Human-readable workflow, graph, or pipeline name */
+  workflow_name?: string | null;
   /** [v2] Zero-based step position within a workflow. Used for ordering and cross-step loop detection */
   step_index?: number | null;
   /** [v2] Agent orchestration framework, if known */
@@ -122,6 +136,10 @@ export const CALL_TYPES = [
   'stt',
   'moderation',
   'function',
+  'tool_call',
+  'tool_result',
+  'retrieval',
+  'memory',
 ] as const;
 
 export type CallType = (typeof CALL_TYPES)[number];

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useQuery,
   useMutation,
   useQueryClient,
@@ -73,6 +73,7 @@ import {
   getAlertDetail,
   getMe,
   getCallDetail,
+  getAdjacentCalls,
   getCallTraceTree,
   getDiagnosisFixWatch,
   getDiagnosisState,
@@ -100,6 +101,19 @@ import {
   updateSupportTicket,
   listProjectMembers,
   inviteProjectMember,
+  getGithubConnectionStatus,
+  listReplayRuns,
+  getReplayRun,
+  getReplayQuota,
+  createReplayRunFromCall,
+  createReplayRunFromIssue,
+  getJudgeHealth,
+  type ReplayRunDetailItem,
+  type ReplayRunListResponse,
+  type ReplayQuotaResponse,
+  type ReplayCreatePayload,
+  type ReplayCreateResponse,
+  type JudgeHealthResponse,
 } from "./api";
 import {
   fetchOwnerHealth,
@@ -161,7 +175,9 @@ import type {
   ProjectInviteResponse,
   SupportTicketListResponse,
   SupportTicketItem,
+  GithubConnectionStatusResponse,
 } from "./types";
+import type { AdjacentCallsResponse } from "./types";
 
 // ─── Activity Feed ──────────────────────────────────────────────────────────
 
@@ -292,16 +308,20 @@ export function useListCalls(filters: {
   date_to?: string;
   sort_by?: string;
   sort_order?: string;
+  min_cost_usd?: number;
+  max_cost_usd?: number;
   limit?: number;
   offset?: number;
 }) {
-  const { limit = 50, offset = 0, date_from, date_to, ...rest } = filters;
+  const { limit = 50, offset = 0, date_from, date_to, min_cost_usd, max_cost_usd, ...rest } = filters;
   return useQuery<CallListResponse>({
     queryKey: ["calls", "list", filters],
     queryFn: () => listCalls({
       ...rest,
       start_time: date_from || undefined,
       end_time: date_to || undefined,
+      min_cost_usd: min_cost_usd ?? undefined,
+      max_cost_usd: max_cost_usd ?? undefined,
       limit,
       offset,
     }),
@@ -405,6 +425,14 @@ export function useCallDetail(callId: string) {
   return useQuery<CallDetailResponse>({
     queryKey: ["call-detail", callId],
     queryFn: () => getCallDetail(callId),
+    enabled: !!callId,
+  });
+}
+
+export function useAdjacentCalls(callId: string) {
+  return useQuery<AdjacentCallsResponse>({
+    queryKey: ["calls", "adjacent", callId],
+    queryFn: ({ signal }) => getAdjacentCalls(callId, signal),
     enabled: !!callId,
   });
 }
@@ -1075,6 +1103,104 @@ export function useDriftHistory(
     queryKey: ["drift", "history", modelId],
     queryFn: ({ signal }) => getDriftHistory(modelId!, signal),
     enabled: !!modelId,
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+// -- GitHub Connection --------------------------------------------------------
+
+export function useGithubConnectionStatus(
+  options?: Partial<UseQueryOptions<GithubConnectionStatusResponse>>,
+) {
+  return useQuery<GithubConnectionStatusResponse>({
+    queryKey: ["github", "connection-status"],
+    queryFn: ({ signal }) => getGithubConnectionStatus(signal),
+    staleTime: 5 * 60_000,
+    ...options,
+  });
+}
+// ── Replay Runs ───────────────────────────────────────────────────────────────
+
+export function useReplayRuns(
+  params: { golden_set_id?: string; status?: string; cursor?: string; limit?: number } = {},
+  options?: Partial<UseQueryOptions<ReplayRunListResponse>>,
+) {
+  return useQuery<ReplayRunListResponse>({
+    queryKey: ["replay-runs", params],
+    queryFn: ({ signal }) => listReplayRuns(params, signal),
+    staleTime: 15_000,
+    ...options,
+  });
+}
+
+export function useReplayRunDetail(
+  runId: string | null | undefined,
+  options?: Partial<UseQueryOptions<ReplayRunDetailItem>>,
+) {
+  return useQuery<ReplayRunDetailItem>({
+    queryKey: ["replay-run", runId],
+    queryFn: ({ signal }) => getReplayRun(runId!, signal),
+    enabled: !!runId,
+    staleTime: 10_000,
+    refetchInterval: (q) =>
+      q.state.data?.status === "pending" || q.state.data?.status === "running"
+        ? 4_000
+        : false,
+    ...options,
+  });
+}
+
+export function useReplayQuota() {
+  return useQuery<ReplayQuotaResponse>({
+    queryKey: ["replay-quota"],
+    queryFn: ({ signal }) => getReplayQuota(signal),
+    staleTime: 60_000,
+  });
+}
+
+// ── Judge Health / Drift ──────────────────────────────────────────────────────
+
+
+export function useCreateReplayRunFromCall(
+  options?: Partial<UseMutationOptions<ReplayCreateResponse, Error, { callId: string; payload: ReplayCreatePayload }>>,
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...rest } = options ?? {};
+  return useMutation<ReplayCreateResponse, Error, { callId: string; payload: ReplayCreatePayload }>({
+    mutationFn: ({ callId, payload }) => createReplayRunFromCall(callId, payload),
+    onSuccess: (data, variables, onMutateResult, context) => {
+      queryClient.invalidateQueries({ queryKey: ["replay-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["replay-quota"] });
+      onSuccess?.(data, variables, onMutateResult, context);
+    },
+    ...rest,
+  });
+}
+
+export function useCreateReplayRunFromIssue(
+  options?: Partial<UseMutationOptions<ReplayCreateResponse, Error, { issueId: string; payload: ReplayCreatePayload }>>,
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...rest } = options ?? {};
+  return useMutation<ReplayCreateResponse, Error, { issueId: string; payload: ReplayCreatePayload }>({
+    mutationFn: ({ issueId, payload }) => createReplayRunFromIssue(issueId, payload),
+    onSuccess: (data, variables, onMutateResult, context) => {
+      queryClient.invalidateQueries({ queryKey: ["replay-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["replay-quota"] });
+      onSuccess?.(data, variables, onMutateResult, context);
+    },
+    ...rest,
+  });
+}
+
+export function useJudgeHealth(
+  includeZeroSample = false,
+  options?: Partial<UseQueryOptions<JudgeHealthResponse>>,
+) {
+  return useQuery<JudgeHealthResponse>({
+    queryKey: ["judge-health", includeZeroSample],
+    queryFn: ({ signal }) => getJudgeHealth({ includeZeroSample, signal }),
     staleTime: 60_000,
     ...options,
   });

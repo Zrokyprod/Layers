@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useRecentTraces, useCallTraceTree, useTraceById } from "@/lib/hooks";
+import { useRecentTraces, useCallTraceTree, useTraceById, useCreateReplayRunFromCall } from "@/lib/hooks";
 import { formatUsd, formatDateTime, formatCount } from "@/lib/format";
 import { StatusPill } from "@/components/status-pill";
+import type { ReplayMode } from "@/lib/api";
 import type { TraceTreeNode } from "@/lib/types";
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -152,7 +153,9 @@ function TraceTreeView({ node, depth = 0 }: { node: TraceTreeNode; depth?: numbe
 
 export default function TraceDetailPage() {
   const params = useParams() as { id?: string };
+  const router = useRouter();
   const traceId = params?.id ?? "";
+  const [replayMode, setReplayMode] = useState<ReplayMode>("stub");
 
   // try to discover the trace entry via recent traces, falling back to trace-by-id lookup
   const tracesQuery = useRecentTraces(30, 500);
@@ -164,10 +167,21 @@ export default function TraceDetailPage() {
 
   const rootCallId = traceItem?.root_call_id ?? null;
   const traceTreeQuery = useCallTraceTree(rootCallId ?? "");
+  const createReplayMutation = useCreateReplayRunFromCall({
+    onSuccess: (run) => router.push(`/replay/${run.id}`),
+  });
 
   useEffect(() => {
     // no-op: hook usage ensures refetches
   }, [traceId]);
+
+  function createReplay() {
+    if (!rootCallId) return;
+    createReplayMutation.mutate({
+      callId: rootCallId,
+      payload: { replay_mode: replayMode },
+    });
+  }
 
   if (!traceId) {
     return <section className="panel"><p>Trace id missing.</p></section>;
@@ -191,7 +205,27 @@ export default function TraceDetailPage() {
           <h3>Trace {traceItem.trace_id}</h3>
           <p className="mono">{traceItem.agents.join(' → ')} · {traceItem.providers.join(', ')}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <select
+            value={replayMode}
+            onChange={(event) => setReplayMode(event.target.value as ReplayMode)}
+            className="input"
+            style={{ maxWidth: 170 }}
+            disabled={!rootCallId || createReplayMutation.isPending}
+          >
+            <option value="stub">Stub</option>
+            <option value="mocked-tool">Mocked-tool</option>
+            <option value="live-sandbox">Live sandbox</option>
+            <option value="shadow">Shadow</option>
+          </select>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={createReplay}
+            disabled={!rootCallId || createReplayMutation.isPending}
+          >
+            {createReplayMutation.isPending ? "Creating..." : "Create Replay"}
+          </button>
           <Link href={`/calls/${traceItem.root_call_id}`} className="btn btn-soft">Open Root Call</Link>
           <button className="btn btn-soft" onClick={() => { const blob = new Blob([JSON.stringify(traceItem, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `trace-${traceItem.trace_id}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }}>Export JSON</button>
         </div>

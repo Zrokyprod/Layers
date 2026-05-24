@@ -32,6 +32,14 @@ export function useKeyboardShortcuts() {
         },
       },
       {
+        key: "j",
+        ctrl: true,
+        description: "Open Ask Zroky",
+        action: () => {
+          window.dispatchEvent(new CustomEvent("open-ask-zroky"));
+        },
+      },
+      {
         key: "b",
         ctrl: true,
         description: "Toggle sidebar",
@@ -56,10 +64,10 @@ export function useKeyboardShortcuts() {
         action: () => router.push("/anomalies"),
       },
       {
-        key: "a",
+        key: "f",
         ctrl: true,
-        description: "Go to alerts",
-        action: () => router.push("/alerts"),
+        description: "Go to fix queue",
+        action: () => router.push("/recommendations"),
       },
       {
         key: "s",
@@ -125,12 +133,13 @@ export function useKeyboardShortcuts() {
 }
 
 export const KEYBOARD_SHORTCUTS_HELP = [
+  { keys: ["Ctrl", "J"], description: "Ask Zroky (natural-language Q&A)" },
   { keys: ["Ctrl", "K"], description: "Open command palette" },
   { keys: ["Ctrl", "B"], description: "Toggle sidebar" },
   { keys: ["Ctrl", "H"], description: "Go to home" },
   { keys: ["Ctrl", "C"], description: "Go to calls" },
-  { keys: ["Ctrl", "F"], description: "Go to fixes" },
-  { keys: ["Ctrl", "A"], description: "Go to alerts" },
+  { keys: ["Ctrl", "I"], description: "Go to anomalies" },
+  { keys: ["Ctrl", "F"], description: "Go to fix queue" },
   { keys: ["Ctrl", "S"], description: "Go to settings" },
   { keys: ["Ctrl", "Shift", "R"], description: "Refresh data" },
   { keys: ["Shift", "?"], description: "Show this help" },

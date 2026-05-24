@@ -1,28 +1,19 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, type ReactNode } from "react";
 import {
-  Activity,
   AlertTriangle,
-  BadgeCheck,
-  Bell,
-  Coins,
-  Database,
+  CircleDollarSign,
   DollarSign,
-  GitBranch,
+  FlaskConical,
   Home,
   LogOut,
   Menu,
-  Network,
-  PhoneCall,
-  Radio,
-  Rocket,
   RotateCcw,
-  Scale,
   Settings,
-  ShieldCheck,
+  Sparkles,
   Wrench,
   X,
   type LucideIcon,
@@ -34,34 +25,26 @@ import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
 import { useOwnerProjects, useProjectSettings } from "@/lib/hooks";
 import { ThemeToggle } from "./theme-toggle";
 import { CommandPalette } from "./command-palette";
-import { NotificationBell } from "./notification-bell";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { SavedYouBadge } from "./saved-you-badge";
+import { AskZroky } from "./ask-zroky";
 
 // Nav layout per ZROKY-TECHNICAL-PLAN-V2.md §10.3.
 // Pilot-section items will gain <PlanGate> wrapping in Module 8.
 type NavItem = { href: string; label: string; section: "watch" | "pilot" | "settings"; icon: LucideIcon; pilotPlaceholder?: boolean };
 const dashboardLinks: ReadonlyArray<NavItem> = [
-  // Watch (free)
+  // Watch — what is happening
   { href: "/home", label: "Home", section: "watch", icon: Home },
-  { href: "/live", label: "Live", section: "watch", icon: Radio, pilotPlaceholder: true },
-  { href: "/calls", label: "Calls", section: "watch", icon: PhoneCall },
-  { href: "/trace", label: "Traces", section: "watch", icon: Network },
-  { href: "/issues", label: "Anomalies", section: "watch", icon: AlertTriangle },
-  { href: "/cost", label: "Cost Explorer", section: "watch", icon: DollarSign },
-  // Pilot (paid) — pages ship in M3..M7. Until then these resolve to a coming-soon placeholder.
-  { href: "/pilot", label: "Pilot", section: "pilot", icon: Rocket, pilotPlaceholder: true },
-  { href: "/goldens", label: "Goldens", section: "pilot", icon: Database, pilotPlaceholder: true },
-  { href: "/replay", label: "Replay Runs", section: "pilot", icon: RotateCcw },
-  { href: "/judge", label: "Judge Calibration", section: "pilot", icon: Scale },
-  { href: "/calibration", label: "Calibration", section: "pilot", icon: BadgeCheck },
-  { href: "/outcomes", label: "Cost Attribution", section: "pilot", icon: Coins },
-  { href: "/root-cause", label: "Root Cause", section: "pilot", icon: GitBranch },
-  { href: "/reliability", label: "Reliability", section: "pilot", icon: ShieldCheck },
+  { href: "/issues", label: "Issues", section: "watch", icon: AlertTriangle },
+  { href: "/cost", label: "Cost", section: "watch", icon: DollarSign },
+  { href: "/outcomes", label: "Outcomes", section: "watch", icon: CircleDollarSign },
+
+  // Pilot — what to do about it
   { href: "/recommendations", label: "Fix Queue", section: "pilot", icon: Wrench },
-  { href: "/drift", label: "Provider Drift", section: "watch", icon: Activity },
-  // Always-on auxiliaries
-  { href: "/alerts", label: "Alerts", section: "watch", icon: Bell },
+  { href: "/replay", label: "Replay", section: "pilot", icon: RotateCcw },
+  { href: "/calibration", label: "Calibration", section: "pilot", icon: FlaskConical },
+
+  // Settings
   { href: "/settings", label: "Settings", section: "settings", icon: Settings },
 ] as const;
 
@@ -69,35 +52,20 @@ function getTitle(pathname: string): string {
   if (pathname.startsWith("/calls/")) {
     return "Call Detail";
   }
-  if (pathname.startsWith("/anomalies/")) {
-    return "Anomaly Detail";
+  if (pathname.startsWith("/anomalies/") || pathname.startsWith("/issues/")) {
+    return "Issue Detail";
+  }
+  if (pathname === "/issues") {
+    return "Issues";
   }
   if (pathname.startsWith("/replay/")) {
     return "Replay Run";
   }
-  if (pathname.startsWith("/goldens/")) {
-    return "Golden Set";
-  }
-  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
-    return "Judge Calibration";
-  }
-  if (pathname === "/outcomes" || pathname.startsWith("/outcomes/")) {
-    return "Cost Attribution";
-  }
-  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
-    return "Root-Cause Ablation";
-  }
-  if (pathname === "/reliability" || pathname.startsWith("/reliability/")) {
-    return "Agent Reliability";
-  }
   if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
     return "Fix Queue";
   }
-  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
-    return "Calibration Score";
-  }
-  if (pathname === "/drift" || pathname.startsWith("/drift/")) {
-    return "Provider Drift";
+  if (pathname === "/cost" || pathname.startsWith("/cost/")) {
+    return "Cost";
   }
 
   const match = dashboardLinks.find((item) => item.href === pathname);
@@ -114,61 +82,22 @@ function getTitle(pathname: string): string {
 
 function getSubTitle(pathname: string): string {
   if (pathname === "/home") {
-    return "Health, activity, and pilot impact at a glance.";
+    return "Is your agent healthy right now?";
   }
-  if (pathname === "/cost") {
-    return "Spend, waste, forecast, and what-if savings — unified view.";
-  }
-  if (pathname === "/live") {
-    return "Real-time stream of incoming calls.";
+  if (pathname === "/cost" || pathname.startsWith("/cost/")) {
+    return "What you spent — and what failures cost you.";
   }
   if (pathname.startsWith("/calls")) {
-    return "Search and inspect captured calls.";
+    return "What your agent said — every prompt, response, and trace.";
   }
-  if (pathname === "/trace" || pathname.startsWith("/trace/")) {
-    return "Multi-agent trace trees with parent/child lineage.";
-  }
-  if (pathname === "/anomalies" || pathname.startsWith("/anomalies/")) {
-    return "Detector-driven anomalies with diagnose evidence.";
-  }
-  if (pathname === "/pilot") {
-    return "Autopilot policy, action feed, and goldens.";
-  }
-  if (pathname === "/goldens" || pathname.startsWith("/goldens/")) {
-    return "Production-trace canonicals used for replay.";
+  if (pathname === "/anomalies" || pathname.startsWith("/anomalies/") || pathname === "/issues" || pathname.startsWith("/issues/")) {
+    return "Top production problems — not raw traces. Plain-English root cause and one-click fix.";
   }
   if (pathname === "/replay" || pathname.startsWith("/replay/")) {
-    return "Replay runs against golden sets.";
-  }
-  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
-    return "LLM-as-judge accuracy scoreboard, confusion matrix, and mode control.";
-  }
-  if (pathname === "/outcomes" || pathname.startsWith("/outcomes/")) {
-    return "Cost-of-failure attribution — every bad outcome mapped to its dollar cost.";
-  }
-  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
-    return "Statistical causal ablation — identify which axis explains each AI failure.";
-  }
-  if (pathname === "/reliability" || pathname.startsWith("/reliability/")) {
-    return "Composite 0-100 health score per agent — fail rate, cost, determinism, trend.";
-  }
-  if (pathname === "/drift" || pathname.startsWith("/drift/")) {
-    return "Daily benchmark results across providers — latency, quality, and cost drift.";
+    return "Test your fix against past data before deploying.";
   }
   if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
-    return "Ranked actionable fix items — causal axis failures, determinism spikes, cost overruns.";
-  }
-  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
-    return "Public judge accuracy score — per-model, per-class F1, mode status.";
-  }
-  if (pathname === "/digest") {
-    return "Weekly impact summaries.";
-  }
-  if (pathname === "/alerts") {
-    return "Priority incidents with lifecycle actions.";
-  }
-  if (pathname === "/notifications") {
-    return "Account inbox for alerts, product updates, and reliability events.";
+    return "What to fix next, ranked by dollar impact.";
   }
   if (pathname === "/settings") {
     return "Project, members, providers, plan & billing.";
@@ -193,6 +122,12 @@ function getSubTitle(pathname: string): string {
   }
   if (pathname === "/settings/team") {
     return "Invite and remove project members.";
+  }
+  if (pathname === "/outcomes" || pathname.startsWith("/outcomes/")) {
+    return "Business cost of every failure — refunds, escalations, churn, attributed by agent.";
+  }
+  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
+    return "Golden sets, judge accuracy, calibration runs — all in one place.";
   }
   return "Operational view";
 }
@@ -362,6 +297,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <div className="topbar-meta">
             <button
               type="button"
+              className="ask-trigger-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-ask-zroky"))}
+              aria-label="Open Ask Zroky"
+              title="Ask Zroky anything about your agent (Ctrl+J)"
+            >
+              <Sparkles className="ask-trigger-icon" aria-hidden="true" />
+              <span className="ask-trigger-text">Ask Zroky</span>
+              <kbd className="ask-trigger-kbd">Ctrl+J</kbd>
+            </button>
+            <button
+              type="button"
               className="cp-trigger-btn"
               onClick={() => window.dispatchEvent(new CustomEvent("open-command-palette"))}
               aria-label="Open command palette"
@@ -370,7 +316,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <kbd className="cp-trigger-kbd">Ctrl+K</kbd>
             </button>
             <SavedYouBadge />
-            <NotificationBell />
             <span
               className={`sdk-badge ${sdkConnected ? "sdk-badge-connected" : "sdk-badge-idle"}`}
               title={sdkConnected ? "SDK is sending live data" : "No live data received yet"}
@@ -418,6 +363,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </section>
       <CommandPalette />
       <ShortcutsHelp />
+      <AskZroky />
     </div>
   );
 }

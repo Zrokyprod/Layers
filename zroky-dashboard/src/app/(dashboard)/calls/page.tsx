@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { useRouter } from "next/navigation";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -8,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { exportCallsCsv, exportCallsJson } from "@/lib/api";
 import { formatCount, formatDateTime, formatUsd, safeString } from "@/lib/format";
-import { useListCalls, useResolveDiagnosis } from "@/lib/hooks";
+import { useListCalls } from "@/lib/hooks";
 import { callsFilterSchema, type CallsFilterFormData } from "@/lib/schemas";
 import { StatusPill } from "@/components/status-pill";
 import type { CallListItem } from "@/lib/types";
@@ -23,6 +24,8 @@ const emptyFilters: CallsFilterFormData = {
   agent_name: "",
   date_from: "",
   date_to: "",
+  min_cost_usd: "",
+  max_cost_usd: "",
   sort_by: "created_at",
   sort_order: "desc",
 };
@@ -31,6 +34,10 @@ type SortKey = "created_at" | "cost_usd" | "total_tokens" | "latency_ms";
 
 function resolveUserIdFilterFromSearchParams(searchParams: URLSearchParams): string {
   return searchParams.get("user_id")?.trim() || searchParams.get("user")?.trim() || "";
+}
+
+function onEnterSubmit(fn: () => void) {
+  return (e: React.KeyboardEvent) => { if (e.key === "Enter") fn(); };
 }
 
 function SortTh({
@@ -63,8 +70,6 @@ function downloadSelectedCallsJson(rows: CallListItem[], selectedIds: Set<string
   const blob = new Blob([
     JSON.stringify(
       {
-        exported_at: new Date().toISOString(),
-        row_count: selectedRows.length,
         items: selectedRows,
       },
       null,
@@ -83,11 +88,11 @@ function downloadSelectedCallsJson(rows: CallListItem[], selectedIds: Set<string
 
 function CallsPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [page, setPage] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exportingJson, setExportingJson] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string>("");
-  const resolveDiagnosisMutation = useResolveDiagnosis();
 
   const [appliedFilters, setAppliedFilters] = useState<CallsFilterFormData>(() => ({
     status: searchParams.get("status")?.trim() ?? "",
@@ -97,12 +102,16 @@ function CallsPageContent() {
     agent_name: searchParams.get("agent_name")?.trim() ?? "",
     date_from: searchParams.get("date_from")?.trim() ?? "",
     date_to: searchParams.get("date_to")?.trim() ?? "",
+    min_cost_usd: "",
+    max_cost_usd: "",
     sort_by: (searchParams.get("sort_by") as SortKey) ?? "created_at",
     sort_order: (searchParams.get("sort_order") as "asc" | "desc") ?? "desc",
   }));
 
   const callsQuery = useListCalls({
     ...appliedFilters,
+    min_cost_usd: appliedFilters.min_cost_usd ? parseFloat(appliedFilters.min_cost_usd) : undefined,
+    max_cost_usd: appliedFilters.max_cost_usd ? parseFloat(appliedFilters.max_cost_usd) : undefined,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   });
@@ -129,9 +138,11 @@ function CallsPageContent() {
       date_to: searchParams.get("date_to")?.trim() ?? "",
       sort_by: (searchParams.get("sort_by") as SortKey) ?? "created_at",
       sort_order: (searchParams.get("sort_order") as "asc" | "desc") ?? "desc",
+      min_cost_usd: "",
+      max_cost_usd: "",
     };
     reset(urlFilters);
-    setAppliedFilters(urlFilters);
+    setAppliedFilters({ ...urlFilters, min_cost_usd: "", max_cost_usd: "" });
     setPage(0);
     setSelectedIds(new Set());
   }, [searchParams, reset]);
@@ -141,6 +152,7 @@ function CallsPageContent() {
     setSelectedIds(new Set());
     setAppliedFilters(data);
   });
+  const submitFilters = () => void onSubmit();
 
   const handleSort = (col: SortKey) => {
     const currentSortBy = appliedFilters.sort_by as SortKey;
@@ -221,43 +233,14 @@ function CallsPageContent() {
       appliedFilters.call_type ||
       appliedFilters.agent_name ||
       appliedFilters.date_from ||
-      appliedFilters.date_to,
+      appliedFilters.date_to ||
+      appliedFilters.min_cost_usd ||
+      appliedFilters.max_cost_usd,
   );
 
   const sortBy = appliedFilters.sort_by as SortKey;
   const sortOrder = appliedFilters.sort_order as "asc" | "desc";
-  const selectedRows = rows.filter((row) => selectedIds.has(row.call_id));
-  const selectedDiagnosisIds = Array.from(
-    new Set(
-      selectedRows.flatMap((row) => row.diagnoses ?? []).filter((diagnosisId) => Boolean(diagnosisId)),
-    ),
-  );
 
-  const handleBulkResolve = async () => {
-    if (selectedDiagnosisIds.length === 0) {
-      setBulkMessage("Selected calls do not have linked diagnoses to resolve.");
-      return;
-    }
-
-    let resolvedCount = 0;
-    let failedCount = 0;
-
-    for (const diagnosisId of selectedDiagnosisIds) {
-      try {
-        await resolveDiagnosisMutation.mutateAsync(diagnosisId);
-        resolvedCount += 1;
-      } catch {
-        failedCount += 1;
-      }
-    }
-
-    setBulkMessage(
-      failedCount > 0
-        ? `Resolved ${resolvedCount} linked diagnoses. ${failedCount} failed.`
-        : `Resolved ${resolvedCount} linked diagnoses successfully.`,
-    );
-    await callsQuery.refetch();
-  };
 
   return (
     <>
@@ -306,27 +289,30 @@ function CallsPageContent() {
               <option value="completed">completed</option>
               <option value="failed">failed</option>
               <option value="enqueue_failed">enqueue_failed</option>
+              <option value="auth_failure">auth_failure</option>
+              <option value="loop_detected">loop_detected</option>
+              <option value="dead_lettered">dead_lettered</option>
             </select>
           </div>
 
           <div className="field">
             <label htmlFor="model">Model</label>
-            <input id="model" {...register("model")} placeholder="gpt-4.1-mini" />
+            <input id="model" {...register("model")} placeholder="gpt-4.1-mini" onKeyDown={onEnterSubmit(submitFilters)} />
           </div>
 
           <div className="field">
             <label htmlFor="agentName">Agent</label>
-            <input id="agentName" {...register("agent_name")} placeholder="agent name" />
+            <input id="agentName" {...register("agent_name")} placeholder="agent name" onKeyDown={onEnterSubmit(submitFilters)} />
           </div>
 
           <div className="field">
             <label htmlFor="userId">User ID</label>
-            <input id="userId" {...register("user_id")} placeholder="user id" />
+            <input id="userId" {...register("user_id")} placeholder="user id" onKeyDown={onEnterSubmit(submitFilters)} />
           </div>
 
           <div className="field">
             <label htmlFor="callType">Call Type</label>
-            <input id="callType" {...register("call_type")} placeholder="chat" />
+            <input id="callType" {...register("call_type")} placeholder="chat" onKeyDown={onEnterSubmit(submitFilters)} />
           </div>
 
           <div className="field">
@@ -337,6 +323,16 @@ function CallsPageContent() {
           <div className="field">
             <label htmlFor="dateTo">To</label>
             <input id="dateTo" type="datetime-local" {...register("date_to")} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="minCost">Min Cost ($)</label>
+            <input id="minCost" type="number" step="0.001" min="0" {...register("min_cost_usd")} placeholder="0.00" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="maxCost">Max Cost ($)</label>
+            <input id="maxCost" type="number" step="0.001" min="0" {...register("max_cost_usd")} placeholder="0.00" />
           </div>
 
           <div className="actions calls-filter-actions">
@@ -365,17 +361,7 @@ function CallsPageContent() {
       {/* ── Bulk action bar ── */}
       {selectedIds.size > 0 ? (
         <div className="bulk-bar">
-          <span className="bulk-bar-count">
-            {selectedIds.size} selected · {selectedDiagnosisIds.length} linked diagnosis{selectedDiagnosisIds.length !== 1 ? "es" : ""}
-          </span>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => void handleBulkResolve()}
-            disabled={resolveDiagnosisMutation.isPending || selectedDiagnosisIds.length === 0}
-          >
-            {resolveDiagnosisMutation.isPending ? "Resolving…" : "Resolve linked diagnoses"}
-          </button>
+          <span className="bulk-bar-count">{selectedIds.size} selected</span>
           <button
             type="button"
             className="btn btn-soft btn-sm"
@@ -425,6 +411,7 @@ function CallsPageContent() {
                       aria-label="Select all on this page"
                     />
                   </th>
+                  <th>Call ID</th>
                   <SortTh label="Time" col="created_at" current={sortBy} order={sortOrder} onSort={handleSort} />
                   <th>Provider</th>
                   <th>Model</th>
@@ -434,6 +421,7 @@ function CallsPageContent() {
                   <SortTh label="Cost" col="cost_usd" current={sortBy} order={sortOrder} onSort={handleSort} />
                   <SortTh label="Latency" col="latency_ms" current={sortBy} order={sortOrder} onSort={handleSort} />
                   <th>Status</th>
+                  <th>Error</th>
                 </tr>
               </thead>
               <tbody>
@@ -441,8 +429,10 @@ function CallsPageContent() {
                   <tr
                     key={row.call_id}
                     className={selectedIds.has(row.call_id) ? "row-selected" : ""}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => router.push(`/calls/${row.call_id}`)}
                   >
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedIds.has(row.call_id)}
@@ -450,19 +440,19 @@ function CallsPageContent() {
                         aria-label={`Select call ${row.call_id}`}
                       />
                     </td>
+                    <td className="mono" title={row.call_id} style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{row.call_id.slice(0, 12)}</td>
                     <td>{formatDateTime(row.created_at)}</td>
                     <td>{safeString(row.provider, "unknown")}</td>
-                    <td>
-                      <Link href={`/calls/${row.call_id}`}>{safeString(row.model, "unknown")}</Link>
-                    </td>
+                    <td>{safeString(row.model, "unknown")}</td>
                     <td>{safeString(row.agent_name, "-")}</td>
-                    <td>{safeString(row.user_id, "-")}</td>
+                    <td style={{ maxWidth: "100px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={safeString(row.user_id, "")}>{safeString(row.user_id, "-")}</td>
                     <td className="mono">{formatCount(row.total_tokens)}</td>
                     <td className="mono">{formatUsd(row.cost_usd)}</td>
-                    <td className="mono">{row.latency_ms != null ? `${row.latency_ms}ms` : "-"}</td>
+                    <td className="mono">{row.latency_ms != null ? (row.latency_ms < 1000 ? `${row.latency_ms}ms` : `${(row.latency_ms / 1000).toFixed(1)}s`) : "-"}</td>
                     <td>
                       <StatusPill value={row.status} />
                     </td>
+                    <td>{row.error_code ? <span style={{ color: "#ef4444", fontSize: "0.8rem", fontFamily: "monospace" }}>{row.error_code}</span> : <span style={{ color: "var(--muted)" }}>{"\u2014"}</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -527,6 +517,7 @@ function CallsPageContent() {
                   reset(emptyFilters);
                   setAppliedFilters(emptyFilters);
                   setPage(0);
+                  setSelectedIds(new Set());
                 }}
               >
                 Reset filters

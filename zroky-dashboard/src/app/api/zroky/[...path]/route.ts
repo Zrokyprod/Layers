@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-const defaultBaseUrl = "http://127.0.0.1:8000";
+const devDefaultBaseUrl = "http://127.0.0.1:8000";
 
 type RouteContext = {
   params: Promise<{
@@ -9,14 +9,35 @@ type RouteContext = {
 };
 
 function getBaseUrl(): string {
-  const raw = process.env.ZROKY_API_BASE_URL ?? defaultBaseUrl;
-  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+  const raw = process.env.ZROKY_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (!raw && isProduction) {
+    throw new Error("ZROKY_API_BASE_URL is required in production.");
+  }
+
+  const value = raw ?? devDefaultBaseUrl;
+  const parsed = new URL(value);
+  if (isProduction && ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) {
+    throw new Error("ZROKY_API_BASE_URL must point to a real backend in production.");
+  }
+
+  const normalized = parsed.toString();
+  return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
 }
 
 async function forwardRequest(request: NextRequest, context: RouteContext): Promise<Response> {
   const params = await context.params;
   const path = params.path.join("/");
-  const baseUrl = getBaseUrl();
+  let baseUrl: string;
+  try {
+    baseUrl = getBaseUrl();
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Backend API is not configured." },
+      { status: 500 },
+    );
+  }
   const target = new URL(`${baseUrl}/${path}`);
 
   request.nextUrl.searchParams.forEach((value, key) => {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -14,25 +14,21 @@ interface CommandItem {
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
   return [
-    // Watch
-    { id: "home", label: "Go to Home", description: "Health, activity, and pilot impact", shortcut: "Ctrl+H", action: () => router.push("/home") },
-    { id: "calls", label: "Go to Calls", description: "Search and inspect captured calls", shortcut: "Ctrl+C", action: () => router.push("/calls") },
-    { id: "trace", label: "Go to Traces", description: "Multi-agent trace tree", action: () => router.push("/trace") },
-    { id: "anomalies", label: "Go to Anomalies", description: "Detector-driven anomalies and diagnoses", shortcut: "Ctrl+I", action: () => router.push("/anomalies") },
-    { id: "alerts", label: "Go to Alerts", description: "Priority incidents", shortcut: "Ctrl+A", action: () => router.push("/alerts") },
-    // Pilot (paid)
-    { id: "pilot", label: "Go to Pilot", description: "Autopilot policy and action feed", action: () => router.push("/pilot") },
-    { id: "goldens", label: "Go to Goldens", description: "Production-trace canonicals", action: () => router.push("/goldens") },
-    { id: "replay", label: "Go to Replay Runs", description: "Replay run history", action: () => router.push("/replay") },
-    { id: "judge", label: "Go to Judge Calibration", description: "Accuracy scoreboard, confusion matrix, mode control", action: () => router.push("/judge") },
-    { id: "calibration", label: "Go to Calibration Score", description: "Public per-model accuracy, F1 per class, blocking/advisory mode", action: () => router.push("/calibration") },
-    { id: "outcomes", label: "Go to Cost Attribution", description: "Dollar cost of every bad AI outcome — by type, cluster, and replay savings", action: () => router.push("/outcomes") },
-    { id: "root-cause", label: "Go to Root Cause", description: "Statistical causal ablation — identify which axis explains each AI failure", action: () => router.push("/root-cause") },
-    { id: "reliability", label: "Go to Reliability", description: "Composite 0-100 health score per agent — fail rate, cost, determinism, trend", action: () => router.push("/reliability") },
-    { id: "recommendations", label: "Go to Fix Queue", description: "Ranked actionable fix items — causal axis failures, determinism spikes, cost overruns", action: () => router.push("/recommendations") },
-    { id: "digest", label: "Go to Digest", description: "Weekly impact summaries", action: () => router.push("/digest") },
-    { id: "drift", label: "Go to Provider Drift", description: "Silent-update alerts for major LLM providers", action: () => router.push("/drift") },
-    { id: "notifications", label: "Go to Notifications", description: "Account inbox for alerts and product updates", action: () => router.push("/notifications") },
+    // Watch (Observability)
+    { id: "home", label: "Go to Home", description: "Health check + live agent activity", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "calls", label: "Go to Calls", description: "What your agent said — prompts, responses, latency", shortcut: "Ctrl+C", action: () => router.push("/calls") },
+    { id: "alerts", label: "Go to Alerts", description: "Triage open alerts — acknowledge, resolve, reopen", shortcut: "Ctrl+I", action: () => router.push("/alerts") },
+    { id: "cost", label: "Go to Cost", description: "Spend, waste, and cost of failures", action: () => router.push("/cost") },
+    { id: "outcomes", label: "Go to Outcomes", description: "Business cost of failures — refunds, escalations, churn attributed by agent", action: () => router.push("/outcomes") },
+    // Pilot (Actionable)
+    { id: "recommendations", label: "Go to Fix Queue", description: "What to fix next, ranked by impact ($)", action: () => router.push("/recommendations") },
+    { id: "replay", label: "Go to Replay", description: "Test a fix against past data before deploying", action: () => router.push("/replay") },
+    { id: "calibration", label: "Go to Calibration", description: "LLM judge calibration — golden sets, accuracy, run history", action: () => router.push("/calibration") },
+    { id: "calibration-goldens", label: "Calibration → Golden Sets", description: "Add production traces and label pass/fail/inconclusive", action: () => router.push("/calibration?tab=goldens") },
+    { id: "calibration-judge", label: "Calibration → Judge Results", description: "Run calibration, check accuracy gauge and confusion matrix", action: () => router.push("/calibration?tab=judge") },
+    { id: "calibration-score", label: "Calibration → Score Overview", description: "Per-model accuracy rings and blocking/advisory mode", action: () => router.push("/calibration?tab=score") },
+    // Ask Zroky
+    { id: "ask", label: "Ask Zroky", description: "Ask anything about your agent — natural language Q&A", shortcut: "Ctrl+K", action: () => window.dispatchEvent(new CustomEvent("open-ask-zroky")) },
     // Settings
     { id: "settings", label: "Go to Settings", description: "Project, members, providers, plan & billing", shortcut: "Ctrl+S", action: () => router.push("/settings") },
     { id: "settings-keys", label: "Settings → API Keys", description: "Create and revoke API keys", action: () => router.push("/settings/keys") },

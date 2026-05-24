@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { formatCount, formatDateTime, formatUsd, numberFromUnknown, safeString } from "@/lib/format";
 import {
   useCallDetail,
-  useListCalls,
+  useAdjacentCalls,
   useCallTraceTree,
   useDiagnosisFixWatch,
   useDiagnosisPrLinks,
@@ -18,6 +18,8 @@ import {
   useCreateShareLink,
   useGenerateDiagnosisPr,
   useMarkDiagnosisFixCopied,
+  useGithubConnectionStatus,
+  useCreateReplayRunFromCall,
 } from "@/lib/hooks";
 import { prGenerationSchema, type PrGenerationFormData } from "@/lib/schemas";
 import type { JsonMap, TraceTreeNode } from "@/lib/types";
@@ -307,36 +309,31 @@ function TraceTreeView({ node, depth = 0 }: { node: TraceTreeNode; depth?: numbe
 
 export default function CallDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const callId = typeof params.id === "string" ? params.id : "";
 
   const detailQuery = useCallDetail(callId);
-  const prevCallQuery = useListCalls({
-    date_from: detailQuery.data?.call.created_at ?? "",
-    sort_by: "created_at",
-    sort_order: "asc",
-    limit: 3,
-    offset: 0,
-  });
-  const nextCallQuery = useListCalls({
-    date_to: detailQuery.data?.call.created_at ?? "",
-    sort_by: "created_at",
-    sort_order: "desc",
-    limit: 3,
-    offset: 0,
-  });
+  const adjacentQuery = useAdjacentCalls(callId);
   const traceTreeQuery = useCallTraceTree(callId);
   const fixWatchQuery = useDiagnosisFixWatch(callId);
   const prLinksQuery = useDiagnosisPrLinks(callId);
+  const githubStatus = useGithubConnectionStatus();
 
   const feedbackMutation = useSubmitDiagnosisFeedback();
   const resolveMutation = useResolveDiagnosis();
   const shareMutation = useCreateShareLink();
   const generatePrMutation = useGenerateDiagnosisPr();
   const markFixCopiedMutation = useMarkDiagnosisFixCopied();
+  const createReplayMutation = useCreateReplayRunFromCall({
+    onSuccess: (run) => router.push(`/replay/${run.id}`),
+  });
 
   const [share, setShare] = useState<Awaited<ReturnType<ReturnType<typeof useCreateShareLink>["mutateAsync"]>> | null>(null);
   const [prResult, setPrResult] = useState<Awaited<ReturnType<ReturnType<typeof useGenerateDiagnosisPr>["mutateAsync"]>> | null>(null);
-  const [actionNote, setActionNote] = useState<string>("");
+  const [feedbackNote, setFeedbackNote] = useState<string>("");
+  const [resolveNote, setResolveNote] = useState<string>("");
+  const [shareNote, setShareNote] = useState<string>("");
+  const [replayMode, setReplayMode] = useState<"stub" | "mocked-tool" | "live-sandbox" | "shadow">("stub");
 
   const {
     register,
@@ -355,7 +352,7 @@ export default function CallDetailPage() {
   const traceTree = traceTreeQuery.data ?? null;
   const fixWatch = fixWatchQuery.data ?? null;
   const prLinks = prLinksQuery.data ?? [];
-  const loading = detailQuery.isLoading || traceTreeQuery.isLoading || fixWatchQuery.isLoading;
+  const loading = detailQuery.isLoading;
   const error = detailQuery.error?.message ?? traceTreeQuery.error?.message ?? fixWatchQuery.error?.message ?? null;
 
   const diagnosis = useMemo(() => {
@@ -375,11 +372,11 @@ export default function CallDetailPage() {
   async function submitFeedback(wasHelpful: boolean) {
     if (!callId) return;
     try {
-      await feedbackMutation.mutateAsync({ callId, wasHelpful, note: actionNote.trim() || undefined });
-      setActionNote(wasHelpful ? "Marked helpful." : "Marked not helpful.");
+      await feedbackMutation.mutateAsync({ callId, wasHelpful, note: feedbackNote.trim() || undefined });
+      setFeedbackNote(wasHelpful ? "Marked helpful." : "Marked not helpful.");
     } catch (feedbackError) {
       const message = feedbackError instanceof Error ? feedbackError.message : "Feedback action failed.";
-      setActionNote(message);
+      setFeedbackNote(message);
     }
   }
 
@@ -388,10 +385,10 @@ export default function CallDetailPage() {
     try {
       const created = await shareMutation.mutateAsync(callId);
       setShare(created);
-      setActionNote("Read-only share link created.");
+      setShareNote("Read-only share link created.");
     } catch (shareError) {
       const message = shareError instanceof Error ? shareError.message : "Share action failed.";
-      setActionNote(message);
+      setShareNote(message);
     }
   }
 
@@ -399,10 +396,10 @@ export default function CallDetailPage() {
     if (!callId) return;
     try {
       const resolved = await resolveMutation.mutateAsync(callId);
-      setActionNote(resolved.message);
+      setResolveNote(resolved.message);
     } catch (resolveError) {
       const message = resolveError instanceof Error ? resolveError.message : "Resolve action failed.";
-      setActionNote(message);
+      setResolveNote(message);
     }
   }
 
@@ -410,7 +407,7 @@ export default function CallDetailPage() {
     if (!callId) return;
     const snippet = safeString(fix.code, "").trim();
     if (!snippet) {
-      setActionNote("No generated code snippet available to copy.");
+      setShareNote("No generated code snippet available to copy.");
       return;
     }
     try {
@@ -419,11 +416,16 @@ export default function CallDetailPage() {
       }
       await navigator.clipboard.writeText(snippet);
       await markFixCopiedMutation.mutateAsync(callId);
-      setActionNote("Fix snippet copied and audit-logged.");
+      setShareNote("Fix snippet copied and audit-logged.");
     } catch (copyError) {
       const message = copyError instanceof Error ? copyError.message : "Copy action failed.";
-      setActionNote(message);
+      setShareNote(message);
     }
+  }
+
+  function createReplay() {
+    if (!callId) return;
+    createReplayMutation.mutate({ callId, payload: { replay_mode: replayMode } });
   }
 
   async function onGeneratePr(data: PrGenerationFormData) {
@@ -436,10 +438,10 @@ export default function CallDetailPage() {
         baseBranch: data.baseBranch.trim() || undefined,
       });
       setPrResult(created);
-      setActionNote(`PR #${created.pull_request_number} generated successfully.`);
+      setResolveNote(`PR #${created.pull_request_number} generated successfully.`);
     } catch (generateError) {
       const message = generateError instanceof Error ? generateError.message : "Generate PR failed.";
-      setActionNote(message);
+      setResolveNote(message);
     }
   }
 
@@ -467,8 +469,8 @@ export default function CallDetailPage() {
     detail.payload.failure_reason && typeof detail.payload.failure_reason === "object" && !Array.isArray(detail.payload.failure_reason)
       ? (detail.payload.failure_reason as Record<string, unknown>)
       : null;
-  const newerCall = prevCallQuery.data?.items.find((item) => item.call_id !== callId) ?? null;
-  const olderCall = nextCallQuery.data?.items.find((item) => item.call_id !== callId) ?? null;
+  const newerCall = adjacentQuery.data?.prev ?? null;
+  const olderCall = adjacentQuery.data?.next ?? null;
   const requestPayload = asObject(detail.payload.request);
   const responsePayload = asObject(detail.payload.response);
 
@@ -483,13 +485,13 @@ export default function CallDetailPage() {
 
       <section className="detail-nav-row" aria-label="Call navigation">
         {newerCall ? (
-          <Link href={`/calls/${newerCall.call_id}`} className="btn btn-soft btn-sm">
-            ← Prev Call
+          <Link href={`/calls/${newerCall.id}`} className="btn btn-soft btn-sm">
+            ← {newerCall.model ?? "Prev"} · {newerCall.status}
           </Link>
         ) : <span />}
         {olderCall ? (
-          <Link href={`/calls/${olderCall.call_id}`} className="btn btn-soft btn-sm">
-            Next Call →
+          <Link href={`/calls/${olderCall.id}`} className="btn btn-soft btn-sm">
+            {olderCall.model ?? "Next"} · {olderCall.status} →
           </Link>
         ) : null}
       </section>
@@ -510,7 +512,36 @@ export default function CallDetailPage() {
             </div>
             <p>{formatDateTime(detail.call.created_at)}{detail.call.agent_name ? ` · Agent: ${detail.call.agent_name}` : ""}{detail.call.user_id ? ` · User: ${detail.call.user_id}` : ""}</p>
           </div>
-          <StatusPill value={detail.call.status} />
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <select
+              value={replayMode}
+              onChange={(event) => setReplayMode(event.target.value as typeof replayMode)}
+              className="input"
+              style={{ maxWidth: 160 }}
+            >
+              <option value="stub">Stub</option>
+              <option value="mocked-tool">Mocked-tool</option>
+              <option value="live-sandbox">Live sandbox</option>
+              <option value="shadow">Shadow</option>
+            </select>
+            <button type="button" className="btn btn-primary btn-sm" onClick={createReplay} disabled={createReplayMutation.isPending}>
+              {createReplayMutation.isPending ? "Creating..." : "Replay"}
+            </button>
+            <button
+              type="button"
+              className="ask-trigger-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-ask-zroky", {
+                detail: {
+                  context: { call_id: callId },
+                  prefill: "Why did this call behave this way?",
+                },
+              }))}
+              title="Ask Zroky why this call behaved this way"
+            >
+              <span className="ask-trigger-text">Ask Zroky about this call</span>
+            </button>
+            <StatusPill value={detail.call.status} />
+          </div>
         </header>
 
         {/* ── KPI grid (8 cards) ── */}
@@ -597,7 +628,7 @@ export default function CallDetailPage() {
             {promptText ? <CopyButton text={promptText} label="prompt" /> : null}
           </header>
           {promptText ? (
-            <pre className="code-block raw-call-pre">{promptText}</pre>
+            <pre className="code-block raw-call-pre" style={{ maxHeight: "400px", overflowY: "auto" }}>{promptText}</pre>
           ) : (
             <div className="empty">No prompt text captured for this call.</div>
           )}
@@ -618,7 +649,7 @@ export default function CallDetailPage() {
             {responseText ? <CopyButton text={responseText} label="response" /> : null}
           </header>
           {responseText ? (
-            <pre className="code-block raw-call-pre">{responseText}</pre>
+            <pre className="code-block raw-call-pre" style={{ maxHeight: "400px", overflowY: "auto" }}>{responseText}</pre>
           ) : (
             <div className="empty">No response text captured for this call.</div>
           )}
@@ -674,142 +705,13 @@ export default function CallDetailPage() {
           <StructuredObject data={evidence} emptyLabel="No evidence extracted." />
         </article>
 
-        <article className="panel">
-          <header className="panel-header">
-            <div>
-              <h3>Fix Guidance</h3>
-              <p>Primary and fallback recommendations.</p>
-            </div>
-          </header>
-
-          <div className="list">
-            <div className="list-row">
-              <div className="list-main">
-                <strong>Primary Fix</strong>
-                <span>{safeString(fix.primary, "No primary fix returned.")}</span>
-              </div>
-            </div>
-            <div className="list-row">
-              <div className="list-main">
-                <strong>Alternative</strong>
-                <span>{safeString(fix.alternative, "No alternative fix returned.")}</span>
-              </div>
-            </div>
-            {safeString(fix.code, "") && (
-              <>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Code Suggestion</strong>
-                  </div>
-                </div>
-                <pre className="code-block">{safeString(fix.code, "")}</pre>
-              </>
-            )}
-          </div>
-        </article>
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Multi-Agent Trace Tree</h3>
-            <p>Which agent did what, in order — with costs, latency, and failures highlighted.</p>
-          </div>
-          {traceTree?.trace_id ? (
-            <Link href={`/trace/${traceTree.trace_id}`} className="btn btn-soft">
-              View in Traces →
-            </Link>
-          ) : null}
-        </header>
-
-        {traceTree ? (
-          <>
-            <div className="list">
-              {traceTree.root_failure && (
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Root Failure</strong>
-                    <span>
-                      {safeString(traceTree.root_failure.category, "unknown")} · {safeString(traceTree.root_failure.root_cause, "No root cause available")}
-                    </span>
-                  </div>
-                </div>
-              )}
-              <div className="list-row">
-                <div className="list-main"><strong>Trace ID</strong></div>
-                <span className="mono">{safeString(traceTree.trace_id, "n/a")}</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main"><strong>Downstream Calls</strong></div>
-                <span className="mono">{formatCount(traceTree.total_downstream_calls)}</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main"><strong>Total Wasted Cost</strong></div>
-                <span className="mono">{formatUsd(traceTree.total_wasted_cost_usd)}</span>
-              </div>
-            </div>
-
-            {/* Agent attribution grid */}
-            {(() => {
-              const stats = new Map<string, { calls: number; cost: number; failed: boolean }>();
-              collectAgentStats(traceTree.root_node, stats);
-              const entries = Array.from(stats.entries());
-              if (entries.length === 0) return null;
-              return (
-                <div style={{ marginTop: 16, marginBottom: 16 }}>
-                  <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Agent Attribution ({entries.length} agent{entries.length !== 1 ? "s" : ""})
-                  </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
-                    {entries.map(([name, s]) => (
-                      <div
-                        key={name}
-                        style={{
-                          border: s.failed ? "1px solid rgba(239,68,68,0.4)" : "1px solid var(--border)",
-                          borderRadius: 8,
-                          padding: "8px 12px",
-                          background: s.failed ? "rgba(239,68,68,0.05)" : "var(--surface-muted)",
-                        }}
-                      >
-                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{name}</div>
-                        <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                          {s.calls} call{s.calls !== 1 ? "s" : ""}
-                          {s.cost > 0 ? ` · wasted ${formatUsd(s.cost)}` : ""}
-                        </div>
-                        {s.failed && (
-                          <div style={{ fontSize: 11, color: "#ef4444", marginTop: 2 }}>⚠ had failure</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div style={{ marginTop: 8 }}>
-              <ul style={{ margin: 0, padding: 0 }}>
-                <TraceTreeView node={traceTree.root_node} depth={0} />
-              </ul>
-            </div>
-          </>
-        ) : (
-          <div className="empty">No trace context available for this call.</div>
+        {wastedCostUsd > 0 && (
+          <article className="panel">
+            <h3>Wasted Cost</h3>
+            <p className="hint">Current estimated avoidable spend for this incident.</p>
+            <strong className="kpi-value mono">{formatUsd(wastedCostUsd)}</strong>
+          </article>
         )}
-      </section>
-
-      <section className="grid-three">
-        <article className="panel panel-muted">
-          <header className="panel-header">
-            <div>
-              <h3>Tool Timeline</h3>
-              <p>Trace trail if tools were involved.</p>
-            </div>
-          </header>
-          <StructuredObject
-            data={asObject(detail.payload.tool_lifecycle_summary)}
-            emptyLabel="No tool activity recorded."
-          />
-        </article>
 
         <article className="panel panel-muted">
           <header className="panel-header">
@@ -852,11 +754,13 @@ export default function CallDetailPage() {
       </section>
 
       <section className="grid-three">
-        <article className="panel">
-          <h3>Comparison Context</h3>
-          <p className="hint">Compared against rolling project baseline.</p>
-          <strong className="kpi-value">{comparisonMultiplier > 0 ? `${comparisonMultiplier.toFixed(2)}x` : "n/a"}</strong>
-        </article>
+        {comparisonMultiplier > 0 && (
+          <article className="panel">
+            <h3>Comparison Context</h3>
+            <p className="hint">Compared against rolling project baseline.</p>
+            <strong className="kpi-value">{`${comparisonMultiplier.toFixed(2)}x`}</strong>
+          </article>
+        )}
 
         <article className="panel">
           <h3>Wasted Cost</h3>
@@ -864,17 +768,17 @@ export default function CallDetailPage() {
           <strong className="kpi-value mono">{formatUsd(wastedCostUsd)}</strong>
         </article>
 
-        <article className="panel">
-          <h3>Fix Watch Status</h3>
-          <p className="hint">Health monitoring state after recommendation rollout.</p>
-          <StatusPill value={fixWatch?.status ?? safeString(diagnosis.watch_status, "not_started")} />
-          {fixWatch ? (
+        {fixWatch && (
+          <article className="panel">
+            <h3>Fix Watch Status</h3>
+            <p className="hint">Health monitoring state after recommendation rollout.</p>
+            <StatusPill value={fixWatch.status} />
             <p className="hint">
               {fixWatch.message} · Recurrences {formatCount(fixWatch.recurrence_count)}
               {fixWatch.watch_expires_at ? ` · Expires ${formatDateTime(fixWatch.watch_expires_at)}` : ""}
             </p>
-          ) : null}
-        </article>
+          </article>
+        )}
       </section>
 
       <section className="panel">
@@ -886,6 +790,13 @@ export default function CallDetailPage() {
           <StatusPill value={prResult?.auth_source ?? "not_generated"} />
         </header>
 
+        {!githubStatus.isLoading && !githubStatus.data?.connected && (
+          <div style={{ marginBottom: "1rem", padding: "0.75rem 1rem", background: "rgba(245,158,11,0.12)", borderLeft: "3px solid #f59e0b", borderRadius: "6px", fontSize: "0.82rem" }}>
+            <strong>GitHub not connected.</strong>{" "}
+            <Link href="/settings/providers">Connect GitHub in Settings - Providers</Link> to generate PRs.
+          </div>
+        )}
+        {githubStatus.data?.connected && (
         <form className="grid-three" onSubmit={handleSubmit(onGeneratePr)}>
           <div className="field">
             <label htmlFor="repoOwner">Repository Owner</label>
@@ -920,11 +831,21 @@ export default function CallDetailPage() {
             </button>
           </div>
         </form>
+        )}
 
         {prResult ? (
           <div className="panel-muted" style={{ padding: 12, borderRadius: 12 }}>
             <p className="hint">
-              Latest PR: #{prResult.pull_request_number} · Source <strong>{prResult.auth_source}</strong>
+              PR #{prResult.pull_request_number} via <strong>{prResult.auth_source}</strong>
+            </p>
+            <p style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "6px 0" }}>
+              <span style={{ fontSize: "0.78rem", padding: "2px 8px", borderRadius: 999, background: "#22c55e22", color: "#22c55e", fontWeight: 600 }}>PR Opened</span>
+              {prResult.last_ci_state ? (
+                <span style={{ fontSize: "0.78rem", padding: "2px 8px", borderRadius: 999, background: prResult.last_ci_state === "success" ? "#22c55e22" : prResult.last_ci_state === "failure" ? "#ef444422" : "#f59e0b22", color: prResult.last_ci_state === "success" ? "#22c55e" : prResult.last_ci_state === "failure" ? "#ef4444" : "#f59e0b", fontWeight: 600 }}>CI: {prResult.last_ci_state}</span>
+              ) : <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>CI: pending</span>}
+              {prResult.merged_at ? (
+                <span style={{ fontSize: "0.78rem", padding: "2px 8px", borderRadius: 999, background: "#a855f722", color: "#a855f7", fontWeight: 600 }}>Merged</span>
+              ) : <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Not merged</span>}
             </p>
             <p>
               <a href={prResult.pull_request_url} target="_blank" rel="noreferrer">
@@ -961,28 +882,34 @@ export default function CallDetailPage() {
           </div>
         </header>
 
-        <div className="actions">
-          <button type="button" className="btn btn-primary" onClick={() => void submitFeedback(true)}>
-            Helpful: Yes
-          </button>
-          <button type="button" className="btn btn-danger" onClick={() => void submitFeedback(false)}>
-            Helpful: No
-          </button>
-          <button type="button" className="btn btn-soft" onClick={() => void markResolved()}>
-            Mark Resolved
-          </button>
-          <button type="button" className="btn btn-soft" onClick={() => void copyFixSuggestion()}>
-            Copy Fix Snippet
-          </button>
-          <button type="button" className="btn btn-soft" onClick={() => void submitFeedback(false)}>
-            Dismissed
-          </button>
-          <button type="button" className="btn btn-soft" onClick={() => void shareDiagnosis()}>
-            Share Diagnosis (24h)
-          </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div className="actions">
+            <button type="button" className="btn btn-primary" onClick={() => void markResolved()}>
+              Mark Resolved
+            </button>
+            {resolveNote ? <span className="hint">{resolveNote}</span> : null}
+          </div>
+          <div className="actions">
+            <button type="button" className="btn btn-soft" onClick={() => void submitFeedback(true)}>
+              Helpful ✓
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => void submitFeedback(false)}>
+              Not Helpful ✗
+            </button>
+            {feedbackNote ? <span className="hint">{feedbackNote}</span> : null}
+          </div>
+          <div className="actions">
+            <button type="button" className="btn btn-soft" onClick={() => void copyFixSuggestion()}>
+              Copy Fix Snippet
+            </button>
+            <button type="button" className="btn btn-soft" onClick={() => void shareDiagnosis()}>
+              Share Diagnosis (24h)
+            </button>
+            {shareNote ? <span className="hint">{shareNote}</span> : null}
+          </div>
         </div>
 
-        {actionNote ? <p className="hint">{actionNote}</p> : null}
+        
 
         {share ? (
           <div className="panel-muted" style={{ padding: 12, borderRadius: 12 }}>

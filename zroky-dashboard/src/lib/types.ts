@@ -1,4 +1,4 @@
-export type JsonMap = Record<string, unknown>;
+﻿export type JsonMap = Record<string, unknown>;
 
 export interface AuthTokenResponse {
   access_token: string;
@@ -108,6 +108,17 @@ export interface CallListResponse {
   limit: number;
   offset: number;
   items: CallListItem[];
+}
+
+export interface AdjacentCallItem {
+  id: string;
+  model: string | null;
+  status: string;
+}
+
+export interface AdjacentCallsResponse {
+  prev: AdjacentCallItem | null;
+  next: AdjacentCallItem | null;
 }
 
 export interface CallFeedbackSummary {
@@ -234,6 +245,35 @@ export interface HealthScoreResponse {
   open_issues_score: number;
   details: JsonMap;
   updated_at: string;
+}
+
+export type CaptureHealthStatus = "connected" | "stale" | "no_data";
+
+export interface CaptureValidationWarning {
+  code: "tool_spans_missing" | "outcome_missing" | "prompt_version_missing";
+  label: string;
+  detail: string;
+}
+
+export interface CaptureHealthResponse {
+  project_id: string;
+  status: CaptureHealthStatus;
+  stale_after_minutes: number;
+  last_call_id: string | null;
+  last_seen_at: string | null;
+  seconds_since_last_call: number | null;
+  last_provider: string | null;
+  last_model: string | null;
+  last_call_type: string | null;
+  last_source: string | null;
+  calls_24h: number;
+  sdk_events_24h: number;
+  gateway_events_24h: number;
+  retrieval_spans_24h: number;
+  memory_spans_24h: number;
+  error_events_24h: number;
+  sampled_recent_calls: number;
+  validation_warnings: CaptureValidationWarning[];
 }
 
 export interface FixHealthTrustSummary {
@@ -1100,6 +1140,20 @@ export interface TenantFeatureFlagsResponse {
 
 export type IssueStatus = "open" | "resolved" | "ignored";
 
+export interface IssueEvidenceTrace {
+  call_id: string | null;
+  trace_id: string | null;
+  workflow_name: string | null;
+  prompt_version: string | null;
+  model: string | null;
+  provider: string | null;
+  status: string | null;
+  latency_ms: number | null;
+  cost_usd: number;
+  created_at: string | null;
+  evidence_summary: string | null;
+}
+
 export interface IssueItem {
   id: string;
   project_id: string;
@@ -1119,6 +1173,16 @@ export interface IssueItem {
   resolution_source: string | null;
   created_at: string;
   updated_at: string;
+  title: string;
+  affected_agent: string | null;
+  affected_workflow: string | null;
+  root_cause: string;
+  evidence_traces: IssueEvidenceTrace[];
+  cost_impact_usd: number;
+  user_impact: string;
+  replay_coverage_status: string;
+  recommended_next_action: string;
+  priority_score: number;
 }
 
 export interface IssueListResponse {
@@ -1206,4 +1270,37 @@ export interface ModelHistoryResponse {
   display_name: string;
   category: string;
   points: MetricPoint[];
+}
+
+
+// -- Ask Zroky -----------------------------------------------------------------
+
+export interface AskEvidence {
+  kind: string;
+  id: string;
+  label: string;
+  href: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  suggested_actions: string[];
+  confidence: number;
+  intent: string;
+  evidence: AskEvidence[];
+  used_llm: boolean;
+  fallback_reason: string | null;
+}
+
+export interface AskContext {
+  call_id?: string;
+  anomaly_id?: string;
+}
+
+export interface AskFeedbackRequest {
+  question: string;
+  answer: string;
+  helpful: boolean;
+  intent: string;
+  confidence: number;
 }

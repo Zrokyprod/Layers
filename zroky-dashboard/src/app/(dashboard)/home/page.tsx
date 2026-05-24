@@ -1,28 +1,25 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getActivityFeed, getAnalyticsSummary, getAuthSummary, getHealthScore, listAlerts, listCalls } from "@/lib/api";
+import { getActivityFeed, getAnalyticsSummary, getAuthSummary, getCaptureHealth, getHealthScore } from "@/lib/api";
 import { formatCount, formatDateTime, formatPercent, formatUsd, numberFromUnknown, safeString } from "@/lib/format";
 import { useDashboardStore } from "@/lib/store";
 import type {
   ActivityFeedItemResponse,
-  AlertItemResponse,
   AnalyticsSummaryResponse,
   AuthSummaryResponse,
-  CallListItem,
+  CaptureHealthResponse,
   HealthScoreResponse,
 } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 import { ComingSoonPoll } from "@/components/coming-soon-poll";
+import { CaptureConnectPanel } from "@/components/capture-connect-panel";
 import { JudgeHealthPanel } from "@/components/judge-health-panel";
-import { PriorityQueue } from "@/components/priority-queue";
-import {
-  detectorBadgeClass,
-  detectorLabel,
-  getDetectorMeta,
-} from "@/lib/detector-meta";
+import { TopIssuesQueue } from "@/components/top-issues-queue";
+import { RecentIssueActivity } from "@/components/recent-issue-activity";
+import { OpenIssuesBySeverity } from "@/components/open-issues-by-severity";
 
 const pollMs = 10000;
 const liveRetryMs = 5000;
@@ -70,7 +67,7 @@ function KpiDelta({
   const delta = current - previous;
   const pct = Math.abs((delta / previous) * 100);
   const isGood = lowerIsBetter ? delta <= 0 : delta >= 0;
-  const arrow = delta > 0 ? "↑" : delta < 0 ? "↓" : "→";
+  const arrow = delta > 0 ? "â†‘" : delta < 0 ? "â†“" : "â†’";
   const colorClass = delta === 0 ? "kpi-delta-flat" : isGood ? "kpi-delta-good" : "kpi-delta-bad";
   return (
     <span className={colorClass}>
@@ -79,15 +76,22 @@ function KpiDelta({
   );
 }
 
+function captureHealthText(captureHealth: CaptureHealthResponse | null): string {
+  if (!captureHealth) return "Checking ingest path";
+  if (captureHealth.status === "no_data") return "No calls received yet";
+  if (captureHealth.status === "stale") {
+    return `Last event ${captureHealth.last_seen_at ? formatDateTime(captureHealth.last_seen_at) : "unknown"}`;
+  }
+  return `${formatCount(captureHealth.calls_24h)} events in 24h`;
+}
+
 export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<AnalyticsSummaryResponse | null>(null);
   const [health, setHealth] = useState<HealthScoreResponse | null>(null);
-  const [alerts, setAlerts] = useState<AlertItemResponse[]>([]);
-  const [feed, setFeed] = useState<CallListItem[]>([]);
+  const [captureHealth, setCaptureHealth] = useState<CaptureHealthResponse | null>(null);
   const [activityFeed, setActivityFeed] = useState<ActivityFeedItemResponse[]>([]);
-  const [liveFeedState, setLiveFeedState] = useState<LiveFeedState>("connecting");
   const [authSummary, setAuthSummary] = useState<AuthSummaryResponse | null>(null);
   const [windowDays, setWindowDays] = useState<1 | 7 | 30>(1);
   const setSdkConnected = useDashboardStore((s) => s.setSdkConnected);
@@ -97,19 +101,18 @@ export default function HomePage() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const [summaryPayload, healthPayload, alertsPayload, callsPayload, activityPayload, authPayload] = await Promise.all([
+      const [summaryPayload, healthPayload, capturePayload, activityPayload, authPayload] = await Promise.all([
         getAnalyticsSummary(windowDays),
         getHealthScore(),
-        listAlerts({ status: "OPEN", limit: 8, offset: 0 }),
-        listCalls({ limit: 10, offset: 0 }),
+        getCaptureHealth(),
         getActivityFeed({ limit: 12, offset: 0 }),
         getAuthSummary(24),
       ]);
 
       setSummary(summaryPayload);
       setHealth(healthPayload);
-      setAlerts(alertsPayload.items);
-      setFeed(callsPayload.items);
+      setCaptureHealth(capturePayload);
+      setSdkConnected(capturePayload.status === "connected");
       setActivityFeed(activityPayload.items);
       setAuthSummary(authPayload);
     } catch (loadError) {
@@ -118,7 +121,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [windowDays]);
+  }, [setSdkConnected, windowDays]);
 
   useEffect(() => {
     void load();
@@ -129,74 +132,18 @@ export default function HomePage() {
   }, [load]);
 
   useEffect(() => {
-    let cancelled = false;
-    let source: EventSource | null = null;
-    let retryTimer: number | null = null;
-
-    const connect = () => {
-      if (cancelled) {
-        return;
-      }
-
-      setLiveFeedState("connecting");
-      source = new EventSource("/api/zroky/v1/live/calls?limit=10");
-
-      source.onopen = () => {
-        setLiveFeedState("live");
-        setSdkConnected(true);
-      };
-
-      source.addEventListener("snapshot", (event) => {
-        try {
-          const payload = JSON.parse((event as MessageEvent<string>).data) as { items?: CallListItem[] };
-          if (Array.isArray(payload.items)) {
-            setFeed(payload.items);
-          }
-        } catch {
-          // Ignore malformed stream events and keep the previous snapshot.
-        }
-      });
-
-      source.onerror = () => {
-        if (source) {
-          source.close();
-          source = null;
-        }
-        if (cancelled) {
-          return;
-        }
-        setLiveFeedState("retrying");
-        setSdkConnected(false);
-        retryTimer = window.setTimeout(connect, liveRetryMs);
-      };
-    };
-
-    connect();
-
-    return () => {
-      cancelled = true;
-      if (retryTimer !== null) {
-        window.clearTimeout(retryTimer);
-      }
-      if (source) {
-        source.close();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
     setOnboardingWizardOpened(window.localStorage.getItem(ONBOARDING_WIZARD_OPENED_KEY) === "1");
   }, []);
 
-  function markOnboardingWizardOpened() {
+  const markOnboardingWizardOpened = useCallback(() => {
     setOnboardingWizardOpened(true);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ONBOARDING_WIZARD_OPENED_KEY, "1");
     }
-  }
+  }, []);
 
   const unusualActivity = useMemo(() => {
     if (!summary?.unusual_activity) {
@@ -300,13 +247,16 @@ export default function HomePage() {
 
   const fixAdoption = summary?.fix_adoption ?? null;
   const feedbackLoop = summary?.feedback_loop ?? null;
-  const hasNoData = !loading && summary !== null && summary.calls_today === 0 && summary.calls_yesterday === 0;
+  const shouldShowCaptureSetup =
+    !loading &&
+    captureHealth !== null &&
+    (captureHealth.status !== "connected" || (summary !== null && summary.calls_today === 0 && summary.calls_yesterday === 0));
   const onboardingChecklist = useMemo(() => {
+    const captureConnected = sdkConnected || captureHealth?.status === "connected";
     const items = [
-      { label: "SDK stream connected", done: sdkConnected },
+      { label: "Capture stream connected", done: captureConnected },
       { label: "At least one call ingested", done: (summary?.calls_today ?? 0) > 0 },
-      { label: "At least one alert generated", done: alerts.length > 0 },
-      { label: "Onboarding wizard opened", done: onboardingWizardOpened },
+      { label: "Setup path opened", done: onboardingWizardOpened },
     ];
     const completed = items.filter((item) => item.done).length;
     return {
@@ -315,7 +265,7 @@ export default function HomePage() {
       total: items.length,
       pct: Math.round((completed / items.length) * 100),
     };
-  }, [alerts.length, onboardingWizardOpened, sdkConnected, summary?.calls_today]);
+  }, [captureHealth?.status, onboardingWizardOpened, sdkConnected, summary?.calls_today]);
 
   return (
     <>
@@ -326,11 +276,8 @@ export default function HomePage() {
         </p>
         <div className="hero-footer">
           <div className="actions">
-            <Link href="/calls" className="btn btn-primary">
-              Review Calls
-            </Link>
-            <Link href="/alerts" className="btn btn-soft">
-              Open Alerts Queue
+            <Link href="/issues" className="btn btn-primary">
+              Triage Top Issues
             </Link>
           </div>
           <div className="window-toggle" role="group" aria-label="Time window">
@@ -345,53 +292,20 @@ export default function HomePage() {
               </button>
             ))}
           </div>
+          <p className="hint" style={{ fontSize: "0.72rem", marginTop: "0.25rem", opacity: 0.7 }}>Applies to KPI cards</p>
         </div>
       </section>
 
-      {hasNoData ? (
-        <section className="panel onboarding-empty-state">
-          <div className="onboarding-empty-icon" aria-hidden="true">🚀</div>
-          <h2>No data yet — connect your first agent</h2>
-          <p>Zroky hasn&apos;t received any calls. Follow the steps below to get started.</p>
-          <div className="onboarding-progress" role="status" aria-live="polite">
-            <div className="onboarding-progress-head">
-              <strong>Setup Progress</strong>
-              <span className="mono">{onboardingChecklist.completed}/{onboardingChecklist.total} done</span>
-            </div>
-            <div className="onboarding-progress-track" aria-hidden="true">
-              <div className="onboarding-progress-fill" style={{ width: `${onboardingChecklist.pct}%` }} />
-            </div>
-            <div className="onboarding-progress-grid">
-              {onboardingChecklist.items.map((item) => (
-                <span key={item.label} className={`onboarding-progress-item${item.done ? " done" : ""}`}>
-                  {item.done ? "✓" : "○"} {item.label}
-                </span>
-              ))}
-            </div>
-          </div>
-          <ol className="onboarding-steps">
-            <li>
-              <strong>Install the SDK</strong>
-              <code>pip install zroky-sdk</code>
-            </li>
-            <li>
-              <strong>Initialize your project</strong>
-              <code>zroky init --project your-project-id</code>
-            </li>
-            <li>
-              <strong>Run your agent</strong>
-              <code>zroky run --agent your_agent.py</code>
-            </li>
-            <li>
-              <strong>Verify on the Live stream</strong> — captured calls land on{" "}
-              <Link href="/calls" className="link">Calls</Link> within seconds.
-            </li>
-          </ol>
-          <div className="actions home-onboarding-actions">
-            <Link href="/settings/keys" className="btn btn-primary">Get API key</Link>
-            <Link href="/calls" className="btn btn-soft">Open Calls</Link>
-          </div>
-        </section>
+      {shouldShowCaptureSetup ? (
+        <CaptureConnectPanel
+          captureHealth={captureHealth}
+          checklistItems={onboardingChecklist.items}
+          completedCount={onboardingChecklist.completed}
+          totalCount={onboardingChecklist.total}
+          progressPct={onboardingChecklist.pct}
+          onRefresh={() => void load()}
+          onMarkOpened={markOnboardingWizardOpened}
+        />
       ) : null}
 
       {error ? <section className="panel"><p>{error}</p></section> : null}
@@ -401,7 +315,7 @@ export default function HomePage() {
           <header className="panel-header">
             <div>
               <h3 className="home-auth-banner-title">
-                ⚠ Auth Failure Detected — Production Down Risk
+                {authSummary.open_alert_count > 1 ? "âš  Auth Failures Detected" : "âš  Auth Failure Detected"}
               </h3>
               <p>
                 {authSummary.open_alert_count} unacknowledged auth failure alert{authSummary.open_alert_count > 1 ? "s" : ""} in the last 24 hours.
@@ -412,8 +326,8 @@ export default function HomePage() {
                   : " Not yet acknowledged."}
               </p>
             </div>
-            <Link href="/alerts?category=AUTH_FAILURE" className="btn btn-primary home-auth-banner-btn">
-              Triage Auth Alerts
+            <Link href="/issues?failure_code=AUTH_FAILURE" className="btn btn-primary home-auth-banner-btn">
+              Triage Auth Issues
             </Link>
           </header>
         </section>
@@ -436,13 +350,21 @@ export default function HomePage() {
         </article>
 
         <article className="kpi-card">
+          <span className="kpi-label">Capture Health</span>
+          <strong className="kpi-value">
+            <StatusPill value={captureHealth?.status ?? "checking"} />
+          </strong>
+          <div className="kpi-helper">{captureHealthText(captureHealth)}</div>
+        </article>
+
+        <article className="kpi-card">
           <span className="kpi-label">Calls ({windowDays === 1 ? "24h" : windowDays === 7 ? "7d" : "30d"})</span>
           <strong className="kpi-value">{summary ? formatCount(summary.calls_today) : "-"}</strong>
           <div className="kpi-helper">
             {summary && summary.calls_yesterday > 0 ? (
               <KpiDelta current={summary.calls_today} previous={summary.calls_yesterday} lowerIsBetter={false} />
             ) : (
-              `Traffic · last ${windowDays === 1 ? "24 hours" : windowDays === 7 ? "7 days" : "30 days"}`
+              `Traffic Â· last ${windowDays === 1 ? "24 hours" : windowDays === 7 ? "7 days" : "30 days"}`
             )}
           </div>
         </article>
@@ -460,9 +382,9 @@ export default function HomePage() {
         </article>
 
         <article className="kpi-card">
-          <span className="kpi-label">Open Alerts</span>
+          <span className="kpi-label">Open Issues</span>
           <strong className="kpi-value">{summary ? formatCount(summary.open_issues) : "0"}</strong>
-          <div className="kpi-helper">Detector-driven, needs triage</div>
+          <div className="kpi-helper">Grouped product problems, ranked by impact</div>
         </article>
 
         <article className="kpi-card">
@@ -476,47 +398,96 @@ export default function HomePage() {
         </article>
       </section>
 
+      {/* Top Issues Queue: top-5 open grouped Issues ranked by priority_score */}
+      <TopIssuesQueue />
+
+      <JudgeHealthPanel />
+
       <section className="grid-two">
-        <article className="panel">
+        <RecentIssueActivity />
+
+        <article className="panel panel-muted">
           <header className="panel-header">
             <div>
-              <h3>Active Alerts</h3>
-              <p>Highest-priority open alerts from the detector pipeline.</p>
+              <h3>Unusual Activity</h3>
+              <p>Automatic anomaly hint for bursty users.</p>
             </div>
-            <Link href="/alerts" className="btn btn-soft">
-              See All
-            </Link>
           </header>
 
-          <div className="list">
-            {alerts.length === 0 ? (
-              <div className="empty">No active alerts. System is quiet.</div>
-            ) : (
-              alerts.slice(0, 6).map((alert) => {
-                const meta = getDetectorMeta(alert.category);
-                return (
-                  <Link href="/alerts" key={alert.alert_id} className="list-row">
-                    <div className="list-main">
-                      <strong>{alert.title}</strong>
-                      <span>
-                        <span
-                          className={detectorBadgeClass(alert.category)}
-                          title={meta.description}
-                          style={{ marginRight: "0.4rem" }}
-                        >
-                          <span aria-hidden="true">{meta.icon}</span>{" "}
-                          {detectorLabel(alert.category)}
-                        </span>
-                        · {formatDateTime(alert.created_at)}
-                      </span>
-                    </div>
-                    <StatusPill value={alert.severity} />
-                  </Link>
-                );
-              })
-            )}
-          </div>
+          {unusualActivity ? (
+            <div className="list unusual-activity-panel">
+              <div className="list-row unusual-activity-headline">
+                <div className="list-main">
+                  <strong>{unusualActivity.multiplier.toFixed(2)} times normal</strong>
+                  <span>{unusualActivity.impactedUser} is showing burst behavior vs project baseline.</span>
+                </div>
+                <StatusPill value={unusualActivity.multiplier >= 3 ? "critical" : "warning"} />
+              </div>
+
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Impacted User</strong>
+                </div>
+                <span className="mono">{unusualActivity.impactedUser}</span>
+              </div>
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Anomaly Multiplier</strong>
+                  <span className="list-subtle">Maximum of call and cost multiplier.</span>
+                </div>
+                <span className="mono">{unusualActivity.multiplier.toFixed(2)} times normal</span>
+              </div>
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Call Pattern</strong>
+                  <span className="list-subtle">
+                    {formatCount(unusualActivity.currentCalls)} current vs {unusualActivity.normalCallsPerUser.toFixed(2)} normal calls per user
+                  </span>
+                </div>
+                <span className="mono">{unusualActivity.callMultiplier.toFixed(2)}x</span>
+              </div>
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Cost Pattern</strong>
+                  <span className="list-subtle">
+                    {formatUsd(unusualActivity.currentCostUsd)} current vs {formatUsd(unusualActivity.normalCostPerUserUsd)} normal spend per user
+                  </span>
+                </div>
+                <span className="mono">{unusualActivity.costMultiplier.toFixed(2)}x</span>
+              </div>
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Current Waste Estimate</strong>
+                </div>
+                <span className="mono">{formatUsd(unusualActivity.wasteUsd)}</span>
+              </div>
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Suggested Action</strong>
+                </div>
+                <span>{unusualActivity.action}</span>
+              </div>
+
+              <div className="actions unusual-activity-actions">
+                <Link
+                  href={`/calls?user_id=${encodeURIComponent(unusualActivity.impactedUser)}`}
+                  className="btn btn-primary"
+                >
+                  Investigate User Calls
+                </Link>
+                <Link href="/issues" className="btn btn-soft">
+                  Open Issues
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="empty">No unusual user activity detected in current window.</div>
+          )}
         </article>
+      </section>
+
+      <section className="grid-two">
+        <OpenIssuesBySeverity />
 
         <article className="panel panel-muted">
           <header className="panel-header">
@@ -604,128 +575,7 @@ export default function HomePage() {
         </article>
       </section>
 
-      <section className="grid-two">
-        <article className="panel">
-          <header className="panel-header">
-            <div>
-              <h3>Live Feed</h3>
-              <p>
-                Latest calls and diagnosis statuses. Stream: {liveFeedState === "live" ? "connected" : liveFeedState}
-              </p>
-            </div>
-            <Link href="/calls" className="btn btn-soft">
-              Open Calls
-            </Link>
-          </header>
-
-          <div className="list">
-            {feed.length === 0 ? (
-              <div className="empty">No call activity yet.</div>
-            ) : (
-              feed.map((item) => (
-                <Link key={item.call_id} href={`/calls/${item.call_id}`} className="list-row">
-                  <div className="list-main">
-                    <strong>{item.model ?? "unknown-model"}</strong>
-                    <span>
-                      {safeString(item.user_id, "unknown-user")} · {formatDateTime(item.created_at)}
-                    </span>
-                  </div>
-                  <StatusPill value={item.status} />
-                </Link>
-              ))
-            )}
-          </div>
-        </article>
-
-        <article className="panel panel-muted">
-          <header className="panel-header">
-            <div>
-              <h3>Unusual Activity</h3>
-              <p>Automatic anomaly hint for bursty users.</p>
-            </div>
-          </header>
-
-          {unusualActivity ? (
-            <div className="list unusual-activity-panel">
-              <div className="list-row unusual-activity-headline">
-                <div className="list-main">
-                  <strong>{unusualActivity.multiplier.toFixed(2)} times normal</strong>
-                  <span>{unusualActivity.impactedUser} is showing burst behavior vs project baseline.</span>
-                </div>
-                <StatusPill value={unusualActivity.multiplier >= 3 ? "critical" : "warning"} />
-              </div>
-
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Impacted User</strong>
-                </div>
-                <span className="mono">{unusualActivity.impactedUser}</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Anomaly Multiplier</strong>
-                  <span className="list-subtle">Maximum of call and cost multiplier.</span>
-                </div>
-                <span className="mono">{unusualActivity.multiplier.toFixed(2)} times normal</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Call Pattern</strong>
-                  <span className="list-subtle">
-                    {formatCount(unusualActivity.currentCalls)} current vs {unusualActivity.normalCallsPerUser.toFixed(2)} normal calls per user
-                  </span>
-                </div>
-                <span className="mono">{unusualActivity.callMultiplier.toFixed(2)}x</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Cost Pattern</strong>
-                  <span className="list-subtle">
-                    {formatUsd(unusualActivity.currentCostUsd)} current vs {formatUsd(unusualActivity.normalCostPerUserUsd)} normal spend per user
-                  </span>
-                </div>
-                <span className="mono">{unusualActivity.costMultiplier.toFixed(2)}x</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Current Waste Estimate</strong>
-                </div>
-                <span className="mono">{formatUsd(unusualActivity.wasteUsd)}</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Suggested Action</strong>
-                </div>
-                <span>{unusualActivity.action}</span>
-              </div>
-
-              <div className="actions unusual-activity-actions">
-                <Link
-                  href={`/calls?user_id=${encodeURIComponent(unusualActivity.impactedUser)}`}
-                  className="btn btn-primary"
-                >
-                  Investigate User Calls
-                </Link>
-                <Link href="/alerts" className="btn btn-soft">
-                  Open Alerts Queue
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="empty">No unusual user activity detected in current window.</div>
-          )}
-        </article>
-      </section>
-{/* ── Today's Priority queue ──
-          Top-5 actionable open alerts, ranked by severity × occurrence ×
-          blast × recency. Pure client-side ranking on top of /v1/alerts
-          — no new backend route needed. Placed BEFORE Judge Health so
-          users hit the actionable list first. */}
-      <PriorityQueue />
-
-      
-      <JudgeHealthPanel />
-
+      {fixAdoption && fixAdoption.viewed_diagnoses > 0 ? (
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -816,6 +666,7 @@ export default function HomePage() {
           </article>
         </div>
       </section>
+      ) : null}
 
       <section className="panel">
         <header className="panel-header">
@@ -832,13 +683,14 @@ export default function HomePage() {
         />
       </section>
 
-      <section className="panel">
-        <header className="panel-header">
+      <details className="panel">
+        <summary className="panel-header" style={{ cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <h3>Enterprise Audit Feed</h3>
             <p>Immutable action trail: diagnosis viewed, fix copied, PR generated, and resolved.</p>
           </div>
-        </header>
+          <span className="mono hint">{activityFeed.length > 0 ? activityFeed.length + " events" : "No events"}</span>
+        </summary>
 
         <div className="list">
           {activityFeed.length === 0 ? (
@@ -849,7 +701,7 @@ export default function HomePage() {
                 <div className="list-main">
                   <strong>{actionLabel(item.action)}</strong>
                   <span>
-                    {item.diagnosis_id} · {safeString(item.actor_subject, "system")} · {formatDateTime(item.created_at)}
+                    {item.diagnosis_id} Â· {safeString(item.actor_subject, "system")} Â· {formatDateTime(item.created_at)}
                   </span>
                 </div>
                 <StatusPill value={item.action} />
@@ -857,7 +709,7 @@ export default function HomePage() {
             ))
           )}
         </div>
-      </section>
+      </details>
     </>
   );
 }

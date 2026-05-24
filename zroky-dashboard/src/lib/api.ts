@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AlertChannel,
   AlertChannelTestResponse,
   AlertItemResponse,
@@ -14,6 +14,8 @@ import type {
   CallTraceTreeResponse,
   CallDetailResponse,
   CallListResponse,
+  CaptureHealthResponse,
+  AdjacentCallsResponse,
   CostBreakdownResponse,
   CostDailyTrendResponse,
   CostHourlyResponse,
@@ -53,7 +55,6 @@ import type {
   RetentionDataErasureResponse,
   RetentionPolicyResponse,
   HealthScoreResponse,
-  JudgeHealthResponse,
   SavingsSummaryResponse,
   GithubConnectionStatusResponse,
   SlackInstallStartResponse,
@@ -88,6 +89,9 @@ import type {
   DriftModelView,
   StatusResponse,
   ModelHistoryResponse,
+  AskResponse,
+  AskContext,
+  AskFeedbackRequest,
 } from "@/lib/types";
 import {
   clearAuthSession,
@@ -290,6 +294,10 @@ export function getHealthScore(signal?: AbortSignal): Promise<HealthScoreRespons
   return request<HealthScoreResponse>("/v1/analytics/health-score", { signal });
 }
 
+export function getCaptureHealth(signal?: AbortSignal): Promise<CaptureHealthResponse> {
+  return request<CaptureHealthResponse>("/v1/capture/health", { signal });
+}
+
 export function getJudgeHealth(
   options: { includeZeroSample?: boolean; signal?: AbortSignal } = {},
 ): Promise<JudgeHealthResponse> {
@@ -446,6 +454,10 @@ export function listCalls(
     end_time?: string;
     limit?: number;
     offset?: number;
+    date_from?: string;
+    date_to?: string;
+    min_cost_usd?: number;
+    max_cost_usd?: number;
   },
   signal?: AbortSignal,
 ): Promise<CallListResponse> {
@@ -529,6 +541,10 @@ export async function exportCallsJson(
 
 export function getCallDetail(callId: string, signal?: AbortSignal): Promise<CallDetailResponse> {
   return request<CallDetailResponse>(`/v1/calls/${encodeURIComponent(callId)}`, { signal });
+}
+
+export function getAdjacentCalls(callId: string, signal?: AbortSignal): Promise<AdjacentCallsResponse> {
+  return request<AdjacentCallsResponse>(`/v1/calls/${encodeURIComponent(callId)}/adjacent`, { signal });
 }
 
 export function getCallTraceTree(callId: string, signal?: AbortSignal): Promise<CallTraceTreeResponse> {
@@ -1191,6 +1207,12 @@ export function resolveIssue(
   });
 }
 
+export function ignoreIssue(issueId: string): Promise<IssueItem> {
+  return request<IssueItem>(`/v1/issues/${encodeURIComponent(issueId)}/ignore`, {
+    method: "POST",
+  });
+}
+
 // ── Replay ────────────────────────────────────────────────────────────────────
 
 export interface ReplayJobResponse {
@@ -1817,4 +1839,191 @@ export function deleteGoldenTrace(
     `/v1/goldens/${encodeURIComponent(goldenSetId)}/traces/${encodeURIComponent(traceId)}`,
     { method: "DELETE", signal },
   );
+}
+
+
+// -- Ask Zroky -----------------------------------------------------------------
+
+export function askZroky(
+  body: { question: string; context?: AskContext },
+  signal?: AbortSignal,
+): Promise<AskResponse> {
+  return request<AskResponse>("/v1/ask", { method: "POST", body, signal });
+}
+
+export function submitAskFeedback(
+  body: AskFeedbackRequest,
+  signal?: AbortSignal,
+): Promise<{ accepted: boolean }> {
+  return request<{ accepted: boolean }>("/v1/ask/feedback", { method: "POST", body, signal });
+}
+
+// ── Replay Runs (Pilot) ───────────────────────────────────────────────────────
+
+export interface ReplayRunSummary {
+  trace_count_at_dispatch: number;
+  trace_count_executed: number;
+  pass_count: number;
+  fail_count: number;
+  error_count: number;
+  reproduced_original_failure: boolean | null;
+  fix_passed: boolean | null;
+  verified_fix: boolean;
+  verification_status: string;
+  output_diff: Record<string, unknown> | null;
+  tool_behavior_diff: Record<string, unknown> | null;
+  cost_delta_usd: number | null;
+  latency_delta_ms: number | null;
+  replay_cost_usd: number | null;
+}
+
+export interface ReplayRunItem {
+  id: string;
+  project_id: string;
+  golden_set_id: string;
+  trigger: string;
+  git_sha: string | null;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  summary: ReplayRunSummary;
+  created_at: string;
+  replay_mode: string;
+  executor_replay_mode: string;
+  replay_mode_warning: string | null;
+  candidate_prompt_override: string | null;
+  candidate_model_override: string | null;
+  prevented_outcome_cost_usd: number | null;
+}
+
+export interface ReplayRunTraceItem {
+  id: string;
+  replay_run_id: string;
+  golden_trace_id: string | null;
+  project_id: string;
+  call_id_replayed: string | null;
+  judge_scores_json: string | null;
+  status: string;
+  diff_metric: number | null;
+  output_text: string | null;
+  completed_at: string | null;
+  created_at: string;
+  output_diff: Record<string, unknown> | null;
+  tool_behavior_diff: Record<string, unknown> | null;
+  cost_delta_usd: number | null;
+  latency_delta_ms: number | null;
+}
+
+export interface ReplayRunDetailItem extends ReplayRunItem {
+  traces: ReplayRunTraceItem[];
+}
+
+export interface ReplayRunListResponse {
+  items: ReplayRunItem[];
+  next_cursor: string | null;
+  total_in_page: number;
+}
+
+export type ReplayMode = "stub" | "mocked-tool" | "live-sandbox" | "shadow";
+
+export interface ReplayCreatePayload {
+  replay_mode: ReplayMode;
+  candidate_prompt_override?: string;
+  candidate_model_override?: string;
+}
+
+export interface ReplayCreateResponse {
+  id: string;
+  project_id: string;
+  golden_set_id: string;
+  trigger: string;
+  status: string;
+  created_at: string;
+  summary_url: string;
+  replay_mode: string;
+}
+
+export function listReplayRuns(
+  params: { golden_set_id?: string; status?: string; cursor?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<ReplayRunListResponse> {
+  const q: Record<string, string> = {};
+  if (params.golden_set_id) q.golden_set_id = params.golden_set_id;
+  if (params.status) q.status = params.status;
+  if (params.cursor) q.cursor = params.cursor;
+  if (params.limit != null) q.limit = String(params.limit);
+  return request<ReplayRunListResponse>("/v1/replay/runs", { query: q, signal });
+}
+
+export function getReplayRun(runId: string, signal?: AbortSignal): Promise<ReplayRunDetailItem> {
+  return request<ReplayRunDetailItem>(`/v1/replay/runs/${encodeURIComponent(runId)}`, { signal });
+}
+
+export function createReplayRunFromCall(
+  callId: string,
+  body: ReplayCreatePayload,
+  signal?: AbortSignal,
+): Promise<ReplayCreateResponse> {
+  return request<ReplayCreateResponse>(`/v1/replay/runs/from-call/${encodeURIComponent(callId)}`, {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+export function createReplayRunFromIssue(
+  issueId: string,
+  body: ReplayCreatePayload,
+  signal?: AbortSignal,
+): Promise<ReplayCreateResponse> {
+  return request<ReplayCreateResponse>(`/v1/replay/runs/from-issue/${encodeURIComponent(issueId)}`, {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+export interface ReplayQuotaResponse {
+  enabled: boolean;
+  /** -1 = unlimited (Enterprise) */
+  limit: number;
+  used: number;
+  resets_at: string;
+  plan_code: string;
+}
+
+export function getReplayQuota(signal?: AbortSignal): Promise<ReplayQuotaResponse> {
+  return request<ReplayQuotaResponse>("/v1/replay/quota", { signal });
+}
+
+// ── Judge Health / Drift ──────────────────────────────────────────────────────
+
+export interface VerdictDriftView {
+  judge_model: string;
+  sample_count: number;
+  disagreement_count: number;
+  disagreement_rate: number;
+  threshold: number;
+  breached: boolean;
+}
+
+export interface DimensionDriftView {
+  judge_model: string;
+  dimension: string;
+  sample_count: number;
+  older_mean: number;
+  recent_mean: number;
+  drift: number;
+  threshold: number;
+  breached: boolean;
+}
+
+export interface JudgeHealthResponse {
+  project_id: string;
+  window_hours: number;
+  enabled: boolean;
+  primary_model: string | null;
+  ensemble_models: string[];
+  verdict_drift: VerdictDriftView[];
+  dimension_drift: DimensionDriftView[];
+  any_breached: boolean;
 }

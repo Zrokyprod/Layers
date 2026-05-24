@@ -3,43 +3,77 @@
 import { useEffect, useState } from "react";
 import {
   getAnalyticsSummary,
-  getCostAnomalyRisk,
-  getCostForecast,
+  getCostDailyTrend,
   getSavingsSummary,
 } from "@/lib/api";
 import { formatUsd, formatPercent } from "@/lib/format";
 import type {
   AnalyticsSummaryResponse,
-  CostAnomalyRiskResponse,
-  CostForecastResponse,
+  CostDailyTrendResponse,
   SavingsSummaryResponse,
 } from "@/lib/types";
 
 /**
  * CostKpiStrip — 4 hero KPIs at the top of the Cost Explorer.
  *
- *   1. Spent today        — `cost_today_usd` vs `cost_yesterday_usd` (Δ%)
- *   2. Forecast next window — projected total from `/ai/cost/forecast`
- *   3. Wasted % of spend  — `cumulative_wasted_usd / total spend`
- *   4. Anomaly risk pill  — current `/ai/cost/anomaly-risk` status
+ *   1. Spent today      — cost_today_usd vs cost_yesterday_usd (Δ%)
+ *   2. Est. tomorrow    — average of last 3 daily-trend points (deterministic)
+ *   3. Wasted on issues — cumulative_wasted_usd / total spend
+ *   4. Anomaly risk     — z-score of today vs window mean±std (deterministic)
  *
- * Each card has a sparkline-free numeric framing — the hero chart below shows
- * the time-series. This row is for "is anything on fire RIGHT NOW".
+ * Cards 2 and 4 were previously calling /ai/cost/forecast and
+ * /ai/cost/anomaly-risk — routes that don't exist in the backend.
+ * They now derive the same signal from the daily-trend data already
+ * fetched by CostHeroChart. No extra network call, no silent 404.
  */
 
 interface CardData {
   summary: AnalyticsSummaryResponse | null;
-  forecast: CostForecastResponse | null;
+  trend: CostDailyTrendResponse | null;
   savings: SavingsSummaryResponse | null;
-  risk: CostAnomalyRiskResponse | null;
+}
+
+// ── Deterministic forecast: average of last 3 daily points ──────────────────
+
+function computeForecast(trend: CostDailyTrendResponse | null): {
+  avgPerDay: number;
+  direction: "rising" | "falling" | "stable";
+} {
+  const pts = trend?.points ?? [];
+  const last3 = pts.slice(-3).map((p) => p.total_cost_usd);
+  if (last3.length === 0) return { avgPerDay: 0, direction: "stable" };
+  const avg = last3.reduce((a, b) => a + b, 0) / last3.length;
+  const first = last3[0];
+  const last = last3[last3.length - 1];
+  const direction: "rising" | "falling" | "stable" =
+    last > first * 1.05 ? "rising" : last < first * 0.95 ? "falling" : "stable";
+  return { avgPerDay: avg, direction };
+}
+
+// ── Deterministic anomaly: z-score of latest day vs window mean±std ──────────
+
+function computeAnomalyRisk(trend: CostDailyTrendResponse | null): {
+  status: "ok" | "elevated" | "high";
+  label: string;
+  zScore: number;
+} {
+  const costs = (trend?.points ?? []).map((p) => p.total_cost_usd);
+  if (costs.length < 3) return { status: "ok", label: "Normal", zScore: 0 };
+  const mean = costs.reduce((a, b) => a + b, 0) / costs.length;
+  const variance = costs.reduce((a, b) => a + (b - mean) ** 2, 0) / costs.length;
+  const std = Math.sqrt(variance);
+  const latest = costs[costs.length - 1] ?? 0;
+  const z = std > 0 ? (latest - mean) / std : 0;
+  if (z > 2.5) return { status: "high", label: "High", zScore: z };
+  if (z > 1.5) return { status: "elevated", label: "Elevated", zScore: z };
+  return { status: "ok", label: "Normal", zScore: z };
 }
 
 export function CostKpiStrip({ windowDays }: { windowDays: number }) {
   const [data, setData] = useState<CardData>({
     summary: null,
-    forecast: null,
+    trend: null,
     savings: null,
-    risk: null,
   });
 
   useEffect(() => {
@@ -47,18 +81,16 @@ export function CostKpiStrip({ windowDays }: { windowDays: number }) {
     let cancelled = false;
 
     async function load() {
-      const [summary, forecast, savings, risk] = await Promise.allSettled([
+      const [summary, trend, savings] = await Promise.allSettled([
         getAnalyticsSummary(1, controller.signal),
-        getCostForecast(Math.min(24, windowDays * 24), controller.signal),
+        getCostDailyTrend(windowDays, controller.signal),
         getSavingsSummary(windowDays, controller.signal),
-        getCostAnomalyRisk(controller.signal),
       ]);
       if (cancelled) return;
       setData({
         summary: summary.status === "fulfilled" ? summary.value : null,
-        forecast: forecast.status === "fulfilled" ? forecast.value : null,
+        trend: trend.status === "fulfilled" ? trend.value : null,
         savings: savings.status === "fulfilled" ? savings.value : null,
-        risk: risk.status === "fulfilled" ? risk.value : null,
       });
     }
 
@@ -69,28 +101,25 @@ export function CostKpiStrip({ windowDays }: { windowDays: number }) {
     };
   }, [windowDays]);
 
+  // Card 1: Spent today
   const todaySpend = data.summary?.cost_today_usd ?? 0;
   const yesterdaySpend = data.summary?.cost_yesterday_usd ?? 0;
   const todayDelta = yesterdaySpend > 0 ? (todaySpend - yesterdaySpend) / yesterdaySpend : 0;
   const todayDirection = todaySpend > yesterdaySpend ? "up" : todaySpend < yesterdaySpend ? "down" : "flat";
 
-  // Sum forecast points for a "next window" total
-  const forecastTotal = data.forecast?.points.reduce(
-    (acc, p) => acc + p.predicted_cost_usd,
-    0,
-  ) ?? 0;
-  const forecastConfidence = data.forecast?.confidence ?? 0;
-  const forecastTrend = data.forecast?.trend ?? "stable";
+  // Card 2: Est. tomorrow
+  const { avgPerDay, direction: forecastDir } = computeForecast(data.trend);
 
+  // Card 3: Wasted on open issues
   const wasted = data.savings?.cumulative_wasted_usd ?? 0;
-  const totalSpendForWindow = (data.savings?.cumulative_wasted_usd ?? 0)
-    + (data.savings?.cumulative_resolved_blast_usd ?? 0)
-    + Math.max(0, todaySpend * windowDays); // rough — replaced by hero chart's real number
+  const totalSpendForWindow =
+    (data.savings?.cumulative_wasted_usd ?? 0) +
+    (data.savings?.cumulative_resolved_blast_usd ?? 0) +
+    Math.max(0, todaySpend * windowDays);
   const wastedPct = totalSpendForWindow > 0 ? wasted / totalSpendForWindow : 0;
 
-  const riskStatus = data.risk?.status ?? "ok";
-  const riskLabel = data.risk?.risk_label ?? "Stable";
-  const riskScore = data.risk?.risk_score ?? 0;
+  // Card 4: Anomaly risk
+  const { status: riskStatus, label: riskLabel, zScore } = computeAnomalyRisk(data.trend);
 
   return (
     <section className="cost-kpi-strip" aria-label="Cost key indicators">
@@ -104,14 +133,16 @@ export function CostKpiStrip({ windowDays }: { windowDays: number }) {
       </article>
 
       <article className="cost-kpi-card">
-        <header>Forecast (next {data.forecast?.hours_ahead ?? "—"}h)</header>
-        <strong className="cost-kpi-value mono">{formatUsd(forecastTotal)}</strong>
+        <header>Est. tomorrow</header>
+        <strong className="cost-kpi-value mono">
+          {data.trend ? formatUsd(avgPerDay) : "—"}
+        </strong>
         <div className="cost-kpi-meta">
-          <span className={`cost-kpi-trend cost-kpi-trend-${forecastTrend}`}>
-            {forecastTrend === "rising" ? "↑ rising" : forecastTrend === "falling" ? "↓ falling" : "→ stable"}
+          <span className={`cost-kpi-trend cost-kpi-trend-${forecastDir}`}>
+            {forecastDir === "rising" ? "↑ rising" : forecastDir === "falling" ? "↓ falling" : "→ stable"}
           </span>
           <span className="cost-kpi-confidence">
-            {Math.round(forecastConfidence * 100)}% confidence
+            avg last {Math.min(3, data.trend?.points.length ?? 0)}d
           </span>
         </div>
       </article>
@@ -134,17 +165,11 @@ export function CostKpiStrip({ windowDays }: { windowDays: number }) {
         <strong className="cost-kpi-value">{riskLabel}</strong>
         <div className="cost-kpi-meta">
           <span className="cost-kpi-risk-score mono">
-            score {riskScore.toFixed(2)}
+            z={zScore.toFixed(2)}
           </span>
-          {data.risk?.contributing_factors && data.risk.contributing_factors.length > 0 ? (
-            <span
-              className="cost-kpi-risk-factors"
-              title={data.risk.contributing_factors.join("\n")}
-            >
-              {data.risk.contributing_factors.length} factor
-              {data.risk.contributing_factors.length === 1 ? "" : "s"}
-            </span>
-          ) : null}
+          <span className="cost-kpi-confidence">
+            {(data.trend?.points.length ?? 0)}d sample
+          </span>
         </div>
       </article>
     </section>

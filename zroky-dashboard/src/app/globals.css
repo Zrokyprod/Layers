@@ -1,4 +1,4 @@
-/* Tailwind v4 — import utilities only (no base/preflight reset)
+/* Tailwind v4 â€” import utilities only (no base/preflight reset)
    to preserve the existing custom design-system classes below. */
 @import "tailwindcss/utilities";
 
@@ -262,7 +262,7 @@ pre,
   box-shadow: 0 12px 34px rgba(124, 58, 237, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* Non-navigable nav entry — page does not exist yet (roadmap placeholder).
+/* Non-navigable nav entry â€” page does not exist yet (roadmap placeholder).
    Visually de-emphasized and never clickable so users don't get 404s. */
 .nav-link-placeholder {
   opacity: 0.55;
@@ -340,7 +340,7 @@ pre,
   gap: 10px;
 }
 
-/* ── Command palette trigger button ─────────────────────────── */
+/* â”€â”€ Command palette trigger button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cp-trigger-btn {
   display: flex;
@@ -376,7 +376,7 @@ pre,
   color: var(--text-secondary);
 }
 
-/* ── Command palette modal ───────────────────────────────────── */
+/* â”€â”€ Command palette modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cp-backdrop {
   position: fixed;
@@ -526,7 +526,7 @@ pre,
   font-size: 0.88rem;
 }
 
-/* ── SDK connection status badge ────────────────────────────── */
+/* â”€â”€ SDK connection status badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .sdk-badge {
   display: inline-flex;
@@ -673,7 +673,7 @@ pre,
 }
 
 /* -----------------------------------------------------------------------
-   ALERT STRIPS — inline status banners inside panels
+   ALERT STRIPS â€” inline status banners inside panels
    ----------------------------------------------------------------------- */
 .alert-strip {
   padding: 10px 14px;
@@ -1082,7 +1082,7 @@ tr:hover td {
   background: #eff6ff !important;
 }
 
-/* ── Pagination ─────────────────────────────────────────────── */
+/* â”€â”€ Pagination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .pagination {
   display: flex;
@@ -1103,7 +1103,7 @@ tr:hover td {
   font-size: 0.78rem;
 }
 
-/* ── Bulk action bar ────────────────────────────────────────── */
+/* â”€â”€ Bulk action bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bulk-bar {
   display: flex;
@@ -1384,7 +1384,7 @@ tr:hover td {
   margin-top: var(--space-1);
 }
 
-/* ── Time window toggle ─────────────────────────────────────── */
+/* â”€â”€ Time window toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .window-toggle {
   display: flex;
@@ -1419,7 +1419,7 @@ tr:hover td {
   color: var(--text-primary);
 }
 
-/* ── Shortcuts help button ──────────────────────────────────── */
+/* â”€â”€ Shortcuts help button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .sh-help-btn {
   width: 26px;
@@ -1442,7 +1442,7 @@ tr:hover td {
   color: var(--text-primary);
 }
 
-/* ── Shortcuts help modal ───────────────────────────────────── */
+/* â”€â”€ Shortcuts help modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .sh-backdrop {
   position: fixed;
@@ -1547,7 +1547,7 @@ tr:hover td {
   color: var(--text-secondary);
 }
 
-/* ── Call detail page ───────────────────────────────────────── */
+/* â”€â”€ Call detail page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .detail-breadcrumb {
   display: flex;
@@ -1760,7 +1760,7 @@ tr:hover td {
   padding: 4px 8px;
 }
 
-/* ── AI Assistant (FAB + slide-in panel) ───────────────────── */
+/* â”€â”€ AI Assistant (FAB + slide-in panel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .ai-fab {
   position: fixed;
@@ -2137,7 +2137,7 @@ tr:hover td {
   cursor: not-allowed;
 }
 
-/* ── Cost page ───────────────────────────────────────────────── */
+/* â”€â”€ Cost page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cost-window-bar {
   display: flex;
@@ -2321,7 +2321,7 @@ tr:hover td {
   opacity: 0.45;
 }
 
-/* ── Auth pages ─────────────────────────────────────────────── */
+/* â”€â”€ Auth pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .auth-screen {
   min-height: 100vh;
@@ -2586,7 +2586,7 @@ tr:hover td {
   box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.14);
 }
 
-/* ── Password eye-toggle ─────────────────────────────────────── */
+/* â”€â”€ Password eye-toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .input-eye-wrap {
   position: relative;
@@ -2617,7 +2617,7 @@ tr:hover td {
   color: #ffffff;
 }
 
-/* ── Password strength chips ─────────────────────────────────── */
+/* â”€â”€ Password strength chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .password-strength {
   display: flex;
@@ -2646,7 +2646,7 @@ tr:hover td {
   color: var(--text-secondary);
 }
 
-/* ── Spinner ─────────────────────────────────────────────────── */
+/* â”€â”€ Spinner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .spinner {
   width: 32px;
@@ -2697,7 +2697,7 @@ tr:hover td {
   to { transform: rotate(360deg); }
 }
 
-/* ── Onboarding empty state ─────────────────────────────────── */
+/* â”€â”€ Onboarding empty state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .onboarding-empty-state {
   text-align: center;
@@ -2820,6 +2820,319 @@ tr:hover td {
 
 .onboarding-progress-item.done {
   color: #166534;
+}
+
+.capture-connect-panel {
+  display: grid;
+  gap: 18px;
+  border-color: #b7d6c2;
+  background: linear-gradient(180deg, #f8fbf8 0%, #eef8f1 100%);
+  color: #13251f;
+  box-shadow: 0 18px 46px rgba(6, 33, 23, 0.2);
+}
+
+.capture-connect-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.capture-connect-title {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.capture-connect-title svg {
+  width: 24px;
+  height: 24px;
+  color: #176b4d;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.capture-connect-title h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: #13251f;
+}
+
+.capture-connect-title p {
+  margin: 0;
+  max-width: 68ch;
+  color: #3e5c52;
+}
+
+.capture-connect-panel .btn-soft {
+  border-color: #c9ddd2;
+  background: #ffffff;
+  color: #173f35;
+}
+
+.capture-connect-panel .btn-soft:hover {
+  border-color: #94b9a6;
+  background: #eff8f2;
+}
+
+.capture-connect-panel .onboarding-progress {
+  border-color: #d5e6dc;
+  background: #ffffff;
+  color: #13251f;
+}
+
+.capture-connect-panel .onboarding-progress-head strong,
+.capture-connect-panel .onboarding-progress-head .mono {
+  color: #13251f;
+}
+
+.capture-connect-panel .onboarding-progress-item {
+  color: #4b655b;
+}
+
+.capture-connect-panel .onboarding-progress-item.done {
+  color: #176b4d;
+}
+
+.capture-verification-strip {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.6fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.capture-verification-main {
+  border: 1px solid #c9ddd2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #13251f;
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.capture-verification-main svg {
+  width: 22px;
+  height: 22px;
+  color: #176b4d;
+  flex: 0 0 auto;
+}
+
+.capture-verification-strip.stale .capture-verification-main svg,
+.capture-verification-strip.waiting .capture-verification-main svg {
+  color: #a16207;
+}
+
+.capture-verification-main strong,
+.capture-verification-main span {
+  display: block;
+}
+
+.capture-verification-main strong {
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.capture-verification-main span {
+  margin-top: 4px;
+  color: #4b655b;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.capture-health-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.capture-health-metric {
+  border: 1px solid #d5e6dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #13251f;
+  padding: 10px;
+  min-width: 0;
+  text-decoration: none;
+  display: grid;
+  gap: 3px;
+}
+
+.capture-health-metric span,
+.capture-health-metric small {
+  color: #527066;
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-health-metric strong {
+  color: #13251f;
+  font-size: 0.94rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-health-link:hover {
+  border-color: #94b9a6;
+  background: #f3f8f5;
+}
+
+.capture-validation-warnings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.capture-validation-warning {
+  border: 1px solid #ead7a7;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #3c2d10;
+  padding: 10px;
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+}
+
+.capture-validation-warning svg {
+  width: 18px;
+  height: 18px;
+  color: #a16207;
+  flex: 0 0 auto;
+}
+
+.capture-validation-warning strong,
+.capture-validation-warning span {
+  display: block;
+}
+
+.capture-validation-warning strong {
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
+.capture-validation-warning span {
+  margin-top: 3px;
+  color: #6f541f;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.capture-method-toggle {
+  display: inline-flex;
+  width: fit-content;
+  gap: 4px;
+  border: 1px solid #c9ddd2;
+  border-radius: 8px;
+  background: #eaf4ee;
+  padding: 4px;
+}
+
+.capture-method-toggle button {
+  min-width: 112px;
+  height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #456258;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.capture-method-toggle button.active {
+  background: #173f35;
+  color: #ffffff;
+}
+
+.capture-method-toggle svg,
+.capture-copy-btn svg,
+.capture-connect-head .btn svg,
+.capture-connect-actions .btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.capture-connect-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.capture-code-block {
+  border: 1px solid #d5e6dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #13251f;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.capture-code-head {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #d5e6dc;
+  background: #f3f8f5;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: #1f3a31;
+}
+
+.capture-code-block pre {
+  margin: 0;
+  padding: 12px;
+  max-height: 260px;
+  overflow: auto;
+  background: #101826;
+  color: #e8eef8;
+}
+
+.capture-code-block code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  line-height: 1.65;
+  white-space: pre;
+}
+
+.capture-connect-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .capture-connect-head {
+    display: grid;
+  }
+
+  .capture-method-toggle {
+    width: 100%;
+  }
+
+  .capture-method-toggle button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .capture-verification-strip,
+  .capture-health-metrics {
+    grid-template-columns: 1fr;
+  }
 }
 
 .link {
@@ -3584,7 +3897,7 @@ tr:hover td {
 }
 
 /* -----------------------------------------------------------------------
-   ALIAS VARIABLES — bridge between new pages and existing design tokens
+   ALIAS VARIABLES â€” bridge between new pages and existing design tokens
    ----------------------------------------------------------------------- */
 :root {
   --space-6: 48px;
@@ -3707,7 +4020,7 @@ tr:hover td {
   max-width: 860px;
 }
 
-/* ── Alerts page ─────────────────────────────────────────────── */
+/* â”€â”€ Alerts page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .alert-kpi-grid {
   margin-bottom: 16px;
@@ -3832,7 +4145,7 @@ tr:hover td {
   color: #475569;
 }
 
-/* Layer-attribution micro-badge — small uppercase chip showing detection layer.
+/* Layer-attribution micro-badge â€” small uppercase chip showing detection layer.
    Used in detail headers and the detectors registry. */
 .detector-layer-chip {
   display: inline-block;
@@ -3862,7 +4175,7 @@ tr:hover td {
   background: #f5f3ff;
 }
 
-/* ── Judge Health panel (Layer 3 surface) ──────────────────────────────── */
+/* â”€â”€ Judge Health panel (Layer 3 surface) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .judge-health-panel {
   border-left: 3px solid transparent;
@@ -3982,7 +4295,7 @@ tr:hover td {
   margin-left: 8px;
 }
 
-/* ── Judge Scorecard (per-dimension visualization) ─────────────────────── */
+/* â”€â”€ Judge Scorecard (per-dimension visualization) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .judge-scorecard {
   margin: 12px 0;
@@ -4121,7 +4434,7 @@ tr:hover td {
   color: var(--text-primary);
 }
 
-/* ── Judge Narrative Card (Layer 3 hero callout — screenshot-worthy) ──── */
+/* â”€â”€ Judge Narrative Card (Layer 3 hero callout â€” screenshot-worthy) â”€â”€â”€â”€ */
 
 .judge-narrative {
   margin: 12px 0;
@@ -4244,7 +4557,7 @@ tr:hover td {
   color: var(--text-primary);
 }
 
-/* ── Counterfactual Impact card (Saved by Zroky) ───────────────────────── */
+/* â”€â”€ Counterfactual Impact card (Saved by Zroky) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .counterfactual-card {
   margin: 12px 0;
@@ -4328,7 +4641,7 @@ tr:hover td {
   font-style: italic;
 }
 
-/* ── Saved You badge (top-bar persistent ROI counter) ──────────────────── */
+/* â”€â”€ Saved You badge (top-bar persistent ROI counter) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .saved-you-badge {
   display: inline-flex;
@@ -4363,7 +4676,7 @@ tr:hover td {
   font-size: 0.78rem;
 }
 
-/* ── Today's Priority queue (top-5 actionable open alerts) ─────────────── */
+/* â”€â”€ Today's Priority queue (top-5 actionable open alerts) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .priority-queue {
   margin: 16px 0;
@@ -4495,9 +4808,9 @@ tr:hover td {
   transform: translateX(2px);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   COST EXPLORER (/cost) — unified spend, forecast, waste, what-if, pareto
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   COST EXPLORER (/cost) â€” unified spend, forecast, waste, what-if, pareto
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .cost-explorer {
   display: flex;
@@ -4567,7 +4880,7 @@ tr:hover td {
   }
 }
 
-/* ── KPI strip ───────────────────────────────────────────────────────────── */
+/* â”€â”€ KPI strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cost-kpi-strip {
   display: grid;
@@ -4647,7 +4960,7 @@ tr:hover td {
 .cost-kpi-risk-score    { color: var(--text-secondary); }
 .cost-kpi-risk-factors  { color: var(--text-secondary); cursor: help; }
 
-/* ── Hero chart ──────────────────────────────────────────────────────────── */
+/* â”€â”€ Hero chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cost-hero-chart {
   padding: 16px 20px 12px;
@@ -4769,7 +5082,7 @@ tr:hover td {
   font-size: 0.7rem;
 }
 
-/* ── Cost per outcome ────────────────────────────────────────────────────── */
+/* â”€â”€ Cost per outcome â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cost-outcome {
   display: flex;
@@ -4826,7 +5139,7 @@ tr:hover td {
   color: var(--text-secondary);
 }
 
-/* ── What-if calculator ──────────────────────────────────────────────────── */
+/* â”€â”€ What-if calculator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cost-whatif {
   display: flex;
@@ -4945,7 +5258,7 @@ tr:hover td {
   font-style: italic;
 }
 
-/* ── Pareto breakdown ────────────────────────────────────────────────────── */
+/* â”€â”€ Pareto breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cost-pareto {
   display: flex;
@@ -5168,7 +5481,7 @@ tr:hover td {
   border-color: #fca5a5;
 }
 
-/* ── Trace page ──────────────────────────────────────────────── */
+/* â”€â”€ Trace page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .trace-list {
   display: flex;
@@ -5296,7 +5609,7 @@ tr:hover td {
   color: #ef4444;
 }
 
-/* ── Loops page ──────────────────────────────────────────────── */
+/* â”€â”€ Loops page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .loop-window-btns {
   display: flex;
@@ -5424,7 +5737,7 @@ tr:hover td {
   border-left: 3px solid #f59e0b;
 }
 
-/* ── Notifications page ──────────────────────────────────────── */
+/* â”€â”€ Notifications page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .notif-row {
   display: flex;
@@ -5552,7 +5865,7 @@ tr:hover td {
   height: auto;
 }
 
-/* ── Auth-health page ────────────────────────────────────────── */
+/* â”€â”€ Auth-health page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .auth-incident-banner {
   border-left: 4px solid #dc2626;
@@ -5589,7 +5902,7 @@ tr:hover td {
   line-height: 1.7;
 }
 
-/* ── Onboarding page ─────────────────────────────────────────── */
+/* â”€â”€ Onboarding page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .onboarding-main {
   min-height: 100vh;
@@ -5602,7 +5915,7 @@ tr:hover td {
   border-radius: 12px;
 }
 
-/* ── Settings layout tabs ────────────────────────────────────── */
+/* â”€â”€ Settings layout tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .settings-tabs-nav {
   display: flex;
@@ -5632,7 +5945,7 @@ tr:hover td {
   color: var(--accent);
 }
 
-/* ── Settings / Keys page ────────────────────────────────────── */
+/* â”€â”€ Settings / Keys page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .keys-newkey-banner {
   border-color: #22c55e;
@@ -5699,7 +6012,7 @@ tr:hover td {
   margin: 0;
 }
 
-/* ── Settings / Providers page ───────────────────────────────── */
+/* â”€â”€ Settings / Providers page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .providers-list {
   display: flex;
@@ -5790,7 +6103,7 @@ tr:hover td {
   flex-shrink: 0;
 }
 
-/* ── Settings / Profile page ─────────────────────────────────── */
+/* â”€â”€ Settings / Profile page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .profile-identity-row {
   display: flex;
@@ -5879,7 +6192,7 @@ tr:hover td {
   margin-bottom: 12px;
 }
 
-/* ── Settings / Team page ────────────────────────────────────── */
+/* â”€â”€ Settings / Team page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .team-member-row {
   display: flex;
@@ -5959,7 +6272,7 @@ tr:hover td {
   align-items: center;
 }
 
-/* ── Settings / Billing page ─────────────────────────────────── */
+/* â”€â”€ Settings / Billing page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .billing-plans-grid {
   display: grid;
@@ -6070,7 +6383,7 @@ tr:hover td {
   background: var(--bg-elevated, #f8fafc);
 }
 
-/* ── Settings / Support page ─────────────────────────────────── */
+/* â”€â”€ Settings / Support page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .support-ticket-row {
   padding: 12px 4px;
@@ -6168,7 +6481,7 @@ tr:hover td {
   gap: 6px;
 }
 
-/* ── Settings main page helpers ──────────────────────────────── */
+/* â”€â”€ Settings main page helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /* Inset box reusing panel-muted background (replaces inline padding + border-radius) */
 .settings-inset {
@@ -6192,7 +6505,7 @@ tr:hover td {
   grid-column: 1 / -1;
 }
 
-/* ── NotificationBell component ──────────────────────────────── */
+/* â”€â”€ NotificationBell component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .nbell-root {
   position: relative;
@@ -6376,7 +6689,7 @@ tr:hover td {
   text-decoration: underline;
 }
 
-/* ── AssistantChat component ─────────────────────────────────── */
+/* â”€â”€ AssistantChat component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .chat-fab {
   position: fixed;
@@ -6674,7 +6987,7 @@ tr:hover td {
   color: var(--text-secondary);
 }
 
-/* ── ErrorBoundary component ─────────────────────────────────── */
+/* â”€â”€ ErrorBoundary component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .errb-screen {
   min-height: 100vh;
@@ -6719,7 +7032,7 @@ tr:hover td {
   font-size: 0.9rem;
 }
 
-/* ── Owner section ──────────────────────────────────────────── */
+/* â”€â”€ Owner section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-checking {
   min-height: 100vh;
@@ -7240,7 +7553,7 @@ tr:hover td {
   text-decoration: underline;
 }
 
-/* ── Owner admin tables ──────────────────────────────────────── */
+/* â”€â”€ Owner admin tables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-table-wrap {
   background: var(--bg-panel);
@@ -7382,7 +7695,7 @@ tr:hover td {
   font-family: monospace;
 }
 
-/* ── Owner filter bar ────────────────────────────────────────── */
+/* â”€â”€ Owner filter bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-panel-filter {
   padding: 14px 16px;
@@ -7417,7 +7730,7 @@ tr:hover td {
   min-width: 200px;
 }
 
-/* ── Owner pagination ────────────────────────────────────────── */
+/* â”€â”€ Owner pagination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-pagination {
   display: flex;
@@ -7431,7 +7744,7 @@ tr:hover td {
   color: var(--text-secondary);
 }
 
-/* ── Infrastructure page ─────────────────────────────────────── */
+/* â”€â”€ Infrastructure page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-svc-card {
   background: var(--bg-panel);
@@ -7521,7 +7834,7 @@ tr:hover td {
   color: var(--status-success);
 }
 
-/* ── AI Integration page ─────────────────────────────────────── */
+/* â”€â”€ AI Integration page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-provider-meta {
   display: flex;
@@ -7574,7 +7887,7 @@ tr:hover td {
   font-weight: 600;
 }
 
-/* ── Feature flags page ──────────────────────────────────────── */
+/* â”€â”€ Feature flags page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-flag-form {
   display: flex;
@@ -7632,7 +7945,7 @@ tr:hover td {
   gap: 10px;
 }
 
-/* ── Rate limits page ────────────────────────────────────────── */
+/* â”€â”€ Rate limits page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-config-row {
   display: grid;
@@ -7695,7 +8008,7 @@ tr:hover td {
   color: var(--status-error);
 }
 
-/* ── Pricing page ────────────────────────────────────────────── */
+/* â”€â”€ Pricing page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-price-input {
   width: 90px;
@@ -7712,7 +8025,7 @@ tr:hover td {
   font-size: 0.82rem;
 }
 
-/* ── Platform LLM page ───────────────────────────────────────── */
+/* â”€â”€ Platform LLM page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .owner-llm-panels {
   display: grid;
@@ -7757,7 +8070,7 @@ tr:hover td {
   font-size: 0.83rem;
   color: var(--text-primary);
 }
-/* ── Notification bell & popover ────────────────────────────── */
+/* â”€â”€ Notification bell & popover â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .notification-bell-wrap {
   position: relative;
@@ -7919,7 +8232,7 @@ tr:hover td {
   color: var(--danger);
 }
 
-/* ── Notifications page ───────────────────────────────────── */
+/* â”€â”€ Notifications page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .notifications-page {
   max-width: 920px;
@@ -7993,3 +8306,371 @@ tr:hover td {
   flex-shrink: 0;
 }
 
+
+/* ---------------------------------------------------------------------------
+   Ask Zroky — natural-language Q&A drawer.  Mounted in DashboardShell.
+   ----------------------------------------------------------------------- */
+
+.ask-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border, rgba(124, 92, 255, 0.4));
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.18), rgba(54, 163, 255, 0.18));
+  color: var(--text-main, #e6e8ee);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.ask-trigger-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(124, 92, 255, 0.25);
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.32), rgba(54, 163, 255, 0.32));
+}
+.ask-trigger-icon {
+  width: 16px;
+  height: 16px;
+  color: #b9a4ff;
+}
+.ask-trigger-text { white-space: nowrap; }
+.ask-trigger-kbd {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.ask-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 18, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 80;
+  display: flex;
+  justify-content: flex-end;
+  animation: ask-fade-in 140ms ease-out;
+}
+@keyframes ask-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.ask-drawer {
+  width: min(440px, 100%);
+  height: 100%;
+  background: var(--surface-1, #14161f);
+  border-left: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  display: flex;
+  flex-direction: column;
+  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.45);
+  animation: ask-slide-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes ask-slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.ask-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+}
+.ask-head-title { display: flex; gap: 0.65rem; align-items: flex-start; }
+.ask-head-icon {
+  width: 22px;
+  height: 22px;
+  color: #b9a4ff;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.ask-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main, #e6e8ee);
+}
+.ask-head p {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted, #8b90a3);
+}
+.ask-head-actions { display: flex; gap: 0.4rem; align-items: center; }
+.ask-reset-btn {
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  color: var(--text-muted, #8b90a3);
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ask-reset-btn:hover { color: var(--text-main, #e6e8ee); }
+.ask-close-btn {
+  background: transparent;
+  border: 0;
+  color: var(--text-muted, #8b90a3);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ask-close-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-main); }
+
+.ask-context-pill {
+  margin: 0.6rem 1.1rem 0;
+  padding: 0.45rem 0.7rem;
+  background: rgba(54, 163, 255, 0.08);
+  border: 1px solid rgba(54, 163, 255, 0.25);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #8b90a3);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.ask-context-pill .mono { color: var(--text-main, #e6e8ee); }
+.ask-context-clear {
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  color: rgba(54, 163, 255, 0.9);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.ask-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.1rem;
+}
+
+.ask-empty {
+  margin-top: 1.5rem;
+  text-align: left;
+}
+.ask-empty-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+  color: var(--text-main, #e6e8ee);
+}
+.ask-empty-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted, #8b90a3);
+  margin: 0 0 0.85rem;
+}
+.ask-suggestions { display: flex; flex-direction: column; gap: 0.5rem; }
+.ask-suggestion-btn {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  color: var(--text-main, #e6e8ee);
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.ask-suggestion-btn:hover {
+  background: rgba(124, 92, 255, 0.10);
+  border-color: rgba(124, 92, 255, 0.45);
+}
+
+.ask-turns { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.85rem; }
+.ask-turn { display: flex; }
+.ask-turn-user { justify-content: flex-end; }
+.ask-turn-assistant { justify-content: flex-start; }
+.ask-bubble {
+  max-width: 88%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+}
+.ask-turn-user .ask-bubble {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(54, 163, 255, 0.22));
+  border-color: rgba(124, 92, 255, 0.35);
+}
+.ask-bubble-text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text-main, #e6e8ee);
+  white-space: pre-wrap;
+}
+
+.ask-actions {
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.ask-action-item {
+  display: flex;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #b6bacb);
+}
+.ask-action-arrow { color: #b9a4ff; }
+
+.ask-evidence {
+  margin-top: 0.7rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.ask-evidence-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #8b90a3);
+  font-weight: 600;
+}
+.ask-evidence-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.ask-evidence-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-main, #e6e8ee);
+  font-size: 0.78rem;
+}
+.ask-evidence-link:hover { background: rgba(255, 255, 255, 0.06); }
+.ask-evidence-kind {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ask-evidence-kind-call { background: rgba(54, 163, 255, 0.18); color: #7cc1ff; }
+.ask-evidence-kind-anomaly { background: rgba(255, 92, 92, 0.18); color: #ff9b9b; }
+.ask-evidence-label-text { color: var(--text-muted, #b6bacb); }
+
+.ask-fallback-note {
+  margin: 0.55rem 0 0;
+  font-size: 0.7rem;
+  color: var(--text-muted, #8b90a3);
+  font-style: italic;
+}
+
+.ask-bubble-pending {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  padding: 0.6rem 0.9rem;
+}
+.ask-typing-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  animation: ask-typing 1.2s infinite ease-in-out;
+}
+.ask-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.ask-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ask-typing {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+
+.ask-input-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.85rem 1.1rem 1.1rem;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+}
+.ask-input {
+  flex: 1;
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  color: var(--text-main, #e6e8ee);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.ask-input:focus {
+  border-color: rgba(124, 92, 255, 0.55);
+  background: rgba(255, 255, 255, 0.07);
+}
+.ask-input:disabled { opacity: 0.6; }
+.ask-send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 0;
+  cursor: pointer;
+  background: linear-gradient(135deg, #7c5cff, #36a3ff);
+  color: white;
+  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+.ask-send-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(124, 92, 255, 0.4);
+}
+.ask-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* -- Mobile responsive -------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 70;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+  }
+  .app-shell:not(.sidebar-collapsed) .sidebar {
+    transform: translateX(0);
+  }
+  .ask-drawer {
+    width: 100vw;
+  }
+}
+
+/* -- Mobile responsive -------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 70;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+  }
+  .app-shell:not(.sidebar-collapsed) .sidebar {
+    transform: translateX(0);
+  }
+  .ask-drawer {
+    width: 100vw;
+  }
+}
