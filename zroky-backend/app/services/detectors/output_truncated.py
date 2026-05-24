@@ -27,6 +27,7 @@ _TRUNCATION_FINISH_REASONS = frozenset(
     {
         "length",
         "max_tokens",
+        "max_output_tokens",
         "max-tokens",
         "max_token",
         "truncated",

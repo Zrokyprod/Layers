@@ -11,9 +11,12 @@ from fastapi import APIRouter
 
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.analytics import router as analytics_router
+from app.api.routes.ask import router as ask_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.calls import router as calls_router
+from app.api.routes.capture import router as capture_router
 from app.api.routes.diagnoses import router as diagnoses_router
+from app.api.routes.digest import router as digest_router
 from app.api.routes.export import router as export_router
 from app.api.routes.fix_events import router as fix_events_router
 from app.api.routes.health import router as health_router
@@ -64,9 +67,11 @@ api_router.include_router(auth_router, tags=["auth"])
 api_router.include_router(security_router, tags=["security"])
 api_router.include_router(realtime_ws_router, tags=["realtime"])
 api_router.include_router(ingest_router, tags=["ingest"])
+api_router.include_router(capture_router, tags=["capture"])
 api_router.include_router(calls_router, tags=["calls"])
 api_router.include_router(live_router, tags=["live"])
 api_router.include_router(analytics_router, tags=["analytics"])
+api_router.include_router(ask_router, tags=["ask"])  # Ask Zroky — natural-language Q&A
 api_router.include_router(alerts_router, tags=["alerts"])
 api_router.include_router(integrations_router, tags=["integrations"])
 api_router.include_router(notifications_router, tags=["notifications"])
@@ -76,6 +81,7 @@ api_router.include_router(export_router, tags=["export"])
 api_router.include_router(fix_events_router, tags=["fix-events"])
 api_router.include_router(github_webhooks_router, tags=["github-webhooks"])
 api_router.include_router(diagnoses_router, tags=["diagnoses"])
+api_router.include_router(digest_router, tags=["digest"])
 api_router.include_router(projects_router, tags=["projects"])
 api_router.include_router(anomalies_router, tags=["anomalies"])  # canonical (Phase B)
 api_router.include_router(issues_router, tags=["issues"])  # legacy; retained until consumers migrate

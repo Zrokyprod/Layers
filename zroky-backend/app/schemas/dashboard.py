@@ -1,4 +1,4 @@
-import re
+﻿import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -50,6 +50,17 @@ class CallListResponse(BaseModel):
     limit: int
     offset: int
     items: list[CallListItem]
+
+
+class AdjacentCallItem(BaseModel):
+    id: str
+    model: str | None = None
+    status: str
+
+
+class AdjacentCallsResponse(BaseModel):
+    prev: AdjacentCallItem | None = None
+    next: AdjacentCallItem | None = None
 
 
 class CallFeedbackSummary(BaseModel):

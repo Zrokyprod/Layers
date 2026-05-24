@@ -23,14 +23,13 @@ via `services.entitlements_resolver`. The legacy file will be deleted
 in a follow-up cleanup once the dashboard migrates off `/plans` and
 `/usage` (tracked separately from Module 12).
 """
-from __future__ import annotations
-
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     HTTPException,
     Header,
@@ -408,7 +407,7 @@ class BillingMeResponse(BaseModel):
 @limiter.limit("12/minute")
 def create_checkout_session(
     request: Request,
-    body: CheckoutRequest,
+    body: CheckoutRequest = Body(...),
     tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
     gateway: StripeGateway = Depends(get_stripe_gateway),

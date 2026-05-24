@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timezone
 
@@ -102,7 +102,7 @@ def mark_all_notifications_read(
     return MarkAllReadResponse(marked_count=len(items))
 
 
-@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_notification(
     notification_id: str,
     request: Request,
@@ -116,4 +116,4 @@ def delete_notification(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
     db.delete(notification)
     db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, response_model=None)

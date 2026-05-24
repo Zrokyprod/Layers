@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -48,11 +48,14 @@ from app.services.retention import (
 from app.worker.celery_app import celery_app
 from app.worker.idempotency import idempotency_guard
 from app.services.email_sender import send_email, send_slack_message
-from app.services.weekly_impact import (
-    WeeklyImpactSummary,
-    compute_weekly_impact,
-    render_weekly_impact_html,
-    render_weekly_impact_plain,
+from app.services.digest_engine import (
+    generate_weekly_digest,
+    list_pending_digests,
+    mark_digest_sent,
+    monday_of,
+    parse_summary_json,
+    render_plain,
+    resolve_recipient_emails,
 )
 logger = logging.getLogger(__name__)
 
@@ -305,7 +308,7 @@ def _fetch_recent_signature_rows(
     limit: int,
     now: datetime,
 ) -> list[DiagnosisJob]:
-    # UTCDateTime column type normalizes tz across backends — pass through.
+    # UTCDateTime column type normalizes tz across backends â€” pass through.
     query_now = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
     window_start = query_now - timedelta(seconds=max(1, window_seconds))
     query = (
@@ -1025,11 +1028,24 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                 job.error_message = None
                 sync_alerts_from_jobs(session, tenant_id, [job])
                 session.commit()
+
+                # Deliver alert to tenant's connected Slack / Teams channels.
+                # Fires only when there are real diagnoses (not healthy traces).
+                if diagnosis_categories:
+                    from app.services.notification_dispatch import dispatch_alert_to_tenant_channels
+                    dispatch_alert_to_tenant_channels(
+                        db=session,
+                        tenant_id=tenant_id,
+                        categories=diagnosis_categories,
+                        agent_name=job.agent_name,
+                        diagnosis_id=diagnosis_id,
+                    )
+
                 # Group each detected failure code into the issues triage table
                 # AND, in parallel, into the new anomalies table (Module 3 Phase B
-                # of the issues→anomalies rename — plan §3.1, §6.1). The two
+                # of the issuesâ†’anomalies rename â€” plan Â§3.1, Â§6.1). The two
                 # writes share the same source-of-truth iteration; demoted codes
-                # per plan §6.1 (AUTH_FAILURE, TOKEN_OVERFLOW, RATE_LIMIT,
+                # per plan Â§6.1 (AUTH_FAILURE, TOKEN_OVERFLOW, RATE_LIMIT,
                 # PROVIDER_ERROR) are skipped on the anomalies side via the
                 # `map_failure_code_to_detector` helper but still recorded in
                 # the legacy issues table for backwards compat.
@@ -1120,7 +1136,7 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                     )
                 except Exception:
                     logger.debug("fix_shown_event_write_failed", exc_info=True)
-                # Best-effort realtime broadcast — never blocks the worker.
+                # Best-effort realtime broadcast â€” never blocks the worker.
                 try:
                     publish_diagnosis(
                         tenant_id=tenant_id,
@@ -1496,66 +1512,100 @@ def run_retention_enforcement(
         session.close()
 
 
-@celery_app.task(name="app.worker.tasks.send_weekly_impact_emails", queue="diagnosis_fast")
-def send_weekly_impact_emails() -> dict:
-    """Celery beat task: send weekly developer impact emails to all active projects."""
+@celery_app.task(name="app.worker.tasks.generate_weekly_digests", queue="diagnosis_fast")
+def generate_weekly_digests(week_start_iso: str | None = None) -> dict:
+    """Stage 1: compute one weekly digest row per active project."""
     settings = get_settings()
-    if not settings.WEEKLY_IMPACT_EMAIL_ENABLED:
-        logger.info("send_weekly_impact_emails: feature disabled — skipping")
-        return {"skipped": True}
+    if not settings.DIGEST_ENABLED:
+        return {"skipped": True, "reason": "DIGEST_ENABLED=false"}
 
     session = SessionLocal()
-    sent = 0
-    errors = 0
+    generated = 0
+    failed = 0
+    results: list[dict[str, Any]] = []
     try:
+        week_start = (
+            monday_of(datetime.fromisoformat(week_start_iso).date())
+            if week_start_iso
+            else monday_of(datetime.now(timezone.utc).date())
+        )
         projects: list[Project] = list(
             session.execute(
                 select(Project).where(Project.is_active.is_(True))
             ).scalars().all()
         )
-
         for project in projects:
             try:
-                summary: WeeklyImpactSummary = compute_weekly_impact(session, project.id)
-
-                if not summary.recipient_emails:
-                    logger.debug(
-                        "send_weekly_impact_emails: no admin emails for project %s — skipping",
-                        project.id,
-                    )
-                    continue
-
-                subject = f"ZROKY saved you ${summary.prevented_waste_usd:.2f} this week"
-                html_body = render_weekly_impact_html(summary)
-                plain_body = render_weekly_impact_plain(summary)
-
-                ok = send_email(
-                    summary.recipient_emails,
-                    subject,
-                    html_body,
-                    plain_body=plain_body,
+                digest = generate_weekly_digest(
+                    session,
+                    project_id=project.id,
+                    week_start=week_start,
                 )
-                if ok:
-                    sent += 1
-                    logger.info(
-                        "send_weekly_impact_emails: sent for project %s to %d recipients",
-                        project.id,
-                        len(summary.recipient_emails),
-                    )
-                else:
-                    logger.warning(
-                        "send_weekly_impact_emails: send_email returned False for project %s",
-                        project.id,
-                    )
-            except Exception as project_exc:  # noqa: BLE001
-                errors += 1
-                logger.error(
-                    "send_weekly_impact_emails: failed for project %s: %s",
-                    project.id,
-                    project_exc,
-                )
+                generated += 1
+                results.append({"project_id": project.id, "status": "ok", "digest_id": digest.id})
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                failed += 1
+                results.append({"project_id": project.id, "status": "failed", "error": mask_error_message(exc)})
+                logger.exception("generate_weekly_digest_failed", extra={"project_id": project.id})
+        return {
+            "week_start": week_start.isoformat(),
+            "projects_processed": len(projects),
+            "generated": generated,
+            "failed": failed,
+            "results": results,
+        }
+    finally:
+        session.close()
 
-        return {"projects_processed": len(projects), "emails_sent": sent, "errors": errors}
+
+@celery_app.task(name="app.worker.tasks.send_pending_digests", queue="diagnosis_fast")
+def send_pending_digests(week_start_iso: str | None = None) -> dict:
+    """Stage 2: send queued digest rows and stamp sent_at only on success."""
+    settings = get_settings()
+    if not settings.DIGEST_ENABLED:
+        return {"skipped": True, "reason": "DIGEST_ENABLED=false"}
+
+    session = SessionLocal()
+    sent = 0
+    failed = 0
+    skipped_no_recipients = 0
+    try:
+        week_start = (
+            monday_of(datetime.fromisoformat(week_start_iso).date())
+            if week_start_iso
+            else None
+        )
+        digests = list_pending_digests(
+            session,
+            week_start=week_start,
+            limit=max(1, int(settings.DIGEST_SEND_BATCH_SIZE)),
+        )
+        for digest in digests:
+            recipients = resolve_recipient_emails(session, digest.project_id)
+            if not recipients:
+                skipped_no_recipients += 1
+                continue
+            summary = parse_summary_json(digest.summary_json)
+            prevented_waste = summary.get("cost", {}).get("prevented_waste_usd", 0)
+            subject = f"ZROKY saved you ${float(prevented_waste or 0):.2f} this week"
+            ok = send_email(
+                recipients,
+                subject,
+                digest.html_blob or "",
+                plain_body=render_plain(summary) if summary else None,
+            )
+            if ok:
+                mark_digest_sent(session, digest=digest, sent_to_emails=recipients)
+                sent += 1
+            else:
+                failed += 1
+        return {
+            "processed": len(digests),
+            "sent": sent,
+            "failed": failed,
+            "skipped_no_recipients": skipped_no_recipients,
+        }
     finally:
         session.close()
 
@@ -1637,6 +1687,16 @@ def notify_fix_watch_recurrences() -> dict:
                 )
                 send_slack_message(slack_msg)
 
+                # Also deliver directly to the tenant's own Slack / Teams channel.
+                from app.services.notification_dispatch import dispatch_alert_to_tenant_channels
+                dispatch_alert_to_tenant_channels(
+                    db=session,
+                    tenant_id=watch.tenant_id,
+                    categories=target_cats,
+                    agent_name=None,
+                    diagnosis_id=watch.diagnosis_id,
+                )
+
                 # Record notification in audit log to avoid re-notifying today
                 audit = AuditLog(
                     tenant_id=watch.tenant_id,
@@ -1659,13 +1719,26 @@ def notify_fix_watch_recurrences() -> dict:
 
 @celery_app.task(name="app.worker.tasks.sync_clickhouse", queue="diagnosis_fast", ignore_result=True)
 def sync_clickhouse() -> dict:
-    """Beat task: pull new Call rows from Postgres → insert into ClickHouse."""
+    """Beat task: pull new Call rows from Postgres â†’ insert into ClickHouse."""
     from app.services.clickhouse_sync import sync_calls_to_clickhouse
     session = SessionLocal()
     try:
         return sync_calls_to_clickhouse(session)
     finally:
         session.close()
+
+
+@celery_app.task(name="app.worker.tasks.consume_gateway_ingest_stream", queue="diagnosis_fast")
+def consume_gateway_ingest_stream() -> dict:
+    """Beat task: drain gateway Redis stream into the canonical ingest pipeline."""
+    settings = get_settings()
+    if not settings.GATEWAY_INGEST_STREAM_ENABLED:
+        return {"enabled": False}
+
+    from app.services.gateway_stream_consumer import consume_gateway_stream_once
+
+    result = consume_gateway_stream_once()
+    return {"enabled": True, **result.__dict__}
 
 
 @celery_app.task(
@@ -1683,7 +1756,7 @@ def run_shadow_judge_task(
     call_response: str | None = None,
     diagnosis_summary: str | None = None,
 ) -> dict:
-    """Background shadow judge — fire-and-forget, never retried, never blocks production."""
+    """Background shadow judge â€” fire-and-forget, never retried, never blocks production."""
     from app.services.judge_shadow import run_shadow_judge
     verdict = run_shadow_judge(
         tenant_id=tenant_id,
@@ -1717,7 +1790,7 @@ def process_replay_run(
     *,
     record_calibration: bool = False,
 ) -> dict:
-    """Execute a pending ReplayRun (Module 8; plan §6.4).
+    """Execute a pending ReplayRun (Module 8; plan Â§6.4).
 
     Grades every GoldenTrace in the parent set against the configured
     judge_engine evaluator and writes one ReplayRunTrace row per trace.
@@ -1756,9 +1829,11 @@ def process_replay_run(
                 ReplayBudgetTracker,
                 default_resolver,
                 execute_replay_run,
+                _finalize_error,
                 make_live_llm_resolver,
             )
             from app.services.replay_runs import (
+                REAL_COMPARISON_REPLAY_MODES,
                 REPLAY_MODE_REAL_LLM,
                 parse_summary,
             )
@@ -1778,7 +1853,7 @@ def process_replay_run(
                 plan_code=plan, entitlements_dict=ents
             )
 
-            # ── Option B: resolve replay mode + overrides from summary ────
+            # â”€â”€ Option B: resolve replay mode + overrides from summary â”€â”€â”€â”€
             run = session.execute(
                 select(ReplayRun).where(
                     ReplayRun.project_id == tenant_id,
@@ -1797,14 +1872,20 @@ def process_replay_run(
                 }
 
             summary = parse_summary(run.summary_json)
-            replay_mode = summary.get("replay_mode", "stub")
+            replay_mode = str(summary.get("replay_mode") or "stub")
+            requested_replay_mode = str(
+                summary.get("requested_replay_mode") or replay_mode
+            )
             candidate_prompt_override = summary.get("candidate_prompt_override")
             candidate_model_override = summary.get("candidate_model_override")
 
             # Plan gate: real-LLM replay requires Team+ or Enterprise.
-            # Pro and below fall back to stub with a warning log.
+            # Fail closed instead of silently running a stub replay.
             use_live_resolver = False
-            if replay_mode == REPLAY_MODE_REAL_LLM:
+            if (
+                replay_mode == REPLAY_MODE_REAL_LLM
+                or requested_replay_mode in REAL_COMPARISON_REPLAY_MODES
+            ):
                 from app.services.entitlements_resolver import has
 
                 real_llm_entitled = has(
@@ -1813,10 +1894,18 @@ def process_replay_run(
                 if not real_llm_entitled:
                     logger.warning(
                         "process_replay_run.plan_gate_blocked tenant=%s run=%s "
-                        "plan=%s — falling back to stub resolver",
+                        "plan=%s â€” falling back to stub resolver",
                         tenant_id, run_id, plan,
                     )
-                    use_live_resolver = False
+                    run = _finalize_error(
+                        session, run, reason="real_llm_entitlement_missing"
+                    )
+                    return {
+                        "status": run.status,
+                        "tenant_id": tenant_id,
+                        "run_id": run_id,
+                        "summary": json.loads(run.summary_json) if run.summary_json else {},
+                    }
                 else:
                     use_live_resolver = True
 
@@ -1832,6 +1921,7 @@ def process_replay_run(
 
             actual_output_resolver = (
                 make_live_llm_resolver(
+                    replay_mode=requested_replay_mode,
                     candidate_prompt_override=candidate_prompt_override,
                     candidate_model_override=candidate_model_override,
                     budget_tracker=budget_tracker,
@@ -1860,9 +1950,9 @@ def process_replay_run(
                     "run_id": run_id,
                 }
 
-            # ── Auto-fix PR generation (most advanced — Enterprise) ──
+            # â”€â”€ Auto-fix PR generation (most advanced â€” Enterprise) â”€â”€
             # Trigger only when a real-LLM replay with overrides fails.
-            if replay_mode == REPLAY_MODE_REAL_LLM and run.status in ("fail", "error"):
+            if requested_replay_mode in REAL_COMPARISON_REPLAY_MODES and run.status in ("fail", "error"):
                 from app.services.replay_pr_dispatch import (
                     dispatch_replay_fix_pr,
                 )
@@ -1933,15 +2023,15 @@ def process_replay_run(
             session.close()
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# Module 12 — Subscription lifecycle automation (plan §11.4)
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Module 12 â€” Subscription lifecycle automation (plan Â§11.4)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #
 # Two beat-driven sweeps that close the gap between Stripe's event
 # stream and section 11.4's locked transition rules:
 #
-#   * expire_trials                — application-managed (no-card) trials
-#   * expire_past_due_grace        — 7-day grace cap on past_due
+#   * expire_trials                â€” application-managed (no-card) trials
+#   * expire_past_due_grace        â€” 7-day grace cap on past_due
 #
 # Both tasks are thin wrappers over `services.subscription_lifecycle`.
 # The actual transition logic, audit-log writes, and resolver-cache
@@ -1949,13 +2039,13 @@ def process_replay_run(
 # same code paths without Celery.
 #
 # Cadence: hourly. The trial-expiry worst case (one row that became
-# eligible at 00:01) sees its downgrade by 01:07 — well under the
+# eligible at 00:01) sees its downgrade by 01:07 â€” well under the
 # customer-perception bound of "starts working within an hour".
 #
 # Idempotency: the eligibility filters in the service guarantee
 # re-entry safety. Concurrent sweeps would each pick the same rows
 # and the second would find the rows already transitioned. We do
-# NOT add a distributed lock — the cost is one wasted SELECT per
+# NOT add a distributed lock â€” the cost is one wasted SELECT per
 # duplicate run, which is cheap.
 
 
@@ -1974,7 +2064,7 @@ def expire_trials(limit: int | None = None) -> dict:
 
     settings = get_settings()
     if not settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
-        logger.info("expire_trials: BILLING_LIFECYCLE_SWEEP_ENABLED=false — skipping")
+        logger.info("expire_trials: BILLING_LIFECYCLE_SWEEP_ENABLED=false â€” skipping")
         return {"skipped": True, "reason": "BILLING_LIFECYCLE_SWEEP_ENABLED=false"}
 
     effective_limit = (
@@ -2018,7 +2108,7 @@ def expire_past_due_grace(
     for the eligibility contract.
 
     grace_days defaults to BILLING_PAST_DUE_GRACE_DAYS (locked at 7
-    per plan §11.4 binding); the kwarg exists so an operator can run
+    per plan Â§11.4 binding); the kwarg exists so an operator can run
     a one-off sweep with a longer window during a Stripe outage.
     """
     from app.services.subscription_lifecycle import sweep_expired_past_due_grace
@@ -2026,7 +2116,7 @@ def expire_past_due_grace(
     settings = get_settings()
     if not settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
         logger.info(
-            "expire_past_due_grace: BILLING_LIFECYCLE_SWEEP_ENABLED=false — skipping"
+            "expire_past_due_grace: BILLING_LIFECYCLE_SWEEP_ENABLED=false â€” skipping"
         )
         return {"skipped": True, "reason": "BILLING_LIFECYCLE_SWEEP_ENABLED=false"}
 
@@ -2069,7 +2159,7 @@ def run_judge_calibration_all_projects() -> dict:
     """Beat task: run judge calibration for every active project with
     labeled golden traces.
 
-    Idempotent per (project_id, judge_model, run_date) — the runner
+    Idempotent per (project_id, judge_model, run_date) â€” the runner
     short-circuits if a complete row already exists.
     """
     from datetime import date as _date
@@ -2081,7 +2171,7 @@ def run_judge_calibration_all_projects() -> dict:
 
     settings = get_settings()
     if not settings.JUDGE_CALIBRATION_ENABLED:
-        logger.info("judge_calibration_all_projects: JUDGE_CALIBRATION_ENABLED=false — skipping")
+        logger.info("judge_calibration_all_projects: JUDGE_CALIBRATION_ENABLED=false â€” skipping")
         return {"skipped": True, "reason": "JUDGE_CALIBRATION_ENABLED=false"}
 
     today = _date.today()
@@ -2158,7 +2248,7 @@ def run_provider_drift_watch() -> dict:
 
     settings = get_settings()
     if not settings.PROVIDER_DRIFT_WATCH_ENABLED:
-        logger.info("run_provider_drift_watch: PROVIDER_DRIFT_WATCH_ENABLED=false — skipping")
+        logger.info("run_provider_drift_watch: PROVIDER_DRIFT_WATCH_ENABLED=false â€” skipping")
         return {"skipped": True, "reason": "PROVIDER_DRIFT_WATCH_ENABLED=false"}
 
     today = _date.today()

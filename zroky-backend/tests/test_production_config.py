@@ -21,16 +21,27 @@ def test_production_config_rejects_insecure_defaults() -> None:
     assert "REQUIRE_PROVISIONING_TOKEN" in error_text
     assert "ENABLE_READY_DB_CHECK" in error_text
     assert "ENABLE_READY_REDIS_CHECK" in error_text
+    assert "DATABASE_URL" in error_text
+    assert "REDIS_URL" in error_text
+    assert "ALLOWED_ORIGINS" in error_text
+    assert "TRUSTED_HOSTS" in error_text
+    assert "FRONTEND_URL" in error_text
 
 
 def test_production_config_accepts_hardened_profile() -> None:
     settings = Settings(
         APP_ENV="production",
+        DATABASE_URL="postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
+        REDIS_URL="redis://redis.example.com:6379/0",
+        ALLOWED_ORIGINS="https://app.zroky.ai",
+        TRUSTED_HOSTS="api.zroky.ai",
+        FRONTEND_URL="https://app.zroky.ai",
         ALLOW_PROJECT_HEADER_CONTEXT=False,
         REQUIRE_PROVISIONING_TOKEN=True,
         PROVISIONING_TOKEN="super-secret",
         ENABLE_READY_DB_CHECK=True,
         ENABLE_READY_REDIS_CHECK=True,
+        PII_ENCRYPTION_KEY="x" * 32,
     )
 
     validate_runtime_settings(settings)
@@ -44,11 +55,17 @@ def test_non_production_config_skips_strict_guard() -> None:
 def test_production_config_rejects_incomplete_jwt_hardening() -> None:
     settings = Settings(
         APP_ENV="production",
+        DATABASE_URL="postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
+        REDIS_URL="redis://redis.example.com:6379/0",
+        ALLOWED_ORIGINS="https://app.zroky.ai",
+        TRUSTED_HOSTS="api.zroky.ai",
+        FRONTEND_URL="https://app.zroky.ai",
         ALLOW_PROJECT_HEADER_CONTEXT=False,
         REQUIRE_PROVISIONING_TOKEN=True,
         PROVISIONING_TOKEN="super-secret",
         ENABLE_READY_DB_CHECK=True,
         ENABLE_READY_REDIS_CHECK=True,
+        PII_ENCRYPTION_KEY="x" * 32,
         JWT_JWKS_URL="https://example.com/.well-known/jwks.json",
         JWT_ISSUER=None,
         JWT_AUDIENCE=None,
@@ -67,11 +84,17 @@ def test_production_config_rejects_incomplete_jwt_hardening() -> None:
 def test_production_config_accepts_hardened_jwt_profile() -> None:
     settings = Settings(
         APP_ENV="production",
+        DATABASE_URL="postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
+        REDIS_URL="redis://redis.example.com:6379/0",
+        ALLOWED_ORIGINS="https://app.zroky.ai",
+        TRUSTED_HOSTS="api.zroky.ai",
+        FRONTEND_URL="https://app.zroky.ai",
         ALLOW_PROJECT_HEADER_CONTEXT=False,
         REQUIRE_PROVISIONING_TOKEN=True,
         PROVISIONING_TOKEN="super-secret",
         ENABLE_READY_DB_CHECK=True,
         ENABLE_READY_REDIS_CHECK=True,
+        PII_ENCRYPTION_KEY="x" * 32,
         JWT_JWKS_URL="https://example.com/.well-known/jwks.json",
         JWT_ISSUER="https://issuer.example.com/",
         JWT_AUDIENCE="zroky-api",
@@ -84,11 +107,17 @@ def test_production_config_accepts_hardened_jwt_profile() -> None:
 def test_production_config_rejects_internal_debug_without_token() -> None:
     settings = Settings(
         APP_ENV="production",
+        DATABASE_URL="postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
+        REDIS_URL="redis://redis.example.com:6379/0",
+        ALLOWED_ORIGINS="https://app.zroky.ai",
+        TRUSTED_HOSTS="api.zroky.ai",
+        FRONTEND_URL="https://app.zroky.ai",
         ALLOW_PROJECT_HEADER_CONTEXT=False,
         REQUIRE_PROVISIONING_TOKEN=True,
         PROVISIONING_TOKEN="super-secret",
         ENABLE_READY_DB_CHECK=True,
         ENABLE_READY_REDIS_CHECK=True,
+        PII_ENCRYPTION_KEY="x" * 32,
         ENABLE_INTERNAL_DEBUG_ENDPOINT=True,
         INTERNAL_DEBUG_TOKEN=None,
     )
@@ -102,11 +131,17 @@ def test_production_config_rejects_internal_debug_without_token() -> None:
 def test_production_config_accepts_internal_debug_with_token() -> None:
     settings = Settings(
         APP_ENV="production",
+        DATABASE_URL="postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
+        REDIS_URL="redis://redis.example.com:6379/0",
+        ALLOWED_ORIGINS="https://app.zroky.ai",
+        TRUSTED_HOSTS="api.zroky.ai",
+        FRONTEND_URL="https://app.zroky.ai",
         ALLOW_PROJECT_HEADER_CONTEXT=False,
         REQUIRE_PROVISIONING_TOKEN=True,
         PROVISIONING_TOKEN="super-secret",
         ENABLE_READY_DB_CHECK=True,
         ENABLE_READY_REDIS_CHECK=True,
+        PII_ENCRYPTION_KEY="x" * 32,
         ENABLE_INTERNAL_DEBUG_ENDPOINT=True,
         INTERNAL_DEBUG_TOKEN="internal-debug-secret",
     )

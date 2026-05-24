@@ -20,14 +20,12 @@ Entitlements plan-gate (402 Payment Required) — Module 6 attaches
 so every endpoint here is gated uniformly per plan §10.x. The
 `goldens.max_sets` cap is enforced inside `create_golden_set` itself.
 """
-from __future__ import annotations
-
 import base64
 import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -294,7 +292,7 @@ def patch_golden(
     return _to_response(db, golden_set=updated, project_id=tenant_id)
 
 
-@router.delete("/{golden_set_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{golden_set_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 @limiter.limit("30/minute")
 def delete_golden(
     request: Request,
@@ -377,6 +375,7 @@ def add_golden_trace(
 @router.delete(
     "/{golden_set_id}/traces/{trace_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
 )
 @limiter.limit("60/minute")
 def remove_golden_trace(
@@ -417,6 +416,7 @@ class GoldenRunRequest(BaseModel):
     # these fields are rejected with HTTP 422 to prevent silent no-ops.
     candidate_prompt_override: str | None = None
     candidate_model_override: str | None = None
+    replay_mode: str | None = None
 
 
 class GoldenRunDispatchResponse(BaseModel):
@@ -446,7 +446,7 @@ class GoldenRunDispatchResponse(BaseModel):
 def run_golden_set(
     request: Request,
     golden_set_id: str,
-    body: GoldenRunRequest | None = None,
+    body: GoldenRunRequest = Body(default_factory=GoldenRunRequest),
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> GoldenRunDispatchResponse:
@@ -456,7 +456,7 @@ def run_golden_set(
     is handled by a background worker (deferred to a later module). Clients
     should poll `GET /v1/replay/runs/{id}` for status.
     """
-    payload = body or GoldenRunRequest()
+    payload = body
     if payload.trigger not in VALID_TRIGGERS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -473,6 +473,7 @@ def run_golden_set(
             branch_name=payload.branch_name,
             pr_number=payload.pr_number,
             commit_message=payload.commit_message,
+            replay_mode=payload.replay_mode,
             candidate_prompt_override=payload.candidate_prompt_override,
             candidate_model_override=payload.candidate_model_override,
         )

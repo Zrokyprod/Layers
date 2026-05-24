@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -52,6 +53,13 @@ class Settings(BaseSettings):
     INGEST_RATE_LIMIT_WINDOW_SECONDS: int = 60
     INGEST_SUSTAINED_BREACH_THRESHOLD: int = 3
     INGEST_BACKPRESSURE_TTL_SECONDS: int = 300
+    GATEWAY_INGEST_STREAM_ENABLED: bool = False
+    GATEWAY_INGEST_STREAM_NAME: str = "zroky:ingest:v2"
+    GATEWAY_INGEST_CONSUMER_GROUP: str = "zroky-backend"
+    GATEWAY_INGEST_CONSUMER_NAME: str = "worker-1"
+    GATEWAY_INGEST_STREAM_BATCH_SIZE: int = 100
+    GATEWAY_INGEST_STREAM_BLOCK_MS: int = 1000
+    GATEWAY_INGEST_POLL_INTERVAL_SECONDS: int = 5
 
     PROVIDER_STATUS_FETCH_TIMEOUT_MS: int = 800
     PROVIDER_STATUS_CACHE_TTL_SECONDS: int = 300
@@ -59,14 +67,14 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
 
-    # ── OpenRouter / DeepSeek settings ─────────────────────
-    # Primary model for diagnosis/fix generation (DeepSeek — best for code)
+    # â”€â”€ OpenRouter / DeepSeek settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Primary model for diagnosis/fix generation (DeepSeek â€” best for code)
     OPENROUTER_PRIMARY_MODEL: str = "deepseek/deepseek-chat"
     # Fallback model when primary is down / rate-limited
     OPENROUTER_FALLBACK_MODEL: str = "deepseek/deepseek-chat-v3"
-    # Assistant chat model (Gemini 2.5 Flash — fast, large context, reliable tool-use)
+    # Assistant chat model (Gemini 2.5 Flash â€” fast, large context, reliable tool-use)
     OPENROUTER_ASSISTANT_MODEL: str = "google/gemini-2.5-flash"
-    # NL analytics model (GPT-4o-mini — most reliable structured JSON output)
+    # NL analytics model (GPT-4o-mini â€” most reliable structured JSON output)
     OPENROUTER_ANALYTICS_MODEL: str = "openai/gpt-4o-mini"
     # Request timeout for OpenRouter calls
     OPENROUTER_REQUEST_TIMEOUT_SECONDS: int = 60
@@ -74,7 +82,7 @@ class Settings(BaseSettings):
     TENANT_HEADER_NAME: str = "x-project-id"
     LEGACY_TENANT_HEADER_NAME: str = "x-tenant-id"
     ACCEPT_LEGACY_TENANT_HEADER: bool = True
-    # SECURITY: must be False in production — setting True lets any caller claim owner context
+    # SECURITY: must be False in production â€” setting True lets any caller claim owner context
     ALLOW_PROJECT_HEADER_CONTEXT: bool = False
     API_KEY_HEADER_NAME: str = "x-api-key"
     ACCEPT_BEARER_AS_API_KEY: bool = True
@@ -91,7 +99,7 @@ class Settings(BaseSettings):
     ALLOW_JWT_PROVISIONING_ACCESS: bool = True
     ENFORCE_JWT_PROJECT_MEMBERSHIP: bool = False
 
-    # SECURITY: must be True in production — setting False lets anyone call provisioning endpoints
+    # SECURITY: must be True in production â€” setting False lets anyone call provisioning endpoints
     REQUIRE_PROVISIONING_TOKEN: bool = True
     PROVISIONING_TOKEN_HEADER_NAME: str = "x-zroky-admin-token"
     PROVISIONING_TOKEN: Optional[str] = None
@@ -105,7 +113,7 @@ class Settings(BaseSettings):
     # When unset, reads fall back to the primary DATABASE_URL.
     DATABASE_READ_REPLICA_URL: Optional[str] = None
 
-    # ── ClickHouse (W12) ────────────────────────────────────────────────────
+    # â”€â”€ ClickHouse (W12) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # When unset, /cost and /issues fall back to Postgres with a banner warning.
     CLICKHOUSE_URL: Optional[str] = None
     CLICKHOUSE_DATABASE: str = "zroky"
@@ -114,14 +122,14 @@ class Settings(BaseSettings):
     CLICKHOUSE_ENABLED: bool = False
     CLICKHOUSE_SYNC_INTERVAL_SECONDS: int = 60
 
-    # ── Replay worker ────────────────────────────────────────────────────────
+    # â”€â”€ Replay worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Shared secret between the control plane and the customer-hosted replay worker.
     # When unset, /v1/replay/poll and /v1/replay/result always return 401.
     REPLAY_WORKER_TOKEN: Optional[str] = None
 
-    # ── Replay execution mode ────────────────────────────────────────────────
+    # â”€â”€ Replay execution mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # When False (default), the replay executor's default resolver re-grades
-    # each golden trace against the source Call's *recorded response* — this
+    # each golden trace against the source Call's *recorded response* â€” this
     # is "stub-mode" replay and CANNOT detect regressions caused by prompt
     # edits, model swaps, or RAG-config changes, because no real LLM call is
     # ever issued.
@@ -140,14 +148,20 @@ class Settings(BaseSettings):
     # before issuing more provider calls once cumulative spend crosses
     # this number. Stub-mode runs ignore the cap entirely (no LLM cost).
     REPLAY_REAL_LLM_BUDGET_USD: float = 1.0
+    # Optional customer-hosted sandbox executor for live-sandbox replay.
+    # When unset, live-sandbox requests fail closed instead of pretending
+    # captured tool snapshots are equivalent to real sandbox execution.
+    REPLAY_SANDBOX_WORKER_URL: Optional[str] = None
+    REPLAY_SANDBOX_WORKER_TOKEN: Optional[str] = None
+    REPLAY_SANDBOX_TIMEOUT_SECONDS: float = 30.0
 
-    # ── Billing quota enforcement ─────────────────────────────────────────────
+    # â”€â”€ Billing quota enforcement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # When True, ingest returns HTTP 429 once a tenant exceeds their plan's
     # max_calls_per_month.  Disable during trials / grace periods via this flag
     # or the per-project feature flag `billing_quota_enforcement`.
     BILLING_ENFORCE_QUOTA: bool = False
 
-    # Connection pool sizing (Postgres only — SQLite uses default StaticPool).
+    # Connection pool sizing (Postgres only â€” SQLite uses default StaticPool).
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT_SECONDS: int = 30
@@ -180,10 +194,10 @@ class Settings(BaseSettings):
     # Can reuse GITHUB_TOKEN_ENCRYPTION_KEY if not set separately
     PII_ENCRYPTION_KEY: Optional[str] = None
 
-    # ── Provider key vault (Module 4.5; plan §14.2 / migration 0058) ─────
+    # â”€â”€ Provider key vault (Module 4.5; plan Â§14.2 / migration 0058) â”€â”€â”€â”€â”€
     # Master KEK for the AES-256-GCM envelope used by `provider_keys_vault`.
     # Production: drive from KMS-resolved KEK (e.g. AWS KMS GenerateDataKey).
-    # Local/dev/test: any string ≥ 32 chars; HKDF-SHA256 derives a per-project
+    # Local/dev/test: any string â‰¥ 32 chars; HKDF-SHA256 derives a per-project
     # KEK so cross-tenant ciphertext decryption is impossible even with the
     # master KEK in hand. When unset, the vault routes return 503 to surface
     # the misconfiguration loudly rather than silently storing plaintext.
@@ -192,7 +206,7 @@ class Settings(BaseSettings):
     # re-wrap rotation can find rows still encrypted under the previous KEK.
     PROVIDER_KEY_VAULT_KEY_ID: str = "local-dev-kek-v1"
 
-    # ── Stripe billing (Module 5; plan §11.3 / migration 0054 + 0059) ─────
+    # â”€â”€ Stripe billing (Module 5; plan Â§11.3 / migration 0054 + 0059) â”€â”€â”€â”€â”€
     # Master switch. When false the /v1/billing/{checkout,portal,webhook}
     # endpoints all return 503 and `stripe_gateway` falls back to a stub
     # implementation. Self-host (`ZROKY_TIER=self-host`) sets this false.
@@ -204,12 +218,12 @@ class Settings(BaseSettings):
     # `customer.subscription.*` / `invoice.*` events; webhook returns
     # 503 if BILLING_ENABLED=true and this is missing.
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
-    # API base URL — overridable for testing against Stripe-Mock.
+    # API base URL â€” overridable for testing against Stripe-Mock.
     STRIPE_API_BASE_URL: str = "https://api.stripe.com"
     # Tolerance window (seconds) for the webhook timestamp check;
     # mirrors stripe-python's default of 5 minutes.
     STRIPE_WEBHOOK_TOLERANCE_SECONDS: int = 300
-    # Plan-code → Stripe Price ID mapping. JSON-encoded inline. Keys must
+    # Plan-code â†’ Stripe Price ID mapping. JSON-encoded inline. Keys must
     # match `services/billing_plans.PLAN_ENTITLEMENTS` (free/starter/pro/
     # team/enterprise). 'free' has no Stripe price (no checkout).
     STRIPE_PRICE_IDS_JSON: str = "{}"
@@ -222,7 +236,7 @@ class Settings(BaseSettings):
     )
     BILLING_PORTAL_RETURN_URL: str = "http://localhost:3000/settings/billing"
 
-    # ── Subscription lifecycle automation (Module 12; plan §11.4) ────────
+    # â”€â”€ Subscription lifecycle automation (Module 12; plan Â§11.4) â”€â”€â”€â”€â”€â”€â”€â”€
     # Master switch for the trial-expiry + past-due-grace sweeps. When
     # false the Celery tasks short-circuit (used during incident
     # response if a billing bug is auto-downgrading customers wrongly).
@@ -233,7 +247,7 @@ class Settings(BaseSettings):
     # negotiate a longer grace without a code change.
     BILLING_PAST_DUE_GRACE_DAYS: int = 7
     # Per-tick row cap for both sweep tasks. Bounds the worst-case
-    # execution time (one DB transaction per row) — at 500 the task
+    # execution time (one DB transaction per row) â€” at 500 the task
     # finishes well within Celery's visibility timeout. Increase for
     # backfills, never decrease below 100 (a backed-up sweep would
     # take many beat ticks to drain).
@@ -244,23 +258,23 @@ class Settings(BaseSettings):
     # (status='trialing' vs status='past_due') and never contend.
     BILLING_LIFECYCLE_SWEEP_MINUTE: int = 7
 
-    # ── Entitlements resolver (Module 6; plan §11.2) ─────────────────────
+    # â”€â”€ Entitlements resolver (Module 6; plan Â§11.2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Redis cache TTL for the merged (override > trial > plan) entitlement
-    # dict per org_id. Plan §11.2 binds 60s. Lower = fresher reads after
+    # dict per org_id. Plan Â§11.2 binds 60s. Lower = fresher reads after
     # plan changes; higher = less DB load. 60s is the bound write
     # invalidations (services/entitlements.py) cap to.
     ENTITLEMENT_CACHE_TTL_SECONDS: int = 60
 
-    # ── Judge engine (Module 7; plan §4.2 + §17.2 decision #4) ───────────
+    # â”€â”€ Judge engine (Module 7; plan Â§4.2 + Â§17.2 decision #4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Master kill-switch. When false, get_evaluator() returns the
-    # deterministic stub regardless of plan — useful for incident response
+    # deterministic stub regardless of plan â€” useful for incident response
     # if a judge model misbehaves at scale.
     JUDGE_ENABLED: bool = True
     # Single-judge model. claude-haiku-4 per locked decision (cheap, fast,
     # good calibration vs. anthropic ground truth).
     JUDGE_SINGLE_MODEL: str = "anthropic/claude-haiku-4"
     # Ensemble members (Team+/Enterprise). JSON array of OpenRouter model
-    # slugs. Median vote → final verdict. Per decision #4: Haiku-4 +
+    # slugs. Median vote â†’ final verdict. Per decision #4: Haiku-4 +
     # GPT-4.5-mini. Stored as a string so 12-factor env-var deploys keep
     # working.
     JUDGE_ENSEMBLE_MODELS_JSON: str = (
@@ -272,7 +286,7 @@ class Settings(BaseSettings):
     # Sampling temperature. 0.0 = deterministic, which is what we want
     # for graders. Bump only if a calibration study justifies it.
     JUDGE_TEMPERATURE: float = 0.0
-    # Calibration drift alarm threshold. Plan §17.2 decision #4 binds 5%.
+    # Calibration drift alarm threshold. Plan Â§17.2 decision #4 binds 5%.
     # When the rolling judge-vs-ground-truth disagreement rate over
     # JUDGE_CALIBRATION_WINDOW_HOURS exceeds this, an anomaly is emitted.
     JUDGE_CALIBRATION_DRIFT_THRESHOLD: float = 0.05
@@ -281,34 +295,34 @@ class Settings(BaseSettings):
     # Minimum sample count before drift is computed. Smaller windows are
     # too noisy to alarm on; 20 is the floor below which we skip.
     JUDGE_CALIBRATION_MIN_SAMPLES: int = 20
-    # Multi-dimensional evaluator (Module 7 extension; plan §9 accuracy+faithfulness+
+    # Multi-dimensional evaluator (Module 7 extension; plan Â§9 accuracy+faithfulness+
     # relevance+coherence breakdown). Kill-switch mirrors JUDGE_ENABLED pattern.
     JUDGE_MULTIDIM_ENABLED: bool = True
-    # Override model for multi-dim calls. Empty string → falls back to JUDGE_SINGLE_MODEL.
+    # Override model for multi-dim calls. Empty string â†’ falls back to JUDGE_SINGLE_MODEL.
     JUDGE_MULTIDIM_MODEL: str = ""
-    # Reference-free evaluator — no golden output needed. Dimensions: relevance,
+    # Reference-free evaluator â€” no golden output needed. Dimensions: relevance,
     # coherence, groundedness (hallucination proxy), completeness. Useful for
     # cold-start projects that have not yet labelled any golden sets.
     JUDGE_REFERENCE_FREE_ENABLED: bool = True
-    # Override model for reference-free calls. Empty string → falls back to JUDGE_SINGLE_MODEL.
+    # Override model for reference-free calls. Empty string â†’ falls back to JUDGE_SINGLE_MODEL.
     JUDGE_REFERENCE_FREE_MODEL: str = ""
 
-    # ── Module 10: Pilot Tier-2 auto-PR backend ─────────────────────────
-    # Plan §17.3 #2 (GitHub App vs OAuth) is still open. Until that
+    # â”€â”€ Module 10: Pilot Tier-2 auto-PR backend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Plan Â§17.3 #2 (GitHub App vs OAuth) is still open. Until that
     # decision lands, the dispatch pipeline ships behind a protocol
     # seam with three implementations (dry_run / recording / a future
     # github_app or github_oauth). `dry_run` is the safe default for
-    # tests + dev — fail-CLOSED: a typo in this env var produces a
+    # tests + dev â€” fail-CLOSED: a typo in this env var produces a
     # dry-run client, never a live PR-opening client.
     PILOT_PR_CLIENT_BACKEND: str = "dry_run"
-    # Replay-pass gate threshold for Tier-2 dispatch (plan §17.1 risk #1).
+    # Replay-pass gate threshold for Tier-2 dispatch (plan Â§17.1 risk #1).
     # A ReplayRun must report `pass_count / trace_count_at_dispatch >= this`
     # to clear the gate. 0.95 mirrors `policy_json.tier1_min_confidence`
-    # default but is intentionally a separate knob — Tier-2 PRs are
+    # default but is intentionally a separate knob â€” Tier-2 PRs are
     # human-reviewed, so a customer might choose a lower gate for them.
     PILOT_TIER2_REPLAY_PASS_GATE: float = 0.95
     # Daily cap on Tier-2 PR creations per project. Sized for "noisy
-    # detector wakes up at 3am" scenarios — at 10/day a runaway loop
+    # detector wakes up at 3am" scenarios â€” at 10/day a runaway loop
     # produces tractable review load instead of paging cost. Override
     # via env var; per-project override lives in policy_json (later).
     PILOT_TIER2_DAILY_PR_CAP: int = 10
@@ -329,7 +343,7 @@ class Settings(BaseSettings):
 
     # Frontend Settings
     FRONTEND_URL: str = "http://localhost:3000"
-    # State HMAC key for CSRF protection — defaults to AUTH_JWT_SECRET if not set
+    # State HMAC key for CSRF protection â€” defaults to AUTH_JWT_SECRET if not set
     OAUTH_STATE_SECRET: Optional[str] = None
 
     # SMTP / email notifications
@@ -349,12 +363,14 @@ class Settings(BaseSettings):
     SLACK_TOKEN_ENCRYPTION_KEY: Optional[str] = None
     MS_TEAMS_WEBHOOK_ENCRYPTION_KEY: Optional[str] = None
 
-    # Weekly developer impact email (legacy — Module 11 superseded by digest pipeline below)
-    WEEKLY_IMPACT_EMAIL_ENABLED: bool = False
-    WEEKLY_IMPACT_EMAIL_CRON_DAY_OF_WEEK: int = 1  # 1 = Monday (0=Sunday … 6=Saturday)
-    WEEKLY_IMPACT_EMAIL_CRON_HOUR: int = 8
 
-    # ── Legacy-surface feature flags (ZROKY-TECHNICAL-PLAN-V2.md §1.3) ────────
+    # Weekly digest pipeline.
+    DIGEST_ENABLED: bool = False
+    DIGEST_SEND_BATCH_SIZE: int = 100
+    DIGEST_GENERATE_CRON_DAY_OF_WEEK: int = 1  # 1 = Monday (0=Sunday ... 6=Saturday)
+    DIGEST_GENERATE_CRON_HOUR: int = 2
+
+    # â”€â”€ Legacy-surface feature flags (ZROKY-TECHNICAL-PLAN-V2.md Â§1.3) â”€â”€â”€â”€â”€â”€â”€â”€
     # These gate routes whose UI is being cut in Module 1 or whose replacement
     # ships in a later module. When `False` the route is NOT registered with
     # the API router, so OpenAPI no longer advertises it.
@@ -368,11 +384,11 @@ class Settings(BaseSettings):
     # FEATURE_LEGACY_ONBOARDING, FEATURE_LEGACY_FEATURE_FLAGS:
     # source files deleted in Module 1; flags removed.
     FEATURE_LEGACY_OWNER: bool = True              # M11 will disable. Replacement: zroky-admin app.
-    FEATURE_LEGACY_BILLING: bool = False           # M12 disabled. Replacement: §11.3 Stripe-Checkout-only routes (POST /checkout, /portal, /webhook + GET /me); legacy /plans, GET/PUT /subscription, /usage gated off.
+    FEATURE_LEGACY_BILLING: bool = False           # M12 disabled. Replacement: Â§11.3 Stripe-Checkout-only routes (POST /checkout, /portal, /webhook + GET /me); legacy /plans, GET/PUT /subscription, /usage gated off.
     FEATURE_LEGACY_INVITATIONS: bool = True        # M8 will reduce. Replacement: /v1/invitations/accept only.
     FEATURE_LEGACY_DIAGNOSIS_ALIAS: bool = True    # M7 will disable. Merges into /v1/diagnoses.
 
-    # ── Calibrated Judge (Wedge 3 — judge calibration + auto-downgrade) ─────
+    # â”€â”€ Calibrated Judge (Wedge 3 â€” judge calibration + auto-downgrade) â”€â”€â”€â”€â”€
     # Master switch for the daily golden-set calibration runner.
     JUDGE_CALIBRATION_ENABLED: bool = True
     # Cron hour/minute (UTC) for the daily per-project calibration sweep.
@@ -380,11 +396,11 @@ class Settings(BaseSettings):
     JUDGE_CALIBRATION_CRON_MINUTE: int = 30
     # Minimum labeled golden traces required before a run is attempted.
     JUDGE_CALIBRATION_MIN_SAMPLES: int = 50
-    # Accuracy thresholds with hysteresis (decision #4: §17.2).
+    # Accuracy thresholds with hysteresis (decision #4: Â§17.2).
     JUDGE_CALIBRATION_DOWNGRADE_BELOW: float = 0.90
     JUDGE_CALIBRATION_RESTORE_ABOVE: float = 0.93
 
-    # ── Provider Drift Watch (Wedge 2) ────────────────────────────────────────
+    # â”€â”€ Provider Drift Watch (Wedge 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Master switch for the daily provider-silent-update detector.
     # When false the Celery beat task short-circuits and the public
     # endpoints return empty arrays (no banners, no RSS items).
@@ -392,7 +408,7 @@ class Settings(BaseSettings):
     # Hour at which the daily probe suite is dispatched (UTC).
     PROVIDER_DRIFT_WATCH_CRON_HOUR: int = 4
     PROVIDER_DRIFT_WATCH_CRON_MINUTE: int = 0
-    # Per-run budget cap (USD). At ~240 probes × 8 models with average
+    # Per-run budget cap (USD). At ~240 probes Ã— 8 models with average
     # ~$0.001/call this lands around $2/day; we keep a 5x safety
     # multiplier so a model whose pricing rises (or one that produces
     # unusually long outputs) doesn't silently kill the run.
@@ -415,11 +431,42 @@ def is_production_env(app_env: str) -> bool:
     return app_env.strip().lower() in {"prod", "production"}
 
 
+def _hostname(value: str | None) -> str:
+    if not value:
+        return ""
+    return (urlparse(value).hostname or "").lower()
+
+
+def _is_local_url(value: str | None) -> bool:
+    return _hostname(value) in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
 def validate_runtime_settings(settings: Settings) -> None:
     if not is_production_env(settings.APP_ENV):
         return
 
     failures: list[str] = []
+
+    if settings.DATABASE_URL.startswith("sqlite"):
+        failures.append("DATABASE_URL must point to managed PostgreSQL in production")
+
+    if _is_local_url(settings.REDIS_URL):
+        failures.append("REDIS_URL must point to managed Redis in production")
+
+    allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+    if not allowed_origins:
+        failures.append("ALLOWED_ORIGINS must be configured in production")
+    elif any(_is_local_url(origin) for origin in allowed_origins):
+        failures.append("ALLOWED_ORIGINS cannot include localhost in production")
+
+    trusted_hosts = [h.strip().lower() for h in settings.TRUSTED_HOSTS.split(",") if h.strip()]
+    if not trusted_hosts:
+        failures.append("TRUSTED_HOSTS must be configured in production")
+    elif any(host in {"*", "localhost", "127.0.0.1", "::1"} for host in trusted_hosts):
+        failures.append("TRUSTED_HOSTS cannot use wildcard or localhost in production")
+
+    if _is_local_url(settings.FRONTEND_URL):
+        failures.append("FRONTEND_URL must point to the production dashboard URL")
 
     if settings.ALLOW_PROJECT_HEADER_CONTEXT:
         failures.append("ALLOW_PROJECT_HEADER_CONTEXT must be false in production")

@@ -1,34 +1,41 @@
+import os
+
 from celery import Celery
 from celery.schedules import crontab
 
 from app.core.config import get_settings
 
 settings = get_settings()
+testing = os.environ.get("TESTING", "").strip().lower() in {"1", "true", "yes"}
+broker_url = settings.effective_celery_broker_url
+result_backend = settings.effective_celery_result_backend
+if testing and not settings.CELERY_BROKER_URL:
+    broker_url = "memory://"
+if testing and not settings.CELERY_RESULT_BACKEND:
+    result_backend = "cache+memory://"
 
 retention_minute = min(max(int(settings.RETENTION_ENFORCEMENT_CRON_MINUTE), 0), 59)
 retention_hour = min(max(int(settings.RETENTION_ENFORCEMENT_CRON_HOUR), 0), 23)
-weekly_email_dow = min(max(int(settings.WEEKLY_IMPACT_EMAIL_CRON_DAY_OF_WEEK), 0), 6)
-weekly_email_hour = min(max(int(settings.WEEKLY_IMPACT_EMAIL_CRON_HOUR), 0), 23)
+digest_dow = min(max(int(settings.DIGEST_GENERATE_CRON_DAY_OF_WEEK), 0), 6)
+digest_hour = min(max(int(settings.DIGEST_GENERATE_CRON_HOUR), 0), 23)
 beat_schedule: dict[str, dict] = {}
+
 if settings.RETENTION_ENFORCEMENT_ENABLED:
     beat_schedule["retention-enforcement-daily"] = {
         "task": "app.worker.tasks.run_retention_enforcement",
         "schedule": crontab(minute=retention_minute, hour=retention_hour),
         "options": {"queue": "diagnosis_fast"},
     }
-if settings.WEEKLY_IMPACT_EMAIL_ENABLED:
-    # Legacy single-stage path — kept for one release behind the
-    # WEEKLY_IMPACT_EMAIL_ENABLED flag. New deployments should set
-    # DIGEST_ENABLED instead. Tasks are mutually exclusive: deployments
-    # that flip both on get duplicate emails, so the README/CHANGELOG
-    # for Module 11 explicitly calls out the rotation.
-    beat_schedule["weekly-impact-email"] = {
-        "task": "app.worker.tasks.send_weekly_impact_emails",
-        "schedule": crontab(
-            day_of_week=weekly_email_dow,
-            hour=weekly_email_hour,
-            minute=0,
-        ),
+
+if settings.DIGEST_ENABLED:
+    beat_schedule["weekly-digest-generate"] = {
+        "task": "app.worker.tasks.generate_weekly_digests",
+        "schedule": crontab(day_of_week=digest_dow, hour=digest_hour, minute=0),
+        "options": {"queue": "diagnosis_fast"},
+    }
+    beat_schedule["weekly-digest-send"] = {
+        "task": "app.worker.tasks.send_pending_digests",
+        "schedule": crontab(minute="*/5"),
         "options": {"queue": "diagnosis_fast"},
     }
 
@@ -39,10 +46,7 @@ beat_schedule["fix-watch-recurrence-check"] = {
     "options": {"queue": "diagnosis_fast"},
 }
 
-# Module 12 — subscription lifecycle sweeps. Hourly cadence, offset
-# from :00 to dodge the top-of-hour herd from other beat tasks. The
-# two sweeps share a minute because they query disjoint row sets
-# (status='trialing' vs status='past_due') and never contend.
+# Module 12 subscription lifecycle sweeps.
 if settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
     _lifecycle_minute = min(max(int(settings.BILLING_LIFECYCLE_SWEEP_MINUTE), 0), 59)
     beat_schedule["billing-lifecycle-trial-expiry"] = {
@@ -56,7 +60,7 @@ if settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
         "options": {"queue": "diagnosis_fast"},
     }
 
-# Wedge 3 — Judge Calibration (daily per-project sweep)
+# Wedge 3: Judge Calibration.
 if settings.JUDGE_CALIBRATION_ENABLED:
     _cal_hour = min(max(int(settings.JUDGE_CALIBRATION_CRON_HOUR), 0), 23)
     _cal_minute = min(max(int(settings.JUDGE_CALIBRATION_CRON_MINUTE), 0), 59)
@@ -66,7 +70,7 @@ if settings.JUDGE_CALIBRATION_ENABLED:
         "options": {"queue": "diagnosis_fast"},
     }
 
-# Wedge 2 — Provider Drift Watch (daily at 04:00 UTC)
+# Wedge 2: Provider Drift Watch.
 if settings.PROVIDER_DRIFT_WATCH_ENABLED:
     _drift_minute = min(max(int(settings.PROVIDER_DRIFT_WATCH_CRON_MINUTE), 0), 59)
     _drift_hour = min(max(int(settings.PROVIDER_DRIFT_WATCH_CRON_HOUR), 0), 23)
@@ -76,7 +80,6 @@ if settings.PROVIDER_DRIFT_WATCH_ENABLED:
         "options": {"queue": "diagnosis_fast"},
     }
 
-# ClickHouse sync — only scheduled when CLICKHOUSE_ENABLED is true
 if settings.CLICKHOUSE_ENABLED:
     _ch_interval = max(10, int(settings.CLICKHOUSE_SYNC_INTERVAL_SECONDS))
     beat_schedule["clickhouse-sync"] = {
@@ -85,10 +88,18 @@ if settings.CLICKHOUSE_ENABLED:
         "options": {"queue": "diagnosis_fast"},
     }
 
+if settings.GATEWAY_INGEST_STREAM_ENABLED:
+    _gateway_interval = max(1, int(settings.GATEWAY_INGEST_POLL_INTERVAL_SECONDS))
+    beat_schedule["gateway-ingest-stream"] = {
+        "task": "app.worker.tasks.consume_gateway_ingest_stream",
+        "schedule": _gateway_interval,
+        "options": {"queue": "diagnosis_fast"},
+    }
+
 celery_app = Celery(
     "zroky",
-    broker=settings.effective_celery_broker_url,
-    backend=settings.effective_celery_result_backend,
+    broker=broker_url,
+    backend=result_backend,
 )
 
 celery_app.conf.update(
@@ -103,18 +114,14 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_default_queue="diagnosis_fast",
-    # Timeouts: prevent runaway tasks from hogging workers
     task_soft_time_limit=300,
     task_time_limit=600,
-    # Retry policy: exponential back-off with a hard ceiling
     task_default_retry_delay=10,
     task_max_retries=3,
-    # Dead-letter queue for permanently failed tasks
     task_routes={
         "app.worker.tasks.run_fast_diagnosis": {"queue": "diagnosis_fast"},
         "app.worker.tasks.run_pattern_diagnosis": {"queue": "diagnosis_pattern"},
     },
-    # Broker/DLQ: route failed messages to a dead-letter exchange so they can be inspected
     broker_transport_options={
         "queue_order_strategy": "priority",
         "priority_steps": list(range(10)),
