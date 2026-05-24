@@ -15,15 +15,13 @@ Entitlements plan-gate (402 Payment Required) — Module 6 attaches
 `require_entitlement("pilot.autopilot_enabled")` at the router level
 so every endpoint here is gated uniformly per plan §10.x.
 """
-from __future__ import annotations
-
 import base64
 import json
 import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -432,7 +430,7 @@ def get_policy(
 @limiter.limit("12/minute")
 def put_policy(
     request: Request,
-    body: PilotPolicyPayload,
+    body: PilotPolicyPayload = Body(...),
     context=Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
 ) -> PilotPolicyResponse:

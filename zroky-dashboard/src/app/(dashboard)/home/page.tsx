@@ -22,10 +22,7 @@ import { RecentIssueActivity } from "@/components/recent-issue-activity";
 import { OpenIssuesBySeverity } from "@/components/open-issues-by-severity";
 
 const pollMs = 10000;
-const liveRetryMs = 5000;
 const ONBOARDING_WIZARD_OPENED_KEY = "zroky.onboardingWizardOpened";
-
-type LiveFeedState = "connecting" | "live" | "retrying";
 
 type HealthBreakdownItem = {
   key: "success_rate" | "latency_score" | "cost_anomaly_score" | "open_issues_score";

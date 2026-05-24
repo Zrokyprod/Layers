@@ -16,14 +16,12 @@ No new entitlement — anyone with a project membership can vote. The
 write surface is intentionally cheap (single upsert) so we never
 gate-keep the data we *want* to collect.
 """
-from __future__ import annotations
-
 import csv
 import io
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -89,7 +87,7 @@ def _require_user_subject(ctx: TenantContext) -> str:
 @limiter.limit("30/minute")
 def submit_vote(
     request: Request,
-    body: FeatureVoteRequest,
+    body: FeatureVoteRequest = Body(...),
     ctx: TenantContext = Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
 ) -> FeatureVoteResponse:

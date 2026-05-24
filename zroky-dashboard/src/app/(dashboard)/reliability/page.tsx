@@ -4,9 +4,6 @@ import { useState } from "react";
 import {
   Activity,
   AlertCircle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   DollarSign,
   Loader2,
   RefreshCw,

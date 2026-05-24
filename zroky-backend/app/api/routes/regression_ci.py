@@ -38,8 +38,6 @@ Architecture notes:
     twice get two distinct runs. Add a 60-second idempotency window
     later if duplicate dispatches become a real-world problem.
 """
-from __future__ import annotations
-
 import json
 import logging
 from dataclasses import dataclass
@@ -47,7 +45,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -405,8 +403,8 @@ def _run_regression_ci_background(
 @limiter.limit("30/minute")
 def post_run(
     request: Request,
-    body: RegressionCIRunRequest,
     background_tasks: BackgroundTasks,
+    body: RegressionCIRunRequest = Body(...),
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> RegressionCIRunResponse:

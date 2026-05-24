@@ -548,7 +548,7 @@ def run_calibration(
     persisted with status='skipped'. When the runner itself raises an
     unexpected exception the run is persisted with status='error'.
     """
-    run_date = run_date or datetime.now(timezone.utc).date()
+    run_date = run_date or date.today()
 
     existing = _existing_run(
         db, project_id=project_id, judge_model=judge_model, run_date=run_date

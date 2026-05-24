@@ -308,7 +308,6 @@ export function AskZroky() {
                         <ul className="ask-actions">
                           {turn.suggested_actions.map((action, idx) => (
                             <li
-                              // eslint-disable-next-line react/no-array-index-key
                               key={`${turn.id}-action-${idx}`}
                               className="ask-action-item"
                             >

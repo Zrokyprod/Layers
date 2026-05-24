@@ -21,11 +21,9 @@ Vault surface:
 Entitlements plan-gate (402) is centralised in Module 6. For 4.5 the
 routes accept any authenticated tenant.
 """
-from __future__ import annotations
-
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -135,7 +133,7 @@ class ProviderKeyListResponse(BaseModel):
 @limiter.limit("12/minute")
 def create_provider_key(
     request: Request,
-    body: ProviderKeyCreateRequest,
+    body: ProviderKeyCreateRequest = Body(...),
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> ProviderKeyResponse:

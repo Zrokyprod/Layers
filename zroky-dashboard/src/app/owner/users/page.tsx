@@ -9,7 +9,7 @@ export default function OwnerUsersPage() {
   const { data, isLoading, error } = useOwnerUsers(200, 0);
   const [search, setSearch] = useState("");
 
-  const users = data?.users ?? [];
+  const users = useMemo(() => data?.users ?? [], [data?.users]);
   const total = data?.total ?? 0;
   const loading = isLoading;
   const errorMessage = error?.message ?? "";

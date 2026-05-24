@@ -35,7 +35,7 @@ function TraceRow({ item }: { item: TraceListItem }) {
     try {
       const json = JSON.stringify(item, null, 2);
       downloadBlob(`trace-${item.trace_id}.json`, json, "application/json");
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -45,7 +45,7 @@ function TraceRow({ item }: { item: TraceListItem }) {
       if (typeof navigator !== "undefined" && navigator.clipboard) {
         await navigator.clipboard.writeText(JSON.stringify(item, null, 2));
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -110,7 +110,7 @@ export default function TracePage() {
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
 
-  const allItems = data?.items ?? [];
+  const allItems = useMemo(() => data?.items ?? [], [data?.items]);
   const multiAgentItems = useMemo(() => allItems.filter((i) => i.agent_count > 1), [allItems]);
   const failedItems = useMemo(() => allItems.filter((i) => i.has_failure), [allItems]);
   const totalCost = useMemo(() => allItems.reduce((s, i) => s + i.total_cost_usd, 0), [allItems]);
@@ -161,7 +161,7 @@ export default function TracePage() {
     try {
       const json = JSON.stringify(items, null, 2);
       downloadBlob(`traces-${Date.now()}.json`, json, "application/json");
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -221,6 +221,12 @@ export default function TracePage() {
             <p>Provider-agnostic trace tree — see which agent did what, in order, with costs and failures highlighted.</p>
           </div>
           <div className="trace-window-btns">
+            <button className="btn btn-soft btn-sm" type="button" onClick={() => exportTracesJson(displayItems)}>
+              Export JSON
+            </button>
+            <button className="btn btn-soft btn-sm" type="button" onClick={() => exportTracesCsv(displayItems)}>
+              Export CSV
+            </button>
             {[1, 7, 14, 30].map((d) => (
               <button
                 key={d}

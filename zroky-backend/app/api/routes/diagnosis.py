@@ -678,7 +678,7 @@ def generate_diagnosis_pr(
 
     if not repository_owner or not repository_name:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
                 "repository_owner and repository_name are required. "
                 "Provide them in request body or configure GITHUB_PR_DEFAULT_OWNER/GITHUB_PR_DEFAULT_REPO."

@@ -354,6 +354,16 @@ export default function CallDetailPage() {
   const prLinks = prLinksQuery.data ?? [];
   const loading = detailQuery.isLoading;
   const error = detailQuery.error?.message ?? traceTreeQuery.error?.message ?? fixWatchQuery.error?.message ?? null;
+  const traceAgentStats = useMemo(() => {
+    if (!traceTree?.root_node) {
+      return [];
+    }
+    const acc = new Map<string, { calls: number; cost: number; failed: boolean }>();
+    collectAgentStats(traceTree.root_node, acc);
+    return Array.from(acc.entries())
+      .map(([agent, stats]) => ({ agent, ...stats }))
+      .sort((a, b) => b.cost - a.cost || b.calls - a.calls);
+  }, [traceTree]);
 
   const diagnosis = useMemo(() => {
     const diagnoses = detail?.diagnosis_result?.diagnoses;
@@ -617,6 +627,50 @@ export default function CallDetailPage() {
           </div>
         )}
       </section>
+
+      {traceTree ? (
+        <section className="panel">
+          <header className="panel-header">
+            <div>
+              <h3>Trace Tree</h3>
+              <p>Downstream calls grouped by agent, provider, cost, and failure status.</p>
+            </div>
+            <StatusPill value={traceTree.root_failure ? "failed" : "ok"} />
+          </header>
+          <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 12 }}>
+            <article className="kpi-card">
+              <span className="kpi-label">Downstream Calls</span>
+              <strong className="kpi-value mono">{formatCount(traceTree.total_downstream_calls)}</strong>
+            </article>
+            <article className="kpi-card">
+              <span className="kpi-label">Wasted Cost</span>
+              <strong className="kpi-value mono">{formatUsd(traceTree.total_wasted_cost_usd)}</strong>
+            </article>
+            <article className="kpi-card">
+              <span className="kpi-label">Root Failure</span>
+              <strong className="kpi-value">{traceTree.root_failure?.category ?? "None"}</strong>
+            </article>
+            <article className="kpi-card">
+              <span className="kpi-label">Agents</span>
+              <strong className="kpi-value mono">{formatCount(traceAgentStats.length)}</strong>
+            </article>
+          </div>
+          {traceAgentStats.length > 0 ? (
+            <div className="actions" style={{ marginBottom: 12 }}>
+              {traceAgentStats.map((stats) => (
+                <span key={stats.agent} className="trace-badge trace-badge-multi">
+                  {stats.agent}: {formatCount(stats.calls)} calls
+                  {stats.cost > 0 ? `, ${formatUsd(stats.cost)} wasted` : ""}
+                  {stats.failed ? ", failed" : ""}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <ul style={{ margin: 0, padding: 0 }}>
+            <TraceTreeView node={traceTree.root_node} />
+          </ul>
+        </section>
+      ) : null}
 
       <section className="grid-two">
         <article className="panel">

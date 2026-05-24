@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -17,12 +17,12 @@ export default function RegisterPage() {
 
   const {
     register,
+    control,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({ resolver: zodResolver(registerSchema) });
 
-  const pw = watch("password", "");
+  const pw = useWatch({ control, name: "password", defaultValue: "" }) ?? "";
 
   const strengthRules = [
     { label: "8+ chars", met: pw.length >= 8 },

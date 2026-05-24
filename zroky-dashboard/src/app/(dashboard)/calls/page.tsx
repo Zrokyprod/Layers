@@ -92,7 +92,6 @@ function CallsPageContent() {
   const [page, setPage] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exportingJson, setExportingJson] = useState(false);
-  const [bulkMessage, setBulkMessage] = useState<string>("");
 
   const [appliedFilters, setAppliedFilters] = useState<CallsFilterFormData>(() => ({
     status: searchParams.get("status")?.trim() ?? "",
@@ -121,7 +120,6 @@ function CallsPageContent() {
     handleSubmit,
     reset,
     setValue,
-    watch,
   } = useForm<CallsFilterFormData>({
     resolver: zodResolver(callsFilterSchema),
     defaultValues: appliedFilters,
@@ -385,8 +383,6 @@ function CallsPageContent() {
           </button>
         </div>
       ) : null}
-
-      {bulkMessage ? <p className="hint">{bulkMessage}</p> : null}
 
       {error ? <section className="panel"><p className="text-error">{error}</p></section> : null}
 

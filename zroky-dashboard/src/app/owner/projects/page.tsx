@@ -9,7 +9,7 @@ export default function OwnerProjectsPage() {
   const { data, isLoading, error } = useOwnerProjects(200, 0);
   const [search, setSearch] = useState("");
 
-  const projects = data?.projects ?? [];
+  const projects = useMemo(() => data?.projects ?? [], [data?.projects]);
   const total = data?.total ?? 0;
   const loading = isLoading;
   const errorMessage = error?.message ?? "";

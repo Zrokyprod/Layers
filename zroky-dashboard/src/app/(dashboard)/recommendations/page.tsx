@@ -16,7 +16,6 @@ import {
   Sparkles,
   TrendingDown,
   Wrench,
-  X,
 } from "lucide-react";
 import {
   useRecommendations,
