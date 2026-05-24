@@ -50,7 +50,7 @@ jobs:
         run: ruff check app tests alembic scripts
 
       - name: Run type checks
-        run: mypy --config-file mypy.ini || true
+        run: mypy --config-file mypy.ini
 
   sqlite-fast:
     runs-on: ubuntu-latest
@@ -141,12 +141,11 @@ jobs:
       - name: Run Postgres security tests
         run: pytest -q -m postgres_rls tests/test_postgres_rls.py
 
-  security-audit-optional:
+  security-audit:
     runs-on: ubuntu-latest
     needs:
       - lint-type
       - sqlite-fast
-    continue-on-error: true
     env:
       PYTHONPATH: .
     defaults:
@@ -168,7 +167,7 @@ jobs:
           pip install -r requirements.txt
           pip install bandit pip-audit
 
-      - name: Run optional security scans
+      - name: Run security scans
         id: security_scans
         run: |
           mkdir -p .artifacts
@@ -183,11 +182,11 @@ jobs:
           echo "pip_audit_exit=${PIP_AUDIT_EXIT}" >> $GITHUB_OUTPUT
 
           if [ "${BANDIT_EXIT}" -ne 0 ] || [ "${PIP_AUDIT_EXIT}" -ne 0 ]; then
-            echo "Optional security scans reported findings."
+            echo "Security scans reported findings."
             exit 1
           fi
 
-      - name: Upload optional security scan artifacts
+      - name: Upload security scan artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
