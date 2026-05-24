@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { createReplayJob, getReplayJob } from "@/lib/api";
-import type { ReplayJobResponse } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+
+import { useReplayRunDetail } from "@/lib/hooks";
+import { formatDateTime, formatUsd } from "@/lib/format";
 
 const STATUS_CLASS: Record<string, string> = {
   pending: "badge-yellow",
@@ -17,193 +16,171 @@ const STATUS_CLASS: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pending",
-  running: "Running…",
-  pass: "Pass ✓",
-  fail: "Fail ✗",
+  running: "Running",
+  pass: "Pass",
+  fail: "Fail",
   error: "Error",
 };
 
-export default function ReplayPage() {
-  const { id: callId } = useParams<{ id: string }>();
-  const [job, setJob] = useState<ReplayJobResponse | null>(null);
-  const [triggering, setTriggering] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+function boolLabel(value: boolean | null | undefined) {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "Unknown";
+}
 
-  function stopPolling() {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
+function formatMs(value: number | null | undefined) {
+  if (value == null) return "-";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value} ms`;
+}
+
+function JsonPreview({ value }: { value: Record<string, unknown> | null | undefined }) {
+  if (!value) return <span className="notif-meta">No difference data captured.</span>;
+  return (
+    <pre className="mono" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: "0.75rem", margin: 0 }}>
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  );
+}
+
+export default function ReplayRunDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const runQuery = useReplayRunDetail(id);
+  const run = runQuery.data ?? null;
+
+  if (runQuery.isLoading) {
+    return (
+      <section className="panel">
+        <div className="loading" />
+      </section>
+    );
   }
 
-  useEffect(() => () => stopPolling(), []);
-
-  function startPolling(replayId: string) {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const updated = await getReplayJob(replayId);
-        setJob(updated);
-        if (updated.status !== "pending" && updated.status !== "running") {
-          stopPolling();
-        }
-      } catch {
-        stopPolling();
-      }
-    }, 3000);
+  if (runQuery.error || !run) {
+    return (
+      <section className="panel">
+        <p className="notif-error">{runQuery.error?.message ?? "Replay run unavailable."}</p>
+        <Link href="/replay" className="btn btn-soft" style={{ marginTop: "1rem" }}>
+          Back to replay runs
+        </Link>
+      </section>
+    );
   }
 
-  async function onTrigger() {
-    if (!callId) return;
-    setTriggering(true);
-    setError(null);
-    try {
-      const created = await createReplayJob({ call_id: callId });
-      setJob(created);
-      if (created.status === "pending" || created.status === "running") {
-        startPolling(created.id);
-      }
-    } catch (e: unknown) {
-      setError((e as { message?: string }).message ?? "Failed to create replay job.");
-    } finally {
-      setTriggering(false);
-    }
-  }
-
-  const isTerminal = job && job.status !== "pending" && job.status !== "running";
-  const isActive = job && (job.status === "pending" || job.status === "running");
+  const summary = run.summary;
+  const isStub = run.replay_mode === "stub";
 
   return (
     <div>
       <div style={{ marginBottom: "1rem", fontSize: "0.85rem" }}>
-        <Link href="/issues" className="notif-action-link">← Issues</Link>
+        <Link href="/replay" className="notif-action-link">Back to replay runs</Link>
       </div>
 
-      {/* ── Header ── */}
-      <div className="panel" style={{ marginBottom: "1rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+      <section className="panel" style={{ marginBottom: "1rem" }}>
+        <header className="panel-header">
           <div>
-            <h2 style={{ margin: 0, marginBottom: "0.25rem" }}>Replay sandbox</h2>
-            <div className="mono notif-meta" style={{ fontSize: "0.8rem" }}>
-              call: {callId}
-            </div>
+            <h2 style={{ margin: 0 }}>Replay run</h2>
+            <p className="mono notif-meta" style={{ marginTop: "0.35rem" }}>{run.id}</p>
           </div>
+          <span className={`alert-cat-badge ${STATUS_CLASS[run.status] ?? "badge-gray"}`}>
+            {STATUS_LABEL[run.status] ?? run.status}
+          </span>
+        </header>
 
-          <button
-            className="btn btn-soft"
-            onClick={() => void onTrigger()}
-            disabled={triggering || !!isActive}
-          >
-            {triggering ? "Submitting…" : isActive ? "Running…" : job ? "Re-run replay" : "Trigger replay"}
-          </button>
-        </div>
-
-        {error && <p className="notif-error" style={{ marginTop: "0.75rem" }}>{error}</p>}
-      </div>
-
-      {/* ── Job status ── */}
-      {job && (
-        <div className="panel" style={{ marginBottom: "1rem" }}>
-          <header className="panel-header">
-            <h3>Replay job</h3>
-            <span className={`alert-cat-badge ${STATUS_CLASS[job.status] ?? "badge-gray"}`}>
-              {STATUS_LABEL[job.status] ?? job.status}
-            </span>
-          </header>
-
-          <div style={{ marginTop: "0.75rem" }}>
-            <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
-              <tbody>
-                {[
-                  ["Job ID", job.id],
-                  ["Status", STATUS_LABEL[job.status] ?? job.status],
-                  ["Created", formatDateTime(job.created_at)],
-                  ["Completed", job.completed_at ? formatDateTime(job.completed_at) : "—"],
-                  ["Diff metric", job.diff_metric !== null ? String(job.diff_metric.toFixed(4)) : "—"],
-                  ["PR ID", job.pr_id ?? "—"],
-                ].map(([label, value]) => (
-                  <tr key={label} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <td style={{ padding: "0.4rem 0.75rem", color: "var(--color-muted)", whiteSpace: "nowrap" }}>{label}</td>
-                    <td style={{ padding: "0.4rem 0.75rem" }} className="mono">{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {run.replay_mode_warning && (
+          <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", borderRadius: 8, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.1)" }}>
+            <strong>{isStub ? "Stub replay is a sanity check, not a verified fix." : "Replay mode warning"}</strong>
+            <p style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}>{run.replay_mode_warning}</p>
           </div>
+        )}
+      </section>
 
-          {/* ── Verdict ── */}
-          {isTerminal && (
-            <div
-              style={{
-                marginTop: "1rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "6px",
-                background: job.status === "pass" ? "var(--color-green-bg, #f0fdf4)" : "var(--color-red-bg, #fef2f2)",
-                border: `1px solid ${job.status === "pass" ? "var(--color-green)" : "var(--color-red)"}`,
-              }}
-            >
-              {job.status === "pass" ? (
-                <strong>✓ Replay passed — fix is safe to ship.</strong>
-              ) : job.status === "fail" ? (
-                <strong>✗ Replay failed — the fix does not resolve the original failure.</strong>
-              ) : (
-                <strong>⚠ Replay errored — check worker logs.</strong>
-              )}
-              {job.diff_metric !== null && (
-                <p style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}>
-                  Diff metric: <span className="mono">{job.diff_metric.toFixed(4)}</span>
-                  {" "}(1.0 = identical to expected output)
-                </p>
-              )}
-            </div>
-          )}
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
+        <ProofCard title="Mode" value={run.replay_mode} />
+        <ProofCard title="Original failure reproduced" value={boolLabel(summary.reproduced_original_failure)} />
+        <ProofCard title="Fix passed" value={boolLabel(summary.fix_passed)} />
+        <ProofCard title="Verification" value={summary.verified_fix ? "Verified fix" : summary.verification_status} tone={summary.verified_fix ? "good" : isStub ? "warn" : "neutral"} />
+        <ProofCard title="Replay cost" value={summary.replay_cost_usd == null ? "-" : formatUsd(summary.replay_cost_usd)} />
+        <ProofCard title="Cost delta" value={summary.cost_delta_usd == null ? "-" : formatUsd(summary.cost_delta_usd)} />
+        <ProofCard title="Latency delta" value={formatMs(summary.latency_delta_ms)} />
+        <ProofCard title="Traces" value={`${summary.trace_count_executed}/${summary.trace_count_at_dispatch}`} />
+      </section>
 
-          {/* ── Worker output ── */}
-          {job.stdout_tail && (
-            <div style={{ marginTop: "1rem" }}>
-              <div style={{ fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.25rem" }}>Worker output</div>
-              <pre
-                className="mono"
-                style={{
-                  padding: "0.75rem",
-                  background: "var(--color-code-bg, #1e1e1e)",
-                  color: "var(--color-code-fg, #d4d4d4)",
-                  borderRadius: "6px",
-                  fontSize: "0.75rem",
-                  overflowX: "auto",
-                  maxHeight: "300px",
-                  overflowY: "auto",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                }}
-              >
-                {job.stdout_tail}
-              </pre>
-            </div>
-          )}
+      <section className="panel" style={{ marginBottom: "1rem" }}>
+        <header className="panel-header">
+          <h3>Run metadata</h3>
+        </header>
+        <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+          <tbody>
+            {[
+              ["Golden set", run.golden_set_id],
+              ["Git SHA", run.git_sha ?? "-"],
+              ["Trigger", run.trigger],
+              ["Executor mode", run.executor_replay_mode],
+              ["Created", formatDateTime(run.created_at)],
+              ["Started", run.started_at ? formatDateTime(run.started_at) : "-"],
+              ["Completed", run.completed_at ? formatDateTime(run.completed_at) : "-"],
+            ].map(([label, value]) => (
+              <tr key={label} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <td style={{ padding: "0.45rem 0.75rem", color: "var(--color-muted)", whiteSpace: "nowrap" }}>{label}</td>
+                <td style={{ padding: "0.45rem 0.75rem" }} className="mono">{value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
 
-          {job.error_message && (
-            <div style={{ marginTop: "0.75rem" }}>
-              <p className="notif-error">{job.error_message}</p>
-            </div>
-          )}
-        </div>
-      )}
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+        <article className="panel">
+          <header className="panel-header"><h3>Output differences</h3></header>
+          <JsonPreview value={summary.output_diff} />
+        </article>
+        <article className="panel">
+          <header className="panel-header"><h3>Tool behavior differences</h3></header>
+          <JsonPreview value={summary.tool_behavior_diff} />
+        </article>
+      </section>
 
-      {/* ── Explanation ── */}
-      {!job && (
-        <div className="panel" style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>
-          <p>
-            The replay sandbox re-runs the original failing call against the candidate fix diff
-            and reports whether the fix resolves the problem.
-          </p>
-          <p style={{ marginTop: "0.5rem" }}>
-            Requires the <strong>Zroky Replay Worker</strong> to be running in your environment.
-            Set <span className="mono">REPLAY_WORKER_TOKEN</span> in both the worker and control plane.
-          </p>
-        </div>
-      )}
+      <section className="panel">
+        <header className="panel-header">
+          <div>
+            <h3>Trace results</h3>
+            <p>{run.traces.length} trace{run.traces.length === 1 ? "" : "s"} in this replay run.</p>
+          </div>
+        </header>
+        {run.traces.length === 0 ? (
+          <div className="empty">No trace rows have been written yet.</div>
+        ) : (
+          <div className="list">
+            {run.traces.map((trace) => (
+              <div key={trace.id} className="list-row" style={{ alignItems: "flex-start" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <span className={`alert-cat-badge ${STATUS_CLASS[trace.status] ?? "badge-gray"}`}>{trace.status}</span>
+                    {trace.call_id_replayed && <Link href={`/calls/${trace.call_id_replayed}`} className="mono notif-action-link">{trace.call_id_replayed}</Link>}
+                  </div>
+                  {trace.output_text && <p className="mono" style={{ marginTop: "0.5rem", fontSize: "0.78rem", whiteSpace: "pre-wrap" }}>{trace.output_text.slice(0, 600)}</p>}
+                </div>
+                <div style={{ textAlign: "right", fontSize: "0.78rem" }}>
+                  <div>Diff: {trace.diff_metric == null ? "-" : trace.diff_metric.toFixed(4)}</div>
+                  <div>Cost: {trace.cost_delta_usd == null ? "-" : formatUsd(trace.cost_delta_usd)}</div>
+                  <div>Latency: {formatMs(trace.latency_delta_ms)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+function ProofCard({ title, value, tone = "neutral" }: { title: string; value: string; tone?: "good" | "warn" | "neutral" }) {
+  const color = tone === "good" ? "var(--color-green)" : tone === "warn" ? "#f59e0b" : "inherit";
+  return (
+    <article className="panel" style={{ padding: "0.85rem 1rem" }}>
+      <div className="notif-meta" style={{ fontSize: "0.72rem" }}>{title}</div>
+      <div style={{ marginTop: "0.35rem", fontWeight: 700, color }}>{value}</div>
+    </article>
   );
 }

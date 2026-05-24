@@ -1,4 +1,4 @@
-"""Tests for Module 9 — GitHub-Action-friendly replay dispatch surface.
+﻿"""Tests for Module 9 â€” GitHub-Action-friendly replay dispatch surface.
 
 Covers:
   * Service-level idempotency on `(project_id, golden_set_id, git_sha)`
@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -44,7 +45,7 @@ from app.services.replay_runs import (
 )
 
 
-# ── fixtures ─────────────────────────────────────────────────────────────────
+# â”€â”€ fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @pytest.fixture()
@@ -104,7 +105,7 @@ def client(tmp_path: Path):
 PROJECT_HEADER = "X-Project-Id"
 
 
-# Module 6 plan-gate bypass — same shape as test_replay_runs.py.
+# Module 6 plan-gate bypass â€” same shape as test_replay_runs.py.
 @pytest.fixture(autouse=True)
 def _grant_pilot_tier(monkeypatch):
     from app.services import entitlements_resolver
@@ -146,7 +147,7 @@ def _stub_process_replay_run(monkeypatch):
     return calls
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _seed_project(session, project_id: str, *, default_set: str | None = None):
@@ -175,7 +176,7 @@ def _seed_set_with_traces(
     return gs
 
 
-# ── service: metadata persistence ────────────────────────────────────────────
+# â”€â”€ service: metadata persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestDispatchMetadataFields:
@@ -242,7 +243,7 @@ class TestDispatchMetadataFields:
         assert len(summary["commit_message"]) == 200
 
 
-# ── service: idempotency ─────────────────────────────────────────────────────
+# â”€â”€ service: idempotency â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestDispatchIdempotency:
@@ -407,7 +408,7 @@ class TestDispatchIdempotency:
         assert run_a.id != run_b.id
 
 
-# ── service: build_summary_url ───────────────────────────────────────────────
+# â”€â”€ service: build_summary_url â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestBuildSummaryUrl:
@@ -420,7 +421,7 @@ class TestBuildSummaryUrl:
         s = get_settings()
         monkeypatch.setattr(s, "FRONTEND_URL", "https://app.example.com")
         url = build_summary_url(run)
-        assert url == f"https://app.example.com/replay/runs/{run.id}"
+        assert url == f"https://app.example.com/replay/{run.id}"
 
     def test_strips_trailing_slash(self, db_session, monkeypatch) -> None:
         gs = _seed_set_with_traces(db_session, project_id="proj-1", name="x")
@@ -430,11 +431,11 @@ class TestBuildSummaryUrl:
         assert run is not None
         s = get_settings()
         monkeypatch.setattr(s, "FRONTEND_URL", "https://app.example.com/")
-        assert build_summary_url(run).startswith("https://app.example.com/replay/runs/")
+        assert build_summary_url(run).startswith("https://app.example.com/replay/")
         assert "//replay" not in build_summary_url(run)
 
 
-# ── service: delete_golden_set cascade ───────────────────────────────────────
+# â”€â”€ service: delete_golden_set cascade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestDeleteGoldenSetClearsDefault:
@@ -475,7 +476,7 @@ class TestDeleteGoldenSetClearsDefault:
         assert proj_b.default_golden_set_id == gs_b.id
 
 
-# ── Option A: route-level override gating ────────────────────────────────────
+# â”€â”€ Option A: route-level override gating â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestReplayDispatchOverrideGating:
@@ -586,7 +587,7 @@ class TestReplayDispatchOverrideGating:
             assert summary["candidate_model_override"] == "gpt-4o"
 
 
-# ── route: POST /v1/replay/dispatch ──────────────────────────────────────────
+# â”€â”€ route: POST /v1/replay/dispatch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestReplayDispatchRoute:
@@ -613,7 +614,7 @@ class TestReplayDispatchRoute:
         assert body["trigger"] == "github"  # default for this surface
         assert body["git_sha"] == "sha-aaa"
         assert body["idempotent"] is False
-        assert body["summary_url"].endswith(f"/replay/runs/{body['id']}")
+        assert body["summary_url"].endswith(f"/replay/{body['id']}")
 
     def test_resolves_default_golden_set(self, client: TestClient) -> None:
         factory = client._session_factory  # type: ignore[attr-defined]
@@ -652,7 +653,7 @@ class TestReplayDispatchRoute:
         with factory() as session:
             proj = _seed_project(session, "proj-1")
             # Point at a set ID that does not exist (simulates a stale
-            # default pointer that escaped the cascade — defense in
+            # default pointer that escaped the cascade â€” defense in
             # depth).
             proj.default_golden_set_id = "nonexistent-set"
             session.commit()
@@ -662,7 +663,7 @@ class TestReplayDispatchRoute:
             headers={PROJECT_HEADER: "proj-1"},
             json={"git_sha": "sha-aaa"},
         )
-        # Service returns None for missing set → route maps to 422
+        # Service returns None for missing set â†’ route maps to 422
         # with diagnostic message about updating the default pointer.
         assert response.status_code == 422
         assert "default_golden_set_id" in response.json()["detail"]
@@ -808,7 +809,7 @@ class TestReplayDispatchRoute:
         assert response.status_code == 422
 
 
-# ── route: POST /v1/goldens/{id}/run backward-compat with new fields ─────────
+# â”€â”€ route: POST /v1/goldens/{id}/run backward-compat with new fields â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestGoldensRunBackwardCompat:
@@ -831,7 +832,7 @@ class TestGoldensRunBackwardCompat:
         assert response.status_code == 202
         body = response.json()
         assert "summary_url" in body
-        assert body["summary_url"].endswith(f"/replay/runs/{body['id']}")
+        assert body["summary_url"].endswith(f"/replay/{body['id']}")
         assert body["idempotent"] is False
 
     def test_idempotent_dispatch_via_legacy_endpoint(
@@ -858,8 +859,149 @@ class TestGoldensRunBackwardCompat:
         assert first.status_code == 202
         assert second.status_code == 202
         assert first.json()["id"] == second.json()["id"]
-        # First call inserts → idempotent False; second call hits the
+        # First call inserts â†’ idempotent False; second call hits the
         # non-terminal branch (run still pending because the worker is
-        # stubbed) → idempotent True.
+        # stubbed) â†’ idempotent True.
         assert first.json()["idempotent"] is False
         assert second.json()["idempotent"] is True
+
+
+# -- Quota enforcement ---------------------------------------------------------
+
+
+class TestQuotaEnforcement:
+    """Tests for replay.monthly_runs quota checks on the dispatch route."""
+
+    def test_dispatch_blocked_at_plan_limit(
+        self, client: TestClient, monkeypatch
+    ) -> None:
+        """POST /v1/replay/dispatch ? 402 when monthly limit is exhausted."""
+        from app.services import entitlements_resolver
+        from app.services.billing_plans import PLAN_ENTITLEMENTS
+
+        limited = dict(PLAN_ENTITLEMENTS["pro"])
+        limited["replay.monthly_runs"] = 2
+        monkeypatch.setattr(
+            entitlements_resolver,
+            "get",
+            lambda db, org_id, key, default=None: limited.get(key, default),
+        )
+        monkeypatch.setattr(
+            entitlements_resolver, "get_plan_code", lambda db, org_id: "pro"
+        )
+
+        project_id = "quota-block-1"
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            for _ in range(2):
+                session.add(
+                    ReplayRun(
+                        id=str(uuid4()),
+                        project_id=project_id,
+                        golden_set_id="gs-x",
+                        status="pass",
+                        trigger="manual",
+                        created_at=datetime.now(timezone.utc),
+                    )
+                )
+            session.commit()
+
+        resp = client.post(
+            "/v1/replay/dispatch",
+            json={"golden_set_id": "gs-x"},
+            headers={PROJECT_HEADER: project_id},
+        )
+        assert resp.status_code == 402
+        body = resp.json()
+        assert body["detail"]["required_entitlement"] == "replay.monthly_runs"
+        assert body["detail"]["used"] == 2
+        assert body["detail"]["limit"] == 2
+
+    def test_dispatch_allowed_under_limit(
+        self, client: TestClient, monkeypatch
+    ) -> None:
+        """Quota gate passes when under limit; request advances to set resolver.
+
+        No golden set is configured on the project so the response is 422
+        (set not found), which proves the request progressed past the quota gate.
+        """
+        from app.services import entitlements_resolver
+        from app.services.billing_plans import PLAN_ENTITLEMENTS
+
+        limited = dict(PLAN_ENTITLEMENTS["pro"])
+        limited["replay.monthly_runs"] = 3
+        monkeypatch.setattr(
+            entitlements_resolver,
+            "get",
+            lambda db, org_id, key, default=None: limited.get(key, default),
+        )
+        monkeypatch.setattr(
+            entitlements_resolver, "get_plan_code", lambda db, org_id: "pro"
+        )
+
+        project_id = "quota-allow-1"
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            for _ in range(2):  # 2 of 3 used — one slot remaining
+                session.add(
+                    ReplayRun(
+                        id=str(uuid4()),
+                        project_id=project_id,
+                        golden_set_id="gs-y",
+                        status="pass",
+                        trigger="manual",
+                        created_at=datetime.now(timezone.utc),
+                    )
+                )
+            session.commit()
+
+        # No default golden set ? 422 from set resolver, NOT 402 from quota gate.
+        resp = client.post(
+            "/v1/replay/dispatch",
+            json={},
+            headers={PROJECT_HEADER: project_id},
+        )
+        assert resp.status_code == 422
+        assert "golden_set_id" in resp.json()["detail"].lower()
+
+    def test_dispatch_enterprise_unlimited(
+        self, client: TestClient, monkeypatch
+    ) -> None:
+        """Enterprise plan (limit=-1) is never quota-blocked."""
+        from app.services import entitlements_resolver
+        from app.services.billing_plans import PLAN_ENTITLEMENTS
+
+        enterprise = dict(PLAN_ENTITLEMENTS["enterprise"])
+        monkeypatch.setattr(
+            entitlements_resolver,
+            "get",
+            lambda db, org_id, key, default=None: enterprise.get(key, default),
+        )
+        monkeypatch.setattr(
+            entitlements_resolver, "get_plan_code", lambda db, org_id: "enterprise"
+        )
+
+        project_id = "quota-ent-1"
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            for _ in range(100):  # far beyond any numeric limit
+                session.add(
+                    ReplayRun(
+                        id=str(uuid4()),
+                        project_id=project_id,
+                        golden_set_id="gs-ent",
+                        status="pass",
+                        trigger="manual",
+                        created_at=datetime.now(timezone.utc),
+                    )
+                )
+            session.commit()
+
+        # No golden set ? 422 from set resolver, NOT 402, proving enterprise
+        # is never quota-gated.
+        resp = client.post(
+            "/v1/replay/dispatch",
+            json={},
+            headers={PROJECT_HEADER: project_id},
+        )
+        assert resp.status_code == 422

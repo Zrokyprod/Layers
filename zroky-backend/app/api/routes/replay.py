@@ -1,4 +1,4 @@
-"""
+﻿"""
 Replay API — dispatch and track replay jobs for the customer-hosted replay worker.
 
 Routes:
@@ -25,6 +25,7 @@ from app.core.limiter import limiter
 from fastapi import Request
 from app.db.models import Call, DiagnosisPullRequest, ReplayJob
 from app.db.session import get_db_session
+from app.services.replay_runs import check_replay_monthly_quota
 
 router = APIRouter(prefix="/v1/replay")
 logger = logging.getLogger(__name__)
@@ -83,7 +84,37 @@ class WorkerResultPayload(BaseModel):
     result: dict[str, Any]
 
 
+class ReplayQuotaResponse(BaseModel):
+    enabled: bool
+    used: int
+    limit: int    # -1 = unlimited (Enterprise)
+    resets_at: str  # ISO date — first day of next calendar month
+    plan_code: str
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.get("/quota", response_model=ReplayQuotaResponse)
+@limiter.limit("120/minute")
+def get_replay_quota(
+    request: Request,
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> ReplayQuotaResponse:
+    """Return the calling tenant's monthly replay quota state.
+
+    Accessible to all plan tiers (no feature gate) so the dashboard can
+    show the correct upgrade prompt to Free and Starter users.
+    """
+    result = check_replay_monthly_quota(db, tenant_id)
+    return ReplayQuotaResponse(
+        enabled=result.enabled,
+        used=result.used,
+        limit=result.limit,
+        resets_at=result.resets_at,
+        plan_code=result.plan_code,
+    )
+
 
 @router.post("/jobs", response_model=ReplayJobResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("20/minute")
@@ -93,6 +124,26 @@ def create_replay_job(
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> ReplayJobResponse:
+    # ── monthly quota check ──────────────────────────────────────────
+    quota = check_replay_monthly_quota(db, tenant_id)
+    if quota.limit != -1 and quota.used >= quota.limit:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "detail": (
+                    f"Monthly replay limit reached ({quota.used}/{quota.limit}). "
+                    f"Resets {quota.resets_at}."
+                ),
+                "required_entitlement": "replay.monthly_runs",
+                "current_plan": quota.plan_code,
+                "used": quota.used,
+                "limit": quota.limit,
+                "resets_at": quota.resets_at,
+                "upgrade_hint_url": "/settings/billing?upgrade_hint=replay.monthly_runs",
+            },
+            headers={"X-Zroky-Plan-Hint": quota.plan_code},
+        )
+
     call = db.execute(
         select(Call).where(Call.id == body.call_id, Call.project_id == tenant_id)
     ).scalar_one_or_none()
@@ -177,7 +228,7 @@ def worker_poll(body: WorkerPollRequest, db: Session = Depends(get_db_session)) 
     return WorkerPollResponse(jobs=payloads)
 
 
-@router.post("/result", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/result", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def worker_result(body: WorkerResultPayload, db: Session = Depends(get_db_session)) -> None:
     settings = get_settings()
     if not settings.REPLAY_WORKER_TOKEN or body.worker_token != settings.REPLAY_WORKER_TOKEN:

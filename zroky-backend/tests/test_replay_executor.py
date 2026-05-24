@@ -29,7 +29,6 @@ Coverage:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -50,20 +49,23 @@ from app.services.judge_engine import (
     DeterministicStubEvaluator,
     Evaluator,
     VERDICT_FAIL,
-    VERDICT_INCONCLUSIVE,
     VERDICT_PASS,
     Verdict,
 )
 from app.services.replay_executor import (
     ActualOutput,
-    MAX_TRACES_PER_RUN,
     ReplayBudgetTracker,
     _estimate_llm_cost,
     default_resolver,
     execute_replay_run,
     make_live_llm_resolver,
 )
-from app.services.replay_runs import dispatch_replay_run
+from app.services.replay_runs import (
+    REPLAY_MODE_LIVE_SANDBOX,
+    REPLAY_MODE_MOCKED_TOOL,
+    REPLAY_MODE_REAL_LLM,
+    dispatch_replay_run,
+)
 
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
@@ -309,6 +311,9 @@ class TestExecuteReplayRun:
         assert summary["fail_count"] == 0
         assert summary["error_count"] == 0
         assert summary["trace_count_executed"] == 3
+        assert summary["verification_status"] == "sanity_check_only"
+        assert summary["verified_fix"] is False
+        assert summary["fix_passed"] is True
 
         traces = db_session.execute(
             select(ReplayRunTrace).where(ReplayRunTrace.replay_run_id == run.id)
@@ -451,6 +456,36 @@ class TestExecuteReplayRun:
         assert out.status == "error"
         summary = json.loads(out.summary_json)
         assert "too_many_traces" in summary["error_reason"]
+
+    def test_real_replay_from_issue_marks_verified_fix(self, db_session) -> None:
+        run, _ = _seed_run_with_traces(db_session, expected_responses=["fixed"])
+        summary = json.loads(run.summary_json)
+        summary["replay_mode"] = REPLAY_MODE_REAL_LLM
+        summary["requested_replay_mode"] = REPLAY_MODE_REAL_LLM
+        summary["source_issue_id"] = "issue-1"
+        summary["source_issue_failure_code"] = "SCHEMA_VIOLATION"
+        run.summary_json = json.dumps(summary, separators=(",", ":"))
+        db_session.add(run)
+        db_session.commit()
+
+        out = execute_replay_run(
+            db_session,
+            project_id=run.project_id,
+            run_id=run.id,
+            evaluator=DeterministicStubEvaluator(),
+            actual_output_resolver=lambda trace, _call: ActualOutput(
+                text=trace.expected_output_text,
+                model="gpt-4o",
+            ),
+        )
+
+        assert out is not None
+        assert out.status == "pass"
+        updated_summary = json.loads(out.summary_json)
+        assert updated_summary["reproduced_original_failure"] is True
+        assert updated_summary["fix_passed"] is True
+        assert updated_summary["verified_fix"] is True
+        assert updated_summary["verification_status"] == "verified_fix"
 
 
 # ── per-trace grading details ────────────────────────────────────────────────
@@ -793,6 +828,156 @@ class TestLiveLlmResolver:
         out = resolver(trace, call)
         assert out.text is None
         assert out.reason == "source_call_missing_model"
+
+    def test_mocked_tool_requires_captured_tool_snapshot(self, db_session) -> None:
+        call = _make_call(db_session, project_id="p1", call_id="c1", response_text="old")
+        gs = create_golden_set(db_session, project_id="p1", name="ds")
+        trace = add_trace(
+            db_session,
+            project_id="p1",
+            golden_set_id=gs.id,
+            call_id=call.id,
+            expected_output_text="exp",
+        )
+
+        resolver = make_live_llm_resolver(replay_mode=REPLAY_MODE_MOCKED_TOOL)
+        out = resolver(trace, call)
+
+        assert out.text is None
+        assert out.reason == "tool_snapshot_missing"
+        assert out.metadata is not None
+        assert out.metadata["tool_behavior_diff"]["available"] is False
+
+    def test_mocked_tool_injects_frozen_tool_context(self, db_session, monkeypatch) -> None:
+        call = _make_call(db_session, project_id="p1", call_id="c1", response_text="old")
+        call.tool_lifecycle_summary_json = json.dumps(
+            [{"tool_name": "refund_lookup", "tool_success": True}]
+        )
+        db_session.add(call)
+        db_session.commit()
+        gs = create_golden_set(db_session, project_id="p1", name="ds")
+        trace = add_trace(
+            db_session,
+            project_id="p1",
+            golden_set_id=gs.id,
+            call_id=call.id,
+            expected_output_text="exp",
+        )
+
+        captured_messages = []
+
+        class _FakeClient:
+            def chat_completions_create(self, *, model, messages, **kwargs):
+                captured_messages.append(messages)
+
+                class _U:
+                    prompt_tokens = 1
+                    completion_tokens = 1
+
+                class _C:
+                    class message:
+                        content = "ok"
+
+                class _R:
+                    choices = [_C()]
+                    usage = _U()
+
+                return _R()
+
+        monkeypatch.setattr(
+            "app.services.llm_client.get_llm_client",
+            lambda: _FakeClient(),
+        )
+
+        resolver = make_live_llm_resolver(replay_mode=REPLAY_MODE_MOCKED_TOOL)
+        out = resolver(trace, call)
+
+        assert out.text == "ok"
+        assert "refund_lookup" in captured_messages[0][0]["content"]
+        assert out.metadata is not None
+        tool_diff = out.metadata["tool_behavior_diff"]
+        assert tool_diff["available"] is True
+        assert tool_diff["mode"] == "mocked_tool_frozen_outputs"
+
+    def test_live_sandbox_fails_closed_without_runtime(self, db_session) -> None:
+        call = _make_call(db_session, project_id="p1", call_id="c1", response_text="old")
+        gs = create_golden_set(db_session, project_id="p1", name="ds")
+        trace = add_trace(
+            db_session,
+            project_id="p1",
+            golden_set_id=gs.id,
+            call_id=call.id,
+            expected_output_text="exp",
+        )
+
+        resolver = make_live_llm_resolver(replay_mode=REPLAY_MODE_LIVE_SANDBOX)
+        out = resolver(trace, call)
+
+        assert out.text is None
+        assert out.reason == "sandbox_tool_runtime_unavailable"
+        assert out.metadata is not None
+        assert out.metadata["tool_behavior_diff"]["mode"] == "live_sandbox"
+
+    def test_live_sandbox_calls_configured_worker(self, db_session, monkeypatch) -> None:
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        monkeypatch.setattr(settings, "REPLAY_SANDBOX_WORKER_URL", "https://sandbox.zroky.test/replay")
+        monkeypatch.setattr(settings, "REPLAY_SANDBOX_WORKER_TOKEN", "sandbox-secret")
+        call = _make_call(db_session, project_id="p1", call_id="c1", response_text="old")
+        call.tool_lifecycle_summary_json = json.dumps([{"tool_name": "lookup"}])
+        db_session.add(call)
+        db_session.commit()
+        gs = create_golden_set(db_session, project_id="p1", name="ds")
+        trace = add_trace(
+            db_session,
+            project_id="p1",
+            golden_set_id=gs.id,
+            call_id=call.id,
+            expected_output_text="exp",
+        )
+
+        captured = {}
+
+        class _FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "output_text": "sandbox output",
+                    "model": "gpt-4o",
+                    "latency_ms": 25,
+                    "cost_usd": 0.002,
+                    "input_tokens": 12,
+                    "output_tokens": 4,
+                    "tool_behavior_diff": {
+                        "available": True,
+                        "changed": True,
+                        "mode": "live_sandbox",
+                    },
+                }
+
+        def _fake_post(url, *, json, headers, timeout):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            captured["timeout"] = timeout
+            return _FakeResponse()
+
+        monkeypatch.setattr("httpx.post", _fake_post)
+
+        resolver = make_live_llm_resolver(replay_mode=REPLAY_MODE_LIVE_SANDBOX)
+        out = resolver(trace, call)
+
+        assert out.text == "sandbox output"
+        assert out.model == "gpt-4o"
+        assert out.cost_total == pytest.approx(0.002)
+        assert captured["url"] == "https://sandbox.zroky.test/replay"
+        assert captured["headers"]["Authorization"] == "Bearer sandbox-secret"
+        assert captured["json"]["tool_snapshot"] == [{"tool_name": "lookup"}]
+        assert out.metadata is not None
+        assert out.metadata["tool_behavior_diff"]["changed"] is True
 
     def test_calls_provider_and_returns_text(self, db_session, monkeypatch) -> None:
         call = _make_call(db_session, project_id="p1", call_id="c1", response_text="old")

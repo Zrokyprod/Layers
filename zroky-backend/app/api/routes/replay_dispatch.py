@@ -21,12 +21,10 @@ Auth model: same as the rest of the Pilot tier — tenant-scoped via
 plan-gated via `require_entitlement("pilot.autopilot_enabled")` at the
 router level so customers on Free / Watch-only get a 402.
 """
-from __future__ import annotations
-
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,6 +38,7 @@ from app.services.goldens import get_golden_set
 from app.services.replay_runs import (
     VALID_TRIGGERS,
     build_summary_url,
+    check_replay_monthly_quota,
     dispatch_replay_run,
     was_idempotent_hit,
 )
@@ -77,6 +76,7 @@ class ReplayDispatchRequest(BaseModel):
     branch_name: str | None = None
     pr_number: int | None = None
     commit_message: str | None = None
+    replay_mode: str | None = None
     # Option A (honesty fix) — see GoldenRunRequest for full rationale.
     # CI callers can set these to test a candidate prompt/model coming
     # from a PR diff; the dispatcher rejects them when
@@ -132,7 +132,7 @@ def _resolve_default_golden_set_id(
 @limiter.limit("30/minute")
 def dispatch_replay(
     request: Request,
-    body: ReplayDispatchRequest | None = None,
+    body: ReplayDispatchRequest = Body(default_factory=ReplayDispatchRequest),
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> ReplayDispatchResponse:
@@ -145,12 +145,32 @@ def dispatch_replay(
     Returns 422 when neither is available, 404 when the resolved set
     no longer exists for the tenant, and 202 on accept.
     """
-    payload = body or ReplayDispatchRequest()
+    payload = body
 
     if payload.trigger not in VALID_TRIGGERS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"trigger must be one of {sorted(VALID_TRIGGERS)}",
+        )
+
+    # ── monthly quota check (fast-fail before golden set I/O) ────────
+    quota = check_replay_monthly_quota(db, tenant_id)
+    if quota.limit != -1 and quota.used >= quota.limit:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "detail": (
+                    f"Monthly replay limit reached ({quota.used}/{quota.limit}). "
+                    f"Resets {quota.resets_at}."
+                ),
+                "required_entitlement": "replay.monthly_runs",
+                "current_plan": quota.plan_code,
+                "used": quota.used,
+                "limit": quota.limit,
+                "resets_at": quota.resets_at,
+                "upgrade_hint_url": "/settings/billing?upgrade_hint=replay.monthly_runs",
+            },
+            headers={"X-Zroky-Plan-Hint": quota.plan_code},
         )
 
     # ── resolve target set ───────────────────────────────────────────
@@ -192,6 +212,7 @@ def dispatch_replay(
             branch_name=payload.branch_name,
             pr_number=payload.pr_number,
             commit_message=payload.commit_message,
+            replay_mode=payload.replay_mode,
             candidate_prompt_override=payload.candidate_prompt_override,
             candidate_model_override=payload.candidate_model_override,
         )

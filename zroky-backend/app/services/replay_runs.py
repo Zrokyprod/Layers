@@ -24,21 +24,27 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     Call,
-    GoldenSet,
     GoldenTrace,
+    Issue,
     ReplayRun,
     ReplayRunTrace,
 )
-from app.services.goldens import add_trace, count_traces, get_golden_set
+from app.services.goldens import (
+    add_trace,
+    count_traces,
+    create_golden_set,
+    get_golden_set,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +68,22 @@ VALID_TRACE_STATUSES = frozenset({"pass", "fail", "error"})
 #              capping spend at REPLAY_REAL_LLM_BUDGET_USD per run.
 REPLAY_MODE_STUB = "stub"
 REPLAY_MODE_REAL_LLM = "real_llm"
-VALID_REPLAY_MODES = frozenset({REPLAY_MODE_STUB, REPLAY_MODE_REAL_LLM})
+REPLAY_MODE_MOCKED_TOOL = "mocked-tool"
+REPLAY_MODE_LIVE_SANDBOX = "live-sandbox"
+REPLAY_MODE_SHADOW = "shadow"
+VALID_REPLAY_MODES = frozenset({
+    REPLAY_MODE_STUB,
+    REPLAY_MODE_REAL_LLM,
+    REPLAY_MODE_MOCKED_TOOL,
+    REPLAY_MODE_LIVE_SANDBOX,
+    REPLAY_MODE_SHADOW,
+})
+REAL_COMPARISON_REPLAY_MODES = frozenset({
+    REPLAY_MODE_REAL_LLM,
+    REPLAY_MODE_MOCKED_TOOL,
+    REPLAY_MODE_LIVE_SANDBOX,
+    REPLAY_MODE_SHADOW,
+})
 
 # Truncation for the stored prompt override — large prompts blow up
 # summary_json and the dashboard payload. Anything legitimate fits well
@@ -78,6 +99,25 @@ _STUB_MODE_WARNING = (
     "reflected in these results. Enable REPLAY_REAL_LLM_ENABLED on the "
     "control plane (Option B) to detect those regressions."
 )
+
+_MODE_WARNINGS = {
+    REPLAY_MODE_STUB: _STUB_MODE_WARNING,
+    REPLAY_MODE_MOCKED_TOOL: (
+        "Mocked-tool replay uses a live model comparison with frozen recorded "
+        "tool context where captured tool data is available. Missing tool "
+        "snapshots are reported in the tool behavior diff instead of being "
+        "treated as verified."
+    ),
+    REPLAY_MODE_LIVE_SANDBOX: (
+        "Live-sandbox replay uses the live model path. Tool execution is "
+        "limited to sandbox-capable captured context; unavailable tool calls "
+        "are surfaced as warnings, not silently verified."
+    ),
+    REPLAY_MODE_SHADOW: (
+        "Shadow replay compares the candidate configuration side-by-side with "
+        "the baseline golden trace. Stub results are never marked verified."
+    ),
+}
 
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
@@ -165,6 +205,7 @@ def _find_idempotent_run(
 
 def _resolve_replay_mode(
     *,
+    replay_mode: str | None = None,
     candidate_prompt_override: str | None,
     candidate_model_override: str | None,
 ) -> tuple[str, str | None]:
@@ -185,6 +226,13 @@ def _resolve_replay_mode(
     rather than silently dropping the override and running a stub-mode
     replay that ignores the edit, we refuse to dispatch.
     """
+    requested_mode = (replay_mode or "").strip() or None
+    if requested_mode is not None and requested_mode not in VALID_REPLAY_MODES:
+        raise ValueError(
+            "replay_mode must be one of "
+            f"{sorted(VALID_REPLAY_MODES)}, got {requested_mode!r}"
+        )
+
     has_override = bool(
         (candidate_prompt_override and candidate_prompt_override.strip())
         or (candidate_model_override and candidate_model_override.strip())
@@ -197,23 +245,22 @@ def _resolve_replay_mode(
     settings = get_settings()
     real_llm_enabled = bool(settings.REPLAY_REAL_LLM_ENABLED)
 
-    if not has_override:
+    if requested_mode is None:
+        if not has_override:
+            return REPLAY_MODE_STUB, _STUB_MODE_WARNING
+        requested_mode = REPLAY_MODE_REAL_LLM
+
+    if requested_mode == REPLAY_MODE_STUB:
         return REPLAY_MODE_STUB, _STUB_MODE_WARNING
 
     if not real_llm_enabled:
-        # The whole point of the override is to test a NEW prompt/model
-        # against the goldens. Running stub-mode in that case would grade
-        # the ORIGINAL recorded response — silently telling the caller
-        # "your edit didn't regress" when in reality their edit was never
-        # tested. That false-negative is the bug we're closing.
         raise ValueError(
-            "candidate_prompt_override / candidate_model_override require "
-            "real-LLM replay, but REPLAY_REAL_LLM_ENABLED is False on the "
-            "control plane. Enable it (Option B) or remove the override "
-            "to run a stub-mode self-consistency check."
+            f"replay_mode={requested_mode!r} requires real comparison replay, "
+            "but REPLAY_REAL_LLM_ENABLED is False on the control plane. "
+            "Enable it or use replay_mode='stub' for a sanity check."
         )
 
-    return REPLAY_MODE_REAL_LLM, None
+    return requested_mode, _MODE_WARNINGS.get(requested_mode)
 
 
 def dispatch_replay_run(
@@ -226,6 +273,7 @@ def dispatch_replay_run(
     branch_name: str | None = None,
     pr_number: int | None = None,
     commit_message: str | None = None,
+    replay_mode: str | None = None,
     candidate_prompt_override: str | None = None,
     candidate_model_override: str | None = None,
 ) -> ReplayRun | None:
@@ -268,8 +316,15 @@ def dispatch_replay_run(
     # This raises on misconfigured override → real-LLM-off so we never
     # write a misleading pending row.
     replay_mode, replay_mode_warning = _resolve_replay_mode(
+        replay_mode=replay_mode,
         candidate_prompt_override=candidate_prompt_override,
         candidate_model_override=candidate_model_override,
+    )
+    requested_replay_mode = replay_mode
+    executor_replay_mode = (
+        REPLAY_MODE_REAL_LLM
+        if replay_mode in REAL_COMPARISON_REPLAY_MODES
+        else replay_mode
     )
 
     # Truncate the stored prompt — see _MAX_PROMPT_OVERRIDE_CHARS rationale.
@@ -300,6 +355,7 @@ def dispatch_replay_run(
     has_override = (
         normalized_prompt_override is not None
         or normalized_model_override is not None
+        or requested_replay_mode in REAL_COMPARISON_REPLAY_MODES
     )
     if normalized_sha is not None and not has_override:
         existing = _find_idempotent_run(
@@ -336,7 +392,12 @@ def dispatch_replay_run(
         "error_count": 0,
         # Option A honesty fields — ALWAYS present so frontends can
         # render the right banner without conditional null-checks.
-        "replay_mode": replay_mode,
+        "replay_mode": executor_replay_mode,
+        "requested_replay_mode": requested_replay_mode,
+        "verification_status": "sanity_check_only"
+        if requested_replay_mode == REPLAY_MODE_STUB
+        else "pending_real_comparison",
+        "verified_fix": False,
     }
     if replay_mode_warning:
         summary["replay_mode_warning"] = replay_mode_warning
@@ -393,6 +454,145 @@ def was_idempotent_hit(run: ReplayRun) -> bool:
     service.
     """
     return getattr(run, "_zroky_was_new", True) is False
+
+
+def _safe_json_object(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        decoded = json.loads(raw)
+        return decoded if isinstance(decoded, dict) else {}
+    except Exception:
+        return {}
+
+
+def _first_text(payload: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for value in payload.values():
+        if isinstance(value, dict):
+            nested = _first_text(value, *keys)
+            if nested:
+                return nested
+    return None
+
+
+def _expected_output_from_call(call: Call) -> str | None:
+    payload = _safe_json_object(call.payload_json)
+    return _first_text(
+        payload,
+        "response",
+        "output",
+        "completion",
+        "result",
+        "response_text",
+    )
+
+
+def _one_click_set_name(*, source_kind: str, source_id: str) -> str:
+    return f"One-click replay: {source_kind} {source_id[:12]} {str(uuid4())[:8]}"
+
+
+def create_replay_from_call(
+    db: Session,
+    *,
+    project_id: str,
+    call_id: str,
+    replay_mode: str = REPLAY_MODE_STUB,
+    candidate_prompt_override: str | None = None,
+    candidate_model_override: str | None = None,
+) -> ReplayRun | None:
+    call = db.execute(
+        select(Call).where(Call.project_id == project_id, Call.id == call_id)
+    ).scalar_one_or_none()
+    if call is None:
+        return None
+    _resolve_replay_mode(
+        replay_mode=replay_mode,
+        candidate_prompt_override=candidate_prompt_override,
+        candidate_model_override=candidate_model_override,
+    )
+
+    golden_set = create_golden_set(
+        db,
+        project_id=project_id,
+        name=_one_click_set_name(source_kind="call", source_id=call_id),
+        description=f"Auto-created from call {call_id}.",
+    )
+    trace = mark_call_as_golden(
+        db,
+        project_id=project_id,
+        call_id=call_id,
+        golden_set_id=golden_set.id,
+        expected_output_text=_expected_output_from_call(call),
+    )
+    if trace is None:
+        return None
+
+    run = dispatch_replay_run(
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set.id,
+        trigger="manual",
+        replay_mode=replay_mode,
+        candidate_prompt_override=candidate_prompt_override,
+        candidate_model_override=candidate_model_override,
+    )
+    if run is None:
+        return None
+
+    summary = parse_summary(run.summary_json)
+    summary["source_kind"] = "call"
+    summary["source_id"] = call_id
+    summary["source_call_id"] = call_id
+    run.summary_json = json.dumps(summary, separators=(",", ":"))
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def create_replay_from_issue(
+    db: Session,
+    *,
+    project_id: str,
+    issue_id: str,
+    replay_mode: str = REPLAY_MODE_STUB,
+    candidate_prompt_override: str | None = None,
+    candidate_model_override: str | None = None,
+) -> ReplayRun | None:
+    issue = db.execute(
+        select(Issue).where(Issue.project_id == project_id, Issue.id == issue_id)
+    ).scalar_one_or_none()
+    if issue is None:
+        return None
+    if not issue.sample_call_id:
+        raise ValueError("Issue has no sample_call_id to replay.")
+
+    run = create_replay_from_call(
+        db,
+        project_id=project_id,
+        call_id=issue.sample_call_id,
+        replay_mode=replay_mode,
+        candidate_prompt_override=candidate_prompt_override,
+        candidate_model_override=candidate_model_override,
+    )
+    if run is None:
+        return None
+
+    summary = parse_summary(run.summary_json)
+    summary["source_kind"] = "issue"
+    summary["source_id"] = issue_id
+    summary["source_issue_id"] = issue_id
+    summary["source_issue_failure_code"] = issue.failure_code
+    summary["source_issue_severity"] = issue.severity
+    run.summary_json = json.dumps(summary, separators=(",", ":"))
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
 
 
 # ── reads ────────────────────────────────────────────────────────────────────
@@ -560,4 +760,95 @@ def build_summary_url(run: ReplayRun) -> str:
 
     settings = get_settings()
     base = (settings.FRONTEND_URL or "https://zroky.ai").rstrip("/")
-    return f"{base}/replay/runs/{run.id}"
+    return f"{base}/replay/{run.id}"
+
+
+# ── monthly quota ─────────────────────────────────────────────────────────────
+
+
+@dataclass
+class ReplayQuotaResult:
+    """Monthly replay quota state for a tenant.
+
+    ``limit == -1`` means unlimited (Enterprise). Callers must treat
+    -1 as "no cap" rather than a literal number; the quota is never
+    considered exceeded when limit is -1.
+    """
+
+    enabled: bool    # pilot.autopilot_enabled — basic feature gate
+    used: int        # ReplayRun + ReplayJob rows created this calendar month
+    limit: int       # replay.monthly_runs; -1 = unlimited
+    resets_at: str   # ISO date of first day of next calendar month
+    plan_code: str   # e.g. "pro", "team", "enterprise"
+
+
+def check_replay_monthly_quota(db: Session, tenant_id: str) -> ReplayQuotaResult:
+    """Return the monthly replay quota state for ``tenant_id``.
+
+    Counts both :class:`ReplayRun` (batch golden-set runs) and the
+    legacy :class:`ReplayJob` rows (single-call worker jobs) against
+    the plan's ``replay.monthly_runs`` entitlement. The combined total
+    is what the dashboard quota banner displays.
+
+    Never raises — returns ``allowed=False / limit=0`` on any DB or
+    resolver error so a transient failure never opens a quota bypass.
+    """
+    from app.db.models import ReplayJob  # local: intentionally separate service
+    from app.services import entitlements_resolver
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if now.month == 12:
+        resets_dt = month_start.replace(year=now.year + 1, month=1)
+    else:
+        resets_dt = month_start.replace(month=now.month + 1)
+
+    resets_at = resets_dt.date().isoformat()
+
+    try:
+        enabled: bool = entitlements_resolver.has(db, tenant_id, "pilot.autopilot_enabled")
+        raw_limit = entitlements_resolver.get(
+            db, tenant_id, "replay.monthly_runs", default=0
+        )
+        limit: int = int(raw_limit) if raw_limit is not None else 0
+        plan_code: str = entitlements_resolver.get_plan_code(db, tenant_id)
+
+        run_count: int = (
+            db.execute(
+                select(func.count(ReplayRun.id)).where(
+                    ReplayRun.project_id == tenant_id,
+                    ReplayRun.created_at >= month_start,
+                )
+            ).scalar_one()
+            or 0
+        )
+        job_count: int = (
+            db.execute(
+                select(func.count(ReplayJob.id)).where(
+                    ReplayJob.tenant_id == tenant_id,
+                    ReplayJob.created_at >= month_start,
+                )
+            ).scalar_one()
+            or 0
+        )
+        used = run_count + job_count
+
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "check_replay_monthly_quota failed for tenant=%s — denying", tenant_id
+        )
+        return ReplayQuotaResult(
+            enabled=False,
+            used=0,
+            limit=0,
+            resets_at=resets_at,
+            plan_code="unknown",
+        )
+
+    return ReplayQuotaResult(
+        enabled=enabled,
+        used=used,
+        limit=limit,
+        resets_at=resets_at,
+        plan_code=plan_code,
+    )

@@ -22,17 +22,19 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, GoldenSet, GoldenTrace, ReplayRun, ReplayRunTrace
+from app.db.models import Call, GoldenSet, GoldenTrace, Issue, ReplayRun, ReplayRunTrace
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.goldens import add_trace, create_golden_set
 from app.services.replay_runs import (
+    REPLAY_MODE_MOCKED_TOOL,
     REPLAY_MODE_REAL_LLM,
     REPLAY_MODE_STUB,
     VALID_RUN_STATUSES,
     VALID_TRIGGERS,
     _STUB_MODE_WARNING,
     _resolve_replay_mode,
+    create_replay_from_call,
     dispatch_replay_run,
     get_replay_run,
     list_replay_runs,
@@ -307,6 +309,46 @@ class TestDispatchReplayRun:
         assert "replay_mode_warning" not in summary
         assert summary["candidate_prompt_override"] == "new prompt"
         assert summary["candidate_model_override"] == "claude-3-haiku"
+
+    def test_stamps_requested_mode_with_executor_compatibility(
+        self, db_session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gs = _seed_set_with_traces(db_session, project_id="proj-1", name="x")
+        s = get_settings()
+        monkeypatch.setattr(s, "REPLAY_REAL_LLM_ENABLED", True)
+        run = dispatch_replay_run(
+            db_session,
+            project_id="proj-1",
+            golden_set_id=gs.id,
+            replay_mode=REPLAY_MODE_MOCKED_TOOL,
+        )
+        assert run is not None
+        summary = parse_summary(run.summary_json)
+        assert summary["requested_replay_mode"] == REPLAY_MODE_MOCKED_TOOL
+        assert summary["replay_mode"] == REPLAY_MODE_REAL_LLM
+        assert summary["verification_status"] == "pending_real_comparison"
+
+    def test_create_replay_from_call_creates_one_click_run(self, db_session) -> None:
+        _seed_call(
+            db_session,
+            project_id="proj-1",
+            call_id="call-1",
+            payload_json=json.dumps({"response": "ok"}),
+        )
+        run = create_replay_from_call(
+            db_session,
+            project_id="proj-1",
+            call_id="call-1",
+        )
+        assert run is not None
+        summary = parse_summary(run.summary_json)
+        assert summary["source_kind"] == "call"
+        assert summary["source_call_id"] == "call-1"
+        trace = db_session.execute(
+            select(GoldenTrace).where(GoldenTrace.golden_set_id == run.golden_set_id)
+        ).scalar_one()
+        assert trace.call_id == "call-1"
+        assert trace.expected_output_text == "ok"
 
     def test_override_bypasses_idempotency(
         self, db_session, monkeypatch: pytest.MonkeyPatch
@@ -877,6 +919,65 @@ class TestReplayModeInResponse:
 
 # ── route: POST /v1/calls/{call_id}/mark-golden ──────────────────────────────
 
+
+
+class TestCreateReplayFromIssueRoute:
+    def test_creates_one_click_replay_from_issue(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.api.routes import replay_runs as replay_runs_routes
+
+        enqueued: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            replay_runs_routes,
+            "_enqueue_replay_run",
+            lambda run_id, tenant_id: enqueued.append((run_id, tenant_id)),
+        )
+
+        now = datetime.now(timezone.utc)
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            _seed_call(
+                session,
+                project_id="proj-1",
+                call_id="call-issue",
+                payload_json=json.dumps({"response": "issue fixed"}),
+            )
+            issue = Issue(
+                id="issue-1",
+                project_id="proj-1",
+                failure_code="OUTPUT_MISMATCH",
+                prompt_fingerprint="fp-issue",
+                agent_name="support-agent",
+                severity="high",
+                first_seen_at=now - timedelta(minutes=5),
+                last_seen_at=now,
+                sample_call_id="call-issue",
+            )
+            session.add(issue)
+            session.commit()
+
+        response = client.post(
+            "/v1/replay/runs/from-issue/issue-1",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={"replay_mode": "stub"},
+        )
+        assert response.status_code == 202
+        body = response.json()
+        assert body["replay_mode"] == "stub"
+        assert body["summary_url"].endswith(f"/replay/{body['id']}")
+        assert enqueued == [(body["id"], "proj-1")]
+
+        with factory() as session:
+            run = session.get(ReplayRun, body["id"])
+            assert run is not None
+            summary = parse_summary(run.summary_json)
+            assert summary["source_kind"] == "issue"
+            assert summary["source_issue_id"] == "issue-1"
+            assert summary["source_call_id"] == "call-issue"
+            trace = session.execute(
+                select(GoldenTrace).where(GoldenTrace.golden_set_id == run.golden_set_id)
+            ).scalar_one()
+            assert trace.call_id == "call-issue"
+            assert trace.expected_output_text == "issue fixed"
 
 class TestMarkGoldenRoute:
     def test_201(self, client: TestClient) -> None:
