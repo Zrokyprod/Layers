@@ -8522,6 +8522,24 @@ tr:hover td {
   color: var(--text-muted, #b6bacb);
 }
 .ask-action-arrow { color: #b9a4ff; }
+.ask-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(185, 164, 255, 0.32);
+  background: rgba(185, 164, 255, 0.12);
+  color: #e6ddff;
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+.ask-action-button:hover {
+  background: rgba(185, 164, 255, 0.2);
+  color: #fff;
+}
 
 .ask-evidence {
   margin-top: 0.7rem;

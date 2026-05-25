@@ -1,11 +1,13 @@
 ﻿"use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Send, Sparkles, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { askZroky, listCalls, listAlerts, submitAskFeedback } from "@/lib/api";
+import { useCreateReplayRunFromCall, useCreateReplayRunFromIssue } from "@/lib/hooks";
 import type { AskContext, AskEvidence, AskFeedbackRequest, AskResponse } from "@/lib/types";
 
 interface ChatTurn {
@@ -18,21 +20,83 @@ interface ChatTurn {
   fallback_reason?: string | null;
   intent?: string;
   confidence?: number;
+  context?: AskContext | null;
 }
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 11);
 }
 
+type AskActionKind = "create_replay" | "open_issue" | "open_call" | "open_trace" | "promote_golden";
+
+interface AskWorkflowAction {
+  kind: AskActionKind;
+  label: string;
+  href?: string;
+}
+
+function actionKind(action: string): AskActionKind | null {
+  const normalized = action.toLowerCase().replace(/[_-]/g, " ");
+  if (normalized.includes("create") && normalized.includes("replay")) return "create_replay";
+  if (normalized.includes("open") && normalized.includes("issue")) return "open_issue";
+  if (normalized.includes("open") && normalized.includes("call")) return "open_call";
+  if (normalized.includes("open") && normalized.includes("trace")) return "open_trace";
+  if (normalized.includes("promote") && normalized.includes("golden")) return "promote_golden";
+  return null;
+}
+
+function evidenceFor(evidence: AskEvidence[], kinds: string[]): AskEvidence | null {
+  return evidence.find((ev) => kinds.includes(ev.kind.toLowerCase())) ?? null;
+}
+
+function idFromHref(href: string | undefined, prefix: string): string | null {
+  if (!href) return null;
+  const match = href.match(new RegExp(`${prefix}/([^/?#]+)`));
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function buildWorkflowActions(turn: ChatTurn): AskWorkflowAction[] {
+  const evidence = turn.evidence ?? [];
+  if (evidence.length === 0) return [];
+  const context = turn.context ?? null;
+  const callEvidence = evidenceFor(evidence, ["call"]);
+  const issueEvidence = evidenceFor(evidence, ["issue", "anomaly"]);
+  const traceEvidence = evidenceFor(evidence, ["trace"]);
+  const replayEvidence = evidenceFor(evidence, ["replay"]);
+  const callId = context?.call_id ?? callEvidence?.id ?? idFromHref(callEvidence?.href, "/calls");
+  const issueId = context?.issue_id ?? context?.anomaly_id ?? issueEvidence?.id ?? idFromHref(issueEvidence?.href, "/issues");
+  const traceId = context?.trace_id ?? traceEvidence?.id ?? idFromHref(traceEvidence?.href, "/trace");
+  const replayId = replayEvidence?.id ?? idFromHref(replayEvidence?.href, "/replay");
+  const seen = new Set<AskActionKind>();
+  const actions: AskWorkflowAction[] = [];
+
+  for (const suggestedAction of turn.suggested_actions ?? []) {
+    const kind = actionKind(suggestedAction);
+    if (!kind || seen.has(kind)) continue;
+    seen.add(kind);
+    if (kind === "create_replay" && (issueId || callId)) actions.push({ kind, label: "Create Replay" });
+    if (kind === "open_issue" && issueId) actions.push({ kind, label: "Open Issue", href: `/issues/${encodeURIComponent(issueId)}` });
+    if (kind === "open_call" && callId) actions.push({ kind, label: "Open Call", href: `/calls/${encodeURIComponent(callId)}` });
+    if (kind === "open_trace" && traceId) actions.push({ kind, label: "Open Trace", href: `/trace/${encodeURIComponent(traceId)}` });
+    if (kind === "promote_golden") actions.push({ kind, label: "Promote Golden", href: replayId ? `/replay/${encodeURIComponent(replayId)}` : "/goldens" });
+  }
+
+  return actions;
+}
+
 export function AskZroky() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [pending, setPending] = useState(false);
   const [context, setContext] = useState<AskContext | null>(null);
   const [turnFeedback, setTurnFeedback] = useState<Record<string, "up" | "down">>({});
+  const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const createReplayFromCall = useCreateReplayRunFromCall();
+  const createReplayFromIssue = useCreateReplayRunFromIssue();
 
   // Dynamic suggestion data — only fetched when drawer is open
   const callsQuery = useQuery({
@@ -124,16 +188,18 @@ export function AskZroky() {
         payload.context = context;
       }
       const result: AskResponse = await askZroky(payload);
+      const hasEvidence = result.evidence.length > 0;
       const assistantTurn: ChatTurn = {
         id: uid(),
         role: "assistant",
-        text: result.answer,
+        text: hasEvidence ? result.answer : "Not enough data to answer this yet.",
         evidence: result.evidence,
-        suggested_actions: result.suggested_actions,
+        suggested_actions: hasEvidence ? result.suggested_actions : [],
         used_llm: result.used_llm,
         fallback_reason: result.fallback_reason,
         intent: result.intent,
         confidence: result.confidence,
+        context,
       };
       setTurns((prev) => [...prev, assistantTurn]);
     } catch (err) {
@@ -172,11 +238,40 @@ export function AskZroky() {
     }
   }
 
+  async function runWorkflowAction(turn: ChatTurn, action: AskWorkflowAction) {
+    if (action.kind !== "create_replay") return;
+    const evidence = turn.evidence ?? [];
+    const callEvidence = evidenceFor(evidence, ["call"]);
+    const issueEvidence = evidenceFor(evidence, ["issue", "anomaly"]);
+    const callId = turn.context?.call_id ?? callEvidence?.id ?? idFromHref(callEvidence?.href, "/calls");
+    const issueId = turn.context?.issue_id ?? turn.context?.anomaly_id ?? issueEvidence?.id ?? idFromHref(issueEvidence?.href, "/issues");
+    setActionStatus((prev) => ({ ...prev, [`${turn.id}-${action.kind}`]: "Creating replay..." }));
+    try {
+      const run = issueId
+        ? await createReplayFromIssue.mutateAsync({ issueId, payload: { replay_mode: "real_llm" } })
+        : callId
+        ? await createReplayFromCall.mutateAsync({ callId, payload: { replay_mode: "real_llm" } })
+        : null;
+      if (!run) {
+        setActionStatus((prev) => ({ ...prev, [`${turn.id}-${action.kind}`]: "No call or issue evidence available." }));
+        return;
+      }
+      setOpen(false);
+      router.push(`/replay/${run.id}`);
+    } catch (error) {
+      setActionStatus((prev) => ({
+        ...prev,
+        [`${turn.id}-${action.kind}`]: error instanceof Error ? error.message : "Create replay failed.",
+      }));
+    }
+  }
+
   function reset() {
     setTurns([]);
     setContext(null);
     setQuestion("");
     setTurnFeedback({});
+    setActionStatus({});
   }
 
   if (!open) {
@@ -218,7 +313,9 @@ export function AskZroky() {
             Scoped to{" "}
             <span className="mono">
               {context.call_id ? `call ${context.call_id.slice(0, 8)}` : null}
+              {context.issue_id ? `issue ${context.issue_id.slice(0, 8)}` : null}
               {context.anomaly_id ? `anomaly ${context.anomaly_id.slice(0, 8)}` : null}
+              {context.trace_id ? `trace ${context.trace_id.slice(0, 8)}` : null}
             </span>
             <button
               type="button"
@@ -302,23 +399,26 @@ export function AskZroky() {
                   <div className="ask-bubble">
                     <p className="ask-bubble-text">{turn.text}</p>
 
-                    {turn.role === "assistant" &&
-                      turn.suggested_actions &&
-                      turn.suggested_actions.length > 0 && (
-                        <ul className="ask-actions">
-                          {turn.suggested_actions.map((action, idx) => (
-                            <li
-                              key={`${turn.id}-action-${idx}`}
-                              className="ask-action-item"
-                            >
-                              <span className="ask-action-arrow" aria-hidden="true">
-                                →
-                              </span>
-                              <span>{action}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                    {turn.role === "assistant" && buildWorkflowActions(turn).length > 0 && (
+                      <div className="ask-actions">
+                        {buildWorkflowActions(turn).map((action) => {
+                          const status = actionStatus[`${turn.id}-${action.kind}`];
+                          return (
+                            <div key={`${turn.id}-${action.kind}`} className="ask-action-item">
+                              {action.href ? (
+                                <Link href={action.href} className="ask-action-button" onClick={() => setOpen(false)}>
+                                  {action.label}
+                                </Link>
+                              ) : (
+                                <button type="button" className="ask-action-button" onClick={() => void runWorkflowAction(turn, action)}>
+                                  {status ?? action.label}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {turn.role === "assistant" &&
                       turn.evidence &&

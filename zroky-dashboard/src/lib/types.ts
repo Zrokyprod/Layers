@@ -1295,6 +1295,8 @@ export interface AskResponse {
 export interface AskContext {
   call_id?: string;
   anomaly_id?: string;
+  issue_id?: string;
+  trace_id?: string;
 }
 
 export interface AskFeedbackRequest {
