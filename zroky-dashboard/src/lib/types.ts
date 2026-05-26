@@ -1144,6 +1144,8 @@ export interface IssueItem {
   last_fix_id: string | null;
   resolved_at: string | null;
   resolution_source: string | null;
+  assigned_to: string | null;
+  deploy_pr_url: string | null;
   created_at: string;
   updated_at: string;
   title: string;

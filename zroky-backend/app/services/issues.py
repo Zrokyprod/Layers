@@ -33,6 +33,7 @@ from app.services.issue_projection import (
 )
 
 VALID_STATUSES = PUBLIC_ISSUE_STATUSES
+_UNCHANGED = object()
 
 
 def _existing_anomaly(
@@ -204,6 +205,58 @@ def ignore_issue(
         issue_id=issue_id,
         public_status=PUBLIC_IGNORED,
     )
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def update_issue_triage(
+    db: Session,
+    *,
+    project_id: str,
+    issue_id: str,
+    assigned_to: str | None | object = _UNCHANGED,
+    deploy_pr_url: str | None | object = _UNCHANGED,
+) -> Anomaly | None:
+    """Persist customer-facing issue triage metadata on the canonical anomaly."""
+    anomaly = db.execute(
+        select(Anomaly).where(Anomaly.project_id == project_id, Anomaly.id == issue_id)
+    ).scalar_one_or_none()
+    if anomaly is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    evidence = safe_json_object(anomaly.evidence_json)
+    triage = evidence.get("issue_triage")
+    if not isinstance(triage, dict):
+        triage = {}
+
+    if assigned_to is not _UNCHANGED:
+        cleaned = _clean_optional_text(assigned_to if isinstance(assigned_to, str) else None)
+        if cleaned is None:
+            triage.pop("assigned_to", None)
+        else:
+            triage["assigned_to"] = cleaned
+
+    if deploy_pr_url is not _UNCHANGED:
+        cleaned = _clean_optional_text(deploy_pr_url if isinstance(deploy_pr_url, str) else None)
+        if cleaned is None:
+            triage.pop("deploy_pr_url", None)
+        else:
+            triage["deploy_pr_url"] = cleaned
+
+    triage["updated_at"] = now.isoformat()
+    evidence["issue_triage"] = triage
+    anomaly.evidence_json = json.dumps(evidence, separators=(",", ":"))
+    anomaly.updated_at = now
+    db.add(anomaly)
+    db.commit()
+    db.refresh(anomaly)
+    return anomaly
 
 
 def project_issue(anomaly: Anomaly):

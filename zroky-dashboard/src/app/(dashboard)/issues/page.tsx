@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ignoreIssue, listIssues, resolveIssue } from "@/lib/api";
+import { ignoreIssue, listIssues, resolveIssue, updateIssueTriage } from "@/lib/api";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel } from "@/lib/issue-format";
 import { useCreateReplayRunFromIssue } from "@/lib/hooks";
@@ -120,12 +120,12 @@ function IssueList({ status }: { status: IssueStatus }) {
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [ignoringId, setIgnoringId] = useState<string | null>(null);
   const [acceptingRiskId, setAcceptingRiskId] = useState<string | null>(null);
   const [replayingId, setReplayingId] = useState<string | null>(null);
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
-  const [deployLinks, setDeployLinks] = useState<Record<string, string>>({});
+  const [triagingId, setTriagingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({ severity: "", has_fix: "" });
   const abortRef = useRef<AbortController | null>(null);
   const createReplay = useCreateReplayRunFromIssue({
@@ -220,37 +220,50 @@ function IssueList({ status }: { status: IssueStatus }) {
     );
   }
 
-  function onAssign(event: MouseEvent, issueId: string) {
+  async function onAssign(event: MouseEvent, issue: IssueItem) {
     event.preventDefault();
     event.stopPropagation();
-    const assignee = window.prompt("Assign this issue to:", assignments[issueId] ?? "");
+    const assignee = window.prompt("Assign this issue to:", issue.assigned_to ?? "");
     if (assignee === null) return;
     const trimmed = assignee.trim();
-    setAssignments((prev) => {
-      const next = { ...prev };
-      if (trimmed) next[issueId] = trimmed;
-      else delete next[issueId];
-      return next;
-    });
+    setTriagingId(issue.id);
+    try {
+      const updated = await updateIssueTriage(issue.id, { assigned_to: trimmed || null });
+      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setActionError(null);
+    } catch (error: unknown) {
+      setActionError((error as { message?: string }).message ?? "Failed to update issue assignment.");
+    } finally {
+      setTriagingId(null);
+    }
   }
 
-  function onLinkDeploy(event: MouseEvent, issueId: string) {
+  async function onLinkDeploy(event: MouseEvent, issue: IssueItem) {
     event.preventDefault();
     event.stopPropagation();
-    const link = window.prompt("Paste deploy or PR URL:", deployLinks[issueId] ?? "");
+    const link = window.prompt("Paste deploy or PR URL:", issue.deploy_pr_url ?? "");
     if (link === null) return;
     const trimmed = link.trim();
-    setDeployLinks((prev) => {
-      const next = { ...prev };
-      if (trimmed) next[issueId] = trimmed;
-      else delete next[issueId];
-      return next;
-    });
+    setTriagingId(issue.id);
+    try {
+      const updated = await updateIssueTriage(issue.id, { deploy_pr_url: trimmed || null });
+      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setActionError(null);
+    } catch (error: unknown) {
+      setActionError((error as { message?: string }).message ?? "Failed to update deploy/PR link.");
+    } finally {
+      setTriagingId(null);
+    }
   }
 
   return (
     <section>
       <FilterBar filters={filters} onChange={applyFilters} />
+      {actionError && (
+        <div className="panel" style={{ marginBottom: "0.75rem" }}>
+          <p className="notif-error">{actionError}</p>
+        </div>
+      )}
 
       {loading && items.length === 0 ? (
         <div className="loading" />
@@ -276,8 +289,7 @@ function IssueList({ status }: { status: IssueStatus }) {
               ignoring={ignoringId === issue.id}
               acceptingRisk={acceptingRiskId === issue.id}
               replaying={replayingId === issue.id}
-              assignment={assignments[issue.id]}
-              deployLink={deployLinks[issue.id]}
+              triaging={triagingId === issue.id}
               onResolve={onResolve}
               onIgnore={onIgnore}
               onAcceptedRisk={onAcceptedRisk}
@@ -307,8 +319,7 @@ function IssueCard({
   ignoring,
   acceptingRisk,
   replaying,
-  assignment,
-  deployLink,
+  triaging,
   onResolve,
   onIgnore,
   onAcceptedRisk,
@@ -322,14 +333,13 @@ function IssueCard({
   ignoring: boolean;
   acceptingRisk: boolean;
   replaying: boolean;
-  assignment?: string;
-  deployLink?: string;
+  triaging: boolean;
   onResolve: (event: MouseEvent, issueId: string) => void;
   onIgnore: (event: MouseEvent, issueId: string) => void;
   onAcceptedRisk: (event: MouseEvent, issueId: string) => void;
   onCreateReplay: (event: MouseEvent, issueId: string) => void;
-  onAssign: (event: MouseEvent, issueId: string) => void;
-  onLinkDeploy: (event: MouseEvent, issueId: string) => void;
+  onAssign: (event: MouseEvent, issue: IssueItem) => void;
+  onLinkDeploy: (event: MouseEvent, issue: IssueItem) => void;
 }) {
   const firstTrace = issue.evidence_traces[0];
   const traceTarget = firstTrace?.trace_id ?? firstTrace?.call_id ?? issue.sample_call_id;
@@ -360,8 +370,8 @@ function IssueCard({
             <span>{issue.affected_workflow ?? "Workflow not captured"}</span>
             <span>{issue.occurrence_count} affected calls</span>
             <span>{formatDateTime(issue.last_seen_at)}</span>
-            {assignment && <span>assigned to {assignment}</span>}
-            {deployLink && <a href={deployLink} target="_blank" rel="noreferrer" className="notif-action-link">deploy/PR linked</a>}
+            {issue.assigned_to && <span>assigned to {issue.assigned_to}</span>}
+            {issue.deploy_pr_url && <a href={issue.deploy_pr_url} target="_blank" rel="noreferrer" className="notif-action-link">deploy/PR linked</a>}
           </div>
 
           <p style={{ margin: "0.75rem 0 0", fontSize: "0.9rem", lineHeight: 1.45 }}>
@@ -401,11 +411,11 @@ function IssueCard({
           >
             {replaying ? "Creating..." : "Create Replay"}
           </button>
-          <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onAssign(event, issue.id)}>
-            {assignment ? "Reassign" : "Assign"}
+          <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onAssign(event, issue)} disabled={triaging}>
+            {issue.assigned_to ? "Reassign" : "Assign"}
           </button>
-          <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onLinkDeploy(event, issue.id)}>
-            {deployLink ? "Edit Deploy/PR" : "Link Deploy/PR"}
+          <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onLinkDeploy(event, issue)} disabled={triaging}>
+            {issue.deploy_pr_url ? "Edit Deploy/PR" : "Link Deploy/PR"}
           </button>
           <button
             type="button"

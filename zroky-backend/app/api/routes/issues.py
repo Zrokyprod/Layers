@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ from app.services.issue_projection import (
     anomaly_status_from_public,
     issue_projection_from_anomaly,
 )
-from app.services.issues import ignore_issue, resolve_issue
+from app.services.issues import ignore_issue, resolve_issue, update_issue_triage
 
 router = APIRouter(prefix="/v1/issues")
 logger = logging.getLogger(__name__)
@@ -68,6 +68,8 @@ class IssueResponse(BaseModel):
     last_fix_id: str | None
     resolved_at: datetime | None
     resolution_source: str | None
+    assigned_to: str | None
+    deploy_pr_url: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -93,6 +95,37 @@ class IssueListResponse(BaseModel):
 class IssueResolveRequest(BaseModel):
     fix_id: str | None = None
     resolution_source: str = "manual"
+
+
+def _optional_trimmed_text(value: str | None, *, max_len: int, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name} must be a string or null",
+        )
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) > max_len:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name} must be at most {max_len} characters",
+        )
+    return text
+
+
+def _optional_deploy_url(value: str | None) -> str | None:
+    text = _optional_trimmed_text(value, max_len=500, field_name="deploy_pr_url")
+    if text is None:
+        return None
+    if not text.startswith(("https://", "http://")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="deploy_pr_url must start with http:// or https://",
+        )
+    return text
 
 
 def _severity_rank(severity: str | None) -> int:
@@ -615,6 +648,8 @@ def _build_issue_response(db: Session, issue: IssueProjection | Anomaly) -> Issu
         last_fix_id=issue.last_fix_id,
         resolved_at=issue.resolved_at,
         resolution_source=issue.resolution_source,
+        assigned_to=issue.assigned_to,
+        deploy_pr_url=issue.deploy_pr_url,
         created_at=issue.created_at,
         updated_at=issue.updated_at,
         title=_issue_title(issue, evidence, calls),
@@ -754,6 +789,36 @@ def get_issue(
     if issue is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     return _build_issue_response(db, issue)
+
+
+@router.patch("/{issue_id}/triage", response_model=IssueResponse)
+@limiter.limit("60/minute")
+def update_issue_triage_endpoint(
+    request: Request,
+    issue_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> IssueResponse:
+    updates: dict[str, str | None] = {}
+    if "assigned_to" in body:
+        updates["assigned_to"] = _optional_trimmed_text(
+            body.get("assigned_to"),
+            max_len=120,
+            field_name="assigned_to",
+        )
+    if "deploy_pr_url" in body:
+        updates["deploy_pr_url"] = _optional_deploy_url(body.get("deploy_pr_url"))
+
+    updated = update_issue_triage(
+        db,
+        project_id=tenant_id,
+        issue_id=issue_id,
+        **updates,
+    )
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+    return _build_issue_response(db, updated)
 
 
 @router.post("/{issue_id}/resolve", response_model=IssueResponse)

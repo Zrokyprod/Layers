@@ -304,6 +304,76 @@ def test_issue_detail_keeps_same_product_projection(client_ctx) -> None:
     assert body["priority_score"] > 0
 
 
+def test_issue_triage_update_persists_assignment_and_deploy_link(client_ctx) -> None:
+    client, session_local = client_ctx
+    project_id = "proj-issue-triage"
+
+    with session_local() as session:
+        _seed_issue(
+            session,
+            project_id=project_id,
+            issue_id="issue-triage",
+            failure_code="SCHEMA_VIOLATION",
+            severity="high",
+            occurrence_count=5,
+            blast_radius_usd=1.25,
+            sample_call_id=None,
+        )
+        session.commit()
+
+    response = client.patch(
+        "/v1/issues/issue-triage/triage",
+        headers={PROJECT_HEADER: project_id},
+        json={
+            "assigned_to": "Maya",
+            "deploy_pr_url": "https://github.com/zroky-ai/zroky/pull/42",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["assigned_to"] == "Maya"
+    assert body["deploy_pr_url"] == "https://github.com/zroky-ai/zroky/pull/42"
+
+    detail = client.get("/v1/issues/issue-triage", headers={PROJECT_HEADER: project_id})
+    assert detail.status_code == 200
+    assert detail.json()["assigned_to"] == "Maya"
+    assert detail.json()["deploy_pr_url"] == "https://github.com/zroky-ai/zroky/pull/42"
+
+    clear = client.patch(
+        "/v1/issues/issue-triage/triage",
+        headers={PROJECT_HEADER: project_id},
+        json={"assigned_to": None},
+    )
+    assert clear.status_code == 200
+    assert clear.json()["assigned_to"] is None
+    assert clear.json()["deploy_pr_url"] == "https://github.com/zroky-ai/zroky/pull/42"
+
+
+def test_issue_triage_update_rejects_non_url_deploy_link(client_ctx) -> None:
+    client, session_local = client_ctx
+    project_id = "proj-issue-triage-invalid"
+
+    with session_local() as session:
+        _seed_issue(
+            session,
+            project_id=project_id,
+            issue_id="issue-triage-invalid",
+            failure_code="SCHEMA_VIOLATION",
+            severity="high",
+            occurrence_count=1,
+            blast_radius_usd=0,
+            sample_call_id=None,
+        )
+        session.commit()
+
+    response = client.patch(
+        "/v1/issues/issue-triage-invalid/triage",
+        headers={PROJECT_HEADER: project_id},
+        json={"deploy_pr_url": "not-a-url"},
+    )
+    assert response.status_code == 422
+
+
 def test_issue_replay_coverage_is_mode_aware(client_ctx) -> None:
     client, session_local = client_ctx
     project_id = "proj-issue-replay-mode"

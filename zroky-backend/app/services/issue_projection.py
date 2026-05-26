@@ -38,6 +38,8 @@ class IssueProjection:
     last_fix_id: str | None
     resolved_at: datetime | None
     resolution_source: str | None
+    assigned_to: str | None
+    deploy_pr_url: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -141,6 +143,9 @@ def issue_projection_from_anomaly(anomaly: Anomaly) -> IssueProjection:
     legacy = evidence.get("legacy_issue")
     if not isinstance(legacy, dict):
         legacy = {}
+    triage = evidence.get("issue_triage")
+    if not isinstance(triage, dict):
+        triage = {}
 
     resolved_at = parse_optional_datetime(legacy.get("resolved_at"))
     sample_evidence_json = legacy.get("sample_evidence_json")
@@ -173,6 +178,8 @@ def issue_projection_from_anomaly(anomaly: Anomaly) -> IssueProjection:
         last_fix_id=_first_text(legacy.get("last_fix_id"), evidence.get("last_fix_id")),
         resolved_at=resolved_at if anomaly.status == ANOMALY_RESOLVED else None,
         resolution_source=_first_text(legacy.get("resolution_source"), evidence.get("resolution_source")),
+        assigned_to=_first_text(triage.get("assigned_to"), legacy.get("assigned_to")),
+        deploy_pr_url=_first_text(triage.get("deploy_pr_url"), legacy.get("deploy_pr_url")),
         created_at=anomaly.created_at,
         updated_at=anomaly.updated_at,
     )

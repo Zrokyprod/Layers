@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getIssue, ignoreIssue, resolveIssue } from "@/lib/api";
+import { getIssue, ignoreIssue, resolveIssue, updateIssueTriage } from "@/lib/api";
 import { useCreateReplayRunFromIssue } from "@/lib/hooks";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel } from "@/lib/issue-format";
@@ -18,11 +18,11 @@ export default function IssueDetailPage() {
   const [issue, setIssue] = useState<IssueItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
   const [ignoring, setIgnoring] = useState(false);
   const [acceptingRisk, setAcceptingRisk] = useState(false);
-  const [assignment, setAssignment] = useState("");
-  const [deployLink, setDeployLink] = useState("");
+  const [triaging, setTriaging] = useState(false);
   const [replayMode, setReplayMode] = useState<ReplayMode>("stub");
   const createReplay = useCreateReplayRunFromIssue({
     onSuccess: (run) => router.push(`/replay/${run.id}`),
@@ -81,16 +81,34 @@ export default function IssueDetailPage() {
     createReplay.mutate({ issueId: issue.id, payload: { replay_mode: replayMode } });
   }
 
-  function onAssign() {
-    const assignee = window.prompt("Assign this issue to:", assignment);
+  async function onAssign() {
+    if (!issue) return;
+    const assignee = window.prompt("Assign this issue to:", issue.assigned_to ?? "");
     if (assignee === null) return;
-    setAssignment(assignee.trim());
+    setTriaging(true);
+    try {
+      setIssue(await updateIssueTriage(issue.id, { assigned_to: assignee.trim() || null }));
+      setActionError(null);
+    } catch (error: unknown) {
+      setActionError((error as { message?: string }).message ?? "Failed to update issue assignment.");
+    } finally {
+      setTriaging(false);
+    }
   }
 
-  function onLinkDeploy() {
-    const link = window.prompt("Paste deploy or PR URL:", deployLink);
+  async function onLinkDeploy() {
+    if (!issue) return;
+    const link = window.prompt("Paste deploy or PR URL:", issue.deploy_pr_url ?? "");
     if (link === null) return;
-    setDeployLink(link.trim());
+    setTriaging(true);
+    try {
+      setIssue(await updateIssueTriage(issue.id, { deploy_pr_url: link.trim() || null }));
+      setActionError(null);
+    } catch (error: unknown) {
+      setActionError((error as { message?: string }).message ?? "Failed to update deploy/PR link.");
+    } finally {
+      setTriaging(false);
+    }
   }
 
   if (loading) return <div className="loading" />;
@@ -111,6 +129,11 @@ export default function IssueDetailPage() {
       <div style={{ marginBottom: "1rem", fontSize: "0.85rem" }}>
         <Link href="/issues" className="notif-action-link">Back to issues</Link>
       </div>
+      {actionError && (
+        <div className="panel" style={{ marginBottom: "1rem" }}>
+          <p className="notif-error">{actionError}</p>
+        </div>
+      )}
 
       <section className="panel" style={{ marginBottom: "1rem" }}>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center", marginBottom: "0.75rem" }}>
@@ -131,8 +154,8 @@ export default function IssueDetailPage() {
               <span>{issue.affected_workflow ?? "Workflow not captured"}</span>
               <span>First: {formatDateTime(issue.first_seen_at)}</span>
               <span>Last: {formatDateTime(issue.last_seen_at)}</span>
-              {assignment && <span>Assigned to {assignment}</span>}
-              {deployLink && <a href={deployLink} target="_blank" rel="noreferrer" className="notif-action-link">Deploy/PR linked</a>}
+              {issue.assigned_to && <span>Assigned to {issue.assigned_to}</span>}
+              {issue.deploy_pr_url && <a href={issue.deploy_pr_url} target="_blank" rel="noreferrer" className="notif-action-link">Deploy/PR linked</a>}
             </div>
           </div>
 
@@ -206,11 +229,11 @@ export default function IssueDetailPage() {
             </button>
           </>
         )}
-        <button className="btn btn-soft" onClick={onAssign}>
-          {assignment ? "Reassign" : "Assign"}
+        <button className="btn btn-soft" onClick={() => void onAssign()} disabled={triaging}>
+          {issue.assigned_to ? "Reassign" : "Assign"}
         </button>
-        <button className="btn btn-soft" onClick={onLinkDeploy}>
-          {deployLink ? "Edit Deploy/PR" : "Link Deploy/PR"}
+        <button className="btn btn-soft" onClick={() => void onLinkDeploy()} disabled={triaging}>
+          {issue.deploy_pr_url ? "Edit Deploy/PR" : "Link Deploy/PR"}
         </button>
         {issue.status === "open" && (
           <>
@@ -247,6 +270,8 @@ export default function IssueDetailPage() {
               ["Sample diagnosis", issue.sample_diagnosis_id ?? "-"],
               ["Last fix", issue.last_fix_id ?? "-"],
               ["Resolution source", issue.resolution_source ?? "-"],
+              ["Assigned to", issue.assigned_to ?? "-"],
+              ["Deploy/PR", issue.deploy_pr_url ?? "-"],
             ].map(([label, value]) => (
               <tr key={label} style={{ borderBottom: "1px solid var(--color-border)" }}>
                 <td style={{ padding: "0.4rem 0.75rem", color: "var(--color-muted)", whiteSpace: "nowrap" }}>{label}</td>

@@ -1206,6 +1206,16 @@ export function ignoreIssue(issueId: string): Promise<IssueItem> {
   });
 }
 
+export function updateIssueTriage(
+  issueId: string,
+  body: { assigned_to?: string | null; deploy_pr_url?: string | null },
+): Promise<IssueItem> {
+  return request<IssueItem>(`/v1/issues/${encodeURIComponent(issueId)}/triage`, {
+    method: "PATCH",
+    body,
+  });
+}
+
 // ── Replay ────────────────────────────────────────────────────────────────────
 
 export interface ReplayJobResponse {
