@@ -7830,6 +7830,167 @@ body {
   line-height: 1.35;
 }
 
+.sidebar-project-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.sidebar-project-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar-capture-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid #fde68a;
+  background: #fffaeb;
+  color: #b45309;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sidebar-capture-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.sidebar-capture-pill.is-live {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.sidebar-project-select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  padding: 8px 9px;
+  font-size: 0.78rem;
+  outline: none;
+}
+
+.sidebar-project-select:focus {
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+}
+
+.profile-menu {
+  position: relative;
+}
+
+.profile-menu[open] .profile-chevron {
+  transform: rotate(180deg);
+}
+
+.profile-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+}
+
+.profile-summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #111827;
+  color: #ffffff;
+  flex: 0 0 auto;
+}
+
+.profile-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-copy strong {
+  font-size: 0.86rem;
+  line-height: 1.1;
+}
+
+.profile-copy span {
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.profile-chevron {
+  width: 15px;
+  height: 15px;
+  color: #98a2b3;
+  transition: transform 160ms ease;
+}
+
+.profile-popover {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 32px rgba(16, 24, 40, 0.12);
+}
+
+.profile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 9px 8px;
+  color: #344054;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.profile-menu-item:hover {
+  background: #f8fafc;
+  color: #111827;
+}
+
 .topbar {
   min-height: 72px;
   padding: 14px 24px;
@@ -8677,6 +8838,169 @@ pre {
   .sdk-badge {
     display: none;
   }
+}
+
+/* Final shell footer overrides: keep project, settings, and profile controls
+   in the left rail, away from the top command area. */
+.sidebar-project-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.sidebar-project-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar-capture-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  background: #fffaeb;
+  color: #b45309;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sidebar-capture-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.sidebar-capture-pill.is-live {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.sidebar-project-select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 0.78rem;
+  outline: none;
+}
+
+.sidebar-project-select:focus {
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+}
+
+.profile-menu {
+  position: relative;
+}
+
+.profile-menu[open] .profile-chevron {
+  transform: rotate(180deg);
+}
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  cursor: pointer;
+  list-style: none;
+  box-shadow: var(--shadow-soft);
+}
+
+.profile-summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: #111827;
+  color: #ffffff;
+}
+
+.profile-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-copy strong {
+  font-size: 0.86rem;
+  line-height: 1.1;
+}
+
+.profile-copy span {
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.profile-chevron {
+  width: 15px;
+  height: 15px;
+  color: #98a2b3;
+  transition: transform 160ms ease;
+}
+
+.profile-popover {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 32px rgba(16, 24, 40, 0.12);
+}
+
+.profile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #344054;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.profile-menu-item:hover {
+  background: #f8fafc;
+  color: #111827;
 }
 
 /* -- Mobile responsive -------------------------------------------------------- */

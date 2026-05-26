@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Bell,
   Bot,
+  ChevronDown,
   DollarSign,
   FlaskConical,
   List,
@@ -16,6 +17,7 @@ import {
   RotateCcw,
   Settings,
   Sparkles,
+  User,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -26,7 +28,6 @@ import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
 import { useProjectSettings } from "@/lib/hooks";
 import { CommandPalette } from "./command-palette";
 import { ShortcutsHelp } from "./shortcuts-help";
-import { SavedYouBadge } from "./saved-you-badge";
 import { AskZroky } from "./ask-zroky";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; pilotPlaceholder?: boolean };
@@ -39,7 +40,6 @@ const dashboardLinks: ReadonlyArray<NavItem> = [
   { href: "/calls", label: "Calls", icon: List },
   { href: "/cost", label: "Cost", icon: DollarSign },
   { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 function getTitle(pathname: string): string {
@@ -282,13 +282,58 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-foot">
-          <span className="sidebar-foot-note">Production-grade capture, issues, replay, and goldens.</span>
-          <button type="button" className="nav-link nav-link-button" onClick={onLogout}>
+          <div className="sidebar-project-card">
+            <div className="sidebar-project-head">
+              <span>Project</span>
+              <span className={`sidebar-capture-pill ${sdkConnected ? "is-live" : ""}`}>
+                {sdkConnected ? "Live" : "Idle"}
+              </span>
+            </div>
+            <select
+              className="sidebar-project-select mono"
+              value={selectedProject ?? projectQuery.data?.project_id ?? ""}
+              onChange={(event) => setSelectedProject(event.target.value || null)}
+              aria-label="Project selector"
+            >
+              {projectOptions.length > 0 ? (
+                projectOptions.map((project) => (
+                  <option key={project.id} value={project.id}>{project.name}</option>
+                ))
+              ) : (
+                <option value="">{projectLabel}</option>
+              )}
+            </select>
+          </div>
+
+          <Link href="/settings" className={navClass(pathname, "/settings")}>
             <span className="nav-link-main">
-              <LogOut className="nav-link-icon" aria-hidden="true" />
-              <span>Logout</span>
+              <Settings className="nav-link-icon" aria-hidden="true" />
+              <span>Settings</span>
             </span>
-          </button>
+          </Link>
+
+          <details className="profile-menu">
+            <summary className="profile-summary">
+              <span className="profile-avatar" aria-hidden="true">
+                <User className="h-4 w-4" />
+              </span>
+              <span className="profile-copy">
+                <strong>Profile</strong>
+                <span>{envLabel.toUpperCase()}</span>
+              </span>
+              <ChevronDown className="profile-chevron" aria-hidden="true" />
+            </summary>
+            <div className="profile-popover">
+              <Link href="/settings/profile" className="profile-menu-item">
+                <User className="h-4 w-4" aria-hidden="true" />
+                Profile settings
+              </Link>
+              <button type="button" className="profile-menu-item" onClick={onLogout}>
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Logout
+              </button>
+            </div>
+          </details>
         </div>
       </aside>
 
@@ -329,41 +374,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <span className="cp-trigger-text">Search…</span>
               <kbd className="cp-trigger-kbd">Ctrl+K</kbd>
             </button>
-            <SavedYouBadge />
-            <span
-              className={`sdk-badge ${sdkConnected ? "sdk-badge-connected" : "sdk-badge-idle"}`}
-              title={sdkConnected ? "SDK is sending live data" : "No live data received yet"}
-              aria-label={sdkConnected ? "SDK connected" : "SDK not connected"}
-            >
-              <span className="sdk-badge-dot" aria-hidden="true" />
-              {sdkConnected ? "SDK Live" : "SDK Idle"}
-            </span>
-            <button
-              type="button"
-              className="sh-help-btn"
-              aria-label="Show keyboard shortcuts (Shift+?)"
-              title="Keyboard shortcuts (Shift+?)"
-              onClick={() => window.dispatchEvent(new CustomEvent("show-shortcuts-help"))}
-            >
-              ?
-            </button>
-            <label className="project-switch-wrap" aria-label="Project selector">
-              <span className="project-switch-label">Project</span>
-              <select
-                className="project-switch-select mono"
-                value={selectedProject ?? projectQuery.data?.project_id ?? ""}
-                onChange={(event) => setSelectedProject(event.target.value || null)}
-              >
-                {projectOptions.length > 0 ? (
-                  projectOptions.map((project) => (
-                    <option key={project.id} value={project.id}>{project.name}</option>
-                  ))
-                ) : (
-                  <option value="">{projectLabel}</option>
-                )}
-              </select>
-            </label>
-            <span className="env-badge">{envLabel.toUpperCase()}</span>
           </div>
         </header>
 
