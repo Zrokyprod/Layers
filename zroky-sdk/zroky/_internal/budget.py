@@ -481,6 +481,10 @@ class BudgetTracker:
         # Periodic cleanup (cheap: every ~100 calls is fine, here every call)
         self._store.cleanup_old_windows()
 
+    def cleanup_old_windows(self, keep_hours: int = 72) -> None:
+        """Delete stale persisted spend windows from the backing store."""
+        self._store.cleanup_old_windows(keep_hours)
+
     # -- inspection -----------------------------------------------------------
 
     def status(self) -> dict[str, Any]:

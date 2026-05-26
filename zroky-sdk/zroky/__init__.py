@@ -53,6 +53,7 @@ from zroky._async import acall, aflush, ainit, ashutdown  # noqa: F401
 
 # Re-export preflight public API from preflight.py
 from zroky.preflight import (  # noqa: F401
+    _is_preflight_sampled_in,
     check_rate_limit_risk,
     check_token_overflow,
     estimate_tokens,
@@ -64,6 +65,7 @@ from zroky.preflight import (  # noqa: F401
 # Re-export internal exception types
 from zroky._internal.budget import BudgetExceededError  # noqa: F401
 from zroky._internal.loop_guard import LoopDetectedError  # noqa: F401
+from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Backward-compat aliases for mutable test-fixture state
@@ -157,8 +159,23 @@ def init(
     Call once at application startup before any tracked calls.
     """
     global _config, _queue, _response_cache, _budget_tracker, _loop_guard, _timeout_manager
+    global _model_health_registry, _rate_limiter
 
     with _lock:
+        if _queue is not None:
+            _queue.shutdown()
+            _queue = None
+        if _response_cache is not None:
+            _response_cache.close()
+            _response_cache = None
+        if _budget_tracker is not None:
+            _budget_tracker.close()
+            _budget_tracker = None
+        _loop_guard = None
+        _timeout_manager = None
+        _model_health_registry = ModelHealthRegistry()
+        _rate_limiter = RateLimiter()
+
         cfg = load_config(
             api_key=api_key, project=project, mode=mode, mask_pii=mask_pii,
             ingest_url=ingest_url, agent_framework=agent_framework,
@@ -301,17 +318,22 @@ def flush() -> None:
 
 def shutdown() -> None:
     """Flush and stop the background queue worker. Call at process exit."""
-    global _response_cache, _budget_tracker, _loop_guard, _timeout_manager
+    global _config, _queue, _response_cache, _budget_tracker, _loop_guard, _timeout_manager
+    global _model_health_registry, _rate_limiter
     if _queue is not None:
         _queue.shutdown()
+        _queue = None
     if _response_cache is not None:
         _response_cache.close()
         _response_cache = None
     if _budget_tracker is not None:
         _budget_tracker.close()
         _budget_tracker = None
+    _config = None
     _loop_guard = None
     _timeout_manager = None
+    _model_health_registry = ModelHealthRegistry()
+    _rate_limiter = RateLimiter()
 
 
 # ---------------------------------------------------------------------------

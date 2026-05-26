@@ -13,6 +13,7 @@ they reference the same underlying objects defined here.
 from __future__ import annotations
 
 import threading
+from inspect import isawaitable
 from collections import deque
 from copy import deepcopy
 from typing import Any
@@ -500,6 +501,13 @@ def _finalize_preflight_blocked(
         )
 
 
+async def _enqueue_event_async(queue: Any, event: CallEvent) -> None:
+    """Enqueue from async paths while tolerating synchronous test doubles."""
+    result = queue.enqueue(event)
+    if isawaitable(result):
+        await result
+
+
 async def _finalize_call_async(
     event: CallEvent,
     response: Any,
@@ -510,7 +518,7 @@ async def _finalize_call_async(
     event.status = "success"
     event.latency_ms = latency_ms
     _extract_response_metadata(event, response)
-    await queue.enqueue(event)
+    await _enqueue_event_async(queue, event)
     _notify_event(event)
     if cfg.verbose:
         print(
@@ -531,7 +539,7 @@ async def _finalize_call_error_async(
     event.error_code = _classify_error(exc)
     event.error_message = mask_error_message(exc)
     event.failure_reason = build_failure_reason(exc, error_code=event.error_code)
-    await queue.enqueue(event)
+    await _enqueue_event_async(queue, event)
     _notify_event(event)
     _notify_error(event, exc)
     if cfg.verbose:
@@ -548,7 +556,7 @@ async def _finalize_preflight_blocked_async(
     cfg: SDKConfig,
 ) -> None:
     _apply_preflight_block_event(event, exc)
-    await queue.enqueue(event)
+    await _enqueue_event_async(queue, event)
     _notify_event(event)
     _notify_error(event, exc)
     if cfg.verbose:

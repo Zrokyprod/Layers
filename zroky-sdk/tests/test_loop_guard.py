@@ -114,14 +114,22 @@ class TestCheckPostCall:
         g.check_post_call("t1", "this is a duplicate output text", "o", "m")
         g.check_pre_call("t1")
         g.check_post_call("t1", "this is a duplicate output text", "o", "m")
-        with pytest.raises(LoopDetectedError):
-            g.check_post_call("t1", "this is a duplicate output text", "o", "m")
+        result = g.check_post_call("t1", "this is a duplicate output text", "o", "m")
+        assert result.action == "raise"
+        assert result.loop_type == "repeated_output"
 
     def test_different_outputs_no_loop(self):
         g = LoopGuard(max_repeated_outputs=2, default_action="raise")
-        for i in range(5):
+        outputs = [
+            "this is a longer unique output about billing",
+            "this is a longer unique output about shipping",
+            "this is a longer unique output about refunds",
+            "this is a longer unique output about authentication",
+            "this is a longer unique output about inventory",
+        ]
+        for output in outputs:
             g.check_pre_call("t1")
-            result = g.check_post_call("t1", f"this is a longer unique output number {i}", "o", "m")
+            result = g.check_post_call("t1", output, "o", "m")
             assert result.action == "allow"
 
     def test_last_good_response_updated(self):

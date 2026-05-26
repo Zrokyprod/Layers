@@ -39,6 +39,7 @@ from zroky._telemetry import (
     _copy_provider_messages,
     _copy_provider_tools,
     _effective_fallback_models,
+    _enqueue_event_async,
     _ensure_provider_payload_is_isolated,
     _estimate_prompt_tokens_for_telemetry,
     _finalize_call_async,
@@ -298,7 +299,7 @@ async def acall(  # noqa: PLR0913
             if cached_entry.tool_calls:
                 event.tool_calls_made = mask_value(cached_entry.tool_calls)
                 _apply_tool_lifecycle_telemetry(event)
-            await queue.enqueue(event)
+            await _enqueue_event_async(queue, event)
             _notify_event(event)
             return cached_stream_iter_async(cached_entry) if stream else CachedResponse(cached_entry)
 
@@ -333,7 +334,7 @@ async def acall(  # noqa: PLR0913
                 event.status = "loop_guarded"
                 event.output_content = cached
                 event.loop_action_taken = "return_cached"
-                await queue.enqueue(event)
+                await _enqueue_event_async(queue, event)
                 _notify_event(event)
                 return _build_synthetic_response(cached, provider, model)
 
@@ -646,7 +647,7 @@ async def _wrapped_stream_async(  # noqa: PLR0912,PLR0915
         _z._model_health_registry.record(resolved, latency_ms, success=True)
         if _z._timeout_manager is not None and cfg.timeout_enabled:
             _z._timeout_manager.record_latency(resolved, latency_ms / 1000.0)
-        await queue.enqueue(event)
+        await _enqueue_event_async(queue, event)
         if cfg.rate_limit_enabled:
             rl_key = rate_limit_key(
                 fallback_outcome.resolved_provider or event.provider,

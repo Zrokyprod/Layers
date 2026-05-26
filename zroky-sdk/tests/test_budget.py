@@ -215,16 +215,16 @@ class TestBudgetTrackerUnit:
     def test_cleanup_old_windows(self, tmp_path):
         db = str(tmp_path / "budget.db")
         t = BudgetTracker(db_path=db)
-        # Insert an old window via the same connection so WAL sees it
+        # Insert an old persisted window without depending on BudgetTracker internals.
         old_ts = 1_600_000_000.0  # ~Sep 2020
-        t._conn.execute(
-            "INSERT INTO budget_spend (scope_type, scope_id, window_key, spend_usd, updated_at) VALUES (?, ?, ?, ?, ?)",
-            ("project", "default", "2020-01-01", 99.0, old_ts),
-        )
-        t._conn.commit()
+        with sqlite3.connect(db) as conn:
+            conn.execute(
+                "INSERT INTO budget_spend (scope_type, scope_id, window_key, spend_usd, updated_at) VALUES (?, ?, ?, ?, ?)",
+                ("project", "default", "2020-01-01", 99.0, old_ts),
+            )
         t.cleanup_old_windows(keep_hours=1)
-        cur = t._conn.execute("SELECT COUNT(*) FROM budget_spend")
-        row = cur.fetchone()
+        with sqlite3.connect(db) as conn:
+            row = conn.execute("SELECT COUNT(*) FROM budget_spend").fetchone()
         assert row[0] == 0
 
 
