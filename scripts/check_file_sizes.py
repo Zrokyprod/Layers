@@ -3,9 +3,8 @@
 Fails CI if any tracked Python file under the scanned roots exceeds 30 KB,
 unless explicitly whitelisted in .github/file-size-whitelist.txt.
 
-Files under any `_internal/` directory are always excluded (internal implementation
-detail that intentionally concentrates logic). `__pycache__/` and virtualenvs are
-also skipped.
+`__pycache__/` and virtualenvs are skipped. Internal implementation modules are
+scanned too; moving code under `_internal/` must not hide a giant file.
 
 Run locally:  python scripts/check_file_sizes.py
 Run in CI:    same (non-zero exit fails the job).
@@ -28,7 +27,6 @@ SCAN_ROOTS = [
 ]
 
 EXCLUDE_PATH_SEGMENTS = {
-    "_internal",
     "__pycache__",
     ".venv",
     "venv",
