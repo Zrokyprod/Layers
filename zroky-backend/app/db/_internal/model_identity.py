@@ -404,3 +404,6 @@ class PlatformLlmUsage(Base):
 def _user_email_set_listener(target: User, value: str | None, oldvalue, initiator) -> None:
     """Automatically populate email_hash whenever User.email is assigned."""
     target.email_hash = compute_email_hash(value)
+
+
+event.listen(User.email, "set", _user_email_set_listener)
