@@ -52,12 +52,12 @@ def test_classify_specific_call_uuid():
     assert intent.call_id == "11111111-2222-3333-4444-555555555555"
 
 
-def test_classify_specific_anomaly_uuid():
+def test_classify_specific_issue_uuid():
     intent = classify_intent(
-        "Tell me about anomaly 11111111-2222-3333-4444-555555555555"
+        "Tell me about issue 11111111-2222-3333-4444-555555555555"
     )
-    assert intent.name == "specific_anomaly"
-    assert intent.anomaly_id == "11111111-2222-3333-4444-555555555555"
+    assert intent.name == "specific_issue"
+    assert intent.issue_id == "11111111-2222-3333-4444-555555555555"
 
 
 def test_classify_behavior_question():
@@ -133,6 +133,7 @@ def test_fallback_with_failure_evidence():
     )
     intent = Intent(name="failure", window_days=7)
     answer = _fallback(intent, bundle, reason="llm_error")
+    assert "Top open issue" in answer.answer
     assert "TIMEOUT" in answer.answer
     assert "12 times" in answer.answer
 

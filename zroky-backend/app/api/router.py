@@ -83,8 +83,8 @@ api_router.include_router(github_webhooks_router, tags=["github-webhooks"])
 api_router.include_router(diagnoses_router, tags=["diagnoses"])
 api_router.include_router(digest_router, tags=["digest"])
 api_router.include_router(projects_router, tags=["projects"])
-api_router.include_router(anomalies_router, tags=["anomalies"])  # canonical (Phase B)
-api_router.include_router(issues_router, tags=["issues"])  # legacy; retained until consumers migrate
+api_router.include_router(issues_router, tags=["issues"])  # public problem API backed by Anomaly
+api_router.include_router(anomalies_router, tags=["internal"], include_in_schema=False)  # deprecated alias
 api_router.include_router(goldens_router, tags=["goldens"])  # Pilot tier (Module 4.1)
 api_router.include_router(replay_router, tags=["replay"])  # legacy single-fix replay jobs
 api_router.include_router(replay_runs_router, tags=["replay-runs"])  # Pilot tier (Module 4.2)

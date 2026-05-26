@@ -54,9 +54,27 @@ VALID_DETECTORS = frozenset({
     "HALLUCINATION_RISK",
     "SCHEMA_VIOLATION",
     "LATENCY_REGRESSION",
+    "TOOL_SELECTION_FAILURE",
+    "TOOL_CALL_FAILURE",
+    "TOOL_ARGUMENT_MISMATCH",
+    "RAG_RETRIEVAL_MISSING",
+    "RETRIEVAL_MISSING",
+    "TOKEN_USAGE_DRIFT",
+    "TOKEN_OVERFLOW",
+    "RATE_LIMIT",
+    "AUTH_FAILURE",
+    "PROVIDER_ERROR",
+    "LATENCY_ANOMALY",
+    "LATENCY_DRIFT",
+    "ERROR_RATE_DRIFT",
+    "EMPTY_OUTPUT",
+    "OUTPUT_TRUNCATED",
+    "OUTPUT_LENGTH_DRIFT",
+    "REPEATED_OUTPUT",
+    "UNKNOWN",
 })
 
-# Legacy failure_code → detector. None means "demoted; do not upsert".
+# Legacy failure_code to canonical detector. Empty/unknown codes still skip.
 _LEGACY_FAILURE_TO_DETECTOR: dict[str, str | None] = {
     "LOOP_DETECTED": "LOOP_DETECTED",
     "COST_SPIKE": "COST_SPIKE",
@@ -66,11 +84,23 @@ _LEGACY_FAILURE_TO_DETECTOR: dict[str, str | None] = {
     "SCHEMA_VIOLATION": "SCHEMA_VIOLATION",
     "SCHEMA_MISMATCH": "SCHEMA_VIOLATION",
     "LATENCY_REGRESSION": "LATENCY_REGRESSION",
-    # demoted (SDK preflight warnings only — plan §6.1)
-    "AUTH_FAILURE": None,
-    "TOKEN_OVERFLOW": None,
-    "RATE_LIMIT": None,
-    "PROVIDER_ERROR": None,
+    "TOOL_SELECTION_FAILURE": "TOOL_SELECTION_FAILURE",
+    "TOOL_CALL_FAILURE": "TOOL_CALL_FAILURE",
+    "TOOL_ARGUMENT_MISMATCH": "TOOL_ARGUMENT_MISMATCH",
+    "RAG_RETRIEVAL_MISSING": "RAG_RETRIEVAL_MISSING",
+    "RETRIEVAL_MISSING": "RETRIEVAL_MISSING",
+    "TOKEN_USAGE_DRIFT": "TOKEN_USAGE_DRIFT",
+    "TOKEN_OVERFLOW": "TOKEN_OVERFLOW",
+    "RATE_LIMIT": "RATE_LIMIT",
+    "AUTH_FAILURE": "AUTH_FAILURE",
+    "PROVIDER_ERROR": "PROVIDER_ERROR",
+    "LATENCY_ANOMALY": "LATENCY_ANOMALY",
+    "LATENCY_DRIFT": "LATENCY_DRIFT",
+    "ERROR_RATE_DRIFT": "ERROR_RATE_DRIFT",
+    "EMPTY_OUTPUT": "EMPTY_OUTPUT",
+    "OUTPUT_TRUNCATED": "OUTPUT_TRUNCATED",
+    "OUTPUT_LENGTH_DRIFT": "OUTPUT_LENGTH_DRIFT",
+    "REPEATED_OUTPUT": "REPEATED_OUTPUT",
     "UNKNOWN": None,
     "": None,
 }
@@ -83,8 +113,7 @@ _MAX_SAMPLE_CALL_IDS = 5
 def map_failure_code_to_detector(failure_code: str | None) -> str | None:
     """Translate a legacy `failure_code` to the new `detector` enum.
 
-    Returns None for codes that are demoted to SDK-only preflight warnings,
-    or for unknown codes. Callers should skip the upsert when None.
+    Returns None for empty/unknown codes. Callers should skip the upsert then.
     """
     if not failure_code:
         return None
@@ -93,6 +122,16 @@ def map_failure_code_to_detector(failure_code: str | None) -> str | None:
         return _LEGACY_FAILURE_TO_DETECTOR[code]
     if code in VALID_DETECTORS:
         return code
+    if "TOOL" in code:
+        return "TOOL_SELECTION_FAILURE"
+    if "RAG" in code or "RETRIEVAL" in code:
+        return "RAG_RETRIEVAL_MISSING"
+    if "LATENCY" in code:
+        return "LATENCY_DRIFT"
+    if "TOKEN" in code:
+        return "TOKEN_USAGE_DRIFT"
+    if "OUTPUT" in code:
+        return "ACCURACY_REGRESSION"
     return None
 
 
@@ -120,11 +159,25 @@ def compute_fingerprint(
 
 def _derive_severity(detector: str, occurrence_count: int) -> str:
     """Heuristic severity based on detector class + recurrence."""
-    if detector in ("COST_SPIKE", "ACCURACY_REGRESSION", "HALLUCINATION_RISK"):
+    if detector in {
+        "AUTH_FAILURE",
+        "COST_SPIKE",
+        "ACCURACY_REGRESSION",
+        "HALLUCINATION_RISK",
+        "PROVIDER_ERROR",
+    }:
         if occurrence_count >= 5:
             return "critical"
         return "high"
-    if detector in ("LOOP_DETECTED", "SCHEMA_VIOLATION", "LATENCY_REGRESSION"):
+    if detector in {
+        "LOOP_DETECTED",
+        "SCHEMA_VIOLATION",
+        "LATENCY_REGRESSION",
+        "LATENCY_ANOMALY",
+        "LATENCY_DRIFT",
+        "TOKEN_OVERFLOW",
+        "ERROR_RATE_DRIFT",
+    }:
         if occurrence_count >= 10:
             return "high"
         if occurrence_count >= 3:

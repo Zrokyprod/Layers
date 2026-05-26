@@ -6,7 +6,8 @@ POST /v1/anomalies/{id}/acknowledge — Acknowledge without resolving.
 POST /v1/anomalies/{id}/mute        — Silence (replaces legacy 'ignored').
 
 Phase B of the legacy `issues → anomalies` rename (plan §3.1, §6.1).
-The legacy `/v1/issues` route is retained until every consumer migrates.
+This route is deprecated for external clients; use `/v1/issues` for the
+customer-facing issue model.
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -39,6 +40,14 @@ _DEFAULT_LIMIT = 20
 _MAX_LIMIT = 100
 
 _VALID_SEVERITIES = frozenset({"low", "medium", "high", "critical"})
+
+
+def _mark_deprecated(response: Response) -> None:
+    response.headers["Deprecation"] = "true"
+    response.headers["Link"] = '</v1/issues>; rel="successor-version"'
+    response.headers["X-Zroky-Deprecated"] = (
+        "Deprecated internal issue alias; use /v1/issues"
+    )
 
 
 # ── schemas ───────────────────────────────────────────────────────────────────
@@ -92,6 +101,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str] | None:
 @limiter.limit("60/minute")
 def list_anomalies(
     request: Request,
+    response: Response,
     status_filter: str | None = Query(default="open", alias="status"),
     detector: str | None = Query(default=None),
     severity: str | None = Query(default=None),
@@ -100,6 +110,7 @@ def list_anomalies(
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> AnomalyListResponse:
+    _mark_deprecated(response)
     if (
         status_filter is not None
         and status_filter not in VALID_STATUSES
@@ -174,10 +185,12 @@ def list_anomalies(
 @limiter.limit("120/minute")
 def get_anomaly(
     request: Request,
+    response: Response,
     anomaly_id: str,
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> AnomalyResponse:
+    _mark_deprecated(response)
     anomaly = db.execute(
         select(Anomaly).where(
             Anomaly.project_id == tenant_id,
@@ -186,7 +199,7 @@ def get_anomaly(
     ).scalar_one_or_none()
     if anomaly is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Anomaly not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found"
         )
     return AnomalyResponse.model_validate(anomaly)
 
@@ -195,14 +208,16 @@ def get_anomaly(
 @limiter.limit("30/minute")
 def resolve_anomaly_endpoint(
     request: Request,
+    response: Response,
     anomaly_id: str,
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> AnomalyResponse:
+    _mark_deprecated(response)
     resolved = resolve_anomaly(db, project_id=tenant_id, anomaly_id=anomaly_id)
     if resolved is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Anomaly not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found"
         )
     return AnomalyResponse.model_validate(resolved)
 
@@ -211,14 +226,16 @@ def resolve_anomaly_endpoint(
 @limiter.limit("30/minute")
 def acknowledge_anomaly_endpoint(
     request: Request,
+    response: Response,
     anomaly_id: str,
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> AnomalyResponse:
+    _mark_deprecated(response)
     acked = acknowledge_anomaly(db, project_id=tenant_id, anomaly_id=anomaly_id)
     if acked is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Anomaly not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found"
         )
     return AnomalyResponse.model_validate(acked)
 
@@ -227,13 +244,15 @@ def acknowledge_anomaly_endpoint(
 @limiter.limit("30/minute")
 def mute_anomaly_endpoint(
     request: Request,
+    response: Response,
     anomaly_id: str,
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> AnomalyResponse:
+    _mark_deprecated(response)
     muted = mute_anomaly(db, project_id=tenant_id, anomaly_id=anomaly_id)
     if muted is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Anomaly not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found"
         )
     return AnomalyResponse.model_validate(muted)

@@ -9,9 +9,10 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, DiagnosisFeedback, DiagnosisJob, DiagnosisShareToken, Issue
+from app.db.models import Anomaly, Call, DiagnosisFeedback, DiagnosisJob, DiagnosisShareToken
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.services.anomalies import compute_fingerprint
 
 
 @pytest.fixture()
@@ -1411,52 +1412,85 @@ def test_savings_summary_aggregates_open_and_resolved_issues(test_ctx) -> None:
     recent = now - timedelta(days=2)
     ancient = now - timedelta(days=120)
 
+    def _savings_anomaly(
+        *,
+        failure_code: str,
+        prompt_fingerprint: str,
+        status: str,
+        severity: str,
+        occurrence_count: int,
+        blast_radius_usd: float,
+        seen_at: datetime,
+    ) -> Anomaly:
+        return Anomaly(
+            project_id=project_id,
+            fingerprint=compute_fingerprint(
+                detector=failure_code,
+                prompt_fingerprint=prompt_fingerprint,
+                agent_name=None,
+            ),
+            detector=failure_code,
+            status="resolved" if status == "resolved" else "open",
+            severity=severity,
+            occurrence_count=occurrence_count,
+            first_seen_at=seen_at,
+            last_seen_at=seen_at,
+            evidence_json=json.dumps(
+                {
+                    "failure_code": failure_code,
+                    "prompt_fingerprint": prompt_fingerprint,
+                    "blast_radius_usd": blast_radius_usd,
+                    "legacy_issue": {
+                        "failure_code": failure_code,
+                        "prompt_fingerprint": prompt_fingerprint,
+                        "agent_name": None,
+                        "blast_radius_usd": blast_radius_usd,
+                        "resolved_at": seen_at.isoformat()
+                        if status == "resolved"
+                        else None,
+                    },
+                },
+                separators=(",", ":"),
+            ),
+            created_at=seen_at,
+            updated_at=seen_at,
+        )
+
     with session_local() as session:
         # Open issue inside window — counts toward "still bleeding".
         session.add(
-            Issue(
-                project_id=project_id,
+            _savings_anomaly(
                 failure_code="LOOP_DETECTED",
                 prompt_fingerprint="fp1",
-                agent_name=None,
                 status="open",
                 severity="high",
                 occurrence_count=5,
                 blast_radius_usd=10.0,
-                first_seen_at=recent,
-                last_seen_at=recent,
+                seen_at=recent,
             )
         )
         # Resolved issue inside window — drives "already saved" + projection.
         session.add(
-            Issue(
-                project_id=project_id,
+            _savings_anomaly(
                 failure_code="COST_SPIKE",
                 prompt_fingerprint="fp2",
-                agent_name=None,
                 status="resolved",
                 severity="critical",
                 occurrence_count=3,
                 blast_radius_usd=20.0,
-                first_seen_at=recent,
-                last_seen_at=recent,
-                resolved_at=recent,
+                seen_at=recent,
             )
         )
         # Ancient issue OUTSIDE window — must be excluded.
         session.add(
-            Issue(
-                project_id=project_id,
+            _savings_anomaly(
                 failure_code="AUTH_FAILURE",
                 prompt_fingerprint="fp3",
-                agent_name=None,
                 status="resolved",
                 severity="low",
                 occurrence_count=1,
                 blast_radius_usd=999.0,
-                first_seen_at=ancient,
-                last_seen_at=ancient,
-                resolved_at=ancient,
+                seen_at=ancient,
             )
         )
         session.commit()

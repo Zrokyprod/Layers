@@ -1,7 +1,7 @@
 """Ask Zroky — natural-language Q&A endpoint.
 
 POST /v1/ask
-    body: { question: str, context?: { call_id?: str, anomaly_id?: str } }
+    body: { question: str, context?: { call_id?: str, issue_id?: str } }
     returns:
         {
             answer: str,
@@ -37,6 +37,8 @@ _MAX_QUESTION_LENGTH = 1000
 
 class AskContext(BaseModel):
     call_id: str | None = Field(default=None, max_length=64)
+    issue_id: str | None = Field(default=None, max_length=64)
+    # Deprecated alias retained for older dashboard clients.
     anomaly_id: str | None = Field(default=None, max_length=64)
 
 

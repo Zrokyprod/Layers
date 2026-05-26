@@ -33,9 +33,9 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    Anomaly,
     Call,
     GoldenTrace,
-    Issue,
     ReplayRun,
     ReplayRunTrace,
 )
@@ -45,6 +45,7 @@ from app.services.goldens import (
     create_golden_set,
     get_golden_set,
 )
+from app.services.issue_projection import issue_projection_from_anomaly
 
 logger = logging.getLogger(__name__)
 
@@ -563,11 +564,12 @@ def create_replay_from_issue(
     candidate_prompt_override: str | None = None,
     candidate_model_override: str | None = None,
 ) -> ReplayRun | None:
-    issue = db.execute(
-        select(Issue).where(Issue.project_id == project_id, Issue.id == issue_id)
+    anomaly = db.execute(
+        select(Anomaly).where(Anomaly.project_id == project_id, Anomaly.id == issue_id)
     ).scalar_one_or_none()
-    if issue is None:
+    if anomaly is None:
         return None
+    issue = issue_projection_from_anomaly(anomaly)
     if not issue.sample_call_id:
         raise ValueError("Issue has no sample_call_id to replay.")
 

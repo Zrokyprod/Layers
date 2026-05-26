@@ -1,9 +1,7 @@
-"""
-GET /v1/issues - product-level issue triage.
+"""GET /v1/issues - customer-facing product issue triage.
 
-The legacy issues table stores grouped detector rows. This route projects those
-rows into the object the dashboard needs: a small set of plain-English product
-problems with evidence, impact, replay coverage, and the next action.
+`Anomaly` is the canonical backend model. This route keeps `/v1/issues` as the
+stable public API by projecting anomalies into plain-English product problems.
 """
 from __future__ import annotations
 
@@ -21,9 +19,15 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_id
 from app.core.limiter import limiter
-from app.db.models import Call, GoldenTrace, Issue, ReplayJob, ReplayRun, ReplayRunTrace
+from app.db.models import Anomaly, Call, GoldenTrace, ReplayJob, ReplayRun, ReplayRunTrace
 from app.db.session import get_db_session
-from app.services.issues import VALID_STATUSES, ignore_issue, resolve_issue
+from app.services.issue_projection import (
+    PUBLIC_ISSUE_STATUSES,
+    IssueProjection,
+    anomaly_status_from_public,
+    issue_projection_from_anomaly,
+)
+from app.services.issues import ignore_issue, resolve_issue
 
 router = APIRouter(prefix="/v1/issues")
 logger = logging.getLogger(__name__)
@@ -102,15 +106,15 @@ def _severity_rank(severity: str | None) -> int:
 
 def _severity_rank_expr():
     return case(
-        (Issue.severity == "critical", 4),
-        (Issue.severity == "high", 3),
-        (Issue.severity == "medium", 2),
-        (Issue.severity == "low", 1),
+        (Anomaly.severity == "critical", 4),
+        (Anomaly.severity == "high", 3),
+        (Anomaly.severity == "medium", 2),
+        (Anomaly.severity == "low", 1),
         else_=0,
     )
 
 
-def _priority_score(issue: Issue) -> float:
+def _priority_score(issue: IssueProjection) -> float:
     return round(
         (_severity_rank(issue.severity) * 1000.0)
         + (float(issue.blast_radius_usd or 0) * 25.0)
@@ -119,7 +123,7 @@ def _priority_score(issue: Issue) -> float:
     )
 
 
-def _encode_cursor(issue: Issue) -> str:
+def _encode_cursor(issue: IssueProjection) -> str:
     payload = json.dumps(
         {
             "s": _severity_rank(issue.severity),
@@ -227,7 +231,7 @@ def _context_value(
     return _first_text(tuple(sources), *keys)
 
 
-def _load_evidence_calls(db: Session, issue: Issue) -> list[Call]:
+def _load_evidence_calls(db: Session, issue: IssueProjection) -> list[Call]:
     calls: list[Call] = []
     seen: set[str] = set()
 
@@ -290,7 +294,11 @@ def _trace_from_call(
     )
 
 
-def _fallback_trace(issue: Issue, evidence: Mapping[str, Any], summary: str | None) -> IssueEvidenceTrace:
+def _fallback_trace(
+    issue: IssueProjection,
+    evidence: Mapping[str, Any],
+    summary: str | None,
+) -> IssueEvidenceTrace:
     return IssueEvidenceTrace(
         call_id=issue.sample_call_id,
         trace_id=_first_text((evidence,), "trace_id"),
@@ -306,7 +314,11 @@ def _fallback_trace(issue: Issue, evidence: Mapping[str, Any], summary: str | No
     )
 
 
-def _build_evidence_traces(issue: Issue, evidence: Mapping[str, Any], calls: list[Call]) -> list[IssueEvidenceTrace]:
+def _build_evidence_traces(
+    issue: IssueProjection,
+    evidence: Mapping[str, Any],
+    calls: list[Call],
+) -> list[IssueEvidenceTrace]:
     summary = _evidence_summary(evidence)
     traces = [_trace_from_call(call, evidence, summary) for call in calls]
     if traces:
@@ -316,7 +328,11 @@ def _build_evidence_traces(issue: Issue, evidence: Mapping[str, Any], calls: lis
     return []
 
 
-def _issue_title(issue: Issue, evidence: Mapping[str, Any], calls: list[Call]) -> str:
+def _issue_title(
+    issue: IssueProjection,
+    evidence: Mapping[str, Any],
+    calls: list[Call],
+) -> str:
     code = issue.failure_code.upper()
     agent = _display_name(issue.agent_name)
     workflow = _context_value(evidence, calls, "workflow_name", "workflow")
@@ -367,7 +383,11 @@ def _issue_title(issue: Issue, evidence: Mapping[str, Any], calls: list[Call]) -
     return f"{agent} has recurring {code.replace('_', ' ').lower()}"
 
 
-def _root_cause(issue: Issue, evidence: Mapping[str, Any], calls: list[Call]) -> str:
+def _root_cause(
+    issue: IssueProjection,
+    evidence: Mapping[str, Any],
+    calls: list[Call],
+) -> str:
     explicit = _first_text(
         (evidence,),
         "root_cause",
@@ -425,7 +445,7 @@ def _root_cause(issue: Issue, evidence: Mapping[str, Any], calls: list[Call]) ->
     return "The same failure pattern is recurring across grouped traces."
 
 
-def _user_impact(issue: Issue) -> str:
+def _user_impact(issue: IssueProjection) -> str:
     count = int(issue.occurrence_count or 0)
     cost = float(issue.blast_radius_usd or 0)
     call_word = "call" if count == 1 else "calls"
@@ -434,7 +454,7 @@ def _user_impact(issue: Issue) -> str:
     return f"{count} affected {call_word}; cost impact is not yet measured."
 
 
-def _replay_coverage_status(db: Session, issue: Issue) -> str:
+def _replay_coverage_status(db: Session, issue: IssueProjection) -> str:
     if not issue.sample_call_id:
         return "not_covered"
 
@@ -523,7 +543,7 @@ def _mode_aware_replay_pass_status(db: Session, run_trace: ReplayRunTrace) -> st
     return "real_replay_passed"
 
 
-def _recommended_next_action(issue: Issue, replay_status: str) -> str:
+def _recommended_next_action(issue: IssueProjection, replay_status: str) -> str:
     code = issue.failure_code.upper()
     if replay_status in {"not_covered", "fix_pending_replay"}:
         replay_prefix = "Add this evidence trace to replay coverage, then "
@@ -571,7 +591,9 @@ def _recommended_next_action(issue: Issue, replay_status: str) -> str:
     return f"{replay_prefix}validate the grouped failure and ship the smallest targeted fix."
 
 
-def _build_issue_response(db: Session, issue: Issue) -> IssueResponse:
+def _build_issue_response(db: Session, issue: IssueProjection | Anomaly) -> IssueResponse:
+    if isinstance(issue, Anomaly):
+        issue = issue_projection_from_anomaly(issue)
     evidence = _safe_json_object(issue.sample_evidence_json)
     calls = _load_evidence_calls(db, issue)
     affected_workflow = _context_value(evidence, calls, "workflow_name", "workflow")
@@ -622,26 +644,22 @@ def list_issues(
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> IssueListResponse:
-    if status_filter is not None and status_filter not in VALID_STATUSES and status_filter != "all":
+    if status_filter is not None and status_filter not in PUBLIC_ISSUE_STATUSES and status_filter != "all":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="status must be one of: open, resolved, ignored, all",
         )
 
-    conditions = [Issue.project_id == tenant_id]
+    conditions = [Anomaly.project_id == tenant_id]
 
     if status_filter and status_filter != "all":
-        conditions.append(Issue.status == status_filter)
-    if failure_code:
-        conditions.append(Issue.failure_code == failure_code.upper())
-    if agent_name:
-        conditions.append(Issue.agent_name == agent_name)
+        anomaly_status = anomaly_status_from_public(status_filter)
+        if anomaly_status == "open":
+            conditions.append(Anomaly.status.in_(["open", "acknowledged"]))
+        else:
+            conditions.append(Anomaly.status == anomaly_status)
     if severity:
-        conditions.append(Issue.severity == severity.lower())
-    if has_fix is True:
-        conditions.append(Issue.last_fix_id.isnot(None))
-    elif has_fix is False:
-        conditions.append(Issue.last_fix_id.is_(None))
+        conditions.append(Anomaly.severity == severity.lower())
 
     rank_expr = _severity_rank_expr()
 
@@ -654,7 +672,6 @@ def list_issues(
             )
         try:
             cursor_rank = int(decoded["s"])
-            cursor_blast = float(decoded["b"])
             cursor_count = int(decoded["c"])
             cursor_ts = datetime.fromisoformat(str(decoded["t"]))
             cursor_id = str(decoded["id"])
@@ -668,43 +685,49 @@ def list_issues(
         conditions.append(
             or_(
                 rank_expr < cursor_rank,
-                and_(rank_expr == cursor_rank, Issue.blast_radius_usd < cursor_blast),
+                and_(rank_expr == cursor_rank, Anomaly.occurrence_count < cursor_count),
                 and_(
                     rank_expr == cursor_rank,
-                    Issue.blast_radius_usd == cursor_blast,
-                    Issue.occurrence_count < cursor_count,
+                    Anomaly.occurrence_count == cursor_count,
+                    Anomaly.last_seen_at < cursor_ts,
                 ),
                 and_(
                     rank_expr == cursor_rank,
-                    Issue.blast_radius_usd == cursor_blast,
-                    Issue.occurrence_count == cursor_count,
-                    Issue.last_seen_at < cursor_ts,
-                ),
-                and_(
-                    rank_expr == cursor_rank,
-                    Issue.blast_radius_usd == cursor_blast,
-                    Issue.occurrence_count == cursor_count,
-                    Issue.last_seen_at == cursor_ts,
-                    Issue.id < cursor_id,
+                    Anomaly.occurrence_count == cursor_count,
+                    Anomaly.last_seen_at == cursor_ts,
+                    Anomaly.id < cursor_id,
                 ),
             )
         )
 
+    fetch_limit = min(max((limit * 4) + 1, limit + 1), 401)
     rows = db.execute(
-        select(Issue)
+        select(Anomaly)
         .where(*conditions)
         .order_by(
             rank_expr.desc(),
-            Issue.blast_radius_usd.desc(),
-            Issue.occurrence_count.desc(),
-            Issue.last_seen_at.desc(),
-            Issue.id.desc(),
+            Anomaly.occurrence_count.desc(),
+            Anomaly.last_seen_at.desc(),
+            Anomaly.id.desc(),
         )
-        .limit(limit + 1)
+        .limit(fetch_limit)
     ).scalars().all()
 
-    has_next = len(rows) > limit
-    page = list(rows[:limit])
+    projections = [issue_projection_from_anomaly(row) for row in rows]
+    if failure_code:
+        expected_code = failure_code.upper()
+        projections = [
+            item for item in projections if item.failure_code.upper() == expected_code
+        ]
+    if agent_name:
+        projections = [item for item in projections if item.agent_name == agent_name]
+    if has_fix is True:
+        projections = [item for item in projections if item.last_fix_id is not None]
+    elif has_fix is False:
+        projections = [item for item in projections if item.last_fix_id is None]
+
+    has_next = len(projections) > limit
+    page = list(projections[:limit])
 
     next_cursor: str | None = None
     if has_next and page:
@@ -726,7 +749,7 @@ def get_issue(
     db: Session = Depends(get_db_session),
 ) -> IssueResponse:
     issue = db.execute(
-        select(Issue).where(Issue.project_id == tenant_id, Issue.id == issue_id)
+        select(Anomaly).where(Anomaly.project_id == tenant_id, Anomaly.id == issue_id)
     ).scalar_one_or_none()
     if issue is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")

@@ -17,7 +17,7 @@ IntentName = Literal[
     "latency",
     "failure",
     "specific_call",
-    "specific_anomaly",
+    "specific_issue",
     "behavior",
     "general",
 ]
@@ -30,6 +30,8 @@ class Intent:
     agent_name: str | None = None
     user_id: str | None = None
     call_id: str | None = None
+    issue_id: str | None = None
+    # Deprecated internal alias retained for older call sites.
     anomaly_id: str | None = None
 
 
@@ -93,9 +95,10 @@ def classify_intent(question: str) -> Intent:
 
     if call_id and any(token in q for token in ("anomaly", "issue", "incident")):
         return Intent(
-            name="specific_anomaly",
+            name="specific_issue",
             window_days=window_days,
             agent_name=agent_name,
+            issue_id=call_id,
             anomaly_id=call_id,
         )
 

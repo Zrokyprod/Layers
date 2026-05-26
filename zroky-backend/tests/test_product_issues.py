@@ -9,7 +9,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, GoldenSet, GoldenTrace, Issue, ReplayJob, ReplayRun, ReplayRunTrace
+from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, ReplayJob, ReplayRun, ReplayRunTrace
+from app.services.anomalies import VALID_DETECTORS, compute_fingerprint
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 
@@ -110,22 +111,45 @@ def _seed_issue(
     last_seen_delta: int = 0,
 ) -> None:
     now = datetime.now(timezone.utc) - timedelta(minutes=last_seen_delta)
+    evidence_payload = dict(evidence or {})
+    evidence_payload.update(
+        {
+            "failure_code": failure_code,
+            "prompt_fingerprint": prompt_fingerprint,
+            "agent_name": agent_name,
+            "blast_radius_usd": blast_radius_usd,
+            "legacy_issue": {
+                "failure_code": failure_code,
+                "prompt_fingerprint": prompt_fingerprint,
+                "agent_name": agent_name,
+                "sample_call_id": sample_call_id,
+                "sample_diagnosis_id": f"diag-{issue_id}",
+                "blast_radius_usd": blast_radius_usd,
+                "sample_evidence_json": json.dumps(evidence or {}, separators=(",", ":")),
+                "last_fix_id": None,
+                "resolved_at": None,
+                "resolution_source": None,
+            },
+        }
+    )
+    detector = failure_code if failure_code in VALID_DETECTORS else "UNKNOWN"
     session.add(
-        Issue(
+        Anomaly(
             id=issue_id,
             project_id=project_id,
-            failure_code=failure_code,
-            prompt_fingerprint=prompt_fingerprint,
-            agent_name=agent_name,
+            fingerprint=compute_fingerprint(
+                detector=detector,
+                prompt_fingerprint=prompt_fingerprint,
+                agent_name=agent_name,
+            ),
+            detector=detector,
             status="open",
             severity=severity,
             occurrence_count=occurrence_count,
-            blast_radius_usd=blast_radius_usd,
             first_seen_at=now - timedelta(hours=1),
             last_seen_at=now,
-            sample_call_id=sample_call_id,
-            sample_diagnosis_id=f"diag-{issue_id}",
-            sample_evidence_json=json.dumps(evidence or {}, separators=(",", ":")),
+            sample_call_ids_json=json.dumps([sample_call_id]) if sample_call_id else None,
+            evidence_json=json.dumps(evidence_payload, separators=(",", ":")),
             created_at=now - timedelta(hours=1),
             updated_at=now,
         )

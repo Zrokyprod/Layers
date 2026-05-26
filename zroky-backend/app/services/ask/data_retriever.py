@@ -1,9 +1,9 @@
-"""Pulls the smallest sufficient set of evidence rows for the synthesizer.
+﻿"""Pulls the smallest sufficient set of evidence rows for the synthesizer.
 
 Strict rules:
     * Always scope by project_id (multi-tenant isolation).
     * Hard cap row counts so context stays small enough for Haiku.
-    * Return primitive dicts only — no ORM objects leak to the synthesizer.
+    * Return primitive dicts only â€” no ORM objects leak to the synthesizer.
 """
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Call, DiagnosisJob, Issue
+from app.db.models import Anomaly, Call, DiagnosisJob
+from app.services.issue_projection import issue_projection_from_anomaly
 from .intent_router import Intent
 
 _MAX_ROWS = 8
@@ -55,12 +56,16 @@ def collect_evidence(
     # Resolve any context hints supplied by the UI (e.g. user opened a call
     # detail page and pressed "Ask about this call").
     ctx_call_id = str(context.get("call_id") or "").strip() or intent.call_id
-    ctx_anomaly_id = str(context.get("anomaly_id") or "").strip() or intent.anomaly_id
+    ctx_issue_id = (
+        str(context.get("issue_id") or context.get("anomaly_id") or "").strip()
+        or intent.issue_id
+        or intent.anomaly_id
+    )
 
     if ctx_call_id:
         _populate_call_context(db, project_id, ctx_call_id, bundle)
-    if ctx_anomaly_id:
-        _populate_anomaly_context(db, project_id, ctx_anomaly_id, bundle)
+    if ctx_issue_id:
+        _populate_issue_context(db, project_id, ctx_issue_id, bundle)
 
     if intent.name == "cost":
         _populate_cost(db, project_id, since, intent.agent_name, bundle)
@@ -76,7 +81,7 @@ def collect_evidence(
     return bundle
 
 
-# ── intent-specific population ────────────────────────────────────────────────
+# â”€â”€ intent-specific population â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _populate_overview(
     db: Session, project_id: str, since: datetime, bundle: EvidenceBundle
@@ -136,7 +141,7 @@ def _populate_cost(
             EvidenceLink(
                 kind="call",
                 id=call_id,
-                label=f"${float(cost or 0):.4f} · {agent or model or call_id[:8]}",
+                label=f"${float(cost or 0):.4f} Â· {agent or model or call_id[:8]}",
                 href=f"/calls/{call_id}",
             )
         )
@@ -177,7 +182,7 @@ def _populate_latency(
             EvidenceLink(
                 kind="call",
                 id=call_id,
-                label=f"{float(latency_ms or 0):.0f}ms · {agent or model or call_id[:8]}",
+                label=f"{float(latency_ms or 0):.0f}ms Â· {agent or model or call_id[:8]}",
                 href=f"/calls/{call_id}",
             )
         )
@@ -193,21 +198,22 @@ def _populate_failures(
     _populate_overview(db, project_id, since, bundle)
 
     issue_stmt = (
-        select(Issue)
+        select(Anomaly)
         .where(
-            Issue.project_id == project_id,
-            Issue.last_seen_at >= since,
-            Issue.status == "open",
+            Anomaly.project_id == project_id,
+            Anomaly.last_seen_at >= since,
+            Anomaly.status.in_(["open", "acknowledged"]),
         )
     )
-    if agent_name:
-        issue_stmt = issue_stmt.where(Issue.agent_name == agent_name)
-    issue_stmt = issue_stmt.order_by(desc(Issue.last_seen_at)).limit(_MAX_ROWS)
+    issue_stmt = issue_stmt.order_by(desc(Anomaly.last_seen_at)).limit(_MAX_ROWS * 3)
 
-    for row in db.execute(issue_stmt).scalars().all():
+    for anomaly in db.execute(issue_stmt).scalars().all():
+        row = issue_projection_from_anomaly(anomaly)
+        if agent_name and row.agent_name != agent_name:
+            continue
         bundle.rows.append(
             {
-                "anomaly_id": row.id,
+                "issue_id": row.id,
                 "failure_code": row.failure_code,
                 "agent_name": row.agent_name,
                 "severity": row.severity,
@@ -218,12 +224,14 @@ def _populate_failures(
         )
         bundle.links.append(
             EvidenceLink(
-                kind="anomaly",
+                kind="issue",
                 id=row.id,
-                label=f"{row.failure_code} · {row.agent_name or 'agent'} · {row.occurrence_count}×",
+                label=f"{row.failure_code} Â· {row.agent_name or 'agent'} Â· {row.occurrence_count}Ã—",
                 href=f"/issues/{row.id}",
             )
         )
+        if len(bundle.rows) >= _MAX_ROWS:
+            break
 
 
 def _populate_recent_calls(
@@ -256,13 +264,13 @@ def _populate_recent_calls(
             EvidenceLink(
                 kind="call",
                 id=call.id,
-                label=f"{call.status} · {call.agent_name or call.model or call.id[:8]}",
+                label=f"{call.status} Â· {call.agent_name or call.model or call.id[:8]}",
                 href=f"/calls/{call.id}",
             )
         )
 
 
-# ── context-driven enrichment ────────────────────────────────────────────────
+# â”€â”€ context-driven enrichment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _populate_call_context(
     db: Session, project_id: str, call_id: str, bundle: EvidenceBundle
@@ -286,7 +294,7 @@ def _populate_call_context(
         EvidenceLink(
             kind="call",
             id=call.id,
-            label=f"This call · {call.status}",
+            label=f"This call Â· {call.status}",
             href=f"/calls/{call.id}",
         )
     )
@@ -309,16 +317,17 @@ def _populate_call_context(
         ]
 
 
-def _populate_anomaly_context(
-    db: Session, project_id: str, anomaly_id: str, bundle: EvidenceBundle
+def _populate_issue_context(
+    db: Session, project_id: str, issue_id: str, bundle: EvidenceBundle
 ) -> None:
-    issue = db.execute(
-        select(Issue).where(Issue.project_id == project_id, Issue.id == anomaly_id)
+    anomaly = db.execute(
+        select(Anomaly).where(Anomaly.project_id == project_id, Anomaly.id == issue_id)
     ).scalar_one_or_none()
-    if not issue:
+    if not anomaly:
         return
-    bundle.summary["focused_anomaly"] = {
-        "anomaly_id": issue.id,
+    issue = issue_projection_from_anomaly(anomaly)
+    bundle.summary["focused_issue"] = {
+        "issue_id": issue.id,
         "failure_code": issue.failure_code,
         "agent_name": issue.agent_name,
         "severity": issue.severity,
@@ -330,9 +339,9 @@ def _populate_anomaly_context(
     }
     bundle.links.append(
         EvidenceLink(
-            kind="anomaly",
+            kind="issue",
             id=issue.id,
-            label=f"This anomaly · {issue.failure_code}",
+            label=f"This issue - {issue.failure_code}",
             href=f"/issues/{issue.id}",
         )
     )

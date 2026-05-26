@@ -22,7 +22,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, GoldenSet, GoldenTrace, Issue, ReplayRun, ReplayRunTrace
+from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, ReplayRun, ReplayRunTrace
+from app.services.anomalies import compute_fingerprint
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.goldens import add_trace, create_golden_set
@@ -941,16 +942,35 @@ class TestCreateReplayFromIssueRoute:
                 call_id="call-issue",
                 payload_json=json.dumps({"response": "issue fixed"}),
             )
-            issue = Issue(
+            issue = Anomaly(
                 id="issue-1",
                 project_id="proj-1",
-                failure_code="OUTPUT_MISMATCH",
-                prompt_fingerprint="fp-issue",
-                agent_name="support-agent",
+                fingerprint=compute_fingerprint(
+                    detector="UNKNOWN",
+                    prompt_fingerprint="fp-issue",
+                    agent_name="support-agent",
+                ),
+                detector="UNKNOWN",
                 severity="high",
+                status="open",
+                occurrence_count=1,
                 first_seen_at=now - timedelta(minutes=5),
                 last_seen_at=now,
-                sample_call_id="call-issue",
+                sample_call_ids_json=json.dumps(["call-issue"]),
+                evidence_json=json.dumps(
+                    {
+                        "failure_code": "OUTPUT_MISMATCH",
+                        "prompt_fingerprint": "fp-issue",
+                        "agent_name": "support-agent",
+                        "legacy_issue": {
+                            "failure_code": "OUTPUT_MISMATCH",
+                            "prompt_fingerprint": "fp-issue",
+                            "agent_name": "support-agent",
+                            "sample_call_id": "call-issue",
+                        },
+                    },
+                    separators=(",", ":"),
+                ),
             )
             session.add(issue)
             session.commit()

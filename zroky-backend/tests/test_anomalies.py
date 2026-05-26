@@ -5,9 +5,8 @@ Module 3 Phase B coverage:
     insert + upsert paths, sample-call-id merge, status transitions.
   - Route-level: list filters, validation errors, cursor pagination,
     detail 404/200, resolve/acknowledge/mute.
-  - Dual-write integration: a single legacy-failure-code call yields BOTH
-    an `issues` row AND an `anomalies` row, while a demoted code yields
-    only an `issues` row.
+  - Issue-consolidation integration: public issue writes create canonical
+    `anomalies` rows, and `/v1/anomalies` advertises its deprecated status.
 """
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Anomaly, Issue
+from app.db.models import Anomaly
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.anomalies import (
@@ -191,8 +190,8 @@ class TestFailureCodeMapping:
         "code",
         ["AUTH_FAILURE", "TOKEN_OVERFLOW", "RATE_LIMIT", "PROVIDER_ERROR"],
     )
-    def test_demoted_codes_return_none(self, code: str) -> None:
-        assert map_failure_code_to_detector(code) is None
+    def test_former_preflight_codes_are_canonical_issues(self, code: str) -> None:
+        assert map_failure_code_to_detector(code) == code
 
     @pytest.mark.parametrize("code", [None, "", "   ", "NOT_A_REAL_CODE"])
     def test_unknown_or_empty_returns_none(self, code: str | None) -> None:
@@ -387,6 +386,8 @@ class TestListAnomalies:
             "/v1/anomalies", headers={PROJECT_HEADER: "proj-empty"}
         )
         assert response.status_code == 200
+        assert response.headers["Deprecation"] == "true"
+        assert "use /v1/issues" in response.headers["X-Zroky-Deprecated"]
         body = response.json()
         assert body["items"] == []
         assert body["next_cursor"] is None
@@ -623,17 +624,14 @@ class TestStatusTransitionRoutes:
 # ── dual-write integration ───────────────────────────────────────────────────
 
 
-class TestDualWrite:
-    """Verify the worker-side dual-write path: a single legacy failure code
-    yields BOTH an `issues` row AND an `anomalies` row (when the code is
-    kept), or only an `issues` row (when the code is demoted).
-    """
+class TestIssueConsolidation:
+    """Verify public issue writes now target the canonical anomaly model."""
 
-    def test_kept_code_writes_both_tables(self, db_session) -> None:
+    def test_upsert_issue_writes_canonical_anomaly(self, db_session) -> None:
         from app.services.issues import upsert_issue
 
         now = datetime.now(timezone.utc)
-        upsert_issue(
+        anomaly = upsert_issue(
             db_session,
             project_id="proj-dual",
             failure_code="LOOP_DETECTED",
@@ -645,35 +643,23 @@ class TestDualWrite:
             call_cost_usd=0.5,
             evidence={"summary": "loop detected"},
         )
+        assert anomaly is not None
         detector = map_failure_code_to_detector("LOOP_DETECTED")
         assert detector == "LOOP_DETECTED"
-        upsert_anomaly(
-            db_session,
-            project_id="proj-dual",
-            detector=detector,
-            prompt_fingerprint="fp-dual",
-            agent_name="alpha",
-            call_id="call-dual-1",
-            occurred_at=now,
-            evidence={"summary": "loop detected"},
-        )
 
-        issues = db_session.execute(
-            select(Issue).where(Issue.project_id == "proj-dual")
-        ).scalars().all()
         anomalies = db_session.execute(
             select(Anomaly).where(Anomaly.project_id == "proj-dual")
         ).scalars().all()
-        assert len(issues) == 1
         assert len(anomalies) == 1
-        assert issues[0].failure_code == "LOOP_DETECTED"
         assert anomalies[0].detector == "LOOP_DETECTED"
+        evidence = json.loads(anomalies[0].evidence_json or "{}")
+        assert evidence["legacy_issue"]["failure_code"] == "LOOP_DETECTED"
 
-    def test_demoted_code_writes_only_legacy_issue(self, db_session) -> None:
+    def test_auth_failure_is_canonical_anomaly(self, db_session) -> None:
         from app.services.issues import upsert_issue
 
         now = datetime.now(timezone.utc)
-        upsert_issue(
+        anomaly = upsert_issue(
             db_session,
             project_id="proj-demoted",
             failure_code="AUTH_FAILURE",
@@ -685,17 +671,15 @@ class TestDualWrite:
             call_cost_usd=0.0,
             evidence={"summary": "auth failure"},
         )
+        assert anomaly is not None
         detector = map_failure_code_to_detector("AUTH_FAILURE")
-        assert detector is None  # demoted; worker would skip the upsert
+        assert detector == "AUTH_FAILURE"
 
-        issues = db_session.execute(
-            select(Issue).where(Issue.project_id == "proj-demoted")
-        ).scalars().all()
         anomalies = db_session.execute(
             select(Anomaly).where(Anomaly.project_id == "proj-demoted")
         ).scalars().all()
-        assert len(issues) == 1
-        assert len(anomalies) == 0
+        assert len(anomalies) == 1
+        assert anomalies[0].detector == "AUTH_FAILURE"
 
 
 # ── invariants ───────────────────────────────────────────────────────────────
@@ -712,6 +696,24 @@ class TestInvariants:
             "HALLUCINATION_RISK",
             "SCHEMA_VIOLATION",
             "LATENCY_REGRESSION",
+            "TOOL_SELECTION_FAILURE",
+            "TOOL_CALL_FAILURE",
+            "TOOL_ARGUMENT_MISMATCH",
+            "RAG_RETRIEVAL_MISSING",
+            "RETRIEVAL_MISSING",
+            "TOKEN_USAGE_DRIFT",
+            "TOKEN_OVERFLOW",
+            "RATE_LIMIT",
+            "AUTH_FAILURE",
+            "PROVIDER_ERROR",
+            "LATENCY_ANOMALY",
+            "LATENCY_DRIFT",
+            "ERROR_RATE_DRIFT",
+            "EMPTY_OUTPUT",
+            "OUTPUT_TRUNCATED",
+            "OUTPUT_LENGTH_DRIFT",
+            "REPEATED_OUTPUT",
+            "UNKNOWN",
         })
 
     def test_valid_statuses_match_db_check(self) -> None:

@@ -187,7 +187,7 @@ def _fallback(intent: Intent, evidence: EvidenceBundle, *, reason: str) -> AskAn
         )
     if intent.name == "failure" and evidence.rows:
         pieces.append(
-            f"Top open anomaly: {evidence.rows[0].get('failure_code')} occurred "
+            f"Top open issue: {evidence.rows[0].get('failure_code')} occurred "
             f"{evidence.rows[0].get('occurrence_count')} times."
         )
 
