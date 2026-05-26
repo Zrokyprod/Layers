@@ -118,7 +118,8 @@ def process_replay_run(
                 if not real_llm_entitled:
                     logger.warning(
                         "process_replay_run.plan_gate_blocked tenant=%s run=%s "
-                        "plan=%s â€” falling back to stub resolver",
+                        "plan=%s - finalizing error; real comparison replay "
+                        "will not be downgraded to stub",
                         tenant_id, run_id, plan,
                     )
                     run = _finalize_error(
