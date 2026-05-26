@@ -1,6 +1,6 @@
 # Zroky Final Product Execution Contract
 
-Date: 2026-05-24
+Date: 2026-05-26
 
 Role assigned for this audit: Principal Product Architect plus Production Systems Engineer.
 
@@ -93,21 +93,22 @@ These items are the implementation and verification scope. Resolved items remain
 
 ## 3. Verification Snapshot
 
-Commands run during this audit:
+Commands run during the current verification pass:
 
-1. `npm.cmd test` in `zroky-sdk-js`: passed, 29 tests.
-2. `npm.cmd run lint` in `zroky-dashboard`: passed with 0 errors and 26 warnings.
-3. `go test ./...` in `zroky-gateway` with workspace `GOCACHE`: failed 2 proxy tests.
-4. `python scripts/run_capture_smoke_no_docker.py`: could not run because `python` is not installed on PATH.
-5. `py scripts/check_file_sizes.py`: could not run because `py` is not installed on PATH.
-6. Direct venv Python failed: it points to missing `C:\Users\user\AppData\Local\Programs\Python\Python311\python.exe`.
+1. `go test ./...` in `zroky-gateway`: passed.
+2. `python ..\scripts\run_capture_e2e_local.py` from `zroky-backend`: passed end to end.
+3. E2E sub-gate `Gateway Go contract tests`: passed.
+4. E2E sub-gate `Python SDK capture context tests`: passed, 3 tests.
+5. E2E sub-gate `Backend capture ingest tests`: passed, 11 tests.
+6. E2E sub-gate `JS SDK capture tests`: passed, 29 tests.
+7. E2E sub-gate `JS SDK build`: passed.
+8. E2E sub-gate `JS SDK size gate`: passed, 4.89 KB gzipped under the 30 KB limit.
+9. E2E sub-gate `Dashboard capture lint`: passed.
+10. E2E sub-gate `Live no-Docker capture smoke`: passed with `status=connected source=gateway_http_direct calls_24h=1`.
 
-Gateway failing tests:
-
-1. `TestHandlerProxiesAndEmitsDirectHTTPBatch`: emitted event lost expected project/trace context in the test assertion.
-2. `TestHandlerStreamsSSEAndEmitsCapturedTelemetry`: emitted streaming usage did not match expected total usage in the test assertion.
-
-These failures make Gateway a P0 blocker.
+Earlier Gateway/Python blockers are resolved in the current branch. The only
+remaining production-readiness proof is external: deploy fresh managed
+Postgres/Redis/secrets/domains, then run the final production smoke sequence.
 
 ## 4. Target Architecture
 

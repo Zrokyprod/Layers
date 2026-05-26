@@ -20,6 +20,7 @@ BACKEND = ROOT / "zroky-backend"
 GATEWAY = ROOT / "zroky-gateway"
 PROJECT_ID = "proj_capture_smoke"
 CALL_ID = "call_capture_smoke"
+GO_CACHE = ROOT / ".data" / f"go-cache-capture-smoke-{os.getpid()}"
 
 
 class ManagedProcess:
@@ -133,7 +134,8 @@ def build_gateway_binary() -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     command = ["go", "build", "-o", str(out_path), "./cmd/gateway"]
     env = os.environ.copy()
-    env.setdefault("GOCACHE", str(GATEWAY / ".gocache"))
+    GO_CACHE.mkdir(parents=True, exist_ok=True)
+    env["GOCACHE"] = str(GO_CACHE)
     subprocess.run(command, cwd=GATEWAY, env=env, check=True)
     return out_path
 

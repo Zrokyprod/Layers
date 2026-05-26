@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+GO_CACHE = ROOT / ".data" / f"go-cache-capture-e2e-{os.getpid()}"
 
 
 def project_python() -> str:
@@ -60,7 +61,7 @@ STEPS: list[Step] = [
         "Gateway Go contract tests",
         ["go", "test", "./..."],
         ROOT / "zroky-gateway",
-        {"GOCACHE": str(ROOT / "zroky-gateway" / ".gocache")},
+        {"GOCACHE": str(GO_CACHE)},
         90,
     ),
     (
@@ -164,6 +165,7 @@ def run_step(name: str, command: list[str], cwd: Path, env: dict[str, str] | Non
 
 def main() -> None:
     print("[capture-e2e] Running local capture verification without Docker.", flush=True)
+    GO_CACHE.mkdir(parents=True, exist_ok=True)
     for name, command, cwd, env, timeout_seconds in STEPS:
         run_step(name, command, cwd, env, timeout_seconds)
     print("\n[capture-e2e] All local capture checks passed.", flush=True)

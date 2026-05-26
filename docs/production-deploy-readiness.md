@@ -177,6 +177,7 @@ These local verification commands passed after this readiness pass:
 
 ```text
 go test ./...                         # zroky-gateway
+python ..\scripts\run_capture_e2e_local.py  # zroky-backend cwd
 python -m compileall app              # zroky-replay-worker
 pytest tests/test_production_config.py tests/test_health.py -q
 npm run lint                          # zroky-dashboard
@@ -184,4 +185,3 @@ npm run build                         # zroky-dashboard
 npm run lint                          # zroky-admin
 npm run build                         # zroky-admin
 ```
-
