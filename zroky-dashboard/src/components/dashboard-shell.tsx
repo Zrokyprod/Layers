@@ -24,7 +24,6 @@ import { clearAccessToken } from "@/lib/auth";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
 import { useProjectSettings } from "@/lib/hooks";
-import { ThemeToggle } from "./theme-toggle";
 import { CommandPalette } from "./command-palette";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { SavedYouBadge } from "./saved-you-badge";
@@ -269,8 +268,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     <div className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
       <aside className={`sidebar ${sidebarOpen ? "" : "hidden lg:flex"}`}>
         <div className="brand">
-          <h1>Zroky Dashboard</h1>
-          <p>Failure intelligence with decisive actions.</p>
+          <span className="brand-mark" aria-hidden="true">Z</span>
+          <div>
+            <h1>Zroky</h1>
+            <p>Agent reliability loop</p>
+          </div>
         </div>
 
         <nav className="nav-links" aria-label="Primary">
@@ -280,9 +282,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-foot">
-          <div className="sidebar-actions">
-            <ThemeToggle />
-          </div>
+          <span className="sidebar-foot-note">Production-grade capture, issues, replay, and goldens.</span>
           <button type="button" className="nav-link nav-link-button" onClick={onLogout}>
             <span className="nav-link-main">
               <LogOut className="nav-link-icon" aria-hidden="true" />

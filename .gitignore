@@ -75,6 +75,7 @@ lint_output.txt
 # ── IDE / Editors ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+.codex/
 *.swp
 *.swo
 *~

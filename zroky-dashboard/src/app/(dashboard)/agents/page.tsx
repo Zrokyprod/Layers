@@ -231,11 +231,34 @@ function AgentsSetupState({
   );
 }
 
+function AgentsLoadingState() {
+  return (
+    <section className="panel launchpad-loading">
+      <header className="panel-header">
+        <div>
+          <h3>Preparing Agents Launchpad</h3>
+          <p>Loading capture health, open issues, recent calls, and reliability scores.</p>
+        </div>
+      </header>
+      <div className="launchpad-loading-grid" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="launchpad-loading-list" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </section>
+  );
+}
+
 function AgentHealthPill({ score }: { score: number | null }) {
   const tone = healthTone(score);
   return (
-    <div style={{ display: "grid", gap: 4 }}>
-      <span className={`alert-cat-badge ${tone.className}`} style={{ width: "fit-content" }}>
+    <div className="agent-health-pill">
+      <span className={`alert-cat-badge ${tone.className}`}>
         {tone.label}
       </span>
       <strong>{score == null ? "-" : Math.round(score)}</strong>
@@ -245,20 +268,20 @@ function AgentHealthPill({ score }: { score: number | null }) {
 
 function AgentRow({ row }: { row: AgentLaunchpadRow }) {
   return (
-    <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-      <td style={{ padding: "0.9rem", verticalAlign: "top" }}>
-        <div style={{ display: "flex", gap: "0.65rem", alignItems: "flex-start" }}>
-          <Bot aria-hidden="true" style={{ width: 18, height: 18, color: "var(--accent)" }} />
+    <tr className="agent-table-row">
+      <td className="agent-table-cell">
+        <div className="agent-name-cell">
+          <Bot aria-hidden="true" className="agent-name-icon" />
           <div>
             <strong>{row.agentName}</strong>
             <div className="notif-meta">{formatCount(row.callCount)} recent call{row.callCount === 1 ? "" : "s"}</div>
           </div>
         </div>
       </td>
-      <td style={{ padding: "0.9rem", verticalAlign: "top" }}>
+      <td className="agent-table-cell">
         <AgentHealthPill score={row.healthScore} />
       </td>
-      <td style={{ padding: "0.9rem", verticalAlign: "top", minWidth: 220 }}>
+      <td className="agent-table-cell agent-table-wide">
         {row.latestIssue ? (
           <Link href={`/issues/${encodeURIComponent(row.latestIssue.id)}`} className="notif-action-link">
             {row.latestIssue.title}
@@ -267,23 +290,23 @@ function AgentRow({ row }: { row: AgentLaunchpadRow }) {
           <span className="notif-meta">No open issue</span>
         )}
       </td>
-      <td style={{ padding: "0.9rem", verticalAlign: "top" }}>
+      <td className="agent-table-cell">
         <strong>{row.successRate == null ? "-" : formatPercent(row.successRate)}</strong>
         <div className="notif-meta">
           {row.successfulCalls > 0 ? `${formatCount(row.successfulCalls)} successful` : "No success sample"}
         </div>
       </td>
-      <td style={{ padding: "0.9rem", verticalAlign: "top" }}>
+      <td className="agent-table-cell">
         <strong>{row.costPerSuccessfulTask == null ? "-" : formatUsd(row.costPerSuccessfulTask)}</strong>
       </td>
-      <td style={{ padding: "0.9rem", verticalAlign: "top" }}>
+      <td className="agent-table-cell">
         <span>{row.replayCoverage}</span>
       </td>
-      <td style={{ padding: "0.9rem", verticalAlign: "top" }}>
-        <Clock3 aria-hidden="true" style={{ width: 14, height: 14, marginRight: 4, verticalAlign: -2 }} />
+      <td className="agent-table-cell">
+        <Clock3 aria-hidden="true" className="agent-inline-icon" />
         {formatDateTime(row.lastEventAt)}
       </td>
-      <td style={{ padding: "0.9rem", verticalAlign: "top", minWidth: 220 }}>
+      <td className="agent-table-cell agent-table-wide">
         <span>{row.recommendedAction}</span>
       </td>
     </tr>
@@ -365,7 +388,7 @@ export default function AgentsPage() {
   const atRiskAgents = rows.filter((row) => row.healthScore != null && row.healthScore < 55).length;
 
   if (loading && !hasRows) {
-    return <div className="loading" />;
+    return <AgentsLoadingState />;
   }
 
   if (!hasRows) {
@@ -381,14 +404,14 @@ export default function AgentsPage() {
   }
 
   return (
-    <div className="grid gap-4">
-      <section className="panel">
+    <div className="dashboard-stack">
+      <section className="panel launchpad-panel">
         <header className="panel-header">
           <div>
             <h3>Agents Launchpad</h3>
             <p>One row per agent, ranked by open issue priority, low health, and most recent activity.</p>
           </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className="launchpad-actions">
             <button type="button" className="btn btn-soft" onClick={refreshAll}>
               <RefreshCw aria-hidden="true" />
               Refresh
@@ -406,37 +429,37 @@ export default function AgentsPage() {
         </header>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
-        <div className="panel panel-muted">
+      <section className="metric-strip" aria-label="Agent launchpad metrics">
+        <div className="metric-card">
           <div className="notif-meta">Agents</div>
-          <strong style={{ fontSize: "1.4rem" }}>{formatCount(rows.length)}</strong>
+          <strong>{formatCount(rows.length)}</strong>
         </div>
-        <div className="panel panel-muted">
+        <div className="metric-card">
           <div className="notif-meta">Open issues</div>
-          <strong style={{ fontSize: "1.4rem" }}>{formatCount(openIssues)}</strong>
+          <strong>{formatCount(openIssues)}</strong>
         </div>
-        <div className="panel panel-muted">
+        <div className="metric-card">
           <div className="notif-meta">At-risk agents</div>
-          <strong style={{ fontSize: "1.4rem" }}>{formatCount(atRiskAgents)}</strong>
+          <strong>{formatCount(atRiskAgents)}</strong>
         </div>
-        <div className="panel panel-muted">
+        <div className="metric-card">
           <div className="notif-meta">Capture</div>
-          <strong style={{ fontSize: "1.1rem" }}>{captureHealthQuery.data?.status ?? "unknown"}</strong>
+          <strong>{captureHealthQuery.data?.status ?? "unknown"}</strong>
         </div>
       </section>
 
-      <section className="panel" style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.86rem" }}>
+      <section className="panel agent-table-panel">
+        <table className="agent-table">
           <thead>
-            <tr style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-muted)", textAlign: "left" }}>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Agent</th>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Health</th>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Latest issue</th>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Success rate</th>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Cost / success</th>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Replay coverage</th>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Last event</th>
-              <th style={{ padding: "0.75rem 0.9rem" }}>Recommended action</th>
+            <tr>
+              <th>Agent</th>
+              <th>Health</th>
+              <th>Latest issue</th>
+              <th>Success rate</th>
+              <th>Cost / success</th>
+              <th>Replay coverage</th>
+              <th>Last event</th>
+              <th>Recommended action</th>
             </tr>
           </thead>
           <tbody>
