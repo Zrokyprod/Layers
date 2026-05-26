@@ -4,6 +4,20 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bot,
+  CheckCircle2,
+  CircleDot,
+  GitPullRequestArrow,
+  Loader2,
+  MessageSquareText,
+  ShieldCheck,
+  Target,
+  UserRoundPlus,
+  XCircle,
+} from "lucide-react";
 import { ignoreIssue, listIssues, resolveIssue, updateIssueTriage } from "@/lib/api";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel } from "@/lib/issue-format";
@@ -43,20 +57,23 @@ function IssuesPageContent() {
   }
 
   return (
-    <div>
-      <header style={{ marginBottom: "1rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+    <div className="issue-workspace">
+      <section className="module-hero issue-hero">
+        <div className="module-hero-header">
           <div>
-            <h1 style={{ margin: 0, fontSize: "1.35rem" }}>Issues</h1>
-            <p className="notif-meta" style={{ marginTop: "0.35rem" }}>
-              Top grouped production problems, not raw traces.
-            </p>
+            <div className="module-eyebrow">
+              <Target aria-hidden="true" />
+              Production problem queue
+            </div>
+            <h1>Issues</h1>
+            <p>Top grouped production problems with root cause, evidence, replay status, impact, and the next action.</p>
           </div>
-          <div className="mono notif-meta" style={{ fontSize: "0.75rem" }}>
-            default view: top 5
+          <div className="issue-hero-meta">
+            <span className="mono">default view: top 5</span>
+            <span>Fix the queue from the top down.</span>
           </div>
         </div>
-      </header>
+      </section>
 
       <div className="tab-bar" role="tablist" aria-label="Issues tabs">
         {TABS.map((tab) => (
@@ -80,7 +97,7 @@ function IssuesPageContent() {
 
 function FilterBar({ filters, onChange }: { filters: Filters; onChange: (filters: Filters) => void }) {
   return (
-    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", padding: "0.75rem 0" }}>
+    <div className="issue-filter-bar">
       <select
         className="input input-sm"
         value={filters.severity}
@@ -111,6 +128,53 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (filters
         </button>
       )}
     </div>
+  );
+}
+
+function IssuesLoadingState() {
+  return (
+    <section className="panel issue-loading-panel" aria-label="Loading issues">
+      <Loader2 aria-hidden="true" />
+      <div>
+        <strong>Loading issue queue</strong>
+        <p className="notif-meta">Grouping raw traces into product issues.</p>
+      </div>
+    </section>
+  );
+}
+
+function IssueQueueSummary({ items, status }: { items: IssueItem[]; status: IssueStatus }) {
+  const highSeverity = items.filter((issue) => ["critical", "high"].includes(issue.severity.toLowerCase())).length;
+  const unassigned = items.filter((issue) => !issue.assigned_to).length;
+  const replayMissing = items.filter((issue) => {
+    const replay = issue.replay_coverage_status;
+    return replay === "not_covered" || replay === "fix_pending_replay" || replay === "covered_not_run";
+  }).length;
+  const impactUsd = items.reduce((sum, issue) => sum + issue.cost_impact_usd, 0);
+
+  return (
+    <section className="issue-summary-grid" aria-label={`${status} issue summary`}>
+      <div className="issue-summary-card">
+        <span>Visible issues</span>
+        <strong>{items.length}</strong>
+        <p>Loaded in this queue view.</p>
+      </div>
+      <div className="issue-summary-card">
+        <span>Critical / high</span>
+        <strong>{highSeverity}</strong>
+        <p>Fix these before lower severity items.</p>
+      </div>
+      <div className="issue-summary-card">
+        <span>Replay gaps</span>
+        <strong>{replayMissing}</strong>
+        <p>Needs replay proof before fix confidence.</p>
+      </div>
+      <div className="issue-summary-card">
+        <span>Unassigned</span>
+        <strong>{unassigned}</strong>
+        <p>{formatUsd(impactUsd)} visible cost impact.</p>
+      </div>
+    </section>
   );
 }
 
@@ -266,7 +330,7 @@ function IssueList({ status }: { status: IssueStatus }) {
       )}
 
       {loading && items.length === 0 ? (
-        <div className="loading" />
+        <IssuesLoadingState />
       ) : error ? (
         <div className="panel">
           <p className="notif-error">{error}</p>
@@ -279,7 +343,8 @@ function IssueList({ status }: { status: IssueStatus }) {
           {status === "open" ? "No open product issues." : status === "resolved" ? "No resolved issues." : "No ignored issues."}
         </div>
       ) : (
-        <div style={{ display: "grid", gap: "0.75rem" }}>
+        <div className="issue-list-stack">
+          <IssueQueueSummary items={items} status={status} />
           {items.map((issue) => (
             <IssueCard
               key={issue.id}
@@ -300,7 +365,7 @@ function IssueList({ status }: { status: IssueStatus }) {
           ))}
 
           {cursor && (
-            <div style={{ textAlign: "center", padding: "0.5rem" }}>
+            <div className="issue-load-more">
               <button className="btn btn-soft" onClick={() => void loadPage(cursor, filters)} disabled={loading}>
                 {loading ? "Loading..." : "Load next 5"}
               </button>
@@ -344,62 +409,80 @@ function IssueCard({
   const firstTrace = issue.evidence_traces[0];
   const traceTarget = firstTrace?.trace_id ?? firstTrace?.call_id ?? issue.sample_call_id;
   const canCreateReplay = Boolean(issue.sample_call_id || issue.evidence_traces.length > 0);
+  const highImpact = issue.cost_impact_usd > 1;
 
   return (
-    <article className="panel">
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "1rem", alignItems: "start" }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.55rem" }}>
+    <article className="panel issue-card">
+      <div className="issue-card-grid">
+        <div className="issue-card-main">
+          <div className="issue-card-badges">
             {severityBadge(issue.severity)}
-            <span className="alert-cat-badge badge-gray" style={{ fontSize: "0.65rem" }}>
+            <span className="alert-cat-badge badge-gray issue-small-badge">
               {detectorLabel(issue.failure_code)}
             </span>
-            <span className="mono notif-meta" style={{ fontSize: "0.72rem" }}>
+            <span className="mono notif-meta issue-score">
               score {issue.priority_score.toFixed(0)}
             </span>
           </div>
 
-          <h2 style={{ margin: 0, fontSize: "1.05rem", lineHeight: 1.25 }}>
-            <Link href={`/issues/${issue.id}`} style={{ color: "inherit", textDecoration: "none" }}>
+          <h2 className="issue-title">
+            <Link href={`/issues/${issue.id}`}>
               {issue.title}
             </Link>
           </h2>
 
-          <div className="notif-meta" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.45rem" }}>
-            <span>{issue.affected_agent ?? "Agent not captured"}</span>
+          <div className="issue-meta-row">
+            <span>
+              <Bot aria-hidden="true" />
+              {issue.affected_agent ?? "Agent not captured"}
+            </span>
             <span>{issue.affected_workflow ?? "Workflow not captured"}</span>
             <span>{issue.occurrence_count} affected calls</span>
             <span>{formatDateTime(issue.last_seen_at)}</span>
             {issue.assigned_to && <span>assigned to {issue.assigned_to}</span>}
-            {issue.deploy_pr_url && <a href={issue.deploy_pr_url} target="_blank" rel="noreferrer" className="notif-action-link">deploy/PR linked</a>}
+            {issue.deploy_pr_url && (
+              <a href={issue.deploy_pr_url} target="_blank" rel="noreferrer" className="notif-action-link">
+                deploy/PR linked
+              </a>
+            )}
           </div>
 
-          <p style={{ margin: "0.75rem 0 0", fontSize: "0.9rem", lineHeight: 1.45 }}>
+          <p className="issue-root-cause">
             <strong>Root cause:</strong> {issue.root_cause}
           </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.65rem", marginTop: "0.85rem" }}>
-            <InfoCell label="Impact" value={`${issue.user_impact} · ${formatUsd(issue.cost_impact_usd)} blast radius`} />
+          <div className="issue-evidence-grid">
+            <InfoCell label="Impact" value={`${issue.user_impact} - ${formatUsd(issue.cost_impact_usd)} blast radius`} />
             <InfoCell label="Replay" value={replayLabel(issue.replay_coverage_status)} />
             <InfoCell label="Next action" value={issue.recommended_next_action} />
           </div>
 
           {firstTrace && (
-            <div className="mono notif-meta" style={{ marginTop: "0.85rem", fontSize: "0.72rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+            <div className="issue-trace-row">
               <span>evidence: {issue.evidence_traces.length} trace{issue.evidence_traces.length === 1 ? "" : "s"}</span>
               {firstTrace.prompt_version && <span>prompt {firstTrace.prompt_version}</span>}
               {firstTrace.model && <span>{firstTrace.provider ?? "provider"} / {firstTrace.model}</span>}
-              {traceTarget && <Link href={`/trace/${traceTarget}`} className="notif-action-link">trace {traceTarget.slice(0, 18)}</Link>}
-              {issue.sample_call_id && <Link href={`/calls/${issue.sample_call_id}`} className="notif-action-link">sample call</Link>}
+              {traceTarget && (
+                <Link href={`/trace/${traceTarget}`} className="notif-action-link">
+                  trace {traceTarget.slice(0, 18)}
+                </Link>
+              )}
+              {issue.sample_call_id && (
+                <Link href={`/calls/${issue.sample_call_id}`} className="notif-action-link">
+                  sample call
+                </Link>
+              )}
             </div>
           )}
         </div>
 
-        <div style={{ display: "grid", gap: "0.45rem", minWidth: "132px", justifyItems: "stretch" }}>
-          <div style={{ textAlign: "right", fontWeight: 700, color: issue.cost_impact_usd > 1 ? "var(--color-red)" : "inherit" }}>
+        <div className="issue-action-rail">
+          <div className={`issue-impact-value${highImpact ? " is-high-impact" : ""}`}>
             {formatUsd(issue.cost_impact_usd)}
+            <span>cost impact</span>
           </div>
           <Link href={`/issues/${issue.id}`} className="btn btn-soft btn-sm">
+            <CircleDot aria-hidden="true" />
             Open issue
           </Link>
           <button
@@ -409,12 +492,15 @@ function IssueCard({
             disabled={!canCreateReplay || replaying}
             title={canCreateReplay ? "Create replay from issue evidence" : "No issue evidence available for replay"}
           >
-            {replaying ? "Creating..." : "Create Replay"}
+            {replaying ? <Loader2 aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+            {replaying ? "Creating..." : "Create replay"}
           </button>
           <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onAssign(event, issue)} disabled={triaging}>
+            <UserRoundPlus aria-hidden="true" />
             {issue.assigned_to ? "Reassign" : "Assign"}
           </button>
           <button type="button" className="btn btn-soft btn-sm" onClick={(event) => onLinkDeploy(event, issue)} disabled={triaging}>
+            <GitPullRequestArrow aria-hidden="true" />
             {issue.deploy_pr_url ? "Edit Deploy/PR" : "Link Deploy/PR"}
           </button>
           <button
@@ -431,17 +517,21 @@ function IssueCard({
               }));
             }}
           >
+            <MessageSquareText aria-hidden="true" />
             Ask Zroky
           </button>
           {status === "open" && (
             <>
               <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onAcceptedRisk(event, issue.id)} disabled={acceptingRisk}>
+                <ShieldCheck aria-hidden="true" />
                 {acceptingRisk ? "..." : "Accepted Risk"}
               </button>
               <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onResolve(event, issue.id)} disabled={resolving}>
+                <CheckCircle2 aria-hidden="true" />
                 {resolving ? "..." : "Resolve"}
               </button>
               <button type="button" className="btn btn-soft btn-sm" onClick={(event) => void onIgnore(event, issue.id)} disabled={ignoring}>
+                <XCircle aria-hidden="true" />
                 {ignoring ? "..." : "Ignore/Mute"}
               </button>
             </>
@@ -454,16 +544,17 @@ function IssueCard({
 
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.55rem" }}>
-      <div className="notif-meta" style={{ fontSize: "0.68rem", marginBottom: "0.25rem" }}>{label}</div>
-      <div style={{ fontSize: "0.82rem", lineHeight: 1.35 }}>{value}</div>
+    <div className="issue-info-cell">
+      <div className="notif-meta">{label}</div>
+      <div>{value}</div>
     </div>
   );
 }
 
 function severityBadge(severity: string) {
   return (
-    <span className={`alert-cat-badge badge-${severityBadgeColor(severity)}`} style={{ fontSize: "0.65rem", padding: "1px 6px" }}>
+    <span className={`alert-cat-badge badge-${severityBadgeColor(severity)} issue-small-badge`}>
+      <AlertTriangle aria-hidden="true" />
       {severity}
     </span>
   );

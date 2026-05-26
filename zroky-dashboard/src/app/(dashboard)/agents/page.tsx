@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   AlertTriangle,
+  ArrowRight,
   Bot,
   CheckCircle2,
   Clock3,
   Loader2,
   RefreshCw,
   ShieldCheck,
+  Target,
   Wrench,
 } from "lucide-react";
 
@@ -266,6 +269,117 @@ function AgentHealthPill({ score }: { score: number | null }) {
   );
 }
 
+function LaunchpadMetric({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="metric-card launchpad-metric-card">
+      <div className="notif-meta">{label}</div>
+      <strong>{value}</strong>
+      <span>{helper}</span>
+    </div>
+  );
+}
+
+function LaunchpadBrief({
+  rows,
+  openIssues,
+  atRiskAgents,
+  captureHealth,
+}: {
+  rows: AgentLaunchpadRow[];
+  openIssues: number;
+  atRiskAgents: number;
+  captureHealth: CaptureHealthResponse | null;
+}) {
+  const topIssueRow = rows.find((row) => row.latestIssue);
+  const firstAtRisk = rows.find((row) => row.healthScore != null && row.healthScore < 55);
+  const focusRow = topIssueRow ?? firstAtRisk ?? rows[0] ?? null;
+  const issue = focusRow?.latestIssue ?? null;
+  const captureConnected = captureHealth?.status === "connected";
+
+  return (
+    <section className="launchpad-brief" aria-label="Agents launchpad brief">
+      <div className="launchpad-brief-main">
+        <div className="module-eyebrow">
+          <Target aria-hidden="true" />
+          Next best action
+        </div>
+        {issue && focusRow ? (
+          <>
+            <h2>{issue.title}</h2>
+            <p>
+              {focusRow.agentName} is the highest-priority agent right now. Start with the issue evidence, then run a replay before treating any fix as verified.
+            </p>
+            <div className="launchpad-brief-actions">
+              <Link href={`/issues/${encodeURIComponent(issue.id)}`} className="btn btn-primary">
+                Open issue
+                <ArrowRight aria-hidden="true" />
+              </Link>
+              <Link href="/replay" className="btn btn-soft">
+                Replay queue
+              </Link>
+            </div>
+          </>
+        ) : focusRow ? (
+          <>
+            <h2>{focusRow.agentName} is clean for now</h2>
+            <p>
+              No open issue is attached to this agent. Keep capture quality high and promote important passing paths into goldens.
+            </p>
+            <div className="launchpad-brief-actions">
+              <Link href="/goldens" className="btn btn-primary">
+                Review goldens
+                <ArrowRight aria-hidden="true" />
+              </Link>
+              <Link href="/calls" className="btn btn-soft">
+                Recent calls
+              </Link>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2>No agent activity yet</h2>
+            <p>Connect one production-like call and Zroky will rank agents by issue priority, health, replay coverage, and cost impact.</p>
+          </>
+        )}
+      </div>
+
+      <div className="launchpad-brief-side">
+        <div className="brief-status-row">
+          <span className={`alert-cat-badge ${captureConnected ? "badge-green" : "badge-yellow"}`}>
+            {captureHealth?.status ?? "unknown"}
+          </span>
+          <span>Capture status</span>
+        </div>
+        <div className="brief-kpi-grid">
+          <div>
+            <strong>{formatCount(openIssues)}</strong>
+            <span>open issues</span>
+          </div>
+          <div>
+            <strong>{formatCount(atRiskAgents)}</strong>
+            <span>at-risk agents</span>
+          </div>
+        </div>
+        {captureHealth?.validation_warnings?.length ? (
+          <Link href="#capture-warnings" className="notif-action-link">
+            {captureHealth.validation_warnings.length} capture warning{captureHealth.validation_warnings.length === 1 ? "" : "s"}
+          </Link>
+        ) : (
+          <span className="notif-meta">Capture payload quality looks clean.</span>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function AgentRow({ row }: { row: AgentLaunchpadRow }) {
   return (
     <tr className="agent-table-row">
@@ -386,6 +500,11 @@ export default function AgentsPage() {
   const callsToday = summaryQuery.data?.calls_today ?? 0;
   const openIssues = issuesQuery.data?.items.length ?? 0;
   const atRiskAgents = rows.filter((row) => row.healthScore != null && row.healthScore < 55).length;
+  const healthyAgents = rows.filter((row) => row.healthScore != null && row.healthScore >= 80 && !row.latestIssue).length;
+  const replayGaps = rows.filter((row) => {
+    const status = row.latestIssue?.replay_coverage_status;
+    return status === "not_covered" || status === "fix_pending_replay" || status === "covered_not_run";
+  }).length;
 
   if (loading && !hasRows) {
     return <AgentsLoadingState />;
@@ -405,11 +524,15 @@ export default function AgentsPage() {
 
   return (
     <div className="dashboard-stack">
-      <section className="panel launchpad-panel">
-        <header className="panel-header">
+      <section className="module-hero launchpad-panel">
+        <header className="module-hero-header">
           <div>
-            <h3>Agents Launchpad</h3>
-            <p>One row per agent, ranked by open issue priority, low health, and most recent activity.</p>
+            <div className="module-eyebrow">
+              <Activity aria-hidden="true" />
+              Production agent control
+            </div>
+            <h1>Agents Launchpad</h1>
+            <p>Rank agents by real production pain: open issue priority, health score, replay coverage, last event, and cost per successful task.</p>
           </div>
           <div className="launchpad-actions">
             <button type="button" className="btn btn-soft" onClick={refreshAll}>
@@ -429,23 +552,18 @@ export default function AgentsPage() {
         </header>
       </section>
 
+      <LaunchpadBrief
+        rows={rows}
+        openIssues={openIssues}
+        atRiskAgents={atRiskAgents}
+        captureHealth={captureHealthQuery.data ?? null}
+      />
+
       <section className="metric-strip" aria-label="Agent launchpad metrics">
-        <div className="metric-card">
-          <div className="notif-meta">Agents</div>
-          <strong>{formatCount(rows.length)}</strong>
-        </div>
-        <div className="metric-card">
-          <div className="notif-meta">Open issues</div>
-          <strong>{formatCount(openIssues)}</strong>
-        </div>
-        <div className="metric-card">
-          <div className="notif-meta">At-risk agents</div>
-          <strong>{formatCount(atRiskAgents)}</strong>
-        </div>
-        <div className="metric-card">
-          <div className="notif-meta">Capture</div>
-          <strong>{captureHealthQuery.data?.status ?? "unknown"}</strong>
-        </div>
+        <LaunchpadMetric label="Monitored agents" value={formatCount(rows.length)} helper={`${formatCount(healthyAgents)} healthy without open issue`} />
+        <LaunchpadMetric label="Open issues" value={formatCount(openIssues)} helper="Grouped product problems to fix first" />
+        <LaunchpadMetric label="At-risk agents" value={formatCount(atRiskAgents)} helper="Health score below 55" />
+        <LaunchpadMetric label="Replay gaps" value={formatCount(replayGaps)} helper="Issues that still need proof" />
       </section>
 
       <section className="panel agent-table-panel">
@@ -471,7 +589,7 @@ export default function AgentsPage() {
       </section>
 
       {captureHealthQuery.data?.validation_warnings?.length ? (
-        <section className="panel panel-muted">
+        <section className="panel panel-muted" id="capture-warnings">
           <header className="panel-header">
             <div>
               <h3>Capture validation warnings</h3>
