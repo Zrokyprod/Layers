@@ -23,7 +23,7 @@ The user should not think "I have 50,000 traces." The user should think "These a
 
 ## 2. Current Audit Verdict
 
-The current repo has a strong engine but an incomplete product surface.
+The current repo has a strong engine and the core local product loop is now code-level verified.
 
 Bold items in this document are the implementation or verification scope. Non-bold text is context, product intent, or explanation.
 
@@ -39,21 +39,28 @@ Strong:
 8. Goldens backend and dashboard page exist.
 9. Ask Zroky exists with evidence-oriented answers.
 
-Not production-complete yet:
+Resolved in current branch:
 
-1. Gateway Go tests currently fail in `internal/proxy`.
-2. Local Python runtime is broken: `python` and `py` are not on PATH, and `zroky-backend/.venv/Scripts/python.exe` points to a missing Python 3.11 install.
-3. Full no-Docker capture smoke cannot run until Python is repaired.
-4. ClickHouse sync reads token/cost/status fields from wrong places and can fail or write incorrect rows.
-5. Dashboard primary nav hides important built pages and has no `/agents` Launchpad.
-6. Issue and Anomaly concepts still run in parallel.
-7. API contract file contains many `Magicmock` summaries and must be regenerated.
-8. CI has soft checks using `|| true` and optional security audit paths.
-9. Repo contains large local binaries and generated artifacts that should not be in product source.
+1. Gateway Go tests pass, including `internal/proxy`.
+2. Local Python runtime and backend virtual environment are usable.
+3. Full no-Docker capture E2E passes.
+4. ClickHouse sync reads token, cost, status, and error fields from `Call` columns.
+5. Dashboard primary nav exposes Agents, Issues, Replay, Goldens, Drift, Calls, Cost, Alerts, and Settings.
+6. Customer-facing product wording uses Issues; `/v1/issues` is backed by the canonical problem model.
+7. API contract has no `MagicMock`, `Magicmock`, or fake-summary leakage.
+8. Core CI gates are strict; optional benchmark and chaos jobs remain intentionally non-blocking.
+9. Repo-local binaries/generated artifacts were removed and ignored.
+
+Still not proven until external production smoke runs:
+
+1. Managed Postgres and Redis boot with production secrets.
+2. Real provider proxy traffic flows through the deployed gateway.
+3. Fresh signup can create a project/key and capture the first production event.
+4. Issue -> replay -> golden -> CI proof works against deployed services.
 
 ## 2.1 Bold Action Scope
 
-Only these items should be treated as fix/check scope until they are resolved:
+These items are the implementation and verification scope. Resolved items remain listed for audit traceability; unresolved items must stay bold until their proof gate is green.
 
 1. **Repair Python runtime and recreate the backend virtual environment.**
 2. **Fix Gateway Go `internal/proxy` test failures.**
@@ -529,7 +536,8 @@ These are local artifacts and should not live in product source:
 
 ### Remove vendored binaries
 
-1. `prometheus/prometheus-3.1.0.windows-amd64`
+1. `prometheus/prometheus-3.1.0.windows-amd64/prometheus.exe`
+2. `prometheus/prometheus-3.1.0.windows-amd64/promtool.exe`
 
 Keep only:
 
@@ -544,9 +552,9 @@ Keep only:
 
 ### Regenerate API contract
 
-1. `api-contracts/zroky-api-v1.openapi.json` contains many `Magicmock` summaries.
-2. It must be regenerated from the real FastAPI app after Python runtime is fixed.
-3. CI should fail if `Magicmock` appears again.
+1. `api-contracts/zroky-api-v1.openapi.json` has no `MagicMock`, `Magicmock`, or fake-summary leakage.
+2. Regenerate it only through the real FastAPI export path.
+3. CI fails if `MagicMock`, `Magicmock`, or fake-summary text appears again.
 
 ### Dirty tree cleanup protocol
 
@@ -721,12 +729,12 @@ Required:
 
 ### P0.6 Make CI strict
 
-Current evidence:
+Current verification:
 
-1. `.github/workflows/ci.yml` has `mypy ... || true`.
-2. `.github/workflows/ci.yml` has `pip-audit ... || true`.
-3. `.github/workflows/zroky-backend-ci.yml` has `mypy ... || true`.
-4. Security audit job is optional with `continue-on-error: true`.
+1. Backend `mypy` and `pip-audit` gates in `.github/workflows/ci.yml` fail the build.
+2. Backend `mypy` and security-audit gates in `.github/workflows/zroky-backend-ci.yml` fail the build.
+3. Core static guards no longer use `|| true`; they explicitly distinguish "no matches" from scan failure.
+4. `|| true` remains only in optional benchmark/chaos flows, where non-blocking behavior is intentional.
 
 Required:
 

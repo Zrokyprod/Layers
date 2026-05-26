@@ -26,6 +26,15 @@ _CLAIM_PATTERN = re.compile(
 )
 
 _BENCH_TAG_PATTERN = re.compile(r"BENCH_TAG:(\w+)")
+_GENERIC_TAG_WORDS = {
+    "p50",
+    "p95",
+    "p99",
+    "latency",
+    "overhead",
+    "throughput",
+    "eps",
+}
 
 _DOC_GLOBS = [
     "README.md",
@@ -40,7 +49,7 @@ _BENCH_GLOB = "zroky-backend/benchmarks/bench_*.py"
 def _collect_bench_tags() -> set[str]:
     tags: set[str] = set()
     for f in _REPO.glob(_BENCH_GLOB):
-        for match in _BENCH_TAG_PATTERN.finditer(f.read_text()):
+        for match in _BENCH_TAG_PATTERN.finditer(f.read_text(encoding="utf-8")):
             tags.add(match.group(1))
     return tags
 
@@ -49,7 +58,8 @@ def _collect_doc_claims() -> list[tuple[Path, int, str]]:
     claims: list[tuple[Path, int, str]] = []
     for glob in _DOC_GLOBS:
         for f in _REPO.glob(glob):
-            for lineno, line in enumerate(f.read_text().splitlines(), 1):
+            text = f.read_text(encoding="utf-8", errors="replace")
+            for lineno, line in enumerate(text.splitlines(), 1):
                 if _CLAIM_PATTERN.search(line):
                     claims.append((f, lineno, line.strip()))
     return claims
@@ -75,8 +85,18 @@ def main() -> None:
     for path, lineno, line in claims:
         rel = path.relative_to(_REPO)
         matched_tag = None
+        explicit_tags = set(_BENCH_TAG_PATTERN.findall(line))
+        for tag in sorted(explicit_tags):
+            if tag in bench_tags:
+                matched_tag = tag
+                break
         for tag in bench_tags:
+            if matched_tag:
+                break
             tag_words = set(tag.lower().replace("_", " ").split())
+            tag_words -= _GENERIC_TAG_WORDS
+            if not tag_words:
+                continue
             line_lower = line.lower()
             if any(w in line_lower for w in tag_words):
                 matched_tag = tag

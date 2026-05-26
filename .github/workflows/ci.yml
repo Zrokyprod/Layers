@@ -203,9 +203,16 @@ jobs:
 
       - name: Check for ad-hoc IngestEvent (v1) usage
         run: |
+          set +e
           violations=$(grep -r --include="*.py" \
             -E "from app\.schemas\.ingest import[^(]*(IngestEvent[^V]|IngestEvent$)" \
-            zroky-backend/app/ || true)
+            zroky-backend/app/)
+          grep_status=$?
+          set -e
+          if [ "${grep_status}" -gt 1 ]; then
+            echo "::error::IngestEvent v1 scan failed."
+            exit "${grep_status}"
+          fi
           if [ -n "$violations" ]; then
             echo "::error::IngestEvent v1 imports found — use IngestEventV2 from app.schemas.ingest_event_v2:"
             echo "$violations"
@@ -222,18 +229,43 @@ jobs:
 
       - name: Ensure no PR is opened without a replay_status=pass check
         run: |
-          violations=$(grep -r --include="*.py" \
+          set +e
+          candidate_matches=$(grep -r --include="*.py" \
             -E "create_pull_request|open_pr|github_pr\.create|DiagnosisPullRequest\(" \
-            zroky-backend/app/ | \
-            grep -v "replay_status.*pass\|replay_pass\|# noqa: replay-lint" || true)
+            zroky-backend/app/)
+          grep_status=$?
+          set -e
+          if [ "${grep_status}" -gt 1 ]; then
+            echo "::error::Replay-pass scan failed."
+            exit "${grep_status}"
+          fi
+
+          violations=""
+          if [ -n "$candidate_matches" ]; then
+            set +e
+            violations=$(printf '%s\n' "$candidate_matches" | grep -v "replay_status.*pass\|replay_pass\|# noqa: replay-lint")
+            filter_status=$?
+            set -e
+            if [ "${filter_status}" -gt 1 ]; then
+              echo "::error::Replay-pass filter failed."
+              exit "${filter_status}"
+            fi
+          fi
           if [ -n "$violations" ]; then
             echo "::error::Possible PR-without-replay-pass: verify replay_status='pass' is checked before these calls:"
             echo "$violations"
             exit 1
           fi
+          set +e
           violations_hard=$(grep -r --include="*.py" \
             -E "skip_replay_check\s*=\s*True" \
-            zroky-backend/app/ || true)
+            zroky-backend/app/)
+          hard_status=$?
+          set -e
+          if [ "${hard_status}" -gt 1 ]; then
+            echo "::error::Replay bypass scan failed."
+            exit "${hard_status}"
+          fi
           if [ -n "$violations_hard" ]; then
             echo "::error::skip_replay_check=True found — replay verification bypass is forbidden:"
             echo "$violations_hard"

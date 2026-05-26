@@ -67,7 +67,7 @@ async def call_agent(prompt: str):
     return await openai.chat.completions.create(...)
 ```
 
-SDK overhead p95 < 5 ms (CI-enforced, Rule 4).
+SDK overhead p95 < 5 ms (CI-enforced, Rule 4; BENCH_TAG:trace_wrapper_overhead).
 
 ---
 

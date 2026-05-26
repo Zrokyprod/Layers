@@ -99,6 +99,7 @@ def test_bench_trace_wrapper_overhead(benchmark):
     """
     Measure the overhead of the trace wrapper vs a naked call.
 
+    BENCH_TAG:trace_wrapper_overhead
     Rule 4 target: p95 overhead < 5 ms.
     The benchmark runner posts a regression comment on PRs and fails
     if mean overhead regresses > 10% vs the stored baseline.
