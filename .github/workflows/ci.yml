@@ -189,8 +189,8 @@ jobs:
 
       - name: Check OpenAPI generated summaries are real
         run: |
-          if grep -E "MagicMock|Magicmock|MagicMocks" ../api-contracts/zroky-api-v1.openapi.json; then
-            echo "::error::OpenAPI contract contains MagicMock-generated summaries or descriptions."
+          if grep -E "MagicMock|Magicmock|MagicMocks|fake-summary|fake_summary" ../api-contracts/zroky-api-v1.openapi.json; then
+            echo "::error::OpenAPI contract contains MagicMock/fake-summary generated summaries or descriptions."
             exit 1
           fi
 
