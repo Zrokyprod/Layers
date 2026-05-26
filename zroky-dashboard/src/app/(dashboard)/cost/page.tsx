@@ -12,6 +12,7 @@
  * counterfactual) is a teaser pointing here.
  */
 
+import { CircleDollarSign } from "lucide-react";
 import { useState } from "react";
 import { CostKpiStrip } from "@/components/cost-explorer/kpi-strip";
 import { CostHeroChart } from "@/components/cost-explorer/hero-chart";
@@ -34,29 +35,35 @@ export default function CostExplorerPage() {
 
   return (
     <div className="cost-explorer">
-      <header className="cost-explorer-header">
-        <div>
-          <h1>Cost Explorer</h1>
-          <p>
-            Spend, waste, and forecast in one view. Issue markers connect cost
-            spikes to the alerts that fired them.
-          </p>
+      <section className="module-hero cost-explorer-hero">
+        <div className="module-hero-header">
+          <div>
+            <span className="module-eyebrow">
+              <CircleDollarSign aria-hidden="true" />
+              Cost leak detection
+            </span>
+            <h1>Cost</h1>
+            <p>
+              Find where money is leaking across spend trend, waste attribution,
+              outcome cost, model swaps, Pareto breakdowns, and expensive calls.
+            </p>
+          </div>
+          <div className="cost-explorer-window" role="tablist" aria-label="Time window">
+            {WINDOW_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                role="tab"
+                aria-selected={windowDays === opt.value}
+                className={`cost-window-btn ${windowDays === opt.value ? "active" : ""}`}
+                onClick={() => setWindowDays(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="cost-explorer-window" role="tablist" aria-label="Time window">
-          {WINDOW_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              role="tab"
-              aria-selected={windowDays === opt.value}
-              className={`cost-window-btn ${windowDays === opt.value ? "active" : ""}`}
-              onClick={() => setWindowDays(opt.value)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </header>
+      </section>
 
       <CostKpiStrip windowDays={windowDays} />
 
