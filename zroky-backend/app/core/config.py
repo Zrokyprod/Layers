@@ -383,7 +383,7 @@ class Settings(BaseSettings):
     # FEATURE_LEGACY_NOTIFICATIONS, FEATURE_LEGACY_SUPPORT,
     # FEATURE_LEGACY_ONBOARDING, FEATURE_LEGACY_FEATURE_FLAGS:
     # source files deleted in Module 1; flags removed.
-    FEATURE_LEGACY_OWNER: bool = True              # M11 will disable. Replacement: zroky-admin app.
+    FEATURE_LEGACY_OWNER: bool = True              # Customer production env sets False. Admin-only deployments may enable for zroky-admin.
     FEATURE_LEGACY_BILLING: bool = False           # M12 disabled. Replacement: Â§11.3 Stripe-Checkout-only routes (POST /checkout, /portal, /webhook + GET /me); legacy /plans, GET/PUT /subscription, /usage gated off.
     FEATURE_LEGACY_INVITATIONS: bool = True        # M8 will reduce. Replacement: /v1/invitations/accept only.
     FEATURE_LEGACY_DIAGNOSIS_ALIAS: bool = True    # M7 will disable. Merges into /v1/diagnoses.
@@ -483,8 +483,14 @@ def validate_runtime_settings(settings: Settings) -> None:
     if not settings.ENABLE_READY_REDIS_CHECK:
         failures.append("ENABLE_READY_REDIS_CHECK must be true in production")
 
+    if settings.ENABLE_METRICS_ENDPOINT and not (settings.METRICS_TOKEN or "").strip():
+        failures.append("METRICS_TOKEN must be configured when metrics endpoint is enabled in production")
+
     if settings.ENABLE_INTERNAL_DEBUG_ENDPOINT and not (settings.INTERNAL_DEBUG_TOKEN or "").strip():
         failures.append("INTERNAL_DEBUG_TOKEN must be configured when internal debug endpoint is enabled")
+
+    if not (settings.AUTH_JWT_SECRET or "").strip():
+        failures.append("AUTH_JWT_SECRET must be configured in production for dashboard session tokens")
 
     if is_jwt_configured(settings):
         if not settings.JWT_ISSUER:

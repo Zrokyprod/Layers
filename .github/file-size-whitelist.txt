@@ -13,17 +13,11 @@
 # ── Q1 Sprint 1–2 splits (deadline: Week 6) ──────────────────────────────────
 
 # ── Q2 split queue (pre-existing tech debt; DO NOT add new siblings) ─────────
-zroky-backend/app/api/routes/analytics.py     # ZROKY-Q2-201 — split by sub-domain
-zroky-backend/app/worker/tasks.py             # ZROKY-Q2-202 — split by worker domain
-zroky-backend/app/api/routes/owner.py         # ZROKY-Q2-203 — split by sub-resource
-zroky-backend/app/services/fix_adoption.py    # ZROKY-Q2-204 — split metrics / tracking
-zroky-backend/app/db/models.py                # ZROKY-Q2-205 — split by ORM domain module
 zroky-backend/app/api/routes/settings.py      # ZROKY-Q2-206 — split by sub-route
 zroky-backend/app/api/routes/diagnosis.py     # ZROKY-Q2-207 — split by sub-resource
 zroky-backend/app/api/routes/auth.py          # ZROKY-Q2-208 — split oauth / password / session
 zroky-backend/app/api/routes/ingest.py        # ZROKY-Q2-209 — split intake / enrichment
 zroky-sdk/zroky/_async.py                     # ZROKY-Q2-210 — split queue / batcher / flusher
-zroky-backend/app/services/replay_executor.py # ZROKY-Q2-211 - split replay modes / comparison / persistence
 zroky-backend/app/services/judge_engine.py    # ZROKY-Q2-212 - split provider client / rubric / verdict serialization
 zroky-backend/app/api/routes/calls.py         # ZROKY-Q2-213 - split list / detail / trace tree / golden actions
 zroky-backend/app/services/replay_runs.py     # ZROKY-Q2-214 - split create / quota / promotion / summaries
