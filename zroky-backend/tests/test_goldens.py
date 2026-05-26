@@ -149,6 +149,8 @@ class TestCreateGoldenSet:
         assert gs.name == "canonical"
         assert gs.description == "desc"
         assert gs.judge_config_json == '{"k":"v"}'
+        assert gs.is_flaky is False
+        assert gs.blocks_ci is False
 
     def test_empty_name_rejected(self, db_session) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -213,6 +215,19 @@ class TestUpdateGoldenSet:
         assert updated is not None
         assert updated.name == "renamed"
         assert updated.description == "d"  # unchanged
+
+    def test_update_flaky_and_blocking_flags(self, db_session) -> None:
+        gs = create_golden_set(db_session, project_id="proj-1", name="flags")
+        updated = update_golden_set(
+            db_session,
+            project_id="proj-1",
+            golden_set_id=gs.id,
+            is_flaky=True,
+            blocks_ci=True,
+        )
+        assert updated is not None
+        assert updated.is_flaky is True
+        assert updated.blocks_ci is True
 
     def test_clear_optional_fields(self, db_session) -> None:
         gs = create_golden_set(
@@ -579,6 +594,8 @@ class TestCreateRoute:
         assert body["description"] == "d"
         assert body["trace_count"] == 0
         assert body["project_id"] == "proj-1"
+        assert body["is_flaky"] is False
+        assert body["blocks_ci"] is False
 
     def test_duplicate_name_409(self, client: TestClient) -> None:
         client.post(
@@ -660,6 +677,27 @@ class TestPatchRoute:
         )
         assert response.status_code == 200
         assert response.json()["description"] is None
+
+    def test_patch_flaky_and_blocking_flags_persist(self, client: TestClient) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        gs = _create_golden_via_factory(factory, project_id="proj-1", name="flags")
+        response = client.patch(
+            f"/v1/goldens/{gs.id}",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={"is_flaky": True, "blocks_ci": True},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["is_flaky"] is True
+        assert body["blocks_ci"] is True
+
+        detail = client.get(
+            f"/v1/goldens/{gs.id}",
+            headers={PROJECT_HEADER: "proj-1"},
+        )
+        assert detail.status_code == 200
+        assert detail.json()["is_flaky"] is True
+        assert detail.json()["blocks_ci"] is True
 
     def test_rename_conflict_409(self, client: TestClient) -> None:
         factory = client._session_factory  # type: ignore[attr-defined]

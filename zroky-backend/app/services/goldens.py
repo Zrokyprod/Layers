@@ -133,6 +133,8 @@ def update_golden_set(
     name: str | None = None,
     description: str | None = None,
     judge_config_json: str | None = None,
+    is_flaky: bool | None = None,
+    blocks_ci: bool | None = None,
     clear_description: bool = False,
     clear_judge_config: bool = False,
 ) -> GoldenSet | None:
@@ -160,6 +162,12 @@ def update_golden_set(
         golden_set.judge_config_json = None
     elif judge_config_json is not None:
         golden_set.judge_config_json = judge_config_json
+
+    if is_flaky is not None:
+        golden_set.is_flaky = bool(is_flaky)
+
+    if blocks_ci is not None:
+        golden_set.blocks_ci = bool(blocks_ci)
 
     golden_set.updated_at = datetime.now(timezone.utc)
     db.add(golden_set)

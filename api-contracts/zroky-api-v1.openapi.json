@@ -30389,6 +30389,14 @@
             ],
             "title": "Judge Config Json"
           },
+          "is_flaky": {
+            "type": "boolean",
+            "title": "Is Flaky"
+          },
+          "blocks_ci": {
+            "type": "boolean",
+            "title": "Blocks Ci"
+          },
           "trace_count": {
             "type": "integer",
             "title": "Trace Count"
@@ -30411,6 +30419,8 @@
           "name",
           "description",
           "judge_config_json",
+          "is_flaky",
+          "blocks_ci",
           "trace_count",
           "created_at",
           "updated_at"
@@ -30453,6 +30463,28 @@
               }
             ],
             "title": "Judge Config Json"
+          },
+          "is_flaky": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Flaky"
+          },
+          "blocks_ci": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocks Ci"
           },
           "clear_description": {
             "type": "boolean",

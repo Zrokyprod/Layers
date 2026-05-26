@@ -11,6 +11,7 @@ import {
   listGoldenTraces,
   listReplayRuns,
   runGoldenSet,
+  updateGoldenSet,
   type GoldenSetView,
   type GoldenTraceView,
   type ReplayRunItem,
@@ -37,12 +38,6 @@ function passFailLabel(run: ReplayRunItem | null) {
   if (!run) return "No runs yet";
   const summary = run.summary;
   return `${summary.pass_count} pass / ${summary.fail_count} fail${summary.error_count ? ` / ${summary.error_count} error` : ""}`;
-}
-
-function useLocalFlags() {
-  const [flaky, setFlaky] = useState<Record<string, boolean>>({});
-  const [blocking, setBlocking] = useState<Record<string, boolean>>({});
-  return { flaky, setFlaky, blocking, setBlocking };
 }
 
 function CreateSetPanel() {
@@ -140,16 +135,8 @@ function TracePreview({ set }: { set: GoldenSetView }) {
 
 function GoldenSetCard({
   set,
-  flaky,
-  blocking,
-  onToggleFlaky,
-  onToggleBlocking,
 }: {
   set: GoldenSetView;
-  flaky: boolean;
-  blocking: boolean;
-  onToggleFlaky: () => void;
-  onToggleBlocking: () => void;
 }) {
   const qc = useQueryClient();
   const runsQuery = useQuery({
@@ -163,6 +150,12 @@ function GoldenSetCard({
       void qc.invalidateQueries({ queryKey: ["replay-runs"] });
     },
   });
+  const updateMutation = useMutation({
+    mutationFn: (body: { is_flaky?: boolean; blocks_ci?: boolean }) => updateGoldenSet(set.id, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["golden-sets"] });
+    },
+  });
 
   return (
     <article className="panel">
@@ -170,8 +163,8 @@ function GoldenSetCard({
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <h3 style={{ margin: 0 }}>{set.name}</h3>
-            <span className={`alert-cat-badge ${blocking ? "badge-red" : "badge-gray"}`}>{blocking ? "Blocking" : "Advisory"}</span>
-            <span className={`alert-cat-badge ${flaky ? "badge-yellow" : "badge-green"}`}>{flaky ? "Flaky" : "Stable"}</span>
+            <span className={`alert-cat-badge ${set.blocks_ci ? "badge-red" : "badge-gray"}`}>{set.blocks_ci ? "Blocking" : "Advisory"}</span>
+            <span className={`alert-cat-badge ${set.is_flaky ? "badge-yellow" : "badge-green"}`}>{set.is_flaky ? "Flaky" : "Stable"}</span>
             {latestRun && <span className={`alert-cat-badge ${statusClass(latestRun.status)}`}>{latestRun.status}</span>}
           </div>
           {set.description && <p className="notif-meta" style={{ marginTop: "0.35rem" }}>{set.description}</p>}
@@ -188,27 +181,41 @@ function GoldenSetCard({
           <button type="button" className="btn btn-primary btn-sm" onClick={() => runMutation.mutate()} disabled={set.trace_count === 0 || runMutation.isPending}>
             {runMutation.isPending ? "Running..." : "Run set"}
           </button>
-          <button type="button" className="btn btn-soft btn-sm" onClick={onToggleFlaky}>{flaky ? "Clear flaky" : "Mark flaky"}</button>
-          <button type="button" className="btn btn-soft btn-sm" onClick={onToggleBlocking}>{blocking ? "Mark advisory" : "Mark blocking"}</button>
+          <button
+            type="button"
+            className="btn btn-soft btn-sm"
+            onClick={() => updateMutation.mutate({ is_flaky: !set.is_flaky })}
+            disabled={updateMutation.isPending}
+          >
+            {set.is_flaky ? "Clear flaky" : "Mark flaky"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-soft btn-sm"
+            onClick={() => updateMutation.mutate({ blocks_ci: !set.blocks_ci })}
+            disabled={updateMutation.isPending}
+          >
+            {set.blocks_ci ? "Mark advisory" : "Mark blocking"}
+          </button>
           <Link href={`/replay?golden_set_id=${encodeURIComponent(set.id)}`} className="btn btn-soft btn-sm">Open replay history</Link>
           <Link href={`/calibration?tab=goldens`} className="btn btn-soft btn-sm">Open labels</Link>
         </div>
       </div>
       {runMutation.error && <p className="notif-error" style={{ marginTop: "0.75rem" }}>{runMutation.error.message}</p>}
+      {updateMutation.error && <p className="notif-error" style={{ marginTop: "0.75rem" }}>{updateMutation.error.message}</p>}
     </article>
   );
 }
 
 export default function GoldensPage() {
-  const { flaky, setFlaky, blocking, setBlocking } = useLocalFlags();
   const setsQuery = useQuery({
     queryKey: ["golden-sets"],
     queryFn: ({ signal }) => listGoldenSets({ limit: 100 }, signal),
   });
   const sets = useMemo(() => setsQuery.data?.items ?? [], [setsQuery.data?.items]);
   const totalTraces = useMemo(() => sets.reduce((sum, set) => sum + set.trace_count, 0), [sets]);
-  const blockingCount = sets.filter((set) => blocking[set.id]).length;
-  const flakyCount = sets.filter((set) => flaky[set.id]).length;
+  const blockingCount = sets.filter((set) => set.blocks_ci).length;
+  const flakyCount = sets.filter((set) => set.is_flaky).length;
 
   return (
     <div className="grid gap-4">
@@ -241,10 +248,6 @@ export default function GoldensPage() {
             <GoldenSetCard
               key={set.id}
               set={set}
-              flaky={Boolean(flaky[set.id])}
-              blocking={Boolean(blocking[set.id])}
-              onToggleFlaky={() => setFlaky((prev) => ({ ...prev, [set.id]: !prev[set.id] }))}
-              onToggleBlocking={() => setBlocking((prev) => ({ ...prev, [set.id]: !prev[set.id] }))}
             />
           ))}
         </section>

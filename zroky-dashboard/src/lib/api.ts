@@ -1749,6 +1749,8 @@ export interface GoldenSetView {
   name: string;
   description: string | null;
   judge_config_json: string | null;
+  is_flaky: boolean;
+  blocks_ci: boolean;
   trace_count: number;
   created_at: string;
   updated_at: string;
@@ -1809,6 +1811,26 @@ export function getGoldenSet(
   signal?: AbortSignal,
 ): Promise<GoldenSetView> {
   return request<GoldenSetView>(`/v1/goldens/${encodeURIComponent(id)}`, { signal });
+}
+
+export function updateGoldenSet(
+  id: string,
+  body: {
+    name?: string;
+    description?: string | null;
+    judge_config_json?: string | null;
+    is_flaky?: boolean;
+    blocks_ci?: boolean;
+    clear_description?: boolean;
+    clear_judge_config?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<GoldenSetView> {
+  return request<GoldenSetView>(`/v1/goldens/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body,
+    signal,
+  });
 }
 
 export function listGoldenTraces(

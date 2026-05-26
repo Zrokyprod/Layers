@@ -71,6 +71,8 @@ class GoldenSetResponse(BaseModel):
     name: str
     description: str | None
     judge_config_json: str | None
+    is_flaky: bool
+    blocks_ci: bool
     trace_count: int
     created_at: datetime
     updated_at: datetime
@@ -94,6 +96,8 @@ class GoldenSetUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     judge_config_json: str | None = None
+    is_flaky: bool | None = None
+    blocks_ci: bool | None = None
     clear_description: bool = False
     clear_judge_config: bool = False
 
@@ -157,6 +161,8 @@ def _to_response(db: Session, *, golden_set, project_id: str) -> GoldenSetRespon
         name=golden_set.name,
         description=golden_set.description,
         judge_config_json=golden_set.judge_config_json,
+        is_flaky=bool(golden_set.is_flaky),
+        blocks_ci=bool(golden_set.blocks_ci),
         trace_count=count_traces(
             db, project_id=project_id, golden_set_id=golden_set.id
         ),
@@ -276,6 +282,8 @@ def patch_golden(
             name=body.name,
             description=body.description,
             judge_config_json=body.judge_config_json,
+            is_flaky=body.is_flaky,
+            blocks_ci=body.blocks_ci,
             clear_description=body.clear_description,
             clear_judge_config=body.clear_judge_config,
         )
