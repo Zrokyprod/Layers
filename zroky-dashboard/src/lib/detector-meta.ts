@@ -1,7 +1,7 @@
 /**
- * Detector / anomaly category metadata — single source of truth for the UI.
+ * Detector / issue category metadata — single source of truth for the UI.
  *
- * Backend emits 16 distinct anomaly categories across Layer 1 (deterministic
+ * Backend emits distinct issue categories across Layer 1 (deterministic
  * fast rules), Layer 2 (statistical baseline drift), and Layer 3 (LLM-as-judge
  * bridge). Previously each dashboard page hardcoded its own subset of 6 codes
  * with no labels for the other 10 — users saw raw snake_case for any new
@@ -127,7 +127,7 @@ const CATALOG: Record<DetectorCategory, DetectorMeta> = {
   },
   LATENCY_ANOMALY: {
     code: "LATENCY_ANOMALY",
-    label: "Latency Anomaly",
+    label: "Latency Issue",
     description: "Single call latency exceeded the project's p99 ceiling.",
     badgeColor: "yellow",
     defaultSeverity: "medium",

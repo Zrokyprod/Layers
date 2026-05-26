@@ -70,7 +70,6 @@
   NotificationListResponse,
   MarkReadResponse,
   MarkAllReadResponse,
-  PlatformLlmUsageSummaryResponse,
   SubscriptionPlanListResponse,
   TenantSubscription,
   BillingUsageSummary,
@@ -1060,12 +1059,6 @@ export function deleteNotification(notificationId: string): Promise<void> {
   return request<void>(`/v1/notifications/${encodeURIComponent(notificationId)}`, {
     method: "DELETE",
   });
-}
-
-// ── Platform LLM Usage (owner) ───────────────────────────────────────────────
-
-export function getPlatformLlmUsageSummary(signal?: AbortSignal): Promise<PlatformLlmUsageSummaryResponse> {
-  return request<PlatformLlmUsageSummaryResponse>("/v1/owner/platform-llm-usage", { signal });
 }
 
 // ── Billing / Subscriptions ──────────────────────────────────────────────────

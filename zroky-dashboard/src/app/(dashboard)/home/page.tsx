@@ -206,7 +206,7 @@ export default function HomePage() {
       },
       {
         key: "cost_anomaly_score",
-        label: "Cost Anomaly",
+        label: "Cost Issue",
         weight: 0.2,
         score: health.cost_anomaly_score,
         weightedPoints: health.cost_anomaly_score * 0.2,
@@ -407,7 +407,7 @@ export default function HomePage() {
           <header className="panel-header">
             <div>
               <h3>Unusual Activity</h3>
-              <p>Automatic anomaly hint for bursty users.</p>
+              <p>Automatic issue hint for bursty users.</p>
             </div>
           </header>
 
@@ -429,7 +429,7 @@ export default function HomePage() {
               </div>
               <div className="list-row">
                 <div className="list-main">
-                  <strong>Anomaly Multiplier</strong>
+                  <strong>Issue Multiplier</strong>
                   <span className="list-subtle">Maximum of call and cost multiplier.</span>
                 </div>
                 <span className="mono">{unusualActivity.multiplier.toFixed(2)} times normal</span>

@@ -314,7 +314,7 @@ export function AskZroky() {
             <span className="mono">
               {context.call_id ? `call ${context.call_id.slice(0, 8)}` : null}
               {context.issue_id ? `issue ${context.issue_id.slice(0, 8)}` : null}
-              {context.anomaly_id ? `anomaly ${context.anomaly_id.slice(0, 8)}` : null}
+              {context.anomaly_id ? `issue ${context.anomaly_id.slice(0, 8)}` : null}
               {context.trace_id ? `trace ${context.trace_id.slice(0, 8)}` : null}
             </span>
             <button
@@ -436,7 +436,7 @@ export function AskZroky() {
                                   <span
                                     className={`ask-evidence-kind ask-evidence-kind-${ev.kind}`}
                                   >
-                                    {ev.kind}
+                                    {ev.kind.toLowerCase() === "anomaly" ? "issue" : ev.kind}
                                   </span>
                                   <span className="ask-evidence-label-text">{ev.label}</span>
                                 </Link>

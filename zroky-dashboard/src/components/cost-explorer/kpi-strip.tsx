@@ -19,10 +19,10 @@ import type {
  *   1. Spent today      — cost_today_usd vs cost_yesterday_usd (Δ%)
  *   2. Est. tomorrow    — average of last 3 daily-trend points (deterministic)
  *   3. Wasted on issues — cumulative_wasted_usd / total spend
- *   4. Anomaly risk     — z-score of today vs window mean±std (deterministic)
+ *   4. Issue risk       — z-score of today vs window mean±std (deterministic)
  *
  * Cards 2 and 4 were previously calling /ai/cost/forecast and
- * /ai/cost/anomaly-risk — routes that don't exist in the backend.
+ * /ai/cost/issue-risk — routes that don't exist in the backend.
  * They now derive the same signal from the daily-trend data already
  * fetched by CostHeroChart. No extra network call, no silent 404.
  */
@@ -50,9 +50,9 @@ function computeForecast(trend: CostDailyTrendResponse | null): {
   return { avgPerDay: avg, direction };
 }
 
-// ── Deterministic anomaly: z-score of latest day vs window mean±std ──────────
+// ── Deterministic issue risk: z-score of latest day vs window mean/std ───────
 
-function computeAnomalyRisk(trend: CostDailyTrendResponse | null): {
+function computeIssueRisk(trend: CostDailyTrendResponse | null): {
   status: "ok" | "elevated" | "high";
   label: string;
   zScore: number;
@@ -118,8 +118,8 @@ export function CostKpiStrip({ windowDays }: { windowDays: number }) {
     Math.max(0, todaySpend * windowDays);
   const wastedPct = totalSpendForWindow > 0 ? wasted / totalSpendForWindow : 0;
 
-  // Card 4: Anomaly risk
-  const { status: riskStatus, label: riskLabel, zScore } = computeAnomalyRisk(data.trend);
+  // Card 4: Issue risk
+  const { status: riskStatus, label: riskLabel, zScore } = computeIssueRisk(data.trend);
 
   return (
     <section className="cost-kpi-strip" aria-label="Cost key indicators">
@@ -161,7 +161,7 @@ export function CostKpiStrip({ windowDays }: { windowDays: number }) {
       </article>
 
       <article className={`cost-kpi-card cost-kpi-risk-${riskStatus}`}>
-        <header>Anomaly risk</header>
+        <header>Issue risk</header>
         <strong className="cost-kpi-value">{riskLabel}</strong>
         <div className="cost-kpi-meta">
           <span className="cost-kpi-risk-score mono">

@@ -23,7 +23,7 @@ import {
 import { clearAccessToken } from "@/lib/auth";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
-import { useOwnerProjects, useProjectSettings } from "@/lib/hooks";
+import { useProjectSettings } from "@/lib/hooks";
 import { ThemeToggle } from "./theme-toggle";
 import { CommandPalette } from "./command-palette";
 import { ShortcutsHelp } from "./shortcuts-help";
@@ -217,7 +217,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "staging";
   const projectLabel = process.env.NEXT_PUBLIC_DASHBOARD_PROJECT_LABEL ?? "project";
   const projectQuery = useProjectSettings();
-  const ownerProjectsQuery = useOwnerProjects(200, 0);
 
   // Use store for sidebar state
   const {
@@ -247,13 +246,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const projectOptions = useMemo(() => {
     const items = new Map<string, string>();
 
-    const ownerProjects = ownerProjectsQuery.data?.projects ?? [];
-    for (const project of ownerProjects) {
-      if (project.id) {
-        items.set(project.id, project.name || project.id);
-      }
-    }
-
     if (projectQuery.data?.project_id) {
       const id = projectQuery.data.project_id;
       const name = projectQuery.data.name ?? id;
@@ -265,7 +257,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     }
 
     return Array.from(items.entries()).map(([id, name]) => ({ id, name }));
-  }, [ownerProjectsQuery.data?.projects, projectQuery.data, selectedProject]);
+  }, [projectQuery.data, selectedProject]);
 
   function onLogout() {
     clearAccessToken();

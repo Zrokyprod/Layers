@@ -6,7 +6,7 @@ import { useMemo } from "react";
  * CounterfactualImpact — "what Zroky just prevented".
  *
  * Renders an emotional ROI callout: projects the impact of THIS specific
- * anomaly forward in time as if it hadn't been caught, and frames it as
+ * issue forward in time as if it hadn't been caught, and frames it as
  * "saved by Zroky" with concrete numbers.
  *
  * Pulls signals defensively from the diagnosis envelope:
@@ -107,7 +107,7 @@ function buildProjection(
       alreadyWastedUsd,
       projectedAdditionalUsd,
       affectedCalls: occurrenceCount * PROJECTION_HOURS,
-      rationale: `If this anomaly continued unattended for ${PROJECTION_HOURS}h, it would have added roughly ${formatUsd(projectedAdditionalUsd)} and impacted ~${formatCount(
+      rationale: `If this issue continued unattended for ${PROJECTION_HOURS}h, it would have added roughly ${formatUsd(projectedAdditionalUsd)} and impacted ~${formatCount(
         occurrenceCount * PROJECTION_HOURS,
       )} calls.`,
       basis: `extrapolated from ${formatCount(occurrenceCount)} occurrences and ${formatUsd(alreadyWastedUsd)} wasted so far`,

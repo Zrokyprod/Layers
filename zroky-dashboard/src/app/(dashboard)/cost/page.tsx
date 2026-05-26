@@ -3,7 +3,7 @@
 /**
  * /cost — unified Cost Explorer.
  *
- * Single page that consolidates every cost view: trend with forecast + anomaly
+ * Single page that consolidates every cost view: trend with forecast + issue
  * markers + waste attribution, cost-per-outcome KPIs, what-if model swap
  * calculator, and Pareto breakdowns by model/user/agent.
  *
@@ -38,7 +38,7 @@ export default function CostExplorerPage() {
         <div>
           <h1>Cost Explorer</h1>
           <p>
-            Spend, waste, and forecast in one view. Anomaly markers connect cost
+            Spend, waste, and forecast in one view. Issue markers connect cost
             spikes to the alerts that fired them.
           </p>
         </div>

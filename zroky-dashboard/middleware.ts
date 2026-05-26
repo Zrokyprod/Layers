@@ -41,8 +41,6 @@ const PROTECTED_PREFIXES = [
   "/digest",
   "/drift",
 ];
-// /owner has its own token-gate UI — exclude from cookie auth entirely
-const OWNER_PREFIX = "/owner";
 
 function isProtectedPath(pathname: string): boolean {
   if (pathname === "/") {
@@ -61,11 +59,6 @@ function isPublicPath(pathname: string): boolean {
 export function middleware(request: NextRequest): NextResponse {
   const { pathname, search } = request.nextUrl;
   const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
-
-  // Owner dashboard uses its own token gate — skip cookie auth
-  if (pathname === OWNER_PREFIX || pathname.startsWith(`${OWNER_PREFIX}/`)) {
-    return NextResponse.next();
-  }
 
   if (!token && isProtectedPath(pathname)) {
     const loginUrl = new URL("/auth/login", request.url);

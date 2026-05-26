@@ -22,7 +22,7 @@ import type {
  *   2. Forecast line (dashed) projecting future cost from /ai/cost/forecast.
  *      Sums forecast hours into a single "tomorrow" data point so it lines up
  *      with the historical daily bars.
- *   3. Anomaly markers — vertical red bands at the dates COST_SPIKE alerts
+ *   3. Issue markers — vertical red bands at the dates COST_SPIKE alerts
  *      fired. Connects detection → visualization, the gap nobody else covers.
  *
  * Hover tooltip shows full breakdown per day including which alerts hit.
@@ -98,7 +98,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
       failedCount: p.failed_call_count,
     }));
 
-    // Attach anomaly markers — group alerts by day
+    // Attach issue markers — group alerts by day
     if (alerts.length > 0) {
       const byDay = new Map<string, AlertItemResponse[]>();
       for (const a of alerts) {
@@ -155,7 +155,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
         <header className="panel-header">
           <div>
             <h2>Cost trend</h2>
-            <p>Loading spend, forecast, and anomaly markers…</p>
+            <p>Loading spend, forecast, and issue markers...</p>
           </div>
         </header>
         <div className="cost-hero-skeleton" style={{ height: CHART_HEIGHT }} />
@@ -215,7 +215,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
         <div>
           <h2>Cost trend</h2>
           <p>
-            Legitimate spend, wasted spend, forecast, and detected anomalies in
+            Legitimate spend, wasted spend, forecast, and detected issues in
             one view.
           </p>
         </div>
@@ -240,7 +240,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
           width={chartWidth}
           height={CHART_HEIGHT}
           role="img"
-          aria-label="Cost trend chart with forecast and anomaly markers"
+          aria-label="Cost trend chart with forecast and issue markers"
         >
           {/* Y-axis grid lines + labels */}
           {yTicks.map((t, i) => {
@@ -269,7 +269,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
             );
           })}
 
-          {/* Anomaly bands (drawn behind bars) */}
+          {/* Issue bands (drawn behind bars) */}
           {points.map((p, i) =>
             p.spikeAlerts && p.spikeAlerts.length > 0 ? (
               <rect
@@ -365,7 +365,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
             />
           ) : null}
 
-          {/* Anomaly marker triangles at top of each spike day */}
+          {/* Issue marker triangles at top of each spike day */}
           {points.map((p, i) =>
             p.spikeAlerts && p.spikeAlerts.length > 0 ? (
               <g key={`amark-${i}`}>

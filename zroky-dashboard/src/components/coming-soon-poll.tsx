@@ -13,8 +13,8 @@
  * `useCasePrompt` shown when the user votes "interested".
  *
  * No vote counts are exposed to the customer (decision: don't bias
- * via herd / social-proof signal). The owner sees aggregates via
- * the CLI viewer or the /owner/feature-votes admin page.
+ * via herd / social-proof signal). Aggregates are viewed in the
+ * standalone zroky-admin feature-votes page or via the CLI viewer.
  */
 
 import { useCallback, useEffect, useState } from "react";

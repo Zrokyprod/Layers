@@ -59,12 +59,6 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
     headers.set("authorization", bearer);
   }
 
-  // Forward owner/admin token when present (used by the Owner Dashboard)
-  const adminToken = request.headers.get("x-zroky-admin-token");
-  if (adminToken) {
-    headers.set("x-zroky-admin-token", adminToken);
-  }
-
   const projectId = process.env.ZROKY_PROJECT_ID;
   const apiKey = process.env.ZROKY_API_KEY;
   const provisioningToken = process.env.ZROKY_PROVISIONING_TOKEN;

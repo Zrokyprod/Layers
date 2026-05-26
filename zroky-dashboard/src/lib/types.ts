@@ -998,33 +998,6 @@ export interface MarkAllReadResponse {
   marked_count: number;
 }
 
-// ── Platform LLM Usage (owner) ───────────────────────────────────────────────
-
-export interface PlatformLlmUsageItem {
-  id: string;
-  purpose: string;
-  provider: string;
-  model: string;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  cost_usd: number;
-  latency_ms: number;
-  tenant_id: string | null;
-  diagnosis_id: string | null;
-  created_at: string;
-}
-
-export interface PlatformLlmUsageSummaryResponse {
-  total_calls: number;
-  total_cost_usd: number;
-  total_tokens: number;
-  avg_latency_ms: number;
-  by_purpose: Record<string, { calls: number; cost_usd: number; tokens: number }>;
-  by_model: Record<string, { calls: number; cost_usd: number; tokens: number }>;
-  recent: PlatformLlmUsageItem[];
-}
-
 // ── Billing / Subscriptions ──────────────────────────────────────────────────
 
 export interface SubscriptionPlan {
@@ -1294,8 +1267,8 @@ export interface AskResponse {
 
 export interface AskContext {
   call_id?: string;
-  anomaly_id?: string;
   issue_id?: string;
+  anomaly_id?: string;
   trace_id?: string;
 }
 
