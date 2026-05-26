@@ -116,6 +116,37 @@ def test_default_api_key_name_is_zroky_api(client: TestClient) -> None:
     assert key_response.json()["name"] == "Zroky API"
 
 
+def test_api_key_expiry_scope_and_rotation_flow(client: TestClient) -> None:
+    project_response = client.post(
+        "/v1/projects",
+        json={"name": "Rotating Key Project"},
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["project_id"]
+
+    key_response = client.post(
+        f"/v1/projects/{project_id}/api-keys",
+        json={"name": "rotatable", "expires_in_days": 30, "scopes": ["project:member"]},
+    )
+    assert key_response.status_code == 201
+    key_payload = key_response.json()
+    assert key_payload["scopes"] == ["project:member"]
+    assert key_payload["expires_at"] is not None
+
+    rotate_response = client.post(f"/v1/projects/{project_id}/api-keys/{key_payload['key_id']}/rotate")
+    assert rotate_response.status_code == 200
+    rotated_payload = rotate_response.json()
+    assert rotated_payload["api_key"].startswith("zroky_api_live_")
+    assert rotated_payload["rotated_from_key_id"] == key_payload["key_id"]
+    assert rotated_payload["scopes"] == ["project:member"]
+
+    keys_response = client.get(f"/v1/projects/{project_id}/api-keys")
+    assert keys_response.status_code == 200
+    keys = keys_response.json()
+    old_key = next(item for item in keys if item["key_id"] == key_payload["key_id"])
+    assert old_key["revoked"] is True
+
+
 def test_revoked_api_key_blocked(client: TestClient) -> None:
     project_response = client.post(
         "/v1/projects",

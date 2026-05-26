@@ -365,6 +365,11 @@ def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token user is no longer active.",
         )
+    if token_store.get(f"jwt_blacklisted_user:{user.id}"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="All sessions for this user have been revoked.",
+        )
 
     return _issue_token(user)
 
@@ -839,6 +844,15 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class SecurityStatusResponse(BaseModel):
+    two_factor_enabled: bool
+    password_login_enabled: bool
+    github_connected: bool
+    google_connected: bool
+    current_session_expires_at: str | None = None
+    global_logout_available: bool = True
+
+
 class DeleteAccountRequest(BaseModel):
     confirm_email: str
 
@@ -855,14 +869,33 @@ def _get_current_user(authorization: str | None = None, db: Session | None = Non
         payload = decode_session_token(token, secret)
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
-    user_id = payload.get("sub") or payload.get("user_id")
+    jti = str(payload.get("jti") or "").strip()
+    if jti and token_store.get(f"jwt_blacklisted:{jti}"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has been revoked.")
+    user_id = payload.get("user_id") or payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject.")
     stmt = select(User).where(User.id == user_id)
     user = db.scalars(stmt).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    if token_store.get(f"jwt_blacklisted_user:{user.id}"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="All sessions for this user have been revoked.")
     return user
+
+
+def _decode_current_session_expiry(authorization: str | None) -> str | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization[len("Bearer "):]
+    try:
+        payload = decode_session_token(token, _require_auth_secret())
+    except Exception:
+        return None
+    exp = payload.get("exp")
+    if isinstance(exp, (int, float)):
+        return datetime.fromtimestamp(exp, tz=UTC).isoformat()
+    return None
 
 
 @router.get("/me", response_model=MeResponse)
@@ -908,6 +941,34 @@ def change_password(
     user.password_hash = hash_password(body.new_password)
     db.commit()
     return {"detail": "Password changed successfully."}
+
+
+@router.get("/me/security", response_model=SecurityStatusResponse)
+def get_security_status(
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> SecurityStatusResponse:
+    user = _get_current_user(authorization=authorization, db=db)
+    return SecurityStatusResponse(
+        two_factor_enabled=False,
+        password_login_enabled=bool(user.password_hash),
+        github_connected=bool(user.github_id or user.github_login),
+        google_connected=bool(user.google_id),
+        current_session_expires_at=_decode_current_session_expiry(authorization),
+        global_logout_available=True,
+    )
+
+
+@router.post("/me/logout-all", status_code=status.HTTP_200_OK)
+@limiter.limit("5/hour")
+def logout_all_sessions(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict[str, str]:
+    user = _get_current_user(authorization=authorization, db=db)
+    token_store.revoke_all_user_tokens(user.id)
+    return {"detail": "All sessions for this account have been revoked."}
 
 
 @router.delete("/me", status_code=status.HTTP_200_OK)

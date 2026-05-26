@@ -39,6 +39,14 @@ DEFAULT_ROLLBACK_DRILL = {
     "completed_at": None,
 }
 
+DEFAULT_EVALUATION_SETTINGS = {
+    "judge_mode": "standard",
+    "default_judge_model": "auto",
+    "minimum_confidence": 0.75,
+    "auto_calibration_enabled": True,
+    "record_replay_calibration": True,
+}
+
 
 def ensure_project_exists(db: Session, tenant_id: str) -> Project:
     project = db.get(Project, tenant_id)
@@ -93,6 +101,7 @@ def get_or_create_dashboard_config(db: Session, tenant_id: str) -> ProjectDashbo
         provider_verifications_json="{}",
         pricing_validation_json=json.dumps(DEFAULT_PRICING_VALIDATION),
         rollback_drill_json=json.dumps(DEFAULT_ROLLBACK_DRILL),
+        evaluation_settings_json=json.dumps(DEFAULT_EVALUATION_SETTINGS),
     )
     db.add(config)
     db.commit()
@@ -145,3 +154,11 @@ def get_rollback_drill(config: ProjectDashboardConfig) -> dict[str, Any]:
 
 def set_rollback_drill(config: ProjectDashboardConfig, payload: dict[str, Any]) -> None:
     config.rollback_drill_json = json.dumps(payload, separators=(",", ":"))
+
+
+def get_evaluation_settings(config: ProjectDashboardConfig) -> dict[str, Any]:
+    return _load_json_object(config.evaluation_settings_json, DEFAULT_EVALUATION_SETTINGS)
+
+
+def set_evaluation_settings(config: ProjectDashboardConfig, payload: dict[str, Any]) -> None:
+    config.evaluation_settings_json = json.dumps(payload, separators=(",", ":"))

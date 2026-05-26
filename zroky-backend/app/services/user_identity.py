@@ -38,10 +38,13 @@ def _resolve_internal_identity(token: str) -> RequestIdentity | None:
 
     # Reject blacklisted tokens (logout support)
     jti = str(claims.get("jti") or "").strip()
+    user_id = str(claims.get("user_id") or "").strip()
     if jti:
         try:
             from app.services import token_store
             if token_store.get(f"jwt_blacklisted:{jti}"):
+                return None
+            if user_id and token_store.get(f"jwt_blacklisted_user:{user_id}"):
                 return None
         except Exception:  # noqa: BLE001
             pass

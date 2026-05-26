@@ -360,6 +360,34 @@ def test_logout_without_token_is_200(client):
     assert resp.status_code == 200
 
 
+def test_me_security_and_logout_all_flow(client):
+    reg = client.post("/v1/auth/register", json={
+        "email": "security@example.com",
+        "password": "securitypw123",
+        "confirm_password": "securitypw123",
+    })
+    assert reg.status_code == 201
+    access_token = reg.json()["access_token"]
+    refresh_token = reg.json()["refresh_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    me = client.get("/v1/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["email"] == "security@example.com"
+
+    security = client.get("/v1/auth/me/security", headers=headers)
+    assert security.status_code == 200
+    body = security.json()
+    assert body["password_login_enabled"] is True
+    assert body["global_logout_available"] is True
+
+    logout_all = client.post("/v1/auth/me/logout-all", headers=headers)
+    assert logout_all.status_code == 200
+
+    refresh = client.post("/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert refresh.status_code == 401
+
+
 # ---------------------------------------------------------------------------
 # GitHub OAuth — configuration guard
 # ---------------------------------------------------------------------------

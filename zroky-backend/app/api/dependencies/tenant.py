@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.authorization import ROLE_RANK
@@ -17,6 +17,7 @@ from app.db.models import ApiKey, Project, ProjectMembership
 from app.db.session import get_db_session, set_db_tenant_context
 from app.services.membership import get_membership
 from app.services.security import decode_session_token, hash_api_key
+from app.services import token_store
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,9 @@ def _resolve_project_from_bearer(
     subject = str(claims.get("sub") or "").strip()
     if not user_id:
         return None
+    jti = str(claims.get("jti") or "").strip()
+    if (jti and token_store.get(f"jwt_blacklisted:{jti}")) or token_store.get(f"jwt_blacklisted_user:{user_id}"):
+        return None
 
     # Resolve the user's project from their membership row
     membership_row = db.execute(
@@ -107,12 +111,14 @@ def _resolve_project_from_bearer(
 
 
 def _resolve_project_from_api_key(api_key_value: str, db: Session) -> str | None:
+    now = datetime.now(timezone.utc)
     query = (
         select(ApiKey)
         .join(Project, Project.id == ApiKey.project_id)
         .where(
             ApiKey.key_hash == hash_api_key(api_key_value),
             ApiKey.revoked_at.is_(None),
+            or_(ApiKey.expires_at.is_(None), ApiKey.expires_at > now),
             Project.is_active.is_(True),
         )
     )

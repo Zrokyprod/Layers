@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 VALID_PROJECT_ROLES = {"owner", "admin", "member", "viewer"}
+VALID_API_KEY_SCOPES = {"project:member"}
 
 
 class ProjectCreateRequest(BaseModel):
@@ -22,6 +23,8 @@ class ProjectResponse(BaseModel):
 
 class ApiKeyCreateRequest(BaseModel):
     name: str = Field(default="Zroky API", min_length=1, max_length=80)
+    scopes: list[str] = Field(default_factory=lambda: ["project:member"])
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
 
     @field_validator("name")
     @classmethod
@@ -31,6 +34,17 @@ class ApiKeyCreateRequest(BaseModel):
             raise ValueError("API key name must not be empty")
         return normalized
 
+    @field_validator("scopes")
+    @classmethod
+    def validate_scopes(cls, value: list[str]) -> list[str]:
+        normalized = sorted({item.strip().lower() for item in value if item.strip()})
+        if not normalized:
+            return ["project:member"]
+        unsupported = [item for item in normalized if item not in VALID_API_KEY_SCOPES]
+        if unsupported:
+            raise ValueError("API key scopes must be project:member.")
+        return normalized
+
 
 class ApiKeyCreateResponse(BaseModel):
     key_id: str
@@ -38,6 +52,9 @@ class ApiKeyCreateResponse(BaseModel):
     name: str
     key_prefix: str
     api_key: str
+    scopes: list[str]
+    expires_at: datetime | None
+    rotated_from_key_id: str | None = None
     created_at: datetime
 
 
@@ -46,7 +63,11 @@ class ApiKeyResponse(BaseModel):
     project_id: str
     name: str
     key_prefix: str
+    scopes: list[str]
     revoked: bool
+    expired: bool
+    expires_at: datetime | None
+    rotated_from_key_id: str | None = None
     last_used_at: datetime | None
     created_at: datetime
 

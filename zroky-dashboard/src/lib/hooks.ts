@@ -66,6 +66,7 @@ import {
   listProjectApiKeys,
   createProjectApiKey,
   revokeProjectApiKey,
+  rotateProjectApiKey,
   listAlerts,
   acknowledgeAlert,
   resolveAlert,
@@ -382,8 +383,8 @@ export function useListProjectApiKeys(projectId: string) {
 
 export function useCreateProjectApiKey() {
   const qc = useQueryClient();
-  return useMutation<ApiKeyCreateResponse, Error, { projectId: string; name: string }>({
-    mutationFn: ({ projectId, name }) => createProjectApiKey(projectId, name),
+  return useMutation<ApiKeyCreateResponse, Error, { projectId: string; name: string; expires_in_days?: number | null; scopes?: string[] }>({
+    mutationFn: ({ projectId, name, expires_in_days, scopes }) => createProjectApiKey(projectId, { name, expires_in_days, scopes }),
     onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["project-api-keys", vars.projectId] }),
   });
 }
@@ -392,6 +393,14 @@ export function useRevokeProjectApiKey() {
   const qc = useQueryClient();
   return useMutation<ApiKeyResponse, Error, { projectId: string; keyId: string }>({
     mutationFn: ({ projectId, keyId }) => revokeProjectApiKey(projectId, keyId),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["project-api-keys", vars.projectId] }),
+  });
+}
+
+export function useRotateProjectApiKey() {
+  const qc = useQueryClient();
+  return useMutation<ApiKeyCreateResponse, Error, { projectId: string; keyId: string }>({
+    mutationFn: ({ projectId, keyId }) => rotateProjectApiKey(projectId, keyId),
     onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["project-api-keys", vars.projectId] }),
   });
 }

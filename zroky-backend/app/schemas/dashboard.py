@@ -720,6 +720,23 @@ class NotificationSettingsResponse(BaseModel):
     updated_at: datetime
 
 
+class EvaluationSettingsUpdateRequest(BaseModel):
+    judge_mode: Literal["fast", "standard", "strict"] = "standard"
+    default_judge_model: str = Field(default="auto", min_length=1, max_length=120)
+    minimum_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+    auto_calibration_enabled: bool = True
+    record_replay_calibration: bool = True
+
+
+class EvaluationSettingsResponse(BaseModel):
+    judge_mode: Literal["fast", "standard", "strict"]
+    default_judge_model: str
+    minimum_confidence: float
+    auto_calibration_enabled: bool
+    record_replay_calibration: bool
+    updated_at: datetime
+
+
 class GithubConnectCallbackRequest(BaseModel):
     code: str = Field(min_length=1, max_length=2048)
     state: str = Field(min_length=1, max_length=4096)

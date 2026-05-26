@@ -822,6 +822,108 @@
         }
       }
     },
+    "/v1/auth/me/security": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get Security Status",
+        "operationId": "get_security_status_v1_auth_me_security_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me/logout-all": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout All Sessions",
+        "operationId": "logout_all_sessions_v1_auth_me_logout_all_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Logout All Sessions V1 Auth Me Logout All Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/.well-known/security.txt": {
       "get": {
         "tags": [
@@ -3880,6 +3982,66 @@
         }
       }
     },
+    "/v1/settings/evaluation": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Get Evaluation Settings Route",
+        "operationId": "get_evaluation_settings_route_v1_settings_evaluation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Update Evaluation Settings Route",
+        "operationId": "update_evaluation_settings_route_v1_settings_evaluation_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationSettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/settings/github/connection": {
       "get": {
         "tags": [
@@ -5423,6 +5585,57 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiKeyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/api-keys/{key_id}/rotate": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Rotate Api Key",
+        "operationId": "rotate_api_key_v1_projects__project_id__api_keys__key_id__rotate_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreateResponse"
                 }
               }
             }
@@ -9278,6 +9491,66 @@
         }
       }
     },
+    "/v1/owner/pricing": {
+      "get": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Get Pricing",
+        "operationId": "owner_get_pricing_v1_owner_pricing_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingConfigResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Update Pricing",
+        "operationId": "owner_update_pricing_v1_owner_pricing_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricingConfigUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingConfigResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/owner/stats": {
       "get": {
         "tags": [
@@ -9291,7 +9564,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerStatsResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerStatsResponse"
                 }
               }
             }
@@ -9370,7 +9643,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerUsersResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUsersResponse"
                 }
               }
             }
@@ -9412,7 +9685,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerUserItem"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUserItem"
                 }
               }
             }
@@ -9608,7 +9881,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerProjectsResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectsResponse"
                 }
               }
             }
@@ -9692,7 +9965,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerProjectItem"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectItem"
                 }
               }
             }
@@ -9789,66 +10062,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectMembersResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/owner/pricing": {
-      "get": {
-        "tags": [
-          "owner"
-        ],
-        "summary": "Owner Get Pricing",
-        "operationId": "owner_get_pricing_v1_owner_pricing_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PricingConfigResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "owner"
-        ],
-        "summary": "Owner Update Pricing",
-        "operationId": "owner_update_pricing_v1_owner_pricing_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PricingConfigUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PricingConfigResponse"
                 }
               }
             }
@@ -12576,6 +12789,108 @@
                     "type": "string"
                   },
                   "title": "Response Change Password Api V1 Auth Me Password Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me/security": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get Security Status",
+        "operationId": "get_security_status_api_v1_auth_me_security_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me/logout-all": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout All Sessions",
+        "operationId": "logout_all_sessions_api_v1_auth_me_logout_all_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Logout All Sessions Api V1 Auth Me Logout All Post"
                 }
               }
             }
@@ -15651,6 +15966,66 @@
         }
       }
     },
+    "/api/v1/settings/evaluation": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Get Evaluation Settings Route",
+        "operationId": "get_evaluation_settings_route_api_v1_settings_evaluation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Update Evaluation Settings Route",
+        "operationId": "update_evaluation_settings_route_api_v1_settings_evaluation_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationSettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/settings/github/connection": {
       "get": {
         "tags": [
@@ -17194,6 +17569,57 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiKeyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/api-keys/{key_id}/rotate": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Rotate Api Key",
+        "operationId": "rotate_api_key_api_v1_projects__project_id__api_keys__key_id__rotate_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreateResponse"
                 }
               }
             }
@@ -21049,6 +21475,66 @@
         }
       }
     },
+    "/api/v1/owner/pricing": {
+      "get": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Get Pricing",
+        "operationId": "owner_get_pricing_api_v1_owner_pricing_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingConfigResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Update Pricing",
+        "operationId": "owner_update_pricing_api_v1_owner_pricing_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricingConfigUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingConfigResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/owner/stats": {
       "get": {
         "tags": [
@@ -21062,7 +21548,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerStatsResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerStatsResponse"
                 }
               }
             }
@@ -21141,7 +21627,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerUsersResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUsersResponse"
                 }
               }
             }
@@ -21183,7 +21669,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerUserItem"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUserItem"
                 }
               }
             }
@@ -21379,7 +21865,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerProjectsResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectsResponse"
                 }
               }
             }
@@ -21463,7 +21949,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerProjectItem"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectItem"
                 }
               }
             }
@@ -21560,66 +22046,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectMembersResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/owner/pricing": {
-      "get": {
-        "tags": [
-          "owner"
-        ],
-        "summary": "Owner Get Pricing",
-        "operationId": "owner_get_pricing_api_v1_owner_pricing_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PricingConfigResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "owner"
-        ],
-        "summary": "Owner Update Pricing",
-        "operationId": "owner_update_pricing_api_v1_owner_pricing_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PricingConfigUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PricingConfigResponse"
                 }
               }
             }
@@ -24756,6 +25182,26 @@
             "minLength": 1,
             "title": "Name",
             "default": "Zroky API"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
           }
         },
         "type": "object",
@@ -24783,6 +25229,36 @@
             "type": "string",
             "title": "Api Key"
           },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "rotated_from_key_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rotated From Key Id"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -24796,6 +25272,8 @@
           "name",
           "key_prefix",
           "api_key",
+          "scopes",
+          "expires_at",
           "created_at"
         ],
         "title": "ApiKeyCreateResponse"
@@ -24818,9 +25296,43 @@
             "type": "string",
             "title": "Key Prefix"
           },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
           "revoked": {
             "type": "boolean",
             "title": "Revoked"
+          },
+          "expired": {
+            "type": "boolean",
+            "title": "Expired"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "rotated_from_key_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rotated From Key Id"
           },
           "last_used_at": {
             "anyOf": [
@@ -24846,7 +25358,10 @@
           "project_id",
           "name",
           "key_prefix",
+          "scopes",
           "revoked",
+          "expired",
+          "expires_at",
           "last_used_at",
           "created_at"
         ],
@@ -29017,6 +29532,90 @@
           "active"
         ],
         "title": "DriftModelView"
+      },
+      "EvaluationSettingsResponse": {
+        "properties": {
+          "judge_mode": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "standard",
+              "strict"
+            ],
+            "title": "Judge Mode"
+          },
+          "default_judge_model": {
+            "type": "string",
+            "title": "Default Judge Model"
+          },
+          "minimum_confidence": {
+            "type": "number",
+            "title": "Minimum Confidence"
+          },
+          "auto_calibration_enabled": {
+            "type": "boolean",
+            "title": "Auto Calibration Enabled"
+          },
+          "record_replay_calibration": {
+            "type": "boolean",
+            "title": "Record Replay Calibration"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "judge_mode",
+          "default_judge_model",
+          "minimum_confidence",
+          "auto_calibration_enabled",
+          "record_replay_calibration",
+          "updated_at"
+        ],
+        "title": "EvaluationSettingsResponse"
+      },
+      "EvaluationSettingsUpdateRequest": {
+        "properties": {
+          "judge_mode": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "standard",
+              "strict"
+            ],
+            "title": "Judge Mode",
+            "default": "standard"
+          },
+          "default_judge_model": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Default Judge Model",
+            "default": "auto"
+          },
+          "minimum_confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Confidence",
+            "default": 0.75
+          },
+          "auto_calibration_enabled": {
+            "type": "boolean",
+            "title": "Auto Calibration Enabled",
+            "default": true
+          },
+          "record_replay_calibration": {
+            "type": "boolean",
+            "title": "Record Replay Calibration",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "EvaluationSettingsUpdateRequest"
       },
       "ExportCallItem": {
         "properties": {
@@ -37677,6 +38276,50 @@
         "title": "SavingsSummaryResponse",
         "description": "Aggregate ROI surface — \"what Zroky saved you\" across a time window.\n\nSourced from the legacy `issues` table for the present surface; the\naggregation logic intentionally lives at the route layer so it can be\nrepointed to `anomalies` once the Phase B migration finishes."
       },
+      "SecurityStatusResponse": {
+        "properties": {
+          "two_factor_enabled": {
+            "type": "boolean",
+            "title": "Two Factor Enabled"
+          },
+          "password_login_enabled": {
+            "type": "boolean",
+            "title": "Password Login Enabled"
+          },
+          "github_connected": {
+            "type": "boolean",
+            "title": "Github Connected"
+          },
+          "google_connected": {
+            "type": "boolean",
+            "title": "Google Connected"
+          },
+          "current_session_expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Session Expires At"
+          },
+          "global_logout_available": {
+            "type": "boolean",
+            "title": "Global Logout Available",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "two_factor_enabled",
+          "password_login_enabled",
+          "github_connected",
+          "google_connected"
+        ],
+        "title": "SecurityStatusResponse"
+      },
       "ServiceStatus": {
         "properties": {
           "name": {
@@ -38770,7 +39413,7 @@
         ],
         "title": "WorkerResultPayload"
       },
-      "app__api__routes___internal__owner_impl__OwnerProjectItem": {
+      "app__api__routes___internal__owner_common__OwnerProjectItem": {
         "properties": {
           "id": {
             "type": "string",
@@ -38826,11 +39469,11 @@
         ],
         "title": "OwnerProjectItem"
       },
-      "app__api__routes___internal__owner_impl__OwnerProjectsResponse": {
+      "app__api__routes___internal__owner_common__OwnerProjectsResponse": {
         "properties": {
           "projects": {
             "items": {
-              "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerProjectItem"
+              "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectItem"
             },
             "type": "array",
             "title": "Projects"
@@ -38847,7 +39490,7 @@
         ],
         "title": "OwnerProjectsResponse"
       },
-      "app__api__routes___internal__owner_impl__OwnerStatsResponse": {
+      "app__api__routes___internal__owner_common__OwnerStatsResponse": {
         "properties": {
           "total_users": {
             "type": "integer",
@@ -38895,7 +39538,7 @@
         ],
         "title": "OwnerStatsResponse"
       },
-      "app__api__routes___internal__owner_impl__OwnerUserItem": {
+      "app__api__routes___internal__owner_common__OwnerUserItem": {
         "properties": {
           "id": {
             "type": "string",
@@ -38960,11 +39603,11 @@
         ],
         "title": "OwnerUserItem"
       },
-      "app__api__routes___internal__owner_impl__OwnerUsersResponse": {
+      "app__api__routes___internal__owner_common__OwnerUsersResponse": {
         "properties": {
           "users": {
             "items": {
-              "$ref": "#/components/schemas/app__api__routes___internal__owner_impl__OwnerUserItem"
+              "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUserItem"
             },
             "type": "array",
             "title": "Users"

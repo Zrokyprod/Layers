@@ -17,6 +17,8 @@ from app.db.session import db_healthcheck, get_db_session, get_db_session_read
 from app.schemas.dashboard import (
     GithubConnectionStatusResponse,
     GithubConnectCallbackRequest,
+    EvaluationSettingsResponse,
+    EvaluationSettingsUpdateRequest,
     NotificationSettingsResponse,
     NotificationSettingsUpdateRequest,
     PiiDetectorTestRequest,
@@ -49,11 +51,13 @@ from app.services.dashboard_config import (
     ensure_project_exists,
     get_notification_settings,
     get_or_create_dashboard_config,
+    get_evaluation_settings,
     get_pii_patterns,
     get_pricing_validation,
     get_provider_verifications,
     get_rollback_drill,
     set_notification_settings,
+    set_evaluation_settings,
     set_pii_patterns,
     set_pricing_validation,
     set_provider_verifications,
@@ -111,6 +115,18 @@ def _github_connection_status(user: User) -> GithubConnectionStatusResponse:
         scopes=scopes,
         connected_at=user.github_token_connected_at if connected else None,
         updated_at=user.github_token_updated_at,
+    )
+
+
+def _evaluation_settings_response(config) -> EvaluationSettingsResponse:
+    payload = get_evaluation_settings(config)
+    return EvaluationSettingsResponse(
+        judge_mode=payload.get("judge_mode") or "standard",
+        default_judge_model=str(payload.get("default_judge_model") or "auto"),
+        minimum_confidence=float(payload.get("minimum_confidence", 0.75)),
+        auto_calibration_enabled=bool(payload.get("auto_calibration_enabled", True)),
+        record_replay_calibration=bool(payload.get("record_replay_calibration", True)),
+        updated_at=config.updated_at,
     )
 
 
@@ -517,6 +533,40 @@ def update_notification_settings_route(
         terminal_enabled=bool(settings.get("terminal_enabled", True)),
         updated_at=config.updated_at,
     )
+
+
+@router.get("/evaluation", response_model=EvaluationSettingsResponse)
+def get_evaluation_settings_route(
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session_read),
+) -> EvaluationSettingsResponse:
+    _require_project(db, tenant_id)
+    config = get_or_create_dashboard_config(db, tenant_id)
+    return _evaluation_settings_response(config)
+
+
+@router.put("/evaluation", response_model=EvaluationSettingsResponse)
+def update_evaluation_settings_route(
+    body: EvaluationSettingsUpdateRequest,
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
+) -> EvaluationSettingsResponse:
+    _require_project(db, tenant_id)
+    config = get_or_create_dashboard_config(db, tenant_id)
+    set_evaluation_settings(
+        config,
+        {
+            "judge_mode": body.judge_mode,
+            "default_judge_model": body.default_judge_model.strip() or "auto",
+            "minimum_confidence": body.minimum_confidence,
+            "auto_calibration_enabled": body.auto_calibration_enabled,
+            "record_replay_calibration": body.record_replay_calibration,
+        },
+    )
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+    return _evaluation_settings_response(config)
 
 
 @router.get("/github/connection", response_model=GithubConnectionStatusResponse)

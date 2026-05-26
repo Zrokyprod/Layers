@@ -8,6 +8,9 @@
   AuthTokenResponse,
   ApiKeyCreateResponse,
   ApiKeyResponse,
+  BillingCheckoutResponse,
+  BillingMeResponse,
+  BillingPortalResponse,
   BudgetConfigResponse,
   BudgetStatusResponse,
   CacheSavingsResponse,
@@ -43,6 +46,8 @@
   PiiPolicyResponse,
   PricingInterviewNote,
   PricingValidationResponse,
+  ProviderKeyListResponse,
+  ProviderKeyResponse,
   ProjectResponse,
   ProjectMemberListResponse,
   ProjectInviteResponse,
@@ -62,9 +67,11 @@
   SlackTestMessageResponse,
   TeamsInstallStatusResponse,
   TeamsTestMessageResponse,
+  EvaluationSettingsResponse,
   CostForecastResponse,
   CostAnomalyRiskResponse,
   ChangePasswordResponse,
+  SecurityStatusResponse,
   ProjectInvitationItem,
   AcceptInvitationResponse,
   NotificationListResponse,
@@ -904,10 +911,13 @@ export function listProjectApiKeys(projectId: string, signal?: AbortSignal): Pro
   return request<ApiKeyResponse[]>(`/v1/projects/${encodeURIComponent(projectId)}/api-keys`, { signal });
 }
 
-export function createProjectApiKey(projectId: string, name: string): Promise<ApiKeyCreateResponse> {
+export function createProjectApiKey(
+  projectId: string,
+  body: { name: string; expires_in_days?: number | null; scopes?: string[] },
+): Promise<ApiKeyCreateResponse> {
   return request<ApiKeyCreateResponse>(`/v1/projects/${encodeURIComponent(projectId)}/api-keys`, {
     method: "POST",
-    body: { name },
+    body,
   });
 }
 
@@ -918,6 +928,45 @@ export function revokeProjectApiKey(projectId: string, keyId: string): Promise<A
       method: "POST",
     },
   );
+}
+
+export function rotateProjectApiKey(projectId: string, keyId: string): Promise<ApiKeyCreateResponse> {
+  return request<ApiKeyCreateResponse>(
+    `/v1/projects/${encodeURIComponent(projectId)}/api-keys/${encodeURIComponent(keyId)}/rotate`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function listProviderKeys(query?: {
+  provider?: string;
+  include_revoked?: boolean;
+}, signal?: AbortSignal): Promise<ProviderKeyListResponse> {
+  return request<ProviderKeyListResponse>("/v1/providers/keys", {
+    signal,
+    query: {
+      provider: query?.provider,
+      include_revoked: query?.include_revoked == null ? undefined : query.include_revoked ? "true" : "false",
+    },
+  });
+}
+
+export function createProviderKey(body: {
+  provider: string;
+  plaintext_key: string;
+  label?: string | null;
+}): Promise<ProviderKeyResponse> {
+  return request<ProviderKeyResponse>("/v1/providers/keys", {
+    method: "POST",
+    body,
+  });
+}
+
+export function revokeProviderKey(keyId: string): Promise<ProviderKeyResponse> {
+  return request<ProviderKeyResponse>(`/v1/providers/keys/${encodeURIComponent(keyId)}`, {
+    method: "DELETE",
+  });
 }
 
 export function getMe(signal?: AbortSignal): Promise<MeResponse> {
@@ -931,6 +980,16 @@ export function changePassword(
   return request<ChangePasswordResponse>("/v1/auth/me/password", {
     method: "PATCH",
     body: { current_password: currentPassword, new_password: newPassword },
+  });
+}
+
+export function getSecurityStatus(signal?: AbortSignal): Promise<SecurityStatusResponse> {
+  return request<SecurityStatusResponse>("/v1/auth/me/security", { signal });
+}
+
+export function logoutAllSessions(): Promise<{ detail: string }> {
+  return request<{ detail: string }>("/v1/auth/me/logout-all", {
+    method: "POST",
   });
 }
 
@@ -1087,6 +1146,26 @@ export function getBillingUsageSummary(signal?: AbortSignal): Promise<BillingUsa
   return request<BillingUsageSummary>("/v1/billing/usage", { signal });
 }
 
+export function getBillingMe(signal?: AbortSignal): Promise<BillingMeResponse> {
+  return request<BillingMeResponse>("/v1/billing/me", { signal });
+}
+
+export function createBillingCheckout(body: {
+  plan_code: string;
+  customer_email?: string | null;
+}): Promise<BillingCheckoutResponse> {
+  return request<BillingCheckoutResponse>("/v1/billing/checkout", {
+    method: "POST",
+    body,
+  });
+}
+
+export function createBillingPortal(): Promise<BillingPortalResponse> {
+  return request<BillingPortalResponse>("/v1/billing/portal", {
+    method: "POST",
+  });
+}
+
 // ── Support Tickets ──────────────────────────────────────────────────────────
 
 export function listSupportTickets(query?: { status?: string; limit?: number; offset?: number }, signal?: AbortSignal): Promise<SupportTicketListResponse> {
@@ -1212,6 +1291,23 @@ export function updateIssueTriage(
 ): Promise<IssueItem> {
   return request<IssueItem>(`/v1/issues/${encodeURIComponent(issueId)}/triage`, {
     method: "PATCH",
+    body,
+  });
+}
+
+export function getEvaluationSettings(signal?: AbortSignal): Promise<EvaluationSettingsResponse> {
+  return request<EvaluationSettingsResponse>("/v1/settings/evaluation", { signal });
+}
+
+export function updateEvaluationSettings(body: {
+  judge_mode: "fast" | "standard" | "strict";
+  default_judge_model: string;
+  minimum_confidence: number;
+  auto_calibration_enabled: boolean;
+  record_replay_calibration: boolean;
+}): Promise<EvaluationSettingsResponse> {
+  return request<EvaluationSettingsResponse>("/v1/settings/evaluation", {
+    method: "PUT",
     body,
   });
 }

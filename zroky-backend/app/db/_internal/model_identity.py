@@ -156,6 +156,9 @@ class ApiKey(Base):
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(24), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    scopes_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[\"project:member\"]'"))
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    rotated_from_key_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -225,6 +228,7 @@ class ProjectDashboardConfig(Base):
     provider_verifications_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     pricing_validation_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     rollback_drill_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    evaluation_settings_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, server_default=func.now()
     )

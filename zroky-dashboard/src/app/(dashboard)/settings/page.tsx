@@ -372,7 +372,10 @@ export default function SettingsPage() {
     }
 
     try {
-      const created = await createProjectApiKey(state.project.project_id, apiKeyName);
+      const created = await createProjectApiKey(state.project.project_id, {
+        name: apiKeyName,
+        scopes: ["project:member"],
+      });
       setLatestCreatedApiKey(created.api_key);
       await load();
       setStatusMessage("API key created.");

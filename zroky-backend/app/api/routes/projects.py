@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
@@ -28,6 +29,17 @@ from app.services.security import generate_api_key_material, generate_project_id
 router = APIRouter(prefix="/v1/projects")
 
 
+def _api_key_scopes(api_key: ApiKey) -> list[str]:
+    try:
+        raw = json.loads(api_key.scopes_json or "[]")
+    except json.JSONDecodeError:
+        raw = []
+    if not isinstance(raw, list):
+        return ["project:member"]
+    scopes = sorted({str(item).strip().lower() for item in raw if str(item).strip()})
+    return scopes or ["project:member"]
+
+
 def _project_to_response(project: Project) -> ProjectResponse:
     return ProjectResponse(
         project_id=project.id,
@@ -40,12 +52,19 @@ def _project_to_response(project: Project) -> ProjectResponse:
 
 
 def _api_key_to_response(api_key: ApiKey) -> ApiKeyResponse:
+    now = datetime.now(timezone.utc)
+    expires_at = api_key.expires_at
+    expired = expires_at is not None and expires_at <= now
     return ApiKeyResponse(
         key_id=api_key.id,
         project_id=api_key.project_id,
         name=api_key.name,
         key_prefix=api_key.key_prefix,
+        scopes=_api_key_scopes(api_key),
         revoked=api_key.revoked_at is not None,
+        expired=expired,
+        expires_at=expires_at,
+        rotated_from_key_id=api_key.rotated_from_key_id,
         last_used_at=api_key.last_used_at,
         created_at=api_key.created_at,
     )
@@ -148,11 +167,18 @@ def create_api_key(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Project is inactive")
 
     raw_api_key, key_prefix, key_hash = generate_api_key_material()
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+        if body.expires_in_days is not None
+        else None
+    )
     api_key = ApiKey(
         project_id=project_id,
         name=body.name,
         key_prefix=key_prefix,
         key_hash=key_hash,
+        scopes_json=json.dumps(body.scopes, separators=(",", ":")),
+        expires_at=expires_at,
     )
 
     db.add(api_key)
@@ -165,6 +191,9 @@ def create_api_key(
         name=api_key.name,
         key_prefix=api_key.key_prefix,
         api_key=raw_api_key,
+        scopes=_api_key_scopes(api_key),
+        expires_at=api_key.expires_at,
+        rotated_from_key_id=api_key.rotated_from_key_id,
         created_at=api_key.created_at,
     )
 
@@ -210,6 +239,51 @@ def revoke_api_key(
         db.refresh(api_key)
 
     return _api_key_to_response(api_key)
+
+
+@router.post(
+    "/{project_id}/api-keys/{key_id}/rotate",
+    response_model=ApiKeyCreateResponse,
+    dependencies=[Depends(require_project_role("admin"))],
+)
+@limiter.limit("10/minute")
+def rotate_api_key(
+    request: Request,
+    project_id: str,
+    key_id: str,
+    db: Session = Depends(get_db_session),
+) -> ApiKeyCreateResponse:
+    query = select(ApiKey).where(ApiKey.id == key_id, ApiKey.project_id == project_id)
+    old_key = db.execute(query).scalar_one_or_none()
+    if old_key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+
+    raw_api_key, key_prefix, key_hash = generate_api_key_material()
+    new_key = ApiKey(
+        project_id=project_id,
+        name=f"{old_key.name} rotated",
+        key_prefix=key_prefix,
+        key_hash=key_hash,
+        scopes_json=json.dumps(_api_key_scopes(old_key), separators=(",", ":")),
+        expires_at=old_key.expires_at,
+        rotated_from_key_id=old_key.id,
+    )
+    old_key.revoked_at = old_key.revoked_at or datetime.now(timezone.utc)
+    db.add(new_key)
+    db.commit()
+    db.refresh(new_key)
+
+    return ApiKeyCreateResponse(
+        key_id=new_key.id,
+        project_id=new_key.project_id,
+        name=new_key.name,
+        key_prefix=new_key.key_prefix,
+        api_key=raw_api_key,
+        scopes=_api_key_scopes(new_key),
+        expires_at=new_key.expires_at,
+        rotated_from_key_id=new_key.rotated_from_key_id,
+        created_at=new_key.created_at,
+    )
 
 
 @router.post(

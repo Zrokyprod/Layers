@@ -11,6 +11,7 @@ import {
   useListProjectApiKeys,
   useCreateProjectApiKey,
   useRevokeProjectApiKey,
+  useRotateProjectApiKey,
 } from "@/lib/hooks";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
 
@@ -21,12 +22,12 @@ export default function ApiKeysPage() {
 
   const createMutation = useCreateProjectApiKey();
   const revokeMutation = useRevokeProjectApiKey();
+  const rotateMutation = useRotateProjectApiKey();
 
   const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
-
-  // Revoke confirmation
+  const [expiresInDays, setExpiresInDays] = useState("90");
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyResponse | null>(null);
 
   const {
@@ -44,7 +45,13 @@ export default function ApiKeysPage() {
     setStatusMsg("");
     setNewKey(null);
     try {
-      const created = await createMutation.mutateAsync({ projectId, name: data.name.trim() });
+      const parsedExpiry = expiresInDays.trim() === "" ? null : Number(expiresInDays);
+      const created = await createMutation.mutateAsync({
+        projectId,
+        name: data.name.trim(),
+        expires_in_days: Number.isFinite(parsedExpiry ?? 0) ? parsedExpiry : null,
+        scopes: ["project:member"],
+      });
       setNewKey(created);
       reset({ name: "My API Key" });
     } catch (err) {
@@ -56,11 +63,22 @@ export default function ApiKeysPage() {
     if (!revokeTarget || !projectId) return;
     try {
       await revokeMutation.mutateAsync({ projectId, keyId: revokeTarget.key_id });
-      setRevokeTarget(null);
       setStatusMsg(`Key "${revokeTarget.name}" revoked.`);
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Revoke failed.");
+    } finally {
       setRevokeTarget(null);
+    }
+  }
+
+  async function onRotate(target: ApiKeyResponse) {
+    if (!projectId) return;
+    try {
+      const rotated = await rotateMutation.mutateAsync({ projectId, keyId: target.key_id });
+      setNewKey(rotated);
+      setStatusMsg(`Key "${target.name}" rotated. Copy the replacement key now.`);
+    } catch (err) {
+      setStatusMsg(err instanceof Error ? err.message : "Rotation failed.");
     }
   }
 
@@ -77,13 +95,12 @@ export default function ApiKeysPage() {
 
   return (
     <div className="page-content">
-      {/* New key reveal banner */}
       {newKey && (
         <section className="panel keys-newkey-banner">
           <header className="panel-header">
             <div>
               <h3>New API Key Created</h3>
-              <p>Copy this key now — it will not be shown again.</p>
+              <p>Copy this key now. It will not be shown again.</p>
             </div>
           </header>
           <div className="share-url-row keys-newkey-row">
@@ -92,18 +109,31 @@ export default function ApiKeysPage() {
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
+          <div className="list">
+            <div className="list-row">
+              <div className="list-main">
+                <strong>Scope</strong>
+                <span>{newKey.scopes.join(", ")}</span>
+              </div>
+            </div>
+            <div className="list-row">
+              <div className="list-main">
+                <strong>Expires</strong>
+                <span>{newKey.expires_at ? formatDateTime(newKey.expires_at) : "Never"}</span>
+              </div>
+            </div>
+          </div>
           <button type="button" className="btn btn-soft" onClick={() => setNewKey(null)}>
             Done
           </button>
         </section>
       )}
 
-      {/* Create Key */}
       <section className="panel">
         <header className="panel-header">
           <div>
             <h3>Create New API Key</h3>
-            <p>Give it a descriptive name to identify where it&apos;s used.</p>
+            <p>Use expiry and rotation so production integrations do not rely on permanent secrets.</p>
           </div>
         </header>
 
@@ -120,24 +150,38 @@ export default function ApiKeysPage() {
             />
             {errors.name && <span className="field-error">{errors.name.message}</span>}
           </div>
+          <div className="field settings-key-field">
+            <label htmlFor="key-expiry" className="field-label">Expires in days</label>
+            <input
+              id="key-expiry"
+              type="number"
+              className="input"
+              min="1"
+              max="3650"
+              value={expiresInDays}
+              onChange={(event) => setExpiresInDays(event.target.value)}
+              placeholder="90"
+              disabled={createMutation.isPending || !projectId}
+            />
+            <span className="field-hint">Leave blank for no automatic expiry. Scope is project:member.</span>
+          </div>
           <button
             type="submit"
             className="btn btn-primary"
             disabled={createMutation.isPending || !projectId}
           >
-            {createMutation.isPending ? "Creating…" : "Create key"}
+            {createMutation.isPending ? "Creating..." : "Create key"}
           </button>
         </form>
 
-        {statusMsg && <p className="field-error keys-status-msg">{statusMsg}</p>}
+        {statusMsg && <p className={statusMsg.includes("failed") || statusMsg.includes("Failed") ? "field-error keys-status-msg" : "field-success keys-status-msg"}>{statusMsg}</p>}
       </section>
 
-      {/* Keys Table */}
       <section className="panel">
         <header className="panel-header">
           <div>
             <h3>API Keys</h3>
-            <p>{keys.length} key{keys.length !== 1 ? "s" : ""} — active keys can make requests on behalf of this project.</p>
+            <p>{keys.length} key{keys.length !== 1 ? "s" : ""} for this project.</p>
           </div>
         </header>
 
@@ -154,6 +198,8 @@ export default function ApiKeysPage() {
                 <tr>
                   <th>Name</th>
                   <th>Prefix</th>
+                  <th>Scope</th>
+                  <th>Expires</th>
                   <th>Created</th>
                   <th>Last used</th>
                   <th>Status</th>
@@ -161,26 +207,42 @@ export default function ApiKeysPage() {
                 </tr>
               </thead>
               <tbody>
-                {keys.map((k) => (
-                  <tr key={k.key_id} className={k.revoked ? "keys-row-revoked" : ""}>
-                    <td>{k.name}</td>
-                    <td className="mono">{k.key_prefix}…</td>
-                    <td>{formatDateTime(k.created_at)}</td>
-                    <td>{k.last_used_at ? formatDateTime(k.last_used_at) : "Never"}</td>
+                {keys.map((key) => (
+                  <tr key={key.key_id} className={key.revoked ? "keys-row-revoked" : ""}>
+                    <td>{key.name}</td>
+                    <td className="mono">{key.key_prefix}...</td>
+                    <td>{key.scopes?.join(", ") || "project:member"}</td>
+                    <td>{key.expires_at ? formatDateTime(key.expires_at) : "Never"}</td>
+                    <td>{formatDateTime(key.created_at)}</td>
+                    <td>{key.last_used_at ? formatDateTime(key.last_used_at) : "Never"}</td>
                     <td>
-                      {k.revoked
-                        ? <span className="pill pill-red">Revoked</span>
-                        : <span className="pill pill-green">Active</span>}
+                      {key.revoked ? (
+                        <span className="pill pill-red">Revoked</span>
+                      ) : key.expired ? (
+                        <span className="pill pill-red">Expired</span>
+                      ) : (
+                        <span className="pill pill-green">Active</span>
+                      )}
                     </td>
                     <td>
-                      {!k.revoked && (
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={() => setRevokeTarget(k)}
-                        >
-                          Revoke
-                        </button>
+                      {!key.revoked && !key.expired && (
+                        <div className="actions">
+                          <button
+                            type="button"
+                            className="btn btn-soft btn-sm"
+                            disabled={rotateMutation.isPending}
+                            onClick={() => void onRotate(key)}
+                          >
+                            Rotate
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => setRevokeTarget(key)}
+                          >
+                            Revoke
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -191,7 +253,6 @@ export default function ApiKeysPage() {
         )}
       </section>
 
-      {/* Revoke Confirmation Modal */}
       {revokeTarget && (
         <div
           className="fix-modal-backdrop"
@@ -203,14 +264,13 @@ export default function ApiKeysPage() {
             role="dialog"
             aria-modal="true"
             aria-label="Revoke API key"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
           >
             <header className="panel-header">
               <div>
                 <h3>Revoke API Key</h3>
                 <p>
-                  This action is irreversible. Any requests using{" "}
-                  <strong>{revokeTarget.name}</strong> will immediately stop working.
+                  This action is irreversible. Requests using <strong>{revokeTarget.name}</strong> will stop working.
                 </p>
               </div>
             </header>
@@ -221,7 +281,7 @@ export default function ApiKeysPage() {
                 disabled={revokeMutation.isPending}
                 onClick={onRevoke}
               >
-                {revokeMutation.isPending ? "Revoking…" : "Yes, revoke key"}
+                {revokeMutation.isPending ? "Revoking..." : "Yes, revoke key"}
               </button>
               <button
                 type="button"

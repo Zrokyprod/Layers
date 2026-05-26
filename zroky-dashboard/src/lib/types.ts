@@ -730,7 +730,11 @@ export interface ApiKeyResponse {
   project_id: string;
   name: string;
   key_prefix: string;
+  scopes: string[];
   revoked: boolean;
+  expired: boolean;
+  expires_at: string | null;
+  rotated_from_key_id: string | null;
   last_used_at: string | null;
   created_at: string;
 }
@@ -741,7 +745,31 @@ export interface ApiKeyCreateResponse {
   name: string;
   key_prefix: string;
   api_key: string;
+  scopes: string[];
+  expires_at: string | null;
+  rotated_from_key_id: string | null;
   created_at: string;
+}
+
+export interface ProviderKeyResponse {
+  id: string;
+  project_id: string;
+  provider: string;
+  key_fingerprint: string;
+  key_last4: string | null;
+  kms_key_id: string | null;
+  label: string | null;
+  is_active: boolean;
+  created_by_user_id: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ProviderKeyListResponse {
+  items: ProviderKeyResponse[];
+  total_in_page: number;
 }
 
 export interface DiagnosisFeedbackResponse {
@@ -946,6 +974,15 @@ export interface ChangePasswordResponse {
   detail: string;
 }
 
+export interface SecurityStatusResponse {
+  two_factor_enabled: boolean;
+  password_login_enabled: boolean;
+  github_connected: boolean;
+  google_connected: boolean;
+  current_session_expires_at: string | null;
+  global_logout_available: boolean;
+}
+
 // ── Invitations ──────────────────────────────────────────────────────────────
 
 export interface ProjectInvitationItem {
@@ -1047,6 +1084,41 @@ export interface BillingUsageSummary {
   plan_limit_tokens: number | null;
   overage_calls: number | null;
   overage_tokens: number | null;
+}
+
+export interface BillingMeResponse {
+  org_id: string;
+  plan_code: string;
+  status: string;
+  seats: number;
+  stripe_customer_id: string | null;
+  stripe_sub_id: string | null;
+  current_period_end: string | null;
+  trial_end: string | null;
+  sla_tier: string;
+  plan_template: Record<string, unknown>;
+}
+
+export interface BillingCheckoutResponse {
+  session_id: string;
+  checkout_url: string;
+  plan_code: string;
+  org_id: string;
+}
+
+export interface BillingPortalResponse {
+  session_id: string;
+  portal_url: string;
+  org_id: string;
+}
+
+export interface EvaluationSettingsResponse {
+  judge_mode: "fast" | "standard" | "strict";
+  default_judge_model: string;
+  minimum_confidence: number;
+  auto_calibration_enabled: boolean;
+  record_replay_calibration: boolean;
+  updated_at: string;
 }
 
 // ── Support Tickets ──────────────────────────────────────────────────────────

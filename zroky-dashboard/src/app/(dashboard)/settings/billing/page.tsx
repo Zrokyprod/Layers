@@ -7,12 +7,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useBudget, useUpdateBudget } from "@/lib/hooks";
 import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
+  createBillingCheckout,
+  createBillingPortal,
   getBillingUsageSummary,
+  getBillingMe,
   getTenantSubscription,
   listSubscriptionPlans,
   updateTenantSubscription,
 } from "@/lib/api";
-import type { BillingUsageSummary, SubscriptionPlan, TenantSubscription } from "@/lib/types";
+import type { BillingMeResponse, BillingUsageSummary, SubscriptionPlan, TenantSubscription } from "@/lib/types";
 
 export default function BillingPage() {
   const budget = useBudget();
@@ -20,6 +23,7 @@ export default function BillingPage() {
 
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [subscription, setSubscription] = useState<TenantSubscription | null>(null);
+  const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
   const [usage, setUsage] = useState<BillingUsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +39,10 @@ export default function BillingPage() {
         getTenantSubscription(),
         getBillingUsageSummary(),
       ]);
+      const meRes = await getBillingMe().catch(() => null);
       setPlans(plansRes.plans);
       setSubscription(subRes);
+      setBillingMe(meRes);
       setUsage(usageRes);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load billing data.";
@@ -94,12 +100,33 @@ export default function BillingPage() {
   async function changePlan(planId: string) {
     setActionMsg("");
     try {
-      const updated = await updateTenantSubscription({ plan_id: planId });
-      setSubscription(updated);
-      setActionMsg("Plan updated successfully.");
-      await load();
+      const plan = plans.find((item) => item.id === planId || item.slug === planId);
+      const planCode = plan?.slug ?? planId;
+      if (planCode === "free") {
+        const updated = await updateTenantSubscription({ plan_id: planId });
+        setSubscription(updated);
+        setActionMsg("Plan updated successfully.");
+        await load();
+        return;
+      }
+      if (planCode === "enterprise") {
+        setActionMsg("Enterprise is sales-led. Contact the Zroky team to activate this plan.");
+        return;
+      }
+      const checkout = await createBillingCheckout({ plan_code: planCode });
+      window.open(checkout.checkout_url, "_self");
     } catch (e: unknown) {
       setActionMsg(e instanceof Error ? e.message : "Failed to update plan.");
+    }
+  }
+
+  async function openBillingPortal() {
+    setActionMsg("");
+    try {
+      const portal = await createBillingPortal();
+      window.open(portal.portal_url, "_self");
+    } catch (e: unknown) {
+      setActionMsg(e instanceof Error ? e.message : "Failed to open billing portal.");
     }
   }
 
@@ -117,8 +144,19 @@ export default function BillingPage() {
       {/* Plans */}
       <section className="panel">
         <header className="panel-header">
-          <h3>Plan &amp; Pricing</h3>
-          <p>Your current plan and available upgrades.</p>
+          <div>
+            <h3>Plan &amp; Pricing</h3>
+            <p>Your current plan and Stripe-managed upgrades.</p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-soft"
+            onClick={() => void openBillingPortal()}
+            disabled={loading || !billingMe?.stripe_customer_id}
+            title={!billingMe?.stripe_customer_id ? "Start checkout first to create a Stripe customer." : undefined}
+          >
+            Manage in Stripe
+          </button>
         </header>
 
         {loading && !plans.length ? (
@@ -154,7 +192,7 @@ export default function BillingPage() {
                       onClick={() => changePlan(plan.id)}
                       disabled={loading}
                     >
-                      Switch to {plan.name}
+                      {plan.slug === "free" ? `Switch to ${plan.name}` : `Checkout for ${plan.name}`}
                     </button>
                   )}
                 </div>
@@ -289,9 +327,21 @@ export default function BillingPage() {
       <section className="panel">
         <header className="panel-header">
           <h3>Invoices</h3>
-          <p>Monthly billing history and PDF downloads.</p>
+          <p>Stripe is the source of truth for invoices, payment methods, and receipts.</p>
         </header>
-        <div className="empty billing-invoices-empty">Invoice history will appear here once Stripe billing is connected.</div>
+        <div className="actions billing-invoices-empty">
+          <button
+            type="button"
+            className="btn btn-soft"
+            onClick={() => void openBillingPortal()}
+            disabled={!billingMe?.stripe_customer_id}
+          >
+            Open invoice portal
+          </button>
+          {!billingMe?.stripe_customer_id && (
+            <span className="hint">Create a paid checkout session before opening the Stripe customer portal.</span>
+          )}
+        </div>
       </section>
     </div>
   );
