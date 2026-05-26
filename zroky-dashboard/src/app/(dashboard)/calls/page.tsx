@@ -1,11 +1,10 @@
 ﻿"use client";
-import { useRouter } from "next/navigation";
-
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Database, Download, FileJson, KeyRound, RefreshCw, Search } from "lucide-react";
 
 import { exportCallsCsv, exportCallsJson } from "@/lib/api";
 import { formatCount, formatDateTime, formatUsd, safeString } from "@/lib/format";
@@ -84,6 +83,16 @@ function downloadSelectedCallsJson(rows: CallListItem[], selectedIds: Set<string
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function CallsMetric({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return (
+    <div className="metric-card calls-metric-card">
+      <div className="notif-meta">{label}</div>
+      <strong>{value}</strong>
+      <span>{helper}</span>
+    </div>
+  );
 }
 
 function CallsPageContent() {
@@ -238,15 +247,60 @@ function CallsPageContent() {
 
   const sortBy = appliedFilters.sort_by as SortKey;
   const sortOrder = appliedFilters.sort_order as "asc" | "desc";
+  const visibleCost = rows.reduce((sum, row) => sum + row.cost_usd, 0);
+  const visibleTokens = rows.reduce((sum, row) => sum + row.total_tokens, 0);
+  const visibleFailures = rows.filter((row) =>
+    row.error_code || ["failed", "error", "timeout", "auth_failure", "loop_detected"].includes(row.status.toLowerCase()),
+  ).length;
+  const activeFilterCount = [
+    appliedFilters.status,
+    appliedFilters.model,
+    appliedFilters.user_id,
+    appliedFilters.call_type,
+    appliedFilters.agent_name,
+    appliedFilters.date_from,
+    appliedFilters.date_to,
+    appliedFilters.min_cost_usd,
+    appliedFilters.max_cost_usd,
+  ].filter(Boolean).length;
 
 
   return (
-    <>
-      {/* ── Filter panel ── */}
-      <section className="panel">
+    <div className="calls-workspace">
+      <section className="module-hero calls-hero">
+        <div className="module-hero-header">
+          <div>
+            <div className="module-eyebrow">
+              <Database aria-hidden="true" />
+              Evidence drill-down
+            </div>
+            <h1>Calls</h1>
+            <p>Inspect captured production calls when an issue, replay, drift row, or cost anomaly needs raw evidence.</p>
+          </div>
+          <div className="calls-hero-actions">
+            <button type="button" className="btn btn-soft" onClick={handleExport} title="Download current filter as CSV">
+              <Download aria-hidden="true" />
+              CSV
+            </button>
+            <button type="button" className="btn btn-soft" onClick={() => void handleExportJson()} disabled={exportingJson} title="Download current filter as JSON">
+              <FileJson aria-hidden="true" />
+              {exportingJson ? "Exporting..." : "JSON"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="metric-strip" aria-label="Calls summary">
+        <CallsMetric label="Total calls" value={formatCount(total)} helper={`Page ${page + 1} of ${totalPages}`} />
+        <CallsMetric label="Visible failures" value={formatCount(visibleFailures)} helper="Errors on current page" />
+        <CallsMetric label="Visible cost" value={formatUsd(visibleCost)} helper="Current page spend" />
+        <CallsMetric label="Visible tokens" value={formatCount(visibleTokens)} helper={`${activeFilterCount} active filters`} />
+      </section>
+
+      <section className="panel calls-filter-panel">
         <header className="panel-header">
           <div>
-            <h3>Calls</h3>
+            <h3>Evidence filters</h3>
             <p>
               {callsQuery.data
                 ? `${formatCount(total)} total · page ${page + 1} of ${totalPages}`
@@ -260,6 +314,7 @@ function CallsPageContent() {
               onClick={handleExport}
               title="Download current filter as CSV (up to 5,000 rows)"
             >
+              <Download aria-hidden="true" />
               Export CSV
             </button>
             <button
@@ -269,9 +324,11 @@ function CallsPageContent() {
               disabled={exportingJson}
               title="Download current filter as JSON (up to 2,000 rows)"
             >
-              {exportingJson ? "Exporting…" : "Export JSON"}
+              <FileJson aria-hidden="true" />
+              {exportingJson ? "Exporting..." : "Export JSON"}
             </button>
             <button type="button" className="btn btn-soft" onClick={() => void callsQuery.refetch()}>
+              <RefreshCw aria-hidden="true" />
               Refresh
             </button>
           </div>
@@ -335,6 +392,7 @@ function CallsPageContent() {
 
           <div className="actions calls-filter-actions">
             <button className="btn btn-primary" type="submit">
+              <Search aria-hidden="true" />
               Apply
             </button>
             <button
@@ -394,7 +452,7 @@ function CallsPageContent() {
 
       {/* ── Table ── */}
       {!loading && rows.length > 0 ? (
-        <section className="panel">
+        <section className="panel calls-table-panel">
           <div className="table-wrap">
             <table>
               <thead>
@@ -519,13 +577,14 @@ function CallsPageContent() {
                 Reset filters
               </button>
               <Link href="/settings/keys" className="btn btn-primary">
+                <KeyRound aria-hidden="true" />
                 Get API key
               </Link>
             </div>
           </div>
         </section>
       ) : null}
-    </>
+    </div>
   );
 }
 

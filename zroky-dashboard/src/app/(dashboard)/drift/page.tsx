@@ -5,11 +5,7 @@ import { useMemo, useState } from "react";
 import { Activity, BadgeAlert, CircleDollarSign, Gauge, RefreshCw, type LucideIcon } from "lucide-react";
 
 import { useDriftStatus, useJudgeHealth, useOutcomeSummary } from "@/lib/hooks";
-import type {
-  DimensionDriftView,
-  OutcomeSummaryResponse,
-  VerdictDriftView,
-} from "@/lib/api";
+import type { DimensionDriftView, OutcomeSummaryResponse, VerdictDriftView } from "@/lib/api";
 import type { AlertView } from "@/lib/types";
 
 type DriftTab = "provider" | "judge" | "outcome";
@@ -67,10 +63,10 @@ function evidenceNumber(evidence: Record<string, unknown>, key: string): number 
 }
 
 function toneClass(tone: Tone): string {
-  if (tone === "critical") return "border-red-500/30 bg-red-500/10 text-red-300";
-  if (tone === "warn") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  if (tone === "ok") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-  return "border-white/10 bg-white/[0.03] text-slate-300";
+  if (tone === "critical") return "badge-red";
+  if (tone === "warn") return "badge-yellow";
+  if (tone === "ok") return "badge-green";
+  return "badge-gray";
 }
 
 function toneLabel(tone: Tone): string {
@@ -228,64 +224,34 @@ function outcomeRows(current: OutcomeSummaryResponse | undefined, baseline: Outc
   }];
 }
 
-function TabButton({
-  active,
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-}) {
+function TabButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: LucideIcon; label: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition ${
-        active
-          ? "border-indigo-400 text-white"
-          : "border-transparent text-slate-500 hover:text-slate-300"
-      }`}
-    >
-      <Icon className="h-4 w-4" aria-hidden="true" />
+    <button type="button" onClick={onClick} className={`drift-tab-btn${active ? " is-active" : ""}`}>
+      <Icon aria-hidden="true" />
       {label}
     </button>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-}) {
+function SummaryCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{sub}</p>
+    <div className="metric-card drift-summary-card">
+      <div className="notif-meta">{label}</div>
+      <strong>{value}</strong>
+      <span>{sub}</span>
     </div>
   );
 }
 
 function DriftTable({ rows, empty }: { rows: DriftRow[]; empty: string }) {
   if (rows.length === 0) {
-    return (
-      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
-        <p className="text-sm font-medium text-slate-300">{empty}</p>
-      </div>
-    );
+    return <section className="empty drift-empty">{empty}</section>;
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02]">
-      <div className="min-w-[1120px]">
-        <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr_0.7fr_1fr_1.4fr_1.3fr] gap-3 border-b border-white/[0.06] px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+    <section className="panel drift-table-panel">
+      <div className="drift-table">
+        <div className="drift-table-head">
           <span>Change</span>
           <span>Baseline</span>
           <span>Current</span>
@@ -295,40 +261,35 @@ function DriftTable({ rows, empty }: { rows: DriftRow[]; empty: string }) {
           <span>Recommended action</span>
         </div>
         {rows.map((row) => (
-          <div
-            key={row.id}
-            className="grid grid-cols-[1.4fr_0.8fr_0.8fr_0.7fr_1fr_1.4fr_1.3fr] gap-3 border-b border-white/[0.04] px-4 py-4 text-sm last:border-b-0"
-          >
-          <div className="min-w-0">
-            <span className={`mb-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${toneClass(row.tone)}`}>
-              {toneLabel(row.tone)}
-            </span>
-            <p className="font-semibold text-white">{row.title}</p>
-          </div>
-          <span className="font-mono text-slate-300">{row.baseline}</span>
-          <span className="font-mono text-slate-200">{row.current}</span>
-          <span className="font-mono text-slate-200">{row.delta}</span>
-          <span className="text-slate-300">{row.affected}</span>
-          <span className="text-xs leading-5 text-slate-400">{row.evidence}</span>
-          <div className="space-y-2">
-            <p className="text-xs leading-5 text-slate-300">{row.action}</p>
-            <div className="flex flex-wrap gap-2">
-              {row.primaryHref ? (
-                <Link href={row.primaryHref} className="rounded-md border border-indigo-400/30 bg-indigo-500/10 px-2 py-1 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20">
-                  {row.primaryLabel ?? "Open"}
-                </Link>
-              ) : null}
-              {row.secondaryHref ? (
-                <Link href={row.secondaryHref} className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/[0.07]">
-                  {row.secondaryLabel ?? "Open"}
-                </Link>
-              ) : null}
+          <div key={row.id} className="drift-row">
+            <div className="drift-change-cell">
+              <span className={`alert-cat-badge ${toneClass(row.tone)}`}>{toneLabel(row.tone)}</span>
+              <strong>{row.title}</strong>
             </div>
-          </div>
+            <span className="mono">{row.baseline}</span>
+            <span className="mono">{row.current}</span>
+            <span className="mono">{row.delta}</span>
+            <span>{row.affected}</span>
+            <span>{row.evidence}</span>
+            <div className="drift-action-cell">
+              <p>{row.action}</p>
+              <div>
+                {row.primaryHref ? (
+                  <Link href={row.primaryHref} className="btn btn-primary btn-sm">
+                    {row.primaryLabel ?? "Open"}
+                  </Link>
+                ) : null}
+                {row.secondaryHref ? (
+                  <Link href={row.secondaryHref} className="btn btn-soft btn-sm">
+                    {row.secondaryLabel ?? "Open"}
+                  </Link>
+                ) : null}
+              </div>
+            </div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -361,93 +322,73 @@ export default function DriftPage() {
     [currentOutcomeQuery.data, baselineOutcomeQuery.data],
   );
 
-  const currentRows =
-    activeTab === "provider"
-      ? providerDriftRows
-      : activeTab === "judge"
-        ? judgeDriftRows
-        : outcomeDriftRows;
-
-  const activeLoading =
-    activeTab === "provider"
-      ? providerQuery.isLoading
-      : activeTab === "judge"
-        ? judgeQuery.isLoading
-        : currentOutcomeQuery.isLoading || baselineOutcomeQuery.isLoading;
-
-  const activeError =
-    activeTab === "provider"
-      ? providerQuery.isError
-      : activeTab === "judge"
-        ? judgeQuery.isError
-        : currentOutcomeQuery.isError || baselineOutcomeQuery.isError;
+  const currentRows = activeTab === "provider" ? providerDriftRows : activeTab === "judge" ? judgeDriftRows : outcomeDriftRows;
+  const activeLoading = activeTab === "provider" ? providerQuery.isLoading : activeTab === "judge" ? judgeQuery.isLoading : currentOutcomeQuery.isLoading || baselineOutcomeQuery.isLoading;
+  const activeError = activeTab === "provider" ? providerQuery.isError : activeTab === "judge" ? judgeQuery.isError : currentOutcomeQuery.isError || baselineOutcomeQuery.isError;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Drift</h1>
-          <p className="mt-1 text-sm text-slate-500">Provider, judge, and business-outcome shifts with replay-ready evidence.</p>
+    <div className="drift-workspace">
+      <section className="module-hero drift-hero">
+        <div className="module-hero-header">
+          <div>
+            <div className="module-eyebrow">
+              <Activity aria-hidden="true" />
+              What changed and what to test
+            </div>
+            <h1>Drift</h1>
+            <p>Provider, judge, and business-outcome shifts with baseline, current value, delta, evidence, and replay/golden action.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void providerQuery.refetch();
+              void judgeQuery.refetch();
+              void currentOutcomeQuery.refetch();
+              void baselineOutcomeQuery.refetch();
+            }}
+            className="btn btn-soft"
+          >
+            <RefreshCw aria-hidden="true" />
+            Refresh
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            void providerQuery.refetch();
-            void judgeQuery.refetch();
-            void currentOutcomeQuery.refetch();
-            void baselineOutcomeQuery.refetch();
-          }}
-          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/[0.07]"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Refresh
-        </button>
-      </div>
+      </section>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <section className="metric-strip" aria-label="Drift summary">
         <SummaryCard label="Provider alerts" value={String(providerQuery.data?.total_alerts ?? 0)} sub={`${providerQuery.data?.critical_count ?? 0} critical, ${providerQuery.data?.warn_count ?? 0} watch`} />
         <SummaryCard label="Judge breaches" value={String(judgeQuery.data?.any_breached ? judgeDriftRows.filter((row) => row.tone === "critical" || row.tone === "warn").length : 0)} sub={`${judgeQuery.data?.window_hours ?? 0}h calibration window`} />
         <SummaryCard label="Outcome cost" value={usd(currentOutcomeQuery.data?.total_outcome_usd ?? 0)} sub="Current 7d window" />
         <SummaryCard label="Replay targets" value={String(currentRows.length)} sub="Rows with action evidence" />
-      </div>
+      </section>
 
-      <div className="border-b border-white/[0.06]">
-        <div className="flex flex-wrap gap-6">
-          {TABS.map((tab) => (
-            <TabButton
-              key={tab.id}
-              active={activeTab === tab.id}
-              icon={tab.icon}
-              label={tab.label}
-              onClick={() => setActiveTab(tab.id)}
-            />
-          ))}
-        </div>
-      </div>
+      <section className="drift-tabs" role="tablist" aria-label="Drift tabs">
+        {TABS.map((tab) => (
+          <TabButton key={tab.id} active={activeTab === tab.id} icon={tab.icon} label={tab.label} onClick={() => setActiveTab(tab.id)} />
+        ))}
+      </section>
 
       {activeTab === "judge" ? (
-        <label className="inline-flex items-center gap-2 text-xs text-slate-500">
-          <input
-            type="checkbox"
-            checked={showZero}
-            onChange={(event) => setShowZero(event.target.checked)}
-            className="rounded border-white/20 bg-white/10 text-indigo-500 focus:ring-indigo-500/30"
-          />
+        <label className="drift-zero-toggle">
+          <input type="checkbox" checked={showZero} onChange={(event) => setShowZero(event.target.checked)} />
           Show zero-sample dimensions
         </label>
       ) : null}
 
       {activeError ? (
-        <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          <BadgeAlert className="h-4 w-4" aria-hidden="true" />
+        <div className="drift-error">
+          <BadgeAlert aria-hidden="true" />
           Drift data failed to load.
         </div>
       ) : null}
 
       {activeLoading ? (
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-slate-500">
-          Loading drift rows...
-        </div>
+        <section className="panel issue-loading-panel" aria-label="Loading drift rows">
+          <RefreshCw aria-hidden="true" />
+          <div>
+            <strong>Loading drift rows</strong>
+            <p className="notif-meta">Reading provider, judge, and outcome evidence.</p>
+          </div>
+        </section>
       ) : (
         <DriftTable
           rows={currentRows}

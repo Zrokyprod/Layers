@@ -9830,6 +9830,221 @@ pre {
   gap: 6px;
 }
 
+.drift-workspace,
+.calls-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.drift-summary-card,
+.calls-metric-card {
+  min-height: 108px;
+}
+
+.drift-summary-card span,
+.calls-metric-card span {
+  color: #667085;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.drift-tabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.drift-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.drift-tab-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.drift-tab-btn.is-active,
+.drift-tab-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.drift-zero-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.drift-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.drift-error svg {
+  width: 16px;
+  height: 16px;
+}
+
+.drift-empty {
+  padding: 34px;
+}
+
+.drift-table-panel {
+  padding: 0;
+  overflow-x: auto;
+}
+
+.drift-table {
+  min-width: 1120px;
+}
+
+.drift-table-head,
+.drift-row {
+  display: grid;
+  grid-template-columns: 1.35fr 0.72fr 0.72fr 0.66fr 0.95fr 1.35fr 1.25fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.drift-table-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid #eaecf0;
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.drift-row {
+  padding: 14px;
+  border-bottom: 1px solid #eaecf0;
+  color: #344054;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.drift-row:last-child {
+  border-bottom: 0;
+}
+
+.drift-change-cell,
+.drift-action-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.drift-change-cell strong {
+  color: #111827;
+  line-height: 1.3;
+}
+
+.drift-action-cell p {
+  margin: 0;
+}
+
+.drift-action-cell div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.calls-hero-actions,
+.calls-filter-panel .actions,
+.calls-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calls-hero-actions .btn,
+.calls-filter-panel .btn,
+.calls-empty-actions .btn {
+  gap: 6px;
+}
+
+.calls-filter-panel .filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.calls-filter-panel .field {
+  display: grid;
+  gap: 5px;
+}
+
+.calls-filter-panel .field label {
+  color: #667085;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.calls-filter-panel .field input,
+.calls-filter-panel .field select {
+  width: 100%;
+}
+
+.calls-filter-actions {
+  align-self: end;
+}
+
+.calls-table-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.calls-table-panel .table-wrap {
+  overflow-x: auto;
+}
+
+.calls-table-panel table {
+  min-width: 1120px;
+}
+
+.calls-table-panel th {
+  white-space: nowrap;
+}
+
+.calls-table-panel tbody tr:hover {
+  background: #f8fafc;
+}
+
+.calls-empty-actions .btn-primary {
+  gap: 6px;
+}
+
 /* -- Mobile responsive -------------------------------------------------------- */
 @media (max-width: 1023px) {
   .app-shell {
@@ -9877,6 +10092,10 @@ pre {
   .golden-add-trace {
     grid-template-columns: 1fr;
   }
+
+  .drift-table {
+    min-width: 980px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -9884,14 +10103,16 @@ pre {
   .launchpad-actions,
   .launchpad-brief-actions,
   .issue-filter-bar,
-  .replay-filter-bar {
+  .replay-filter-bar,
+  .calls-hero-actions {
     align-items: stretch;
   }
 
   .launchpad-actions,
   .launchpad-brief-actions,
   .issue-filter-bar,
-  .replay-filter-bar {
+  .replay-filter-bar,
+  .calls-hero-actions {
     flex-direction: column;
   }
 
@@ -9902,7 +10123,10 @@ pre {
   .issue-action-rail .btn,
   .replay-golden-filter,
   .replay-status-tabs,
-  .golden-action-rail .btn {
+  .golden-action-rail .btn,
+  .calls-hero-actions .btn,
+  .calls-filter-panel .btn,
+  .calls-empty-actions .btn {
     width: 100%;
   }
 
@@ -9920,5 +10144,10 @@ pre {
   .issue-evidence-grid,
   .replay-run-proof {
     grid-template-columns: 1fr;
+  }
+
+  .drift-tabs {
+    width: 100%;
+    overflow-x: auto;
   }
 }
