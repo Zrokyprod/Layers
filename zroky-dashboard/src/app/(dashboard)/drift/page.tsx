@@ -217,8 +217,8 @@ function outcomeRows(current: OutcomeSummaryResponse | undefined, baseline: Outc
     affected: "All agents / all workflows",
     evidence: `${current?.linked_outcome_count ?? 0} linked and ${current?.unlinked_outcome_count ?? 0} unlinked outcomes in the current window.`,
     action: "Link outcomes to calls, then replay the top linked failure cluster.",
-    primaryHref: "/outcomes",
-    primaryLabel: "Outcomes",
+    primaryHref: "/cost",
+    primaryLabel: "Cost",
     secondaryHref: "/replay",
     secondaryLabel: "Replay",
   }];

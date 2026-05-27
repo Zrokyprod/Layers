@@ -154,7 +154,7 @@ export default function EvaluationSettingsPage() {
           </div>
         </header>
         <div className="grid gap-3 md:grid-cols-2">
-          <Link href="/calibration" className="panel panel-muted" style={{ textDecoration: "none" }}>
+          <Link href="/settings/evaluation?workspace=calibration" className="panel panel-muted" style={{ textDecoration: "none" }}>
             <div className="panel-header">
               <div>
                 <h3>Calibration</h3>
@@ -162,7 +162,7 @@ export default function EvaluationSettingsPage() {
               </div>
             </div>
           </Link>
-          <Link href="/judge" className="panel panel-muted" style={{ textDecoration: "none" }}>
+          <Link href="/settings/evaluation?workspace=judge" className="panel panel-muted" style={{ textDecoration: "none" }}>
             <div className="panel-header">
               <div>
                 <h3>Judge Diagnostics</h3>
