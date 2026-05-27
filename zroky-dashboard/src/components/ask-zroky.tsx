@@ -33,7 +33,7 @@ import {
   type ReplayRunTraceItem,
 } from "@/lib/api";
 import { useCreateReplayRunFromCall, useCreateReplayRunFromIssue } from "@/lib/hooks";
-import { replayVerifiedFix } from "@/lib/replay-mode";
+import { DEFAULT_VERIFICATION_REPLAY_MODE, replayVerifiedFix } from "@/lib/replay-mode";
 import type { AskContext, AskEvidence, AskFeedbackRequest, AskResponse } from "@/lib/types";
 
 interface ChatTurn {
@@ -326,9 +326,9 @@ export function AskZroky() {
     try {
       if (action.kind === "create_replay") {
         const run = issueId
-          ? await createReplayFromIssue.mutateAsync({ issueId, payload: { replay_mode: "real_llm" } })
+          ? await createReplayFromIssue.mutateAsync({ issueId, payload: { replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE } })
           : callId
-            ? await createReplayFromCall.mutateAsync({ callId, payload: { replay_mode: "real_llm" } })
+            ? await createReplayFromCall.mutateAsync({ callId, payload: { replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE } })
             : null;
         if (!run) {
           setActionStatus((prev) => ({ ...prev, [key]: "No call or issue evidence available." }));

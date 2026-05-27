@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -42,11 +43,7 @@ function formatMs(value: number | null | undefined) {
 
 function JsonPreview({ value }: { value: Record<string, unknown> | null | undefined }) {
   if (!value) return <span className="notif-meta">No difference data captured.</span>;
-  return (
-    <pre className="mono" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: "0.75rem", margin: 0 }}>
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  );
+  return <pre className="struct-pre detail-json-preview">{JSON.stringify(value, null, 2)}</pre>;
 }
 
 function promotionCriteria(run: ReplayRunDetailItem, trace: ReplayRunTraceItem): string {
@@ -83,7 +80,7 @@ function PromoteToGoldenPanel({ run, isVerifiedFix }: { run: ReplayRunDetailItem
     () => run.traces.filter((trace) => trace.status === "pass" && Boolean(trace.call_id_replayed)),
     [run.traces],
   );
-  const canPromote = run.status === "pass" && !run.replay_mode_warning && !run.replay_mode.startsWith("stub") && promotableTraces.length > 0;
+  const canPromote = isVerifiedFix && run.status === "pass" && !run.replay_mode_warning && promotableTraces.length > 0;
   const promoteMutation = useMutation({
     mutationFn: async () => {
       setMessage(null);
@@ -121,42 +118,51 @@ function PromoteToGoldenPanel({ run, isVerifiedFix }: { run: ReplayRunDetailItem
   });
 
   return (
-    <section className="panel" style={{ marginBottom: "1rem" }}>
+    <section className="panel">
       <header className="panel-header">
         <div>
-          <h3>Promote Replay to Golden</h3>
-          <p>Passing replay traces become reusable production memory for future CI regression checks.</p>
+          <h3>Promote replay to Golden</h3>
+          <p>Passing verified replay traces become reusable production memory for CI regression checks.</p>
         </div>
         <span className={`alert-cat-badge ${canPromote ? "badge-green" : "badge-yellow"}`}>
-          {canPromote ? "Ready" : "Needs passing non-stub replay"}
+          {canPromote ? "Ready" : "Needs verified replay"}
         </span>
       </header>
 
-      <div style={{ display: "grid", gap: "0.75rem" }}>
+      <div className="promote-panel-body">
         {!isVerifiedFix && (
-          <p className="notif-meta">Only honest non-stub passing replays should be promoted. Stub replay is a sanity check, not a verified fix.</p>
+          <div className="detail-warning">
+            <strong>
+              <AlertTriangle aria-hidden="true" />
+              Not a verified fix yet
+            </strong>
+            <span>Only non-stub runs with verified comparison evidence can be promoted as production proof.</span>
+          </div>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem", alignItems: "end" }}>
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            <span className="notif-meta">Select Golden Set</span>
+        <div className="detail-form-grid">
+          <label className="detail-field">
+            <span className="detail-field-label">Golden Set</span>
             <select className="input" value={selectedSetId} onChange={(event) => setSelectedSetId(event.target.value)} disabled={goldenSetsQuery.isLoading}>
               <option value="">Create a new set</option>
               {(goldenSetsQuery.data?.items ?? []).map((set) => (
-                <option key={set.id} value={set.id}>{set.name} - {set.trace_count} traces</option>
+                <option key={set.id} value={set.id}>
+                  {set.name} - {set.trace_count} traces
+                </option>
               ))}
             </select>
           </label>
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            <span className="notif-meta">New Golden Set name</span>
+          <label className="detail-field">
+            <span className="detail-field-label">New Golden Set name</span>
             <input className="input" value={newSetName} onChange={(event) => setNewSetName(event.target.value)} placeholder="Production memory" disabled={Boolean(selectedSetId)} />
           </label>
           <button type="button" className="btn btn-primary" onClick={() => promoteMutation.mutate()} disabled={!canPromote || promoteMutation.isPending}>
+            <ShieldCheck aria-hidden="true" />
             {promoteMutation.isPending ? "Promoting..." : "Promote to Golden"}
           </button>
         </div>
         <div className="notif-meta">
-          Source call/replay metadata is stored in each golden trace criteria JSON for CI use later.
-          {" "}<strong>{promotableTraces.length}</strong> passing source trace{promotableTraces.length === 1 ? "" : "s"} available.
+          Source call/replay metadata is stored in each golden trace criteria JSON.{" "}
+          <strong>{promotableTraces.length}</strong> passing source trace{promotableTraces.length === 1 ? "" : "s"} available.
         </div>
         {message && <p className={promoteMutation.isError ? "notif-error" : "notif-meta"}>{message}</p>}
       </div>
@@ -181,7 +187,8 @@ export default function ReplayRunDetailPage() {
     return (
       <section className="panel">
         <p className="notif-error">{runQuery.error?.message ?? "Replay run unavailable."}</p>
-        <Link href="/replay" className="btn btn-soft" style={{ marginTop: "1rem" }}>
+        <Link href="/replay" className="btn btn-soft">
+          <ArrowLeft aria-hidden="true" />
           Back to replay runs
         </Link>
       </section>
@@ -194,31 +201,49 @@ export default function ReplayRunDetailPage() {
   const verificationLabel = replayVerificationLabel(run.replay_mode, summary.verified_fix, summary.verification_status);
 
   return (
-    <div>
-      <div style={{ marginBottom: "1rem", fontSize: "0.85rem" }}>
-        <Link href="/replay" className="notif-action-link">Back to replay runs</Link>
-      </div>
+    <div className="detail-page replay-detail-page">
+      <Link href="/replay" className="detail-back-link">
+        <ArrowLeft aria-hidden="true" />
+        Back to replay runs
+      </Link>
 
-      <section className="panel" style={{ marginBottom: "1rem" }}>
-        <header className="panel-header">
-          <div>
-            <h2 style={{ margin: 0 }}>Replay run</h2>
-            <p className="mono notif-meta" style={{ marginTop: "0.35rem" }}>{run.id}</p>
+      <section className="panel detail-hero">
+        <div className="detail-hero-main">
+          <div className="detail-badge-row">
+            <span className={`alert-cat-badge ${STATUS_CLASS[run.status] ?? "badge-gray"}`}>
+              {STATUS_LABEL[run.status] ?? run.status}
+            </span>
+            <span className={`alert-cat-badge ${isVerifiedFix ? "badge-green" : isStub ? "badge-yellow" : "badge-gray"}`}>
+              {verificationLabel}
+            </span>
           </div>
-          <span className={`alert-cat-badge ${STATUS_CLASS[run.status] ?? "badge-gray"}`}>
+          <h1>Replay run</h1>
+          <div className="detail-meta-row">
+            <span className="mono">{run.id}</span>
+            <span>{replayModeLabel(run.replay_mode)}</span>
+            <span>{formatDateTime(run.created_at)}</span>
+          </div>
+        </div>
+
+        <aside className="detail-hero-side">
+          <div className={`detail-impact-value${run.status === "fail" || run.status === "error" ? " is-danger" : ""}`}>
             {STATUS_LABEL[run.status] ?? run.status}
-          </span>
-        </header>
-
-        {(run.replay_mode_warning || isStub) && (
-          <div style={{ marginTop: "1rem", padding: "0.75rem 1rem", borderRadius: 8, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.1)" }}>
-            <strong>{isStub ? "Stub replay is a sanity check, not a verified fix." : "Replay mode warning"}</strong>
-            <p style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}>{isStub ? "Stub replay is a sanity check, not a verified fix." : run.replay_mode_warning}</p>
           </div>
-        )}
+          <span className="notif-meta">{summary.trace_count_executed}/{summary.trace_count_at_dispatch} traces</span>
+        </aside>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
+      {(run.replay_mode_warning || isStub) && (
+        <div className="detail-warning">
+          <strong>
+            <AlertTriangle aria-hidden="true" />
+            {isStub ? "Stub replay is a sanity check, not a verified fix." : "Replay mode warning"}
+          </strong>
+          <span>{isStub ? "Stub replay re-grades recorded output. It does not prove a prompt/model fix." : run.replay_mode_warning}</span>
+        </div>
+      )}
+
+      <section className="detail-proof-grid">
         <ProofCard title="Mode" value={replayModeLabel(run.replay_mode)} />
         <ProofCard title="Proof badge" value={replayModeProof(run.replay_mode)} tone={isStub ? "warn" : "neutral"} />
         <ProofCard title="Original failure reproduced" value={boolLabel(summary.reproduced_original_failure)} />
@@ -232,11 +257,11 @@ export default function ReplayRunDetailPage() {
 
       <PromoteToGoldenPanel run={run} isVerifiedFix={isVerifiedFix} />
 
-      <section className="panel" style={{ marginBottom: "1rem" }}>
+      <section className="panel">
         <header className="panel-header">
           <h3>Run metadata</h3>
         </header>
-        <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+        <table className="detail-table">
           <tbody>
             {[
               ["Golden set", run.golden_set_id],
@@ -247,22 +272,26 @@ export default function ReplayRunDetailPage() {
               ["Started", run.started_at ? formatDateTime(run.started_at) : "-"],
               ["Completed", run.completed_at ? formatDateTime(run.completed_at) : "-"],
             ].map(([label, value]) => (
-              <tr key={label} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                <td style={{ padding: "0.45rem 0.75rem", color: "var(--color-muted)", whiteSpace: "nowrap" }}>{label}</td>
-                <td style={{ padding: "0.45rem 0.75rem" }} className="mono">{value}</td>
+              <tr key={label}>
+                <td>{label}</td>
+                <td className="mono">{value}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+      <section className="grid-two">
         <article className="panel">
-          <header className="panel-header"><h3>Output differences</h3></header>
+          <header className="panel-header">
+            <h3>Output differences</h3>
+          </header>
           <JsonPreview value={summary.output_diff} />
         </article>
         <article className="panel">
-          <header className="panel-header"><h3>Tool behavior differences</h3></header>
+          <header className="panel-header">
+            <h3>Tool behavior differences</h3>
+          </header>
           <JsonPreview value={summary.tool_behavior_diff} />
         </article>
       </section>
@@ -279,18 +308,22 @@ export default function ReplayRunDetailPage() {
         ) : (
           <div className="list">
             {run.traces.map((trace) => (
-              <div key={trace.id} className="list-row" style={{ alignItems: "flex-start" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <div key={trace.id} className="list-row">
+                <div className="list-main">
+                  <div className="detail-badge-row">
                     <span className={`alert-cat-badge ${STATUS_CLASS[trace.status] ?? "badge-gray"}`}>{trace.status}</span>
-                    {trace.call_id_replayed && <Link href={`/calls/${trace.call_id_replayed}`} className="mono notif-action-link">{trace.call_id_replayed}</Link>}
+                    {trace.call_id_replayed && (
+                      <Link href={`/calls/${trace.call_id_replayed}`} className="mono notif-action-link">
+                        {trace.call_id_replayed}
+                      </Link>
+                    )}
                   </div>
-                  {trace.output_text && <p className="mono" style={{ marginTop: "0.5rem", fontSize: "0.78rem", whiteSpace: "pre-wrap" }}>{trace.output_text.slice(0, 600)}</p>}
+                  {trace.output_text && <p className="mono detail-inset">{trace.output_text.slice(0, 600)}</p>}
                 </div>
-                <div style={{ textAlign: "right", fontSize: "0.78rem" }}>
-                  <div>Diff: {trace.diff_metric == null ? "-" : trace.diff_metric.toFixed(4)}</div>
-                  <div>Cost: {trace.cost_delta_usd == null ? "-" : formatUsd(trace.cost_delta_usd)}</div>
-                  <div>Latency: {formatMs(trace.latency_delta_ms)}</div>
+                <div className="detail-hero-side">
+                  <span>Diff: {trace.diff_metric == null ? "-" : trace.diff_metric.toFixed(4)}</span>
+                  <span>Cost: {trace.cost_delta_usd == null ? "-" : formatUsd(trace.cost_delta_usd)}</span>
+                  <span>Latency: {formatMs(trace.latency_delta_ms)}</span>
                 </div>
               </div>
             ))}
@@ -302,11 +335,13 @@ export default function ReplayRunDetailPage() {
 }
 
 function ProofCard({ title, value, tone = "neutral" }: { title: string; value: string; tone?: "good" | "warn" | "neutral" }) {
-  const color = tone === "good" ? "var(--color-green)" : tone === "warn" ? "#f59e0b" : "inherit";
   return (
-    <article className="panel" style={{ padding: "0.85rem 1rem" }}>
-      <div className="notif-meta" style={{ fontSize: "0.72rem" }}>{title}</div>
-      <div style={{ marginTop: "0.35rem", fontWeight: 700, color }}>{value}</div>
+    <article className={`detail-proof-card${tone === "good" ? " is-good" : tone === "warn" ? " is-warn" : ""}`}>
+      <span>{title}</span>
+      <strong>
+        {tone === "good" ? <CheckCircle2 aria-hidden="true" /> : tone === "warn" ? <AlertTriangle aria-hidden="true" /> : null}
+        {value}
+      </strong>
     </article>
   );
 }

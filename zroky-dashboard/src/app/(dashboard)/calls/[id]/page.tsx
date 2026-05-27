@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { AlertTriangle, Check, CheckCircle2, Copy, Play } from "lucide-react";
 
 import { formatCount, formatDateTime, formatUsd, numberFromUnknown, safeString } from "@/lib/format";
 import {
@@ -28,7 +29,8 @@ import { StatusPill } from "@/components/status-pill";
 import { JudgeScorecard } from "@/components/judge-scorecard";
 import { JudgeNarrativeCard } from "@/components/judge-narrative-card";
 import { CounterfactualImpact } from "@/components/counterfactual-impact";
-import { REPLAY_MODE_OPTIONS, replayModeProof } from "@/lib/replay-mode";
+import { DEFAULT_VERIFICATION_REPLAY_MODE, REPLAY_MODE_OPTIONS, STUB_REPLAY_MODE, replayModeProof } from "@/lib/replay-mode";
+import { TraceTreeView, isFailedTraceStatus } from "@/components/trace-tree-view";
 
 function asObject(value: unknown): JsonMap {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -116,7 +118,7 @@ function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) 
   };
   return (
     <button type="button" className="copy-btn" onClick={() => void copy()} title={`Copy ${label}`}>
-      {copied ? "✓" : "⎘"}
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
     </button>
   );
 }
@@ -130,7 +132,8 @@ function ConfidenceBadge({ confidence, version, ageDays }: {
   const low = confidence.toLowerCase() === "low";
   return (
     <span className={`conf-badge ${low ? "conf-badge-low" : "conf-badge-ok"}`} title={`Pricing v${version ?? "?"} · ${ageDays != null ? `${ageDays}d old` : "age unknown"}`}>
-      {low ? "⚠ Low confidence" : "✓ Pricing verified"} {version ? `v${version}` : ""}
+      {low ? <AlertTriangle aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+      {low ? "Low confidence" : "Pricing verified"} {version ? `v${version}` : ""}
     </span>
   );
 }
@@ -155,158 +158,17 @@ function StructuredObject({ data, emptyLabel = "No data" }: { data: JsonMap; emp
 }
 
 
-const FAILED_STATUS_SET = new Set(["failed", "error", "timeout", "auth_failure", "loop_detected"]);
-const PROVIDER_COLORS: Record<string, string> = {
-  openai: "#10a37f",
-  anthropic: "#c9855e",
-  google: "#4285f4",
-  gemini: "#4285f4",
-  cohere: "#db4437",
-  mistral: "#7b5ea7",
-};
-function providerColor(p: string | null): string {
-  return PROVIDER_COLORS[(p ?? "").toLowerCase()] ?? "#6b7280";
-}
-
 function collectAgentStats(node: TraceTreeNode, acc: Map<string, { calls: number; cost: number; failed: boolean }>) {
   const key = node.agent_name ?? "unknown-agent";
   const prev = acc.get(key) ?? { calls: 0, cost: 0, failed: false };
   acc.set(key, {
     calls: prev.calls + 1,
     cost: prev.cost + node.wasted_cost_usd,
-    failed: prev.failed || FAILED_STATUS_SET.has(node.status.toLowerCase()),
+    failed: prev.failed || isFailedTraceStatus(node.status),
   });
   for (const child of node.children) {
     collectAgentStats(child, acc);
   }
-}
-
-function TraceTreeView({ node, depth = 0 }: { node: TraceTreeNode; depth?: number }) {
-  const hasChildren = node.children.length > 0;
-  const [expanded, setExpanded] = useState(depth < 3);
-  const isFailed = FAILED_STATUS_SET.has(node.status.toLowerCase());
-  const agentLabel = node.agent_name ?? node.call_id.slice(0, 8);
-
-  const borderColor = isFailed ? "#ef4444" : node.status === "success" ? "#22c55e" : "#f59e0b";
-  const bgColor = isFailed ? "rgba(239,68,68,0.06)" : "transparent";
-
-  return (
-    <li style={{ listStyle: "none", paddingLeft: depth === 0 ? 0 : 20 }}>
-      <div
-        style={{
-          borderLeft: `3px solid ${borderColor}`,
-          background: bgColor,
-          borderRadius: 8,
-          padding: "8px 12px",
-          marginBottom: 4,
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 8,
-        }}
-      >
-        {hasChildren ? (
-          <button
-            type="button"
-            onClick={() => setExpanded((c) => !c)}
-            aria-label={expanded ? "Collapse" : "Expand"}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: 12,
-              color: "var(--muted)",
-              paddingTop: 2,
-              flexShrink: 0,
-            }}
-          >
-            {expanded ? "▼" : "▶"}
-          </button>
-        ) : (
-          <span style={{ width: 16, flexShrink: 0 }} />
-        )}
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <strong style={{ fontSize: 14 }}>{agentLabel}</strong>
-
-            {node.wasted_cost_usd > 0 && (
-              <span
-                style={{
-                  background: "#ef4444",
-                  color: "#fff",
-                  borderRadius: 4,
-                  padding: "1px 6px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                }}
-              >
-                wasted {formatUsd(node.wasted_cost_usd)}
-              </span>
-            )}
-
-            {node.error_code && (
-              <span
-                style={{
-                  background: "rgba(239,68,68,0.12)",
-                  color: "#ef4444",
-                  borderRadius: 4,
-                  padding: "1px 6px",
-                  fontSize: 11,
-                }}
-              >
-                {node.error_code}
-              </span>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-            {node.provider && (
-              <span
-                style={{
-                  background: providerColor(node.provider) + "22",
-                  color: providerColor(node.provider),
-                  border: `1px solid ${providerColor(node.provider)}44`,
-                  borderRadius: 4,
-                  padding: "1px 6px",
-                  fontSize: 11,
-                  fontWeight: 500,
-                }}
-              >
-                {node.provider}
-              </span>
-            )}
-            {node.model && (
-              <span
-                style={{
-                  background: "var(--surface-muted)",
-                  borderRadius: 4,
-                  padding: "1px 6px",
-                  fontSize: 11,
-                  color: "var(--muted)",
-                }}
-              >
-                {node.model}
-              </span>
-            )}
-            {node.latency_ms != null && (
-              <span style={{ fontSize: 11, color: "var(--muted)" }}>
-                {node.latency_ms < 1000 ? `${node.latency_ms}ms` : `${(node.latency_ms / 1000).toFixed(1)}s`}
-              </span>
-            )}
-            <StatusPill value={node.status} />
-          </div>
-        </div>
-      </div>
-
-      {hasChildren && expanded && (
-        <ul style={{ margin: 0, padding: 0 }}>
-          {node.children.map((child) => (
-            <TraceTreeView key={child.call_id} node={child} depth={depth + 1} />
-          ))}
-        </ul>
-      )}
-    </li>
-  );
 }
 
 export default function CallDetailPage() {
@@ -335,7 +197,7 @@ export default function CallDetailPage() {
   const [feedbackNote, setFeedbackNote] = useState<string>("");
   const [resolveNote, setResolveNote] = useState<string>("");
   const [shareNote, setShareNote] = useState<string>("");
-  const [replayMode, setReplayMode] = useState<ReplayMode>("stub");
+  const [replayMode, setReplayMode] = useState<ReplayMode>(DEFAULT_VERIFICATION_REPLAY_MODE);
 
   const {
     register,
@@ -487,7 +349,7 @@ export default function CallDetailPage() {
   const responsePayload = asObject(detail.payload.response);
 
   return (
-    <>
+    <div className="call-detail-page">
       {/* ── Breadcrumb ── */}
       <nav className="detail-breadcrumb" aria-label="breadcrumb">
         <Link href="/calls" className="breadcrumb-back">← Calls</Link>
@@ -524,12 +386,11 @@ export default function CallDetailPage() {
             </div>
             <p>{formatDateTime(detail.call.created_at)}{detail.call.agent_name ? ` · Agent: ${detail.call.agent_name}` : ""}{detail.call.user_id ? ` · User: ${detail.call.user_id}` : ""}</p>
           </div>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div className="detail-action-group">
             <select
               value={replayMode}
               onChange={(event) => setReplayMode(event.target.value as typeof replayMode)}
-              className="input"
-              style={{ maxWidth: 160 }}
+              className="input detail-mode-select"
             >
               {REPLAY_MODE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -537,10 +398,11 @@ export default function CallDetailPage() {
                 </option>
               ))}
             </select>
-            <span className="alert-cat-badge badge-gray" title={replayMode === "stub" ? "Stub replay is a sanity check, not a verified fix." : undefined}>
+            <span className="alert-cat-badge badge-gray" title={replayMode === STUB_REPLAY_MODE ? "Stub replay is a sanity check, not a verified fix." : undefined}>
               {replayModeProof(replayMode)}
             </span>
             <button type="button" className="btn btn-primary btn-sm" onClick={createReplay} disabled={createReplayMutation.isPending}>
+              <Play aria-hidden="true" />
               {createReplayMutation.isPending ? "Creating..." : "Replay"}
             </button>
             <button
@@ -561,7 +423,7 @@ export default function CallDetailPage() {
         </header>
 
         {/* ── KPI grid (8 cards) ── */}
-        <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        <div className="kpi-grid detail-kpi-grid">
           <article className="kpi-card">
             <span className="kpi-label">Provider</span>
             <strong className="kpi-value">{safeString(detail.call.provider, "unknown")}</strong>
@@ -603,12 +465,12 @@ export default function CallDetailPage() {
         </div>
 
         {(errorCode || errorMessage || failureReason) && (
-          <div className="list" style={{ marginTop: 12 }}>
+          <div className="list detail-list-stack">
             {errorCode && (
               <div className="list-row">
                 <div className="list-main">
                   <strong>Error Code</strong>
-                  <span className="mono" style={{ color: "#ef4444" }}>{errorCode}</span>
+                  <span className="mono detail-error-code">{errorCode}</span>
                 </div>
               </div>
             )}
@@ -625,7 +487,7 @@ export default function CallDetailPage() {
                 <div className="list-main">
                   <strong>Failure Reason</strong>
                 </div>
-                <pre className="panel-muted" style={{ padding: 8, borderRadius: 8, fontSize: 12, overflowX: "auto", marginTop: 4, width: "100%" }}>
+                <pre className="struct-pre detail-inset">
                   {JSON.stringify(failureReason, null, 2)}
                 </pre>
               </div>
@@ -643,7 +505,7 @@ export default function CallDetailPage() {
             </div>
             <StatusPill value={traceTree.root_failure ? "failed" : "ok"} />
           </header>
-          <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: 12 }}>
+          <div className="kpi-grid detail-kpi-grid">
             <article className="kpi-card">
               <span className="kpi-label">Downstream Calls</span>
               <strong className="kpi-value mono">{formatCount(traceTree.total_downstream_calls)}</strong>
@@ -662,7 +524,7 @@ export default function CallDetailPage() {
             </article>
           </div>
           {traceAgentStats.length > 0 ? (
-            <div className="actions" style={{ marginBottom: 12 }}>
+            <div className="detail-chip-row">
               {traceAgentStats.map((stats) => (
                 <span key={stats.agent} className="trace-badge trace-badge-multi">
                   {stats.agent}: {formatCount(stats.calls)} calls
@@ -672,7 +534,7 @@ export default function CallDetailPage() {
               ))}
             </div>
           ) : null}
-          <ul style={{ margin: 0, padding: 0 }}>
+          <ul className="trace-tree-list">
             <TraceTreeView node={traceTree.root_node} />
           </ul>
         </section>
@@ -688,7 +550,7 @@ export default function CallDetailPage() {
             {promptText ? <CopyButton text={promptText} label="prompt" /> : null}
           </header>
           {promptText ? (
-            <pre className="code-block raw-call-pre" style={{ maxHeight: "400px", overflowY: "auto" }}>{promptText}</pre>
+            <pre className="code-block raw-call-pre">{promptText}</pre>
           ) : (
             <div className="empty">No prompt text captured for this call.</div>
           )}
@@ -709,7 +571,7 @@ export default function CallDetailPage() {
             {responseText ? <CopyButton text={responseText} label="response" /> : null}
           </header>
           {responseText ? (
-            <pre className="code-block raw-call-pre" style={{ maxHeight: "400px", overflowY: "auto" }}>{responseText}</pre>
+            <pre className="code-block raw-call-pre">{responseText}</pre>
           ) : (
             <div className="empty">No response text captured for this call.</div>
           )}
@@ -851,7 +713,7 @@ export default function CallDetailPage() {
         </header>
 
         {!githubStatus.isLoading && !githubStatus.data?.connected && (
-          <div style={{ marginBottom: "1rem", padding: "0.75rem 1rem", background: "rgba(245,158,11,0.12)", borderLeft: "3px solid #f59e0b", borderRadius: "6px", fontSize: "0.82rem" }}>
+          <div className="detail-warning">
             <strong>GitHub not connected.</strong>{" "}
             <Link href="/settings/providers">Connect GitHub in Settings - Providers</Link> to generate PRs.
           </div>
@@ -885,7 +747,7 @@ export default function CallDetailPage() {
             />
           </div>
 
-          <div className="actions" style={{ gridColumn: "1 / -1" }}>
+          <div className="actions grid-wide">
             <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Generating PR..." : "Generate PR"}
             </button>
@@ -894,18 +756,18 @@ export default function CallDetailPage() {
         )}
 
         {prResult ? (
-          <div className="panel-muted" style={{ padding: 12, borderRadius: 12 }}>
+          <div className="detail-inset">
             <p className="hint">
               PR #{prResult.pull_request_number} via <strong>{prResult.auth_source}</strong>
             </p>
-            <p style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "6px 0" }}>
-              <span style={{ fontSize: "0.78rem", padding: "2px 8px", borderRadius: 999, background: "#22c55e22", color: "#22c55e", fontWeight: 600 }}>PR Opened</span>
+            <p className="detail-chip-row">
+              <span className="alert-cat-badge badge-green">PR Opened</span>
               {prResult.last_ci_state ? (
-                <span style={{ fontSize: "0.78rem", padding: "2px 8px", borderRadius: 999, background: prResult.last_ci_state === "success" ? "#22c55e22" : prResult.last_ci_state === "failure" ? "#ef444422" : "#f59e0b22", color: prResult.last_ci_state === "success" ? "#22c55e" : prResult.last_ci_state === "failure" ? "#ef4444" : "#f59e0b", fontWeight: 600 }}>CI: {prResult.last_ci_state}</span>
-              ) : <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>CI: pending</span>}
+                <span className={`alert-cat-badge ${prResult.last_ci_state === "success" ? "badge-green" : prResult.last_ci_state === "failure" ? "badge-red" : "badge-yellow"}`}>CI: {prResult.last_ci_state}</span>
+              ) : <span className="calls-row-muted">CI: pending</span>}
               {prResult.merged_at ? (
-                <span style={{ fontSize: "0.78rem", padding: "2px 8px", borderRadius: 999, background: "#a855f722", color: "#a855f7", fontWeight: 600 }}>Merged</span>
-              ) : <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Not merged</span>}
+                <span className="alert-cat-badge badge-green">Merged</span>
+              ) : <span className="calls-row-muted">Not merged</span>}
             </p>
             <p>
               <a href={prResult.pull_request_url} target="_blank" rel="noreferrer">
@@ -942,7 +804,7 @@ export default function CallDetailPage() {
           </div>
         </header>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <div className="call-actions-stack">
           <div className="actions">
             <button type="button" className="btn btn-primary" onClick={() => void markResolved()}>
               Mark Resolved
@@ -951,10 +813,10 @@ export default function CallDetailPage() {
           </div>
           <div className="actions">
             <button type="button" className="btn btn-soft" onClick={() => void submitFeedback(true)}>
-              Helpful ✓
+              Helpful
             </button>
             <button type="button" className="btn btn-danger" onClick={() => void submitFeedback(false)}>
-              Not Helpful ✗
+              Not helpful
             </button>
             {feedbackNote ? <span className="hint">{feedbackNote}</span> : null}
           </div>
@@ -972,7 +834,7 @@ export default function CallDetailPage() {
         
 
         {share ? (
-          <div className="panel-muted" style={{ padding: 12, borderRadius: 12 }}>
+          <div className="detail-inset">
             <p className="hint">Share link (read-only · 24h):</p>
             <div className="share-url-row">
               <code className="mono share-url">{typeof window !== "undefined" ? `${window.location.origin}/share/${share.token}` : share.token}</code>
@@ -982,12 +844,12 @@ export default function CallDetailPage() {
           </div>
         ) : null}
 
-        <div className="panel-muted" style={{ padding: 12, borderRadius: 12 }}>
+        <div className="detail-inset">
           <p className="hint">
             Feedback totals: Helpful {formatCount(detail.feedback_summary.helpful_count)} · Not helpful {formatCount(detail.feedback_summary.not_helpful_count)}
           </p>
         </div>
       </section>
-    </>
+    </div>
   );
 }

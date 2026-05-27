@@ -482,8 +482,7 @@ function CallsPageContent() {
                 {rows.map((row) => (
                   <tr
                     key={row.call_id}
-                    className={selectedIds.has(row.call_id) ? "row-selected" : ""}
-                    style={{ cursor: "pointer" }}
+                    className={`${selectedIds.has(row.call_id) ? "row-selected " : ""}calls-row-clickable`}
                     onClick={() => router.push(`/calls/${row.call_id}`)}
                   >
                     <td onClick={(e) => e.stopPropagation()}>
@@ -494,19 +493,19 @@ function CallsPageContent() {
                         aria-label={`Select call ${row.call_id}`}
                       />
                     </td>
-                    <td className="mono" title={row.call_id} style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{row.call_id.slice(0, 12)}</td>
+                    <td className="mono calls-row-id" title={row.call_id}>{row.call_id.slice(0, 12)}</td>
                     <td>{formatDateTime(row.created_at)}</td>
                     <td>{safeString(row.provider, "unknown")}</td>
                     <td>{safeString(row.model, "unknown")}</td>
                     <td>{safeString(row.agent_name, "-")}</td>
-                    <td style={{ maxWidth: "100px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={safeString(row.user_id, "")}>{safeString(row.user_id, "-")}</td>
+                    <td className="calls-user-cell" title={safeString(row.user_id, "")}>{safeString(row.user_id, "-")}</td>
                     <td className="mono">{formatCount(row.total_tokens)}</td>
                     <td className="mono">{formatUsd(row.cost_usd)}</td>
                     <td className="mono">{row.latency_ms != null ? (row.latency_ms < 1000 ? `${row.latency_ms}ms` : `${(row.latency_ms / 1000).toFixed(1)}s`) : "-"}</td>
                     <td>
                       <StatusPill value={row.status} />
                     </td>
-                    <td>{row.error_code ? <span style={{ color: "#ef4444", fontSize: "0.8rem", fontFamily: "monospace" }}>{row.error_code}</span> : <span style={{ color: "var(--muted)" }}>{"\u2014"}</span>}</td>
+                    <td>{row.error_code ? <span className="calls-row-error">{row.error_code}</span> : <span className="calls-row-muted">{"\u2014"}</span>}</td>
                   </tr>
                 ))}
               </tbody>

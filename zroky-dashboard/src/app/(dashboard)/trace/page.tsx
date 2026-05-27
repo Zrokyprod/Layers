@@ -6,16 +6,14 @@ import { useRecentTraces } from "@/lib/hooks";
 import { formatUsd, formatDateTime, formatCount } from "@/lib/format";
 import type { TraceListItem } from "@/lib/types";
 
-const PROVIDER_COLORS: Record<string, string> = {
-  openai: "#10a37f",
-  anthropic: "#c9855e",
-  google: "#4285f4",
-  gemini: "#4285f4",
-  cohere: "#db4437",
-  mistral: "#7b5ea7",
-};
-function providerColor(p: string): string {
-  return PROVIDER_COLORS[p.toLowerCase()] ?? "#6b7280";
+function providerTone(provider: string): string {
+  const key = provider.toLowerCase();
+  if (key.includes("openai")) return "openai";
+  if (key.includes("anthropic")) return "anthropic";
+  if (key.includes("google") || key.includes("gemini")) return "google";
+  if (key.includes("cohere")) return "cohere";
+  if (key.includes("mistral")) return "mistral";
+  return "default";
 }
 
 function TraceRow({ item }: { item: TraceListItem }) {
@@ -54,7 +52,7 @@ function TraceRow({ item }: { item: TraceListItem }) {
     <div className={`trace-row${item.has_failure ? " trace-row-failed" : " trace-row-ok"}`}>
       <div className="trace-row-main">
         <div className="trace-row-title">
-          <strong>{item.agents.length > 0 ? item.agents.join(" → ") : "Unnamed Trace"}</strong>
+          <strong>{item.agents.length > 0 ? item.agents.join(" -> ") : "Unnamed Trace"}</strong>
           {item.agent_count > 1 && (
             <span className="trace-badge trace-badge-multi">{item.agent_count} agents</span>
           )}
@@ -69,8 +67,7 @@ function TraceRow({ item }: { item: TraceListItem }) {
           {item.providers.map((p) => (
             <span
               key={p}
-              className="trace-provider-tag"
-              style={{ background: providerColor(p) + "22", color: providerColor(p), borderColor: providerColor(p) + "44" }}
+              className={`trace-provider-tag provider-${providerTone(p)}`}
             >
               {p}
             </span>
@@ -257,26 +254,42 @@ export default function TracePage() {
               {label}
             </button>
           ))}
-          <div style={{ marginLeft: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input placeholder="Search trace id" value={searchId} onChange={(e) => setSearchId(e.target.value)} style={{ minWidth: 200 }} />
-            <select value={providerFilter ?? ""} onChange={(e) => setProviderFilter(e.target.value || null)}>
-              <option value="">All providers</option>
-              {providerNames.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <select value={agentFilter ?? ""} onChange={(e) => setAgentFilter(e.target.value || null)}>
-              <option value="">All agents</option>
-              {agentNames.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "ANY" | "FAILED" | "OK")}>
-              <option value="ANY">Any status</option>
-              <option value="FAILED">Failed only</option>
-              <option value="OK">Successful only</option>
-            </select>
-            <label style={{ fontSize: 12 }}>From</label>
-            <input type="date" value={startDate ?? ""} onChange={(e) => setStartDate(e.target.value || null)} />
-            <label style={{ fontSize: 12 }}>To</label>
-            <input type="date" value={endDate ?? ""} onChange={(e) => setEndDate(e.target.value || null)} />
-            <button className="btn btn-soft" onClick={() => { setSearchId(""); setProviderFilter(null); setAgentFilter(null); setStatusFilter('ANY'); setStartDate(null); setEndDate(null); }}>Clear</button>
+          <div className="trace-filter-fields">
+            <label className="detail-field">
+              <span className="detail-field-label">Search</span>
+              <input className="input" placeholder="Trace id" value={searchId} onChange={(e) => setSearchId(e.target.value)} />
+            </label>
+            <label className="detail-field">
+              <span className="detail-field-label">Provider</span>
+              <select className="input" value={providerFilter ?? ""} onChange={(e) => setProviderFilter(e.target.value || null)}>
+                <option value="">All providers</option>
+                {providerNames.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </label>
+            <label className="detail-field">
+              <span className="detail-field-label">Agent</span>
+              <select className="input" value={agentFilter ?? ""} onChange={(e) => setAgentFilter(e.target.value || null)}>
+                <option value="">All agents</option>
+                {agentNames.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
+            <label className="detail-field">
+              <span className="detail-field-label">Status</span>
+              <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "ANY" | "FAILED" | "OK")}>
+                <option value="ANY">Any status</option>
+                <option value="FAILED">Failed only</option>
+                <option value="OK">Successful only</option>
+              </select>
+            </label>
+            <label className="detail-field">
+              <span className="detail-field-label">From</span>
+              <input className="input" type="date" value={startDate ?? ""} onChange={(e) => setStartDate(e.target.value || null)} />
+            </label>
+            <label className="detail-field">
+              <span className="detail-field-label">To</span>
+              <input className="input" type="date" value={endDate ?? ""} onChange={(e) => setEndDate(e.target.value || null)} />
+            </label>
+            <button className="btn btn-soft" type="button" onClick={() => { setSearchId(""); setProviderFilter(null); setAgentFilter(null); setStatusFilter('ANY'); setStartDate(null); setEndDate(null); }}>Clear</button>
           </div>
         </div>
       </section>

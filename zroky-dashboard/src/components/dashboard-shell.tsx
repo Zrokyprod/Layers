@@ -52,17 +52,11 @@ function getTitle(pathname: string): string {
   if (pathname === "/home") {
     return "Command Center";
   }
-  if (pathname === "/reliability") {
-    return "Agents";
-  }
   if (pathname === "/issues") {
     return "Issues";
   }
   if (pathname.startsWith("/replay/")) {
     return "Replay Run";
-  }
-  if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
-    return "Fix Queue";
   }
   if (pathname === "/settings/evaluation") {
     return "Evaluation Settings";
@@ -84,15 +78,6 @@ function getTitle(pathname: string): string {
   }
   if (pathname === "/settings" || pathname.startsWith("/settings/")) {
     return "Settings";
-  }
-  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
-    return "Calibration";
-  }
-  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
-    return "Judge";
-  }
-  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
-    return "Root Cause";
   }
   if (pathname === "/trace" || pathname.startsWith("/trace/")) {
     return "Trace";
@@ -117,7 +102,7 @@ function getSubTitle(pathname: string): string {
   if (pathname === "/home") {
     return "Secondary command center for project-wide operational context.";
   }
-  if (pathname === "/agents" || pathname.startsWith("/agents/") || pathname === "/reliability") {
+  if (pathname === "/agents" || pathname.startsWith("/agents/")) {
     return "Launch from real agent health, reliability, cost, and determinism data.";
   }
   if (pathname === "/cost" || pathname.startsWith("/cost/")) {
@@ -140,9 +125,6 @@ function getSubTitle(pathname: string): string {
   }
   if (pathname === "/alerts" || pathname.startsWith("/alerts/")) {
     return "Alert routing, triage, acknowledgement, and resolution.";
-  }
-  if (pathname === "/recommendations" || pathname.startsWith("/recommendations/")) {
-    return "What to fix next, ranked by dollar impact.";
   }
   if (pathname === "/settings") {
     return "Project, members, providers, plan & billing.";
@@ -170,18 +152,6 @@ function getSubTitle(pathname: string): string {
   }
   if (pathname === "/settings/evaluation") {
     return "Calibration and judge controls live here.";
-  }
-  if (pathname === "/outcomes" || pathname.startsWith("/outcomes/")) {
-    return "Business cost of every failure — refunds, escalations, churn, attributed by agent.";
-  }
-  if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
-    return "Secondary evaluation workspace linked from Settings.";
-  }
-  if (pathname === "/judge" || pathname.startsWith("/judge/")) {
-    return "Secondary judge diagnostics linked from Settings.";
-  }
-  if (pathname === "/root-cause" || pathname.startsWith("/root-cause/")) {
-    return "Root-cause analysis belongs in issue context.";
   }
   if (pathname === "/trace" || pathname.startsWith("/trace/")) {
     return "Deep-linked trace evidence for calls and issues.";

@@ -21,6 +21,7 @@ import {
 import { ignoreIssue, listIssues, resolveIssue, updateIssueTriage } from "@/lib/api";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel } from "@/lib/issue-format";
+import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
 import { useCreateReplayRunFromIssue } from "@/lib/hooks";
 import type { IssueItem, IssueStatus } from "@/lib/types";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
@@ -279,7 +280,7 @@ function IssueList({ status }: { status: IssueStatus }) {
     event.stopPropagation();
     setReplayingId(issueId);
     createReplay.mutate(
-      { issueId, payload: { replay_mode: "stub" } },
+      { issueId, payload: { replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE } },
       { onSettled: () => setReplayingId(null) },
     );
   }
@@ -490,7 +491,7 @@ function IssueCard({
             className="btn btn-primary btn-sm"
             onClick={(event) => onCreateReplay(event, issue.id)}
             disabled={!canCreateReplay || replaying}
-            title={canCreateReplay ? "Create replay from issue evidence" : "No issue evidence available for replay"}
+            title={canCreateReplay ? "Create real LLM replay from issue evidence" : "No issue evidence available for replay"}
           >
             {replaying ? <Loader2 aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
             {replaying ? "Creating..." : "Create replay"}
