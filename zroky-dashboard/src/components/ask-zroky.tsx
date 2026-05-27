@@ -3,11 +3,37 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Send, Sparkles, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import {
+  CheckCircle2,
+  ExternalLink,
+  FilePlus2,
+  Loader2,
+  MessageSquarePlus,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  ThumbsDown,
+  ThumbsUp,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { askZroky, listCalls, listAlerts, submitAskFeedback } from "@/lib/api";
+import {
+  addGoldenTrace,
+  askZroky,
+  createGoldenSet,
+  getReplayRun,
+  listAlerts,
+  listCalls,
+  listGoldenSets,
+  submitAskFeedback,
+  type GoldenSetView,
+  type ReplayRunDetailItem,
+  type ReplayRunTraceItem,
+} from "@/lib/api";
 import { useCreateReplayRunFromCall, useCreateReplayRunFromIssue } from "@/lib/hooks";
+import { replayVerifiedFix } from "@/lib/replay-mode";
 import type { AskContext, AskEvidence, AskFeedbackRequest, AskResponse } from "@/lib/types";
 
 interface ChatTurn {
@@ -35,6 +61,15 @@ interface AskWorkflowAction {
   href?: string;
 }
 
+interface AskTurnRefs {
+  callId: string | null;
+  issueId: string | null;
+  traceId: string | null;
+  replayId: string | null;
+}
+
+const ASK_GOLDEN_SET_NAME = "Ask Zroky verified fixes";
+
 function actionKind(action: string): AskActionKind | null {
   const normalized = action.toLowerCase().replace(/[_-]/g, " ");
   if (normalized.includes("create") && normalized.includes("replay")) return "create_replay";
@@ -55,18 +90,26 @@ function idFromHref(href: string | undefined, prefix: string): string | null {
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
-function buildWorkflowActions(turn: ChatTurn): AskWorkflowAction[] {
+function turnRefs(turn: ChatTurn): AskTurnRefs {
   const evidence = turn.evidence ?? [];
-  if (evidence.length === 0) return [];
   const context = turn.context ?? null;
   const callEvidence = evidenceFor(evidence, ["call"]);
   const issueEvidence = evidenceFor(evidence, ["issue", "anomaly"]);
   const traceEvidence = evidenceFor(evidence, ["trace"]);
   const replayEvidence = evidenceFor(evidence, ["replay"]);
-  const callId = context?.call_id ?? callEvidence?.id ?? idFromHref(callEvidence?.href, "/calls");
-  const issueId = context?.issue_id ?? context?.anomaly_id ?? issueEvidence?.id ?? idFromHref(issueEvidence?.href, "/issues");
-  const traceId = context?.trace_id ?? traceEvidence?.id ?? idFromHref(traceEvidence?.href, "/trace");
-  const replayId = replayEvidence?.id ?? idFromHref(replayEvidence?.href, "/replay");
+
+  return {
+    callId: context?.call_id ?? callEvidence?.id ?? idFromHref(callEvidence?.href, "/calls"),
+    issueId: context?.issue_id ?? context?.anomaly_id ?? issueEvidence?.id ?? idFromHref(issueEvidence?.href, "/issues"),
+    traceId: context?.trace_id ?? traceEvidence?.id ?? idFromHref(traceEvidence?.href, "/trace"),
+    replayId: replayEvidence?.id ?? idFromHref(replayEvidence?.href, "/replay"),
+  };
+}
+
+function buildWorkflowActions(turn: ChatTurn): AskWorkflowAction[] {
+  const evidence = turn.evidence ?? [];
+  if (evidence.length === 0) return [];
+  const { callId, issueId, traceId, replayId } = turnRefs(turn);
   const seen = new Set<AskActionKind>();
   const actions: AskWorkflowAction[] = [];
 
@@ -78,14 +121,46 @@ function buildWorkflowActions(turn: ChatTurn): AskWorkflowAction[] {
     if (kind === "open_issue" && issueId) actions.push({ kind, label: "Open Issue", href: `/issues/${encodeURIComponent(issueId)}` });
     if (kind === "open_call" && callId) actions.push({ kind, label: "Open Call", href: `/calls/${encodeURIComponent(callId)}` });
     if (kind === "open_trace" && traceId) actions.push({ kind, label: "Open Trace", href: `/trace/${encodeURIComponent(traceId)}` });
-    if (kind === "promote_golden") actions.push({ kind, label: "Promote Golden", href: replayId ? `/replay/${encodeURIComponent(replayId)}` : "/goldens" });
+    if (kind === "promote_golden" && replayId) actions.push({ kind, label: "Promote Golden" });
+    if (kind === "promote_golden" && !replayId && !seen.has("create_replay") && (issueId || callId)) {
+      seen.add("create_replay");
+      actions.push({ kind: "create_replay", label: "Create Replay First" });
+    }
   }
 
   return actions;
 }
 
+function actionIcon(kind: AskActionKind): LucideIcon {
+  if (kind === "create_replay") return FilePlus2;
+  if (kind === "promote_golden") return ShieldCheck;
+  return ExternalLink;
+}
+
+function promotionCriteria(run: ReplayRunDetailItem, trace: ReplayRunTraceItem): string {
+  return JSON.stringify({
+    source: "ask_zroky_verified_promotion",
+    source_replay_run_id: run.id,
+    source_replay_trace_id: trace.id,
+    source_golden_trace_id: trace.golden_trace_id,
+    replay_mode: run.replay_mode,
+    executor_replay_mode: run.executor_replay_mode,
+    replay_status: run.status,
+    replay_trace_status: trace.status,
+    verification_status: run.summary.verification_status,
+    verified_fix: replayVerifiedFix(run.replay_mode, run.summary.verified_fix),
+    diff_metric: trace.diff_metric,
+    cost_delta_usd: trace.cost_delta_usd,
+    latency_delta_ms: trace.latency_delta_ms,
+    output_diff: trace.output_diff,
+    tool_behavior_diff: trace.tool_behavior_diff,
+    promoted_at: new Date().toISOString(),
+  });
+}
+
 export function AskZroky() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -239,31 +314,81 @@ export function AskZroky() {
   }
 
   async function runWorkflowAction(turn: ChatTurn, action: AskWorkflowAction) {
-    if (action.kind !== "create_replay") return;
-    const evidence = turn.evidence ?? [];
-    const callEvidence = evidenceFor(evidence, ["call"]);
-    const issueEvidence = evidenceFor(evidence, ["issue", "anomaly"]);
-    const callId = turn.context?.call_id ?? callEvidence?.id ?? idFromHref(callEvidence?.href, "/calls");
-    const issueId = turn.context?.issue_id ?? turn.context?.anomaly_id ?? issueEvidence?.id ?? idFromHref(issueEvidence?.href, "/issues");
-    setActionStatus((prev) => ({ ...prev, [`${turn.id}-${action.kind}`]: "Creating replay..." }));
+    const { callId, issueId, replayId } = turnRefs(turn);
+    const key = `${turn.id}-${action.kind}`;
+    const verb = action.kind === "promote_golden" ? "Promoting" : "Creating";
+    setActionStatus((prev) => ({ ...prev, [key]: `${verb}...` }));
+
     try {
-      const run = issueId
-        ? await createReplayFromIssue.mutateAsync({ issueId, payload: { replay_mode: "real_llm" } })
-        : callId
-        ? await createReplayFromCall.mutateAsync({ callId, payload: { replay_mode: "real_llm" } })
-        : null;
-      if (!run) {
-        setActionStatus((prev) => ({ ...prev, [`${turn.id}-${action.kind}`]: "No call or issue evidence available." }));
+      if (action.kind === "create_replay") {
+        const run = issueId
+          ? await createReplayFromIssue.mutateAsync({ issueId, payload: { replay_mode: "real_llm" } })
+          : callId
+            ? await createReplayFromCall.mutateAsync({ callId, payload: { replay_mode: "real_llm" } })
+            : null;
+        if (!run) {
+          setActionStatus((prev) => ({ ...prev, [key]: "No call or issue evidence available." }));
+          return;
+        }
+        setOpen(false);
+        router.push(`/replay/${run.id}`);
         return;
       }
-      setOpen(false);
-      router.push(`/replay/${run.id}`);
+
+      if (action.kind === "promote_golden") {
+        if (!replayId) {
+          setActionStatus((prev) => ({ ...prev, [key]: "No replay evidence available." }));
+          return;
+        }
+        const { targetSet, createdCount } = await promoteReplayToGolden(replayId);
+        setActionStatus((prev) => ({
+          ...prev,
+          [key]: `${createdCount} trace${createdCount === 1 ? "" : "s"} added to ${targetSet.name}.`,
+        }));
+        void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
+        void queryClient.invalidateQueries({ queryKey: ["golden-traces", targetSet.id] });
+        setOpen(false);
+        router.push("/goldens");
+      }
     } catch (error) {
       setActionStatus((prev) => ({
         ...prev,
-        [`${turn.id}-${action.kind}`]: error instanceof Error ? error.message : "Create replay failed.",
+        [key]: error instanceof Error ? error.message : "Action failed.",
       }));
     }
+  }
+
+  async function promoteReplayToGolden(replayId: string): Promise<{ targetSet: GoldenSetView; createdCount: number }> {
+    const run = await getReplayRun(replayId);
+    const verifiedFix = replayVerifiedFix(run.replay_mode, run.summary.verified_fix);
+    const promotableTraces = run.traces.filter((trace) => trace.status === "pass" && Boolean(trace.call_id_replayed));
+
+    if (run.status !== "pass" || run.replay_mode_warning || !verifiedFix || promotableTraces.length === 0) {
+      throw new Error("Only verified, non-stub passing replays can be promoted to goldens.");
+    }
+
+    const sets = await listGoldenSets({ limit: 100 });
+    let targetSet = sets.items.find((set) => set.name === ASK_GOLDEN_SET_NAME) ?? null;
+    if (!targetSet) {
+      targetSet = await createGoldenSet({
+        name: ASK_GOLDEN_SET_NAME,
+        description: "Verified replay traces promoted from Ask Zroky.",
+      });
+    }
+
+    let createdCount = 0;
+    for (const trace of promotableTraces) {
+      if (!trace.call_id_replayed) continue;
+      await addGoldenTrace(targetSet.id, {
+        call_id: trace.call_id_replayed,
+        expected_output_text: trace.output_text ?? undefined,
+        criteria_json: promotionCriteria(run, trace),
+        weight: 1,
+      });
+      createdCount += 1;
+    }
+
+    return { targetSet, createdCount };
   }
 
   function reset() {
@@ -333,49 +458,36 @@ export function AskZroky() {
             // Cold-start: no data yet
             !hasData && !callsQuery.isLoading ? (
               <div className="ask-empty">
+                <div className="ask-empty-mark" aria-hidden="true">
+                  <MessageSquarePlus className="h-5 w-5" />
+                </div>
                 <p className="ask-empty-title">No data yet</p>
                 <p className="ask-empty-sub">
                   Install the Zroky SDK to start analyzing your LLM calls.
                 </p>
-                <ol
-                  style={{
-                    paddingLeft: "1.25rem",
-                    fontSize: "0.8rem",
-                    lineHeight: 1.7,
-                    color: "var(--text-muted, #8b90a3)",
-                    margin: "0.75rem 0 1rem",
-                  }}
-                >
+                <ol className="ask-setup-list">
                   <li>
                     <Link
                       href="/settings/keys"
                       className="ask-evidence-link"
                       onClick={() => setOpen(false)}
                     >
-                      Settings → API Keys
+                      Settings - API Keys
                     </Link>{" "}
-                    — copy your project key
+                    - copy your project key
                   </li>
                   <li>
-                    <code
-                      style={{
-                        fontFamily: "ui-monospace, monospace",
-                        fontSize: "0.78rem",
-                        background: "var(--surface-2, rgba(255,255,255,.06))",
-                        padding: "0 0.25rem",
-                        borderRadius: "3px",
-                      }}
-                    >
-                      npm i zroky-sdk
-                    </code>{" "}
-                    — install the SDK
+                    <code className="ask-inline-code">npm i zroky-sdk</code> - install the SDK
                   </li>
-                  <li>Instrument one LLM call — live data appears in seconds</li>
+                  <li>Instrument one LLM call - live data appears in seconds</li>
                 </ol>
               </div>
             ) : (
               // Guided empty state with dynamic suggestions
               <div className="ask-empty">
+                <div className="ask-empty-mark" aria-hidden="true">
+                  <Sparkles className="h-5 w-5" />
+                </div>
                 <p className="ask-empty-title">Ask anything about your AI agent.</p>
                 <p className="ask-empty-sub">Try one of these:</p>
                 <div className="ask-suggestions">
@@ -403,14 +515,23 @@ export function AskZroky() {
                       <div className="ask-actions">
                         {buildWorkflowActions(turn).map((action) => {
                           const status = actionStatus[`${turn.id}-${action.kind}`];
+                          const busy = status === "Creating..." || status === "Promoting...";
+                          const Icon = busy ? Loader2 : actionIcon(action.kind);
                           return (
                             <div key={`${turn.id}-${action.kind}`} className="ask-action-item">
                               {action.href ? (
                                 <Link href={action.href} className="ask-action-button" onClick={() => setOpen(false)}>
+                                  <Icon className="ask-action-icon" aria-hidden="true" />
                                   {action.label}
                                 </Link>
                               ) : (
-                                <button type="button" className="ask-action-button" onClick={() => void runWorkflowAction(turn, action)}>
+                                <button
+                                  type="button"
+                                  className="ask-action-button"
+                                  onClick={() => void runWorkflowAction(turn, action)}
+                                  disabled={busy}
+                                >
+                                  <Icon className={`ask-action-icon${busy ? " spin-icon" : ""}`} aria-hidden="true" />
                                   {status ?? action.label}
                                 </button>
                               )}
@@ -453,39 +574,32 @@ export function AskZroky() {
                     )}
 
                     {turn.role === "assistant" && (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.4rem",
-                          marginTop: "0.6rem",
-                          fontSize: "0.72rem",
-                        }}
-                      >
+                      <div className="ask-feedback">
                         {turnFeedback[turn.id] ? (
-                          <span style={{ color: "var(--text-muted, #8b90a3)" }}>
+                          <span className="ask-feedback-saved">
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
                             Thanks for the feedback!
                           </span>
                         ) : (
                           <>
-                            <span style={{ color: "var(--text-muted, #8b90a3)" }}>
-                              Helpful?
-                            </span>
+                            <span className="ask-feedback-label">Helpful?</span>
                             <button
                               type="button"
-                              className="ask-reset-btn"
+                              className="ask-feedback-btn"
                               onClick={() => void handleFeedback(turn.id, "up")}
                               aria-label="Mark as helpful"
+                              title="Helpful"
                             >
-                              👍
+                              <ThumbsUp className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
-                              className="ask-reset-btn"
+                              className="ask-feedback-btn"
                               onClick={() => void handleFeedback(turn.id, "down")}
                               aria-label="Mark as not helpful"
+                              title="Not helpful"
                             >
-                              👎
+                              <ThumbsDown className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                           </>
                         )}
