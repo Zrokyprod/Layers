@@ -20,7 +20,7 @@ const KNOWN_ACTIONS = [
 function MetaCell({ raw }: { raw: string }) {
   let parsed: Record<string, unknown> | null = null;
   try { parsed = JSON.parse(raw); } catch { /* ignore */ }
-  if (!parsed || Object.keys(parsed).length === 0) return <span className="hint">—</span>;
+  if (!parsed || Object.keys(parsed).length === 0) return <span className="hint">-</span>;
   return (
     <span className="owner-meta-cell">
       {JSON.stringify(parsed, null, 0)}
@@ -75,7 +75,7 @@ export default function AuditLogPage() {
             <label className="owner-filter-label">TENANT ID</label>
             <input
               className="input"
-              placeholder="Filter by tenant…"
+              placeholder="Filter by tenant..."
               value={tenantId}
               onChange={(e) => { setTenantId(e.target.value); setPage(0); }}
             />
@@ -89,7 +89,7 @@ export default function AuditLogPage() {
       </div>
 
       {errorMessage && <div className="alert-strip alert-strip-error">{errorMessage}</div>}
-      {loading && <p className="hint">Loading…</p>}
+      {loading && <p className="hint">Loading...</p>}
 
       {data && (
         <div className="owner-table-wrap">
@@ -114,7 +114,7 @@ export default function AuditLogPage() {
                     <code className="owner-action-code">{e.action}</code>
                   </td>
                   <td className="owner-td owner-td-truncate">
-                    {e.actor_subject || <span className="hint">—</span>}
+                    {e.actor_subject || <span className="hint">-</span>}
                   </td>
                   <td className="owner-td-mono">{e.tenant_id}</td>
                   <td className="owner-td-mono">{e.diagnosis_id}</td>
@@ -131,11 +131,11 @@ export default function AuditLogPage() {
       {totalPages > 1 && (
         <div className="owner-pagination">
           <button className="btn btn-soft" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loading}>
-            ← Prev
+            Prev
           </button>
           <span className="owner-pagination-info">Page {page + 1} of {totalPages}</span>
           <button className="btn btn-soft" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1 || loading}>
-            Next →
+            Next
           </button>
         </div>
       )}

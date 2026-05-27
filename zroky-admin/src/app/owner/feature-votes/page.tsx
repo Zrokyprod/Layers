@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * /owner/feature-votes — Owner view of customer feature-interest polls.
+ * /owner/feature-votes - Owner view of customer feature-interest polls.
  *
  * Lists every registered coming-soon feature with vote counts,
  * percentage interested, and a "ship threshold" status badge.
@@ -33,7 +33,7 @@ function formatPct(value: number): string {
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   try {
     return new Date(value).toLocaleString();
   } catch {
@@ -47,9 +47,9 @@ function StatusBadge({ status }: { status: AdminVoteSummary["status"] }) {
       <span
         className="status-pill"
         style={{ background: "#064e3b", color: "#a7f3d0" }}
-        title="At or above ship threshold — consider prioritizing"
+        title="At or above ship threshold - consider prioritizing"
       >
-        ✓ above threshold
+        above threshold
       </span>
     );
   }
@@ -64,9 +64,9 @@ function StatusBadge({ status }: { status: AdminVoteSummary["status"] }) {
     <span
       className="status-pill"
       style={{ background: "#3f2a08", color: "#fcd34d" }}
-      title="Below ship threshold — collect more data"
+      title="Below ship threshold - collect more data"
     >
-      ↓ below threshold
+      below threshold
     </span>
   );
 }
@@ -156,7 +156,7 @@ export default function OwnerFeatureVotesPage() {
     return () => controller.abort();
   }, [selected, filter]);
 
-  // CSV export — browser fetch with the admin token to trigger download
+  // CSV export with the admin token to trigger download.
   const handleExport = useCallback(async () => {
     if (!selected) return;
     const token = getOwnerToken();
@@ -198,7 +198,7 @@ export default function OwnerFeatureVotesPage() {
     <div className="owner-page">
       <div className="owner-page-header">
         <div>
-          <h2 className="owner-page-title">Feature Votes</h2>
+          <h2 className="owner-page-title">Feature Interest</h2>
           <p className="hint">
             Customer interest in coming-soon features. Used to validate demand
             before committing engineering time.
@@ -229,7 +229,7 @@ export default function OwnerFeatureVotesPage() {
           <tbody>
             {loadingList && (
               <tr>
-                <td colSpan={7} className="owner-td owner-td-empty">Loading…</td>
+                <td colSpan={7} className="owner-td owner-td-empty">Loading...</td>
               </tr>
             )}
             {!loadingList && list && list.features.length === 0 && (
@@ -260,8 +260,8 @@ export default function OwnerFeatureVotesPage() {
                   </td>
                   <td className="owner-td">{f.total}</td>
                   <td className="owner-td">
-                    <span style={{ color: "#10b981" }}>👍 {f.interested}</span>{" "}
-                    <span className="hint">/ 👎 {f.not_interested}</span>
+                    <span style={{ color: "#10b981" }}>Interested {f.interested}</span>{" "}
+                    <span className="hint">/ Not interested {f.not_interested}</span>
                   </td>
                   <td className="owner-td">{formatPct(f.interested_pct)}</td>
                   <td className="owner-td">
@@ -313,7 +313,7 @@ export default function OwnerFeatureVotesPage() {
             </div>
           </div>
 
-          {loadingDetail && <p className="hint">Loading votes…</p>}
+          {loadingDetail && <p className="hint">Loading votes...</p>}
 
           {detail && !loadingDetail && (
             <div className="owner-table-wrap" style={{ marginTop: 12 }}>
@@ -340,9 +340,9 @@ export default function OwnerFeatureVotesPage() {
                         <td className="owner-td owner-td-ts">{formatDate(row.created_at)}</td>
                         <td className="owner-td">
                           {row.vote === "interested" ? (
-                            <span style={{ color: "#10b981" }}>👍 interested</span>
+                            <span style={{ color: "#10b981" }}>Interested</span>
                           ) : (
-                            <span className="hint">👎 not yet</span>
+                            <span className="hint">Not interested</span>
                           )}
                         </td>
                         <td className="owner-td owner-td-truncate">
@@ -377,7 +377,7 @@ export default function OwnerFeatureVotesPage() {
                           {row.use_case ? (
                             <em style={{ color: "#a3a3a3" }}>&ldquo;{row.use_case}&rdquo;</em>
                           ) : (
-                            <span className="hint">—</span>
+                            <span className="hint">-</span>
                           )}
                         </td>
                       </tr>

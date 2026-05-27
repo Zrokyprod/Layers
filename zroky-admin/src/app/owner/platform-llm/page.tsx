@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Cpu, RotateCcw } from "lucide-react";
-import { getPlatformLlmUsageSummary } from "@/lib/api";
+import { fetchPlatformLlmUsageSummary } from "@/lib/owner-api";
 import type { PlatformLlmUsageSummaryResponse } from "@/lib/types";
 
 export default function PlatformLlmUsagePage() {
@@ -14,7 +14,7 @@ export default function PlatformLlmUsagePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getPlatformLlmUsageSummary();
+      const res = await fetchPlatformLlmUsageSummary();
       setData(res);
     } catch (e: unknown) {
       const msg =
@@ -46,7 +46,7 @@ export default function PlatformLlmUsagePage() {
 
       {error && <div className="alert-strip alert-strip-error">{error}</div>}
 
-      {loading && !data && <p className="hint">Loading usage data…</p>}
+      {loading && !data && <p className="hint">Loading usage data...</p>}
 
       {data && (
         <>
@@ -113,7 +113,7 @@ export default function PlatformLlmUsagePage() {
                   <span className="owner-llm-model">{r.model}</span>
                   <span className="hint">{r.total_tokens.toLocaleString()} tokens</span>
                   <span className="hint">${r.cost_usd.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 6 })}</span>
-                  <span className="hint">{r.latency_ms != null ? `${Math.round(r.latency_ms)} ms` : "—"}</span>
+                  <span className="hint">{r.latency_ms != null ? `${Math.round(r.latency_ms)} ms` : "-"}</span>
                 </div>
               ))}
             </div>

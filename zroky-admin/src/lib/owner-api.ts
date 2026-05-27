@@ -1,5 +1,11 @@
-// Owner Dashboard API — uses PROVISIONING_TOKEN stored in sessionStorage
-// Sends it as x-zroky-admin-token header (forwarded by the Next.js proxy)
+// Owner Dashboard API. Uses the provisioning token stored in sessionStorage and
+// forwards it as x-zroky-admin-token through the Next.js proxy.
+
+import type {
+  FeatureFlag,
+  FeatureFlagListResponse,
+  PlatformLlmUsageSummaryResponse,
+} from "@/lib/types";
 
 const BASE = "/api/zroky";
 const TOKEN_KEY = "zroky_owner_token";
@@ -36,10 +42,11 @@ async function ownerRequest<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return res.json() as Promise<T>;
 }
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface OwnerStats {
   total_users: number;
@@ -130,80 +137,22 @@ export interface ProjectMemberItem {
   joined_at: string;
 }
 
-// ─── API functions ────────────────────────────────────────────────────────────
-
-export function fetchOwnerStats(signal?: AbortSignal): Promise<OwnerStats> {
-  return ownerRequest<OwnerStats>("/v1/owner/stats", { signal });
+export interface ProjectRateLimitResponse {
+  project_id: string;
+  overrides: Record<string, unknown>;
+  has_override: boolean;
 }
 
-export function fetchOwnerHealth(signal?: AbortSignal): Promise<OwnerHealth> {
-  return ownerRequest<OwnerHealth>("/v1/owner/health", { signal });
-}
-
-export function fetchOwnerInfra(signal?: AbortSignal): Promise<InfraStats> {
-  return ownerRequest<InfraStats>("/v1/owner/infra", { signal });
-}
-
-export function fetchOwnerUsers(limit = 100, offset = 0): Promise<OwnerUsersResponse> {
-  return ownerRequest<OwnerUsersResponse>(`/v1/owner/users?limit=${limit}&offset=${offset}`);
-}
-
-export function fetchOwnerProjects(limit = 100, offset = 0): Promise<OwnerProjectsResponse> {
-  return ownerRequest<OwnerProjectsResponse>(`/v1/owner/projects?limit=${limit}&offset=${offset}`);
-}
-
-export function fetchOwnerUser(userId: string): Promise<OwnerUserItem> {
-  return ownerRequest<OwnerUserItem>(`/v1/owner/users/${userId}`);
-}
-
-export function fetchUserMemberships(userId: string): Promise<{ memberships: UserMembershipItem[] }> {
-  return ownerRequest<{ memberships: UserMembershipItem[] }>(`/v1/owner/users/${userId}/memberships`);
-}
-
-export async function setUserStatus(userId: string, isActive: boolean, reason?: string): Promise<void> {
-  await ownerRequest<unknown>(`/v1/owner/users/${userId}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ is_active: isActive, reason }),
-  });
-}
-
-export function fetchOwnerProject(projectId: string): Promise<OwnerProjectItem> {
-  return ownerRequest<OwnerProjectItem>(`/v1/owner/projects/${projectId}`);
-}
-
-export function fetchProjectMembers(projectId: string): Promise<{ members: ProjectMemberItem[] }> {
-  return ownerRequest<{ members: ProjectMemberItem[] }>(`/v1/owner/projects/${projectId}/members`);
-}
-
-export async function setProjectStatus(projectId: string, isActive: boolean, reason?: string): Promise<void> {
-  await ownerRequest<unknown>(`/v1/owner/projects/${projectId}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ is_active: isActive, reason }),
-  });
-}
-
-export async function setMaintenanceMode(enabled: boolean, message?: string): Promise<void> {
-  await ownerRequest<unknown>("/v1/owner/maintenance", {
-    method: "POST",
-    body: JSON.stringify({ enabled, message }),
-  });
+export interface ProjectRateLimitUpdate {
+  ingest_soft_limit_rpm?: number;
+  ingest_burst_limit_rpm?: number;
+  ingest_enforce_rate_limit?: boolean;
 }
 
 export interface PricingConfigResponse {
   config: Record<string, unknown>;
   path: string;
   exists: boolean;
-}
-
-export function fetchOwnerPricing(): Promise<PricingConfigResponse> {
-  return ownerRequest<PricingConfigResponse>("/v1/owner/pricing");
-}
-
-export async function updateOwnerPricing(config: Record<string, unknown>): Promise<PricingConfigResponse> {
-  return ownerRequest<PricingConfigResponse>("/v1/owner/pricing", {
-    method: "PUT",
-    body: JSON.stringify({ config }),
-  });
 }
 
 export interface RateLimitConfig {
@@ -214,21 +163,6 @@ export interface RateLimitConfig {
   ingest_backpressure_ttl_seconds: number;
   ingest_enforce_rate_limit: boolean;
   overrides: Record<string, unknown>;
-}
-
-export function fetchRateLimits(): Promise<RateLimitConfig> {
-  return ownerRequest<RateLimitConfig>("/v1/owner/rate-limits");
-}
-
-export async function setRateLimitOverrides(overrides: Record<string, unknown>): Promise<void> {
-  await ownerRequest<unknown>("/v1/owner/rate-limits/overrides", {
-    method: "PUT",
-    body: JSON.stringify({ overrides }),
-  });
-}
-
-export async function clearRateLimitOverrides(): Promise<void> {
-  await ownerRequest<unknown>("/v1/owner/rate-limits/overrides", { method: "DELETE" });
 }
 
 export interface AuditLogItem {
@@ -268,11 +202,16 @@ export interface OwnerBillingSummary {
 export interface OwnerSupportTicketItem {
   ticket_id: string;
   tenant_id: string | null;
+  user_id: string | null;
+  subject: string | null;
+  email: string | null;
   title: string;
+  description: string | null;
   category: string | null;
   priority: string;
   status: string;
   assigned_to: string | null;
+  resolved_at: string | null;
   created_at: string;
   updated_at: string;
   message_count: number;
@@ -283,60 +222,48 @@ export interface OwnerSupportTicketsResponse {
   total: number;
 }
 
-export function fetchAuditLog(
-  opts: { limit?: number; offset?: number; action?: string; tenant_id?: string } = {}
-): Promise<AuditLogResponse> {
-  const params = new URLSearchParams();
-  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
-  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
-  if (opts.action) params.set("action", opts.action);
-  if (opts.tenant_id) params.set("tenant_id", opts.tenant_id);
-  const qs = params.toString();
-  return ownerRequest<AuditLogResponse>(`/v1/owner/audit-log${qs ? "?" + qs : ""}`);
+export interface OwnerSupportMessageItem {
+  message_id: string;
+  sender_type: string;
+  sender_subject: string | null;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
 }
 
-export function fetchOwnerBillingSummary(): Promise<OwnerBillingSummary> {
-  return ownerRequest<OwnerBillingSummary>("/v1/owner/billing/summary");
+export interface OwnerSupportTicketDetailResponse {
+  ticket: OwnerSupportTicketItem;
+  messages: OwnerSupportMessageItem[];
 }
 
-export function fetchOwnerSupportTickets(
-  opts: { status?: string; priority?: string; tenant_id?: string; assigned_to?: string; limit?: number; offset?: number } = {},
-): Promise<OwnerSupportTicketsResponse> {
-  const params = new URLSearchParams();
-  if (opts.status) params.set("status", opts.status);
-  if (opts.priority) params.set("priority", opts.priority);
-  if (opts.tenant_id) params.set("tenant_id", opts.tenant_id);
-  if (opts.assigned_to) params.set("assigned_to", opts.assigned_to);
-  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
-  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
-  const qs = params.toString();
-  return ownerRequest<OwnerSupportTicketsResponse>(`/v1/owner/support/tickets${qs ? "?" + qs : ""}`);
+export interface OwnerBillingAccountItem {
+  org_id: string;
+  project_name: string | null;
+  plan_code: string;
+  status: string;
+  sla_tier: string;
+  seats: number;
+  current_period_end: string | null;
+  trial_end: string | null;
+  stripe_customer_id: string | null;
+  stripe_sub_id: string | null;
+  stripe_customer_url: string | null;
+  stripe_subscription_url: string | null;
+  updated_at: string;
 }
 
-export async function updateOwnerSupportTicket(
-  ticketId: string,
-  body: { status?: string; priority?: string; assigned_to?: string },
-): Promise<void> {
-  await ownerRequest<unknown>(`/v1/owner/support/tickets/${encodeURIComponent(ticketId)}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
+export interface OwnerBillingAccountsResponse {
+  items: OwnerBillingAccountItem[];
+  total: number;
 }
 
-/** Ping /v1/owner/stats with the given token to verify it works */
-export async function verifyOwnerToken(token: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/v1/owner/stats`, {
-      headers: { "x-zroky-admin-token": token },
-      cache: "no-store",
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+export interface OwnerRetentionConfig {
+  call_retention_days: number | null;
+  diagnosis_retention_days: number | null;
+  audit_log_retention_days: number | null;
+  notification_retention_days: number | null;
+  note: string;
 }
-
-// ─── Feature-interest voting (Module 9 smoke-test) ──────────────────────────
 
 export type AdminVoteStatus = "below_threshold" | "above_threshold" | "no_votes";
 
@@ -377,13 +304,248 @@ export interface AdminFeatureDetailResponse {
   next_cursor: string | null;
 }
 
-export function fetchFeatureInterestList(
-  signal?: AbortSignal,
-): Promise<AdminAllFeaturesResponse> {
-  return ownerRequest<AdminAllFeaturesResponse>(
-    "/v1/admin/feature-interest",
-    { signal },
+export function fetchOwnerStats(signal?: AbortSignal): Promise<OwnerStats> {
+  return ownerRequest<OwnerStats>("/v1/owner/stats", { signal });
+}
+
+export function fetchOwnerHealth(signal?: AbortSignal): Promise<OwnerHealth> {
+  return ownerRequest<OwnerHealth>("/v1/owner/health", { signal });
+}
+
+export function fetchOwnerInfra(signal?: AbortSignal): Promise<InfraStats> {
+  return ownerRequest<InfraStats>("/v1/owner/infra", { signal });
+}
+
+export function fetchOwnerUsers(limit = 100, offset = 0): Promise<OwnerUsersResponse> {
+  return ownerRequest<OwnerUsersResponse>(`/v1/owner/users?limit=${limit}&offset=${offset}`);
+}
+
+export function fetchOwnerProjects(limit = 100, offset = 0): Promise<OwnerProjectsResponse> {
+  return ownerRequest<OwnerProjectsResponse>(`/v1/owner/projects?limit=${limit}&offset=${offset}`);
+}
+
+export function fetchOwnerUser(userId: string): Promise<OwnerUserItem> {
+  return ownerRequest<OwnerUserItem>(`/v1/owner/users/${encodeURIComponent(userId)}`);
+}
+
+export function fetchUserMemberships(userId: string): Promise<{ memberships: UserMembershipItem[] }> {
+  return ownerRequest<{ memberships: UserMembershipItem[] }>(
+    `/v1/owner/users/${encodeURIComponent(userId)}/memberships`,
   );
+}
+
+export async function setUserStatus(userId: string, isActive: boolean, reason?: string): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/users/${encodeURIComponent(userId)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active: isActive, reason }),
+  });
+}
+
+export async function anonymizeOwnerUser(userId: string): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/users/${encodeURIComponent(userId)}/anonymize`, {
+    method: "POST",
+  });
+}
+
+export async function deleteOwnerUser(userId: string): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/users/${encodeURIComponent(userId)}?confirm=DELETE_CONFIRMED`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchOwnerProject(projectId: string): Promise<OwnerProjectItem> {
+  return ownerRequest<OwnerProjectItem>(`/v1/owner/projects/${encodeURIComponent(projectId)}`);
+}
+
+export function fetchProjectMembers(projectId: string): Promise<{ members: ProjectMemberItem[] }> {
+  return ownerRequest<{ members: ProjectMemberItem[] }>(
+    `/v1/owner/projects/${encodeURIComponent(projectId)}/members`,
+  );
+}
+
+export async function setProjectStatus(projectId: string, isActive: boolean, reason?: string): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/projects/${encodeURIComponent(projectId)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active: isActive, reason }),
+  });
+}
+
+export function fetchProjectRateLimit(projectId: string): Promise<ProjectRateLimitResponse> {
+  return ownerRequest<ProjectRateLimitResponse>(`/v1/owner/projects/${encodeURIComponent(projectId)}/rate-limit`);
+}
+
+export async function setProjectRateLimit(projectId: string, body: ProjectRateLimitUpdate): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/projects/${encodeURIComponent(projectId)}/rate-limit`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function clearProjectRateLimit(projectId: string): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/projects/${encodeURIComponent(projectId)}/rate-limit`, {
+    method: "DELETE",
+  });
+}
+
+export async function setMaintenanceMode(enabled: boolean, message?: string): Promise<void> {
+  await ownerRequest<unknown>("/v1/owner/maintenance", {
+    method: "POST",
+    body: JSON.stringify({ enabled, message }),
+  });
+}
+
+export function fetchOwnerPricing(): Promise<PricingConfigResponse> {
+  return ownerRequest<PricingConfigResponse>("/v1/owner/pricing");
+}
+
+export async function updateOwnerPricing(config: Record<string, unknown>): Promise<PricingConfigResponse> {
+  return ownerRequest<PricingConfigResponse>("/v1/owner/pricing", {
+    method: "PUT",
+    body: JSON.stringify({ config }),
+  });
+}
+
+export function fetchRateLimits(): Promise<RateLimitConfig> {
+  return ownerRequest<RateLimitConfig>("/v1/owner/rate-limits");
+}
+
+export async function setRateLimitOverrides(overrides: Record<string, unknown>): Promise<void> {
+  await ownerRequest<unknown>("/v1/owner/rate-limits/overrides", {
+    method: "PUT",
+    body: JSON.stringify({ overrides }),
+  });
+}
+
+export async function clearRateLimitOverrides(): Promise<void> {
+  await ownerRequest<unknown>("/v1/owner/rate-limits/overrides", { method: "DELETE" });
+}
+
+export function fetchAuditLog(
+  opts: { limit?: number; offset?: number; action?: string; tenant_id?: string } = {},
+): Promise<AuditLogResponse> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  if (opts.action) params.set("action", opts.action);
+  if (opts.tenant_id) params.set("tenant_id", opts.tenant_id);
+  const qs = params.toString();
+  return ownerRequest<AuditLogResponse>(`/v1/owner/audit-log${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchOwnerBillingSummary(): Promise<OwnerBillingSummary> {
+  return ownerRequest<OwnerBillingSummary>("/v1/owner/billing/summary");
+}
+
+export function fetchOwnerSupportTickets(
+  opts: { status?: string; priority?: string; tenant_id?: string; assigned_to?: string; limit?: number; offset?: number } = {},
+): Promise<OwnerSupportTicketsResponse> {
+  const params = new URLSearchParams();
+  if (opts.status) params.set("status", opts.status);
+  if (opts.priority) params.set("priority", opts.priority);
+  if (opts.tenant_id) params.set("tenant_id", opts.tenant_id);
+  if (opts.assigned_to) params.set("assigned_to", opts.assigned_to);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return ownerRequest<OwnerSupportTicketsResponse>(`/v1/owner/support/tickets${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchOwnerSupportTicket(ticketId: string): Promise<OwnerSupportTicketDetailResponse> {
+  return ownerRequest<OwnerSupportTicketDetailResponse>(`/v1/owner/support/tickets/${encodeURIComponent(ticketId)}`);
+}
+
+export async function updateOwnerSupportTicket(
+  ticketId: string,
+  body: { status?: string; priority?: string; assigned_to?: string },
+): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/support/tickets/${encodeURIComponent(ticketId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function replyOwnerSupportTicket(
+  ticketId: string,
+  body: { body: string; is_internal?: boolean },
+): Promise<void> {
+  await ownerRequest<unknown>(`/v1/owner/support/tickets/${encodeURIComponent(ticketId)}/reply`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchOwnerRetention(): Promise<OwnerRetentionConfig> {
+  return ownerRequest<OwnerRetentionConfig>("/v1/owner/retention");
+}
+
+export function fetchOwnerBillingAccounts(
+  opts: { status?: string; plan_code?: string; limit?: number; offset?: number } = {},
+): Promise<OwnerBillingAccountsResponse> {
+  const params = new URLSearchParams();
+  if (opts.status) params.set("status", opts.status);
+  if (opts.plan_code) params.set("plan_code", opts.plan_code);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return ownerRequest<OwnerBillingAccountsResponse>(`/v1/owner/billing/accounts${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchPlatformLlmUsageSummary(signal?: AbortSignal): Promise<PlatformLlmUsageSummaryResponse> {
+  return ownerRequest<PlatformLlmUsageSummaryResponse>("/v1/owner/platform-llm-usage", { signal });
+}
+
+export function fetchFeatureFlags(signal?: AbortSignal): Promise<FeatureFlagListResponse> {
+  return ownerRequest<FeatureFlagListResponse>("/v1/feature-flags/admin", { signal });
+}
+
+export function createOwnerFeatureFlag(body: {
+  key: string;
+  description?: string;
+  enabled_globally?: boolean;
+}): Promise<FeatureFlag> {
+  return ownerRequest<FeatureFlag>("/v1/feature-flags/admin", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateOwnerFeatureFlag(
+  flagId: string,
+  body: {
+    description?: string;
+    enabled_globally?: boolean;
+    add_enabled_tenants?: string[];
+    remove_enabled_tenants?: string[];
+    add_disabled_tenants?: string[];
+    remove_disabled_tenants?: string[];
+  },
+): Promise<FeatureFlag> {
+  return ownerRequest<FeatureFlag>(`/v1/feature-flags/admin/${encodeURIComponent(flagId)}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteOwnerFeatureFlag(flagId: string): Promise<void> {
+  await ownerRequest<void>(`/v1/feature-flags/admin/${encodeURIComponent(flagId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function verifyOwnerToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}/v1/owner/stats`, {
+      headers: { "x-zroky-admin-token": token },
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export function fetchFeatureInterestList(signal?: AbortSignal): Promise<AdminAllFeaturesResponse> {
+  return ownerRequest<AdminAllFeaturesResponse>("/v1/admin/feature-interest", { signal });
 }
 
 export function fetchFeatureInterestDetail(
@@ -396,12 +558,11 @@ export function fetchFeatureInterestDetail(
   if (opts.vote) params.set("vote", opts.vote);
   const qs = params.toString();
   return ownerRequest<AdminFeatureDetailResponse>(
-    `/v1/admin/feature-interest/${encodeURIComponent(featureKey)}${qs ? "?" + qs : ""}`,
+    `/v1/admin/feature-interest/${encodeURIComponent(featureKey)}${qs ? `?${qs}` : ""}`,
     { signal },
   );
 }
 
-/** URL to the CSV export endpoint (browser navigates to download). */
 export function featureInterestExportUrl(featureKey: string): string {
   return `${BASE}/v1/admin/feature-interest/${encodeURIComponent(featureKey)}/export.csv`;
 }

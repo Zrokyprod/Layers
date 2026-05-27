@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
-import { useOwnerUser, useUserMemberships, useSetUserStatus } from "@/lib/hooks";
+import {
+  useAnonymizeOwnerUser,
+  useDeleteOwnerUser,
+  useOwnerUser,
+  useSetUserStatus,
+  useUserMemberships,
+} from "@/lib/hooks";
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -28,6 +34,8 @@ export default function UserDetailPage() {
   const userQuery = useOwnerUser(id);
   const membershipsQuery = useUserMemberships(id);
   const toggleMutation = useSetUserStatus();
+  const anonymizeMutation = useAnonymizeOwnerUser();
+  const deleteMutation = useDeleteOwnerUser();
 
   const [actionMsg, setActionMsg] = useState("");
 
@@ -47,8 +55,34 @@ export default function UserDetailPage() {
     }
   }
 
+  async function handleAnonymize() {
+    if (!user) return;
+    const confirmed = window.prompt(`Type ANONYMIZE ${user.id} to anonymize this user.`);
+    if (confirmed !== `ANONYMIZE ${user.id}`) return;
+    setActionMsg("");
+    try {
+      await anonymizeMutation.mutateAsync(user.id);
+      setActionMsg("User anonymized successfully.");
+    } catch (e: unknown) {
+      setActionMsg(`Error: ${(e as Error).message}`);
+    }
+  }
+
+  async function handleHardDelete() {
+    if (!user) return;
+    const confirmed = window.prompt(`Type DELETE ${user.id} to hard-delete this user.`);
+    if (confirmed !== `DELETE ${user.id}`) return;
+    setActionMsg("");
+    try {
+      await deleteMutation.mutateAsync(user.id);
+      window.location.href = "/owner/users";
+    } catch (e: unknown) {
+      setActionMsg(`Error: ${(e as Error).message}`);
+    }
+  }
+
   if (loading) {
-    return <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Loading…</p>;
+    return <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Loading...</p>;
   }
   if (error) {
     return <div className="alert-strip alert-strip-error">{error}</div>;
@@ -85,10 +119,10 @@ export default function UserDetailPage() {
           <button
             className={user.is_active ? "btn btn-danger" : "btn btn-primary"}
             onClick={handleToggleStatus}
-            disabled={toggleMutation.isPending}
+            disabled={toggleMutation.isPending || anonymizeMutation.isPending || deleteMutation.isPending}
             style={{ fontSize: "0.82rem", padding: "7px 16px" }}
           >
-            {toggleMutation.isPending ? "Working…" : user.is_active ? "Suspend User" : "Activate User"}
+            {toggleMutation.isPending ? "Working..." : user.is_active ? "Suspend User" : "Activate User"}
           </button>
         </div>
       </div>
@@ -102,15 +136,35 @@ export default function UserDetailPage() {
       {/* Profile Info */}
       <div className="panel">
         <div className="panel-header">Profile</div>
-        <InfoRow label="Email" value={user.email ?? "—"} />
-        <InfoRow label="GitHub Login" value={user.github_login ?? "—"} />
-        <InfoRow label="Display Name" value={user.display_name ?? "—"} />
+        <InfoRow label="Email" value={user.email ?? "-"} />
+        <InfoRow label="GitHub Login" value={user.github_login ?? "-"} />
+        <InfoRow label="Display Name" value={user.display_name ?? "-"} />
         <InfoRow label="Auth Provider" value={provider} />
         <InfoRow label="Projects" value={user.project_count} />
         <InfoRow
           label="Joined"
           value={new Date(user.created_at).toLocaleString()}
         />
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">Danger Zone</div>
+        <div className="owner-danger-actions">
+          <div>
+            <strong>Anonymize user</strong>
+            <p className="hint">Removes personal identifiers and keeps the audit trail intact.</p>
+          </div>
+          <button className="btn btn-danger" onClick={handleAnonymize} disabled={anonymizeMutation.isPending || deleteMutation.isPending}>
+            {anonymizeMutation.isPending ? "Anonymizing..." : "Anonymize"}
+          </button>
+          <div>
+            <strong>Hard delete user</strong>
+            <p className="hint">Deletes the user row after explicit confirmation. Prefer anonymize unless legally required.</p>
+          </div>
+          <button className="btn btn-danger" onClick={handleHardDelete} disabled={anonymizeMutation.isPending || deleteMutation.isPending}>
+            {deleteMutation.isPending ? "Deleting..." : "Hard delete"}
+          </button>
+        </div>
       </div>
 
       {/* Memberships */}

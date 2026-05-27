@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, Plus, Trash2, X } from "lucide-react";
 
 import {
-  createFeatureFlag,
-  deleteFeatureFlag,
-  listFeatureFlags,
-  updateFeatureFlag,
-} from "@/lib/api";
+  createOwnerFeatureFlag,
+  deleteOwnerFeatureFlag,
+  fetchFeatureFlags,
+  updateOwnerFeatureFlag,
+} from "@/lib/owner-api";
 import type { FeatureFlag } from "@/lib/types";
 
 export default function FeatureFlagsPage() {
@@ -26,7 +26,7 @@ export default function FeatureFlagsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await listFeatureFlags();
+      const res = await fetchFeatureFlags();
       setFlags(res.items);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load feature flags.");
@@ -45,7 +45,7 @@ export default function FeatureFlagsPage() {
     setCreateBusy(true);
     setActionMsg("");
     try {
-      const flag = await createFeatureFlag({
+      const flag = await createOwnerFeatureFlag({
         key: newKey.trim(),
         description: newDesc.trim() || undefined,
         enabled_globally: newEnabled,
@@ -65,7 +65,7 @@ export default function FeatureFlagsPage() {
   async function toggleGlobal(flag: FeatureFlag) {
     setActionMsg("");
     try {
-      const updated = await updateFeatureFlag(flag.id, {
+      const updated = await updateOwnerFeatureFlag(flag.id, {
         enabled_globally: !flag.enabled_globally,
       });
       setFlags((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
@@ -79,7 +79,7 @@ export default function FeatureFlagsPage() {
     if (!window.confirm("Delete this feature flag?")) return;
     setActionMsg("");
     try {
-      await deleteFeatureFlag(flagId);
+      await deleteOwnerFeatureFlag(flagId);
       setFlags((prev) => prev.filter((f) => f.id !== flagId));
       setActionMsg("Feature flag deleted.");
     } catch (e: unknown) {
@@ -143,7 +143,7 @@ export default function FeatureFlagsPage() {
         </header>
 
         {loading ? (
-          <p className="hint">Loading…</p>
+          <p className="hint">Loading...</p>
         ) : flags.length === 0 ? (
           <p className="hint">No feature flags configured.</p>
         ) : (
@@ -156,8 +156,8 @@ export default function FeatureFlagsPage() {
                     <div className="hint">{flag.description}</div>
                   )}
                   <div className="owner-flag-meta">
-                    {flag.enabled_tenants.length > 0 && <span>On for {flag.enabled_tenants.length} tenants · </span>}
-                    {flag.disabled_tenants.length > 0 && <span>Off for {flag.disabled_tenants.length} tenants · </span>}
+                    {flag.enabled_tenants.length > 0 && <span>On for {flag.enabled_tenants.length} tenants. </span>}
+                    {flag.disabled_tenants.length > 0 && <span>Off for {flag.disabled_tenants.length} tenants. </span>}
                     Updated {new Date(flag.updated_at).toLocaleDateString()}
                   </div>
                 </div>

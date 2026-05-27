@@ -50,16 +50,6 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
     headers.set("content-type", contentType);
   }
 
-  const incomingAuth = request.headers.get("authorization");
-  const cookieToken = request.cookies.get("zroky_access_token")?.value;
-  if (incomingAuth) {
-    headers.set("authorization", incomingAuth);
-  } else if (cookieToken) {
-    const bearer = cookieToken.toLowerCase().startsWith("bearer ") ? cookieToken : `Bearer ${cookieToken}`;
-    headers.set("authorization", bearer);
-  }
-
-  // Forward owner/admin token when present (used by the Owner Dashboard)
   const adminToken = request.headers.get("x-zroky-admin-token");
   if (adminToken) {
     headers.set("x-zroky-admin-token", adminToken);

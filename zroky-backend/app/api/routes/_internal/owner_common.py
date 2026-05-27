@@ -24,7 +24,7 @@ from app.core.limiter import limiter
 from app.db.models import (
     AuditLog, Call, Notification,
     PlatformLlmUsage, Project, ProjectMembership,
-    SubscriptionPlan, SupportMessage, SupportTicket,
+    Subscription, SubscriptionPlan, SupportTicket, SupportTicketMessage,
     TenantSubscription, User,
 )
 from app.db.session import db_healthcheck, get_db_session

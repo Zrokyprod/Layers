@@ -36,7 +36,7 @@ export default function OwnerProjectsPage() {
         </div>
         <input
           className="input"
-          placeholder="Search by name or owner…"
+          placeholder="Search by name or owner..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ width: 280 }}
@@ -45,7 +45,7 @@ export default function OwnerProjectsPage() {
 
       {errorMessage && <div className="alert-strip alert-strip-error">{errorMessage}</div>}
 
-      {loading && !errorMessage && <p className="hint">Loading…</p>}
+      {loading && !errorMessage && <p className="hint">Loading...</p>}
 
       {!loading && !errorMessage && (
         <div className="owner-table-wrap">
@@ -69,7 +69,7 @@ export default function OwnerProjectsPage() {
                     <div className="owner-user-name">{p.name}</div>
                     <div className="owner-user-id">{p.id}</div>
                   </td>
-                  <td className="owner-td owner-td-secondary">{p.owner_ref ?? "—"}</td>
+                  <td className="owner-td owner-td-secondary">{p.owner_ref ?? "-"}</td>
                   <td className="owner-td">{p.call_count.toLocaleString()}</td>
                   <td className="owner-td">{usd(p.total_cost_usd)}</td>
                   <td className="owner-td">
@@ -77,7 +77,7 @@ export default function OwnerProjectsPage() {
                   </td>
                   <td className="owner-td">{fmt(p.created_at)}</td>
                   <td className="owner-td">
-                    <Link href={`/owner/projects/${p.id}`} className="owner-row-link">View →</Link>
+                    <Link href={`/owner/projects/${p.id}`} className="owner-row-link">View</Link>
                   </td>
                 </tr>
               ))}

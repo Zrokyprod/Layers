@@ -143,13 +143,13 @@ export default function RateLimitsPage() {
             disabled={isMutating || loading}
             style={{ fontSize: "0.82rem", padding: "7px 18px" }}
           >
-            {isMutating ? "Saving…" : "Save Overrides"}
+            {isMutating ? "Saving..." : "Save Overrides"}
           </button>
         </div>
       </div>
 
       {error && <div className="alert-strip alert-strip-error">{error}</div>}
-      {loading && !error && <p className="hint">Loading…</p>}
+      {loading && !error && <p className="hint">Loading...</p>}
 
       {hasOverrides && (
         <div className="alert-strip">
@@ -167,7 +167,7 @@ export default function RateLimitsPage() {
             editValue={edit.ingest_enforce_rate_limit}
             type="boolean"
             onChange={(v) => setField("ingest_enforce_rate_limit", v as boolean)}
-            description="Master switch — disable to allow unlimited ingest"
+            description="Master switch - disable to allow unlimited ingest"
           />
           <ConfigRow
             label="Soft Limit (RPM)"

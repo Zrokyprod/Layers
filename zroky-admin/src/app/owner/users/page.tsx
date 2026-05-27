@@ -38,7 +38,7 @@ export default function OwnerUsersPage() {
         </div>
         <input
           className="input"
-          placeholder="Search by email or GitHub login…"
+          placeholder="Search by email or GitHub login..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ width: 280 }}
@@ -47,7 +47,7 @@ export default function OwnerUsersPage() {
 
       {errorMessage && <div className="alert-strip alert-strip-error">{errorMessage}</div>}
 
-      {loading && !errorMessage && <p className="hint">Loading…</p>}
+      {loading && !errorMessage && <p className="hint">Loading...</p>}
 
       {!loading && !errorMessage && (
         <div className="owner-table-wrap">
@@ -73,13 +73,13 @@ export default function OwnerUsersPage() {
                         {(u.email ?? u.github_login ?? "?")[0].toUpperCase()}
                       </div>
                       <div>
-                        <div className="owner-user-name">{u.email ?? u.github_login ?? "—"}</div>
+                        <div className="owner-user-name">{u.email ?? u.github_login ?? "-"}</div>
                         <div className="owner-user-id">{u.id}</div>
                       </div>
                     </div>
                   </td>
                   <td className="owner-td">
-                    {u.github_login ? <span className="pill">GitHub</span> : u.email ? <span className="pill">Email</span> : "—"}
+                    {u.github_login ? <span className="pill">GitHub</span> : u.email ? <span className="pill">Email</span> : "-"}
                   </td>
                   <td className="owner-td">{u.project_count}</td>
                   <td className="owner-td">
@@ -87,7 +87,7 @@ export default function OwnerUsersPage() {
                   </td>
                   <td className="owner-td">{fmt(u.created_at)}</td>
                   <td className="owner-td">
-                    <Link href={`/owner/users/${u.id}`} className="owner-row-link">View →</Link>
+                    <Link href={`/owner/users/${u.id}`} className="owner-row-link">View</Link>
                   </td>
                 </tr>
               ))}

@@ -63,7 +63,7 @@ export default function InfrastructurePage() {
       <div className="owner-page-header">
         <div>
           <h2 className="owner-page-title">Infrastructure Health</h2>
-          <p className="hint">Live status of all platform services — auto-refresh every 30s</p>
+          <p className="hint">Live status of all platform services - auto-refresh every 30s</p>
         </div>
         <div className="owner-page-header-actions">
           {lastRefresh && (
@@ -91,8 +91,8 @@ export default function InfrastructurePage() {
         <div className="panel">
           <div className="panel-header">Exchange Rate Cache</div>
           <InfraRow label="Status" value={String(er.cache_status ?? "unknown")} warn={er.cache_status !== "ok"} />
-          <InfraRow label="Rate (USD→INR)" value={er.cache_rate != null ? String(er.cache_rate) : "—"} />
-          <InfraRow label="Cache Age" value={er.cache_age_seconds != null ? `${er.cache_age_seconds}s` : "—"} warn={(er.cache_age_seconds as number) > 600} />
+          <InfraRow label="Rate (USD to INR)" value={er.cache_rate != null ? String(er.cache_rate) : "-"} />
+          <InfraRow label="Cache Age" value={er.cache_age_seconds != null ? `${er.cache_age_seconds}s` : "-"} warn={(er.cache_age_seconds as number) > 600} />
           <InfraRow label="Is Stale" value={er.cache_is_stale ? "Yes" : "No"} warn={er.cache_is_stale === true} />
           <InfraRow label="Is Usable" value={er.cache_is_usable ? "Yes" : "No"} warn={!er.cache_is_usable} />
         </div>
@@ -137,7 +137,7 @@ export default function InfrastructurePage() {
         <div className="panel">
           <div className="panel-header">Maintenance Mode</div>
           <p className="hint" style={{ marginBottom: 14 }}>
-            When enabled, a maintenance banner is shown to users. The API continues to operate normally — use this for scheduled maintenance windows.
+            When enabled, a maintenance banner is shown to users. The API continues to operate normally - use this for scheduled maintenance windows.
           </p>
           <div className="owner-maint-controls">
             <span className={`owner-maint-status${health.maintenance_mode ? " owner-maint-status-on" : " owner-maint-status-off"}`}>
@@ -155,7 +155,7 @@ export default function InfrastructurePage() {
               onClick={handleToggleMaintenance}
               disabled={toggleMutation.isPending}
             >
-              {toggleMutation.isPending ? "Updating…" : health.maintenance_mode ? "Disable Maintenance" : "Enable Maintenance"}
+              {toggleMutation.isPending ? "Updating..." : health.maintenance_mode ? "Disable Maintenance" : "Enable Maintenance"}
             </button>
           </div>
         </div>

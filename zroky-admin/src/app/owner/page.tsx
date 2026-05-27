@@ -68,7 +68,7 @@ function HealthBar({ health, onToggleMaintenance, isPending }: { health: OwnerHe
       </span>
 
       <Link href="/owner/infrastructure" className="owner-health-details-link">
-        Details →
+        Details
       </Link>
     </div>
   );
@@ -103,7 +103,7 @@ export default function OwnerOverviewPage() {
         <div className="owner-page-header-actions">
           {lastRefresh && (
             <span className="hint">
-              Updated {lastRefresh.toLocaleTimeString()} · auto-refresh 60s
+              Updated {lastRefresh.toLocaleTimeString()} - auto-refresh 60s
             </span>
           )}
           <button className="btn btn-soft" onClick={() => void statsQuery.refetch()}>
@@ -119,7 +119,7 @@ export default function OwnerOverviewPage() {
 
       {statsError && <div className="alert-strip alert-strip-error">{statsError}</div>}
       {!stats && !statsError && (
-        <p className="hint">Loading…</p>
+        <p className="hint">Loading...</p>
       )}
 
       {stats && (

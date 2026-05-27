@@ -37,6 +37,7 @@ from app.api.routes.feature_interest import (
     admin_router as feature_interest_admin_router,
     router as feature_interest_router,
 )
+from app.api.routes.feature_flags import router as feature_flags_router
 from app.api.routes.goldens import router as goldens_router
 from app.api.routes.issues import router as issues_router
 from app.api.routes.intel import router as intel_router
@@ -109,12 +110,13 @@ api_router.include_router(feature_interest_router, tags=["feature-interest"])
 api_router.include_router(
     feature_interest_admin_router, tags=["feature-interest-admin"],
 )
+api_router.include_router(feature_flags_router, tags=["feature-flags"])
 
 # ── Legacy-gated routes (default OFF, removed when UI is also removed) ───────
 # (FEATURE_LEGACY_ASSISTANT, FEATURE_LEGACY_AI_INTEGRATION removed:
 #  source files deleted in Module 1.)
-# (FEATURE_LEGACY_NOTIFICATIONS, FEATURE_LEGACY_SUPPORT, FEATURE_LEGACY_ONBOARDING,
-#  FEATURE_LEGACY_FEATURE_FLAGS: source files deleted in Module 1; flags removed.)
+# (FEATURE_LEGACY_NOTIFICATIONS, FEATURE_LEGACY_SUPPORT, FEATURE_LEGACY_ONBOARDING:
+#  source files deleted in Module 1; flags removed.)
 
 # ── Legacy-gated routes (default ON until later module ships replacement) ────
 if _settings.FEATURE_LEGACY_OWNER:

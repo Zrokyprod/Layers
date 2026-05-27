@@ -12,6 +12,37 @@ class OwnerSupportReplyRequest(BaseModel):
     is_internal: bool = False
 
 
+def _support_ticket_item(t: SupportTicket) -> dict:
+    return {
+        "ticket_id": t.id,
+        "tenant_id": t.tenant_id,
+        "user_id": t.user_id,
+        "subject": t.subject,
+        "email": t.email,
+        "title": t.title,
+        "description": t.description,
+        "category": t.category,
+        "priority": t.priority,
+        "status": t.status,
+        "assigned_to": t.assigned_to,
+        "resolved_at": t.resolved_at,
+        "created_at": t.created_at,
+        "updated_at": t.updated_at,
+        "message_count": len(t.messages),
+    }
+
+
+def _support_message_item(m: SupportTicketMessage) -> dict:
+    return {
+        "message_id": m.id,
+        "sender_type": m.sender_type,
+        "sender_subject": m.sender_subject,
+        "body": m.body,
+        "is_internal": m.is_internal,
+        "created_at": m.created_at,
+    }
+
+
 @router.get("/support/tickets")
 def owner_list_support_tickets(
     _: None = Depends(require_provisioning_access),
@@ -41,15 +72,22 @@ def owner_list_support_tickets(
     rows = db.execute(q.limit(limit).offset(offset)).scalars().all()
     return {
         "total": total,
-        "items": [
-            {
-                "ticket_id": t.id, "tenant_id": t.tenant_id, "title": t.title,
-                "category": t.category, "priority": t.priority, "status": t.status,
-                "assigned_to": t.assigned_to, "created_at": t.created_at,
-                "updated_at": t.updated_at, "message_count": len(t.messages),
-            }
-            for t in rows
-        ],
+        "items": [_support_ticket_item(t) for t in rows],
+    }
+
+
+@router.get("/support/tickets/{ticket_id}")
+def owner_get_support_ticket(
+    ticket_id: str,
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    ticket = db.scalar(select(SupportTicket).where(SupportTicket.id == ticket_id))
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    return {
+        "ticket": _support_ticket_item(ticket),
+        "messages": [_support_message_item(m) for m in ticket.messages],
     }
 
 
@@ -91,7 +129,7 @@ def owner_reply_support_ticket(
     ticket = db.scalar(select(SupportTicket).where(SupportTicket.id == ticket_id))
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    msg = SupportMessage(
+    msg = SupportTicketMessage(
         ticket_id=ticket_id,
         sender_type="owner",
         sender_subject=_resolve_actor(request),
@@ -99,6 +137,7 @@ def owner_reply_support_ticket(
         is_internal=body.is_internal,
     )
     db.add(msg)
+    ticket.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(msg)
     return {"ok": True, "message_id": msg.id, "ticket_id": ticket_id}
@@ -146,6 +185,59 @@ def owner_billing_summary(
         ],
         "by_status": [
             {"status": s, "count": int(c)} for s, c in status_rows
+        ],
+    }
+
+
+@router.get("/billing/accounts")
+def owner_billing_accounts(
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+    account_status: str | None = Query(default=None, alias="status"),
+    plan_code: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict:
+    q = (
+        select(Subscription, Project.name)
+        .outerjoin(Project, Project.id == Subscription.org_id)
+        .order_by(Subscription.updated_at.desc())
+    )
+    count_q = select(func.count()).select_from(Subscription)
+    if account_status:
+        q = q.where(Subscription.status == account_status)
+        count_q = count_q.where(Subscription.status == account_status)
+    if plan_code:
+        q = q.where(Subscription.plan_code == plan_code)
+        count_q = count_q.where(Subscription.plan_code == plan_code)
+    total = db.scalar(count_q) or 0
+    rows = db.execute(q.limit(limit).offset(offset)).all()
+
+    def stripe_customer_url(customer_id: str | None) -> str | None:
+        return f"https://dashboard.stripe.com/customers/{customer_id}" if customer_id else None
+
+    def stripe_subscription_url(subscription_id: str | None) -> str | None:
+        return f"https://dashboard.stripe.com/subscriptions/{subscription_id}" if subscription_id else None
+
+    return {
+        "total": total,
+        "items": [
+            {
+                "org_id": sub.org_id,
+                "project_name": project_name,
+                "plan_code": sub.plan_code,
+                "status": sub.status,
+                "sla_tier": sub.sla_tier,
+                "seats": sub.seats,
+                "current_period_end": sub.current_period_end,
+                "trial_end": sub.trial_end,
+                "stripe_customer_id": sub.stripe_customer_id,
+                "stripe_sub_id": sub.stripe_sub_id,
+                "stripe_customer_url": stripe_customer_url(sub.stripe_customer_id),
+                "stripe_subscription_url": stripe_subscription_url(sub.stripe_sub_id),
+                "updated_at": sub.updated_at,
+            }
+            for sub, project_name in rows
         ],
     }
 

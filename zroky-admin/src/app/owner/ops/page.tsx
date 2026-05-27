@@ -56,7 +56,7 @@ function PlanRow({ label, value, total }: { label: string; value: number; total:
 
 function TicketStatusBadge({ ticket }: { ticket: OwnerSupportTicketItem }) {
   const tone = ticket.status === "resolved" ? "ok" : ticket.priority === "urgent" || ticket.priority === "high" ? "danger" : "warn";
-  return <Badge tone={tone}>{ticket.priority} · {ticket.status}</Badge>;
+  return <Badge tone={tone}>{ticket.priority} - {ticket.status}</Badge>;
 }
 
 function formatDate(value: string) {
@@ -144,15 +144,15 @@ export default function FounderOpsPage() {
       </div>
 
       <div className="owner-stat-grid">
-        <MetricCard label="Active subscriptions" value={(billing?.total_subscriptions ?? 0).toLocaleString()} sub={`${overdue.toLocaleString()} overdue · ${canceled.toLocaleString()} canceled`} tone={overdue > 0 ? "warn" : "accent"} />
+        <MetricCard label="Active subscriptions" value={(billing?.total_subscriptions ?? 0).toLocaleString()} sub={`${overdue.toLocaleString()} overdue - ${canceled.toLocaleString()} canceled`} tone={overdue > 0 ? "warn" : "accent"} />
         <MetricCard label="Open support" value={openTickets.toLocaleString()} sub={`${dangerTickets.toLocaleString()} high-priority in current queue`} tone={dangerTickets > 0 ? "danger" : "default"} />
-        <MetricCard label="7d platform cost" value={stats ? `$${stats.cost_last_7d_usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "—"} sub={stats ? `${stats.calls_last_7d.toLocaleString()} calls in last 7d` : "Waiting for stats"} tone="accent" />
+        <MetricCard label="7d platform cost" value={stats ? `$${stats.cost_last_7d_usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "-"} sub={stats ? `${stats.calls_last_7d.toLocaleString()} calls in last 7d` : "Waiting for stats"} tone="accent" />
         <MetricCard label="Active users 7d" value={(stats?.active_users_last_7d ?? 0).toLocaleString()} sub={stats ? `${stats.total_users.toLocaleString()} total users` : "Waiting for stats"} />
       </div>
 
       <div className="owner-ops-grid">
         <div className="panel owner-ops-panel">
-          <div className="panel-header">Subscription mix <Link href="/owner/pricing" className="owner-row-link">Manage pricing →</Link></div>
+          <div className="panel-header">Subscription mix <Link href="/owner/pricing" className="owner-row-link">Manage pricing</Link></div>
           <div className="owner-ops-list">
             {(billing?.by_plan ?? []).length === 0 ? <p className="hint">No active subscription plans yet.</p> : null}
             {(billing?.by_plan ?? []).map((plan) => (
@@ -190,7 +190,7 @@ export default function FounderOpsPage() {
                 <div className="owner-ops-ticket-main">
                   <div>
                     <strong>{ticket.title}</strong>
-                    <p className="hint">{ticket.category ?? "general"} · {ticket.message_count} messages · {formatDate(ticket.created_at)}</p>
+                    <p className="hint">{ticket.category ?? "general"} - {ticket.message_count} messages - {formatDate(ticket.created_at)}</p>
                   </div>
                   <TicketStatusBadge ticket={ticket} />
                 </div>
@@ -218,7 +218,7 @@ export default function FounderOpsPage() {
       </div>
 
       <div className="panel owner-ops-panel">
-        <div className="panel-header">Recent owner audit trail <Link href="/owner/audit" className="owner-row-link">View all →</Link></div>
+        <div className="panel-header">Recent owner audit trail <Link href="/owner/audit" className="owner-row-link">View all</Link></div>
         <div className="owner-table-wrap owner-ops-audit-wrap">
           <table className="owner-table">
             <thead>
@@ -232,7 +232,7 @@ export default function FounderOpsPage() {
                 <tr key={entry.id} className="owner-tr">
                   <td className="owner-td owner-td-ts">{formatDate(entry.created_at)}</td>
                   <td className="owner-td"><code className="owner-action-code">{entry.action}</code></td>
-                  <td className="owner-td owner-td-truncate">{entry.actor_subject ?? "—"}</td>
+                  <td className="owner-td owner-td-truncate">{entry.actor_subject ?? "-"}</td>
                   <td className="owner-td-mono">{entry.tenant_id}</td>
                 </tr>
               ))}

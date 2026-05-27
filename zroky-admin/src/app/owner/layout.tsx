@@ -3,6 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import {
+  Activity,
+  BadgeDollarSign,
+  Cpu,
+  Flag,
+  Gauge,
+  Home,
+  KeyRound,
+  LogOut,
+  MessageSquare,
+  ServerCog,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  Users,
+  Vote,
+  type LucideIcon,
+} from "lucide-react";
 
 import {
   clearOwnerToken,
@@ -11,19 +29,54 @@ import {
   verifyOwnerToken,
 } from "@/lib/owner-api";
 
-const NAV = [
-  { href: "/owner", label: "Overview" },
-  { href: "/owner/ops", label: "Founder Ops" },
-  { href: "/owner/infrastructure", label: "Infrastructure" },
-  { href: "/owner/users", label: "Users" },
-  { href: "/owner/projects", label: "Projects" },
-  { href: "/owner/pricing", label: "Pricing" },
-  { href: "/owner/rate-limits", label: "Rate Limits" },
-  { href: "/owner/audit", label: "Audit Log" },
-  { href: "/owner/platform-llm", label: "LLM Usage" },
-  { href: "/owner/feature-flags", label: "Feature Flags" },
-  { href: "/owner/feature-votes", label: "Feature Votes" },
+type OwnerNavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  description: string;
+};
+
+const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<OwnerNavItem> }> = [
+  {
+    label: "Operate",
+    items: [
+      { href: "/owner", label: "Overview", icon: Home, description: "Platform snapshot" },
+      { href: "/owner/ops", label: "Ops", icon: Gauge, description: "Daily command queue" },
+      { href: "/owner/infrastructure", label: "Infrastructure", icon: ServerCog, description: "Workers and queues" },
+      { href: "/owner/support", label: "Support", icon: MessageSquare, description: "Tickets and replies" },
+    ],
+  },
+  {
+    label: "Customers",
+    items: [
+      { href: "/owner/users", label: "Users", icon: Users, description: "Accounts and access" },
+      { href: "/owner/projects", label: "Projects", icon: Activity, description: "Tenants and spend" },
+      { href: "/owner/pricing", label: "Billing", icon: BadgeDollarSign, description: "Plans and status" },
+      { href: "/owner/rate-limits", label: "Rate Limits", icon: SlidersHorizontal, description: "Global and tenant caps" },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { href: "/owner/platform-llm", label: "LLM Usage", icon: Cpu, description: "Internal model cost" },
+      { href: "/owner/feature-flags", label: "Feature Flags", icon: Flag, description: "Rollouts and overrides" },
+      { href: "/owner/feature-votes", label: "Feature Interest", icon: Vote, description: "Demand signals" },
+      { href: "/owner/audit", label: "Audit Log", icon: ShieldCheck, description: "Owner action trail" },
+      { href: "/owner/settings", label: "Settings", icon: Settings, description: "Session and guardrails" },
+    ],
+  },
 ];
+
+function isActive(pathname: string, href: string): boolean {
+  return href === "/owner" ? pathname === "/owner" : pathname.startsWith(href);
+}
+
+function currentPage(pathname: string): OwnerNavItem {
+  return (
+    NAV_GROUPS.flatMap((group) => group.items).find((item) => isActive(pathname, item.href)) ??
+    NAV_GROUPS[0].items[0]
+  );
+}
 
 export default function OwnerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -65,16 +118,16 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
     setTokenInput("");
   }, []);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // Loading state.
   if (authed === null) {
     return (
       <div className="owner-checking">
-        <p className="hint">Checking access…</p>
+        <p className="hint">Checking access...</p>
       </div>
     );
   }
 
-  // ── Token Gate ─────────────────────────────────────────────────────────────
+  // Token gate.
   if (!authed) {
     return (
       <div className="auth-screen">
@@ -103,7 +156,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
               className="btn btn-primary auth-submit-btn"
               disabled={loading || !tokenInput.trim()}
             >
-              {loading ? "Verifying…" : "Enter Dashboard"}
+              {loading ? "Verifying..." : "Enter Dashboard"}
             </button>
           </form>
         </div>
@@ -111,38 +164,73 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // ── Authenticated Shell ────────────────────────────────────────────────────
+  // Authenticated shell.
   return (
     <div className="owner-shell">
-      <header className="owner-topbar">
-        <div className="owner-topbar-brand">
+      <aside className="owner-sidebar" aria-label="Owner navigation">
+        <div className="owner-topbar-brand owner-sidebar-brand">
           <div className="owner-logo">Z</div>
-          <span className="owner-brand-name">Zroky Owner</span>
+          <div>
+            <span className="owner-brand-name">Zroky Admin</span>
+            <span className="owner-brand-sub">Founder console</span>
+          </div>
         </div>
 
         <nav className="owner-nav">
-          {NAV.map((n) => {
-            const active = n.href === "/owner" ? pathname === "/owner" : pathname.startsWith(n.href);
-            return (
-              <Link
-                key={n.href}
-                href={n.href}
-                className={`owner-nav-link${active ? " owner-nav-link-active" : ""}`}
-              >
-                {n.label}
-              </Link>
-            );
-          })}
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className="owner-nav-group">
+              <span className="owner-nav-group-label">{group.label}</span>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`owner-nav-link${active ? " owner-nav-link-active" : ""}`}
+                    title={item.description}
+                  >
+                    <Icon className="owner-nav-icon" aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
-        <button className="btn btn-soft owner-signout-btn" onClick={handleLogout}>
-          Sign out
-        </button>
-      </header>
+        <div className="owner-sidebar-foot">
+          <div className="owner-profile-card">
+            <div className="owner-profile-avatar">
+              <KeyRound size={15} aria-hidden="true" />
+            </div>
+            <div>
+              <strong>Owner session</strong>
+              <span>Provisioning token</span>
+            </div>
+          </div>
+          <button className="owner-signout-btn" onClick={handleLogout}>
+            <LogOut size={15} aria-hidden="true" />
+            <span>Sign out</span>
+          </button>
+        </div>
+      </aside>
 
-      <main className="owner-content">
-        {children}
-      </main>
+      <section className="owner-main">
+        <header className="owner-topbar">
+          <div>
+            <p className="owner-topbar-kicker">Zroky Admin</p>
+            <h1>{currentPage(pathname).label}</h1>
+            <p>{currentPage(pathname).description}</p>
+          </div>
+          <div className="owner-topbar-status">
+            <span className="owner-env-pill">Admin</span>
+            <span className="owner-env-pill owner-env-pill-prod">Production scoped</span>
+          </div>
+        </header>
+
+        <main className="owner-content">{children}</main>
+      </section>
     </div>
   );
 }

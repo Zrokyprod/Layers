@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { useOwnerProject, useProjectMembers, useSetProjectStatus } from "@/lib/hooks";
+import {
+  useClearProjectRateLimit,
+  useOwnerProject,
+  useProjectMembers,
+  useProjectRateLimit,
+  useSetProjectRateLimit,
+  useSetProjectStatus,
+} from "@/lib/hooks";
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -30,14 +37,28 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const projectQuery = useOwnerProject(id);
   const membersQuery = useProjectMembers(id);
+  const rateLimitQuery = useProjectRateLimit(id);
   const toggleMutation = useSetProjectStatus();
+  const setRateLimitMutation = useSetProjectRateLimit(id);
+  const clearRateLimitMutation = useClearProjectRateLimit(id);
 
   const [actionMsg, setActionMsg] = useState("");
+  const [softLimit, setSoftLimit] = useState("");
+  const [burstLimit, setBurstLimit] = useState("");
+  const [enforceLimit, setEnforceLimit] = useState(false);
 
   const project = projectQuery.data ?? null;
   const members = membersQuery.data?.members ?? [];
   const loading = projectQuery.isLoading || membersQuery.isLoading;
   const error = projectQuery.error?.message ?? membersQuery.error?.message ?? "";
+
+  useEffect(() => {
+    const overrides = rateLimitQuery.data?.overrides;
+    if (!overrides) return;
+    setSoftLimit(String(overrides.ingest_soft_limit_rpm ?? ""));
+    setBurstLimit(String(overrides.ingest_burst_limit_rpm ?? ""));
+    setEnforceLimit(Boolean(overrides.ingest_enforce_rate_limit));
+  }, [rateLimitQuery.data?.overrides]);
 
   async function handleToggleStatus() {
     if (!project) return;
@@ -50,8 +71,36 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function handleSaveRateLimit() {
+    setActionMsg("");
+    try {
+      await setRateLimitMutation.mutateAsync({
+        ingest_soft_limit_rpm: softLimit.trim() ? Number(softLimit) : undefined,
+        ingest_burst_limit_rpm: burstLimit.trim() ? Number(burstLimit) : undefined,
+        ingest_enforce_rate_limit: enforceLimit,
+      });
+      setActionMsg("Project rate limit saved.");
+    } catch (e: unknown) {
+      setActionMsg(`Error: ${(e as Error).message}`);
+    }
+  }
+
+  async function handleClearRateLimit() {
+    if (!window.confirm("Clear project-specific rate limit overrides?")) return;
+    setActionMsg("");
+    try {
+      await clearRateLimitMutation.mutateAsync();
+      setSoftLimit("");
+      setBurstLimit("");
+      setEnforceLimit(false);
+      setActionMsg("Project rate limit override cleared.");
+    } catch (e: unknown) {
+      setActionMsg(`Error: ${(e as Error).message}`);
+    }
+  }
+
   if (loading) {
-    return <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Loading…</p>;
+    return <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Loading...</p>;
   }
   if (error) {
     return <div className="alert-strip alert-strip-error">{error}</div>;
@@ -87,7 +136,7 @@ export default function ProjectDetailPage() {
             disabled={toggleMutation.isPending}
             style={{ fontSize: "0.82rem", padding: "7px 16px" }}
           >
-            {toggleMutation.isPending ? "Working…" : project.is_active ? "Suspend Project" : "Activate Project"}
+            {toggleMutation.isPending ? "Working..." : project.is_active ? "Suspend Project" : "Activate Project"}
           </button>
         </div>
       </div>
@@ -138,9 +187,56 @@ export default function ProjectDetailPage() {
         <div className="panel-header">Project Details</div>
         <InfoRow label="Project ID" value={<code style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>{project.id}</code>} />
         <InfoRow label="Name" value={project.name} />
-        <InfoRow label="Owner Ref" value={project.owner_ref ?? "—"} />
+        <InfoRow label="Owner Ref" value={project.owner_ref ?? "-"} />
         <InfoRow label="Status" value={project.is_active ? "Active" : "Suspended"} />
         <InfoRow label="Created" value={new Date(project.created_at).toLocaleString()} />
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          Project Rate Limits
+          <span className="panel-header-note">
+            {rateLimitQuery.data?.has_override ? "Override active" : "Using global defaults"}
+          </span>
+        </div>
+        <div className="owner-project-rate-grid">
+          <label className="field">
+            <span className="field-label">Soft RPM</span>
+            <input
+              className="input"
+              inputMode="numeric"
+              value={softLimit}
+              onChange={(event) => setSoftLimit(event.target.value)}
+              placeholder="global default"
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">Burst RPM</span>
+            <input
+              className="input"
+              inputMode="numeric"
+              value={burstLimit}
+              onChange={(event) => setBurstLimit(event.target.value)}
+              placeholder="global default"
+            />
+          </label>
+          <label className="owner-flag-checkbox">
+            <input
+              type="checkbox"
+              checked={enforceLimit}
+              onChange={(event) => setEnforceLimit(event.target.checked)}
+            />
+            Enforce project limit
+          </label>
+          <div className="owner-project-rate-actions">
+            <button className="btn btn-primary" onClick={handleSaveRateLimit} disabled={setRateLimitMutation.isPending}>
+              {setRateLimitMutation.isPending ? "Saving..." : "Save override"}
+            </button>
+            <button className="btn btn-soft" onClick={handleClearRateLimit} disabled={clearRateLimitMutation.isPending}>
+              {clearRateLimitMutation.isPending ? "Clearing..." : "Clear override"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Members */}
