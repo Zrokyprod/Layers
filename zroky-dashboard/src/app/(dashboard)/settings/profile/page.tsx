@@ -100,7 +100,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="page-content">
+    <div className="page-content settings-profile-page">
       <section className="panel profile-section-gap">
         <header className="panel-header">
           <h3>Your Identity</h3>

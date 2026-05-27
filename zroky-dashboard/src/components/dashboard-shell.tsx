@@ -25,7 +25,7 @@ import {
 import { clearAccessToken } from "@/lib/auth";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
-import { useProjectSettings } from "@/lib/hooks";
+import { useMe, useProjectSettings } from "@/lib/hooks";
 import { CommandPalette } from "./command-palette";
 import { ShortcutsHelp } from "./shortcuts-help";
 import { AskZroky } from "./ask-zroky";
@@ -66,6 +66,24 @@ function getTitle(pathname: string): string {
   }
   if (pathname === "/settings/evaluation") {
     return "Evaluation Settings";
+  }
+  if (pathname === "/settings/profile") {
+    return "Profile";
+  }
+  if (pathname === "/settings/keys") {
+    return "API Keys";
+  }
+  if (pathname === "/settings/providers") {
+    return "Providers";
+  }
+  if (pathname === "/settings/team") {
+    return "Members";
+  }
+  if (pathname === "/settings/billing") {
+    return "Plan & Billing";
+  }
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) {
+    return "Settings";
   }
   if (pathname === "/calibration" || pathname.startsWith("/calibration/")) {
     return "Calibration";
@@ -213,9 +231,9 @@ function NavEntry({ pathname, item }: { pathname: string; item: NavItem }) {
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "staging";
   const projectLabel = process.env.NEXT_PUBLIC_DASHBOARD_PROJECT_LABEL ?? "project";
   const projectQuery = useProjectSettings();
+  const meQuery = useMe();
 
   // Use store for sidebar state
   const {
@@ -258,6 +276,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     return Array.from(items.entries()).map(([id, name]) => ({ id, name }));
   }, [projectQuery.data, selectedProject]);
 
+  const profileEmail = meQuery.data?.email ?? "";
+  const profileName = profileEmail ? profileEmail.split("@")[0] : "Profile";
+  const profileInitial = profileEmail ? profileEmail.charAt(0).toUpperCase() : "U";
+  const profileMeta = profileEmail || "Account";
+
   function onLogout() {
     clearAccessToken();
     router.replace("/auth/login?logged_out=1");
@@ -285,9 +308,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <div className="sidebar-project-card">
             <div className="sidebar-project-head">
               <span>Project</span>
-              <span className={`sidebar-capture-pill ${sdkConnected ? "is-live" : ""}`}>
-                {sdkConnected ? "Live" : "Idle"}
-              </span>
+              {sdkConnected ? <span className="sidebar-capture-pill is-live">Connected</span> : null}
             </div>
             <select
               className="sidebar-project-select mono"
@@ -314,23 +335,32 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
           <details className="profile-menu">
             <summary className="profile-summary">
-              <span className="profile-avatar" aria-hidden="true">
-                <User className="h-4 w-4" />
-              </span>
+              <span className="shell-profile-avatar" aria-hidden="true">{profileInitial}</span>
               <span className="profile-copy">
-                <strong>Profile</strong>
-                <span>{envLabel.toUpperCase()}</span>
+                <strong>{profileName}</strong>
+                <span>{profileMeta}</span>
               </span>
               <ChevronDown className="profile-chevron" aria-hidden="true" />
             </summary>
             <div className="profile-popover">
+              <div className="profile-popover-head">
+                <span className="shell-profile-avatar" aria-hidden="true">{profileInitial}</span>
+                <span>
+                  <strong>{profileName}</strong>
+                  <span>{profileMeta}</span>
+                </span>
+              </div>
               <Link href="/settings/profile" className="profile-menu-item">
                 <User className="h-4 w-4" aria-hidden="true" />
-                Profile settings
+                Profile
+              </Link>
+              <Link href="/settings" className="profile-menu-item">
+                <Settings className="h-4 w-4" aria-hidden="true" />
+                Settings
               </Link>
               <button type="button" className="profile-menu-item" onClick={onLogout}>
                 <LogOut className="h-4 w-4" aria-hidden="true" />
-                Logout
+                Log out
               </button>
             </div>
           </details>
