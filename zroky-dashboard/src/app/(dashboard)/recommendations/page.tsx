@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,59 +17,47 @@ import {
   TrendingDown,
   Wrench,
 } from "lucide-react";
+
 import {
+  useGenerateRecommendations,
   useRecommendations,
   useRecSummary,
   useUpdateRecStatus,
-  useGenerateRecommendations,
 } from "@/lib/hooks";
 import type { RecView } from "@/lib/api";
+import { formatCount, formatDateTime, formatPercent, formatUsd } from "@/lib/format";
 
-// ── Priority badge ────────────────────────────────────────────────────────────
+const STATUS_TABS = [
+  { value: "open", label: "Open" },
+  { value: "acknowledged", label: "Acknowledged" },
+  { value: "resolved", label: "Resolved" },
+  { value: "dismissed", label: "Dismissed" },
+] as const;
 
-const PRIORITY_COLORS: Record<string, string> = {
-  critical: "bg-red-950/60 text-red-300 border-red-800/60",
-  high: "bg-orange-950/60 text-orange-300 border-orange-800/60",
-  medium: "bg-yellow-950/60 text-yellow-300 border-yellow-800/60",
-  low: "bg-gray-800/60 text-gray-400 border-gray-700/60",
-};
-
-function PriorityBadge({ priority }: { priority: string }) {
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full border ${PRIORITY_COLORS[priority] ?? PRIORITY_COLORS.low}`}>
-      {priority}
-    </span>
-  );
+function PriorityBadge({ priority }: { priority: RecView["priority"] }) {
+  return <span className={`fix-priority priority-${priority}`}>{priority}</span>;
 }
-
-// ── Type icon ─────────────────────────────────────────────────────────────────
 
 function TypeIcon({ type }: { type: string }) {
-  const cls = "w-4 h-4 shrink-0";
-  if (type === "axis_causal") return <ShieldAlert className={`${cls} text-indigo-400`} />;
-  if (type === "determinism_high") return <AlertTriangle className={`${cls} text-red-400`} />;
-  if (type === "score_drop") return <TrendingDown className={`${cls} text-orange-400`} />;
-  if (type === "cost_spike") return <DollarSign className={`${cls} text-yellow-400`} />;
-  return <CircleDot className={`${cls} text-gray-500`} />;
+  const className = "fix-type-icon";
+  if (type === "axis_causal") return <ShieldAlert className={className} aria-hidden="true" />;
+  if (type === "determinism_high") return <AlertTriangle className={className} aria-hidden="true" />;
+  if (type === "score_drop") return <TrendingDown className={className} aria-hidden="true" />;
+  if (type === "cost_spike") return <DollarSign className={className} aria-hidden="true" />;
+  return <CircleDot className={className} aria-hidden="true" />;
 }
 
-// ── Difficulty badge ──────────────────────────────────────────────────────────
-
-function DifficultyBadge({ difficulty }: { difficulty: string | null }) {
-  if (!difficulty) return null;
-  const colors: Record<string, string> = {
-    easy: "text-green-400",
-    medium: "text-yellow-400",
-    hard: "text-red-400",
-  };
-  return (
-    <span className={`text-xs ${colors[difficulty] ?? "text-gray-400"}`}>
-      <Wrench className="w-3 h-3 inline mr-0.5" />{difficulty}
-    </span>
-  );
+function difficultyLabel(difficulty: RecView["fix_difficulty"]) {
+  if (!difficulty) return "Not sized";
+  return difficulty;
 }
 
-// ── Status action buttons ─────────────────────────────────────────────────────
+function statusActionLabel(status: string): string {
+  if (status === "acknowledged") return "Acknowledge";
+  if (status === "resolved") return "Resolve";
+  if (status === "dismissed") return "Dismiss";
+  return status;
+}
 
 function StatusActions({
   rec,
@@ -81,38 +69,37 @@ function StatusActions({
   loading: boolean;
 }) {
   if (rec.status !== "open" && rec.status !== "acknowledged") return null;
+
+  const actions = rec.status === "open"
+    ? [
+        { status: "acknowledged", icon: CheckCircle2 },
+        { status: "dismissed", icon: EyeOff },
+      ]
+    : [
+        { status: "resolved", icon: CheckCircle2 },
+        { status: "dismissed", icon: EyeOff },
+      ];
+
   return (
-    <div className="flex items-center gap-1.5 mt-2">
-      {rec.status === "open" && (
-        <button
-          onClick={() => onAction(rec.id, "acknowledged")}
-          disabled={loading}
-          className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-indigo-900/40 border border-indigo-700/40 text-indigo-300 hover:bg-indigo-900/60 disabled:opacity-50 transition-colors"
-        >
-          <CheckCircle2 className="w-3 h-3" /> Acknowledge
-        </button>
-      )}
-      {rec.status === "acknowledged" && (
-        <button
-          onClick={() => onAction(rec.id, "resolved")}
-          disabled={loading}
-          className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-green-900/40 border border-green-700/40 text-green-300 hover:bg-green-900/60 disabled:opacity-50 transition-colors"
-        >
-          <CheckCircle2 className="w-3 h-3" /> Resolve
-        </button>
-      )}
-      <button
-        onClick={() => onAction(rec.id, "dismissed")}
-        disabled={loading}
-        className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-gray-800/40 border border-gray-700/40 text-gray-400 hover:bg-gray-800/60 disabled:opacity-50 transition-colors"
-      >
-        <EyeOff className="w-3 h-3" /> Dismiss
-      </button>
+    <div className="fix-action-row">
+      {actions.map((action) => {
+        const Icon = action.icon;
+        return (
+          <button
+            key={action.status}
+            type="button"
+            className={action.status === "resolved" || action.status === "acknowledged" ? "btn btn-primary" : "btn btn-soft"}
+            disabled={loading}
+            onClick={() => onAction(rec.id, action.status)}
+          >
+            <Icon aria-hidden="true" />
+            {statusActionLabel(action.status)}
+          </button>
+        );
+      })}
     </div>
   );
 }
-
-// ── Recommendation card ───────────────────────────────────────────────────────
 
 function RecCard({
   rec,
@@ -127,111 +114,98 @@ function RecCard({
   onAction: (recId: string, status: string) => void;
   actionLoading: boolean;
 }) {
-  const isOpen = rec.status === "open" || rec.status === "acknowledged";
+  const isClosed = rec.status === "dismissed" || rec.status === "resolved";
+  const confidence = rec.axis_confidence == null ? null : rec.axis_confidence * 100;
+  const failRate = rec.fail_rate_at_generation == null ? null : rec.fail_rate_at_generation * 100;
+
   return (
-    <div className={`border-b border-gray-800/60 ${rec.status === "dismissed" || rec.status === "resolved" ? "opacity-50" : ""}`}>
-      <button
-        className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-800/20 transition-colors"
-        onClick={onToggle}
-      >
-        <TypeIcon type={rec.recommendation_type} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
+    <article className={`fix-card-row${isClosed ? " is-closed" : ""}`}>
+      <button type="button" className="fix-card-summary" onClick={onToggle}>
+        <span className="fix-card-icon">
+          <TypeIcon type={rec.recommendation_type} />
+        </span>
+        <span className="fix-card-main">
+          <span className="fix-card-meta">
             <PriorityBadge priority={rec.priority} />
-            <span className="text-xs text-gray-500 font-mono">{rec.agent_name}</span>
-            {rec.top_axis && (
-              <span className="text-xs text-indigo-400 font-mono">{rec.top_axis}</span>
-            )}
-            {rec.estimated_monthly_impact_usd != null && rec.estimated_monthly_impact_usd > 0 && (
-              <span className="text-xs text-emerald-400 ml-auto">
-                ~${rec.estimated_monthly_impact_usd.toFixed(0)}/mo saving
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-gray-200">{rec.title}</p>
-          {rec.axis_confidence != null && (
-            <p className="text-xs text-gray-500 mt-0.5">
-              Confidence: <span className="text-indigo-400">{(rec.axis_confidence * 100).toFixed(0)}%</span>
-              {rec.health_score_at_generation != null && (
-                <> · Health: <span className="text-yellow-400">{Math.round(rec.health_score_at_generation)}</span></>
-              )}
-            </p>
-          )}
-        </div>
-        {expanded ? (
-          <ChevronDown className="w-4 h-4 text-gray-500 shrink-0 mt-0.5" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-gray-500 shrink-0 mt-0.5" />
-        )}
+            <span className="mono">{rec.agent_name || "unknown-agent"}</span>
+            {rec.top_axis ? <span className="fix-axis-chip">{rec.top_axis}</span> : null}
+            {rec.estimated_monthly_impact_usd != null && rec.estimated_monthly_impact_usd > 0 ? (
+              <span className="fix-saving-chip">{formatUsd(rec.estimated_monthly_impact_usd)}/mo</span>
+            ) : null}
+          </span>
+          <strong>{rec.title}</strong>
+          <span className="fix-card-sub">
+            Generated {formatDateTime(rec.created_at)} · status {rec.status}
+          </span>
+        </span>
+        <span className="fix-card-toggle" aria-hidden="true">
+          {expanded ? <ChevronDown /> : <ChevronRight />}
+        </span>
       </button>
 
-      {expanded && (
-        <div className="px-4 pb-4 pl-11 space-y-3">
-          {rec.detail && (
-            <p className="text-xs text-gray-400 leading-relaxed">{rec.detail}</p>
-          )}
-          {rec.fix_suggestion && (
-            <div className="rounded-lg border border-green-900/40 bg-green-950/20 p-3">
-              <div className="flex items-center gap-1.5 mb-1 text-green-400">
-                <Lightbulb className="w-3.5 h-3.5" />
-                <span className="text-xs font-medium">Fix suggestion</span>
-                <DifficultyBadge difficulty={rec.fix_difficulty} />
-              </div>
-              <p className="text-xs text-green-200">{rec.fix_suggestion}</p>
+      {expanded ? (
+        <div className="fix-card-detail">
+          {rec.detail ? <p className="fix-detail-copy">{rec.detail}</p> : null}
+
+          <div className="fix-evidence-grid">
+            <div>
+              <span>Impact score</span>
+              <strong>{formatCount(rec.impact_score)}</strong>
             </div>
-          )}
-          {isOpen && (
-            <StatusActions rec={rec} onAction={onAction} loading={actionLoading} />
-          )}
-          {rec.status !== "open" && (
-            <p className="text-xs text-gray-600 italic">
-              Status: {rec.status}{rec.actioned_by ? ` by ${rec.actioned_by}` : ""}
+            <div>
+              <span>Confidence</span>
+              <strong>{confidence == null ? "-" : formatPercent(confidence)}</strong>
+            </div>
+            <div>
+              <span>Health at generation</span>
+              <strong>{rec.health_score_at_generation == null ? "-" : formatCount(rec.health_score_at_generation)}</strong>
+            </div>
+            <div>
+              <span>Fail rate</span>
+              <strong>{failRate == null ? "-" : formatPercent(failRate)}</strong>
+            </div>
+            <div>
+              <span>Calls in window</span>
+              <strong>{formatCount(rec.call_count_window)}</strong>
+            </div>
+            <div>
+              <span>Fix size</span>
+              <strong>{difficultyLabel(rec.fix_difficulty)}</strong>
+            </div>
+          </div>
+
+          {rec.fix_suggestion ? (
+            <div className="fix-suggestion-box">
+              <span className="module-eyebrow">
+                <Lightbulb aria-hidden="true" />
+                Candidate fix
+              </span>
+              <p>{rec.fix_suggestion}</p>
+              {rec.fix_difficulty ? (
+                <span className={`fix-difficulty difficulty-${rec.fix_difficulty}`}>
+                  <Wrench aria-hidden="true" />
+                  {rec.fix_difficulty}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {rec.ablation_job_id ? (
+            <p className="fix-detail-note">Ablation job: <span className="mono">{rec.ablation_job_id}</span></p>
+          ) : null}
+          {rec.actioned_by || rec.actioned_at ? (
+            <p className="fix-detail-note">
+              Last action {rec.actioned_at ? formatDateTime(rec.actioned_at) : "-"}
+              {rec.actioned_by ? ` by ${rec.actioned_by}` : ""}
             </p>
-          )}
+          ) : null}
+
+          <StatusActions rec={rec} onAction={onAction} loading={actionLoading} />
         </div>
-      )}
-    </div>
+      ) : null}
+    </article>
   );
 }
-
-// ── Summary banner ────────────────────────────────────────────────────────────
-
-function SummaryBanner({
-  total_open, critical_count, high_count, total_estimated_saving_usd, top_agents,
-}: {
-  total_open: number;
-  critical_count: number;
-  high_count: number;
-  total_estimated_saving_usd: number;
-  top_agents: string[];
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-4 px-6 py-3 border-b border-gray-800 bg-gray-900/30 text-xs">
-      <span className="text-gray-400">{total_open} open</span>
-      {critical_count > 0 && <span className="text-red-400 font-semibold">{critical_count} critical</span>}
-      {high_count > 0 && <span className="text-orange-400">{high_count} high</span>}
-      {total_estimated_saving_usd > 0 && (
-        <span className="text-emerald-400">
-          ~${total_estimated_saving_usd.toFixed(0)}/mo potential saving
-        </span>
-      )}
-      {top_agents.length > 0 && (
-        <span className="text-gray-500">
-          Focus: {top_agents.map((a) => <span key={a} className="text-red-300 font-mono mx-0.5">{a}</span>)}
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-
-const STATUS_TABS = [
-  { value: "open", label: "Open" },
-  { value: "acknowledged", label: "Acknowledged" },
-  { value: "resolved", label: "Resolved" },
-  { value: "dismissed", label: "Dismissed" },
-];
 
 export default function RecommendationsPage() {
   const [activeStatus, setActiveStatus] = useState("open");
@@ -242,82 +216,119 @@ export default function RecommendationsPage() {
   const { mutate: updateStatus, isPending: updating } = useUpdateRecStatus();
   const { mutate: generate, isPending: generating } = useGenerateRecommendations();
 
-  const handleAction = (recId: string, status: string) => {
-    updateStatus({ recId, status });
-  };
+  const openImpact = summary?.total_estimated_saving_usd ?? 0;
+  const activeItems = recs ?? [];
+  const focusText = useMemo(() => {
+    const agents = summary?.top_agents ?? [];
+    return agents.length > 0 ? agents.join(", ") : "No dominant agent yet";
+  }, [summary?.top_agents]);
+
+  function handleAction(recId: string, status: string) {
+    updateStatus({ recId, status, actioned_by: "dashboard" });
+  }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-        <div>
-          <h1 className="text-base font-semibold text-white">Reliability Intelligence Queue</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Ranked fix items — causal axis failures, determinism spikes, cost overruns, regressions
-          </p>
+    <div className="fix-queue-workspace">
+      <section className="module-hero fix-queue-hero">
+        <div className="module-hero-header">
+          <div>
+            <span className="module-eyebrow">
+              <Sparkles aria-hidden="true" />
+              Fix queue
+            </span>
+            <h1>What to fix next</h1>
+            <p>
+              Ranked production recommendations from reliability, cost, determinism,
+              and causal-axis evidence. Every item stays a candidate until replay or goldens verify it.
+            </p>
+          </div>
+          <div className="fix-hero-actions">
+            <button type="button" className="btn btn-primary" disabled={generating} onClick={() => generate()}>
+              {generating ? <Loader2 aria-hidden="true" className="spin-icon" /> : <Sparkles aria-hidden="true" />}
+              Generate
+            </button>
+            <button type="button" className="btn btn-soft" onClick={() => void refetch()}>
+              <RefreshCw aria-hidden="true" />
+              Refresh
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => generate()}
-            disabled={generating}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition-colors"
-          >
-            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            Generate
-          </button>
-          <button onClick={() => refetch()} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      </section>
 
-      {/* Summary */}
-      {summary && <SummaryBanner {...summary} />}
+      <section className="fix-summary-strip" aria-label="Fix queue summary">
+        <article>
+          <span>Open</span>
+          <strong>{formatCount(summary?.total_open)}</strong>
+        </article>
+        <article className={summary?.critical_count ? "tone-danger" : ""}>
+          <span>Critical</span>
+          <strong>{formatCount(summary?.critical_count)}</strong>
+        </article>
+        <article className={summary?.high_count ? "tone-warning" : ""}>
+          <span>High</span>
+          <strong>{formatCount(summary?.high_count)}</strong>
+        </article>
+        <article className={openImpact > 0 ? "tone-success" : ""}>
+          <span>Potential monthly saving</span>
+          <strong>{formatUsd(openImpact)}</strong>
+        </article>
+        <article>
+          <span>Focus</span>
+          <strong>{focusText}</strong>
+        </article>
+      </section>
 
-      {/* Status tabs */}
-      <div className="flex border-b border-gray-800 px-4 pt-1">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setActiveStatus(tab.value)}
-            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-              activeStatus === tab.value
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-gray-500 hover:text-gray-300"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <section className="fix-queue-panel">
+        <header className="fix-panel-header">
+          <div>
+            <span className="module-eyebrow">Queue</span>
+            <h2>{activeItems.length} {activeStatus} items</h2>
+          </div>
+          <div className="fix-status-tabs" role="tablist" aria-label="Recommendation status">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={activeStatus === tab.value}
+                className={activeStatus === tab.value ? "active" : ""}
+                onClick={() => {
+                  setActiveStatus(tab.value);
+                  setExpandedId(null);
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </header>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto">
-        {isLoading && (
-          <div className="flex items-center justify-center h-32 text-gray-500">
-            <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading…
+        {isLoading ? (
+          <div className="fix-loading">
+            <Loader2 aria-hidden="true" className="spin-icon" />
+            Loading recommendations
+          </div>
+        ) : activeItems.length === 0 ? (
+          <div className="fix-empty-state">
+            <CheckCircle2 aria-hidden="true" />
+            <strong>No {activeStatus} recommendations</strong>
+            {activeStatus === "open" ? <span>Generate after new reliability data arrives.</span> : null}
+          </div>
+        ) : (
+          <div className="fix-card-stack">
+            {activeItems.map((rec) => (
+              <RecCard
+                key={rec.id}
+                rec={rec}
+                expanded={expandedId === rec.id}
+                onToggle={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
+                onAction={handleAction}
+                actionLoading={updating}
+              />
+            ))}
           </div>
         )}
-        {!isLoading && (!recs || recs.length === 0) && (
-          <div className="flex flex-col items-center justify-center h-48 gap-2 text-gray-600">
-            <CheckCircle2 className="w-10 h-10 text-gray-800" />
-            <p className="text-sm">No {activeStatus} recommendations</p>
-            {activeStatus === "open" && (
-              <p className="text-xs text-gray-700">Click Generate to analyse agent health data</p>
-            )}
-          </div>
-        )}
-        {recs?.map((rec) => (
-          <RecCard
-            key={rec.id}
-            rec={rec}
-            expanded={expandedId === rec.id}
-            onToggle={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
-            onAction={handleAction}
-            actionLoading={updating}
-          />
-        ))}
-      </div>
+      </section>
     </div>
   );
 }

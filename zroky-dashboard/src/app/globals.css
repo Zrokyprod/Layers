@@ -10045,6 +10045,391 @@ pre {
   gap: 6px;
 }
 
+/* Fix Queue / Recommendations ------------------------------------------------ */
+.fix-queue-workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.fix-queue-hero {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 250, 249, 0.96)),
+    linear-gradient(90deg, rgba(17, 24, 39, 0.05), rgba(202, 138, 4, 0.08));
+}
+
+.fix-hero-actions,
+.fix-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.fix-hero-actions .btn,
+.fix-action-row .btn {
+  gap: 6px;
+}
+
+.fix-hero-actions .btn svg,
+.fix-action-row .btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.spin-icon {
+  animation: spin 900ms linear infinite;
+}
+
+.fix-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fix-summary-strip article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.fix-summary-strip span {
+  color: #667085;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fix-summary-strip strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 1.08rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fix-summary-strip .tone-danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.fix-summary-strip .tone-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.fix-summary-strip .tone-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.fix-queue-panel {
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.fix-panel-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.fix-panel-header h2 {
+  margin: 5px 0 0;
+  color: #111827;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.fix-status-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.fix-status-tabs button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 7px 10px;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.fix-status-tabs button:hover,
+.fix-status-tabs button.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: var(--shadow-soft);
+}
+
+.fix-status-tabs button.active {
+  background: #111827;
+  color: #ffffff;
+}
+
+.fix-card-stack {
+  display: grid;
+}
+
+.fix-card-row {
+  border-bottom: 1px solid #eaecf0;
+}
+
+.fix-card-row:last-child {
+  border-bottom: 0;
+}
+
+.fix-card-row.is-closed {
+  opacity: 0.68;
+}
+
+.fix-card-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  width: 100%;
+  padding: 15px 16px;
+  border: 0;
+  background: #ffffff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 160ms ease;
+}
+
+.fix-card-summary:hover {
+  background: #f8fafc;
+}
+
+.fix-card-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.fix-type-icon,
+.fix-card-toggle svg {
+  width: 17px;
+  height: 17px;
+}
+
+.fix-card-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fix-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  color: #667085;
+  font-size: 0.76rem;
+}
+
+.fix-card-main strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 0.96rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fix-card-sub {
+  color: #667085;
+  font-size: 0.78rem;
+}
+
+.fix-card-toggle {
+  display: grid;
+  place-items: center;
+  color: #98a2b3;
+}
+
+.fix-priority,
+.fix-axis-chip,
+.fix-saving-chip,
+.fix-difficulty {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.priority-critical {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.priority-high {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.priority-medium {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.priority-low {
+  background: #f8fafc;
+  color: #475467;
+}
+
+.fix-axis-chip {
+  background: #f8fafc;
+  color: #344054;
+  text-transform: none;
+}
+
+.fix-saving-chip {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #027a48;
+  text-transform: none;
+}
+
+.fix-card-detail {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px 62px;
+}
+
+.fix-detail-copy,
+.fix-detail-note {
+  margin: 0;
+  color: #667085;
+  font-size: 0.83rem;
+  line-height: 1.5;
+}
+
+.fix-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fix-evidence-grid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.fix-evidence-grid span {
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fix-evidence-grid strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fix-suggestion-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+}
+
+.fix-suggestion-box p {
+  margin: 0;
+  color: #14532d;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.fix-difficulty {
+  width: fit-content;
+  border-color: #bbf7d0;
+  background: #ffffff;
+  color: #027a48;
+}
+
+.difficulty-hard {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+.difficulty-medium {
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.fix-loading,
+.fix-empty-state {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 220px;
+  padding: 24px;
+  color: #667085;
+  text-align: center;
+}
+
+.fix-loading {
+  grid-template-columns: auto auto;
+  justify-content: center;
+}
+
+.fix-empty-state svg {
+  width: 26px;
+  height: 26px;
+  color: #027a48;
+}
+
+.fix-empty-state strong {
+  color: #111827;
+}
+
 /* Settings + shell account controls ----------------------------------------- */
 .shell-profile-avatar {
   display: inline-flex;
@@ -10749,6 +11134,10 @@ pre {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .fix-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .issue-action-rail,
   .golden-action-rail {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -10780,6 +11169,7 @@ pre {
   .issue-filter-bar,
   .replay-filter-bar,
   .calls-hero-actions,
+  .fix-hero-actions,
   .alert-hero-actions,
   .alerts-section-header {
     align-items: stretch;
@@ -10790,6 +11180,7 @@ pre {
   .issue-filter-bar,
   .replay-filter-bar,
   .calls-hero-actions,
+  .fix-hero-actions,
   .alert-hero-actions,
   .alerts-section-header {
     flex-direction: column;
@@ -10806,6 +11197,9 @@ pre {
   .calls-hero-actions .btn,
   .calls-filter-panel .btn,
   .calls-empty-actions .btn,
+  .fix-hero-actions .btn,
+  .fix-action-row .btn,
+  .fix-status-tabs,
   .alert-hero-actions .btn,
   .alerts-channel-actions .btn,
   .alert-action-bar .btn,
@@ -10822,8 +11216,32 @@ pre {
   }
 
   .alert-metric-grid,
+  .fix-summary-strip,
+  .fix-evidence-grid,
   .alert-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .fix-panel-header,
+  .fix-card-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .fix-card-detail {
+    padding: 0 16px 16px;
+  }
+
+  .fix-card-main strong {
+    white-space: normal;
+  }
+
+  .fix-status-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fix-status-tabs button {
+    width: 100%;
   }
 
   .alert-card-row {
