@@ -137,6 +137,10 @@ function actionIcon(kind: AskActionKind): LucideIcon {
   return ExternalLink;
 }
 
+function actionTone(kind: AskActionKind): "primary" | "secondary" {
+  return kind === "create_replay" || kind === "promote_golden" ? "primary" : "secondary";
+}
+
 function promotionCriteria(run: ReplayRunDetailItem, trace: ReplayRunTraceItem): string {
   return JSON.stringify({
     source: "ask_zroky_verified_promotion",
@@ -406,7 +410,13 @@ export function AskZroky() {
   const isIdle = turns.length === 0 && !pending;
 
   return (
-    <div className="ask-backdrop" role="dialog" aria-modal="true" aria-label="Ask Zroky">
+    <div
+      className="ask-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ask Zroky"
+      onClick={() => setOpen(false)}
+    >
       <div className="ask-drawer" onClick={(e) => e.stopPropagation()}>
         <header className="ask-head">
           <div className="ask-head-title">
@@ -517,17 +527,18 @@ export function AskZroky() {
                           const status = actionStatus[`${turn.id}-${action.kind}`];
                           const busy = status === "Creating..." || status === "Promoting...";
                           const Icon = busy ? Loader2 : actionIcon(action.kind);
+                          const className = `ask-action-button ask-action-${actionTone(action.kind)}`;
                           return (
                             <div key={`${turn.id}-${action.kind}`} className="ask-action-item">
                               {action.href ? (
-                                <Link href={action.href} className="ask-action-button" onClick={() => setOpen(false)}>
+                                <Link href={action.href} className={className} onClick={() => setOpen(false)}>
                                   <Icon className="ask-action-icon" aria-hidden="true" />
                                   {action.label}
                                 </Link>
                               ) : (
                                 <button
                                   type="button"
-                                  className="ask-action-button"
+                                  className={className}
                                   onClick={() => void runWorkflowAction(turn, action)}
                                   disabled={busy}
                                 >

@@ -8527,20 +8527,27 @@ a.notif-action-link {
 
 /* Ask Zroky premium drawer --------------------------------------------------- */
 .ask-backdrop {
-  background: rgba(17, 24, 39, 0.28);
+  align-items: stretch;
+  padding: 16px 16px 16px 0;
+  background: rgba(17, 24, 39, 0.18);
   backdrop-filter: blur(2px);
 }
 
 .ask-drawer {
-  width: min(520px, 100vw);
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  height: 100%;
+  border-radius: 14px;
   overflow: hidden;
+  box-shadow:
+    0 24px 56px rgba(16, 24, 40, 0.20),
+    0 0 0 1px rgba(255, 255, 255, 0.78);
 }
 
 .ask-head {
   align-items: center;
-  padding: 18px;
+  padding: 18px 20px;
+  border-bottom-color: #eef2f6;
 }
 
 .ask-head-title {
@@ -8574,8 +8581,10 @@ a.notif-action-link {
 
 .ask-reset-btn {
   height: 32px;
+  min-width: 76px;
   padding: 0 10px;
   font-weight: 750;
+  white-space: nowrap;
 }
 
 .ask-close-btn {
@@ -8603,7 +8612,7 @@ a.notif-action-link {
 }
 
 .ask-body {
-  padding: 16px 18px;
+  padding: 18px 20px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
 }
 
@@ -8673,8 +8682,8 @@ a.notif-action-link {
 }
 
 .ask-bubble {
-  max-width: min(88%, 390px);
-  padding: 12px 13px;
+  max-width: min(91%, 440px);
+  padding: 13px 14px;
   background: #ffffff;
   box-shadow: var(--shadow-soft);
 }
@@ -8685,7 +8694,7 @@ a.notif-action-link {
 }
 
 .ask-turn-user .ask-bubble {
-  background: #111827;
+  background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
   border-color: #111827;
   box-shadow: 0 10px 24px rgba(16, 24, 40, 0.16);
 }
@@ -8695,6 +8704,8 @@ a.notif-action-link {
   line-height: 1.5;
 }
 
+.ask-turn-user .ask-bubble,
+.ask-turn-user .ask-bubble *,
 .ask-turn-user .ask-bubble-text {
   color: #ffffff;
 }
@@ -8714,20 +8725,41 @@ a.notif-action-link {
 .ask-action-button {
   min-height: 32px;
   gap: 7px;
+  padding: 7px 11px;
+  font-size: 0.76rem;
+  line-height: 1;
+  text-decoration: none;
+  opacity: 1;
+}
+
+.ask-action-primary {
   border-color: #111827;
   background: #111827;
   color: #ffffff;
-  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.12);
+  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.14);
 }
 
-.ask-action-button:hover {
+.ask-action-secondary {
+  border-color: #d0d5dd;
+  background: #ffffff;
+  color: #344054;
+  box-shadow: var(--shadow-soft);
+}
+
+.ask-action-primary:hover {
   background: #374151;
   color: #ffffff;
 }
 
+.ask-action-secondary:hover {
+  border-color: #98a2b3;
+  background: #f8fafc;
+  color: #111827;
+}
+
 .ask-action-button:disabled {
   cursor: not-allowed;
-  opacity: 0.72;
+  opacity: 0.76;
 }
 
 .ask-action-icon {
@@ -8748,7 +8780,9 @@ a.notif-action-link {
 
 .ask-evidence-link {
   width: 100%;
+  min-height: 36px;
   min-width: 0;
+  justify-content: flex-start;
   background: #f8fafc;
   color: #111827;
 }
@@ -8760,6 +8794,8 @@ a.notif-action-link {
 
 .ask-evidence-kind {
   flex: 0 0 auto;
+  min-width: 54px;
+  text-align: center;
   border-radius: 999px;
   font-weight: 800;
 }
@@ -8811,8 +8847,8 @@ a.notif-action-link {
 
 .ask-feedback-btn {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
   border: 1px solid #e5e7eb;
@@ -8832,12 +8868,53 @@ a.notif-action-link {
 }
 
 .ask-input-row {
-  padding: 12px 18px 16px;
+  padding: 14px 20px 18px;
   gap: 8px;
 }
 
 .ask-input {
   min-width: 0;
+  height: 40px;
+}
+
+.ask-send-btn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  background: #111827;
+  color: #ffffff;
+}
+
+.ask-send-btn:disabled {
+  background: #98a2b3;
+  color: #ffffff;
+  opacity: 1;
+}
+
+@media (max-width: 720px) {
+  .ask-backdrop {
+    padding: 0;
+  }
+
+  .ask-drawer {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .ask-bubble {
+    max-width: 94%;
+  }
+
+  .ask-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .ask-action-button {
+    width: 100%;
+  }
 }
 
 .capture-connect-panel {
