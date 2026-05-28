@@ -1,0 +1,8 @@
+.env*
+.next/
+node_modules/
+coverage/
+test-results/
+playwright-report/
+tsconfig.tsbuildinfo
+dev-server.*.log
