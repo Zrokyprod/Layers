@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
+from app.db.url import normalize_sqlalchemy_database_url
 
 settings = get_settings()
 
@@ -76,13 +77,15 @@ def _attach_search_path(target_engine: Engine) -> None:
             cursor.close()
 
 
-_db_url = _inject_search_path(settings.DATABASE_URL)
+_db_url = _inject_search_path(normalize_sqlalchemy_database_url(settings.DATABASE_URL))
 engine = create_engine(_db_url, **_build_engine_kwargs(_db_url))
 _attach_search_path(engine)
 _attach_statement_timeout(engine)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
-_read_url = _inject_search_path(settings.DATABASE_READ_REPLICA_URL or settings.DATABASE_URL)
+_read_url = _inject_search_path(
+    normalize_sqlalchemy_database_url(settings.DATABASE_READ_REPLICA_URL or settings.DATABASE_URL)
+)
 read_engine = create_engine(_read_url, **_build_engine_kwargs(_read_url))
 _attach_search_path(read_engine)
 _attach_statement_timeout(read_engine)

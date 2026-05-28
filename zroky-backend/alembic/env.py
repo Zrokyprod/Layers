@@ -8,6 +8,7 @@ from sqlalchemy.engine import make_url
 
 from app.core.config import get_settings
 from app.db.base import Base
+from app.db.url import normalize_sqlalchemy_database_url
 
 # Import models so they are registered on Base metadata.
 from app.db import models  # noqa: F401
@@ -41,6 +42,7 @@ resolved_database_url = (
     or config.get_main_option("sqlalchemy.url")
     or settings.DATABASE_URL
 )
+resolved_database_url = normalize_sqlalchemy_database_url(resolved_database_url)
 
 ensure_sqlite_parent_dir(resolved_database_url)
 config.set_main_option("sqlalchemy.url", resolved_database_url)
