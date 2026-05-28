@@ -24,7 +24,7 @@ def process_replay_run(
     short-circuits, so retries are safe.
 
     Resolves the right evaluator based on the org's plan + entitlements
-    so Pro gets single-judge (Haiku-4) and Team+ gets ensemble per locked
+    so Pro gets single-judge (Haiku-4) and Plus gets ensemble per locked
     decision #4.
     """
     task_key = f"replay:{tenant_id}:{run_id}"
@@ -103,7 +103,7 @@ def process_replay_run(
             candidate_prompt_override = summary.get("candidate_prompt_override")
             candidate_model_override = summary.get("candidate_model_override")
 
-            # Plan gate: real-LLM replay requires Team+ or Enterprise.
+            # Plan gate: real-LLM replay requires Plus or Enterprise.
             # Fail closed instead of silently running a stub replay.
             use_live_resolver = False
             if (

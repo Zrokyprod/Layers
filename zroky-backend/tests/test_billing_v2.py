@@ -93,9 +93,8 @@ def _billing_settings(monkeypatch: pytest.MonkeyPatch):
         "STRIPE_PRICE_IDS_JSON",
         json.dumps(
             {
-                "starter": "price_starter_test",
                 "pro": "price_pro_test",
-                "team": "price_team_test",
+                "plus": "price_plus_test",
             }
         ),
     )
@@ -202,7 +201,7 @@ class TestBillingPlans:
             assert_self_serve_plan("enterprise")
 
     def test_assert_self_serve_accepts_paid_tiers(self) -> None:
-        for code in ("starter", "pro", "team"):
+        for code in ("pro", "plus"):
             assert assert_self_serve_plan(code) == code
 
     def test_resolve_price_id_happy(self) -> None:
@@ -220,7 +219,7 @@ class TestBillingPlans:
         a = get_plan_entitlements("free")
         a["events.monthly_quota"] = 999
         b = get_plan_entitlements("free")
-        assert b["events.monthly_quota"] == 100_000  # not mutated
+        assert b["events.monthly_quota"] == 50_000  # not mutated
 
     def test_all_plans_have_same_keys(self) -> None:
         ref = set(PLAN_ENTITLEMENTS["free"].keys())
@@ -282,7 +281,7 @@ class TestEntitlementsService:
     def test_set_trial_overlay(self, db_session) -> None:
         expires = datetime.now(timezone.utc) + timedelta(days=14)
         rows = set_trial_entitlements(
-            db_session, org_id="o1", plan_code="team", expires_at=expires,
+            db_session, org_id="o1", plan_code="plus", expires_at=expires,
         )
         assert all(r.source == "trial" for r in rows)
         assert all(r.expires_at is not None for r in rows)
@@ -290,10 +289,10 @@ class TestEntitlementsService:
     def test_clear_trial(self, db_session) -> None:
         expires = datetime.now(timezone.utc) + timedelta(days=14)
         set_trial_entitlements(
-            db_session, org_id="o1", plan_code="team", expires_at=expires,
+            db_session, org_id="o1", plan_code="plus", expires_at=expires,
         )
         deleted = clear_trial_entitlements(db_session, org_id="o1")
-        assert deleted == len(PLAN_ENTITLEMENTS["team"])
+        assert deleted == len(PLAN_ENTITLEMENTS["plus"])
 
     def test_override_upsert(self, db_session) -> None:
         row1 = set_override_entitlement(
@@ -560,12 +559,12 @@ class TestStripeSyncDispatch:
             event_id="evt_pre",
             event_type="checkout.session.completed",
             obj={
-                "metadata": {"org_id": "o-beta", "plan_code": "starter"},
+                "metadata": {"org_id": "o-beta", "plan_code": "pro"},
                 "customer": "cus_beta", "subscription": "sub_beta",
             },
         ))
 
-        # Then sub.updated bumps to active+pro
+        # Then sub.updated bumps to active+plus
         dispatch_event(db_session, _make_event(
             event_id="evt_upd_1",
             event_type="customer.subscription.updated",
@@ -573,7 +572,7 @@ class TestStripeSyncDispatch:
                 "id": "sub_beta",
                 "customer": "cus_beta",
                 "status": "active",
-                "metadata": {"org_id": "o-beta", "plan_code": "pro"},
+                "metadata": {"org_id": "o-beta", "plan_code": "plus"},
                 "current_period_end": int(time.time()) + 30 * 86400,
             },
             created=int(time.time()) + 100,
@@ -582,7 +581,7 @@ class TestStripeSyncDispatch:
         sub = db_session.execute(
             select(Subscription).where(Subscription.org_id == "o-beta")
         ).scalar_one()
-        assert sub.plan_code == "pro"
+        assert sub.plan_code == "plus"
         assert sub.status == "active"
         assert sub.current_period_end is not None
 
@@ -595,7 +594,7 @@ class TestStripeSyncDispatch:
                 "id": "sub_trial",
                 "customer": "cus_trial",
                 "status": "trialing",
-                "metadata": {"org_id": "o-trial", "plan_code": "team"},
+                "metadata": {"org_id": "o-trial", "plan_code": "plus"},
                 "trial_end": trial_end,
                 "current_period_end": trial_end,
             },
@@ -606,7 +605,7 @@ class TestStripeSyncDispatch:
                 Entitlement.source == "trial",
             )
         ).scalars().all()
-        assert len(trial_rows) == len(PLAN_ENTITLEMENTS["team"])
+        assert len(trial_rows) == len(PLAN_ENTITLEMENTS["plus"])
         assert all(r.expires_at is not None for r in trial_rows)
 
     def test_subscription_deleted_clears_entitlements(self, db_session) -> None:
@@ -647,7 +646,7 @@ class TestStripeSyncDispatch:
             event_id="evt_pf_seed",
             event_type="checkout.session.completed",
             obj={
-                "metadata": {"org_id": "o-pf", "plan_code": "starter"},
+                "metadata": {"org_id": "o-pf", "plan_code": "pro"},
                 "customer": "cus_pf", "subscription": "sub_pf",
             },
         ))
@@ -669,7 +668,7 @@ class TestStripeSyncDispatch:
             event_id="evt_ip_seed",
             event_type="checkout.session.completed",
             obj={
-                "metadata": {"org_id": "o-ip", "plan_code": "starter"},
+                "metadata": {"org_id": "o-ip", "plan_code": "pro"},
                 "customer": "cus_ip", "subscription": "sub_ip",
             },
         ))
@@ -898,7 +897,7 @@ class TestWebhookRoute:
             event_id="evt_replay_1",
             event_type="checkout.session.completed",
             obj={
-                "metadata": {"org_id": "org-replay", "plan_code": "starter"},
+                "metadata": {"org_id": "org-replay", "plan_code": "pro"},
                 "customer": "cus_r", "subscription": "sub_r",
             },
         )
@@ -981,7 +980,7 @@ class TestBillingMeRoute:
         assert body["seats"] == 1
         assert body["stripe_customer_id"] is None
         # plan_template reflects free tier
-        assert body["plan_template"]["events.monthly_quota"] == 100_000
+        assert body["plan_template"]["events.monthly_quota"] == 50_000
 
     def test_returns_existing_subscription(self, client: TestClient) -> None:
         factory = client._session_factory  # type: ignore[attr-defined]
@@ -1019,7 +1018,7 @@ class TestInvariants:
     def test_plan_codes_match_tier_matrix(self) -> None:
         # Plan §11.1 binding tiers
         assert VALID_PLAN_CODES == frozenset(
-            {"free", "starter", "pro", "team", "enterprise"}
+            {"free", "pro", "plus", "enterprise"}
         )
 
     def test_handled_event_types_mirror_plan_section_113(self) -> None:

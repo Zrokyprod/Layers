@@ -10,7 +10,7 @@ require_entitlement code path.
 
 Coverage:
   - Gate denies free-tier orgs with 402 + X-Zroky-Plan-Hint header
-  - Gate allows pro/team/enterprise orgs (real DB rows)
+  - Gate allows pro/plus/enterprise orgs (real DB rows)
   - X-Zroky-Plan-Hint reflects current plan_code on both pass and fail
   - 402 body shape matches plan §10.x contract (detail, required_entitlement,
     current_plan, upgrade_hint_url)
@@ -141,15 +141,15 @@ class TestGate402Denial:
         )
         assert response.status_code == 402
 
-    def test_starter_org_blocked_from_pilot(self, client: TestClient) -> None:
-        # Starter has pilot.autopilot_enabled=False per plan §11.1
-        _seed_org(client, org_id="starter-org", plan_code="starter")
+    def test_plus_org_allowed_through_pilot(self, client: TestClient) -> None:
+        # Plus carries the full pilot feature gate.
+        _seed_org(client, org_id="plus-org", plan_code="plus")
         response = client.get(
             "/v1/pilot/actions",
-            headers={PROJECT_HEADER: "starter-org"},
+            headers={PROJECT_HEADER: "plus-org"},
         )
-        assert response.status_code == 402
-        assert response.json()["detail"]["current_plan"] == "starter"
+        assert response.status_code == 200
+        assert response.headers.get(PLAN_HINT_HEADER) == "plus"
 
     def test_402_includes_plan_hint_header(self, client: TestClient) -> None:
         _seed_org(client, org_id="free-org", plan_code="free")
@@ -186,14 +186,14 @@ class TestGateAllow:
         assert response.status_code == 200
         assert response.headers.get(PLAN_HINT_HEADER) == "pro"
 
-    def test_team_org_allowed_through_goldens(self, client: TestClient) -> None:
-        _seed_org(client, org_id="team-org", plan_code="team")
+    def test_plus_org_allowed_through_goldens(self, client: TestClient) -> None:
+        _seed_org(client, org_id="plus-org", plan_code="plus")
         response = client.get(
             "/v1/goldens",
-            headers={PROJECT_HEADER: "team-org"},
+            headers={PROJECT_HEADER: "plus-org"},
         )
         assert response.status_code == 200
-        assert response.headers.get(PLAN_HINT_HEADER) == "team"
+        assert response.headers.get(PLAN_HINT_HEADER) == "plus"
 
     def test_enterprise_org_allowed_through_replay(
         self, client: TestClient

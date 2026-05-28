@@ -480,7 +480,7 @@ class TestSweepExpiredPastDueGrace:
         sub = _make_subscription(
             db_session,
             org_id="org-sla-pd",
-            plan_code="team",
+            plan_code="plus",
             status="past_due",
             current_period_end=now - timedelta(days=10),
             stripe_sub_id="sub_sla",
@@ -579,7 +579,7 @@ class TestBillingMeSlaTier:
 
         # Custom value passes through.
         instance = BillingMeResponse(
-            org_id="x", plan_code="team", status="active", seats=10,
+            org_id="x", plan_code="plus", status="active", seats=10,
             sla_tier="team",
         )
         assert instance.sla_tier == "team"

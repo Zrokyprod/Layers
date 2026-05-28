@@ -15,7 +15,7 @@ Evaluator abstraction used by:
 
 Locked design choices (plan §17.2 decision #4):
   - Pro tier: SingleJudgeEvaluator on `claude-haiku-4`.
-  - Team+/Enterprise: EnsembleEvaluator with Haiku-4 + GPT-4.5-mini, median
+  - Plus/Enterprise: EnsembleEvaluator with Haiku-4 + GPT-4.5-mini, median
     vote. Calibration drift alarm fires at 5% (see judge_calibration.py).
 
 Surface (intentionally small):
@@ -383,7 +383,7 @@ class SingleJudgeEvaluator(Evaluator):
 
 
 class EnsembleEvaluator(Evaluator):
-    """N-judge ensemble with median verdict (Team+/Enterprise).
+    """N-judge ensemble with median verdict (Plus/Enterprise).
 
     Vote rule:
       - Each child evaluator returns a Verdict; verdict mapped to integer
@@ -921,7 +921,7 @@ def get_evaluator(
         # Plan-code defaulting when caller didn't resolve entitlements.
         # Keep aligned with PLAN_ENTITLEMENTS in billing_plans.py.
         plan = (plan_code or DEFAULT_PLAN_CODE).strip().lower()
-        ensemble_allowed = plan in {"team", "enterprise"}
+        ensemble_allowed = plan in {"plus", "enterprise"}
 
     if ensemble_allowed:
         models = _parse_ensemble_models()

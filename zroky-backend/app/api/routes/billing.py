@@ -328,10 +328,10 @@ def _get_or_create_org_subscription(
 class CheckoutRequest(BaseModel):
     plan_code: str = Field(
         description=(
-            "Self-serve plan code: 'starter' | 'pro' | 'team'. "
+            "Self-serve plan code: 'pro' | 'plus'. "
             "'enterprise' is sales-led; 'free' has no checkout."
         ),
-        examples=["pro"],
+        examples=["plus"],
     )
     customer_email: str | None = Field(
         default=None,
@@ -374,7 +374,7 @@ class BillingMeResponse(BaseModel):
     current_period_end: str | None = None
     trial_end: str | None = None
     # Module 12 — Reliability SLA tier (plan §11.4). 'none' for
-    # Free/Starter/Pro; 'team'/'enterprise' for tiers carrying the
+    # Free/Pro/Plus; 'team'/'enterprise' for tiers carrying the
     # refund-on-miss SLA contract. Read-only here; mutations happen
     # exclusively in the Founder Console (Module 13).
     sla_tier: str = Field(

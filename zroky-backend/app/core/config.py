@@ -224,8 +224,8 @@ class Settings(BaseSettings):
     # mirrors stripe-python's default of 5 minutes.
     STRIPE_WEBHOOK_TOLERANCE_SECONDS: int = 300
     # Plan-code â†’ Stripe Price ID mapping. JSON-encoded inline. Keys must
-    # match `services/billing_plans.PLAN_ENTITLEMENTS` (free/starter/pro/
-    # team/enterprise). 'free' has no Stripe price (no checkout).
+    # match `services/billing_plans.PLAN_ENTITLEMENTS` (free/pro/plus/
+    # enterprise). 'free' has no Stripe price (no checkout).
     STRIPE_PRICE_IDS_JSON: str = "{}"
     # URLs returned to Stripe Checkout / Portal for redirect-back.
     BILLING_CHECKOUT_SUCCESS_URL: str = (
@@ -273,7 +273,7 @@ class Settings(BaseSettings):
     # Single-judge model. claude-haiku-4 per locked decision (cheap, fast,
     # good calibration vs. anthropic ground truth).
     JUDGE_SINGLE_MODEL: str = "anthropic/claude-haiku-4"
-    # Ensemble members (Team+/Enterprise). JSON array of OpenRouter model
+    # Ensemble members (Plus/Enterprise). JSON array of OpenRouter model
     # slugs. Median vote â†’ final verdict. Per decision #4: Haiku-4 +
     # GPT-4.5-mini. Stored as a string so 12-factor env-var deploys keep
     # working.

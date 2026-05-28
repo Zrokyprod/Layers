@@ -2,6 +2,7 @@
 
 Uses the ``event_counts`` metering ledger (upserted on every accepted ingest)
 for O(1) current-month lookups instead of scanning the ``calls`` table.
+Plan limits come from the active entitlement matrix, not legacy plan rows.
 
 Public API
 ----------
@@ -16,12 +17,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import EventCount, SubscriptionPlan, TenantSubscription
+from app.db.models import EventCount
+from app.services import entitlements_resolver
 
 logger = logging.getLogger(__name__)
 
@@ -135,22 +135,24 @@ def _current_month_count(db: Session, tenant_id: str, month: str) -> int:
 
 
 def _plan_call_limit(db: Session, tenant_id: str) -> int | None:
-    row: Any = db.execute(
-        select(SubscriptionPlan.max_calls_per_month)
-        .join(TenantSubscription, TenantSubscription.plan_id == SubscriptionPlan.id)
-        .where(TenantSubscription.tenant_id == tenant_id)
-        .where(TenantSubscription.status == "active")
-    ).scalar_one_or_none()
-    return int(row) if row is not None else None
+    raw = entitlements_resolver.get(
+        db, tenant_id, "events.monthly_quota", default=None
+    )
+    if raw is None:
+        return None
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return None if limit < 0 else limit
 
 
 def _plan_meta(db: Session, tenant_id: str) -> tuple[str | None, str | None]:
-    row = db.execute(
-        select(SubscriptionPlan.slug, SubscriptionPlan.name)
-        .join(TenantSubscription, TenantSubscription.plan_id == SubscriptionPlan.id)
-        .where(TenantSubscription.tenant_id == tenant_id)
-        .where(TenantSubscription.status == "active")
-    ).one_or_none()
-    if row is None:
-        return None, None
-    return row.slug, row.name
+    plan_code = entitlements_resolver.get_plan_code(db, tenant_id)
+    names = {
+        "free": "Free",
+        "pro": "Pro",
+        "plus": "Plus",
+        "enterprise": "Enterprise",
+    }
+    return plan_code, names.get(plan_code, plan_code.title())

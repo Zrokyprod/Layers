@@ -781,7 +781,7 @@ class ReplayQuotaResult:
     used: int        # ReplayRun + ReplayJob rows created this calendar month
     limit: int       # replay.monthly_runs; -1 = unlimited
     resets_at: str   # ISO date of first day of next calendar month
-    plan_code: str   # e.g. "pro", "team", "enterprise"
+    plan_code: str   # e.g. "pro", "plus", "enterprise"
 
 
 def check_replay_monthly_quota(db: Session, tenant_id: str) -> ReplayQuotaResult:

@@ -41,7 +41,7 @@ class Subscription(Base):
     current_period_end: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     trial_end: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     # Module 12 / migration 0062 — Reliability SLA tier (plan §11.4).
-    # 'none' for Free/Starter/Pro; 'team'/'enterprise' for tiers that
+    # 'none' for Free/Pro/Plus; 'team'/'enterprise' for tiers that
     # carry the refund-on-miss SLA contract. Mutated only by the
     # Founder Console; the Module 12 lifecycle sweep does NOT touch
     # this column on auto-downgrade (a customer who lapses keeps

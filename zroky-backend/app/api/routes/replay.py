@@ -104,7 +104,7 @@ def get_replay_quota(
     """Return the calling tenant's monthly replay quota state.
 
     Accessible to all plan tiers (no feature gate) so the dashboard can
-    show the correct upgrade prompt to Free and Starter users.
+    show the correct upgrade prompt to Free users.
     """
     result = check_replay_monthly_quota(db, tenant_id)
     return ReplayQuotaResponse(

@@ -454,13 +454,13 @@ class TestGetEvaluator:
     def test_deterministic_override_wins(self, fresh_settings) -> None:
         fresh_settings.JUDGE_ENABLED = True
         fresh_settings.OPENROUTER_API_KEY = "sk-test"
-        ev = get_evaluator("team", deterministic=True)
+        ev = get_evaluator("plus", deterministic=True)
         assert isinstance(ev, DeterministicStubEvaluator)
 
     def test_kill_switch_returns_stub(self, fresh_settings) -> None:
         fresh_settings.JUDGE_ENABLED = False
         fresh_settings.OPENROUTER_API_KEY = "sk-test"
-        ev = get_evaluator("team")
+        ev = get_evaluator("plus")
         assert isinstance(ev, DeterministicStubEvaluator)
 
     def test_missing_api_key_returns_stub(self, fresh_settings) -> None:
@@ -477,13 +477,13 @@ class TestGetEvaluator:
         ev = get_evaluator("pro")
         assert isinstance(ev, SingleJudgeEvaluator)
 
-    def test_team_plan_returns_ensemble(self, fresh_settings) -> None:
+    def test_plus_plan_returns_ensemble(self, fresh_settings) -> None:
         fresh_settings.JUDGE_ENABLED = True
         fresh_settings.OPENROUTER_API_KEY = "sk-test"
         fresh_settings.JUDGE_ENSEMBLE_MODELS_JSON = (
             '["anthropic/claude-haiku-4","openai/gpt-4o-mini"]'
         )
-        ev = get_evaluator("team")
+        ev = get_evaluator("plus")
         assert isinstance(ev, EnsembleEvaluator)
         assert len(ev.evaluators) == 2
 
@@ -512,12 +512,12 @@ class TestGetEvaluator:
         )
         assert isinstance(ev, EnsembleEvaluator)
 
-    def test_entitlement_dict_false_demotes_team(self, fresh_settings) -> None:
-        """ensemble_enabled=False in resolved entitlements demotes Team to single."""
+    def test_entitlement_dict_false_demotes_plus(self, fresh_settings) -> None:
+        """ensemble_enabled=False in resolved entitlements demotes Plus to single."""
         fresh_settings.JUDGE_ENABLED = True
         fresh_settings.OPENROUTER_API_KEY = "sk-test"
         ev = get_evaluator(
-            "team",
+            "plus",
             entitlements_dict={"judge.ensemble_enabled": False},
         )
         assert isinstance(ev, SingleJudgeEvaluator)
@@ -528,7 +528,7 @@ class TestGetEvaluator:
         fresh_settings.JUDGE_ENABLED = True
         fresh_settings.OPENROUTER_API_KEY = "sk-test"
         fresh_settings.JUDGE_ENSEMBLE_MODELS_JSON = "not json"
-        ev = get_evaluator("team")
+        ev = get_evaluator("plus")
         assert isinstance(ev, SingleJudgeEvaluator)
 
     def test_single_item_ensemble_falls_back_to_single(
@@ -539,7 +539,7 @@ class TestGetEvaluator:
         fresh_settings.JUDGE_ENSEMBLE_MODELS_JSON = (
             '["anthropic/claude-haiku-4"]'
         )
-        ev = get_evaluator("team")
+        ev = get_evaluator("plus")
         assert isinstance(ev, SingleJudgeEvaluator)
 
     def test_none_plan_code_defaults_to_free(self, fresh_settings) -> None:
