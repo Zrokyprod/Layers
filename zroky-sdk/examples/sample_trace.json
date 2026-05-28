@@ -1,0 +1,23 @@
+{
+  "schema_version": "v2",
+  "call_id": "call_refund_001",
+  "event_id": "call_refund_001:capture",
+  "trace_id": "trace_refund_8f2",
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "call_type": "chat",
+  "agent_name": "refund-agent",
+  "workflow_name": "refund-review",
+  "prompt_version": "refund-v42",
+  "status": "failed",
+  "latency_ms": 1842,
+  "prompt_tokens": 1280,
+  "completion_tokens": 120,
+  "total_tokens": 1400,
+  "prompt_fingerprint": "8dc77651ee68413f9abdd8aa7c8e70ae805f525daefe0d3b41fac128c001e8d7",
+  "metadata": {
+    "failure_path": "retrieval -> crm.search timeout -> stale_policy_chunk",
+    "detector": "tool_loop",
+    "severity": "high"
+  }
+}

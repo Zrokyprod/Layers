@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import zroky
+from zroky._internal.config import load_config
 from zroky._internal.models import ErrorCode
 from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint
 
@@ -60,6 +61,13 @@ def test_init_reads_capture_context_fields(monkeypatch):
     zroky.shutdown()
     _reset_sdk()
 
+
+def test_load_config_defaults_to_cloud_ingest_url(monkeypatch):
+    monkeypatch.delenv("ZROKY_INGEST_URL", raising=False)
+
+    cfg = load_config()
+
+    assert cfg.ingest_url == "https://api.zroky.com/v1/ingest"
 
 def test_agent_context_sets_agent_name(monkeypatch):
     _reset_sdk()

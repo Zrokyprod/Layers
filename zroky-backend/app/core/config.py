@@ -456,6 +456,8 @@ def validate_runtime_settings(settings: Settings) -> None:
     allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
     if not allowed_origins:
         failures.append("ALLOWED_ORIGINS must be configured in production")
+    elif any(origin == "*" for origin in allowed_origins):
+        failures.append("ALLOWED_ORIGINS cannot use wildcard in production")
     elif any(_is_local_url(origin) for origin in allowed_origins):
         failures.append("ALLOWED_ORIGINS cannot include localhost in production")
 
@@ -482,6 +484,12 @@ def validate_runtime_settings(settings: Settings) -> None:
 
     if not settings.ENABLE_READY_REDIS_CHECK:
         failures.append("ENABLE_READY_REDIS_CHECK must be true in production")
+
+    if not settings.BILLING_ENFORCE_QUOTA:
+        failures.append("BILLING_ENFORCE_QUOTA must be true in production")
+
+    if not settings.REPLAY_REAL_LLM_ENABLED:
+        failures.append("REPLAY_REAL_LLM_ENABLED must be true in production")
 
     if settings.ENABLE_METRICS_ENDPOINT and not (settings.METRICS_TOKEN or "").strip():
         failures.append("METRICS_TOKEN must be configured when metrics endpoint is enabled in production")

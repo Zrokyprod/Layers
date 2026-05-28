@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+*.exe
+*.test
+coverage.out
+.gocache/
+dist/
+build/
+.DS_Store
+Thumbs.db

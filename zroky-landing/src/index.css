@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    font-synthesis: none;
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 108px;
+    background: #f7f8fb;
+  }
+
+  body {
+    @apply bg-canvas text-primary antialiased;
+    min-width: 320px;
+    overflow-x: hidden;
+    background: #f6f7f9;
+  }
+
+  button,
+  a {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply border border-panel-border bg-panel shadow-premium;
+  }
+
+  .glass-panel-hover {
+    @apply transition duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-premium-hover;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-panel-border bg-white px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondary shadow-sm;
+  }
+
+  .premium-ring {
+    box-shadow:
+      0 0 0 1px rgba(223, 229, 236, 0.95),
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      0 28px 90px -46px rgba(17, 24, 39, 0.35);
+  }
+
+  .signal-grid {
+    background-image:
+      linear-gradient(rgba(17, 24, 39, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(17, 24, 39, 0.055) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.82), transparent 86%);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-gradient-premium {
+    background: linear-gradient(110deg, #111827 0%, #635bff 34%, #475569 68%, #e4578d 100%);
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .panel-highlight {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel-highlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(110deg, transparent, rgba(255, 255, 255, 0.55), transparent),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.55), transparent 42%);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f7f8fb;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(17, 24, 39, 0.16);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 99, 235, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}

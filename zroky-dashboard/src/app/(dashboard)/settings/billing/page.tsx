@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -9,22 +9,71 @@ import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
   createBillingCheckout,
   createBillingPortal,
-  getBillingUsageSummary,
   getBillingMe,
-  getTenantSubscription,
-  listSubscriptionPlans,
-  updateTenantSubscription,
 } from "@/lib/api";
-import type { BillingMeResponse, BillingUsageSummary, SubscriptionPlan, TenantSubscription } from "@/lib/types";
+import type { BillingMeResponse } from "@/lib/types";
+
+type PlanCatalogItem = {
+  code: string;
+  name: string;
+  monthlyCostUsd: number | null;
+  features: string[];
+  selfServe: boolean;
+};
+
+const PLAN_CATALOG: PlanCatalogItem[] = [
+  {
+    code: "free",
+    name: "Free",
+    monthlyCostUsd: 0,
+    features: ["100K events/mo", "7 day retention", "3 seats"],
+    selfServe: false,
+  },
+  {
+    code: "starter",
+    name: "Starter",
+    monthlyCostUsd: null,
+    features: ["1M events/mo", "30 day retention", "5 seats", "100 replay runs/mo"],
+    selfServe: true,
+  },
+  {
+    code: "pro",
+    name: "Pro",
+    monthlyCostUsd: null,
+    features: ["10M events/mo", "90 day retention", "10 seats", "Real LLM replay"],
+    selfServe: true,
+  },
+  {
+    code: "team",
+    name: "Team",
+    monthlyCostUsd: null,
+    features: ["50M events/mo", "180 day retention", "25 seats", "Judge ensemble"],
+    selfServe: true,
+  },
+  {
+    code: "enterprise",
+    name: "Enterprise",
+    monthlyCostUsd: null,
+    features: ["Unlimited scale", "Dedicated rollout", "SSO", "SLA tier"],
+    selfServe: false,
+  },
+];
+
+function formatEntitlement(value: unknown): string {
+  if (typeof value === "number") {
+    return value < 0 ? "Unlimited" : value.toLocaleString();
+  }
+  if (typeof value === "boolean") {
+    return value ? "Enabled" : "Disabled";
+  }
+  return value == null ? "Not configured" : String(value);
+}
 
 export default function BillingPage() {
   const budget = useBudget();
   const updateBudget = useUpdateBudget();
 
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [subscription, setSubscription] = useState<TenantSubscription | null>(null);
   const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
-  const [usage, setUsage] = useState<BillingUsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState("");
@@ -34,19 +83,9 @@ export default function BillingPage() {
     setLoading(true);
     setError(null);
     try {
-      const [plansRes, subRes, usageRes] = await Promise.all([
-        listSubscriptionPlans(),
-        getTenantSubscription(),
-        getBillingUsageSummary(),
-      ]);
-      const meRes = await getBillingMe().catch(() => null);
-      setPlans(plansRes.plans);
-      setSubscription(subRes);
-      setBillingMe(meRes);
-      setUsage(usageRes);
+      setBillingMe(await getBillingMe());
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to load billing data.";
-      setError(msg);
+      setError(e instanceof Error ? e.message : "Failed to load billing data.");
     } finally {
       setLoading(false);
     }
@@ -97,20 +136,16 @@ export default function BillingPage() {
     );
   });
 
-  async function changePlan(planId: string) {
+  async function changePlan(planCode: string) {
     setActionMsg("");
     try {
-      const plan = plans.find((item) => item.id === planId || item.slug === planId);
-      const planCode = plan?.slug ?? planId;
+      const plan = PLAN_CATALOG.find((item) => item.code === planCode);
       if (planCode === "free") {
-        const updated = await updateTenantSubscription({ plan_id: planId });
-        setSubscription(updated);
-        setActionMsg("Plan updated successfully.");
-        await load();
+        setActionMsg("Free is the default plan. Use Stripe portal to cancel an active paid subscription.");
         return;
       }
-      if (planCode === "enterprise") {
-        setActionMsg("Enterprise is sales-led. Contact the Zroky team to activate this plan.");
+      if (!plan?.selfServe) {
+        setActionMsg(`${plan?.name ?? "This plan"} is sales-led. Contact the Zroky team to activate it.`);
         return;
       }
       const checkout = await createBillingCheckout({ plan_code: planCode });
@@ -130,7 +165,8 @@ export default function BillingPage() {
     }
   }
 
-  const currentPlanId = subscription?.plan?.id;
+  const currentPlanCode = billingMe?.plan_code ?? "free";
+  const template = billingMe?.plan_template ?? {};
 
   return (
     <div className="page-content">
@@ -141,7 +177,6 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Plans */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -159,40 +194,33 @@ export default function BillingPage() {
           </button>
         </header>
 
-        {loading && !plans.length ? (
+        {loading && !billingMe ? (
           <div className="loading" />
         ) : (
           <div className="billing-plans-grid">
-            {plans.map((plan) => {
-              const isCurrent = plan.id === currentPlanId;
+            {PLAN_CATALOG.map((plan) => {
+              const isCurrent = plan.code === currentPlanCode;
               return (
-                <div key={plan.id} className={`billing-plan-card${isCurrent ? " billing-plan-current" : ""}`}>
-                  {isCurrent && (
-                    <span className="pill pill-green billing-plan-badge">Current</span>
-                  )}
+                <div key={plan.code} className={`billing-plan-card${isCurrent ? " billing-plan-current" : ""}`}>
+                  {isCurrent && <span className="pill pill-green billing-plan-badge">Current</span>}
                   <div className="billing-plan-name">{plan.name}</div>
                   <div className="billing-plan-price">
-                    ${plan.monthly_cost_usd.toFixed(2)} <span className="billing-plan-period">/ mo</span>
+                    {plan.monthlyCostUsd == null ? "Custom" : `$${plan.monthlyCostUsd.toFixed(2)}`}{" "}
+                    <span className="billing-plan-period">/ mo</span>
                   </div>
                   <ul className="billing-plan-features">
-                    {plan.features.map((f) => (
-                      <li key={f}>✓ {f}</li>
+                    {plan.features.map((feature) => (
+                      <li key={feature}>✓ {feature}</li>
                     ))}
-                    {plan.max_calls_per_month != null && (
-                      <li>✓ Up to {plan.max_calls_per_month.toLocaleString()} calls/mo</li>
-                    )}
-                    {plan.max_members_per_project > 0 && (
-                      <li>✓ Up to {plan.max_members_per_project} members</li>
-                    )}
                   </ul>
                   {!isCurrent && (
                     <button
                       type="button"
                       className="btn btn-primary billing-plan-btn"
-                      onClick={() => changePlan(plan.id)}
+                      onClick={() => void changePlan(plan.code)}
                       disabled={loading}
                     >
-                      {plan.slug === "free" ? `Switch to ${plan.name}` : `Checkout for ${plan.name}`}
+                      {plan.selfServe ? `Checkout for ${plan.name}` : `Contact us for ${plan.name}`}
                     </button>
                   )}
                 </div>
@@ -202,69 +230,32 @@ export default function BillingPage() {
         )}
       </section>
 
-      {/* Usage summary */}
-      {usage && (
+      {billingMe && (
         <section className="panel">
           <header className="panel-header">
-            <h3>Current Period Usage</h3>
+            <h3>Current Plan Entitlements</h3>
             <p>
-              {new Date(usage.period_start).toLocaleDateString()} →{" "}
-              {new Date(usage.period_end).toLocaleDateString()}
+              {billingMe.status} plan for org {billingMe.org_id}
             </p>
           </header>
 
           <div className="kpi-grid billing-usage-kpis">
             <div className="kpi-card">
-              <div className="kpi-value">{usage.total_calls.toLocaleString()}</div>
-              <div className="kpi-label">Calls</div>
+              <div className="kpi-value">{formatEntitlement(template["events.monthly_quota"])}</div>
+              <div className="kpi-label">Events / month</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-value">{usage.total_tokens.toLocaleString()}</div>
-              <div className="kpi-label">Tokens</div>
+              <div className="kpi-value">{formatEntitlement(template["replay.monthly_runs"])}</div>
+              <div className="kpi-label">Replay runs / month</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-value">${usage.total_cost_usd.toFixed(4)}</div>
-              <div className="kpi-label">Cost</div>
+              <div className="kpi-value">{formatEntitlement(template["seats.included"])}</div>
+              <div className="kpi-label">Included seats</div>
             </div>
           </div>
-
-          {usage.plan_limit_calls != null && (
-            <div className="billing-quota-row">
-              <div className="billing-quota-label">
-                Calls: {usage.total_calls.toLocaleString()} / {usage.plan_limit_calls.toLocaleString()}
-              </div>
-              <div className="billing-progress-track">
-                <div
-                  className={`billing-progress-fill${usage.overage_calls ? " billing-progress-over" : ""}`}
-                  style={{ width: `${Math.min(100, (usage.total_calls / usage.plan_limit_calls) * 100)}%` }}
-                />
-              </div>
-              {usage.overage_calls != null && (
-                <div className="billing-overage">Over by {usage.overage_calls.toLocaleString()} calls</div>
-              )}
-            </div>
-          )}
-
-          {usage.plan_limit_tokens != null && (
-            <div className="billing-quota-row">
-              <div className="billing-quota-label">
-                Tokens: {usage.total_tokens.toLocaleString()} / {usage.plan_limit_tokens.toLocaleString()}
-              </div>
-              <div className="billing-progress-track">
-                <div
-                  className={`billing-progress-fill${usage.overage_tokens ? " billing-progress-over" : ""}`}
-                  style={{ width: `${Math.min(100, (usage.total_tokens / usage.plan_limit_tokens) * 100)}%` }}
-                />
-              </div>
-              {usage.overage_tokens != null && (
-                <div className="billing-overage">Over by {usage.overage_tokens.toLocaleString()} tokens</div>
-              )}
-            </div>
-          )}
         </section>
       )}
 
-      {/* Spend Limits */}
       <section className="panel">
         <header className="panel-header">
           <h3>Spend Limits</h3>
@@ -274,7 +265,7 @@ export default function BillingPage() {
         <form onSubmit={onSaveBudget} className="billing-budget-form">
           <div className="field">
             <label htmlFor="spend-limit" className="field-label">
-              Monthly limit (USD) — leave blank for no limit
+              Monthly limit (USD) - leave blank for no limit
             </label>
             <input
               id="spend-limit"
@@ -285,9 +276,7 @@ export default function BillingPage() {
               {...register("monthlyLimit")}
               disabled={updateBudget.isPending}
             />
-            {errors.monthlyLimit && (
-              <span className="field-error">{errors.monthlyLimit.message}</span>
-            )}
+            {errors.monthlyLimit && <span className="field-error">{errors.monthlyLimit.message}</span>}
           </div>
 
           <div className="field">
@@ -301,11 +290,9 @@ export default function BillingPage() {
               {...register("threshold")}
               disabled={updateBudget.isPending}
             />
-            {errors.threshold && (
-              <span className="field-error">{errors.threshold.message}</span>
-            )}
+            {errors.threshold && <span className="field-error">{errors.threshold.message}</span>}
             <p className="field-hint">
-              You&apos;ll receive an alert when you reach {thresholdValue || "–"}% of your limit.
+              You&apos;ll receive an alert when you reach {thresholdValue || "-"}% of your limit.
             </p>
           </div>
 
@@ -317,13 +304,12 @@ export default function BillingPage() {
 
           <div className="actions">
             <button type="submit" className="btn btn-primary" disabled={updateBudget.isPending}>
-              {updateBudget.isPending ? "Saving…" : "Save limits"}
+              {updateBudget.isPending ? "Saving..." : "Save limits"}
             </button>
           </div>
         </form>
       </section>
 
-      {/* Invoices */}
       <section className="panel">
         <header className="panel-header">
           <h3>Invoices</h3>

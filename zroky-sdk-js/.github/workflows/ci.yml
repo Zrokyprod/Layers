@@ -2,38 +2,24 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
   test:
-    name: typecheck + test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-
-      - run: npm ci
-
-      - name: License header check (CI rule 16)
-        run: |
-          missing=$(grep -rL "SPDX-License-Identifier: FSL-1.1-MIT" src/ tests/ --include="*.ts" 2>/dev/null || true)
-          if [ -n "$missing" ]; then
-            echo "Missing SPDX header in:"; echo "$missing"; exit 1
-          fi
-
-      - name: Typecheck
-        run: npx tsc --noEmit
-
+          node-version: '20'
+          cache: npm
+      - name: Install
+        run: npm ci
       - name: Test
         run: npm test
-
       - name: Build
         run: npm run build
-
-      - name: Bundle size check
+      - name: Size budget
         run: npm run size

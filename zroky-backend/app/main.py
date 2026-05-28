@@ -2,6 +2,7 @@ import json as _json
 import logging as _logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,9 +11,10 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.api.router import api_router
-from app.core.config import get_settings, validate_runtime_settings
+from app.core.config import get_settings, is_production_env, validate_runtime_settings
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
 from app.observability.context import get_correlation_id
@@ -89,7 +91,7 @@ settings = get_settings()
 validate_runtime_settings(settings)
 setup_logging(settings.LOG_LEVEL, settings.LOG_FORMAT)
 
-_is_production = settings.APP_ENV == "production"
+_is_production = is_production_env(settings.APP_ENV)
 
 # Rate limiter — shared instance from app.core.limiter (uses Redis when available)
 
@@ -176,15 +178,61 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 _MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-@app.middleware("http")
-async def _limit_body_size(request: Request, call_next: object) -> Response:
-    content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > _MAX_BODY_BYTES:
-        return JSONResponse(
-            status_code=413,
-            content={"detail": "Request body exceeds the 10 MB limit."},
+class _BodyTooLarge(Exception):
+    pass
+
+
+class _BodySizeLimitMiddleware:
+    def __init__(self, app: ASGIApp, max_body_bytes: int) -> None:
+        self.app = app
+        self.max_body_bytes = max_body_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            key.decode("latin-1").lower(): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
+        content_length = headers.get("content-length")
+        if content_length and int(content_length) > self.max_body_bytes:
+            await self._send_413(send)
+            return
+
+        received = 0
+
+        async def limited_receive() -> dict[str, Any]:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_body_bytes:
+                    raise _BodyTooLarge
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _BodyTooLarge:
+            await self._send_413(send)
+
+    async def _send_413(self, send: Send) -> None:
+        body = b'{"detail":"Request body exceeds the 10 MB limit."}'
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-length", str(len(body)).encode("latin-1")),
+                    (b"content-type", b"application/json"),
+                ],
+            }
         )
-    return await call_next(request)  # type: ignore[operator]
+        await send({"type": "http.response.body", "body": body})
+
+
+app.add_middleware(_BodySizeLimitMiddleware, max_body_bytes=_MAX_BODY_BYTES)
 
 
 @app.middleware("http")

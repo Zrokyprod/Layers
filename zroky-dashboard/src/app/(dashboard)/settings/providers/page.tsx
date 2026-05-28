@@ -41,7 +41,7 @@ const PROVIDER_META: Record<string, { label: string; color: string; description:
   custom: {
     label: "Custom",
     color: "#6b7280",
-    description: "Self-hosted or custom provider endpoint.",
+    description: "Private or custom provider endpoint.",
   },
 };
 

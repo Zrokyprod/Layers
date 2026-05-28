@@ -33,7 +33,7 @@
     "openai": { "optional": true }
   },
   "keywords": ["zroky", "ai", "observability", "openai", "proxy"],
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "FSL-1.1-MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/zroky-ai/zroky-sdk-js"

@@ -49,7 +49,7 @@ function VerifyEmailHandler() {
           <>
             <div className="auth-banner auth-banner-success">{message}</div>
             <p className="auth-foot" style={{ marginTop: "16px" }}>
-              <Link href="/home" className="btn btn-primary auth-submit-btn" style={{ display: "inline-block", textDecoration: "none" }}>
+              <Link href="/agents" className="btn btn-primary auth-submit-btn" style={{ display: "inline-block", textDecoration: "none" }}>
                 Go to Dashboard
               </Link>
             </p>

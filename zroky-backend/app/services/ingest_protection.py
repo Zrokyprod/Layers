@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
 from threading import Lock
@@ -13,6 +14,7 @@ _MEMORY_LOCK = Lock()
 _MEMORY_WINDOW_COUNTS: dict[tuple[str, int], int] = {}
 _MEMORY_BREACH: dict[str, tuple[int, float]] = {}
 _MEMORY_BACKPRESSURE_UNTIL: dict[str, float] = {}
+_RATE_LIMIT_OVERRIDE_KEY = "zroky:owner:rate_limit_overrides"
 
 
 @dataclass
@@ -25,6 +27,79 @@ class IngestRateLimitDecision:
     burst_limit_rpm: int
     backpressure_active: bool
     backpressure_activated: bool
+
+
+@dataclass
+class IngestRateLimitConfig:
+    enforce_rate_limit: bool
+    soft_limit_rpm: int
+    burst_limit_rpm: int
+    window_seconds: int
+    sustained_threshold: int
+    backpressure_ttl_seconds: int
+
+
+def _coerce_int(value: object, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_bool(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    return default
+
+
+def _load_rate_limit_config() -> IngestRateLimitConfig:
+    settings = get_settings()
+    overrides: dict[str, object] = {}
+    try:
+        raw = get_redis_client().get(_RATE_LIMIT_OVERRIDE_KEY)
+        if raw:
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8")
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                overrides = parsed
+    except (redis.RedisError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        overrides = {}
+
+    return IngestRateLimitConfig(
+        enforce_rate_limit=_coerce_bool(
+            overrides.get("ingest_enforce_rate_limit"),
+            settings.INGEST_ENFORCE_RATE_LIMIT,
+        ),
+        soft_limit_rpm=_coerce_int(
+            overrides.get("ingest_soft_limit_rpm"),
+            settings.INGEST_SOFT_LIMIT_RPM,
+        ),
+        burst_limit_rpm=_coerce_int(
+            overrides.get("ingest_burst_limit_rpm"),
+            settings.INGEST_BURST_LIMIT_RPM,
+        ),
+        window_seconds=_coerce_int(
+            overrides.get("ingest_rate_limit_window_seconds"),
+            settings.INGEST_RATE_LIMIT_WINDOW_SECONDS,
+        ),
+        sustained_threshold=_coerce_int(
+            overrides.get("ingest_sustained_breach_threshold"),
+            settings.INGEST_SUSTAINED_BREACH_THRESHOLD,
+        ),
+        backpressure_ttl_seconds=_coerce_int(
+            overrides.get("ingest_backpressure_ttl_seconds"),
+            settings.INGEST_BACKPRESSURE_TTL_SECONDS,
+        ),
+    )
 
 
 def _window_and_retry(now_ts: float, window_seconds: int) -> tuple[int, int]:
@@ -167,25 +242,26 @@ def _evaluate_with_redis(
 
 
 def evaluate_ingest_rate_limit(tenant_id: str) -> IngestRateLimitDecision:
-    settings = get_settings()
-    if not settings.INGEST_ENFORCE_RATE_LIMIT:
+    config = _load_rate_limit_config()
+    soft_limit = max(1, config.soft_limit_rpm)
+    burst_limit = max(soft_limit, config.burst_limit_rpm)
+    window_seconds = max(1, config.window_seconds)
+    sustained_threshold = max(1, config.sustained_threshold)
+    backpressure_ttl_seconds = max(window_seconds, config.backpressure_ttl_seconds)
+
+    if not config.enforce_rate_limit:
         return IngestRateLimitDecision(
             allowed=True,
             retry_after_seconds=None,
             reason="disabled",
             request_count=0,
-            soft_limit_rpm=settings.INGEST_SOFT_LIMIT_RPM,
-            burst_limit_rpm=settings.INGEST_BURST_LIMIT_RPM,
+            soft_limit_rpm=soft_limit,
+            burst_limit_rpm=burst_limit,
             backpressure_active=False,
             backpressure_activated=False,
         )
 
     now_ts = time.time()
-    soft_limit = max(1, settings.INGEST_SOFT_LIMIT_RPM)
-    burst_limit = max(soft_limit, settings.INGEST_BURST_LIMIT_RPM)
-    window_seconds = max(1, settings.INGEST_RATE_LIMIT_WINDOW_SECONDS)
-    sustained_threshold = max(1, settings.INGEST_SUSTAINED_BREACH_THRESHOLD)
-    backpressure_ttl_seconds = max(window_seconds, settings.INGEST_BACKPRESSURE_TTL_SECONDS)
 
     try:
         return _evaluate_with_redis(

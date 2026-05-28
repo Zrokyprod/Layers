@@ -1897,7 +1897,7 @@ Business:
 
 Enterprise:
 
-- self-host/VPC
+- enterprise VPC
 - SSO/SAML
 - audit logs
 - advanced redaction

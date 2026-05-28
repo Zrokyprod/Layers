@@ -222,9 +222,8 @@ export default function RateLimitsPage() {
           Clearing overrides reverts to the environment defaults configured at deploy time.
         </p>
         <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.6, marginTop: 8 }}>
-          <strong>Note:</strong> Currently the ingest route reads settings from env at startup. To make overrides
-          fully dynamic, update <code style={{ fontFamily: "monospace", fontSize: "0.75rem" }}>ingest_protection.py</code>{" "}
-          to check the Redis override key on each call.
+          <strong>Note:</strong> Ingest enforcement reads this Redis override key during rate-limit evaluation, so
+          owner changes take effect without restarting the API while Redis is available.
         </p>
       </div>
     </div>

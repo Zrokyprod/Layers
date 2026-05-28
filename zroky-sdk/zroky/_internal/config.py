@@ -113,7 +113,7 @@ def load_config(
     )
     resolved_url = (
         ingest_url
-        or os.environ.get("ZROKY_INGEST_URL", "http://localhost:8000")
+        or os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.com/v1/ingest")
     ).rstrip("/")
     default_agent = os.environ.get("ZROKY_AGENT")
     verbose = _truthy(os.environ.get("ZROKY_VERBOSE", "false"))

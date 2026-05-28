@@ -543,13 +543,6 @@ export interface AlertChannelTestResponse {
   message: string;
 }
 
-export interface OnboardingTriggerResponse {
-  diagnosis_id: string;
-  status: string;
-  synthetic: boolean;
-  message: string;
-}
-
 export interface PiiPolicyResponse {
   custom_patterns: string[];
   updated_at: string;
@@ -915,36 +908,6 @@ export interface ExportResponse {
   diagnoses: ExportDiagnosisItem[];
   alerts: AlertItemResponse[];
 }
-
-// ── Cost Forecast ────────────────────────────────────────────────────────────
-
-export interface CostForecastPoint {
-  hour: string;
-  predicted_cost_usd: number;
-  lower_bound_usd: number;
-  upper_bound_usd: number;
-}
-
-export interface CostForecastResponse {
-  status: "ok" | "insufficient_data" | "error";
-  hours_ahead: number;
-  points: CostForecastPoint[];
-  trend: "stable" | "rising" | "falling";
-  confidence: number;
-  generated_at: string;
-}
-
-export interface CostAnomalyRiskResponse {
-  status: "ok" | "elevated" | "high" | "error";
-  risk_score: number;
-  risk_label: string;
-  contributing_factors: string[];
-  recommended_action: string | null;
-  generated_at: string;
-}
-
-// ── Team management ──────────────────────────────────────────────────────────
-
 export interface ProjectMembershipResponse {
   membership_id: string;
   project_id: string;
@@ -1054,38 +1017,6 @@ export interface SubscriptionPlan {
   created_at: string;
 }
 
-export interface SubscriptionPlanListResponse {
-  plans: SubscriptionPlan[];
-}
-
-export interface TenantSubscription {
-  id: string;
-  tenant_id: string;
-  plan: SubscriptionPlan;
-  billing_interval: string;
-  status: string;
-  trial_ends_at: string | null;
-  current_period_start: string;
-  current_period_end: string;
-  canceled_at: string | null;
-  seats: number;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
-
-export interface BillingUsageSummary {
-  tenant_id: string;
-  period_start: string;
-  period_end: string;
-  total_calls: number;
-  total_tokens: number;
-  total_cost_usd: number;
-  plan_limit_calls: number | null;
-  plan_limit_tokens: number | null;
-  overage_calls: number | null;
-  overage_tokens: number | null;
-}
-
 export interface BillingMeResponse {
   org_id: string;
   plan_code: string;
@@ -1122,66 +1053,6 @@ export interface EvaluationSettingsResponse {
 }
 
 // ── Support Tickets ──────────────────────────────────────────────────────────
-
-export interface SupportMessageItem {
-  message_id: string;
-  sender_type: string;
-  sender_subject: string | null;
-  body: string;
-  is_internal: boolean;
-  created_at: string;
-}
-
-export interface SupportTicketItem {
-  ticket_id: string;
-  tenant_id: string | null;
-  user_id: string | null;
-  subject: string | null;
-  email: string | null;
-  title: string;
-  description: string | null;
-  category: string;
-  priority: string;
-  status: string;
-  assigned_to: string | null;
-  resolved_at: string | null;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
-}
-
-export interface SupportTicketDetailResponse {
-  ticket: SupportTicketItem;
-  messages: SupportMessageItem[];
-}
-
-export interface SupportTicketListResponse {
-  items: SupportTicketItem[];
-  total: number;
-}
-
-// ── Feature Flags ────────────────────────────────────────────────────────────
-
-export interface FeatureFlag {
-  id: string;
-  key: string;
-  description: string | null;
-  enabled_globally: boolean;
-  enabled_tenants: string[];
-  disabled_tenants: string[];
-  created_at: string;
-  updated_at: string;
-}
-
-export interface FeatureFlagListResponse {
-  items: FeatureFlag[];
-}
-
-export interface TenantFeatureFlagsResponse {
-  flags: Record<string, boolean>;
-}
-
-// ── Issues ────────────────────────────────────────────────────────────────────
 
 export type IssueStatus = "open" | "resolved" | "ignored";
 

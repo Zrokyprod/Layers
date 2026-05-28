@@ -40,7 +40,27 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/notifications",
-        destination: "/issues?tab=open",
+        destination: "/issues",
+        permanent: true,
+      },
+      {
+        source: "/calibration",
+        destination: "/settings/evaluation",
+        permanent: true,
+      },
+      {
+        source: "/judge",
+        destination: "/settings/evaluation",
+        permanent: true,
+      },
+      {
+        source: "/reliability",
+        destination: "/agents",
+        permanent: true,
+      },
+      {
+        source: "/outcomes",
+        destination: "/cost",
         permanent: true,
       },
     ];

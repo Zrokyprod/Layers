@@ -41,7 +41,6 @@
   FixAnalyticsResponse,
   MeResponse,
   NotificationSettingsResponse,
-  OnboardingTriggerResponse,
   PiiDetectorTestResponse,
   PiiPolicyResponse,
   PricingInterviewNote,
@@ -68,8 +67,6 @@
   TeamsInstallStatusResponse,
   TeamsTestMessageResponse,
   EvaluationSettingsResponse,
-  CostForecastResponse,
-  CostAnomalyRiskResponse,
   ChangePasswordResponse,
   SecurityStatusResponse,
   ProjectInvitationItem,
@@ -77,16 +74,6 @@
   NotificationListResponse,
   MarkReadResponse,
   MarkAllReadResponse,
-  SubscriptionPlanListResponse,
-  TenantSubscription,
-  BillingUsageSummary,
-  SupportTicketItem,
-  SupportTicketListResponse,
-  SupportTicketDetailResponse,
-  SupportMessageItem,
-  FeatureFlagListResponse,
-  FeatureFlag,
-  TenantFeatureFlagsResponse,
   IssueItem,
   IssueListResponse,
   DetectorListResponse,
@@ -688,15 +675,6 @@ export function testAlertChannel(channel: AlertChannel): Promise<AlertChannelTes
   });
 }
 
-export function triggerOnboardingFailure(
-  category: "TOKEN_OVERFLOW" | "RATE_LIMIT" | "AUTH_FAILURE" | "LOOP_DETECTED" | "COST_SPIKE",
-): Promise<OnboardingTriggerResponse> {
-  return request<OnboardingTriggerResponse>("/v1/onboarding/trigger-test-failure", {
-    method: "POST",
-    body: { category },
-  });
-}
-
 export function getProjectSettings(signal?: AbortSignal): Promise<ProjectResponse> {
   return request<ProjectResponse>("/v1/settings/project", { signal });
 }
@@ -1022,19 +1000,6 @@ export async function getSharedDiagnosis(shareToken: string): Promise<DiagnosisS
 
 // ── Cost Forecasting ──────────────────────────────────────────────────────────
 
-export function getCostForecast(hoursAhead = 4, signal?: AbortSignal): Promise<CostForecastResponse> {
-  return request<CostForecastResponse>("/ai/cost/forecast", {
-    query: { hours_ahead: hoursAhead },
-    signal,
-  });
-}
-
-export function getCostAnomalyRisk(signal?: AbortSignal): Promise<CostAnomalyRiskResponse> {
-  return request<CostAnomalyRiskResponse>("/ai/cost/anomaly-risk", { signal });
-}
-
-// ── Team / project memberships ────────────────────────────────────────────────
-
 export function listProjectMembers(projectId: string, signal?: AbortSignal): Promise<ProjectMemberListResponse> {
   return request<ProjectMemberListResponse>(`/v1/projects/${encodeURIComponent(projectId)}/memberships`, { signal });
 }
@@ -1122,30 +1087,6 @@ export function deleteNotification(notificationId: string): Promise<void> {
 
 // ── Billing / Subscriptions ──────────────────────────────────────────────────
 
-export function listSubscriptionPlans(signal?: AbortSignal): Promise<SubscriptionPlanListResponse> {
-  return request<SubscriptionPlanListResponse>("/v1/billing/plans", { signal });
-}
-
-export function getTenantSubscription(signal?: AbortSignal): Promise<TenantSubscription> {
-  return request<TenantSubscription>("/v1/billing/subscription", { signal });
-}
-
-export function updateTenantSubscription(body: {
-  plan_id?: string;
-  billing_interval?: string;
-  status?: string;
-  seats?: number;
-}): Promise<TenantSubscription> {
-  return request<TenantSubscription>("/v1/billing/subscription", {
-    method: "PUT",
-    body,
-  });
-}
-
-export function getBillingUsageSummary(signal?: AbortSignal): Promise<BillingUsageSummary> {
-  return request<BillingUsageSummary>("/v1/billing/usage", { signal });
-}
-
 export function getBillingMe(signal?: AbortSignal): Promise<BillingMeResponse> {
   return request<BillingMeResponse>("/v1/billing/me", { signal });
 }
@@ -1167,84 +1108,6 @@ export function createBillingPortal(): Promise<BillingPortalResponse> {
 }
 
 // ── Support Tickets ──────────────────────────────────────────────────────────
-
-export function listSupportTickets(query?: { status?: string; limit?: number; offset?: number }, signal?: AbortSignal): Promise<SupportTicketListResponse> {
-  return request<SupportTicketListResponse>("/v1/support/tickets", {
-    signal,
-    query: {
-      status: query?.status,
-      limit: query?.limit,
-      offset: query?.offset,
-    },
-  });
-}
-
-export function createSupportTicket(body: { title: string; description?: string; category?: string; priority?: string }): Promise<SupportTicketItem> {
-  return request<SupportTicketItem>("/v1/support/tickets", {
-    method: "POST",
-    body,
-  });
-}
-
-export function getSupportTicket(ticketId: string, signal?: AbortSignal): Promise<SupportTicketDetailResponse> {
-  return request<SupportTicketDetailResponse>(`/v1/support/tickets/${encodeURIComponent(ticketId)}`, { signal });
-}
-
-export function updateSupportTicket(ticketId: string, body: { status?: string; priority?: string; assigned_to?: string }): Promise<SupportTicketItem> {
-  return request<SupportTicketItem>(`/v1/support/tickets/${encodeURIComponent(ticketId)}`, {
-    method: "PATCH",
-    body,
-  });
-}
-
-export function addSupportMessage(ticketId: string, body: { body: string }): Promise<SupportMessageItem> {
-  return request<SupportMessageItem>(`/v1/support/tickets/${encodeURIComponent(ticketId)}/messages`, {
-    method: "POST",
-    body,
-  });
-}
-
-// ── Feature Flags ────────────────────────────────────────────────────────────
-
-export function listFeatureFlags(signal?: AbortSignal): Promise<FeatureFlagListResponse> {
-  return request<FeatureFlagListResponse>("/v1/feature-flags/admin", { signal });
-}
-
-export function createFeatureFlag(body: { key: string; description?: string; enabled_globally?: boolean }): Promise<FeatureFlag> {
-  return request<FeatureFlag>("/v1/feature-flags/admin", {
-    method: "POST",
-    body,
-  });
-}
-
-export function updateFeatureFlag(
-  flagId: string,
-  body: {
-    description?: string;
-    enabled_globally?: boolean;
-    add_enabled_tenants?: string[];
-    remove_enabled_tenants?: string[];
-    add_disabled_tenants?: string[];
-    remove_disabled_tenants?: string[];
-  }
-): Promise<FeatureFlag> {
-  return request<FeatureFlag>(`/v1/feature-flags/admin/${encodeURIComponent(flagId)}`, {
-    method: "PUT",
-    body,
-  });
-}
-
-export function deleteFeatureFlag(flagId: string): Promise<void> {
-  return request<void>(`/v1/feature-flags/admin/${encodeURIComponent(flagId)}`, {
-    method: "DELETE",
-  });
-}
-
-export function getTenantFeatureFlags(signal?: AbortSignal): Promise<TenantFeatureFlagsResponse> {
-  return request<TenantFeatureFlagsResponse>("/v1/feature-flags/tenant", { signal });
-}
-
-// ── Issues ────────────────────────────────────────────────────────────────────
 
 export function listIssues(
   params: {

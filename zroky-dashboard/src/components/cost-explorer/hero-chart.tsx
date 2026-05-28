@@ -3,14 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   getCostDailyTrend,
-  getCostForecast,
   listAlerts,
 } from "@/lib/api";
 import { formatUsd } from "@/lib/format";
 import type {
   AlertItemResponse,
   CostDailyTrendResponse,
-  CostForecastResponse,
 } from "@/lib/types";
 
 /**
@@ -19,9 +17,8 @@ import type {
  * Three layers on a single SVG canvas:
  *   1. Stacked bars per day: legitimate spend (green) + failed-call spend (red)
  *      — `failed_cost_usd` is already in CostDailyTrendPoint, no new backend.
- *   2. Forecast line (dashed) projecting future cost from /ai/cost/forecast.
- *      Sums forecast hours into a single "tomorrow" data point so it lines up
- *      with the historical daily bars.
+ *   2. Forecast line (dashed) projecting future cost from the recent daily
+ *      trend, avoiding any extra backend endpoint.
  *   3. Issue markers — vertical red bands at the dates COST_SPIKE alerts
  *      fired. Connects detection → visualization, the gap nobody else covers.
  *
@@ -44,12 +41,6 @@ interface Point {
 const CHART_HEIGHT = 280;
 const CHART_PAD = { top: 24, right: 24, bottom: 36, left: 56 };
 
-function parseDayKey(day: string): number {
-  // YYYY-MM-DD → epoch ms (UTC midnight) for sorting/comparison
-  const t = Date.parse(`${day}T00:00:00Z`);
-  return Number.isFinite(t) ? t : 0;
-}
-
 function formatShortDay(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
   if (!Number.isFinite(d.getTime())) return day;
@@ -58,7 +49,6 @@ function formatShortDay(day: string): string {
 
 export function CostHeroChart({ windowDays }: { windowDays: number }) {
   const [trend, setTrend] = useState<CostDailyTrendResponse | null>(null);
-  const [forecast, setForecast] = useState<CostForecastResponse | null>(null);
   const [alerts, setAlerts] = useState<AlertItemResponse[]>([]);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -67,15 +57,12 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
     let cancelled = false;
 
     async function load() {
-      const [trendRes, forecastRes, alertsRes] = await Promise.allSettled([
+      const [trendRes, alertsRes] = await Promise.allSettled([
         getCostDailyTrend(windowDays, controller.signal),
-        getCostForecast(Math.min(24, windowDays * 24), controller.signal),
-        // Pull recent COST_SPIKE alerts to mark on the chart
         listAlerts({ category: "COST_SPIKE", limit: 100 }),
       ]);
       if (cancelled) return;
       setTrend(trendRes.status === "fulfilled" ? trendRes.value : null);
-      setForecast(forecastRes.status === "fulfilled" ? forecastRes.value : null);
       setAlerts(
         alertsRes.status === "fulfilled" ? (alertsRes.value.items ?? []) : [],
       );
@@ -98,7 +85,6 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
       failedCount: p.failed_call_count,
     }));
 
-    // Attach issue markers — group alerts by day
     if (alerts.length > 0) {
       const byDay = new Map<string, AlertItemResponse[]>();
       for (const a of alerts) {
@@ -114,40 +100,29 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
       }
     }
 
-    // Append forecast points as a single tomorrow-summary (or per-day if longer)
-    if (forecast && forecast.status === "ok" && forecast.points.length > 0) {
-      const lastDay = base.length > 0 ? base[base.length - 1].day : null;
-      const lastEpoch = lastDay ? parseDayKey(lastDay) : Date.now();
-      // Sum forecast hours into daily buckets keyed by date
-      const fbuckets = new Map<string, { sum: number; lower: number; upper: number }>();
-      for (const fp of forecast.points) {
-        const day = fp.hour.slice(0, 10);
-        const existing = fbuckets.get(day) ?? { sum: 0, lower: 0, upper: 0 };
-        existing.sum += fp.predicted_cost_usd;
-        existing.lower += fp.lower_bound_usd;
-        existing.upper += fp.upper_bound_usd;
-        fbuckets.set(day, existing);
-      }
-      const sortedDays = Array.from(fbuckets.keys()).sort();
-      for (const day of sortedDays) {
-        if (parseDayKey(day) <= lastEpoch) continue; // skip past
-        const f = fbuckets.get(day)!;
-        base.push({
-          day,
-          total: f.sum,
-          failed: 0,
-          legitimate: f.sum,
-          callCount: 0,
-          failedCount: 0,
-          isForecast: true,
-          forecastLower: f.lower,
-          forecastUpper: f.upper,
-        });
-      }
+    if (base.length > 0) {
+      const recent = base.slice(-Math.min(3, base.length));
+      const total = recent.reduce((sum, point) => sum + point.total, 0) / recent.length;
+      const min = Math.min(...recent.map((point) => point.total));
+      const max = Math.max(...recent.map((point) => point.total));
+      const lastDay = base[base.length - 1].day;
+      const nextDay = new Date(`${lastDay}T00:00:00Z`);
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      base.push({
+        day: nextDay.toISOString().slice(0, 10),
+        total,
+        failed: 0,
+        legitimate: total,
+        callCount: 0,
+        failedCount: 0,
+        isForecast: true,
+        forecastLower: Math.min(total, min),
+        forecastUpper: Math.max(total, max),
+      });
     }
 
     return base;
-  }, [trend, forecast, alerts]);
+  }, [trend, alerts]);
 
   if (!trend) {
     return (

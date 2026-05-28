@@ -261,11 +261,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     <div className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
       <aside className={`sidebar ${sidebarOpen ? "" : "hidden lg:flex"}`}>
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">Z</span>
-          <div>
-            <h1>Zroky</h1>
-            <p>Agent reliability loop</p>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/zroky.logo.png"
+            alt="Zroky"
+            className="brand-logo"
+            draggable={false}
+            width={110}
+            height={26}
+          />
+          <p className="brand-tagline">Agent reliability loop</p>
         </div>
 
         <nav className="nav-links" aria-label="Primary">

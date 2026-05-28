@@ -92,14 +92,9 @@ import {
   getAuthSummary,
   getRecentTraces,
   getTraceById,
-  getCostForecast,
   listDriftModels,
   getDriftStatus,
   getDriftHistory,
-  getCostAnomalyRisk,
-  listSupportTickets,
-  createSupportTicket,
-  updateSupportTicket,
   listProjectMembers,
   inviteProjectMember,
   getGithubConnectionStatus,
@@ -144,15 +139,11 @@ import type {
   ApiKeyCreateResponse,
   MeResponse,
   TraceListResponse,
-  CostForecastResponse,
   DriftModelView,
   StatusResponse,
   ModelHistoryResponse,
-  CostAnomalyRiskResponse,
   ProjectMemberListResponse,
   ProjectInviteResponse,
-  SupportTicketListResponse,
-  SupportTicketItem,
   GithubConnectionStatusResponse,
 } from "./types";
 import type { AdjacentCallsResponse } from "./types";
@@ -580,24 +571,6 @@ export function useTestProviderConnection() {
 
 // ─── Cost Forecasting ─────────────────────────────────────────────────────────
 
-export function useCostForecast(hoursAhead = 4) {
-  return useQuery<CostForecastResponse, Error>({
-    queryKey: ["cost-forecast", hoursAhead],
-    queryFn: () => getCostForecast(hoursAhead),
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-export function useCostAnomalyRisk() {
-  return useQuery<CostAnomalyRiskResponse, Error>({
-    queryKey: ["cost-anomaly-risk"],
-    queryFn: () => getCostAnomalyRisk(),
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-// ─── Team / Project Members ───────────────────────────────────────────────────
-
 export function useTeamMembers(projectId: string) {
   return useQuery<ProjectMemberListResponse, Error>({
     queryKey: ["project-members", projectId],
@@ -613,31 +586,6 @@ export function useInviteTeamMember(projectId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["project-members", projectId] }),
   });
 }
-
-export function useCreateSupportTicket() {
-  const qc = useQueryClient();
-  return useMutation<SupportTicketItem, Error, { title: string; description?: string; category?: string; priority?: string }>({
-    mutationFn: (body) => createSupportTicket(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["support-tickets"] }),
-  });
-}
-
-export function useUpdateSupportTicket() {
-  const qc = useQueryClient();
-  return useMutation<SupportTicketItem, Error, { ticketId: string; body: { status?: string; priority?: string; assigned_to?: string } }>({
-    mutationFn: ({ ticketId, body }) => updateSupportTicket(ticketId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["support-tickets"] }),
-  });
-}
-
-export function useSupportTickets(opts?: { status?: string; limit?: number; offset?: number }) {
-  return useQuery<SupportTicketListResponse, Error>({
-    queryKey: ["support-tickets", opts ?? {}],
-    queryFn: () => listSupportTickets(opts ?? {}),
-  });
-}
-
-// ─── Judge Calibration ────────────────────────────────────────────────────────
 
 export function useCalibrationLatest(judgeModel?: string) {
   return useQuery<CalibrationRunView[], Error>({

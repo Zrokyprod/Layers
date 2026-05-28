@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -16,9 +17,11 @@ from app.api.routes import ingest as ingest_routes
 from app.api.routes import live as live_routes
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, DiagnosisJob
+from app.db.models import Call, DiagnosisJob, GoldenTrace, ReplayRun, Subscription
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.services.issues import upsert_issue
+from app.services.replay_executor import execute_replay_run
 from app.worker import tasks as worker_tasks
 from app.worker.celery_app import celery_app
 
@@ -112,6 +115,7 @@ def _event(call_id: str, *, user_id: str = "integration-user") -> dict:
         "agent_name": "integration-agent",
         "prompt_fingerprint": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd",
         "user_id": user_id,
+        "output_content": "integration output",
         "created_at": "2026-04-29T12:00:00+00:00",
     }
 
@@ -186,6 +190,84 @@ def test_sdk_ingest_to_ui_full_path_with_real_celery_worker(integration_ctx) -> 
     list_payload = list_response.json()
     assert list_payload["total"] >= 1
     assert any(item["call_id"] == call_id for item in list_payload["items"])
+
+
+def test_capture_to_issue_replay_and_golden_product_loop(
+    integration_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client: TestClient = integration_ctx["client"]
+    session_local = integration_ctx["SessionLocal"]
+    project_id = "proj-product-loop-1"
+    headers = {"X-Project-Id": project_id}
+    call_id = "product-loop-call-1"
+
+    monkeypatch.setattr("app.api.routes.replay_runs._enqueue_replay_run", lambda *_args, **_kwargs: None)
+
+    ingest_response = client.post(
+        "/api/v1/ingest",
+        headers=headers,
+        json={"events": [_event(call_id)]},
+    )
+    assert ingest_response.status_code == 202
+    assert ingest_response.json()["queued"] == 1
+
+    status_payload = _wait_for_terminal_job(client, headers, call_id)
+    assert status_payload["status"] == "done"
+
+    with session_local() as session:
+        session.add(
+            Subscription(
+                org_id=project_id,
+                plan_code="pro",
+                status="active",
+                seats=1,
+            )
+        )
+        issue = upsert_issue(
+            session,
+            project_id=project_id,
+            failure_code="LOOP_DETECTED",
+            prompt_fingerprint="product-loop-fingerprint",
+            agent_name="integration-agent",
+            call_id=call_id,
+            diagnosis_id=call_id,
+            occurred_at=datetime.now(timezone.utc),
+            call_cost_usd=0.01,
+            evidence={"summary": "product-loop proof issue"},
+        )
+        assert issue is not None
+        issue_id = issue.id
+
+    replay_response = client.post(
+        f"/v1/replay/runs/from-issue/{issue_id}",
+        headers=headers,
+        json={},
+    )
+    assert replay_response.status_code == 202
+    replay_payload = replay_response.json()
+    run_id = replay_payload["id"]
+
+    with session_local() as session:
+        executed = execute_replay_run(session, project_id=project_id, run_id=run_id)
+        assert executed is not None
+        traces = session.query(GoldenTrace).filter_by(project_id=project_id).all()
+        runs = session.query(ReplayRun).filter_by(project_id=project_id).all()
+
+    assert len(traces) == 1
+    assert traces[0].call_id == call_id
+    assert len(runs) == 1
+    assert runs[0].status in {"pass", "fail", "error"}
+    run_summary = json.loads(runs[0].summary_json or "{}")
+    assert run_summary["source_kind"] == "issue"
+    assert run_summary["source_call_id"] == call_id
+
+    detail_response = client.get(f"/v1/replay/runs/{run_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["id"] == run_id
+    assert detail_payload["summary"]["trace_count_at_dispatch"] == 1
+    assert detail_payload["traces"][0]["call_id_replayed"] == call_id
 
 
 def test_ingest_flood_accepts_and_queues_high_volume_batch(

@@ -1,4 +1,4 @@
-# OSS Licensing Boundary
+﻿# OSS Licensing Boundary
 
 This workspace contains both **open-source** components and **proprietary**
 components. This document is the authoritative map of which directory is which,
@@ -16,8 +16,8 @@ The split is locked per `ZROKY-TECHNICAL-PLAN-V2.md` §4.5 and §17.2 decision 1
 | `zroky-sdk-js/` | **Open source** | FSL-1.1-MIT | Published publicly as `github.com/zroky-ai/zroky-sdk-js` |
 | `zroky-gateway/` | **Open source** | FSL-1.1-MIT | Published publicly as `github.com/zroky-ai/zroky-gateway` |
 | `zroky-replay-worker/` | **Open source** | FSL-1.1-MIT | Published publicly as `github.com/zroky-ai/zroky-replay-worker` |
-| `zroky-backend/` | **Proprietary** | All rights reserved | Stays in private monorepo. Self-host via compiled Docker image only. |
-| `zroky-dashboard/` | **Proprietary** | All rights reserved | Stays in private monorepo. Self-host via compiled Docker image only. |
+| `zroky-backend/` | **Proprietary** | All rights reserved | Private Zroky control-plane code. Not published as OSS. |
+| `zroky-dashboard/` | **Proprietary** | All rights reserved | Private Zroky dashboard code. Not published as OSS. |
 | Everything else at workspace root (`api-contracts/`, `chaos-tests/`, `docs/`, `eval/`, `grafana/`, `prometheus/`, `scripts/`, `claude-mem/`, `progress.txt`, `ZROKY-TECHNICAL-PLAN-V2.md`, `pricing_config.json`, `Makefile`, `docker-compose.yml`) | **Proprietary** | All rights reserved | Internal tooling and strategy. Never published. |
 
 > **Critical operational rule**: the current workspace `d:\Zroky AI\` is a
@@ -73,7 +73,7 @@ Source: <https://blog.sentry.io/introducing-the-functional-source-license-freedo
 `zroky-backend/` and `zroky-dashboard/` are **All Rights Reserved**:
 
 - Source code is not published anywhere.
-- Self-host customers receive a **compiled Docker image only**.
+- Enterprise deployment options are handled outside the OSS license boundary.
 - The source lives exclusively in the private monorepo.
 - Internal contributors operate under standard employment / contractor IP
   assignment.
@@ -104,10 +104,9 @@ zroky-gateway      ──┼──► api.zroky.com  (proprietary backend, priva
 zroky-replay-worker──┘
 ```
 
-Customers who self-host the OSS components alone get the wire-level
-instrumentation and replay infrastructure. They **do not** get the backend.
-To use the backend they pay for Zroky Cloud or sign a self-host commercial
-agreement.
+The OSS components provide wire-level instrumentation and replay execution.
+They **do not** include the backend. To use the backend, teams use Zroky Cloud
+or an enterprise agreement.
 
 ---
 
@@ -147,6 +146,5 @@ the only legal source of truth for that release.
 
 ## 7. Questions, edge cases, legal contact
 
-For licensing questions or commercial-use clarification, contact
-`legal@zroky.com` (placeholder — replace with real address before first
-public release).
+For security disclosures, contact `security@zroky.ai`. For licensing questions
+or commercial-use clarification, contact `legal@zroky.ai`.

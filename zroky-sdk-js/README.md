@@ -1,30 +1,31 @@
 # @zroky/sdk
 
-TypeScript / JavaScript SDK for [Zroky](https://zroky.com) — captures every
-OpenAI (and compatible) call your AI agent makes, streams structured telemetry
-to the Zroky control plane, and provides production-grade retry, fallback, and
-preflight protection with **zero changes to your existing call sites**.
+Open-source flight recorder SDK for production AI agents � TypeScript/JavaScript capture for LLM calls, tool paths, retrieval, memory, latency, cost, and failures.
 
 [![npm version](https://badge.fury.io/js/%40zroky%2Fsdk.svg)](https://www.npmjs.com/package/@zroky/sdk)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/license-FSL--1.1--MIT-blue)](LICENSE)
 
----
+Zroky Watch is the open-source data plane for Zroky. It captures the evidence behind agent behavior from your runtime while keeping the capture path inspectable. Zroky Pilot/Cloud adds the private control plane: issue grouping, root-cause diagnosis, replay orchestration, judge verification, Goldens, CI gates, and team workflow.
+
+## Why developers use it
+
+- **Zero call-site rewrite for OpenAI clients**: wrap an existing client and keep the same API.
+- **Capture more than LLM calls**: retrieval spans, memory operations, traces, outcomes, latency, cost, status, and prompt fingerprints.
+- **Non-blocking by design**: ingest failures are retried and buffered; instrumentation never throws into your hot path.
+- **Tiny package**: CJS + ESM, tree-shakeable, zero runtime dependencies, optional `openai` peer dependency.
+- **Ready for replay**: captured incidents can become replay cases and CI Goldens in Zroky Pilot.
 
 ## Install
 
 ```bash
 npm install @zroky/sdk
 # or
-yarn add @zroky/sdk
-# or
 pnpm add @zroky/sdk
+# or
+yarn add @zroky/sdk
 ```
 
-Peer dependency: `openai >= 4.0.0` (optional — only needed for `wrap()`).
-
----
-
-## Quickstart — 2-line integration
+## 5-minute quickstart
 
 ```ts
 import OpenAI from "openai";
@@ -35,211 +36,130 @@ init({
   apiKey: process.env.ZROKY_API_KEY,
 });
 
-// Before: const openai = new OpenAI();
-const openai = wrap(new OpenAI(), { agentName: "support-agent" });
+const openai = wrap(new OpenAI(), {
+  agentName: "support-agent",
+  workflowId: "refund-review",
+  environment: "production",
+});
 
-// All subsequent calls are captured automatically — no other changes needed.
 const response = await openai.chat.completions.create({
-  model: "gpt-4o",
-  messages: [{ role: "user", content: "Hello" }],
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "Summarize this refund request" }],
 });
 
 await captureRetrieval({
   query: "refund policy",
   indexName: "support-kb",
-  documents: [{ id: "doc_123", score: 0.92 }],
+  documents: [{ id: "policy_v11", score: 0.91, title: "Refunds" }],
   parentCallId: response._zroky_call_id,
 });
 ```
 
-That's it. Zroky captures latency, token usage, errors, stable prompt
-fingerprints, RAG retrievals, and memory operations. Capture is non-blocking:
-retryable ingest failures are retried and then kept in a bounded in-memory
-buffer for the next successful emit.
+By default the SDK sends capture events to:
 
----
+```text
+https://api.zroky.com/v1/ingest
+```
 
-## API
+Override only when your Zroky team gives you a custom endpoint:
+
+```bash
+ZROKY_ENDPOINT=http://localhost:8000/v1/ingest
+```
+
+## SDK or Gateway?
+
+| Need | Use |
+|---|---|
+| Node/TypeScript app and you can edit code | `@zroky/sdk` |
+| Python app | `zroky-sdk` |
+| Polyglot services or third-party frameworks | `zroky-gateway` |
+| Strict network boundary before provider calls | `zroky-gateway` |
+
+The Gateway supports OpenAI-compatible paths plus Anthropic and Gemini routes. This SDK focuses on JS/TS runtime capture and OpenAI-compatible wrapping.
+
+## API surface
 
 ### `wrap(client, config?)`
 
-Patches an existing OpenAI client to capture and emit telemetry.
-
-```ts
-import OpenAI from "openai";
-import { wrap } from "@zroky/sdk";
-
-const openai = wrap(new OpenAI(), config);
-```
-
-Returns the same client object (mutated in-place, same TypeScript type).
-
-### `init(config)`
-
-Sets default SDK configuration for `wrap()`, `trace()`, and `outcome()`.
-
-```ts
-import { init } from "@zroky/sdk";
-
-init({
-  projectId: process.env.ZROKY_PROJECT_ID,
-  apiKey: process.env.ZROKY_API_KEY,
-  endpoint: process.env.ZROKY_ENDPOINT,
-});
-```
-
-#### Config options
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `projectId` | `string` | `ZROKY_PROJECT_ID` env var | Your Zroky project identifier |
-| `apiKey` | `string` | `ZROKY_API_KEY` env var | Your Zroky ingest API key |
-| `endpoint` | `string` | `https://api.zroky.com/v1/ingest` | Override ingest endpoint |
-| `agentName` | `string` | - | Label this call site (e.g. `"summariser-agent"`) |
-| `agentFramework` | `string` | - | Agent framework tag (e.g. `"langgraph"`, `"custom-js"`) |
-| `sessionId` | `string` | - | Group calls into a user session |
-| `workflowId` | `string` | - | Group calls into a multi-step workflow |
-| `traceId` | `string` | - | Group related spans into one trace |
-| `parentCallId` | `string` | - | Link this call to a parent span/call |
-| `environment` | `string` | - | Runtime environment (e.g. `"production"`, `"staging"`) |
-| `disabled` | `boolean` | `false` | Set `true` to disable capture (e.g. in test environments) |
+Patches an existing OpenAI client to capture and emit telemetry while preserving the same client object and TypeScript type.
 
 ### `trace(fn, config?)`
 
-Wraps an async function as a named trace span. Useful for multi-step
-workflows where you want the whole run grouped together.
-
-```ts
-import { trace } from "@zroky/sdk";
-
-const runWorkflow = trace(async () => {
-  const step1 = await openai.chat.completions.create(/* ... */);
-  const step2 = await openai.chat.completions.create(/* ... */);
-  return { step1, step2 };
-}, { projectId: "...", apiKey: "...", agentName: "planner" });
-
-const result = await runWorkflow();
-```
+Wraps an async function as a named trace span for multi-step agent workflows.
 
 ### `captureRetrieval(options, config?)`
 
-Captures RAG/search context that happens outside the LLM call. Use it after
-vector search, hybrid search, reranking, or knowledge-base lookup.
-
-```ts
-import { captureRetrieval } from "@zroky/sdk";
-
-await captureRetrieval({
-  query: "refund policy",
-  indexName: "support-kb",
-  retrieverVersion: "hybrid-v3",
-  latencyMs: 17,
-  documents: [
-    { id: "doc_123", title: "Refunds", score: 0.92, contentPreview: "..." },
-  ],
-});
-```
+Captures RAG/search context after vector search, hybrid search, reranking, or knowledge-base lookup.
 
 ### `captureMemory(options, config?)`
 
-Captures memory reads/writes/summaries so agent state changes are visible in
-the same production trace as LLM calls.
+Captures memory reads, writes, summaries, namespaces, keys, item counts, and byte estimates.
 
-```ts
-import { captureMemory } from "@zroky/sdk";
+### `outcome(options, config?)`
 
-await captureMemory({
-  operation: "write",
-  namespace: "customer-memory",
-  keys: ["user_123:preferences"],
-  itemCount: 1,
-  bytes: 512,
-});
-```
+Links business outcomes back to captured calls for cost-of-failure analysis.
 
 ### `promptFingerprint(text)`
 
-Returns a stable, deterministic hash of a prompt string. Used internally to
-detect repeated prompt shapes across calls (loop detection). You can also call
-it directly to build your own deduplication logic.
+Returns a stable SHA-256 prompt-shape fingerprint aligned with the Python SDK.
 
-```ts
-import { promptFingerprint } from "@zroky/sdk";
+## Configuration
 
-const fp = promptFingerprint("Summarise the following: ...");
-// 64-char SHA-256 hex digest, stable across runs and aligned with the Python SDK
-```
-
----
-
-## Environment variables
-
-```bash
-ZROKY_PROJECT_ID=proj_xxxx      # required
-ZROKY_API_KEY=zroky_xxxx        # required
-ZROKY_ENDPOINT=https://...      # optional override
-ZROKY_DISABLED=true             # optional: disable all capture
-```
-
-All options can also be passed directly to `wrap()` or `trace()` — env vars
-are the fallback.
-
----
-
-## Using with a self-hosted Zroky backend
-
-If you run the Zroky backend yourself, point the SDK at that backend's ingest
-endpoint:
-
-```ts
-const openai = wrap(new OpenAI(), {
-  projectId: "proj_xxxx",
-  apiKey: "zroky_xxxx",
-  endpoint: "http://localhost:8000/api/v1/ingest",
-});
-```
-
----
+| Option | Env var | Default | Description |
+|---|---|---|---|
+| `projectId` | `ZROKY_PROJECT_ID` | required | Zroky project identifier |
+| `apiKey` | `ZROKY_API_KEY` | required | Zroky ingest API key |
+| `endpoint` | `ZROKY_ENDPOINT` | `https://api.zroky.com/v1/ingest` | Ingest endpoint |
+| `agentName` | - | - | Agent label |
+| `agentFramework` | - | - | Framework tag such as `langgraph`, `custom-js` |
+| `traceId` | - | generated/propagated | Trace grouping |
+| `workflowId` | - | - | Workflow grouping |
+| `disabled` | `ZROKY_DISABLED` | `false` | Disable capture |
 
 ## What gets captured
 
-Each call emits one structured event with:
+Each call emits a structured event with fields such as:
 
 | Field | Example |
 |---|---|
-| `call_id` | `"8d4f..."` |
-| `event_id` | `"8d4f...:capture"` |
-| `schema_version` | `"v2"` |
-| `provider` | `"openai"` |
-| `model` | `"gpt-4o"` |
-| `call_type` | `"chat"`, `"retrieval"`, `"memory"`, or `"trace"` |
+| `call_id` | `8d4f...` |
+| `event_id` | `8d4f...:capture` |
+| `schema_version` | `v2` |
+| `provider` | `openai` |
+| `model` | `gpt-4o-mini` |
+| `call_type` | `chat`, `retrieval`, `memory`, `trace` |
 | `latency_ms` | `342` |
 | `prompt_tokens` | `128` |
 | `completion_tokens` | `64` |
 | `total_tokens` | `192` |
-| `status` | `"success"` or `"error"` |
-| `error_message` | `"Rate limit exceeded"` (on error) |
-| `prompt_fingerprint` | 64-char SHA-256 hex digest |
-| `agent_name` | `"summariser-agent"` (if set) |
-| `session_id` | (if set) |
-| `workflow_id` | (if set) |
+| `status` | `success` or `error` |
+| `prompt_fingerprint` | stable SHA-256 prompt shape |
+| `agent_name` | `support-agent` |
 
-Emit is fire-and-forget for application safety. Retryable failures are retried
-with exponential backoff, then buffered in memory and flushed with the next
-successful emit. Instrumentation never throws into your application path.
+## What is not open source
 
----
+This repo is part of the free Zroky Watch OSS data plane. The Zroky backend, dashboard, judge engine, diagnosis logic, billing, and autonomous workflow are proprietary and delivered through Zroky Cloud and enterprise agreements.
+
+## Deployment model
+
+| Mode | What you use | What you get |
+|---|---|---|
+| Watch OSS | SDK, Gateway, Replay Worker | Open instrumentation and replay execution against Zroky Cloud or an approved endpoint |
+| Zroky Pilot | Zroky Cloud control plane | Issues, diagnosis, replay proof, Goldens, dashboard, and CI gates |
+
+## Run tests
+
+```bash
+npm test
+npm run build
+npm run size
+```
 
 ## Bundle size
 
-The SDK ships as CJS + ESM, fully tree-shakeable, with **zero runtime
-dependencies**. The `openai` peer dependency is optional. `prepublishOnly`
-runs a bundle-size check to keep the footprint small.
-
----
+`prepublishOnly` runs build and size checks. Current bundle target is under 30 KB raw.
 
 ## License
 
-[FSL-1.1-MIT](LICENSE) — free for any use except building a competing product.
-Converts to plain MIT on the second anniversary of each release.
-See [fsl.software](https://fsl.software/) for the full terms.
+[FSL-1.1-MIT](LICENSE) � free for any use except building a competing product. Converts to plain MIT on the second anniversary of each release.

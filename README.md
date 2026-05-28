@@ -6,25 +6,25 @@ Zroky is the reliability platform for agent builders. It watches every AI call y
 
 **ICP:** Teams running 1 K–1 M agent calls/day who ship fixes weekly.
 
-[![CI](https://github.com/zroky/zroky-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/zroky/zroky-ai/actions/workflows/ci.yml)
-[![API Contract](https://github.com/zroky/zroky-ai/actions/workflows/api-contract-check.yml/badge.svg)](https://github.com/zroky/zroky-ai/actions/workflows/api-contract-check.yml)
-[![Schema Drift](https://github.com/zroky/zroky-ai/actions/workflows/schema-drift-check.yml/badge.svg)](https://github.com/zroky/zroky-ai/actions/workflows/schema-drift-check.yml)
+[![Gateway CI](https://github.com/zroky-ai/zroky-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/zroky-ai/zroky-gateway/actions/workflows/ci.yml)
+[![JS SDK CI](https://github.com/zroky-ai/zroky-sdk-js/actions/workflows/ci.yml/badge.svg)](https://github.com/zroky-ai/zroky-sdk-js/actions/workflows/ci.yml)
+[![Replay Worker CI](https://github.com/zroky-ai/zroky-replay-worker/actions/workflows/ci.yml/badge.svg)](https://github.com/zroky-ai/zroky-replay-worker/actions/workflows/ci.yml)
 
 ---
 
-## Quickstart — self-host in 2 minutes
+## Quickstart — capture in 2 minutes
 
 ```bash
-git clone https://github.com/zroky/zroky-ai
-cd zroky-ai
-make self-host        # copies env example, builds images, starts stack
-make self-host-seed   # loads 1 K demo events for instant exploration
+pip install zroky
 ```
 
-Open **http://localhost:3000** — dashboard with live demo data.
+```python
+import zroky
 
-> **First run:** edit `zroky-backend/.env.self-host` and add your `OPENAI_API_KEY`
-> (or Anthropic/Google key) before starting. Everything else defaults to local services.
+zroky.init(api_key="zk-your-key", project_id="your-project")
+```
+
+Captured events are sent to Zroky Cloud by default. The public OSS repos provide SDK, gateway, and replay-worker capture components; the backend and dashboard remain private Zroky control-plane services.
 
 ---
 
@@ -84,7 +84,7 @@ Ten rules, every one CI-enforced. See [ZROKY-Q1-90DAY-PLAN.md](ZROKY-Q1-90DAY-PL
 | 5 — Chaos tests weekly | `chaos-weekly` scheduled workflow |
 | 6 — Labeled eval sets per detector | Precision/recall gate per PR |
 | 7 — Zroky observes Zroky | SLO burn-rate alerts, live dashboard at every Friday demo |
-| 8 — Self-hostable on Day 1 | `make self-host` < 2 min on a clean machine |
+| 8 — Cloud-first capture on Day 1 | SDK default ingest targets `https://api.zroky.com/v1/ingest` |
 | 9 — API v1 frozen; breakage goes to v2 | `api-v1-frozen-check` CI job |
 | 10 — Docs as code | `check_docs_drift` CI job |
 

@@ -50,6 +50,7 @@ yarn-error.log*
 .npm/
 .yarn/
 .pnp.*
+*.tsbuildinfo
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 .pytest_cache/

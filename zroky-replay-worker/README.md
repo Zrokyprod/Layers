@@ -1,32 +1,35 @@
 # zroky-replay-worker
 
-A stateless, self-hostable **replay execution worker** for the
-[Zroky](https://zroky.com) AI reliability platform. The worker polls the
-Zroky control plane for pending replay jobs, executes each job against the
-real LLM in an isolated subprocess, and reports a structured result including
-a `diff_metric` measuring how much the output changed.
+Zero-trust replay worker for proving AI agent fixes � an open-source execution data plane for Zroky replay jobs.
 
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/license-FSL--1.1--MIT-blue)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue)](https://python.org)
 
----
+The Replay Worker pulls pending replay jobs from the Zroky control plane, verifies signed artifacts, executes patched call context against a real LLM provider, computes output deltas, and reports the result back.
+
+## Why developers use it
+
+- **No inbound ports**: the worker pulls jobs; it never accepts pushed payloads.
+- **Artifact verification**: HMAC verification happens before any artifact is downloaded or executed.
+- **Isolated execution path**: replay execution has a timeout and returns structured pass/fail/error results.
+- **Real proof path**: replay compares original production evidence against candidate behavior.
+- **Open execution plane**: keep replay execution explicit, signed, and auditable.
 
 ## What is a replay job?
 
-When Zroky detects an anomaly (e.g. an accuracy regression or a cost spike),
-it generates a candidate fix (a diff against your prompt or call parameters).
-A **replay job** takes that candidate fix, applies it to the original call
-context, re-runs the call against the real LLM, and computes whether the
-output improved.
+A replay job is a signed instruction from the Zroky control plane:
 
-The worker handles the execution layer — it never needs direct access to your
-application code or database.
+```text
+original incident evidence
++ candidate fix diff
++ signed artifact URL
++ timeout and trace metadata
+= replay execution result
+```
 
----
+The worker handles execution only. Zroky Cloud/Pilot handles issue grouping, replay orchestration, judge policy, dashboard, Goldens, and CI gates.
 
 ## Quickstart
-
-### Docker (recommended)
 
 ```bash
 docker run -d \
@@ -34,16 +37,13 @@ docker run -d \
   -e CONTROL_PLANE_URL=https://api.zroky.com \
   -e WORKER_TOKEN=your-worker-token \
   -e ARTIFACT_SIGNING_KEY=your-signing-key \
+  -e OPENROUTER_API_KEY=your-openrouter-key \
   ghcr.io/zroky-ai/zroky-replay-worker:latest
 ```
 
-Get `WORKER_TOKEN` and `ARTIFACT_SIGNING_KEY` from the Zroky dashboard under
-**Settings → Replay Workers**.
+The worker starts polling immediately. No ports need to be opened.
 
-The worker starts polling immediately. No ports need to be opened — it is
-purely outbound.
-
-### Docker Compose
+## Docker Compose
 
 ```yaml
 services:
@@ -53,116 +53,84 @@ services:
       CONTROL_PLANE_URL: https://api.zroky.com
       WORKER_TOKEN: ${ZROKY_WORKER_TOKEN}
       ARTIFACT_SIGNING_KEY: ${ZROKY_ARTIFACT_SIGNING_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       MAX_CONCURRENT_JOBS: 4
     restart: unless-stopped
 ```
 
----
+## Protocol
+
+The worker protocol is pull-based:
+
+```text
+1. POST /v1/replay/poll
+   body: { worker_token, capacity }
+   response: { jobs: [...] }
+
+2. For each job:
+   - verify HMAC signature
+   - download signed artifact
+   - apply candidate diff
+   - execute patched context
+   - compute diff metric
+   - optionally request judge verdict
+
+3. POST /v1/replay/result
+   body: { worker_token, result }
+```
 
 ## Configuration
-
-All configuration is via environment variables (or a `.env` file).
 
 | Variable | Default | Description |
 |---|---|---|
 | `CONTROL_PLANE_URL` | `https://api.zroky.com` | Zroky control plane to poll |
-| `WORKER_TOKEN` | *(required)* | Authentication token for this worker instance |
-| `ARTIFACT_SIGNING_KEY` | *(required)* | HMAC key used to verify artifact integrity before execution |
-| `POLL_INTERVAL_SECONDS` | `10` | How often to check for new jobs |
-| `MAX_CONCURRENT_JOBS` | `4` | Maximum jobs to run in parallel |
-| `JOB_TIMEOUT_SECONDS` | `300` | Per-job execution timeout (hard kill at this limit) |
-| `LOG_LEVEL` | `INFO` | Log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-
-Copy `.env.example` to `.env` for local development.
-
----
+| `WORKER_TOKEN` | required | Authentication token for this worker |
+| `ARTIFACT_SIGNING_KEY` | required | HMAC key used to verify artifact URLs |
+| `OPENROUTER_API_KEY` | empty | Provider key used for real LLM replay execution |
+| `POLL_INTERVAL_SECONDS` | `10` | Poll cadence |
+| `MAX_CONCURRENT_JOBS` | `4` | Maximum parallel replay jobs |
+| `JOB_TIMEOUT_SECONDS` | `300` | Per-job hard timeout |
+| `LOG_LEVEL` | `INFO` | Log verbosity |
 
 ## Security model
 
-The replay worker is designed with a **zero-trust execution model**:
+- **Pull only**: no inbound replay payloads and no open replay ports required.
+- **Verify before execute**: invalid artifact signatures return an error result; no artifact code runs.
+- **No provider keys in artifacts**: artifacts contain call context, not API keys.
+- **Timeout enforced**: long-running jobs return controlled timeout errors.
+- **Structured result**: every job reports `pass`, `fail`, or `error` with metadata.
 
-- **Always pulls, never accepts inbound connections.** No ports are opened.
-  The worker only makes outbound HTTPS calls to `CONTROL_PLANE_URL`.
-- **Artifact signature verified before any execution.** Every job carries a
-  signed artifact URL. The worker verifies the HMAC signature against
-  `ARTIFACT_SIGNING_KEY` before downloading or executing anything. A job with
-  an invalid signature is rejected and reported as an error — no code runs.
-- **Execution in an isolated subprocess.** The LLM call is run inside a
-  `subprocess` with `JOB_TIMEOUT_SECONDS` enforced as a hard kill. The main
-  worker process cannot be affected by a misbehaving job.
-- **No credentials stored in artifacts.** Artifacts contain call context
-  (prompt, model, parameters) but not API keys. Your provider keys are
-  configured separately in the Zroky control plane and injected at the point
-  of execution — they never travel in artifact payloads.
+## Deployment model
 
----
+| Mode | What you use | What you get |
+|---|---|---|
+| Watch OSS | Replay Worker + SDK/Gateway | Open execution worker that talks to Zroky Cloud or an approved endpoint |
+| Zroky Pilot | Zroky Cloud control plane | Full replay orchestration, dashboard, Goldens, and CI gates |
 
-## How a job is executed
-
-```
-Control Plane
-  │  Poll: GET /v1/replay/jobs/pending
-  │  ← [{replay_id, artifact_url, artifact_signature, candidate_fix_diff, ...}]
-  ▼
-Worker
-  1. Verify HMAC signature on artifact_url
-  2. Download artifact (gzip JSON bundle)
-  3. Apply candidate_fix_diff to the prompt field
-  4. Execute patched context in an isolated subprocess (timeout enforced)
-  5. Compute diff_metric:
-       0.0 = output identical to expected
-       1.0 = output completely different
-     status = "pass" if returncode == 0 AND diff_metric <= 0.3
-            = "fail" otherwise
-  6. POST result to /v1/replay/jobs/{replay_id}/result
-```
-
-Results are visible in the Zroky dashboard under **Replay Runs**.
-
----
+The backend and dashboard source code are not part of this OSS repo.
 
 ## Build from source
 
-Requires Python 3.11+.
-
 ```bash
-git clone https://github.com/zroky-ai/zroky-replay-worker
-cd zroky-replay-worker
 pip install -e .
-cp .env.example .env
-# edit .env with your tokens
 uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
-### Run tests
-
-```bash
-pip install pytest httpx pytest-asyncio
-pytest
-```
-
----
-
-## Health endpoints
+Health endpoints:
 
 | Endpoint | Description |
 |---|---|
-| `GET /health` | Returns `{"status": "ok"}` — suitable for Docker healthcheck |
-| `GET /ready` | Returns `{"status": "ready"}` only if `WORKER_TOKEN` is configured |
+| `GET /health` | Basic liveness |
+| `GET /ready` | Ready only when `WORKER_TOKEN` is configured |
 
----
+## Run tests
 
-## Running multiple workers
-
-Each worker instance is stateless — you can run as many as you need in
-parallel. The control plane distributes jobs across all active workers.
-Scale by increasing `MAX_CONCURRENT_JOBS` on a single instance or by
-adding more instances.
-
----
+```bash
+pip install pytest httpx pytest-asyncio
+python -m pytest -q
+python -m py_compile app/main.py app/poller.py app/runner.py app/artifacts.py app/config.py app/models.py
+```
 
 ## License
 
-[FSL-1.1-MIT](LICENSE) — free for any use except building a competing product.
-Converts to plain MIT on the second anniversary of each release.
-See [fsl.software](https://fsl.software/) for the full terms.
+[FSL-1.1-MIT](LICENSE) � free for any use except building a competing product. Converts to plain MIT on the second anniversary of each release.

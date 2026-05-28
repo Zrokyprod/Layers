@@ -32,10 +32,10 @@ Get-ChildItem -Path zroky-sdk,zroky-sdk-js,zroky-gateway,zroky-replay-worker `
 ## 1. Create the 4 public repos on GitHub
 
 ```bash
-gh repo create zroky-ai/zroky-sdk            --public --description "Zroky Python SDK — AI agent observability"
-gh repo create zroky-ai/zroky-sdk-js         --public --description "Zroky JS/TS SDK — AI agent observability"
-gh repo create zroky-ai/zroky-gateway        --public --description "Zroky Gateway — LLM reverse proxy with telemetry"
-gh repo create zroky-ai/zroky-replay-worker  --public --description "Zroky Replay Worker — self-hostable replay executor"
+gh repo create zroky-ai/zroky-sdk            --public --description "Zroky Python SDK — open-source flight recorder for AI agents"
+gh repo create zroky-ai/zroky-sdk-js         --public --description "Zroky JS/TS SDK — open-source flight recorder for AI agents"
+gh repo create zroky-ai/zroky-gateway        --public --description "Zroky Gateway — multi-provider LLM gateway for AI agent telemetry"
+gh repo create zroky-ai/zroky-replay-worker  --public --description "Zroky Replay Worker — zero-trust replay worker for AI agent fixes"
 ```
 
 ---
@@ -222,6 +222,6 @@ forever — backend, dashboard, internal plans, progress notes.
 - [ ] `pyproject.toml` / `package.json` license fields updated to FSL-1.1-MIT
 - [ ] `.env` files are NOT present (only `.env.example`)
 - [ ] `OSS-LICENSING.md` reviewed and signed off
-- [ ] `legal@zroky.com` email address placeholder replaced with real address
+- [ ] Security/legal contact addresses verified
 - [ ] GitHub org `zroky-ai` created
 - [ ] Private monorepo `zroky-cloud` created and pushed

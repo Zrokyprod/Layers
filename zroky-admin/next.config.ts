@@ -35,12 +35,12 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/account",
-        destination: "/settings/profile",
+        destination: "/owner/settings",
         permanent: true,
       },
       {
         source: "/notifications",
-        destination: "/issues?tab=open",
+        destination: "/owner/ops",
         permanent: true,
       },
     ];

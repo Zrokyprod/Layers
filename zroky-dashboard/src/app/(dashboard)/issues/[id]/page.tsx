@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Archive,
@@ -14,14 +15,19 @@ import {
   ShieldAlert,
 } from "lucide-react";
 
-import { getIssue, ignoreIssue, resolveIssue, updateIssueTriage } from "@/lib/api";
-import { useCreateReplayRunFromIssue } from "@/lib/hooks";
+import { getAblationJobsForCall, getIssue, ignoreIssue, resolveIssue, updateIssueTriage, type AblationJobView } from "@/lib/api";
+import { useAblationJob, useCreateReplayRunFromIssue, useTriggerAblation } from "@/lib/hooks";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel } from "@/lib/issue-format";
 import { DEFAULT_VERIFICATION_REPLAY_MODE, REPLAY_MODE_OPTIONS, STUB_REPLAY_MODE, replayModeProof } from "@/lib/replay-mode";
 import type { ReplayMode } from "@/lib/api";
 import type { IssueEvidenceTrace, IssueItem } from "@/lib/types";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
+
+function latestAblationJob(jobs: AblationJobView[]): AblationJobView | null {
+  if (jobs.length === 0) return null;
+  return [...jobs].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0] ?? null;
+}
 
 export default function IssueDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,9 +43,26 @@ export default function IssueDetailPage() {
   const [assigneeDraft, setAssigneeDraft] = useState("");
   const [deployDraft, setDeployDraft] = useState("");
   const [replayMode, setReplayMode] = useState<ReplayMode>(DEFAULT_VERIFICATION_REPLAY_MODE);
+  const [activeAblationJobId, setActiveAblationJobId] = useState<string | null>(null);
   const createReplay = useCreateReplayRunFromIssue({
     onSuccess: (run) => router.push(`/replay/${run.id}`),
   });
+  const triggerAblation = useTriggerAblation();
+  const sampleCallId = issue?.sample_call_id ?? null;
+  const ablationJobsQuery = useQuery<AblationJobView[]>({
+    queryKey: ["ablation", "by-call", sampleCallId],
+    queryFn: ({ signal }) => getAblationJobsForCall(sampleCallId!, signal),
+    enabled: Boolean(sampleCallId),
+    retry: false,
+    staleTime: 30_000,
+  });
+  const latestJobFromList = useMemo(
+    () => latestAblationJob(ablationJobsQuery.data ?? []),
+    [ablationJobsQuery.data],
+  );
+  const selectedAblationJobId = activeAblationJobId ?? latestJobFromList?.id ?? null;
+  const activeAblationJobQuery = useAblationJob(selectedAblationJobId, { retry: false });
+  const selectedAblationJob = activeAblationJobQuery.data ?? latestJobFromList;
 
   useEffect(() => {
     if (!id) return;
@@ -59,6 +82,10 @@ export default function IssueDetailPage() {
       .finally(() => setLoading(false));
     return () => ctrl.abort();
   }, [id]);
+
+  useEffect(() => {
+    setActiveAblationJobId(null);
+  }, [sampleCallId]);
 
   async function onResolve() {
     if (!issue) return;
@@ -96,6 +123,22 @@ export default function IssueDetailPage() {
   function onCreateReplay() {
     if (!issue) return;
     createReplay.mutate({ issueId: issue.id, payload: { replay_mode: replayMode } });
+  }
+
+  function onAnalyzeRootCause() {
+    if (!issue?.sample_call_id) return;
+    triggerAblation.mutate(
+      {
+        call_id: issue.sample_call_id,
+        diagnosis_job_id: issue.sample_diagnosis_id ?? undefined,
+      },
+      {
+        onSuccess: (queued) => {
+          setActiveAblationJobId(queued.job_id);
+          void ablationJobsQuery.refetch();
+        },
+      },
+    );
   }
 
   async function onSaveTriage() {
@@ -210,6 +253,15 @@ export default function IssueDetailPage() {
         <SummaryPanel title="Replay coverage" value={replayLabel(issue.replay_coverage_status)} />
         <SummaryPanel title="Recommended next action" value={issue.recommended_next_action} />
       </section>
+
+      <ZrokyExplanationPanel
+        issue={issue}
+        job={selectedAblationJob}
+        loading={ablationJobsQuery.isLoading || activeAblationJobQuery.isLoading}
+        error={ablationJobsQuery.error ?? activeAblationJobQuery.error ?? triggerAblation.error ?? null}
+        triggering={triggerAblation.isPending}
+        onAnalyze={onAnalyzeRootCause}
+      />
 
       <section className="panel">
         <header className="panel-header">
@@ -346,6 +398,123 @@ function SummaryPanel({ title, value }: { title: string; value: string }) {
       <span>{title}</span>
       <p>{value}</p>
     </article>
+  );
+}
+
+function ZrokyExplanationPanel({
+  issue,
+  job,
+  loading,
+  error,
+  triggering,
+  onAnalyze,
+}: {
+  issue: IssueItem;
+  job: AblationJobView | null;
+  loading: boolean;
+  error: Error | null;
+  triggering: boolean;
+  onAnalyze: () => void;
+}) {
+  const canAnalyze = Boolean(issue.sample_call_id);
+  const topAxes = (job?.axes ?? []).slice(0, 4);
+  const status = job?.status ?? "not_started";
+  const unavailable = error?.message ?? null;
+  const confidence =
+    job?.synthesis_confidence == null ? null : `${Math.round(job.synthesis_confidence * 100)}%`;
+
+  return (
+    <section className="panel">
+      <header className="panel-header">
+        <div>
+          <h3>Zroky explanation</h3>
+          <p>Statistical root-cause attribution and fix guidance for this issue&apos;s sample call.</p>
+        </div>
+        <span className="alert-cat-badge badge-gray">{status.replace(/_/g, " ")}</span>
+      </header>
+
+      {!canAnalyze && (
+        <div className="empty">Deep root-cause analysis needs a sample call captured on this issue.</div>
+      )}
+
+      {canAnalyze && unavailable && !job && (
+        <div className="detail-warning">
+          Deep Zroky explanation is unavailable: {unavailable}. The issue summary, evidence, replay, and Ask Zroky still work.
+        </div>
+      )}
+
+      {canAnalyze && !job && !unavailable && (
+        <div className="empty">
+          Root-cause attribution has not run for this issue yet. Analyze it to get a deeper explanation and fix suggestion.
+        </div>
+      )}
+
+      {job?.status === "insufficient_data" && (
+        <div className="detail-warning">
+          Zroky needs more comparable production data before it can identify a specific causal axis.
+          {job.error_message ? ` ${job.error_message}` : ""}
+        </div>
+      )}
+
+      {job?.status === "error" && (
+        <div className="detail-warning">
+          Root-cause analysis failed{job.error_message ? `: ${job.error_message}` : "."}
+        </div>
+      )}
+
+      {job && ["pending", "running"].includes(job.status) && (
+        <div className="empty">
+          Zroky is analyzing determinism, control traces, and causal axes. This panel refreshes automatically.
+        </div>
+      )}
+
+      {job && (job.root_cause_narrative || job.fix_suggestion || topAxes.length > 0) && (
+        <div className="grid gap-3">
+          {job.root_cause_narrative && (
+            <article className="detail-summary-card">
+              <span>Why this is happening</span>
+              <p>{job.root_cause_narrative}</p>
+            </article>
+          )}
+          {job.fix_suggestion && (
+            <article className="detail-summary-card">
+              <span>Fix Zroky recommends</span>
+              <p>{job.fix_suggestion}</p>
+            </article>
+          )}
+          <div className="detail-meta-row">
+            {job.determinism_class && <span>Determinism: {job.determinism_class}</span>}
+            <span>Control group: {job.control_group_size}</span>
+            {job.fix_difficulty && <span>Difficulty: {job.fix_difficulty}</span>}
+            {confidence && <span>Confidence: {confidence}</span>}
+          </div>
+          {topAxes.length > 0 && (
+            <div className="list">
+              {topAxes.map((axis) => (
+                <div className="list-row" key={axis.id}>
+                  <div className="list-main">
+                    <strong>{axis.axis_type.replace(/_/g, " ")}</strong>
+                    <span>{axis.axis_label}</span>
+                  </div>
+                  <span className="mono">{Math.round(axis.confidence * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={onAnalyze}
+          disabled={!canAnalyze || loading || triggering || status === "pending" || status === "running"}
+        >
+          {triggering ? "Queuing..." : job ? "Run again" : "Analyze root cause"}
+        </button>
+      </div>
+    </section>
   );
 }
 

@@ -1,13 +1,230 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
 
 import { getEvaluationSettings, updateEvaluationSettings } from "@/lib/api";
+import { useCalibrationLatest, useJudgeHealth, useTriggerCalibrationRunNow } from "@/lib/hooks";
 import type { EvaluationSettingsResponse } from "@/lib/types";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatUsd } from "@/lib/format";
 
-export default function EvaluationSettingsPage() {
+type EvaluationWorkspace = "overview" | "calibration" | "judge";
+
+function workspaceFromParam(value: string | null): EvaluationWorkspace {
+  if (value === "calibration" || value === "judge") return value;
+  return "overview";
+}
+
+function pct(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function signedPctPoints(value: number): string {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${(value * 100).toFixed(1)}pp`;
+}
+
+function WorkspaceCard({
+  active,
+  href,
+  title,
+  description,
+}: {
+  active: boolean;
+  href: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`panel panel-muted${active ? " border-primary" : ""}`}
+      style={{ textDecoration: "none" }}
+    >
+      <div className="panel-header">
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        {active ? <span className="pill pill-green">Open</span> : null}
+      </div>
+    </Link>
+  );
+}
+
+function CalibrationWorkspace() {
+  const latestQuery = useCalibrationLatest();
+  const triggerCalibration = useTriggerCalibrationRunNow();
+  const [runMessage, setRunMessage] = useState("");
+  const runs = latestQuery.data ?? [];
+
+  function runCalibrationNow() {
+    setRunMessage("");
+    triggerCalibration.mutate(undefined, {
+      onSuccess: (response) => setRunMessage(response.message || "Calibration run started."),
+      onError: (error) => setRunMessage(error instanceof Error ? error.message : "Calibration run failed."),
+    });
+  }
+
+  return (
+    <section className="panel">
+      <header className="panel-header">
+        <div>
+          <h3>Calibration Workspace</h3>
+          <p>Latest judge calibration runs, agreement quality, and calibration costs.</p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={runCalibrationNow}
+          disabled={triggerCalibration.isPending}
+        >
+          {triggerCalibration.isPending ? "Starting..." : "Run calibration now"}
+        </button>
+      </header>
+
+      {runMessage ? (
+        <p className={runMessage.toLowerCase().includes("fail") ? "field-error" : "field-success"}>{runMessage}</p>
+      ) : null}
+      {latestQuery.error ? <p className="field-error">{latestQuery.error.message}</p> : null}
+      {latestQuery.isLoading ? <div className="loading" /> : null}
+
+      {!latestQuery.isLoading && !latestQuery.error && runs.length === 0 ? (
+        <div className="empty">No calibration runs have been recorded yet.</div>
+      ) : null}
+
+      {runs.length > 0 ? (
+        <div className="table-wrap">
+          <table className="settings-table">
+            <thead>
+              <tr>
+                <th>Judge model</th>
+                <th>Status</th>
+                <th>Samples</th>
+                <th>Accuracy</th>
+                <th>Kappa</th>
+                <th>Low confidence</th>
+                <th>Cost</th>
+                <th>Completed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.id}>
+                  <td className="mono">{run.judge_model}</td>
+                  <td><span className="pill">{run.status}</span></td>
+                  <td>{run.sample_count.toLocaleString()}</td>
+                  <td>{pct(run.accuracy)}</td>
+                  <td>{run.kappa.toFixed(2)}</td>
+                  <td>{pct(run.low_confidence_pct)}</td>
+                  <td className="mono">{formatUsd(run.cost_usd)}</td>
+                  <td>{run.completed_at ? formatDateTime(run.completed_at) : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function JudgeWorkspace() {
+  const judgeQuery = useJudgeHealth(true);
+  const health = judgeQuery.data;
+
+  return (
+    <section className="panel">
+      <header className="panel-header">
+        <div>
+          <h3>Judge Diagnostics</h3>
+          <p>Judge health, ensemble coverage, verdict drift, and score-dimension drift.</p>
+        </div>
+        {health ? <span className={health.any_breached ? "pill pill-red" : "pill pill-green"}>{health.any_breached ? "Drift breached" : "Healthy"}</span> : null}
+      </header>
+
+      {judgeQuery.error ? <p className="field-error">{judgeQuery.error.message}</p> : null}
+      {judgeQuery.isLoading ? <div className="loading" /> : null}
+
+      {health ? (
+        <div className="grid gap-4">
+          <div className="kpi-grid">
+            <div className="kpi-card">
+              <div className="kpi-value">{health.enabled ? "On" : "Off"}</div>
+              <div className="kpi-label">Judge enabled</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-value mono">{health.primary_model ?? "auto"}</div>
+              <div className="kpi-label">Primary judge</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-value">{health.ensemble_models.length}</div>
+              <div className="kpi-label">Ensemble models</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-value">{health.window_hours}h</div>
+              <div className="kpi-label">Window</div>
+            </div>
+          </div>
+
+          <section className="panel panel-muted">
+            <header className="panel-header">
+              <h3>Verdict drift</h3>
+              <p>{health.verdict_drift.length} judge model rows.</p>
+            </header>
+            {health.verdict_drift.length === 0 ? (
+              <div className="empty">No verdict drift rows in the current window.</div>
+            ) : (
+              <div className="list">
+                {health.verdict_drift.map((row) => (
+                  <div key={row.judge_model} className="list-row">
+                    <div className="list-main">
+                      <strong>{row.judge_model}</strong>
+                      <span>{row.disagreement_count} disagreements across {row.sample_count} samples.</span>
+                    </div>
+                    <span className={row.breached ? "pill pill-red" : "pill pill-green"}>
+                      {pct(row.disagreement_rate)} / max {pct(row.threshold)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel panel-muted">
+            <header className="panel-header">
+              <h3>Dimension drift</h3>
+              <p>{health.dimension_drift.length} score dimensions.</p>
+            </header>
+            {health.dimension_drift.length === 0 ? (
+              <div className="empty">No score dimension drift rows in the current window.</div>
+            ) : (
+              <div className="list">
+                {health.dimension_drift.map((row) => (
+                  <div key={`${row.judge_model}-${row.dimension}`} className="list-row">
+                    <div className="list-main">
+                      <strong>{row.dimension}</strong>
+                      <span>{row.judge_model} - {row.sample_count} samples - {pct(row.older_mean)} baseline to {pct(row.recent_mean)} recent.</span>
+                    </div>
+                    <span className={row.breached ? "pill pill-red" : "pill pill-green"}>
+                      {signedPctPoints(row.drift)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function EvaluationSettingsContent() {
+  const searchParams = useSearchParams();
+  const activeWorkspace = workspaceFromParam(searchParams.get("workspace"));
   const [settings, setSettings] = useState<EvaluationSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -152,26 +369,34 @@ export default function EvaluationSettingsPage() {
             <h3>Evaluation Workspaces</h3>
             <p>Open detailed calibration and judge diagnostics when tuning quality gates.</p>
           </div>
+          {activeWorkspace !== "overview" ? <Link href="/settings/evaluation" className="btn btn-soft">Back to overview</Link> : null}
         </header>
         <div className="grid gap-3 md:grid-cols-2">
-          <Link href="/settings/evaluation?workspace=calibration" className="panel panel-muted" style={{ textDecoration: "none" }}>
-            <div className="panel-header">
-              <div>
-                <h3>Calibration</h3>
-                <p>Golden sets, judge accuracy, calibration runs, and score overview.</p>
-              </div>
-            </div>
-          </Link>
-          <Link href="/settings/evaluation?workspace=judge" className="panel panel-muted" style={{ textDecoration: "none" }}>
-            <div className="panel-header">
-              <div>
-                <h3>Judge Diagnostics</h3>
-                <p>Inspect judge health and evaluation diagnostics when tuning quality gates.</p>
-              </div>
-            </div>
-          </Link>
+          <WorkspaceCard
+            active={activeWorkspace === "calibration"}
+            href="/settings/evaluation?workspace=calibration"
+            title="Calibration"
+            description="Golden sets, judge accuracy, calibration runs, and score overview."
+          />
+          <WorkspaceCard
+            active={activeWorkspace === "judge"}
+            href="/settings/evaluation?workspace=judge"
+            title="Judge Diagnostics"
+            description="Inspect judge health and evaluation diagnostics when tuning quality gates."
+          />
         </div>
       </section>
+
+      {activeWorkspace === "calibration" ? <CalibrationWorkspace /> : null}
+      {activeWorkspace === "judge" ? <JudgeWorkspace /> : null}
     </div>
+  );
+}
+
+export default function EvaluationSettingsPage() {
+  return (
+    <Suspense fallback={<div className="grid gap-4"><section className="panel"><div className="loading" /></section></div>}>
+      <EvaluationSettingsContent />
+    </Suspense>
   );
 }
