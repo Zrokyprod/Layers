@@ -7,7 +7,6 @@ from typing import Any
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -17,6 +16,7 @@ from app.api.router import api_router
 from app.core.config import get_settings, is_production_env, validate_runtime_settings
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
+from app.core.trusted_hosts import LivenessBypassTrustedHostMiddleware
 from app.observability.context import get_correlation_id
 from app.observability.middleware import install_observability_middleware
 
@@ -167,7 +167,7 @@ app.add_middleware(
 if _is_production:
     _trusted_hosts = [h.strip() for h in getattr(settings, "TRUSTED_HOSTS", "").split(",") if h.strip()]
     if _trusted_hosts:
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
+        app.add_middleware(LivenessBypassTrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 
 install_observability_middleware(app)
 
