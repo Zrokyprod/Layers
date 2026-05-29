@@ -1948,6 +1948,18 @@ export interface ReplayRunListResponse {
   total_in_page: number;
 }
 
+export interface RegressionCIRunDetailResponse {
+  run_id: string;
+  project_id: string;
+  git_sha: string | null;
+  status: string;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  report: Record<string, unknown> | null;
+  pr_comment_markdown: string | null;
+}
+
 export type ReplayMode = "stub" | "real_llm" | "mocked-tool" | "live-sandbox" | "shadow";
 
 export interface ReplayCreatePayload {
@@ -1981,6 +1993,15 @@ export function listReplayRuns(
 
 export function getReplayRun(runId: string, signal?: AbortSignal): Promise<ReplayRunDetailItem> {
   return request<ReplayRunDetailItem>(`/v1/replay/runs/${encodeURIComponent(runId)}`, { signal });
+}
+
+export function getRegressionCIRun(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<RegressionCIRunDetailResponse> {
+  return request<RegressionCIRunDetailResponse>(`/v1/regression-ci/runs/${encodeURIComponent(runId)}`, {
+    signal,
+  });
 }
 
 export function createReplayRunFromCall(
