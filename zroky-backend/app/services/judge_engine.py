@@ -46,7 +46,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from app.core.config import get_settings
-from app.services.billing_plans import DEFAULT_PLAN_CODE
+from app.services.billing_plans import DEFAULT_PLAN_CODE, get_plan_entitlements
 
 logger = logging.getLogger(__name__)
 
@@ -919,9 +919,11 @@ def get_evaluator(
         ensemble_allowed = bool(entitlements_dict.get("judge.ensemble_enabled"))
     else:
         # Plan-code defaulting when caller didn't resolve entitlements.
-        # Keep aligned with PLAN_ENTITLEMENTS in billing_plans.py.
-        plan = (plan_code or DEFAULT_PLAN_CODE).strip().lower()
-        ensemble_allowed = plan in {"plus", "enterprise"}
+        try:
+            template = get_plan_entitlements(plan_code or DEFAULT_PLAN_CODE)
+        except Exception:  # noqa: BLE001 - unknown/corrupt plan falls back closed.
+            template = get_plan_entitlements(DEFAULT_PLAN_CODE)
+        ensemble_allowed = bool(template.get("judge.ensemble_enabled"))
 
     if ensemble_allowed:
         models = _parse_ensemble_models()

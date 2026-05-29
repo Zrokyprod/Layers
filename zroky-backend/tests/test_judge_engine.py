@@ -471,10 +471,10 @@ class TestGetEvaluator:
         ev = get_evaluator("pro")
         assert isinstance(ev, DeterministicStubEvaluator)
 
-    def test_pro_plan_returns_single(self, fresh_settings) -> None:
+    def test_pilot_plan_returns_single(self, fresh_settings) -> None:
         fresh_settings.JUDGE_ENABLED = True
         fresh_settings.OPENROUTER_API_KEY = "sk-test"
-        ev = get_evaluator("pro")
+        ev = get_evaluator("pilot")
         assert isinstance(ev, SingleJudgeEvaluator)
 
     def test_plus_plan_returns_ensemble(self, fresh_settings) -> None:
@@ -500,14 +500,14 @@ class TestGetEvaluator:
         assert isinstance(ev, SingleJudgeEvaluator)
 
     def test_entitlement_dict_overrides_plan(self, fresh_settings) -> None:
-        """ensemble_enabled=True in resolved entitlements promotes Pro to ensemble."""
+        """ensemble_enabled=True in resolved entitlements promotes Pilot to ensemble."""
         fresh_settings.JUDGE_ENABLED = True
         fresh_settings.OPENROUTER_API_KEY = "sk-test"
         fresh_settings.JUDGE_ENSEMBLE_MODELS_JSON = (
             '["anthropic/claude-haiku-4","openai/gpt-4o-mini"]'
         )
         ev = get_evaluator(
-            "pro",
+            "pilot",
             entitlements_dict={"judge.ensemble_enabled": True},
         )
         assert isinstance(ev, EnsembleEvaluator)

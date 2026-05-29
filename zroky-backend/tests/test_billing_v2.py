@@ -93,6 +93,7 @@ def _billing_settings(monkeypatch: pytest.MonkeyPatch):
         "STRIPE_PRICE_IDS_JSON",
         json.dumps(
             {
+                "pilot": "price_pilot_test",
                 "pro": "price_pro_test",
                 "plus": "price_plus_test",
             }
@@ -201,7 +202,7 @@ class TestBillingPlans:
             assert_self_serve_plan("enterprise")
 
     def test_assert_self_serve_accepts_paid_tiers(self) -> None:
-        for code in ("pro", "plus"):
+        for code in ("pilot", "pro", "plus"):
             assert assert_self_serve_plan(code) == code
 
     def test_resolve_price_id_happy(self) -> None:
@@ -1018,7 +1019,7 @@ class TestInvariants:
     def test_plan_codes_match_tier_matrix(self) -> None:
         # Plan §11.1 binding tiers
         assert VALID_PLAN_CODES == frozenset(
-            {"free", "pro", "plus", "enterprise"}
+            {"free", "pilot", "pro", "plus", "enterprise"}
         )
 
     def test_handled_event_types_mirror_plan_section_113(self) -> None:

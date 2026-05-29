@@ -151,6 +151,7 @@ def _plan_meta(db: Session, tenant_id: str) -> tuple[str | None, str | None]:
     plan_code = entitlements_resolver.get_plan_code(db, tenant_id)
     names = {
         "free": "Free",
+        "pilot": "Pilot",
         "pro": "Pro",
         "plus": "Plus",
         "enterprise": "Enterprise",

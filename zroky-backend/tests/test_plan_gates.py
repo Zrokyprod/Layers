@@ -284,7 +284,7 @@ class TestMinValueGate:
         factory = client._factory  # type: ignore[attr-defined]
         session = factory()
         try:
-            # pro.replay.monthly_runs = 5000 → passes min_value=100
+            # pro.replay.monthly_runs = 1_000, so it passes min_value=100.
             value_or_raise = require_entitlement(
                 "replay.monthly_runs", min_value=100,
             )

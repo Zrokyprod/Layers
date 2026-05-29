@@ -328,10 +328,10 @@ def _get_or_create_org_subscription(
 class CheckoutRequest(BaseModel):
     plan_code: str = Field(
         description=(
-            "Self-serve plan code: 'pro' | 'plus'. "
+            "Self-serve plan code: 'pilot' | 'pro' | 'plus'. "
             "'enterprise' is sales-led; 'free' has no checkout."
         ),
-        examples=["plus"],
+        examples=["pro"],
     )
     customer_email: str | None = Field(
         default=None,

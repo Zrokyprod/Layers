@@ -256,7 +256,7 @@ class TestHasGet:
 
     def test_has_int_quota(self, db_session) -> None:
         _seed_subscription(db_session, org_id="org-1", plan_code="pro")
-        # pro.replay.monthly_runs = 100
+        # pro.replay.monthly_runs = 1_000
         assert has(db_session, "org-1", "replay.monthly_runs") is True
 
     def test_has_zero_quota_is_false(self, db_session) -> None:
@@ -270,7 +270,7 @@ class TestHasGet:
 
     def test_get_returns_raw_value(self, db_session) -> None:
         _seed_subscription(db_session, org_id="org-1", plan_code="pro")
-        assert get(db_session, "org-1", "replay.monthly_runs") == 100
+        assert get(db_session, "org-1", "replay.monthly_runs") == 1_000
 
     def test_get_default_for_missing_key(self, db_session) -> None:
         _seed_subscription(db_session, org_id="org-1", plan_code="free")

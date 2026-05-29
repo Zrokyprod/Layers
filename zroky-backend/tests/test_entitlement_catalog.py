@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from app.db.models import SubscriptionPlan
+from app.services.entitlement_catalog import (
+    CANONICAL_PLAN_CODES,
+    ENTITLEMENT_KEYS,
+    LIMIT_KEYS,
+    PLAN_ENTITLEMENTS,
+    PLAN_KEYS_BINDING,
+    InvalidPlanCodeError,
+    canonical_plan_code,
+    get_catalog_entry,
+    resolve_plan_entitlements,
+    resolve_plan_limits,
+    resolve_plan_template,
+)
+
+
+EXPECTED_LIMITS = {
+    "free": {
+        "max_projects": 1,
+        "max_members": 2,
+        "max_calls_per_month": 50_000,
+        "max_diagnosis_jobs_per_month": 0,
+        "max_real_replay_runs_per_month": 0,
+        "max_mocked_tool_replay_runs_per_month": 0,
+        "max_live_sandbox_replay_runs_per_month": 0,
+        "max_golden_traces": 0,
+        "retention_days": 7,
+    },
+    "pilot": {
+        "max_projects": 3,
+        "max_members": 5,
+        "max_calls_per_month": 500_000,
+        "max_diagnosis_jobs_per_month": 100,
+        "max_real_replay_runs_per_month": 0,
+        "max_mocked_tool_replay_runs_per_month": 100,
+        "max_live_sandbox_replay_runs_per_month": 0,
+        "max_golden_traces": 100,
+        "retention_days": 30,
+    },
+    "pro": {
+        "max_projects": 10,
+        "max_members": 10,
+        "max_calls_per_month": 3_000_000,
+        "max_diagnosis_jobs_per_month": 1_000,
+        "max_real_replay_runs_per_month": 100,
+        "max_mocked_tool_replay_runs_per_month": 1_000,
+        "max_live_sandbox_replay_runs_per_month": 100,
+        "max_golden_traces": 1_000,
+        "retention_days": 90,
+    },
+    "enterprise": {
+        "max_projects": -1,
+        "max_members": -1,
+        "max_calls_per_month": -1,
+        "max_diagnosis_jobs_per_month": -1,
+        "max_real_replay_runs_per_month": -1,
+        "max_mocked_tool_replay_runs_per_month": -1,
+        "max_live_sandbox_replay_runs_per_month": -1,
+        "max_golden_traces": -1,
+        "retention_days": -1,
+    },
+}
+
+
+LEGACY_COMPATIBILITY_KEYS = {
+    "events.monthly_quota",
+    "retention.days",
+    "goldens.max_sets",
+    "replay.monthly_runs",
+    "pilot.autopilot_enabled",
+    "pilot.tier2_pr_enabled",
+    "pilot.real_llm_replay_enabled",
+    "pilot.autofix_pr_enabled",
+    "judge.ensemble_enabled",
+    "digest.audience",
+    "compliance.export_enabled",
+    "selfhost.enabled",
+    "sso.enabled",
+    "seats.included",
+}
+
+
+@pytest.mark.parametrize("plan_code", CANONICAL_PLAN_CODES)
+def test_required_keys_present_for_every_canonical_plan(plan_code: str) -> None:
+    template = resolve_plan_template(plan_code)
+    assert ENTITLEMENT_KEYS.issubset(template)
+    assert LIMIT_KEYS.issubset(template)
+    assert LEGACY_COMPATIBILITY_KEYS.issubset(template)
+    assert set(template).issubset(PLAN_KEYS_BINDING)
+
+
+@pytest.mark.parametrize("plan_code", CANONICAL_PLAN_CODES)
+def test_default_limits(plan_code: str) -> None:
+    assert resolve_plan_limits(plan_code) == EXPECTED_LIMITS[plan_code]
+
+
+def test_default_boolean_entitlements_by_tier() -> None:
+    free = resolve_plan_entitlements("free")
+    pilot = resolve_plan_entitlements("pilot")
+    pro = resolve_plan_entitlements("pro")
+    enterprise = resolve_plan_entitlements("enterprise")
+
+    assert free["watch.cloud_capture"] is True
+    assert free["watch.basic_trace_view"] is True
+    assert free["pilot.failure_inbox"] is False
+    assert free["pro.ci_gate_blocking"] is False
+
+    assert pilot["pilot.failure_inbox"] is True
+    assert pilot["pilot.replay_mocked_tool"] is True
+    assert pilot["pilot.replay_real_llm"] is False
+    assert pilot["pro.ci_gate_blocking"] is False
+
+    assert pro["pilot.replay_real_llm"] is True
+    assert pro["pro.ci_gate_nonblocking"] is True
+    assert pro["pro.ci_gate_blocking"] is True
+    assert pro["enterprise.sso"] is False
+
+    assert all(enterprise[key] is True for key in ENTITLEMENT_KEYS)
+
+
+def test_plus_is_legacy_alias_for_canonical_pro() -> None:
+    assert canonical_plan_code("plus") == "pro"
+    assert get_catalog_entry("plus").plan_code == "pro"
+    assert PLAN_ENTITLEMENTS["plus"] == PLAN_ENTITLEMENTS["pro"]
+    assert resolve_plan_template("plus") == resolve_plan_template("pro")
+
+
+def test_invalid_plan_code_raises() -> None:
+    with pytest.raises(InvalidPlanCodeError):
+        canonical_plan_code("ultra")
+
+
+def test_features_json_list_sets_feature_keys_true() -> None:
+    plan = SubscriptionPlan(
+        slug="pilot",
+        name="Pilot Override",
+        monthly_cost_usd=0,
+        annual_cost_usd=0,
+        max_projects=3,
+        max_members_per_project=5,
+        max_calls_per_month=500_000,
+        features_json=json.dumps(["pilot.replay_real_llm", "pro.replay_shadow"]),
+    )
+
+    entitlements = resolve_plan_entitlements("pilot", subscription_plan=plan)
+
+    assert entitlements["pilot.replay_real_llm"] is True
+    assert entitlements["pro.replay_shadow"] is True
+
+
+def test_features_json_object_and_legacy_columns_overlay_template() -> None:
+    plan = SubscriptionPlan(
+        slug="pilot",
+        name="Pilot Override",
+        monthly_cost_usd=0,
+        annual_cost_usd=0,
+        max_projects=9,
+        max_members_per_project=8,
+        max_calls_per_month=123_456,
+        features_json=json.dumps(
+            {
+                "pilot.replay_real_llm": True,
+                "max_real_replay_runs_per_month": 25,
+                "replay.monthly_runs": 250,
+            }
+        ),
+    )
+
+    template = resolve_plan_template("pilot", subscription_plan=plan)
+    limits = resolve_plan_limits("pilot", subscription_plan=plan)
+
+    assert template["pilot.replay_real_llm"] is True
+    assert template["replay.monthly_runs"] == 250
+    assert limits["max_projects"] == 9
+    assert limits["max_members"] == 8
+    assert limits["max_calls_per_month"] == 123_456
+    assert limits["max_real_replay_runs_per_month"] == 25
+    assert template["seats.included"] == 8
+    assert template["events.monthly_quota"] == 123_456
+
+
+def test_subscription_plan_slug_can_select_plan_code() -> None:
+    plan = SubscriptionPlan(
+        slug="plus",
+        name="Legacy Plus",
+        monthly_cost_usd=0,
+        annual_cost_usd=0,
+        max_projects=10,
+        max_members_per_project=10,
+        max_calls_per_month=3_000_000,
+        features_json="[]",
+    )
+
+    assert resolve_plan_template(None, subscription_plan=plan) == resolve_plan_template(
+        "plus",
+        subscription_plan=plan,
+    )
