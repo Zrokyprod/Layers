@@ -7,30 +7,34 @@
 import type { IssueItem } from "./types";
 
 /** Human-readable label for the backend `replay_coverage_status` enum. */
-export function replayLabel(status: string): string {
-  switch (status) {
+export function replayLabel(status: string | null | undefined): string {
+  switch ((status ?? "").trim().toLowerCase()) {
     case "verified_fix":
       return "Verified fix";
     case "sanity_replay_passed":
-      return "Sanity replay passed";
-    case "real_replay_passed":
-      return "Real replay passed";
+    case "stub_only":
+      return "Stub only";
     case "real_replay_missing_tool_proof":
-      return "Real replay missing tool proof";
-    case "covered_passed":
-      return "Covered, last replay passed";
+    case "tool_snapshot_missing":
+      return "Missing tool proof";
     case "covered_failed":
-      return "Covered, replay still failing";
-    case "replay_running":
-      return "Replay running";
+      return "Replay failed";
+    case "not_verified":
+      return "Not verified";
+    case "inconclusive":
+      return "Inconclusive";
+    case "real_replay_passed":
+    case "covered_passed":
     case "covered_not_run":
-      return "Golden trace exists, not replayed yet";
     case "fix_pending_replay":
-      return "Fix exists, replay missing";
+    case "replay_running":
+      return "Covered, needs review";
     case "not_covered":
-      return "Not covered by replay";
+    case "replay_missing":
+    case "":
+      return "No trusted replay";
     default:
-      return status.replace(/_/g, " ");
+      return "No trusted replay";
   }
 }
 
