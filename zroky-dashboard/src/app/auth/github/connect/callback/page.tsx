@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import { AuthCard, AuthShell } from "@/components/auth-shell";
 import { completeGithubRepoConnect } from "@/lib/api";
 
 function ConnectCallbackContent() {
@@ -49,34 +50,30 @@ function ConnectCallbackContent() {
   }, [router, searchParams]);
 
   return (
-    <div className="auth-callback-screen">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h2 className="auth-heading">Connecting GitHub Repository</h2>
-          <p className="auth-sub">Validating OAuth callback and saving your repo access token.</p>
-        </div>
+    <AuthShell>
+      <AuthCard title="Connecting GitHub repository" subtitle="Validating OAuth callback and saving repo access.">
         {error ? (
           <div className="auth-banner auth-banner-error">
-            {error} — <Link href="/settings" className="auth-link">Return to settings</Link>
+            {error} <Link href="/settings" className="auth-link">Return to settings</Link>
           </div>
         ) : (
-          <p className="hint">Please wait. Redirecting to settings…</p>
+          <div className="auth-status">
+            <div className="spinner" />
+            <p>Please wait. Redirecting to settings...</p>
+          </div>
         )}
-      </div>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 function ConnectCallbackFallback() {
   return (
-    <div className="auth-callback-screen">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h2 className="auth-heading">Connecting GitHub Repository</h2>
-          <p className="auth-sub">Preparing callback context…</p>
-        </div>
-      </div>
-    </div>
+    <AuthShell>
+      <AuthCard title="Connecting GitHub repository" subtitle="Preparing callback context.">
+        <p className="hint">Loading...</p>
+      </AuthCard>
+    </AuthShell>
   );
 }
 

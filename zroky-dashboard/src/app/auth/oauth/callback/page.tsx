@@ -1,6 +1,9 @@
 "use client";
-import { useEffect, Suspense } from "react";
+
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+
+import { AuthCard, AuthShell } from "@/components/auth-shell";
 import { storeAuthSession } from "@/lib/auth";
 
 function OAuthCallbackHandler() {
@@ -15,12 +18,12 @@ function OAuthCallbackHandler() {
     const errorParam = searchParams.get("error");
 
     if (errorParam) {
-      router.replace(`/auth/login?error=${encodeURIComponent(errorParam)}`);
+      router.replace(`/login?error=${encodeURIComponent(errorParam)}`);
       return;
     }
 
     if (!accessToken || !refreshToken) {
-      router.replace("/auth/login?error=oauth_failed");
+      router.replace("/login?error=oauth_failed");
       return;
     }
 
@@ -35,35 +38,32 @@ function OAuthCallbackHandler() {
         email: null,
         email_verified: true,
       });
-      router.replace("/agents");
+      router.replace("/home");
     };
 
     void finish();
   }, [router, searchParams]);
 
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h2 className="auth-heading">Signing you in…</h2>
-          <p className="auth-sub">Please wait while we complete authentication.</p>
-        </div>
-        <div style={{ display: "flex", justifyContent: "center", padding: "24px" }}>
+    <AuthShell>
+      <AuthCard title="Signing you in" subtitle="Please wait while we complete authentication.">
+        <div className="auth-status">
           <div className="spinner" />
+          <p>Creating your Zroky session...</p>
         </div>
-      </div>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 export default function OAuthCallbackPage() {
   return (
     <Suspense fallback={
-      <div className="auth-screen">
-        <div className="auth-card">
-          <p className="hint">Loading…</p>
-        </div>
-      </div>
+      <AuthShell>
+        <AuthCard title="Signing you in" subtitle="Preparing callback context.">
+          <p className="hint">Loading...</p>
+        </AuthCard>
+      </AuthShell>
     }>
       <OAuthCallbackHandler />
     </Suspense>

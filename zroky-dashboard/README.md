@@ -32,6 +32,11 @@ NEXT_PUBLIC_DASHBOARD_ENV=staging
 NEXT_PUBLIC_DASHBOARD_PROJECT_LABEL=project
 ```
 
+For production, set `ZROKY_API_BASE_URL` on the dashboard server/runtime to
+the deployed backend origin, for example `https://api.zroky.ai`. Do not rely on
+`NEXT_PUBLIC_API_URL` for dashboard proxy traffic; `/api/zroky/*` is a
+server-side proxy and reads `ZROKY_API_BASE_URL`.
+
 ## GitHub OAuth Redirect (Required)
 
 Set backend env `GITHUB_OAUTH_REDIRECT_URL` to:

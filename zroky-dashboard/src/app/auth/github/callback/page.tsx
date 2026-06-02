@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import { AuthCard, AuthShell } from "@/components/auth-shell";
 import { completeGithubLogin } from "@/lib/api";
 import { getPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
 
@@ -22,7 +23,6 @@ function CallbackContent() {
 
     const oauthCode = code;
     const oauthState = state;
-
     let cancelled = false;
 
     async function completeSignIn() {
@@ -32,7 +32,7 @@ function CallbackContent() {
           return;
         }
         storeAuthSession(auth);
-        router.replace(getPostAuthRedirectPath("/agents"));
+        router.replace(getPostAuthRedirectPath("/home"));
         router.refresh();
       } catch (callbackError) {
         if (cancelled) {
@@ -51,34 +51,30 @@ function CallbackContent() {
   }, [router, searchParams]);
 
   return (
-    <div className="auth-callback-screen">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h2 className="auth-heading">Completing GitHub Sign-In</h2>
-          <p className="auth-sub">Validating OAuth callback and creating your Zroky session.</p>
-        </div>
+    <AuthShell>
+      <AuthCard title="Completing GitHub sign-in" subtitle="Validating OAuth callback and creating your Zroky session.">
         {error ? (
           <div className="auth-banner auth-banner-error">
-            {error} — <Link href="/auth/login" className="auth-link">Return to login</Link>
+            {error} <Link href="/login" className="auth-link">Return to login</Link>
           </div>
         ) : (
-          <p className="hint">Please wait. Redirecting to dashboard…</p>
+          <div className="auth-status">
+            <div className="spinner" />
+            <p>Please wait. Redirecting to dashboard...</p>
+          </div>
         )}
-      </div>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
 function CallbackFallback() {
   return (
-    <div className="auth-callback-screen">
-      <div className="auth-card">
-        <div className="auth-header">
-          <h2 className="auth-heading">Completing GitHub Sign-In</h2>
-          <p className="auth-sub">Preparing callback context…</p>
-        </div>
-      </div>
-    </div>
+    <AuthShell>
+      <AuthCard title="Completing GitHub sign-in" subtitle="Preparing callback context.">
+        <p className="hint">Loading...</p>
+      </AuthCard>
+    </AuthShell>
   );
 }
 

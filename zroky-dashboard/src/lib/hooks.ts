@@ -50,6 +50,7 @@ import {
   listProviderVerifications,
   testProviderConnection,
   changePassword,
+  updateMe,
   listCalls,
   getCostDailyTrend,
   getCostByModel,
@@ -142,9 +143,9 @@ import type {
   DriftModelView,
   StatusResponse,
   ModelHistoryResponse,
-  ProjectMemberListResponse,
   ProjectInviteResponse,
   GithubConnectionStatusResponse,
+  ProjectMembershipResponse,
 } from "./types";
 import type { AdjacentCallsResponse } from "./types";
 
@@ -202,6 +203,7 @@ export function useBudget() {
   return useQuery<BudgetConfigResponse>({
     queryKey: ["budget"],
     queryFn: () => getBudget(),
+    retry: false,
   });
 }
 
@@ -361,6 +363,7 @@ export function useProjectSettings() {
   return useQuery<ProjectResponse>({
     queryKey: ["project-settings"],
     queryFn: () => getProjectSettings(),
+    retry: false,
   });
 }
 
@@ -369,6 +372,7 @@ export function useListProjectApiKeys(projectId: string) {
     queryKey: ["project-api-keys", projectId],
     queryFn: () => listProjectApiKeys(projectId),
     enabled: !!projectId,
+    retry: false,
   });
 }
 
@@ -544,6 +548,15 @@ export function useMe() {
   return useQuery<MeResponse>({
     queryKey: ["me"],
     queryFn: () => getMe(),
+    retry: false,
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation<MeResponse, Error, { displayName: string | null }>({
+    mutationFn: ({ displayName }) => updateMe({ display_name: displayName }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }
 
@@ -572,7 +585,7 @@ export function useTestProviderConnection() {
 // ─── Cost Forecasting ─────────────────────────────────────────────────────────
 
 export function useTeamMembers(projectId: string) {
-  return useQuery<ProjectMemberListResponse, Error>({
+  return useQuery<ProjectMembershipResponse[], Error>({
     queryKey: ["project-members", projectId],
     queryFn: () => listProjectMembers(projectId),
     enabled: !!projectId,

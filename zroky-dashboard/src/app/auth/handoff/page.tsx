@@ -3,6 +3,8 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { AuthCard, AuthShell } from "@/components/auth-shell";
+
 function HandoffContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -15,7 +17,7 @@ function HandoffContent() {
     const ev = searchParams.get("ev") !== "false";
 
     if (!at || !rt) {
-      router.replace("/auth/login");
+      router.replace("/login");
       return;
     }
 
@@ -40,11 +42,14 @@ function HandoffContent() {
   }, [router, searchParams]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", gap: 12, background: "var(--bg-canvas)" }}>
-      <div style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid #635bff", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
-      <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", fontWeight: 500 }}>Signing you in…</p>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+    <AuthShell>
+      <AuthCard title="Signing you in" subtitle="Creating your authenticated dashboard session.">
+        <div className="auth-status">
+          <div className="spinner" />
+          <p>Redirecting to dashboard...</p>
+        </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
 

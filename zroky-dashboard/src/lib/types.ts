@@ -14,9 +14,12 @@ export interface AuthTokenResponse {
 export interface MeResponse {
   user_id: string;
   email: string | null;
+  display_name: string | null;
   github_login: string | null;
   google_id: string | null;
   has_password: boolean;
+  is_active: boolean;
+  email_verified: boolean;
   created_at: string;
 }
 
@@ -1070,6 +1073,41 @@ export interface IssueEvidenceTrace {
   evidence_summary: string | null;
 }
 
+export interface IssueReplayProof {
+  run_id: string | null;
+  status: string | null;
+  replay_mode: string | null;
+  verified_fix: boolean;
+  summary_url: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface IssueGoldenProof {
+  golden_set_id: string | null;
+  golden_set_name: string | null;
+  golden_trace_id: string | null;
+  status: string | null;
+  blocks_ci: boolean;
+  trace_count: number;
+  created_at: string | null;
+}
+
+export interface IssueCiGateProof {
+  run_id: string | null;
+  status: string | null;
+  git_sha: string | null;
+  summary_url: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface IssueProofSnapshot {
+  replay: IssueReplayProof;
+  golden: IssueGoldenProof;
+  ci_gate: IssueCiGateProof;
+}
+
 export interface IssueItem {
   id: string;
   project_id: string;
@@ -1101,6 +1139,7 @@ export interface IssueItem {
   replay_coverage_status: string;
   recommended_next_action: string;
   priority_score: number;
+  proof?: IssueProofSnapshot | null;
 }
 
 export interface IssueListResponse {

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const ACCESS_TOKEN_COOKIE = "zroky_access_token";
 const REFRESH_TOKEN_COOKIE = "zroky_refresh_token";
 

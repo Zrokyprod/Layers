@@ -48,7 +48,6 @@
   ProviderKeyListResponse,
   ProviderKeyResponse,
   ProjectResponse,
-  ProjectMemberListResponse,
   ProjectInviteResponse,
   ProjectMembershipResponse,
   ProviderVerificationListResponse,
@@ -74,6 +73,8 @@
   NotificationListResponse,
   MarkReadResponse,
   MarkAllReadResponse,
+  IssueCiGateProof,
+  IssueGoldenProof,
   IssueItem,
   IssueListResponse,
   DetectorListResponse,
@@ -101,6 +102,8 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
 };
+
+const defaultClientTimeoutMs = 12_000;
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(`/api/zroky${path}`, "http://local.zroky");
@@ -159,19 +162,106 @@ function buildError(method: Method, path: string, status: number, detail: string
   return new Error(message);
 }
 
+function isHtmlErrorText(text: string, contentType: string | null): boolean {
+  const normalizedContentType = contentType?.toLowerCase() ?? "";
+  const normalizedText = text.slice(0, 160).trim().toLowerCase();
+
+  return (
+    normalizedContentType.includes("text/html")
+    || normalizedText.startsWith("<!doctype")
+    || normalizedText.startsWith("<html")
+    || (normalizedText.startsWith("<") && text.toLowerCase().includes("</html>"))
+  );
+}
+
+function fallbackHttpErrorMessage(status: number): string {
+  if (status === 502 || status === 503 || status === 504) {
+    return "Backend API is unavailable. Start the Zroky backend and retry.";
+  }
+  if (status === 401) {
+    return "Session expired. Sign in again.";
+  }
+  if (status === 403) {
+    return "You do not have access to this action.";
+  }
+  if (status === 404) {
+    return "Requested resource was not found.";
+  }
+  return "Request failed. Please retry.";
+}
+
+function resolveClientTimeoutMs(): number {
+  const raw = Number(process.env.NEXT_PUBLIC_ZROKY_API_TIMEOUT_MS ?? defaultClientTimeoutMs);
+  return Number.isFinite(raw) && raw > 0 ? raw : defaultClientTimeoutMs;
+}
+
+function createRequestSignal(externalSignal?: AbortSignal): {
+  cleanup: () => void;
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  timeoutMs: number;
+} {
+  const timeoutMs = resolveClientTimeoutMs();
+  const controller = new AbortController();
+  let didTimeOut = false;
+
+  const onAbort = () => {
+    controller.abort(externalSignal?.reason);
+  };
+
+  if (externalSignal?.aborted) {
+    onAbort();
+  } else {
+    externalSignal?.addEventListener("abort", onAbort, { once: true });
+  }
+
+  const timeout = globalThis.setTimeout(() => {
+    didTimeOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  return {
+    cleanup: () => {
+      globalThis.clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", onAbort);
+    },
+    signal: controller.signal,
+    timedOut: () => didTimeOut,
+    timeoutMs,
+  };
+}
+
 async function parseErrorDetail(response: Response): Promise<string | null> {
+  let text = "";
+
   try {
-    const payload = (await response.json()) as { detail?: string };
-    if (typeof payload.detail === "string" && payload.detail.trim()) {
-      return payload.detail;
+    text = await response.text();
+  } catch {
+    return null;
+  }
+
+  const trimmedText = text.trim();
+  if (!trimmedText) {
+    return null;
+  }
+
+  const contentType = response.headers?.get("content-type") ?? null;
+  if (isHtmlErrorText(trimmedText, contentType)) {
+    return fallbackHttpErrorMessage(response.status);
+  }
+
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown; message?: unknown; error?: unknown };
+    for (const field of [payload.detail, payload.message, payload.error]) {
+      if (typeof field === "string" && field.trim()) {
+        return field;
+      }
     }
   } catch {
-    const text = await response.text();
-    if (text.trim()) {
-      return text;
-    }
+    return trimmedText;
   }
-  return null;
+
+  return trimmedText;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -180,6 +270,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const performRequest = async (): Promise<Response> => {
     const token = readAccessTokenFromBrowser();
+    const requestSignal = createRequestSignal(options.signal);
     const headers: Record<string, string> = {};
     if (options.body != null) {
       headers["content-type"] = "application/json";
@@ -188,13 +279,22 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       headers.authorization = buildAuthHeader(token);
     }
 
-    return fetch(url, {
-      method,
-      cache: "no-store",
-      headers: Object.keys(headers).length > 0 ? headers : undefined,
-      body: options.body != null ? JSON.stringify(options.body) : undefined,
-      signal: options.signal,
-    });
+    try {
+      return await fetch(url, {
+        method,
+        cache: "no-store",
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+        body: options.body != null ? JSON.stringify(options.body) : undefined,
+        signal: requestSignal.signal,
+      });
+    } catch (error) {
+      if (requestSignal.timedOut()) {
+        throw buildError(method, path, 0, `Backend API timed out after ${requestSignal.timeoutMs}ms.`);
+      }
+      throw error;
+    } finally {
+      requestSignal.cleanup();
+    }
   };
 
   let response = await performRequest();
@@ -211,6 +311,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!response.ok) {
     const detail = await parseErrorDetail(response);
     throw buildError(method, path, response.status, detail);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return (await response.json()) as T;
@@ -951,6 +1055,13 @@ export function getMe(signal?: AbortSignal): Promise<MeResponse> {
   return request<MeResponse>("/v1/auth/me", { signal });
 }
 
+export function updateMe(body: { display_name: string | null }): Promise<MeResponse> {
+  return request<MeResponse>("/v1/auth/me", {
+    method: "PATCH",
+    body,
+  });
+}
+
 export function changePassword(
   currentPassword: string,
   newPassword: string,
@@ -1000,8 +1111,8 @@ export async function getSharedDiagnosis(shareToken: string): Promise<DiagnosisS
 
 // ── Cost Forecasting ──────────────────────────────────────────────────────────
 
-export function listProjectMembers(projectId: string, signal?: AbortSignal): Promise<ProjectMemberListResponse> {
-  return request<ProjectMemberListResponse>(`/v1/projects/${encodeURIComponent(projectId)}/memberships`, { signal });
+export function listProjectMembers(projectId: string, signal?: AbortSignal): Promise<ProjectMembershipResponse[]> {
+  return request<ProjectMembershipResponse[]>(`/v1/projects/${encodeURIComponent(projectId)}/memberships`, { signal });
 }
 
 export function upsertProjectMember(
@@ -1154,6 +1265,47 @@ export function updateIssueTriage(
 ): Promise<IssueItem> {
   return request<IssueItem>(`/v1/issues/${encodeURIComponent(issueId)}/triage`, {
     method: "PATCH",
+    body,
+  });
+}
+
+export interface IssueGoldenPromotionResponse {
+  issue: IssueItem;
+  golden: IssueGoldenProof;
+}
+
+export function promoteIssueToGolden(
+  issueId: string,
+  body: {
+    golden_set_id?: string;
+    expected_output_text?: string;
+    criteria_json?: string;
+    blocks_ci?: boolean;
+  } = {},
+): Promise<IssueGoldenPromotionResponse> {
+  return request<IssueGoldenPromotionResponse>(`/v1/issues/${encodeURIComponent(issueId)}/promote-golden`, {
+    method: "POST",
+    body,
+  });
+}
+
+export interface IssueCiGateResponse {
+  issue: IssueItem;
+  ci_gate: IssueCiGateProof;
+}
+
+export function runIssueCiGate(
+  issueId: string,
+  body: {
+    git_sha?: string;
+    branch_name?: string;
+    pr_number?: number;
+    commit_message?: string;
+    replay_mode?: ReplayMode;
+  } = {},
+): Promise<IssueCiGateResponse> {
+  return request<IssueCiGateResponse>(`/v1/issues/${encodeURIComponent(issueId)}/ci-gate`, {
+    method: "POST",
     body,
   });
 }
@@ -1726,7 +1878,10 @@ export interface GoldenTraceView {
   golden_set_id: string;
   project_id: string;
   call_id: string | null;
+  status: string;
   expected_output_text: string | null;
+  source_output_text: string | null;
+  source_evidence_json: string | null;
   expected_tokens: number | null;
   expected_cost_usd: number | null;
   expected_latency_ms: number | null;
@@ -1792,6 +1947,13 @@ export function updateGoldenSet(
   });
 }
 
+export function deleteGoldenSet(id: string, signal?: AbortSignal): Promise<void> {
+  return request<void>(`/v1/goldens/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    signal,
+  });
+}
+
 export function listGoldenTraces(
   goldenSetId: string,
   params: { limit?: number } = {},
@@ -1807,7 +1969,10 @@ export function addGoldenTrace(
   goldenSetId: string,
   body: {
     call_id?: string;
+    status?: string;
     expected_output_text?: string;
+    source_output_text?: string;
+    source_evidence_json?: string;
     expected_tokens?: number;
     expected_cost_usd?: number;
     expected_latency_ms?: number;
@@ -1826,8 +1991,8 @@ export function deleteGoldenTrace(
   goldenSetId: string,
   traceId: string,
   signal?: AbortSignal,
-): Promise<{ message: string }> {
-  return request<{ message: string }>(
+): Promise<void> {
+  return request<void>(
     `/v1/goldens/${encodeURIComponent(goldenSetId)}/traces/${encodeURIComponent(traceId)}`,
     { method: "DELETE", signal },
   );
@@ -1960,6 +2125,38 @@ export interface RegressionCIRunDetailResponse {
   pr_comment_markdown: string | null;
 }
 
+export interface RegressionCIRunResponse {
+  run_id: string;
+  project_id: string;
+  git_sha: string;
+  status: string;
+  summary_url: string;
+}
+
+export interface RegressionCIChangedFilePayload {
+  path: string;
+  status?: string | null;
+  additions?: number | null;
+  deletions?: number | null;
+  patch?: string | null;
+}
+
+export interface RegressionCIOperatorOverridePayload {
+  category: string;
+  target?: string | null;
+}
+
+export interface RegressionCIRunRequest {
+  git_sha: string;
+  pr_body?: string | null;
+  zroky_yaml?: string | null;
+  changed_files?: RegressionCIChangedFilePayload[];
+  threshold?: number;
+  operator_override?: RegressionCIOperatorOverridePayload | null;
+  target_total_cap?: number | null;
+  sample_window_days?: number;
+}
+
 export type ReplayMode = "stub" | "real_llm" | "mocked-tool" | "live-sandbox" | "shadow";
 
 export interface ReplayCreatePayload {
@@ -1993,6 +2190,17 @@ export function listReplayRuns(
 
 export function getReplayRun(runId: string, signal?: AbortSignal): Promise<ReplayRunDetailItem> {
   return request<ReplayRunDetailItem>(`/v1/replay/runs/${encodeURIComponent(runId)}`, { signal });
+}
+
+export function runRegressionCI(
+  body: RegressionCIRunRequest,
+  signal?: AbortSignal,
+): Promise<RegressionCIRunResponse> {
+  return request<RegressionCIRunResponse>("/v1/regression-ci/run", {
+    method: "POST",
+    body,
+    signal,
+  });
 }
 
 export function getRegressionCIRun(

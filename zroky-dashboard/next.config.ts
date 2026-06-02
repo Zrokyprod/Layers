@@ -14,7 +14,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self'",
-      "connect-src 'self' https://api.zroky.com",
+      "connect-src 'self' https://api.zroky.ai https://api.zroky.com",
       "frame-ancestors 'none'",
     ].join("; "),
   },
@@ -22,6 +22,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  devIndicators: false,
   outputFileTracingRoot: process.cwd(),
   async headers() {
     return [
@@ -34,9 +35,9 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
-        source: "/account",
-        destination: "/settings/profile",
-        permanent: true,
+        source: "/settings/profile",
+        destination: "/account",
+        permanent: false,
       },
       {
         source: "/notifications",
