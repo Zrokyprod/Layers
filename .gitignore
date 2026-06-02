@@ -95,6 +95,11 @@ docfx_temp/
 **/.gocache/
 .data/
 
+# Generated QA / Codex artifacts
+/zroky-dashboard/.codex-artifacts/
+/zroky-dashboard/artifacts/
+/zroky-landing/.codex-artifacts/
+
 # ── Database ──────────────────────────────────────────────────────────────────
 *.sqlite
 *.sqlite3
