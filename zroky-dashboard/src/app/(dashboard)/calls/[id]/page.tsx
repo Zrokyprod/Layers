@@ -355,8 +355,8 @@ export default function CallDetailPage() {
   const traceTree = traceTreeQuery.data ?? null;
   const fixWatch = fixWatchQuery.data ?? null;
   const prLinks = prLinksQuery.data ?? [];
-  const loading = detailQuery.isLoading || traceTreeQuery.isLoading || fixWatchQuery.isLoading;
-  const error = detailQuery.error?.message ?? traceTreeQuery.error?.message ?? fixWatchQuery.error?.message ?? null;
+  const loading = detailQuery.isLoading || traceTreeQuery.isLoading;
+  const error = detailQuery.error?.message ?? traceTreeQuery.error?.message ?? null;
 
   const diagnosis = useMemo(() => {
     const diagnoses = detail?.diagnosis_result?.diagnoses;
