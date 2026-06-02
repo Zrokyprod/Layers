@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
+import { FlaskConical, GitBranch, PlayCircle, ShieldCheck } from "lucide-react";
 
 import { getEvaluationSettings, updateEvaluationSettings } from "@/lib/api";
 import { useCalibrationLatest, useJudgeHealth, useTriggerCalibrationRunNow } from "@/lib/hooks";
@@ -40,8 +41,7 @@ function WorkspaceCard({
   return (
     <Link
       href={href}
-      className={`panel panel-muted${active ? " border-primary" : ""}`}
-      style={{ textDecoration: "none" }}
+      className={`panel panel-muted settings-workspace-card${active ? " border-primary" : ""}`}
     >
       <div className="panel-header">
         <div>
@@ -361,6 +361,37 @@ function EvaluationSettingsContent() {
             </div>
           </form>
         )}
+      </section>
+
+      <section className="panel settings-control-panel">
+        <header className="panel-header">
+          <div>
+            <h3>Where These Controls Apply</h3>
+            <p>Evaluation settings are reused across the reliability path instead of living as isolated preferences.</p>
+          </div>
+        </header>
+        <div className="settings-gate-map">
+          <div className="settings-gate-map-item">
+            <PlayCircle aria-hidden="true" />
+            <strong>Replay Lab</strong>
+            <span>Judge mode and confidence threshold score replay candidate outputs.</span>
+          </div>
+          <div className="settings-gate-map-item">
+            <FlaskConical aria-hidden="true" />
+            <strong>Goldens</strong>
+            <span>Replay calibration samples can promote trustworthy traces into golden sets.</span>
+          </div>
+          <div className="settings-gate-map-item">
+            <GitBranch aria-hidden="true" />
+            <strong>CI Gates</strong>
+            <span>Strict judge behavior increases release-blocking confidence for regressions.</span>
+          </div>
+          <div className="settings-gate-map-item">
+            <ShieldCheck aria-hidden="true" />
+            <strong>Cost Impact</strong>
+            <span>Low-confidence runs should not be used as business proof without review.</span>
+          </div>
+        </div>
       </section>
 
       <section className="panel">

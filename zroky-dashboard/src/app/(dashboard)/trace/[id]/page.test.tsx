@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,10 @@ import TraceDetailPage from "./page";
 
 const hooks = vi.hoisted(() => ({
   mutateReplay: vi.fn(),
+  refetchCallDetail: vi.fn(),
+  refetchTraceById: vi.fn(),
+  refetchTraceTree: vi.fn(),
+  refetchTraces: vi.fn(),
   useCallDetail: vi.fn(),
   useCallTraceTree: vi.fn(),
   useCreateReplayRunFromCall: vi.fn(),
@@ -161,9 +165,11 @@ function mockTraceDetail({
   hooks.useRecentTraces.mockReturnValue({
     data: { window_days: 30, total: 1, multi_agent_count: 0, failed_count: 1, items: [loadedTrace] },
     error: null,
+    isFetching: false,
     isLoading: false,
+    refetch: hooks.refetchTraces,
   });
-  hooks.useTraceById.mockReturnValue({ data: loadedTrace, error: null, isLoading: false });
+  hooks.useTraceById.mockReturnValue({ data: loadedTrace, error: null, isFetching: false, isLoading: false, refetch: hooks.refetchTraceById });
   hooks.useCallTraceTree.mockReturnValue({
     data: {
       call_id: loadedTrace.root_call_id,
@@ -174,9 +180,11 @@ function mockTraceDetail({
       root_node: root,
     },
     error: null,
+    isFetching: false,
     isLoading: false,
+    refetch: hooks.refetchTraceTree,
   });
-  hooks.useCallDetail.mockReturnValue({ data: detailData, error: null, isLoading: false });
+  hooks.useCallDetail.mockReturnValue({ data: detailData, error: null, isFetching: false, isLoading: false, refetch: hooks.refetchCallDetail });
   hooks.useCreateReplayRunFromCall.mockReturnValue({
     isPending: false,
     mutate: hooks.mutateReplay,
@@ -187,6 +195,17 @@ describe("Trace detail MVP", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     navigation.traceId = "trace_refund";
+    hooks.refetchCallDetail.mockResolvedValue({});
+    hooks.refetchTraceById.mockResolvedValue({});
+    hooks.refetchTraceTree.mockResolvedValue({});
+    hooks.refetchTraces.mockResolvedValue({});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    URL.createObjectURL = vi.fn(() => "blob:trace-detail-export");
+    URL.revokeObjectURL = vi.fn();
+    HTMLAnchorElement.prototype.click = vi.fn();
     mockTraceDetail();
   });
 
@@ -201,7 +220,11 @@ describe("Trace detail MVP", () => {
     expect(within(hero).getByText("Failed")).toBeInTheDocument();
     expect(within(hero).getByText("Replay ready")).toBeInTheDocument();
     expect(within(hero).getByText("TOOL_FAILURE")).toBeInTheDocument();
+    expect(within(hero).getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    expect(within(hero).getByRole("button", { name: "Copy trace ID" })).toBeInTheDocument();
+    expect(within(hero).getByRole("button", { name: "Run replay" })).toBeInTheDocument();
     expect(screen.getByText("Failed · Refund Agent · openai")).toBeInTheDocument();
+    expect(hooks.useRecentTraces).toHaveBeenCalledWith(30, 100);
     const metadata = screen.getByLabelText("Trace metadata");
     expect(metadata.classList.contains("trace-detail-metrics")).toBe(true);
     expect(metadata.querySelectorAll(".trace-detail-metric")).toHaveLength(5);
@@ -223,8 +246,10 @@ describe("Trace detail MVP", () => {
     expect(within(panel).getByText("Replay readiness")).toBeInTheDocument();
     expect(within(panel).getByText("Related evidence")).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: "View source call" }).getAttribute("href")).toBe("/calls/call_refund");
+    expect(within(panel).getByRole("button", { name: "Copy root ID" })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Run replay" })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Copy trace ID" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Export raw JSON" })).toBeInTheDocument();
     expect(within(panel).getByText("Golden eligibility")).toBeInTheDocument();
   });
 
@@ -238,6 +263,9 @@ describe("Trace detail MVP", () => {
     if (!failedStep) throw new Error("Missing failed timeline step");
     expect(failedStep.classList.contains("is-failed")).toBe(true);
     expect(within(failedStep).getByText("Tool call")).toBeInTheDocument();
+    expect(within(failedStep).getByRole("link", { name: "View call" }).getAttribute("href")).toBe("/calls/call_tool");
+    fireEvent.click(within(failedStep).getByRole("button", { name: "Copy call ID" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("call_tool"));
     expect(screen.getByText("I want a refund for order #1234")).toBeInTheDocument();
     expect(screen.getByText("Payment failed with timeout.")).toBeInTheDocument();
     const toolSection = screen.getByRole("heading", { name: "Tool behavior" }).closest("article");
@@ -275,9 +303,14 @@ describe("Trace detail MVP", () => {
     render(<TraceDetailPage />);
 
     await screen.findByRole("heading", { name: "Trace timeline" });
+    expect(screen.getByRole("heading", { name: "Raw evidence" })).toBeInTheDocument();
     const summary = screen.getByText("View raw payload JSON");
     const details = summary.closest("details");
     expect(details?.hasAttribute("open")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Copy JSON" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('"trace_id": "trace_refund"')));
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    expect(URL.createObjectURL).toHaveBeenCalled();
     expect(screen.getByText("Run trusted replay before creating a Golden.")).toBeInTheDocument();
     expect(screen.queryByText("Create Golden")).not.toBeInTheDocument();
   });
@@ -285,11 +318,29 @@ describe("Trace detail MVP", () => {
   it("runs replay from the root call when eligible", async () => {
     render(<TraceDetailPage />);
 
-    const button = await screen.findByRole("button", { name: "Run replay" });
-    fireEvent.click(button);
+    const buttons = await screen.findAllByRole("button", { name: "Run replay" });
+    fireEvent.click(buttons[0]);
     expect(hooks.mutateReplay).toHaveBeenCalledWith({
       callId: "call_refund",
       payload: { replay_mode: "real_llm" },
     });
+  });
+
+  it("refreshes all dependent trace detail queries and copies panel IDs", async () => {
+    render(<TraceDetailPage />);
+
+    const hero = (await screen.findByRole("heading", { name: "Refund Agent trace" })).closest(".trace-detail-hero");
+    if (!hero) throw new Error("Missing trace detail hero");
+    fireEvent.click(within(hero).getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(hooks.refetchTraces).toHaveBeenCalledTimes(1));
+    expect(hooks.refetchTraceById).toHaveBeenCalledTimes(1);
+    expect(hooks.refetchTraceTree).toHaveBeenCalledTimes(1);
+    expect(hooks.refetchCallDetail).toHaveBeenCalledTimes(1);
+
+    const panel = screen.getByLabelText("Trace action panel");
+    fireEvent.click(within(panel).getByRole("button", { name: "Copy root ID" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("call_refund"));
+    fireEvent.click(within(panel).getByRole("button", { name: "Export raw JSON" }));
+    expect(URL.createObjectURL).toHaveBeenCalled();
   });
 });

@@ -1,10 +1,12 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useSearchParams } from "next/navigation";
+import { AlertTriangle, CreditCard, Gauge, ReceiptText, ShieldCheck } from "lucide-react";
 
-import { useBudget, useUpdateBudget } from "@/lib/hooks";
+import { useBudget, useBudgetStatus, useUpdateBudget } from "@/lib/hooks";
 import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
   createBillingCheckout,
@@ -62,8 +64,28 @@ function formatEntitlement(value: unknown): string {
   return value == null ? "Not configured" : String(value);
 }
 
-export default function BillingPage() {
+function upgradeHintMessage(value: string | null): string | null {
+  if (value === "replay.monthly_runs") {
+    return "Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity.";
+  }
+  if (value === "pilot.goldens_basic") {
+    return "Goldens require a plan with release-safety entitlements.";
+  }
+  if (value) {
+    return "This feature needs a higher plan or an enabled entitlement.";
+  }
+  return null;
+}
+
+function isProblemMessage(value: string): boolean {
+  const text = value.toLowerCase();
+  return text.includes("failed") || text.includes("unavailable") || text.includes("not configured") || text.includes("disabled");
+}
+
+function BillingSettingsContent() {
+  const searchParams = useSearchParams();
   const budget = useBudget();
+  const budgetStatus = useBudgetStatus();
   const updateBudget = useUpdateBudget();
 
   const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
@@ -160,15 +182,44 @@ export default function BillingPage() {
 
   const currentPlanCode = billingMe?.plan_code ?? "free";
   const template = billingMe?.plan_template ?? {};
+  const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
 
   return (
     <div className="page-content">
+      {upgradeHint && <div className="alert-strip billing-upgrade-hint">{upgradeHint}</div>}
       {error && <div className="alert-strip alert-strip-error">{error}</div>}
       {actionMsg && (
-        <div className={actionMsg.includes("success") ? "alert-strip" : "alert-strip alert-strip-error"}>
+        <div className={isProblemMessage(actionMsg) ? "alert-strip alert-strip-error" : "alert-strip"}>
           {actionMsg}
         </div>
       )}
+
+      <section className="settings-summary-grid">
+        <article className="panel settings-summary-card">
+          <CreditCard aria-hidden="true" />
+          <span>Current plan</span>
+          <strong>{currentPlanCode.toUpperCase()}</strong>
+          <small>{billingMe?.status ?? "Loading billing status"}</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <ReceiptText aria-hidden="true" />
+          <span>Stripe portal</span>
+          <strong>{billingMe?.stripe_customer_id ? "Ready" : "Not created"}</strong>
+          <small>{billingMe?.stripe_customer_id ? "Customer portal can open." : "Checkout must create a customer first."}</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <Gauge aria-hidden="true" />
+          <span>Budget status</span>
+          <strong>{budgetStatus.data?.status ?? "Unknown"}</strong>
+          <small>{budgetStatus.data?.limit_usd == null ? "No hard monthly limit saved." : `$${budgetStatus.data.spent_usd.toFixed(2)} spent this period.`}</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <ShieldCheck aria-hidden="true" />
+          <span>SLA tier</span>
+          <strong>{billingMe?.sla_tier ?? "standard"}</strong>
+          <small>Entitlements are read from backend plan state.</small>
+        </article>
+      </section>
 
       <section className="panel">
         <header className="panel-header">
@@ -186,6 +237,16 @@ export default function BillingPage() {
             Manage in Stripe
           </button>
         </header>
+
+        {isProblemMessage(actionMsg) ? (
+          <div className="settings-config-warning" role="status">
+            <AlertTriangle aria-hidden="true" />
+            <div>
+              <strong>Billing action is not ready in this environment.</strong>
+              <span>{actionMsg}</span>
+            </div>
+          </div>
+        ) : null}
 
         {loading && !billingMe ? (
           <div className="loading" />
@@ -252,7 +313,7 @@ export default function BillingPage() {
       <section className="panel">
         <header className="panel-header">
           <h3>Spend Limits</h3>
-          <p>Hard cap on monthly AI cost. Requests are blocked when the limit is reached.</p>
+          <p>Saved monthly AI spend controls used by the backend budget guard and alerting flow.</p>
         </header>
 
         <form onSubmit={onSaveBudget} className="billing-budget-form">
@@ -323,5 +384,13 @@ export default function BillingPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense fallback={<div className="page-content"><section className="panel"><div className="loading" /></section></div>}>
+      <BillingSettingsContent />
+    </Suspense>
   );
 }

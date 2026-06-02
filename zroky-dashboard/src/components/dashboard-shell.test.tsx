@@ -1,0 +1,345 @@
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DashboardShell } from "./dashboard-shell";
+
+const navState = vi.hoisted(() => ({
+  pathname: "/home",
+  planTemplate: {
+    "pilot.replay_stub": true,
+    "pilot.goldens_basic": true,
+    "pro.ci_gate_nonblocking": true,
+  } as Record<string, unknown>,
+  planCode: "pro" as string | undefined,
+  billingDataAvailable: true,
+  billingLoading: false,
+  budgetDataAvailable: true,
+}));
+
+const routerState = vi.hoisted(() => ({
+  push: vi.fn(),
+  refresh: vi.fn(),
+  replace: vi.fn(),
+}));
+
+const authState = vi.hoisted(() => ({
+  clearAccessToken: vi.fn(),
+}));
+
+const queryClientState = vi.hoisted(() => ({
+  invalidateQueries: vi.fn(),
+}));
+
+const storeState = vi.hoisted(() => ({
+  toggleSidebar: vi.fn(),
+  setLastVisitedPage: vi.fn(),
+  setSelectedProject: vi.fn(),
+  setDateRange: vi.fn(),
+  toggleRealTime: vi.fn(),
+}));
+
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string;
+    children: ReactNode;
+    [key: string]: unknown;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
+vi.mock("next/image", () => ({
+  default: ({
+    alt,
+    src,
+    ...props
+  }: {
+    alt: string;
+    src: string;
+    [key: string]: unknown;
+  }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt={alt} src={src} {...props} />
+  ),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => navState.pathname,
+  useRouter: () => ({
+    replace: routerState.replace,
+    refresh: routerState.refresh,
+    push: routerState.push,
+  }),
+}));
+
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: vi.fn(({ queryKey }: { queryKey: unknown[] }) => {
+    const key = queryKey.join(":");
+    if (key === "billing:me") {
+      return {
+        data: navState.billingDataAvailable
+          ? { plan_template: navState.planTemplate, plan_code: navState.planCode }
+          : undefined,
+        isLoading: navState.billingLoading,
+      };
+    }
+    if (key === "shell-budget-status") {
+      return {
+        data: navState.budgetDataAvailable
+          ? {
+              spent_usd: 12.5,
+              limit_usd: 100,
+              percent_used: 12.5,
+              days_remaining_in_period: 20,
+              forecast_exhaust_in_days: null,
+              status: "ok",
+              forecast_risk_level: "low",
+              forecast_recommendation: "Within budget.",
+            }
+          : undefined,
+        isLoading: false,
+      };
+    }
+    if (key === "shell-issues-count") return { data: { items: [] } };
+    if (key === "shell-agents-count") return { data: [] };
+    return { data: undefined };
+  }),
+  useQueryClient: () => queryClientState,
+}));
+
+vi.mock("@/lib/api", () => ({
+  getBillingMe: vi.fn(),
+  getBudgetStatus: vi.fn(),
+  listIssues: vi.fn(),
+  getReliabilityLeaderboard: vi.fn(),
+}));
+
+vi.mock("@/lib/auth", () => ({
+  clearAccessToken: authState.clearAccessToken,
+}));
+
+vi.mock("@/lib/hooks", () => ({
+  useMe: () => ({
+    data: {
+      email: "sanket@acme.com",
+      display_name: "Sanket K.",
+    },
+  }),
+  useProjectSettings: () => ({
+    data: { project_id: "proj_1", name: "Acme Corp" },
+  }),
+}));
+
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: () => ({
+    sidebarOpen: true,
+    toggleSidebar: storeState.toggleSidebar,
+    setLastVisitedPage: storeState.setLastVisitedPage,
+    selectedProject: "proj_1",
+    setSelectedProject: storeState.setSelectedProject,
+    dateRange: { from: null, to: null },
+    setDateRange: storeState.setDateRange,
+    realTimeEnabled: true,
+    toggleRealTime: storeState.toggleRealTime,
+  }),
+}));
+
+vi.mock("@/lib/keyboard-shortcuts", () => ({
+  useKeyboardShortcuts: vi.fn(),
+}));
+
+vi.mock("./command-palette", () => ({
+  CommandPalette: () => null,
+}));
+
+vi.mock("./shortcuts-help", () => ({
+  ShortcutsHelp: () => null,
+}));
+
+function primaryNavLabels(): string[] {
+  const nav = screen.getByRole("navigation", { name: "Primary" });
+  return Array.from(nav.querySelectorAll("[data-nav-id] .nav-link-main span:last-child"))
+    .map((node) => node.textContent ?? "");
+}
+
+function navItem(id: string): Element {
+  const nav = screen.getByRole("navigation", { name: "Primary" });
+  const item = nav.querySelector(`[data-nav-id="${id}"]`);
+  if (!item) throw new Error(`Missing nav item ${id}`);
+  return item;
+}
+
+describe("DashboardShell primary navigation", () => {
+  beforeEach(() => {
+    navState.pathname = "/home";
+    navState.planTemplate = {
+      "pilot.replay_stub": true,
+      "pilot.goldens_basic": true,
+      "pro.ci_gate_nonblocking": true,
+    };
+    navState.planCode = "pro";
+    navState.billingDataAvailable = true;
+    navState.billingLoading = false;
+    navState.budgetDataAvailable = true;
+    routerState.push.mockClear();
+    routerState.refresh.mockClear();
+    routerState.replace.mockClear();
+    authState.clearAccessToken.mockClear();
+    queryClientState.invalidateQueries.mockClear();
+    storeState.toggleSidebar.mockClear();
+    storeState.setLastVisitedPage.mockClear();
+    storeState.setSelectedProject.mockClear();
+    storeState.setDateRange.mockClear();
+    storeState.toggleRealTime.mockClear();
+  });
+
+  it("renders the MVP primary nav in the required order", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(primaryNavLabels()).toEqual([
+      "Failure Inbox",
+      "Issues",
+      "Replay Lab",
+      "Goldens",
+      "CI Gates",
+      "Traces",
+      "Cost",
+      "Settings",
+    ]);
+    expect(screen.queryByText("Provider Drift")).toBeNull();
+    expect(navItem("failure-inbox").getAttribute("href")).toBe("/home");
+  });
+
+  it("renders the dashboard logo image without the old text lockup", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    const logo = screen.getByRole("img", { name: "Zroky" });
+    expect(logo.getAttribute("src")).toBe("/zroky-sidebar-logo.png");
+    expect(logo.classList.contains("sidebar-logo-image")).toBe(true);
+    expect(screen.queryByText("ZROKY")).not.toBeInTheDocument();
+  });
+
+  it("renders CI Gates as a disabled placeholder without a route", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    const ciGates = navItem("ci-gates");
+    expect(ciGates.getAttribute("aria-disabled")).toBeNull();
+    expect(ciGates.getAttribute("href")).toBe("/ci-gates");
+    expect(within(ciGates as HTMLElement).queryByText("soon")).toBeNull();
+  });
+
+  it("disables gated nav entries when the plan template lacks entitlement", () => {
+    navState.planTemplate = {};
+    navState.planCode = "free";
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(navItem("replay-lab").getAttribute("aria-disabled")).toBe("true");
+    expect(navItem("goldens").getAttribute("aria-disabled")).toBe("true");
+    expect(within(navItem("replay-lab") as HTMLElement).getByText("locked")).toBeInTheDocument();
+    expect(within(navItem("goldens") as HTMLElement).getByText("locked")).toBeInTheDocument();
+  });
+
+  it("uses the actual billing plan code for the sidebar plan badge", () => {
+    navState.planCode = "enterprise";
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Enterprise Plan")).toBeInTheDocument();
+    expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
+  });
+
+  it("does not show Pro Plan when billing data is unavailable", () => {
+    navState.billingDataAvailable = false;
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Plan unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
+  });
+
+  it("does not lock Goldens for paid plan-code fallback", () => {
+    navState.planTemplate = {};
+    navState.planCode = "pro";
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(navItem("goldens").getAttribute("aria-disabled")).toBeNull();
+    expect(navItem("goldens").getAttribute("href")).toBe("/goldens");
+    expect(within(navItem("goldens") as HTMLElement).queryByText("locked")).toBeNull();
+  });
+
+  it("opens an account menu from the sidebar user row instead of logging out immediately", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
+
+    expect(authState.clearAccessToken).not.toHaveBeenCalled();
+    expect(screen.getByRole("menu", { name: "Account menu" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Account" }).getAttribute("href")).toBe("/account");
+  });
+
+  it("logs out only from the explicit account menu action", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Log out" }));
+
+    expect(authState.clearAccessToken).toHaveBeenCalledTimes(1);
+    expect(routerState.replace).toHaveBeenCalledWith("/login?logged_out=1");
+    expect(routerState.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens real workspace and route menus from shell controls", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace menu" }));
+
+    expect(screen.getByRole("menu", { name: "Workspace menu" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Project settings/ }).getAttribute("href")).toBe("/settings");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open dashboard navigation menu" }));
+
+    expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Cost/ }).getAttribute("href")).toBe("/cost");
+  });
+
+  it("applies a dashboard date preset and invalidates dashboard queries", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose dashboard time window" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Last 30 days/ }));
+
+    expect(storeState.setDateRange).toHaveBeenCalledTimes(1);
+    expect(storeState.setDateRange.mock.calls[0]?.[0]).toMatchObject({
+      from: expect.any(Date),
+      to: expect.any(Date),
+    });
+    expect(queryClientState.invalidateQueries).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens environment status and toggles live refresh", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open environment status" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Live dashboard refresh/ }));
+
+    expect(storeState.toggleRealTime).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens page actions from the filter control", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open page actions and filters" }));
+
+    expect(screen.getByRole("menu", { name: "Page actions and filters" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Failed calls/ }).getAttribute("href")).toBe("/calls?status=failed");
+  });
+});

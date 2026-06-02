@@ -1,319 +1,533 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRecentTraces } from "@/lib/hooks";
-import { formatUsd, formatDateTime, formatCount } from "@/lib/format";
-import type { TraceListItem } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { Copy, Download, GitBranch, Play, RefreshCw, Search, SlidersHorizontal, XCircle } from "lucide-react";
 
-function providerTone(provider: string): string {
-  const key = provider.toLowerCase();
-  if (key.includes("openai")) return "openai";
-  if (key.includes("anthropic")) return "anthropic";
-  if (key.includes("google") || key.includes("gemini")) return "google";
-  if (key.includes("cohere")) return "cohere";
-  if (key.includes("mistral")) return "mistral";
-  return "default";
+import type { ReplayMode } from "@/lib/api";
+import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
+import { useCreateReplayRunFromCall, useListCalls, useRecentTraces } from "@/lib/hooks";
+import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
+import type { CallListItem, TraceListItem } from "@/lib/types";
+
+const DASH = "—";
+const TRACE_LIMIT = 100;
+const SLOW_TRACE_LATENCY_MS = 1000;
+
+type StatusFilter = "all" | "failed" | "success";
+type ReplayFilter = "all" | "ready" | "missing";
+type LatencyFilter = "all" | "slow";
+type WindowDays = 7 | 14 | 30;
+type ActionState = { kind: "success" | "error"; message: string } | null;
+
+function statusLabel(item: TraceListItem): string {
+  return item.has_failure ? "Failed" : "Success";
 }
 
-function TraceRow({ item }: { item: TraceListItem }) {
-  function downloadBlob(filename: string, contents: string, type = "text/plain") {
-    const blob = new Blob([contents], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+function statusClass(item: TraceListItem): string {
+  return item.has_failure ? "trace-status-failed" : "trace-status-success";
+}
 
-  function exportTraceJson() {
-    try {
-      const json = JSON.stringify(item, null, 2);
-      downloadBlob(`trace-${item.trace_id}.json`, json, "application/json");
-    } catch {
-      // ignore
-    }
-  }
+function latencyLabel(value: number | null | undefined): string {
+  if (value == null) return DASH;
+  return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(2)}s`;
+}
 
-  async function copyTrace() {
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(JSON.stringify(item, null, 2));
-      }
-    } catch {
-      // ignore
-    }
-  }
+function avgLatencyLabel(values: Array<number | null | undefined>): string {
+  const valid = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (valid.length === 0) return DASH;
+  const avg = valid.reduce((sum, value) => sum + value, 0) / valid.length;
+  return latencyLabel(avg);
+}
 
+function traceTitle(item: TraceListItem): string {
+  if (item.agents.length > 0) return item.agents.join(" -> ");
+  return item.root_call_id ? `Call ${item.root_call_id.slice(0, 12)}` : `Trace ${item.trace_id.slice(0, 12)}`;
+}
+
+function traceMeta(item: TraceListItem): string {
+  return `${item.trace_id} · ${formatCount(item.call_count)} span${item.call_count === 1 ? "" : "s"}`;
+}
+
+function callTypeLabel(call: CallListItem | undefined): string {
+  return call?.call_type?.trim() || "trace";
+}
+
+function modelLabel(item: TraceListItem, call: CallListItem | undefined): string {
+  return call?.model?.trim() || item.providers[0] || DASH;
+}
+
+function agentLabel(item: TraceListItem, call: CallListItem | undefined): string {
+  return item.agents[0] || call?.agent_name || DASH;
+}
+
+function traceMatchesSearch(item: TraceListItem, call: CallListItem | undefined, search: string): boolean {
+  const needle = search.trim().toLowerCase();
+  if (!needle) return true;
+  return [
+    item.trace_id,
+    item.root_call_id,
+    ...item.agents,
+    ...item.providers,
+    item.root_failure_category ?? "",
+    call?.agent_name ?? "",
+    call?.model ?? "",
+    call?.call_type ?? "",
+    call?.status ?? "",
+  ].some((value) => value.toLowerCase().includes(needle));
+}
+
+function traceErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Failed to load traces.";
+  if (/422|less_than_equal|limit/i.test(error.message)) {
+    return "Trace query exceeded the backend window. Refresh with the safe 100 trace limit.";
+  }
+  return error.message || "Failed to load traces.";
+}
+
+function downloadJson(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function TraceMetric({
+  label,
+  value,
+  helper,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className={`trace-row${item.has_failure ? " trace-row-failed" : " trace-row-ok"}`}>
-      <div className="trace-row-main">
-        <div className="trace-row-title">
-          <strong>{item.agents.length > 0 ? item.agents.join(" -> ") : "Unnamed Trace"}</strong>
-          {item.agent_count > 1 && (
-            <span className="trace-badge trace-badge-multi">{item.agent_count} agents</span>
-          )}
-          {item.has_failure && (
-            <span className="trace-badge trace-badge-failed">
-              {item.root_failure_category ?? "FAILED"}
-            </span>
-          )}
-        </div>
-
-        <div className="trace-row-meta">
-          {item.providers.map((p) => (
-            <span
-              key={p}
-              className={`trace-provider-tag provider-${providerTone(p)}`}
-            >
-              {p}
-            </span>
-          ))}
-          <span className="trace-meta-item">{formatCount(item.call_count)} call{item.call_count !== 1 ? "s" : ""}</span>
-          {item.total_cost_usd > 0 && (
-            <span className="trace-meta-item mono">{formatUsd(item.total_cost_usd)}</span>
-          )}
-          <span className="trace-meta-item">{formatDateTime(item.started_at)}</span>
-          {item.last_seen_at !== item.started_at && (
-            <span className="trace-meta-item">last seen {formatDateTime(item.last_seen_at)}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="trace-row-actions">
-        <Link href={`/calls/${item.root_call_id}`} className="btn btn-soft btn-sm">
-          Root Call
-        </Link>
-        <button className="btn btn-soft btn-sm" type="button" onClick={exportTraceJson}>Export JSON</button>
-        <button className="btn btn-soft btn-sm" type="button" onClick={copyTrace}>Copy</button>
-      </div>
-    </div>
+    <button
+      type="button"
+      className={`trace-mvp-kpi trace-mvp-kpi-button${active ? " is-active" : ""}`}
+      onClick={onClick}
+    >
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{helper}</p>
+    </button>
   );
 }
 
-type FilterMode = "all" | "multi" | "failed";
+function TraceRow({
+  item,
+  rootCall,
+  onReplay,
+  onCopyTraceId,
+  replaying,
+}: {
+  item: TraceListItem;
+  rootCall: CallListItem | undefined;
+  onReplay: (callId: string) => void;
+  onCopyTraceId: (traceId: string) => void;
+  replaying: boolean;
+}) {
+  return (
+    <tr>
+      <td>
+        <div className="trace-mvp-primary-cell">
+          <Link href={`/trace/${encodeURIComponent(item.trace_id)}`}>{traceTitle(item)}</Link>
+          <span>{traceMeta(item)}</span>
+        </div>
+      </td>
+      <td><span className={`trace-mvp-status ${statusClass(item)}`}>{statusLabel(item)}</span></td>
+      <td>{agentLabel(item, rootCall)}</td>
+      <td>{callTypeLabel(rootCall)}</td>
+      <td>{modelLabel(item, rootCall)}</td>
+      <td>{item.total_cost_usd > 0 ? formatUsd(item.total_cost_usd) : DASH}</td>
+      <td>{latencyLabel(rootCall?.latency_ms)}</td>
+      <td>{formatDateTime(item.started_at)}</td>
+      <td>
+        <div className="trace-mvp-row-actions">
+          <Link href={`/trace/${encodeURIComponent(item.trace_id)}`} className="btn btn-soft btn-sm">View trace</Link>
+          {item.root_call_id ? (
+            <Link href={`/calls/${item.root_call_id}`} className="btn btn-soft btn-sm">Source call</Link>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-soft btn-sm"
+            onClick={() => onCopyTraceId(item.trace_id)}
+          >
+            <Copy aria-hidden="true" />
+            Copy ID
+          </button>
+          {item.root_call_id ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => onReplay(item.root_call_id)}
+              disabled={replaying}
+            >
+              <Play aria-hidden="true" />
+              Replay
+            </button>
+          ) : null}
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 export default function TracePage() {
-  const [days, setDays] = useState(7);
-  const { data, isLoading, error } = useRecentTraces(days, 200);
-  const [filter, setFilter] = useState<FilterMode>("all");
-  const [providerFilter, setProviderFilter] = useState<string | null>(null);
-  const [agentFilter, setAgentFilter] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'ANY' | 'FAILED' | 'OK'>('ANY');
-  const [searchId, setSearchId] = useState<string>("");
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
+  const router = useRouter();
+  const [windowDays, setWindowDays] = useState<WindowDays>(7);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [agentFilter, setAgentFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [replayFilter, setReplayFilter] = useState<ReplayFilter>("all");
+  const [latencyFilter, setLatencyFilter] = useState<LatencyFilter>("all");
+  const [search, setSearch] = useState("");
+  const [actionState, setActionState] = useState<ActionState>(null);
 
-  const allItems = useMemo(() => data?.items ?? [], [data?.items]);
-  const multiAgentItems = useMemo(() => allItems.filter((i) => i.agent_count > 1), [allItems]);
-  const failedItems = useMemo(() => allItems.filter((i) => i.has_failure), [allItems]);
-  const totalCost = useMemo(() => allItems.reduce((s, i) => s + i.total_cost_usd, 0), [allItems]);
+  const tracesQuery = useRecentTraces(windowDays, TRACE_LIMIT);
+  const callsQuery = useListCalls({ limit: 200, sort_by: "created_at", sort_order: "desc" });
+  const replayMutation = useCreateReplayRunFromCall({
+    onSuccess: (run) => router.push(`/replay/${run.id}`),
+  });
 
-  let displayItems =
-    filter === "multi" ? multiAgentItems
-    : filter === "failed" ? failedItems
-    : allItems;
-  if (providerFilter) displayItems = displayItems.filter((i) => (i.providers ?? []).includes(providerFilter));
-  if (agentFilter) displayItems = displayItems.filter((i) => (i.agents ?? []).includes(agentFilter));
-  if (statusFilter === 'FAILED') displayItems = displayItems.filter((i) => i.has_failure);
-  if (statusFilter === 'OK') displayItems = displayItems.filter((i) => !i.has_failure);
-  if (searchId && searchId.trim()) displayItems = displayItems.filter((i) => i.trace_id.toLowerCase().includes(searchId.trim().toLowerCase()));
-  if (startDate) {
-    const from = new Date(startDate).getTime();
-    displayItems = displayItems.filter((i) => new Date(i.started_at).getTime() >= from);
+  const traces = useMemo(() => tracesQuery.data?.items ?? [], [tracesQuery.data?.items]);
+  const callsById = useMemo(() => {
+    const map = new Map<string, CallListItem>();
+    for (const call of callsQuery.data?.items ?? []) {
+      map.set(call.call_id, call);
+    }
+    return map;
+  }, [callsQuery.data?.items]);
+
+  const agentOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of traces) {
+      for (const agent of item.agents) values.add(agent);
+      const root = callsById.get(item.root_call_id);
+      if (root?.agent_name) values.add(root.agent_name);
+    }
+    return Array.from(values).sort();
+  }, [callsById, traces]);
+
+  const typeOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of traces) {
+      const root = callsById.get(item.root_call_id);
+      if (root?.call_type) values.add(root.call_type);
+    }
+    return Array.from(values).sort();
+  }, [callsById, traces]);
+
+  const modelOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of traces) {
+      for (const provider of item.providers) values.add(provider);
+      const root = callsById.get(item.root_call_id);
+      if (root?.model) values.add(root.model);
+    }
+    return Array.from(values).sort();
+  }, [callsById, traces]);
+
+  const displayRows = useMemo(() => {
+    return traces.filter((item) => {
+      const root = callsById.get(item.root_call_id);
+      if (statusFilter === "failed" && !item.has_failure) return false;
+      if (statusFilter === "success" && item.has_failure) return false;
+      if (agentFilter && agentLabel(item, root) !== agentFilter && !item.agents.includes(agentFilter)) return false;
+      if (typeFilter && callTypeLabel(root) !== typeFilter) return false;
+      if (modelFilter && modelLabel(item, root) !== modelFilter && !item.providers.includes(modelFilter)) return false;
+      if (replayFilter === "ready" && !item.root_call_id) return false;
+      if (replayFilter === "missing" && item.root_call_id) return false;
+      if (latencyFilter === "slow" && ((root?.latency_ms ?? 0) < SLOW_TRACE_LATENCY_MS)) return false;
+      return traceMatchesSearch(item, root, search);
+    });
+  }, [agentFilter, callsById, latencyFilter, modelFilter, replayFilter, search, statusFilter, traces, typeFilter]);
+
+  const rootCalls = traces.map((item) => callsById.get(item.root_call_id));
+  const replayReadyCount = traces.filter((item) => Boolean(item.root_call_id)).length;
+  const slowTraceCount = traces.filter((item) => (callsById.get(item.root_call_id)?.latency_ms ?? 0) >= SLOW_TRACE_LATENCY_MS).length;
+
+  function clearFilters() {
+    setStatusFilter("all");
+    setAgentFilter("");
+    setTypeFilter("");
+    setModelFilter("");
+    setReplayFilter("all");
+    setLatencyFilter("all");
+    setSearch("");
   }
-  if (endDate) {
-    const to = new Date(endDate).getTime();
-    displayItems = displayItems.filter((i) => new Date(i.started_at).getTime() <= to);
+
+  function showAction(kind: "success" | "error", message: string) {
+    setActionState({ kind, message });
   }
 
-  const providerNames = useMemo(() => {
-    const s = new Set<string>();
-    for (const i of allItems) for (const p of i.providers ?? []) s.add(p);
-    return Array.from(s).sort();
-  }, [allItems]);
-
-  const agentNames = useMemo(() => {
-    const s = new Set<string>();
-    for (const i of allItems) for (const a of i.agents ?? []) s.add(a);
-    return Array.from(s).sort();
-  }, [allItems]);
-
-  function downloadBlob(filename: string, contents: string, type = "text/plain") {
-    const blob = new Blob([contents], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  function runReplay(callId: string) {
+    replayMutation.mutate({
+      callId,
+      payload: { replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE as ReplayMode },
+    });
   }
 
-  function exportTracesJson(items: typeof displayItems) {
+  async function refreshTraces() {
+    setActionState(null);
     try {
-      const json = JSON.stringify(items, null, 2);
-      downloadBlob(`traces-${Date.now()}.json`, json, "application/json");
+      await Promise.all([tracesQuery.refetch(), callsQuery.refetch()]);
+      showAction("success", "Trace data refreshed.");
     } catch {
-      // ignore
+      showAction("error", "Refresh failed. Try again.");
     }
   }
 
-  function exportTracesCsv(items: typeof displayItems) {
-    const header = ["trace_id", "agents", "agent_count", "providers", "call_count", "total_cost_usd", "started_at", "last_seen_at", "has_failure", "root_failure_category", "root_call_id"];
-    const rows = items.map((i) => {
-      const cols = [
-        i.trace_id,
-        (i.agents ?? []).join(" |") ,
-        String(i.agent_count ?? 0),
-        (i.providers ?? []).join(" |") ,
-        String(i.call_count ?? 0),
-        String(i.total_cost_usd ?? 0),
-        i.started_at,
-        i.last_seen_at,
-        String(Boolean(i.has_failure)),
-        i.root_failure_category ?? "",
-        i.root_call_id ?? "",
-      ];
-      return cols.map((c) => JSON.stringify(c ?? "")).join(",");
-    });
-    const csv = [header.join(","), ...rows].join("\n");
-    downloadBlob(`traces-${Date.now()}.csv`, csv, "text/csv;charset=utf-8");
+  async function copyVisibleTraceIds() {
+    const traceIds = displayRows.map((item) => item.trace_id);
+    if (traceIds.length === 0) {
+      showAction("error", "No visible trace IDs to copy.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(traceIds.join("\n"));
+      showAction("success", `Copied ${formatCount(traceIds.length)} trace IDs.`);
+    } catch {
+      showAction("error", "Clipboard copy failed.");
+    }
+  }
+
+  async function copyTraceId(traceId: string) {
+    try {
+      await navigator.clipboard.writeText(traceId);
+      showAction("success", "Trace ID copied.");
+    } catch {
+      showAction("error", "Clipboard copy failed.");
+    }
+  }
+
+  function exportVisibleRows() {
+    if (displayRows.length === 0) {
+      showAction("error", "No visible traces to export.");
+      return;
+    }
+    const payload = displayRows.map((item) => ({
+      trace: item,
+      root_call: callsById.get(item.root_call_id) ?? null,
+    }));
+    downloadJson(`zroky-traces-${windowDays}d-visible.json`, payload);
+    showAction("success", `Exported ${formatCount(displayRows.length)} visible traces.`);
   }
 
   return (
-    <>
-      {/* ── KPI strip ── */}
-      {data && (
-        <div className="kpi-grid trace-kpi-grid">
-          <article className="kpi-card">
-            <span className="kpi-label">Total Traces</span>
-            <strong className="kpi-value">{data.total}</strong>
-          </article>
-          <article className="kpi-card">
-            <span className="kpi-label">Multi-Agent</span>
-            <strong className="kpi-value">{data.multi_agent_count}</strong>
-          </article>
-          <article className={`kpi-card${data.failed_count > 0 ? " kpi-card-danger" : ""}`}>
-            <span className="kpi-label">With Failures</span>
-            <strong className={`kpi-value${data.failed_count > 0 ? " kpi-value-danger" : ""}`}>
-              {data.failed_count}
-            </strong>
-          </article>
-          <article className="kpi-card">
-            <span className="kpi-label">Total Cost</span>
-            <strong className="kpi-value mono">{formatUsd(totalCost)}</strong>
-          </article>
+    <div className="traces-mvp">
+      <section className="trace-mvp-hero">
+        <div>
+          <div className="trace-mvp-eyebrow">
+            <GitBranch aria-hidden="true" />
+            Evidence browser
+          </div>
+          <h1>Traces</h1>
+          <p>Captured agent calls, tool steps, retrieval events, and replay-ready evidence.</p>
         </div>
-      )}
+        <div className="trace-mvp-hero-actions">
+          <button type="button" className="btn btn-soft" onClick={() => void refreshTraces()} disabled={tracesQuery.isFetching || callsQuery.isFetching}>
+            <RefreshCw aria-hidden="true" />
+            {tracesQuery.isFetching || callsQuery.isFetching ? "Refreshing..." : "Refresh"}
+          </button>
+          <button type="button" className="btn btn-soft" onClick={() => void copyVisibleTraceIds()}>
+            <Copy aria-hidden="true" />
+            Copy IDs
+          </button>
+          <button type="button" className="btn btn-primary" onClick={exportVisibleRows}>
+            <Download aria-hidden="true" />
+            Export JSON
+          </button>
+        </div>
+      </section>
 
-      <section className="panel" id="trace-summary">
-        <header className="panel-header">
+      {actionState ? (
+        <div className={`trace-mvp-action-message ${actionState.kind === "error" ? "is-error" : ""}`} role="status">
+          {actionState.message}
+        </div>
+      ) : null}
+
+      <section className="trace-mvp-kpis" aria-label="Trace overview">
+        <TraceMetric
+          label="Captured traces"
+          value={tracesQuery.data ? formatCount(tracesQuery.data.total) : DASH}
+          helper="Reset to every loaded trace."
+          active={statusFilter === "all" && replayFilter === "all" && latencyFilter === "all" && !agentFilter && !typeFilter && !modelFilter && !search}
+          onClick={clearFilters}
+        />
+        <TraceMetric
+          label="Failed calls"
+          value={tracesQuery.data ? formatCount(tracesQuery.data.failed_count) : DASH}
+          helper="Filter failed trace groups."
+          active={statusFilter === "failed"}
+          onClick={() => {
+            setStatusFilter("failed");
+            setReplayFilter("all");
+            setLatencyFilter("all");
+          }}
+        />
+        <TraceMetric
+          label="Replay-ready"
+          value={tracesQuery.data ? formatCount(replayReadyCount) : DASH}
+          helper="Filter root-call evidence."
+          active={replayFilter === "ready"}
+          onClick={() => {
+            setReplayFilter("ready");
+            setLatencyFilter("all");
+          }}
+        />
+        <TraceMetric
+          label="Avg latency"
+          value={avgLatencyLabel(rootCalls.map((call) => call?.latency_ms))}
+          helper={`${formatCount(slowTraceCount)} loaded over 1s.`}
+          active={latencyFilter === "slow"}
+          onClick={() => {
+            setLatencyFilter("slow");
+            setReplayFilter("all");
+          }}
+        />
+      </section>
+
+      <section className="trace-mvp-filter-panel" aria-label="Trace filters">
+        <header>
           <div>
-            <h3>Multi-Agent Trace Explorer</h3>
-            <p>Provider-agnostic trace tree — see which agent did what, in order, with costs and failures highlighted.</p>
+            <h2>Trace filters</h2>
+            <p>{formatCount(displayRows.length)} loaded evidence rows.</p>
           </div>
-          <div className="trace-window-btns">
-            <button className="btn btn-soft btn-sm" type="button" onClick={() => exportTracesJson(displayItems)}>
-              Export JSON
-            </button>
-            <button className="btn btn-soft btn-sm" type="button" onClick={() => exportTracesCsv(displayItems)}>
-              Export CSV
-            </button>
-            {[1, 7, 14, 30].map((d) => (
-              <button
-                key={d}
-                type="button"
-                className={`cost-window-btn${days === d ? " active" : ""}`}
-                onClick={() => setDays(d)}
-              >
-                {d}d
-              </button>
-            ))}
+          <SlidersHorizontal aria-hidden="true" />
+        </header>
+        <div className="trace-mvp-toolbar">
+          <label>
+            <span>Window</span>
+            <select value={windowDays} onChange={(event) => setWindowDays(Number(event.target.value) as WindowDays)}>
+              <option value={7}>Last 7 days</option>
+              <option value={14}>Last 14 days</option>
+              <option value={30}>Last 30 days</option>
+            </select>
+          </label>
+          <button type="button" className="btn btn-soft btn-sm" onClick={clearFilters}>
+            <XCircle aria-hidden="true" />
+            Clear filters
+          </button>
+        </div>
+        <div className="trace-mvp-filters">
+          <label>
+            <span>Status</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+              <option value="all">All</option>
+              <option value="failed">Failed</option>
+              <option value="success">Success</option>
+            </select>
+          </label>
+          <label>
+            <span>Agent</span>
+            <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)}>
+              <option value="">Any</option>
+              {agentOptions.map((agent) => <option key={agent} value={agent}>{agent}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Call type</span>
+            <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+              <option value="">Any</option>
+              {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Provider/model</span>
+            <select value={modelFilter} onChange={(event) => setModelFilter(event.target.value)}>
+              <option value="">Any</option>
+              {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Replay-ready</span>
+            <select value={replayFilter} onChange={(event) => setReplayFilter(event.target.value as ReplayFilter)}>
+              <option value="all">All</option>
+              <option value="ready">Replay-ready</option>
+              <option value="missing">Missing root call</option>
+            </select>
+          </label>
+          <label>
+            <span>Latency</span>
+            <select value={latencyFilter} onChange={(event) => setLatencyFilter(event.target.value as LatencyFilter)}>
+              <option value="all">All</option>
+              <option value="slow">Over 1s</option>
+            </select>
+          </label>
+          <label className="trace-mvp-search">
+            <span>Search</span>
+            <div>
+              <Search aria-hidden="true" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search trace, call, agent..." />
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <section className="trace-mvp-table-section">
+        <header>
+          <div>
+            <h2>Trace evidence</h2>
+            <p>Captured calls and trace trees ready for investigation.</p>
           </div>
+          {callsQuery.error && traces.length > 0 ? (
+            <span className="trace-mvp-warning">Call enrichment unavailable. Trace rows are still shown.</span>
+          ) : null}
         </header>
 
-        <div className="trace-filter-row">
-          {(
-            [
-              { mode: "all" as FilterMode, label: `All (${allItems.length})` },
-              { mode: "multi" as FilterMode, label: `Multi-agent (${multiAgentItems.length})` },
-              { mode: "failed" as FilterMode, label: `Failed (${failedItems.length})`, danger: true },
-            ] as { mode: FilterMode; label: string; danger?: boolean }[]
-          ).map(({ mode, label, danger }) => (
-            <button
-              key={mode}
-              type="button"
-              className={`btn trace-filter-btn${filter === mode ? (danger ? " btn-danger" : " btn-primary") : " btn-soft"}`}
-              onClick={() => setFilter(mode)}
-            >
-              {label}
-            </button>
-          ))}
-          <div className="trace-filter-fields">
-            <label className="detail-field">
-              <span className="detail-field-label">Search</span>
-              <input className="input" placeholder="Trace id" value={searchId} onChange={(e) => setSearchId(e.target.value)} />
-            </label>
-            <label className="detail-field">
-              <span className="detail-field-label">Provider</span>
-              <select className="input" value={providerFilter ?? ""} onChange={(e) => setProviderFilter(e.target.value || null)}>
-                <option value="">All providers</option>
-                {providerNames.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
-            <label className="detail-field">
-              <span className="detail-field-label">Agent</span>
-              <select className="input" value={agentFilter ?? ""} onChange={(e) => setAgentFilter(e.target.value || null)}>
-                <option value="">All agents</option>
-                {agentNames.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </label>
-            <label className="detail-field">
-              <span className="detail-field-label">Status</span>
-              <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "ANY" | "FAILED" | "OK")}>
-                <option value="ANY">Any status</option>
-                <option value="FAILED">Failed only</option>
-                <option value="OK">Successful only</option>
-              </select>
-            </label>
-            <label className="detail-field">
-              <span className="detail-field-label">From</span>
-              <input className="input" type="date" value={startDate ?? ""} onChange={(e) => setStartDate(e.target.value || null)} />
-            </label>
-            <label className="detail-field">
-              <span className="detail-field-label">To</span>
-              <input className="input" type="date" value={endDate ?? ""} onChange={(e) => setEndDate(e.target.value || null)} />
-            </label>
-            <button className="btn btn-soft" type="button" onClick={() => { setSearchId(""); setProviderFilter(null); setAgentFilter(null); setStatusFilter('ANY'); setStartDate(null); setEndDate(null); }}>Clear</button>
+        {tracesQuery.isLoading ? <div className="trace-mvp-empty">Loading captured traces...</div> : null}
+        {tracesQuery.error ? <div className="trace-mvp-error">{traceErrorMessage(tracesQuery.error)}</div> : null}
+        {!tracesQuery.isLoading && !tracesQuery.error && displayRows.length === 0 ? (
+          <div className="trace-mvp-empty">
+            <strong>No traces captured yet</strong>
+            <p>Install the SDK to capture agent calls, tools, retrieval, and memory events.</p>
+            <Link href="/settings/keys" className="btn btn-soft btn-sm">View SDK setup</Link>
           </div>
-        </div>
+        ) : null}
+        {displayRows.length > 0 ? (
+          <div className="trace-mvp-table-wrap">
+            <table className="trace-mvp-table">
+              <thead>
+                <tr>
+                  <th>Trace / Call</th>
+                  <th>Status</th>
+                  <th>Agent</th>
+                  <th>Type</th>
+                  <th>Model</th>
+                  <th>Cost</th>
+                  <th>Latency</th>
+                  <th>Created</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayRows.map((item) => (
+                  <TraceRow
+                    key={item.trace_id}
+                    item={item}
+                    rootCall={callsById.get(item.root_call_id)}
+                    onReplay={runReplay}
+                    onCopyTraceId={(traceId) => void copyTraceId(traceId)}
+                    replaying={replayMutation.isPending}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
-
-      <section className="panel">
-        {isLoading && <div className="loading" />}
-        {error && <p className="hint">{error instanceof Error ? error.message : "Failed to load traces."}</p>}
-        {!isLoading && !error && displayItems.length === 0 && (
-          <div className="empty">
-            {filter === "failed"
-              ? `No failed traces in the last ${days} day${days !== 1 ? "s" : ""}.`
-              : filter === "multi"
-              ? `No multi-agent traces in the last ${days} day${days !== 1 ? "s" : ""}.`
-              : `No traces found in the last ${days}d. Traces appear once calls with a shared trace_id are ingested.`}
-          </div>
-        )}
-        {!isLoading && displayItems.length > 0 && (
-          <div className="trace-list">
-            {displayItems.map((item) => (
-              <TraceRow key={item.trace_id} item={item} />
-            ))}
-          </div>
-        )}
-      </section>
-    </>
+    </div>
   );
 }

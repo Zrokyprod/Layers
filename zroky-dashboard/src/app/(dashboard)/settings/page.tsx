@@ -2,44 +2,40 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  BellRing,
+  CheckCircle2,
+  Database,
+  Download,
+  GitPullRequest,
+  LockKeyhole,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 
 import {
-  createProjectApiKey,
   disconnectGithubRepoConnection,
   eraseRetentionData,
   exportProjectData,
   getGithubConnectionStatus,
   getNotifications,
   getPiiPolicy,
-  getPricingValidation,
   getProjectSettings,
   getRetention,
-  getRollbackDrill,
-  listProjectApiKeys,
-  listProviderVerifications,
-  revokeProjectApiKey,
   testPiiDetector,
-  testProviderConnection,
   updateNotifications,
   updatePiiPolicy,
-  updatePricingValidation,
   updateRetention,
-  updateRollbackDrill,
-  verifyRollbackDrill,
 } from "@/lib/api";
 import { formatDateTime, safeString } from "@/lib/format";
 import type {
-  ApiKeyResponse,
   GithubConnectionStatusResponse,
   NotificationSettingsResponse,
   PiiDetectorTestResponse,
   PiiPolicyResponse,
-  PricingInterviewNote,
-  PricingValidationResponse,
   ProjectResponse,
-  ProviderVerificationItem,
-  RollbackDrillResponse,
-  RollbackDrillVerificationResponse,
   RetentionDataErasureResponse,
   RetentionPolicyResponse,
 } from "@/lib/types";
@@ -51,11 +47,36 @@ type SettingsState = {
   pii: PiiPolicyResponse | null;
   retention: RetentionPolicyResponse | null;
   notifications: NotificationSettingsResponse | null;
-  pricingValidation: PricingValidationResponse | null;
-  rollbackDrill: RollbackDrillResponse | null;
-  providers: ProviderVerificationItem[];
-  apiKeys: ApiKeyResponse[];
 };
+
+type SectionKey = "github" | "pii" | "retention" | "notifications";
+
+const defaultNotifications: NotificationSettingsResponse = {
+  email_enabled: true,
+  slack_enabled: false,
+  teams_enabled: false,
+  browser_enabled: true,
+  terminal_enabled: true,
+  updated_at: "",
+};
+
+const settingsLoadTimeoutMs = 15_000;
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function withSettingsTimeout<T>(promise: Promise<T>, detail: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = globalThis.setTimeout(() => reject(new Error(detail)), settingsLoadTimeoutMs);
+    promise.then(resolve, reject).finally(() => globalThis.clearTimeout(timeout));
+  });
+}
+
+function isProblemMessage(value: string): boolean {
+  const text = value.toLowerCase();
+  return text.includes("failed") || text.includes("error") || text.includes("unavailable");
+}
 
 export default function SettingsPage() {
   const [state, setState] = useState<SettingsState>({
@@ -64,17 +85,15 @@ export default function SettingsPage() {
     pii: null,
     retention: null,
     notifications: null,
-    pricingValidation: null,
-    rollbackDrill: null,
-    providers: [],
-    apiKeys: [],
   });
+  const [sectionErrors, setSectionErrors] = useState<Partial<Record<SectionKey, string>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [exporting, setExporting] = useState(false);
   const [erasingData, setErasingData] = useState(false);
   const [eraseBatchSizeInput, setEraseBatchSizeInput] = useState("500");
+  const [eraseConfirmInput, setEraseConfirmInput] = useState("");
   const [eraseSummary, setEraseSummary] = useState<RetentionDataErasureResponse | null>(null);
 
   const [piiInput, setPiiInput] = useState("");
@@ -83,88 +102,47 @@ export default function SettingsPage() {
   const [sampleTextInput, setSampleTextInput] = useState("Contact me at test@example.com for setup details.");
   const [detectorResult, setDetectorResult] = useState<PiiDetectorTestResponse | null>(null);
 
-  const [pricingModelInput, setPricingModelInput] = useState<"tiered" | "usage_based" | "undecided">("undecided");
-  const [pricingRationaleInput, setPricingRationaleInput] = useState("");
-  const [pricingMigrationPathInput, setPricingMigrationPathInput] = useState("");
-  const [pricingInterviewsInput, setPricingInterviewsInput] = useState("[]");
-  const [lockPricingDecisionInput, setLockPricingDecisionInput] = useState(false);
-
-  const [rollbackDeployRevisionInput, setRollbackDeployRevisionInput] = useState("");
-  const [rollbackTargetRevisionInput, setRollbackTargetRevisionInput] = useState("");
-  const [rollbackStatusInput, setRollbackStatusInput] = useState<"not_started" | "in_progress" | "passed" | "failed">("not_started");
-  const [rollbackDeployPassedInput, setRollbackDeployPassedInput] = useState(false);
-  const [rollbackRollbackPassedInput, setRollbackRollbackPassedInput] = useState(false);
-  const [rollbackFailureSimulationInput, setRollbackFailureSimulationInput] = useState(false);
-  const [rollbackFailureCategoryInput, setRollbackFailureCategoryInput] = useState<
-    "TOKEN_OVERFLOW" | "RATE_LIMIT" | "AUTH_FAILURE" | "LOOP_DETECTED" | "COST_SPIKE" | ""
-  >("");
-  const [rollbackFailureNotesInput, setRollbackFailureNotesInput] = useState("");
-  const [rollbackDrillNotesInput, setRollbackDrillNotesInput] = useState("");
-  const [rollbackVerificationRunningPhase, setRollbackVerificationRunningPhase] = useState<"deploy" | "rollback" | null>(null);
-  const [rollbackVerificationResult, setRollbackVerificationResult] = useState<RollbackDrillVerificationResponse | null>(null);
-
-  const [apiKeyName, setApiKeyName] = useState("Zroky Dashboard Key");
-  const [latestCreatedApiKey, setLatestCreatedApiKey] = useState<string>("");
-
-  const canLoadApiKeys = Boolean(state.project?.project_id);
-
-  function applyRollbackDrillToInputs(rollbackDrill: RollbackDrillResponse) {
-    setRollbackDeployRevisionInput(rollbackDrill.deploy_revision ?? "");
-    setRollbackTargetRevisionInput(rollbackDrill.rollback_revision ?? "");
-    setRollbackStatusInput(rollbackDrill.status);
-    setRollbackDeployPassedInput(rollbackDrill.deploy_test_passed);
-    setRollbackRollbackPassedInput(rollbackDrill.rollback_test_passed);
-    setRollbackFailureSimulationInput(rollbackDrill.failure_simulation_performed);
-    setRollbackFailureCategoryInput(rollbackDrill.failure_simulation_category ?? "");
-    setRollbackFailureNotesInput(rollbackDrill.failure_simulation_notes ?? "");
-    setRollbackDrillNotesInput(rollbackDrill.drill_notes ?? "");
-  }
-
   const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setSectionErrors({});
     try {
-      setLoading(true);
-      setError(null);
-      const [project, githubConnection, pii, retention, notifications, pricingValidation, rollbackDrill, providersPayload] = await Promise.all([
+      const project = await withSettingsTimeout(
         getProjectSettings(),
-        getGithubConnectionStatus(),
-        getPiiPolicy(),
-        getRetention(),
-        getNotifications(),
-        getPricingValidation(),
-        getRollbackDrill(),
-        listProviderVerifications(),
+        `Backend API timed out after ${settingsLoadTimeoutMs}ms. Start the Zroky backend and retry.`,
+      );
+      const [githubResult, piiResult, retentionResult, notificationsResult] = await Promise.allSettled([
+        withSettingsTimeout(getGithubConnectionStatus(), "GitHub connection status timed out."),
+        withSettingsTimeout(getPiiPolicy(), "PII policy load timed out."),
+        withSettingsTimeout(getRetention(), "Retention policy load timed out."),
+        withSettingsTimeout(getNotifications(), "Notification settings load timed out."),
       ]);
 
-      let apiKeys: ApiKeyResponse[] = [];
-      try {
-        apiKeys = await listProjectApiKeys(project.project_id);
-      } catch {
-        apiKeys = [];
+      const nextErrors: Partial<Record<SectionKey, string>> = {};
+      if (githubResult.status === "rejected") nextErrors.github = errorMessage(githubResult.reason, "GitHub connection could not load.");
+      if (piiResult.status === "rejected") nextErrors.pii = errorMessage(piiResult.reason, "PII policy could not load.");
+      if (retentionResult.status === "rejected") nextErrors.retention = errorMessage(retentionResult.reason, "Retention policy could not load.");
+      if (notificationsResult.status === "rejected") {
+        nextErrors.notifications = errorMessage(notificationsResult.reason, "Notification settings could not load.");
       }
+
+      const pii = piiResult.status === "fulfilled" ? piiResult.value : null;
+      const retention = retentionResult.status === "fulfilled" ? retentionResult.value : null;
+      const notifications = notificationsResult.status === "fulfilled" ? notificationsResult.value : null;
 
       setState({
         project,
-        githubConnection,
+        githubConnection: githubResult.status === "fulfilled" ? githubResult.value : null,
         pii,
         retention,
         notifications,
-        pricingValidation,
-        rollbackDrill,
-        providers: providersPayload.items,
-        apiKeys,
       });
+      setSectionErrors(nextErrors);
 
-      setPiiInput(pii.custom_patterns.join("\n"));
-      setRetentionInput(String(retention.retention_days));
-      setPricingModelInput(pricingValidation.selected_launch_model);
-      setPricingRationaleInput(pricingValidation.rationale ?? "");
-      setPricingMigrationPathInput(pricingValidation.migration_path ?? "");
-      setPricingInterviewsInput(JSON.stringify(pricingValidation.interviews, null, 2));
-      setLockPricingDecisionInput(pricingValidation.pricing_locked);
-      applyRollbackDrillToInputs(rollbackDrill);
+      if (pii) setPiiInput(pii.custom_patterns.join("\n"));
+      if (retention) setRetentionInput(String(retention.retention_days));
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Failed to load settings.";
-      setError(message);
+      setError(errorMessage(loadError, "Failed to load project settings."));
     } finally {
       setLoading(false);
     }
@@ -174,243 +152,118 @@ export default function SettingsPage() {
     void load();
   }, [load]);
 
-  const notificationDraft = useMemo(() => {
-    return {
-      email_enabled: state.notifications?.email_enabled ?? true,
-      slack_enabled: state.notifications?.slack_enabled ?? false,
-      teams_enabled: state.notifications?.teams_enabled ?? false,
-      browser_enabled: state.notifications?.browser_enabled ?? true,
-      terminal_enabled: state.notifications?.terminal_enabled ?? true,
-    };
-  }, [state.notifications]);
+  const notificationDraft = useMemo(() => state.notifications ?? defaultNotifications, [state.notifications]);
+  const invalidPiiPatterns = useMemo(() => {
+    return piiInput
+      .split("\n")
+      .map((line, index) => ({ line: line.trim(), index: index + 1 }))
+      .filter((item) => item.line.length > 0)
+      .map((item) => {
+        try {
+          new RegExp(item.line);
+          return null;
+        } catch (error) {
+          return {
+            index: item.index,
+            message: error instanceof Error ? error.message : "Invalid regular expression.",
+          };
+        }
+      })
+      .filter((item): item is { index: number; message: string } => Boolean(item));
+  }, [piiInput]);
+
+  const enabledNotificationChannels = useMemo(() => {
+    return [
+      notificationDraft.email_enabled,
+      notificationDraft.slack_enabled,
+      notificationDraft.teams_enabled,
+      notificationDraft.browser_enabled,
+      notificationDraft.terminal_enabled,
+    ].filter(Boolean).length;
+  }, [notificationDraft]);
+
+  function setNotification(key: keyof Omit<NotificationSettingsResponse, "updated_at">) {
+    setState((prev) => ({
+      ...prev,
+      notifications: {
+        ...(prev.notifications ?? defaultNotifications),
+        [key]: !(prev.notifications ?? defaultNotifications)[key],
+      },
+    }));
+  }
 
   async function onSavePii(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setStatusMessage("");
+    if (invalidPiiPatterns.length > 0) {
+      setStatusMessage(`Fix ${invalidPiiPatterns.length} invalid PII pattern${invalidPiiPatterns.length === 1 ? "" : "s"} before saving.`);
+      return;
+    }
     try {
       const patterns = piiInput
         .split("\n")
         .map((line) => line.trim())
-        .filter((line) => line.length > 0);
+        .filter(Boolean);
       const updated = await updatePiiPolicy(patterns);
       setState((prev) => ({ ...prev, pii: updated }));
+      setSectionErrors((prev) => ({ ...prev, pii: undefined }));
       setStatusMessage("PII policy updated.");
     } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : "Failed to save PII policy.";
-      setStatusMessage(message);
+      setStatusMessage(errorMessage(saveError, "Failed to save PII policy."));
     }
   }
 
   async function onTestDetector(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setStatusMessage("");
     try {
       const result = await testPiiDetector(patternInput, sampleTextInput);
       setDetectorResult(result);
       setStatusMessage("PII detector test completed.");
     } catch (detectorError) {
-      const message = detectorError instanceof Error ? detectorError.message : "PII detector test failed.";
-      setStatusMessage(message);
+      setStatusMessage(errorMessage(detectorError, "PII detector test failed."));
     }
   }
 
   async function onSaveRetention(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setStatusMessage("");
     try {
       const retentionDays = Number(retentionInput);
-      const updated = await updateRetention(retentionDays);
+      const updated = await updateRetention(Number.isFinite(retentionDays) ? retentionDays : 30);
       setState((prev) => ({ ...prev, retention: updated }));
+      setSectionErrors((prev) => ({ ...prev, retention: undefined }));
       setStatusMessage("Retention policy updated.");
     } catch (retentionError) {
-      const message = retentionError instanceof Error ? retentionError.message : "Failed to save retention policy.";
-      setStatusMessage(message);
+      setStatusMessage(errorMessage(retentionError, "Failed to save retention policy."));
     }
   }
 
   async function onSaveNotifications(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setStatusMessage("");
     try {
-      const updated = await updateNotifications(notificationDraft);
+      const updated = await updateNotifications({
+        email_enabled: notificationDraft.email_enabled,
+        slack_enabled: notificationDraft.slack_enabled,
+        teams_enabled: notificationDraft.teams_enabled,
+        browser_enabled: notificationDraft.browser_enabled,
+        terminal_enabled: notificationDraft.terminal_enabled,
+      });
       setState((prev) => ({ ...prev, notifications: updated }));
+      setSectionErrors((prev) => ({ ...prev, notifications: undefined }));
       setStatusMessage("Notification settings updated.");
     } catch (notificationError) {
-      const message = notificationError instanceof Error ? notificationError.message : "Failed to update notification settings.";
-      setStatusMessage(message);
-    }
-  }
-
-  async function onSavePricingValidation(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    try {
-      const parsedRaw = JSON.parse(pricingInterviewsInput || "[]") as unknown;
-      if (!Array.isArray(parsedRaw)) {
-        throw new Error("Interviews must be a JSON array.");
-      }
-
-      const interviews = parsedRaw as PricingInterviewNote[];
-      const updated = await updatePricingValidation({
-        selected_launch_model: pricingModelInput,
-        rationale: pricingRationaleInput.trim() || null,
-        migration_path: pricingMigrationPathInput.trim() || null,
-        interviews,
-        lock_pricing_decision: lockPricingDecisionInput,
-      });
-
-      setState((prev) => ({ ...prev, pricingValidation: updated }));
-      setPricingInterviewsInput(JSON.stringify(updated.interviews, null, 2));
-      setLockPricingDecisionInput(updated.pricing_locked);
-      setStatusMessage(
-        updated.pricing_locked
-          ? "Pricing validation saved and pricing decision locked."
-          : "Pricing validation evidence saved.",
-      );
-    } catch (pricingError) {
-      const message = pricingError instanceof Error ? pricingError.message : "Failed to update pricing validation settings.";
-      setStatusMessage(message);
-    }
-  }
-
-  async function onSaveRollbackDrill(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (rollbackStatusInput === "passed" && !state.pricingValidation?.launch_gate_passed) {
-      setStatusMessage("Pricing launch gate incomplete. Finish 5 unique beta interviews and lock pricing before marking rollback drill passed.");
-      return;
-    }
-
-    try {
-      const updated = await updateRollbackDrill({
-        deploy_revision: rollbackDeployRevisionInput.trim() || null,
-        rollback_revision: rollbackTargetRevisionInput.trim() || null,
-        deploy_test_passed: rollbackDeployPassedInput,
-        rollback_test_passed: rollbackRollbackPassedInput,
-        failure_simulation_performed: rollbackFailureSimulationInput,
-        failure_simulation_category: rollbackFailureCategoryInput || null,
-        failure_simulation_notes: rollbackFailureNotesInput.trim() || null,
-        drill_notes: rollbackDrillNotesInput.trim() || null,
-        status: rollbackStatusInput,
-      });
-
-      setState((prev) => ({ ...prev, rollbackDrill: updated }));
-      applyRollbackDrillToInputs(updated);
-      setStatusMessage(`Rollback drill status saved: ${updated.status}.`);
-    } catch (rollbackError) {
-      const message = rollbackError instanceof Error ? rollbackError.message : "Failed to update rollback drill settings.";
-      setStatusMessage(message);
-    }
-  }
-
-  async function onRunRollbackVerification(phase: "deploy" | "rollback") {
-    const deployRevision = rollbackDeployRevisionInput.trim() || null;
-    const rollbackRevision = rollbackTargetRevisionInput.trim() || null;
-
-    try {
-      setRollbackVerificationRunningPhase(phase);
-      const verification = await verifyRollbackDrill(
-        phase === "deploy"
-          ? { phase, deploy_revision: deployRevision }
-          : { phase, rollback_revision: rollbackRevision },
-      );
-
-      setRollbackVerificationResult(verification);
-      setState((prev) => ({ ...prev, rollbackDrill: verification.rollback_drill }));
-      applyRollbackDrillToInputs(verification.rollback_drill);
-
-      if (verification.passed) {
-        setStatusMessage(`${phase === "deploy" ? "Deploy" : "Rollback"} verification passed.`);
-      } else {
-        const failedChecks = verification.checks
-          .filter((item) => item.status === "failed")
-          .map((item) => item.name)
-          .join(", ");
-        setStatusMessage(
-          failedChecks
-            ? `${phase === "deploy" ? "Deploy" : "Rollback"} verification failed: ${failedChecks}.`
-            : `${phase === "deploy" ? "Deploy" : "Rollback"} verification failed.`,
-        );
-      }
-    } catch (verificationError) {
-      const message = verificationError instanceof Error ? verificationError.message : "Rollback verification failed.";
-      setStatusMessage(message);
-    } finally {
-      setRollbackVerificationRunningPhase(null);
-    }
-  }
-
-  async function onToggleNotification(
-    key: "email_enabled" | "slack_enabled" | "teams_enabled" | "browser_enabled" | "terminal_enabled",
-  ) {
-    const current = state.notifications;
-    if (!current) {
-      return;
-    }
-
-    setState((prev) => ({
-      ...prev,
-      notifications: prev.notifications
-        ? {
-            ...prev.notifications,
-            [key]: !prev.notifications[key],
-          }
-        : prev.notifications,
-    }));
-  }
-
-  async function onTestProvider(provider: string) {
-    try {
-      await testProviderConnection(provider);
-      setStatusMessage(`${provider} verification succeeded.`);
-      await load();
-    } catch (providerError) {
-      const message = providerError instanceof Error ? providerError.message : "Provider test failed.";
-      setStatusMessage(message);
-    }
-  }
-
-  async function onCreateApiKey(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!state.project) {
-      return;
-    }
-
-    try {
-      const created = await createProjectApiKey(state.project.project_id, {
-        name: apiKeyName,
-        scopes: ["project:member"],
-      });
-      setLatestCreatedApiKey(created.api_key);
-      await load();
-      setStatusMessage("API key created.");
-    } catch (createError) {
-      const message = createError instanceof Error ? createError.message : "Failed to create API key.";
-      setStatusMessage(message);
-    }
-  }
-
-  async function onRevokeApiKey(keyId: string) {
-    if (!state.project) {
-      return;
-    }
-
-    try {
-      await revokeProjectApiKey(state.project.project_id, keyId);
-      await load();
-      setStatusMessage("API key revoked.");
-    } catch (revokeError) {
-      const message = revokeError instanceof Error ? revokeError.message : "Failed to revoke API key.";
-      setStatusMessage(message);
+      setStatusMessage(errorMessage(notificationError, "Failed to update notification settings."));
     }
   }
 
   async function onExportData() {
+    setStatusMessage("");
     try {
       setExporting(true);
-      const payload = await exportProjectData({
-        limit: 500,
-        include_payload: true,
-      });
-
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
+      const payload = await exportProjectData({ limit: 500, include_payload: true });
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -420,24 +273,23 @@ export default function SettingsPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(downloadUrl);
-
-      setStatusMessage(
-        `Export downloaded: ${payload.call_count} calls, ${payload.diagnosis_count} diagnoses, ${payload.alert_count} alerts.`,
-      );
+      setStatusMessage(`Export downloaded: ${payload.call_count} calls, ${payload.diagnosis_count} diagnoses, ${payload.alert_count} alerts.`);
     } catch (exportError) {
-      const message = exportError instanceof Error ? exportError.message : "Failed to export project data.";
-      setStatusMessage(message);
+      setStatusMessage(errorMessage(exportError, "Failed to export project data."));
     } finally {
       setExporting(false);
     }
   }
 
   async function onEraseProjectData(dryRun: boolean) {
+    setStatusMessage("");
     if (!dryRun) {
-      const confirmed = window.confirm(
-        "This will permanently delete project diagnosis data, calls, alerts, feedback, share links, PR links, and audit logs. Continue?",
-      );
-      if (!confirmed) {
+      if (!eraseSummary?.dry_run) {
+        setStatusMessage("Run a preview before permanent erasure so the affected tables are visible.");
+        return;
+      }
+      if (!project || eraseConfirmInput.trim() !== project.project_id) {
+        setStatusMessage("Type the exact project ID before deleting project data.");
         return;
       }
     }
@@ -450,16 +302,15 @@ export default function SettingsPage() {
         batch_size: Number.isFinite(batchSize) ? batchSize : undefined,
       });
       setEraseSummary(summary);
-
+      if (dryRun) setEraseConfirmInput("");
       const touchedTableCount = Object.values(summary.deleted_by_table).filter((count) => count > 0).length;
       setStatusMessage(
         dryRun
-          ? `Erasure dry run complete: ${summary.total_deleted} rows across ${touchedTableCount} tables.`
+          ? `Erasure preview complete: ${summary.total_deleted} rows across ${touchedTableCount} tables.`
           : `Project data erasure complete: ${summary.total_deleted} rows deleted across ${touchedTableCount} tables.`,
       );
     } catch (erasureError) {
-      const message = erasureError instanceof Error ? erasureError.message : "Failed to erase project data.";
-      setStatusMessage(message);
+      setStatusMessage(errorMessage(erasureError, "Failed to erase project data."));
     } finally {
       setErasingData(false);
     }
@@ -470,20 +321,46 @@ export default function SettingsPage() {
   }
 
   async function onDisconnectGithub() {
+    setStatusMessage("");
     try {
       const updated = await disconnectGithubRepoConnection();
       setState((prev) => ({ ...prev, githubConnection: updated }));
+      setSectionErrors((prev) => ({ ...prev, github: undefined }));
       setStatusMessage("GitHub repository connection removed.");
     } catch (disconnectError) {
-      const message = disconnectError instanceof Error ? disconnectError.message : "Failed to disconnect GitHub.";
-      setStatusMessage(message);
+      setStatusMessage(errorMessage(disconnectError, "Failed to disconnect GitHub."));
     }
   }
 
+  const project = state.project;
+  const githubConnected = Boolean(state.githubConnection?.connected);
+  const eraseConfirmMatches = Boolean(project && eraseConfirmInput.trim() === project.project_id);
+  const previewReadyForDelete = Boolean(eraseSummary?.dry_run);
+  const retentionDays = state.retention?.retention_days ?? null;
+  const retentionBand = retentionDays == null ? "unknown" : retentionDays >= 30 ? "ready" : "short";
+
   return (
-    <>
-      {error ? <section className="panel"><p>{error}</p></section> : null}
-      {statusMessage ? <section className="panel"><p>{statusMessage}</p></section> : null}
+    <div className="page-content settings-project-page">
+      {error ? (
+        <section className="panel settings-error-panel">
+          <header className="panel-header">
+            <div>
+              <h3>Settings could not load</h3>
+              <p>{error}</p>
+            </div>
+            <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
+              <RefreshCw aria-hidden="true" />
+              Retry
+            </button>
+          </header>
+        </section>
+      ) : null}
+
+      {statusMessage ? (
+        <div className={isProblemMessage(statusMessage) ? "alert-strip alert-strip-error" : "alert-strip"}>
+          {statusMessage}
+        </div>
+      ) : null}
 
       {loading ? (
         <section className="panel">
@@ -491,189 +368,199 @@ export default function SettingsPage() {
         </section>
       ) : null}
 
-      {!loading ? (
+      {!loading && project ? (
         <>
-          <section className="grid-two">
-            <article className="panel">
+          <section className="settings-summary-grid">
+            <article className="panel settings-summary-card">
+              <Database aria-hidden="true" />
+              <span>Project</span>
+              <strong>{safeString(project.name, "Project")}</strong>
+              <small className="mono">{project.project_id}</small>
+            </article>
+            <article className="panel settings-summary-card">
+              <GitPullRequest aria-hidden="true" />
+              <span>GitHub PRs</span>
+              <strong>{githubConnected ? "Connected" : "Not connected"}</strong>
+              <small>{state.githubConnection?.github_login ? `@${state.githubConnection.github_login}` : "Connect repo access for generated PRs"}</small>
+            </article>
+            <article className="panel settings-summary-card">
+              <ShieldCheck aria-hidden="true" />
+              <span>Retention</span>
+              <strong>{retentionDays ?? "-"} days</strong>
+              <small>{retentionBand === "short" ? "Short retention, review compliance needs" : `Updated ${formatDateTime(state.retention?.updated_at ?? null)}`}</small>
+            </article>
+            <article className="panel settings-summary-card">
+              <BellRing aria-hidden="true" />
+              <span>Alert channels</span>
+              <strong>{enabledNotificationChannels}/5 enabled</strong>
+              <small>Delivery toggles are project scoped.</small>
+            </article>
+          </section>
+
+          <section className="settings-readiness-grid" aria-label="Project settings readiness">
+            <div className="settings-readiness-item">
+              <CheckCircle2 aria-hidden="true" />
+              <span>PII detector saves only valid regex patterns.</span>
+            </div>
+            <div className="settings-readiness-item">
+              <LockKeyhole aria-hidden="true" />
+              <span>Data erasure requires preview plus exact project ID.</span>
+            </div>
+            <div className={githubConnected ? "settings-readiness-item" : "settings-readiness-item settings-readiness-warn"}>
+              {githubConnected ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
+              <span>{githubConnected ? "GitHub PR generation can use connected repo access." : "GitHub PR generation needs repo OAuth connection."}</span>
+            </div>
+          </section>
+
+          {Object.values(sectionErrors).some(Boolean) ? (
+            <section className="panel panel-muted">
+              <header className="panel-header">
+                <h3>Partial Settings Access</h3>
+                <p>Some admin-only or backend-backed settings did not load. The available controls remain usable.</p>
+              </header>
+              <div className="list">
+                {Object.entries(sectionErrors).map(([key, value]) =>
+                  value ? (
+                    <div key={key} className="list-row">
+                      <div className="list-main">
+                        <strong>{key}</strong>
+                        <span>{value}</span>
+                      </div>
+                    </div>
+                  ) : null,
+                )}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="grid-two settings-grid-row">
+            <article className="panel settings-control-panel">
               <header className="panel-header">
                 <div>
-                  <h3>Project Settings</h3>
-                  <p>Core project identity and ownership.</p>
+                  <h3>Project Metadata</h3>
+                  <p>Identity and ownership for the active Zroky project.</p>
                 </div>
+                <button type="button" className="btn btn-soft" onClick={() => void load()}>
+                  <RefreshCw aria-hidden="true" />
+                  Refresh
+                </button>
               </header>
 
               <div className="list">
                 <div className="list-row">
                   <div className="list-main">
                     <strong>Project ID</strong>
-                    <span className="mono">{safeString(state.project?.project_id, "-")}</span>
+                    <span className="mono">{project.project_id}</span>
                   </div>
                 </div>
                 <div className="list-row">
                   <div className="list-main">
                     <strong>Name</strong>
-                    <span>{safeString(state.project?.name, "-")}</span>
+                    <span>{project.name}</span>
                   </div>
                 </div>
                 <div className="list-row">
                   <div className="list-main">
-                    <strong>Owner Ref</strong>
-                    <span>{safeString(state.project?.owner_ref, "-")}</span>
+                    <strong>Owner reference</strong>
+                    <span>{safeString(project.owner_ref, "-")}</span>
                   </div>
+                </div>
+                <div className="list-row">
+                  <div className="list-main">
+                    <strong>Status</strong>
+                    <span>{project.is_active ? "Active" : "Inactive"}</span>
+                  </div>
+                  <StatusPill value={project.is_active ? "active" : "inactive"} />
                 </div>
                 <div className="list-row">
                   <div className="list-main">
                     <strong>Updated</strong>
-                    <span>{formatDateTime(state.project?.updated_at ?? null)}</span>
+                    <span>{formatDateTime(project.updated_at)}</span>
                   </div>
                 </div>
               </div>
             </article>
 
-            <article className="panel panel-muted">
+            <article className="panel settings-control-panel">
               <header className="panel-header">
                 <div>
-                  <h3>API Keys</h3>
-                  <p>Create and revoke project keys.</p>
+                  <h3>GitHub PR Connection</h3>
+                  <p>Connect your GitHub account so generated fixes can open pull requests.</p>
                 </div>
+                <StatusPill value={githubConnected ? "verified" : "warning"} />
               </header>
 
-              {!canLoadApiKeys ? (
-                <div className="empty">Project context missing, API keys cannot load.</div>
-              ) : (
-                <>
-                  <form className="actions" onSubmit={onCreateApiKey}>
-                    <div className="field settings-key-field">
-                      <label htmlFor="apiKeyName">Key Name</label>
-                      <input
-                        id="apiKeyName"
-                        value={apiKeyName}
-                        onChange={(event) => setApiKeyName(event.target.value)}
-                        placeholder="Zroky Dashboard Key"
-                      />
-                    </div>
-                    <button className="btn btn-primary" type="submit">
-                      Create Key
-                    </button>
-                  </form>
-
-                  {latestCreatedApiKey ? (
-                    <div className="settings-inset">
-                      <p className="hint">Copy once:</p>
-                      <p className="mono settings-key-reveal">
-                        {latestCreatedApiKey}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  <div className="list">
-                    {state.apiKeys.length === 0 ? (
-                      <div className="empty">No API keys listed. If this stays empty, auth permissions may be missing.</div>
-                    ) : (
-                      state.apiKeys.map((key) => (
-                        <div key={key.key_id} className="list-row">
-                          <div className="list-main">
-                            <strong>{key.name}</strong>
-                            <span className="mono">
-                              {key.key_prefix} ┬╖ {formatDateTime(key.created_at)}
-                            </span>
-                          </div>
-                          <div className="actions">
-                            <StatusPill value={key.revoked ? "revoked" : "active"} />
-                            {!key.revoked ? (
-                              <button type="button" className="btn btn-danger" onClick={() => void onRevokeApiKey(key.key_id)}>
-                                Revoke
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))
-                    )}
+              <div className="list">
+                <div className="list-row">
+                  <div className="list-main">
+                    <strong>Connection</strong>
+                    <span>{githubConnected ? "Connected" : "Not connected"}</span>
                   </div>
-                </>
-              )}
+                </div>
+                <div className="list-row">
+                  <div className="list-main">
+                    <strong>GitHub login</strong>
+                    <span>{safeString(state.githubConnection?.github_login, "-")}</span>
+                  </div>
+                </div>
+                <div className="list-row">
+                  <div className="list-main">
+                    <strong>Scopes</strong>
+                    <span>{state.githubConnection?.scopes.length ? state.githubConnection.scopes.join(", ") : "-"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="actions">
+                <button type="button" className="btn btn-primary" onClick={onStartGithubConnect}>
+                  <GitPullRequest aria-hidden="true" />
+                  {githubConnected ? "Reconnect GitHub" : "Connect GitHub"}
+                </button>
+                {githubConnected ? (
+                  <button type="button" className="btn btn-danger" onClick={() => void onDisconnectGithub()}>
+                    Disconnect
+                  </button>
+                ) : null}
+              </div>
             </article>
           </section>
 
-          <section className="panel">
-            <header className="panel-header">
-              <div>
-                <h3>GitHub PR Connection</h3>
-                <p>Connect your GitHub account so PR generation can use your repo access token.</p>
-              </div>
-              <StatusPill value={state.githubConnection?.connected ? "verified" : "warning"} />
-            </header>
-
-            <div className="list">
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Connection Status</strong>
-                  <span>{state.githubConnection?.connected ? "Connected" : "Not connected"}</span>
-                </div>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>GitHub Login</strong>
-                  <span>{safeString(state.githubConnection?.github_login, "-")}</span>
-                </div>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Scopes</strong>
-                  <span>
-                    {state.githubConnection?.scopes && state.githubConnection.scopes.length > 0
-                      ? state.githubConnection.scopes.join(", ")
-                      : "-"}
-                  </span>
-                </div>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Connected At</strong>
-                  <span>{formatDateTime(state.githubConnection?.connected_at ?? null)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="actions">
-              <button type="button" className="btn btn-primary" onClick={onStartGithubConnect}>
-                {state.githubConnection?.connected ? "Reconnect GitHub" : "Connect GitHub"}
-              </button>
-              {state.githubConnection?.connected ? (
-                <button type="button" className="btn btn-danger" onClick={() => void onDisconnectGithub()}>
-                  Disconnect
-                </button>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="grid-two">
-            <article className="panel">
+          <section className="grid-two settings-grid-row">
+            <article className="panel settings-control-panel">
               <header className="panel-header">
                 <div>
                   <h3>PII Policy</h3>
-                  <p>Custom detection patterns and validator.</p>
+                  <p>Custom redaction patterns used before storing captured call evidence.</p>
                 </div>
               </header>
 
               <form className="field" onSubmit={onSavePii}>
-                <label htmlFor="piiPatterns">Custom Patterns (one per line)</label>
+                <label htmlFor="piiPatterns">Custom patterns, one per line</label>
                 <textarea
                   id="piiPatterns"
                   value={piiInput}
                   onChange={(event) => setPiiInput(event.target.value)}
                   placeholder="\\d{16}"
                 />
+                {invalidPiiPatterns.length > 0 ? (
+                  <div className="settings-validation-box" role="alert">
+                    {invalidPiiPatterns.map((item) => (
+                      <p key={item.index}>Line {item.index}: {item.message}</p>
+                    ))}
+                  </div>
+                ) : piiInput.trim() ? (
+                  <p className="field-success">All custom patterns compile locally.</p>
+                ) : null}
                 <div className="actions">
-                  <button className="btn btn-primary" type="submit">
-                    Save PII Policy
+                  <button className="btn btn-primary" type="submit" disabled={invalidPiiPatterns.length > 0}>
+                    Save PII policy
                   </button>
                 </div>
               </form>
 
-              <form className="grid-two" onSubmit={onTestDetector}>
+              <form className="grid-two settings-detector-form" onSubmit={onTestDetector}>
                 <div className="field">
-                  <label htmlFor="patternInput">Test Pattern</label>
+                  <label htmlFor="patternInput">Test pattern</label>
                   <input
                     id="patternInput"
                     value={patternInput}
@@ -681,7 +568,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="sampleInput">Sample Text</label>
+                  <label htmlFor="sampleInput">Sample text</label>
                   <input
                     id="sampleInput"
                     value={sampleTextInput}
@@ -690,7 +577,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="actions settings-grid-full">
                   <button className="btn btn-soft" type="submit">
-                    Test Detector
+                    Test detector
                   </button>
                 </div>
               </form>
@@ -698,76 +585,146 @@ export default function SettingsPage() {
               {detectorResult ? (
                 <div className="settings-inset">
                   <p className="hint">
-                    Valid: {String(detectorResult.valid)} ┬╖ Matches: {detectorResult.match_count}
+                    Valid: {String(detectorResult.valid)}. Matches: {detectorResult.match_count}
                   </p>
-                  {detectorResult.error ? <p className="hint">Error: {detectorResult.error}</p> : null}
+                  {detectorResult.error ? <p className="field-error">{detectorResult.error}</p> : null}
+                  {detectorResult.matches.length > 0 ? (
+                    <p className="mono settings-key-reveal">{detectorResult.matches.join(", ")}</p>
+                  ) : null}
                 </div>
               ) : null}
             </article>
 
-            <article className="panel panel-muted">
+            <article className="panel settings-control-panel">
               <header className="panel-header">
                 <div>
-                  <h3>Retention + Notifications</h3>
-                  <p>Data lifecycle and channel toggles.</p>
+                  <h3>Retention & Notifications</h3>
+                  <p>Control data lifecycle and delivery channels for operational alerts.</p>
                 </div>
               </header>
 
-              <form className="actions" onSubmit={onSaveRetention}>
+              <form className="settings-inline-form" onSubmit={onSaveRetention}>
                 <div className="field">
-                  <label htmlFor="retentionDays">Retention Days</label>
+                  <label htmlFor="retentionDays">Retention days</label>
                   <input
                     id="retentionDays"
+                    type="number"
+                    min="1"
+                    max="3650"
+                    inputMode="numeric"
                     value={retentionInput}
                     onChange={(event) => setRetentionInput(event.target.value)}
                   />
                 </div>
                 <button className="btn btn-primary" type="submit">
-                  Save Retention
+                  Save retention
                 </button>
               </form>
 
-              <div className="settings-inset">
+              <form className="list settings-notification-list" onSubmit={onSaveNotifications}>
+                <label className="list-row" htmlFor="emailEnabled">
+                  <span>Email</span>
+                  <input id="emailEnabled" type="checkbox" checked={notificationDraft.email_enabled} onChange={() => setNotification("email_enabled")} />
+                </label>
+                <label className="list-row" htmlFor="slackEnabled">
+                  <span>Slack</span>
+                  <input id="slackEnabled" type="checkbox" checked={notificationDraft.slack_enabled} onChange={() => setNotification("slack_enabled")} />
+                </label>
+                <label className="list-row" htmlFor="teamsEnabled">
+                  <span>Microsoft Teams</span>
+                  <input id="teamsEnabled" type="checkbox" checked={notificationDraft.teams_enabled} onChange={() => setNotification("teams_enabled")} />
+                </label>
+                <label className="list-row" htmlFor="browserEnabled">
+                  <span>Browser</span>
+                  <input id="browserEnabled" type="checkbox" checked={notificationDraft.browser_enabled} onChange={() => setNotification("browser_enabled")} />
+                </label>
+                <label className="list-row" htmlFor="terminalEnabled">
+                  <span>Terminal</span>
+                  <input id="terminalEnabled" type="checkbox" checked={notificationDraft.terminal_enabled} onChange={() => setNotification("terminal_enabled")} />
+                </label>
+                <div className="actions">
+                  <button className="btn btn-soft" type="submit">
+                    Save channels
+                  </button>
+                  <Link className="btn btn-soft" href="/settings/integrations">
+                    Manage integrations
+                  </Link>
+                </div>
+              </form>
+            </article>
+          </section>
+
+          <section className="grid-two settings-grid-row">
+            <article className="panel settings-control-panel">
+              <header className="panel-header">
+                <div>
+                  <h3>Data Export</h3>
+                  <p>Download calls, diagnoses, and alerts for portability or offline audit.</p>
+                </div>
+              </header>
+              <div className="actions">
+                <button type="button" className="btn btn-soft" onClick={() => void onExportData()} disabled={exporting}>
+                  <Download aria-hidden="true" />
+                  {exporting ? "Preparing export..." : "Download JSON export"}
+                </button>
+              </div>
+            </article>
+
+            <article className="panel settings-control-panel profile-danger-zone">
+              <header className="panel-header">
+                <div>
+                  <h3 className="profile-danger-title">Project Data Erasure</h3>
+                  <p>Preview or permanently delete project operational data. Run preview before deleting.</p>
+                </div>
+              </header>
+              <div className="settings-inline-form">
                 <div className="field">
-                  <label htmlFor="erasureBatchSize">Erasure Batch Size</label>
+                  <label htmlFor="erasureBatchSize">Batch size</label>
                   <input
                     id="erasureBatchSize"
+                    type="number"
+                    min="1"
+                    max="5000"
+                    inputMode="numeric"
                     value={eraseBatchSizeInput}
                     onChange={(event) => setEraseBatchSizeInput(event.target.value)}
                   />
                 </div>
+                <button type="button" className="btn btn-soft" onClick={() => void onEraseProjectData(true)} disabled={erasingData}>
+                  {erasingData ? "Running..." : "Preview"}
+                </button>
+              </div>
+              <div className="settings-delete-confirm">
+                <label htmlFor="erasureConfirmProject">Type project ID to unlock deletion</label>
+                <input
+                  id="erasureConfirmProject"
+                  value={eraseConfirmInput}
+                  onChange={(event) => setEraseConfirmInput(event.target.value)}
+                  placeholder={project.project_id}
+                  disabled={erasingData || !previewReadyForDelete}
+                />
+                <p className="hint">
+                  {previewReadyForDelete
+                    ? "Preview is ready. Permanent delete stays locked until the project ID matches."
+                    : "Run preview first to see exactly what will be touched."}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => void onEraseProjectData(false)}
+                  disabled={erasingData || !previewReadyForDelete || !eraseConfirmMatches}
+                >
+                  <Trash2 aria-hidden="true" />
+                  Delete data
+                </button>
+              </div>
 
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="btn btn-soft"
-                    onClick={() => void onEraseProjectData(true)}
-                    disabled={erasingData}
-                  >
-                    {erasingData ? "Running..." : "Preview Data Erasure"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => void onEraseProjectData(false)}
-                    disabled={erasingData}
-                  >
-                    {erasingData ? "Deleting..." : "Delete All Project Data"}
-                  </button>
-                </div>
-
-                <p className="hint">Delete-all supports GDPR-style project data erasure. Run preview before permanent deletion.</p>
-
-                {eraseSummary ? (
+              {eraseSummary ? (
+                <div className="settings-inset">
+                  <p className="hint">
+                    Last result: {eraseSummary.dry_run ? "Preview" : "Applied"}. Total rows: {eraseSummary.total_deleted}
+                  </p>
                   <div className="list">
-                    <div className="list-row">
-                      <div className="list-main">
-                        <strong>Last Erasure Summary</strong>
-                        <span>
-                          {eraseSummary.dry_run ? "Dry Run" : "Applied"} ┬╖ total deleted: {eraseSummary.total_deleted}
-                        </span>
-                      </div>
-                    </div>
                     {Object.entries(eraseSummary.deleted_by_table).map(([table, count]) => (
                       <div key={table} className="list-row">
                         <div className="list-main">
@@ -777,415 +734,12 @@ export default function SettingsPage() {
                       </div>
                     ))}
                   </div>
-                ) : null}
-              </div>
-
-              <form className="list" onSubmit={onSaveNotifications}>
-                <label className="list-row" htmlFor="emailEnabled">
-                  <span>Email</span>
-                  <input
-                    id="emailEnabled"
-                    type="checkbox"
-                    checked={notificationDraft.email_enabled}
-                    onChange={() => void onToggleNotification("email_enabled")}
-                  />
-                </label>
-
-                <label className="list-row" htmlFor="slackEnabled">
-                  <span>Slack</span>
-                  <input
-                    id="slackEnabled"
-                    type="checkbox"
-                    checked={notificationDraft.slack_enabled}
-                    onChange={() => void onToggleNotification("slack_enabled")}
-                  />
-                </label>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Slack App</strong>
-                    <span>Connect a workspace and channel for alert delivery.</span>
-                  </div>
-                  <Link className="btn btn-soft" href="/settings/integrations/slack">
-                    Manage Slack
-                  </Link>
                 </div>
-
-                <label className="list-row" htmlFor="teamsEnabled">
-                  <span>Microsoft Teams</span>
-                  <input
-                    id="teamsEnabled"
-                    type="checkbox"
-                    checked={notificationDraft.teams_enabled}
-                    onChange={() => void onToggleNotification("teams_enabled")}
-                  />
-                </label>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Teams Webhook</strong>
-                    <span>Connect a Teams channel for alert delivery.</span>
-                  </div>
-                  <Link className="btn btn-soft" href="/settings/integrations/teams">
-                    Manage Teams
-                  </Link>
-                </div>
-
-                <label className="list-row" htmlFor="browserEnabled">
-                  <span>Browser</span>
-                  <input
-                    id="browserEnabled"
-                    type="checkbox"
-                    checked={notificationDraft.browser_enabled}
-                    onChange={() => void onToggleNotification("browser_enabled")}
-                  />
-                </label>
-
-                <label className="list-row" htmlFor="terminalEnabled">
-                  <span>Terminal</span>
-                  <input
-                    id="terminalEnabled"
-                    type="checkbox"
-                    checked={notificationDraft.terminal_enabled}
-                    onChange={() => void onToggleNotification("terminal_enabled")}
-                  />
-                </label>
-
-                <div className="actions">
-                  <button className="btn btn-soft" type="submit">
-                    Save Notification Channels
-                  </button>
-                </div>
-              </form>
+              ) : null}
             </article>
-          </section>
-
-          <section className="grid-two">
-            <article className="panel">
-              <header className="panel-header">
-                <div>
-                  <h3>Pricing Validation Interviews</h3>
-                  <p>Track at least 5 developer interviews and lock launch pricing decision.</p>
-                </div>
-                <StatusPill value={state.pricingValidation?.launch_gate_passed ? "verified" : "warning"} />
-              </header>
-
-              <form className="field" onSubmit={onSavePricingValidation}>
-                <label htmlFor="pricingModel">Selected Launch Model</label>
-                <select
-                  id="pricingModel"
-                  value={pricingModelInput}
-                  onChange={(event) => setPricingModelInput(event.target.value as "tiered" | "usage_based" | "undecided")}
-                  disabled={Boolean(state.pricingValidation?.pricing_locked)}
-                >
-                  <option value="undecided">Undecided</option>
-                  <option value="tiered">Tiered</option>
-                  <option value="usage_based">Usage Based</option>
-                </select>
-
-                <label htmlFor="pricingRationale">Decision Rationale</label>
-                <textarea
-                  id="pricingRationale"
-                  value={pricingRationaleInput}
-                  onChange={(event) => setPricingRationaleInput(event.target.value)}
-                  placeholder="Why this model best fits beta feedback"
-                  disabled={Boolean(state.pricingValidation?.pricing_locked)}
-                />
-
-                <label htmlFor="pricingMigrationPath">Migration Path</label>
-                <textarea
-                  id="pricingMigrationPath"
-                  value={pricingMigrationPathInput}
-                  onChange={(event) => setPricingMigrationPathInput(event.target.value)}
-                  placeholder="Post-launch pricing revision path"
-                  disabled={Boolean(state.pricingValidation?.pricing_locked)}
-                />
-
-                <label htmlFor="pricingInterviews">Interview Notes JSON Array</label>
-                <textarea
-                  id="pricingInterviews"
-                  value={pricingInterviewsInput}
-                  onChange={(event) => setPricingInterviewsInput(event.target.value)}
-                  placeholder='[{"developer_ref":"dev-a","preferred_model":"tiered","fairness_score":4.5,"call_volume_context":"50k/month","notes":"fair","interviewed_at":"2026-04-25T10:00:00Z"}]'
-                  disabled={Boolean(state.pricingValidation?.pricing_locked)}
-                />
-
-                <label className="list-row" htmlFor="lockPricingDecision">
-                  <span>Lock pricing decision</span>
-                  <input
-                    id="lockPricingDecision"
-                    type="checkbox"
-                    checked={lockPricingDecisionInput}
-                    onChange={(event) => setLockPricingDecisionInput(event.target.checked)}
-                    disabled={Boolean(state.pricingValidation?.pricing_locked)}
-                  />
-                </label>
-
-                <div className="actions">
-                  <button className="btn btn-primary" type="submit" disabled={Boolean(state.pricingValidation?.pricing_locked)}>
-                    {state.pricingValidation?.pricing_locked ? "Pricing Locked" : "Save Pricing Validation"}
-                  </button>
-                </div>
-              </form>
-
-              <div className="list">
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Interview Coverage</strong>
-                    <span>
-                      {state.pricingValidation?.unique_developer_count ?? 0} / {state.pricingValidation?.required_interviews ?? 5} unique beta developers
-                    </span>
-                  </div>
-                  <StatusPill value={state.pricingValidation?.minimum_interviews_met ? "verified" : "warning"} />
-                </div>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Missing Interviews</strong>
-                    <span>{state.pricingValidation?.missing_interviews ?? 0}</span>
-                  </div>
-                  <StatusPill value={(state.pricingValidation?.missing_interviews ?? 0) === 0 ? "verified" : "warning"} />
-                </div>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Decision Lock</strong>
-                    <span>
-                      {state.pricingValidation?.pricing_locked
-                        ? `Locked at ${formatDateTime(state.pricingValidation.locked_at)}`
-                        : "Unlocked"}
-                    </span>
-                  </div>
-                  <StatusPill value={state.pricingValidation?.pricing_locked ? "verified" : "warning"} />
-                </div>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Week 12 Pricing Gate</strong>
-                    <span>{state.pricingValidation?.launch_gate_passed ? "Ready" : "Blocked"}</span>
-                  </div>
-                  <StatusPill value={state.pricingValidation?.launch_gate_passed ? "verified" : "warning"} />
-                </div>
-                {!state.pricingValidation?.launch_gate_passed && state.pricingValidation?.blockers?.length ? (
-                  state.pricingValidation.blockers.map((blocker) => (
-                    <div key={blocker} className="list-row">
-                      <div className="list-main">
-                        <strong>Blocker</strong>
-                        <span>{blocker}</span>
-                      </div>
-                    </div>
-                  ))
-                ) : null}
-              </div>
-            </article>
-
-            <article className="panel panel-muted">
-              <header className="panel-header">
-                <div>
-                  <h3>Rollback Drill</h3>
-                  <p>Track deploy + rollback test outcomes and failure simulation evidence.</p>
-                </div>
-                <StatusPill value={state.rollbackDrill?.status} />
-              </header>
-
-              <form className="field" onSubmit={onSaveRollbackDrill}>
-                <label htmlFor="rollbackDeployRevision">Deploy Revision</label>
-                <input
-                  id="rollbackDeployRevision"
-                  value={rollbackDeployRevisionInput}
-                  onChange={(event) => setRollbackDeployRevisionInput(event.target.value)}
-                  placeholder="railway-revision-123"
-                />
-
-                <label htmlFor="rollbackTargetRevision">Rollback Revision</label>
-                <input
-                  id="rollbackTargetRevision"
-                  value={rollbackTargetRevisionInput}
-                  onChange={(event) => setRollbackTargetRevisionInput(event.target.value)}
-                  placeholder="railway-revision-122"
-                />
-
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="btn btn-soft"
-                    onClick={() => void onRunRollbackVerification("deploy")}
-                    disabled={rollbackVerificationRunningPhase !== null}
-                  >
-                    {rollbackVerificationRunningPhase === "deploy" ? "Verifying Deploy..." : "Run Deploy Verification"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-soft"
-                    onClick={() => void onRunRollbackVerification("rollback")}
-                    disabled={rollbackVerificationRunningPhase !== null}
-                  >
-                    {rollbackVerificationRunningPhase === "rollback" ? "Verifying Rollback..." : "Run Rollback Verification"}
-                  </button>
-                </div>
-
-                {rollbackVerificationResult ? (
-                  <div className="settings-inset">
-                    <p className="hint">
-                      Last verification: {rollbackVerificationResult.phase} ┬╖ {rollbackVerificationResult.passed ? "passed" : "failed"} ┬╖ {formatDateTime(rollbackVerificationResult.verified_at)}
-                    </p>
-                    <div className="list">
-                      {rollbackVerificationResult.checks.map((check) => (
-                        <div key={`${check.name}-${rollbackVerificationResult.verified_at}`} className="list-row">
-                          <div className="list-main">
-                            <strong>{check.name}</strong>
-                            <span>{check.detail}</span>
-                          </div>
-                          <StatusPill value={check.status === "ok" ? "verified" : check.status === "failed" ? "failed" : "warning"} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <label htmlFor="rollbackStatus">Drill Status</label>
-                <select
-                  id="rollbackStatus"
-                  value={rollbackStatusInput}
-                  onChange={(event) => setRollbackStatusInput(event.target.value as "not_started" | "in_progress" | "passed" | "failed")}
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="passed" disabled={!state.pricingValidation?.launch_gate_passed}>Passed</option>
-                  <option value="failed">Failed</option>
-                </select>
-
-                <label className="list-row" htmlFor="rollbackDeployPassed">
-                  <span>Deploy test passed (automated)</span>
-                  <input
-                    id="rollbackDeployPassed"
-                    type="checkbox"
-                    checked={rollbackDeployPassedInput}
-                    disabled
-                  />
-                </label>
-
-                <label className="list-row" htmlFor="rollbackRollbackPassed">
-                  <span>Rollback test passed (automated)</span>
-                  <input
-                    id="rollbackRollbackPassed"
-                    type="checkbox"
-                    checked={rollbackRollbackPassedInput}
-                    disabled
-                  />
-                </label>
-
-                <p className="hint">Deploy/Rollback test flags are updated by verification checks, not manual toggles.</p>
-
-                <label className="list-row" htmlFor="rollbackFailureSimulation">
-                  <span>Failure simulation performed</span>
-                  <input
-                    id="rollbackFailureSimulation"
-                    type="checkbox"
-                    checked={rollbackFailureSimulationInput}
-                    onChange={(event) => setRollbackFailureSimulationInput(event.target.checked)}
-                  />
-                </label>
-
-                <label htmlFor="rollbackFailureCategory">Failure Simulation Category</label>
-                <select
-                  id="rollbackFailureCategory"
-                  value={rollbackFailureCategoryInput}
-                  onChange={(event) => setRollbackFailureCategoryInput(event.target.value as "TOKEN_OVERFLOW" | "RATE_LIMIT" | "AUTH_FAILURE" | "LOOP_DETECTED" | "COST_SPIKE" | "")}
-                  disabled={!rollbackFailureSimulationInput}
-                >
-                  <option value="">Select category</option>
-                  <option value="TOKEN_OVERFLOW">TOKEN_OVERFLOW</option>
-                  <option value="RATE_LIMIT">RATE_LIMIT</option>
-                  <option value="AUTH_FAILURE">AUTH_FAILURE</option>
-                  <option value="LOOP_DETECTED">LOOP_DETECTED</option>
-                  <option value="COST_SPIKE">COST_SPIKE</option>
-                </select>
-
-                <label htmlFor="rollbackFailureNotes">Failure Simulation Notes</label>
-                <textarea
-                  id="rollbackFailureNotes"
-                  value={rollbackFailureNotesInput}
-                  onChange={(event) => setRollbackFailureNotesInput(event.target.value)}
-                  placeholder="What failed, how it was detected, and mitigation proof"
-                />
-
-                <label htmlFor="rollbackDrillNotes">Rollback Drill Notes</label>
-                <textarea
-                  id="rollbackDrillNotes"
-                  value={rollbackDrillNotesInput}
-                  onChange={(event) => setRollbackDrillNotesInput(event.target.value)}
-                  placeholder="Deployment and rollback observations"
-                />
-
-                <div className="actions">
-                  <button className="btn btn-soft" type="submit">
-                    Save Rollback Drill
-                  </button>
-                </div>
-              </form>
-
-              <div className="list">
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Status</strong>
-                    <span>{safeString(state.rollbackDrill?.status, "not_started")}</span>
-                  </div>
-                  <StatusPill value={state.rollbackDrill?.status} />
-                </div>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Completed At</strong>
-                    <span>{formatDateTime(state.rollbackDrill?.completed_at ?? null)}</span>
-                  </div>
-                </div>
-              </div>
-            </article>
-          </section>
-
-          <section className="panel">
-            <header className="panel-header">
-              <div>
-                <h3>Provider Verification</h3>
-                <p>Per-provider status and test connection.</p>
-              </div>
-            </header>
-
-            <div className="list">
-              {state.providers.length === 0 ? (
-                <div className="empty">No provider telemetry yet. Trigger a few calls first.</div>
-              ) : (
-                state.providers.map((provider) => (
-                  <div key={provider.provider} className="list-row">
-                    <div className="list-main">
-                      <strong>{provider.provider}</strong>
-                      <span>
-                        tracked calls: {provider.tracked_call_count} ┬╖ checked: {formatDateTime(provider.last_checked_at)}
-                      </span>
-                    </div>
-                    <div className="actions">
-                      <StatusPill value={provider.status} />
-                      <button type="button" className="btn btn-soft" onClick={() => void onTestProvider(provider.provider)}>
-                        Test Connection
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="panel panel-muted">
-            <header className="panel-header">
-              <div>
-                <h3>Data Export</h3>
-                <p>Download calls, diagnoses, and alerts for this project.</p>
-              </div>
-            </header>
-
-            <div className="actions">
-              <button type="button" className="btn btn-soft" onClick={() => void onExportData()} disabled={exporting}>
-                {exporting ? "Preparing Export..." : "Download JSON Export"}
-              </button>
-            </div>
           </section>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -10,7 +10,9 @@ const api = vi.hoisted(() => ({
   getBillingMe: vi.fn(),
   getIssue: vi.fn(),
   ignoreIssue: vi.fn(),
+  promoteIssueToGolden: vi.fn(),
   resolveIssue: vi.fn(),
+  runIssueCiGate: vi.fn(),
   updateIssueTriage: vi.fn(),
 }));
 
@@ -51,6 +53,40 @@ vi.mock("@/lib/api", async () => {
 });
 
 const now = "2026-05-29T10:00:00.000Z";
+
+function proof(
+  overrides: Partial<import("@/lib/types").IssueProofSnapshot> = {},
+): import("@/lib/types").IssueProofSnapshot {
+  return {
+    replay: {
+      run_id: null,
+      status: null,
+      replay_mode: null,
+      verified_fix: false,
+      summary_url: null,
+      created_at: null,
+      completed_at: null,
+    },
+    golden: {
+      golden_set_id: null,
+      golden_set_name: null,
+      golden_trace_id: null,
+      status: null,
+      blocks_ci: false,
+      trace_count: 0,
+      created_at: null,
+    },
+    ci_gate: {
+      run_id: null,
+      status: null,
+      git_sha: null,
+      summary_url: null,
+      created_at: null,
+      completed_at: null,
+    },
+    ...overrides,
+  };
+}
 
 function issue(overrides: Partial<import("@/lib/types").IssueItem> = {}): import("@/lib/types").IssueItem {
   return {
@@ -98,6 +134,7 @@ function issue(overrides: Partial<import("@/lib/types").IssueItem> = {}): import
     replay_coverage_status: "not_covered",
     recommended_next_action: "Replay the issue and verify the payment retry guard.",
     priority_score: 99,
+    proof: proof(),
     ...overrides,
   };
 }
@@ -147,6 +184,63 @@ function mockDetail(
   api.updateIssueTriage.mockResolvedValue(loadedIssue);
   api.resolveIssue.mockResolvedValue({ ...loadedIssue, status: "resolved" });
   api.ignoreIssue.mockResolvedValue({ ...loadedIssue, status: "ignored" });
+  api.promoteIssueToGolden.mockResolvedValue({
+    issue: {
+      ...loadedIssue,
+      proof: proof({
+        golden: {
+          golden_set_id: "golden_1",
+          golden_set_name: "Issue regression guards",
+          golden_trace_id: "trace_golden_1",
+          status: "active",
+          blocks_ci: true,
+          trace_count: 1,
+          created_at: now,
+        },
+      }),
+    },
+    golden: {
+      golden_set_id: "golden_1",
+      golden_set_name: "Issue regression guards",
+      golden_trace_id: "trace_golden_1",
+      status: "active",
+      blocks_ci: true,
+      trace_count: 1,
+      created_at: now,
+    },
+  });
+  api.runIssueCiGate.mockResolvedValue({
+    issue: {
+      ...loadedIssue,
+      proof: proof({
+        golden: {
+          golden_set_id: "golden_1",
+          golden_set_name: "Issue regression guards",
+          golden_trace_id: "trace_golden_1",
+          status: "active",
+          blocks_ci: true,
+          trace_count: 1,
+          created_at: now,
+        },
+        ci_gate: {
+          run_id: "ci_run_1",
+          status: "pending",
+          git_sha: null,
+          summary_url: "/replay/ci_run_1",
+          created_at: now,
+          completed_at: null,
+        },
+      }),
+    },
+    ci_gate: {
+      run_id: "ci_run_1",
+      status: "pending",
+      git_sha: null,
+      summary_url: "/replay/ci_run_1",
+      created_at: now,
+      completed_at: null,
+    },
+  });
 }
 
 describe("IssueDetailPage MVP investigation layout", () => {
@@ -173,20 +267,21 @@ describe("IssueDetailPage MVP investigation layout", () => {
     expect(screen.getByLabelText("Resolution")).toBeInTheDocument();
     expect(screen.getByText("Status: Open")).toBeInTheDocument();
     for (const heading of [
-      "Root cause",
-      "Evidence timeline",
-      "Sample traces",
-      "Replay proof",
-      "Golden status",
+      "Executive diagnosis",
+      "Evidence workbench",
+      "Replay, Golden, and CI readiness",
+      "Cost impact",
     ]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
+    expect(screen.getByLabelText("Issue proof ladder")).toBeInTheDocument();
     expect(screen.getByText("Agent repeated the same payment tool call.")).toBeInTheDocument();
-    expect(screen.getByText("Recommended next step")).toBeInTheDocument();
+    expect(screen.getByText("Recommended path")).toBeInTheDocument();
     expect(screen.getByText("Replay the issue and verify the payment retry guard.")).toBeInTheDocument();
-    expect(screen.getByText("The model retried the same tool call three times.")).toBeInTheDocument();
+    expect(screen.getAllByText("The model retried the same tool call three times.").length).toBeGreaterThan(0);
     expect(screen.getByText("Status / owner")).toBeInTheDocument();
-    expect(screen.getByText("Cost impact")).toBeInTheDocument();
+    expect(screen.getByText("CI gate readiness")).toBeInTheDocument();
+    expect(screen.getAllByText("Cost impact").length).toBeGreaterThan(0);
     expect(screen.getByText("$84.00 from 42 calls")).toBeInTheDocument();
   });
 
@@ -211,34 +306,74 @@ describe("IssueDetailPage MVP investigation layout", () => {
     expect(screen.queryByText("Create Golden")).toBeNull();
   });
 
-  it("shows Create Golden only for verified_fix with a sample call", async () => {
+  it("promotes a verified fix to an active Golden", async () => {
     mockDetail({ replay_coverage_status: "verified_fix" });
 
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
-    const goldenLinks = screen.getAllByRole("link", { name: /Create Golden/i });
-    expect(goldenLinks.length).toBeGreaterThan(0);
-    expect(goldenLinks[0].getAttribute("href")).toBe("/goldens?call_id=call_1");
+    fireEvent.click(screen.getByRole("button", { name: /Promote to Golden/i }));
+
+    await waitFor(() => expect(api.promoteIssueToGolden).toHaveBeenCalledWith("issue_1", { blocks_ci: true }));
+    expect(await screen.findByText("Golden guard created and linked to this issue.")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Open Golden/i })[0].getAttribute("href")).toBe("/goldens/golden_1");
   });
 
-  it.each(["stub_only", "not_verified"])("does not show Create Golden for %s", async (status) => {
+  it.each(["stub_only", "not_verified"])("does not show Golden promotion for %s", async (status) => {
     mockDetail({ replay_coverage_status: status });
 
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
     expect(screen.queryByText("Create Golden")).toBeNull();
-    expect(screen.getByText("Run trusted replay before creating a Golden.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Promote to Golden/i })).toBeNull();
+    expect(screen.getAllByText("Needs trusted replay before Golden promotion.").length).toBeGreaterThan(0);
   });
 
-  it("does not show Create Golden when verified_fix has no sample call", async () => {
+  it("does not show Golden promotion when verified_fix has no sample call", async () => {
     mockDetail({ replay_coverage_status: "verified_fix", sample_call_id: null });
 
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
     expect(screen.queryByText("Create Golden")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Promote to Golden/i })).toBeNull();
+  });
+
+  it("runs a CI gate when an active Golden and PR are linked", async () => {
+    mockDetail(
+      {
+        replay_coverage_status: "verified_fix",
+        proof: proof({
+          golden: {
+            golden_set_id: "golden_1",
+            golden_set_name: "Issue regression guards",
+            golden_trace_id: "trace_golden_1",
+            status: "active",
+            blocks_ci: true,
+            trace_count: 1,
+            created_at: now,
+          },
+        }),
+      },
+      {
+        "pilot.replay_stub": true,
+        "pilot.goldens_basic": true,
+        "pro.ci_gate_nonblocking": true,
+      },
+    );
+
+    render(<IssueDetailPage />);
+
+    await screen.findByRole("heading", { name: "Checkout loop" });
+    fireEvent.click(screen.getAllByRole("button", { name: /Run CI gate/i })[0]);
+
+    await waitFor(() =>
+      expect(api.runIssueCiGate).toHaveBeenCalledWith("issue_1", {
+        replay_mode: "real_llm",
+      }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/ci-gates/ci_run_1");
   });
 
   it("calls existing resolve and ignore APIs", async () => {
@@ -248,9 +383,13 @@ describe("IssueDetailPage MVP investigation layout", () => {
 
     await screen.findByRole("heading", { name: "Checkout loop" });
     fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(screen.getByText("Resolve this issue?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm resolve" }));
     await waitFor(() => expect(api.resolveIssue).toHaveBeenCalledWith("issue_1", { resolution_source: "manual" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Ignore" }));
+    expect(screen.getByText("Ignore this issue?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm ignore" }));
     await waitFor(() => expect(api.ignoreIssue).toHaveBeenCalledWith("issue_1"));
   });
 
@@ -278,7 +417,7 @@ describe("IssueDetailPage MVP investigation layout", () => {
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
-    const sampleSection = screen.getByRole("heading", { name: "Sample traces" }).closest(".imd-card");
+    const sampleSection = screen.getByRole("heading", { name: "Evidence workbench" }).closest(".imd-card");
     if (!sampleSection) throw new Error("Missing sample traces section");
     fireEvent.click(within(sampleSection).getAllByRole("button", { name: /Replay this call/i })[0]);
 

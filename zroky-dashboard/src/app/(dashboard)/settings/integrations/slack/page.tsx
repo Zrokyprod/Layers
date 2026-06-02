@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 
 import {
   disconnectSlackInstall,
@@ -12,7 +13,12 @@ import {
 import type { SlackInstallStatusResponse } from "@/lib/types";
 
 function formatDate(value: string | null) {
-  return value ? new Date(value).toLocaleString() : "—";
+  return value ? new Date(value).toLocaleString() : "-";
+}
+
+function isConfigProblem(value: string): boolean {
+  const text = value.toLowerCase();
+  return text.includes("not configured") || text.includes("unavailable") || text.includes("failed") || text.includes("disabled");
 }
 
 export default function SlackIntegrationPage() {
@@ -78,6 +84,7 @@ export default function SlackIntegrationPage() {
   }
 
   const connected = Boolean(status?.connected);
+  const problemMessage = message && isConfigProblem(message);
 
   return (
     <div className="page-stack">
@@ -87,10 +94,10 @@ export default function SlackIntegrationPage() {
           <h2>Slack</h2>
           <p className="hint">Connect your workspace so Zroky can send alerts, replay failures, and reliability events into the right incident channel.</p>
         </div>
-        <Link className="btn btn-soft" href="/settings">Back to settings</Link>
+        <Link className="btn btn-soft" href="/settings/integrations">Back to integrations</Link>
       </section>
 
-      {message ? <div className="alert-strip">{message}</div> : null}
+      {message ? <div className={problemMessage ? "alert-strip alert-strip-error" : "alert-strip"}>{message}</div> : null}
 
       <section className="grid-two">
         <article className="panel">
@@ -99,29 +106,38 @@ export default function SlackIntegrationPage() {
               <h3>Workspace connection</h3>
               <p>{connected ? "Slack is connected for this project." : "Install the Zroky Slack app for this project."}</p>
             </div>
-            <span className={connected ? "pill pill-success" : "pill"}>{connected ? "Connected" : "Not connected"}</span>
+            <span className={connected ? "pill pill-green" : "pill"}>{connected ? "Connected" : "Not connected"}</span>
           </header>
 
-          {loading ? <p className="hint">Loading Slack status…</p> : null}
+          {loading ? <p className="hint">Loading Slack status...</p> : null}
+          {!loading && problemMessage ? (
+            <div className="settings-config-warning" role="status">
+              <AlertTriangle aria-hidden="true" />
+              <div>
+                <strong>Slack OAuth is not ready in this environment.</strong>
+                <span>{message}</span>
+              </div>
+            </div>
+          ) : null}
 
           {!loading && (
             <div className="list">
               <div className="list-row">
                 <div className="list-main">
                   <strong>Workspace</strong>
-                  <span>{status?.team_name ?? status?.team_id ?? "—"}</span>
+                  <span>{status?.team_name ?? status?.team_id ?? "-"}</span>
                 </div>
               </div>
               <div className="list-row">
                 <div className="list-main">
                   <strong>Channel</strong>
-                  <span>{status?.channel_name ? `#${status.channel_name}` : status?.channel_id ?? "—"}</span>
+                  <span>{status?.channel_name ? `#${status.channel_name}` : status?.channel_id ?? "-"}</span>
                 </div>
               </div>
               <div className="list-row">
                 <div className="list-main">
                   <strong>Installed by</strong>
-                  <span>{status?.installed_by_user ?? "—"}</span>
+                  <span>{status?.installed_by_user ?? "-"}</span>
                 </div>
               </div>
               <div className="list-row">
@@ -133,7 +149,7 @@ export default function SlackIntegrationPage() {
               <div className="list-row">
                 <div className="list-main">
                   <strong>Scopes</strong>
-                  <span>{status?.scopes.length ? status.scopes.join(", ") : "—"}</span>
+                  <span>{status?.scopes.length ? status.scopes.join(", ") : "-"}</span>
                 </div>
               </div>
             </div>

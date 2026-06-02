@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, KeyRound, Plug, ShieldAlert } from "lucide-react";
 
 import {
   createProviderKey,
@@ -12,35 +13,29 @@ import {
 import { formatDateTime } from "@/lib/format";
 import type { ProviderKeyResponse, ProviderVerificationItem } from "@/lib/types";
 
-const PROVIDER_META: Record<string, { label: string; color: string; description: string }> = {
+const PROVIDER_META: Record<string, { label: string; description: string }> = {
   openai: {
     label: "OpenAI",
-    color: "#10a37f",
     description: "Chat completions, responses, and embeddings.",
   },
   anthropic: {
     label: "Anthropic",
-    color: "#d4763b",
     description: "Claude models for reasoning and long context.",
   },
   gemini: {
     label: "Google Gemini",
-    color: "#4285f4",
     description: "Gemini models for multimodal and long-context workflows.",
   },
   openrouter: {
     label: "OpenRouter",
-    color: "#111827",
     description: "Multi-provider routing for replay and evaluation workers.",
   },
   azure_openai: {
     label: "Azure OpenAI",
-    color: "#2563eb",
     description: "Azure-hosted OpenAI deployments.",
   },
   custom: {
     label: "Custom",
-    color: "#6b7280",
     description: "Private or custom provider endpoint.",
   },
 };
@@ -78,6 +73,7 @@ export default function ProvidersPage() {
   const [includeRevoked, setIncludeRevoked] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<ProviderKeyResponse | null>(null);
 
   const loadProviders = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -157,7 +153,9 @@ export default function ProvidersPage() {
     }
   }
 
-  async function onRevokeProviderKey(key: ProviderKeyResponse) {
+  async function onRevokeProviderKey() {
+    if (!revokeTarget) return;
+    const key = revokeTarget;
     setRevokingKeyId(key.id);
     setStatusMessage("");
     setKeyError(null);
@@ -169,6 +167,7 @@ export default function ProvidersPage() {
       setKeyError(err instanceof Error ? err.message : "Failed to revoke provider key.");
     } finally {
       setRevokingKeyId(null);
+      setRevokeTarget(null);
     }
   }
 
@@ -187,9 +186,47 @@ export default function ProvidersPage() {
     return PROVIDER_META[provider]?.label ?? provider;
   }
 
+  function isConfigProblem(message: string | null): boolean {
+    if (!message) return false;
+    const normalized = message.toLowerCase();
+    return normalized.includes("not configured") || normalized.includes("unavailable") || normalized.includes("503") || normalized.includes("vault");
+  }
+
+  const activeProviderKeys = providerKeys.filter((key) => key.is_active);
+  const detectedProviders = items.filter((item) => item.tracked_call_count > 0).length;
+  const verifiedProviders = items.filter((item) => item.status === "verified").length;
+  const vaultConfigProblem = isConfigProblem(keyError);
+
   return (
     <div className="page-content">
       {statusMessage && <div className="alert-strip">{statusMessage}</div>}
+
+      <section className="settings-summary-grid">
+        <article className="panel settings-summary-card">
+          <KeyRound aria-hidden="true" />
+          <span>Active vault keys</span>
+          <strong>{activeProviderKeys.length}</strong>
+          <small>{providerKeys.length} total key records loaded.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <Plug aria-hidden="true" />
+          <span>Detected providers</span>
+          <strong>{detectedProviders}</strong>
+          <small>From captured production or replay traffic.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <CheckCircle2 aria-hidden="true" />
+          <span>Verified</span>
+          <strong>{verifiedProviders}</strong>
+          <small>Connectivity tests that passed recently.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <ShieldAlert aria-hidden="true" />
+          <span>Vault state</span>
+          <strong>{vaultConfigProblem ? "Needs config" : "Reachable"}</strong>
+          <small>{vaultConfigProblem ? "Set backend provider key encryption before saving." : "Key list endpoint responded."}</small>
+        </article>
+      </section>
 
       <section className="panel profile-section-gap">
         <header className="panel-header">
@@ -207,6 +244,16 @@ export default function ProvidersPage() {
             />
           </label>
         </header>
+
+        {vaultConfigProblem ? (
+          <div className="settings-config-warning" role="status">
+            <AlertTriangle aria-hidden="true" />
+            <div>
+              <strong>Provider vault is not ready in this environment.</strong>
+              <span>{keyError}</span>
+            </div>
+          </div>
+        ) : null}
 
         <form className="grid-two" onSubmit={onSaveProviderKey}>
           <div className="field">
@@ -290,7 +337,7 @@ export default function ProvidersPage() {
                           type="button"
                           className="btn btn-danger btn-sm"
                           disabled={revokingKeyId === key.id}
-                          onClick={() => void onRevokeProviderKey(key)}
+                          onClick={() => setRevokeTarget(key)}
                         >
                           {revokingKeyId === key.id ? "Revoking..." : "Revoke"}
                         </button>
@@ -324,7 +371,7 @@ export default function ProvidersPage() {
 
               return (
                 <div key={provider} className="provider-card">
-                  <div className="provider-avatar" style={{ background: meta?.color ?? "#6b7280" }}>
+                  <div className="provider-avatar">
                     {(meta?.label ?? provider).charAt(0).toUpperCase()}
                   </div>
                   <div className="provider-info">
@@ -364,6 +411,53 @@ export default function ProvidersPage() {
           </div>
         )}
       </section>
+
+      {revokeTarget ? (
+        <div
+          className="fix-modal-backdrop"
+          role="presentation"
+          onClick={() => !revokingKeyId && setRevokeTarget(null)}
+        >
+          <section
+            className="panel keys-revoke-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Revoke provider key"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header">
+              <div>
+                <h3>Revoke Provider Key</h3>
+                <p>
+                  Replay, evaluation, and provider verification jobs using <strong>{labelForProvider(revokeTarget.provider)}</strong> may stop working until another active key exists.
+                </p>
+              </div>
+            </header>
+            <div className="settings-modal-facts">
+              <span>Label <strong>{revokeTarget.label ?? "production"}</strong></span>
+              <span>Fingerprint <strong className="mono">{revokeTarget.key_fingerprint.slice(0, 8)}...{revokeTarget.key_last4 ?? "----"}</strong></span>
+            </div>
+            <div className="actions">
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={revokingKeyId === revokeTarget.id}
+                onClick={() => void onRevokeProviderKey()}
+              >
+                {revokingKeyId === revokeTarget.id ? "Revoking..." : "Yes, revoke key"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-soft"
+                disabled={revokingKeyId === revokeTarget.id}
+                onClick={() => setRevokeTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 
 import {
   disconnectTeamsInstall,
@@ -12,7 +13,12 @@ import {
 import type { TeamsInstallStatusResponse } from "@/lib/types";
 
 function formatDate(value: string | null) {
-  return value ? new Date(value).toLocaleString() : "—";
+  return value ? new Date(value).toLocaleString() : "-";
+}
+
+function isConfigProblem(value: string): boolean {
+  const text = value.toLowerCase();
+  return text.includes("not configured") || text.includes("unavailable") || text.includes("failed") || text.includes("disabled");
 }
 
 export default function TeamsIntegrationPage() {
@@ -88,6 +94,7 @@ export default function TeamsIntegrationPage() {
   }
 
   const connected = Boolean(status?.connected);
+  const problemMessage = message && isConfigProblem(message);
 
   return (
     <div className="page-stack">
@@ -97,10 +104,10 @@ export default function TeamsIntegrationPage() {
           <h2>Microsoft Teams</h2>
           <p className="hint">Connect a Teams incoming webhook so Zroky can send alerts, replay failures, and reliability events into your team channel.</p>
         </div>
-        <Link className="btn btn-soft" href="/settings">Back to settings</Link>
+        <Link className="btn btn-soft" href="/settings/integrations">Back to integrations</Link>
       </section>
 
-      {message ? <div className="alert-strip">{message}</div> : null}
+      {message ? <div className={problemMessage ? "alert-strip alert-strip-error" : "alert-strip"}>{message}</div> : null}
 
       <section className="grid-two">
         <article className="panel">
@@ -109,29 +116,38 @@ export default function TeamsIntegrationPage() {
               <h3>Channel connection</h3>
               <p>{connected ? "Microsoft Teams is connected for this project." : "Paste an incoming webhook URL from your Teams channel."}</p>
             </div>
-            <span className={connected ? "pill pill-success" : "pill"}>{connected ? "Connected" : "Not connected"}</span>
+            <span className={connected ? "pill pill-green" : "pill"}>{connected ? "Connected" : "Not connected"}</span>
           </header>
 
-          {loading ? <p className="hint">Loading Microsoft Teams status…</p> : null}
+          {loading ? <p className="hint">Loading Microsoft Teams status...</p> : null}
+          {!loading && problemMessage ? (
+            <div className="settings-config-warning" role="status">
+              <AlertTriangle aria-hidden="true" />
+              <div>
+                <strong>Teams webhook storage is not ready in this environment.</strong>
+                <span>{message}</span>
+              </div>
+            </div>
+          ) : null}
 
           {!loading && (
             <div className="list">
               <div className="list-row">
                 <div className="list-main">
                   <strong>Channel</strong>
-                  <span>{status?.channel_name || "—"}</span>
+                  <span>{status?.channel_name || "-"}</span>
                 </div>
               </div>
               <div className="list-row">
                 <div className="list-main">
                   <strong>Connector</strong>
-                  <span>{status?.connector_type ?? "—"}</span>
+                  <span>{status?.connector_type ?? "-"}</span>
                 </div>
               </div>
               <div className="list-row">
                 <div className="list-main">
                   <strong>Installed by</strong>
-                  <span>{status?.installed_by_user ?? "—"}</span>
+                  <span>{status?.installed_by_user ?? "-"}</span>
                 </div>
               </div>
               <div className="list-row">

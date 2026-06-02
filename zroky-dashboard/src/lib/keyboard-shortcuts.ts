@@ -48,13 +48,13 @@ export function useKeyboardShortcuts() {
       {
         key: "a",
         ctrl: true,
-        description: "Go to agents",
-        action: () => router.push("/agents"),
+        description: "Go to Failure Inbox",
+        action: () => router.push("/home"),
       },
       {
         key: "h",
         ctrl: true,
-        description: "Open command center",
+        description: "Open Failure Inbox",
         action: () => router.push("/home"),
       },
       {
@@ -136,8 +136,8 @@ export const KEYBOARD_SHORTCUTS_HELP = [
   { keys: ["Ctrl", "J"], description: "Ask Zroky (natural-language Q&A)" },
   { keys: ["Ctrl", "K"], description: "Open command palette" },
   { keys: ["Ctrl", "B"], description: "Toggle sidebar" },
-  { keys: ["Ctrl", "A"], description: "Go to agents" },
-  { keys: ["Ctrl", "H"], description: "Open Command Center" },
+  { keys: ["Ctrl", "A"], description: "Go to Failure Inbox" },
+  { keys: ["Ctrl", "H"], description: "Open Failure Inbox" },
   { keys: ["Ctrl", "C"], description: "Go to calls" },
   { keys: ["Ctrl", "I"], description: "Go to issues" },
   { keys: ["Ctrl", "S"], description: "Go to settings" },

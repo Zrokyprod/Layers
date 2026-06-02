@@ -275,7 +275,7 @@ function CallsPageContent() {
               Evidence drill-down
             </div>
             <h1>Calls</h1>
-            <p>Inspect captured production calls when an issue, replay, drift row, or cost anomaly needs raw evidence.</p>
+            <p>Inspect captured production calls when an issue, replay, drift row, or cost spike needs raw evidence.</p>
           </div>
           <div className="calls-hero-actions">
             <button type="button" className="btn btn-soft" onClick={handleExport} title="Download current filter as CSV">

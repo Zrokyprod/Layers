@@ -2,51 +2,50 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 const navLinks = [
-  { label: "Dashboard", href: "/#dashboard" },
-  { label: "Details", href: "/details" },
-  { label: "Blog", href: "/blog" },
-  { label: "Pricing", href: "/pricing" },
+  { label: "Product", href: "/#product" },
+  { label: "Proof Loop", href: "/#proof-loop" },
+  { label: "Pricing", href: "/#pricing" },
+  { label: "Docs", href: "/#quickstart" },
 ];
 
 const footerGroups = [
   {
     title: "Product",
     links: [
-      { label: "Dashboard", href: "/#dashboard" },
-      { label: "Details", href: "/details" },
-      { label: "Pricing", href: "/pricing" },
-      { label: "Get started", href: "/auth/register" },
+      { label: "Product", href: "/product" },
+      { label: "Pricing", href: "/#pricing" },
+      { label: "Docs", href: "/#quickstart" },
+      { label: "Start free", href: "/signup" },
     ],
   },
   {
-    title: "Resources",
+    title: "Reliability",
     links: [
-      { label: "Blog", href: "/blog" },
-      { label: "Release loop", href: "/details#release-loop" },
-      { label: "Reliability guide", href: "/blog#guide" },
-      { label: "Sign in", href: "/auth/login" },
+      { label: "Capture", href: "/#proof-loop" },
+      { label: "Replay Lab", href: "/#proof-loop" },
+      { label: "Golden traces", href: "/#proof-loop" },
+      { label: "CI gates", href: "/#proof-loop" },
     ],
   },
   {
     title: "Company",
     links: [
+      { label: "Docs", href: "/#quickstart" },
       { label: "Contact", href: "mailto:sales@zroky.ai" },
-      { label: "Security", href: "/details#security" },
-      { label: "Status", href: "/#status" },
-      { label: "Roadmap", href: "/blog#roadmap" },
+      { label: "Sign in", href: "/login" },
     ],
   },
 ];
 
 export function PublicNav() {
   return (
-    <header className="public-nav">
-      <Link href="/" className="public-brand" aria-label="Zroky home">
-        <span className="public-brand-mark" aria-hidden="true">Z</span>
-        <span>Zroky</span>
+    <header className="z-nav">
+      <Link href="/" className="z-brand" aria-label="Zroky home">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/zroky-auth-logo.png" alt="Zroky" />
       </Link>
 
-      <nav className="public-nav-links" aria-label="Public navigation">
+      <nav className="z-nav-links" aria-label="Public navigation">
         {navLinks.map((link) => (
           <Link key={link.href} href={link.href}>
             {link.label}
@@ -54,12 +53,12 @@ export function PublicNav() {
         ))}
       </nav>
 
-      <div className="public-nav-actions">
-        <Link href="/auth/login" className="public-link-button">
-          Login
+      <div className="z-nav-actions">
+        <Link href="/login" className="z-link-button">
+          Sign in
         </Link>
-        <Link href="/auth/register" className="public-primary-button">
-          Get Started
+        <Link href="/signup" className="z-primary-button">
+          Start free
           <ArrowRight aria-hidden="true" />
         </Link>
       </div>
@@ -69,19 +68,20 @@ export function PublicNav() {
 
 export function PublicFooter() {
   return (
-    <footer className="public-footer">
-      <div className="public-footer-top">
-        <div>
-          <Link href="/" className="public-brand public-footer-brand" aria-label="Zroky home">
-            <span className="public-brand-mark" aria-hidden="true">Z</span>
-            <span>Zroky</span>
+    <footer className="z-footer">
+      <div className="z-footer-top">
+        <div className="z-footer-brand-block">
+          <Link href="/" className="z-brand z-footer-brand" aria-label="Zroky home">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/zroky-auth-logo.png" alt="Zroky" />
           </Link>
           <p>
-            The operating dashboard for AI agent reliability: incidents, evidence, replay proof, drift, cost, and release gates in one workflow.
+            Zroky captures failed AI-agent runs, diagnoses root cause, replays the exact scenario, and turns verified
+            fixes into release gates.
           </p>
         </div>
 
-        <div className="public-footer-grid">
+        <div className="z-footer-grid">
           {footerGroups.map((group) => (
             <nav key={group.title} aria-label={group.title}>
               <h2>{group.title}</h2>
@@ -95,9 +95,9 @@ export function PublicFooter() {
         </div>
       </div>
 
-      <div className="public-footer-bottom">
+      <div className="z-footer-bottom">
         <span>Copyright {new Date().getFullYear()} Zroky AI.</span>
-        <span>Production reliability for AI agents.</span>
+        <span>No fake logos. No fake testimonials. Built around production reliability proof.</span>
       </div>
     </footer>
   );

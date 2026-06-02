@@ -1,712 +1,1193 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { KeyboardEvent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  DollarSign,
+  GitPullRequest,
+  ListChecks,
+  LockKeyhole,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+} from "lucide-react";
 
-import { getActivityFeed, getAnalyticsSummary, getAuthSummary, getCaptureHealth, getHealthScore } from "@/lib/api";
-import { formatCount, formatDateTime, formatPercent, formatUsd, numberFromUnknown, safeString } from "@/lib/format";
-import { useDashboardStore } from "@/lib/store";
-import type {
-  ActivityFeedItemResponse,
-  AnalyticsSummaryResponse,
-  AuthSummaryResponse,
-  CaptureHealthResponse,
-  HealthScoreResponse,
-} from "@/lib/types";
+import { hasPlanEntitlement } from "@/components/feature-gate";
 import { StatusPill } from "@/components/status-pill";
-import { ComingSoonPoll } from "@/components/coming-soon-poll";
-import { CaptureConnectPanel } from "@/components/capture-connect-panel";
-import { JudgeHealthPanel } from "@/components/judge-health-panel";
-import { TopIssuesQueue } from "@/components/top-issues-queue";
-import { RecentIssueActivity } from "@/components/recent-issue-activity";
-import { OpenIssuesBySeverity } from "@/components/open-issues-by-severity";
+import {
+  createReplayRunFromIssue,
+  getAnalyticsSummary,
+  getBillingMe,
+  getReplayQuota,
+  listGoldenSets,
+  listIssues,
+  listReplayRuns,
+  resolveIssue,
+  type GoldenSetView,
+  type ReplayQuotaResponse,
+  type ReplayRunItem,
+} from "@/lib/api";
+import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
+import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
+import { replayLabel, severityRank } from "@/lib/issue-format";
+import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
+import type { AnalyticsSummaryResponse, BillingMeResponse, IssueItem } from "@/lib/types";
 
-const pollMs = 10000;
-const ONBOARDING_WIZARD_OPENED_KEY = "zroky.onboardingWizardOpened";
-
-type HealthBreakdownItem = {
-  key: "success_rate" | "latency_score" | "cost_anomaly_score" | "open_issues_score";
-  label: string;
-  weight: number;
-  score: number;
-  weightedPoints: number;
-  inputSummary: string;
-  thresholdSummary: string;
+type InboxData = {
+  issues: IssueItem[];
+  replayRuns: ReplayRunItem[];
+  goldenSets: GoldenSetView[];
+  billing: BillingMeResponse | null;
+  quota: ReplayQuotaResponse | null;
+  summary: AnalyticsSummaryResponse | null;
 };
 
-function actionLabel(action: string): string {
-  const normalized = action.trim().toLowerCase();
-  if (normalized === "diagnosis_viewed") {
-    return "Diagnosis Viewed";
-  }
-  if (normalized === "fix_copied") {
-    return "Fix Copied";
-  }
-  if (normalized === "pr_generated") {
-    return "PR Generated";
-  }
-  if (normalized === "resolved") {
-    return "Resolved";
-  }
-  return action;
+type IssueAction = "view" | "replay" | "open_goldens" | "upgrade";
+type ReadinessState = "good" | "warn" | "blocked" | "neutral";
+type InboxLoadKey = keyof InboxData;
+type InboxLoadErrors = Partial<Record<InboxLoadKey, string>>;
+type InboxQueueFocus = "all" | "critical_high" | "replay_gap" | "impact" | "verified";
+
+const refreshIntervalMs = 30_000;
+const loadSourceLabels: Record<InboxLoadKey, string> = {
+  issues: "Issues",
+  replayRuns: "Replay runs",
+  goldenSets: "Goldens",
+  billing: "Billing",
+  quota: "Replay quota",
+  summary: "Analytics",
+};
+
+const GOLDEN_ELIGIBLE_REPLAY_STATUSES = new Set(["verified_fix"]);
+
+const REPLAY_GAP_STATUSES = new Set([
+  "not_covered",
+  "covered_not_run",
+  "fix_pending_replay",
+  "replay_missing",
+  "covered_failed",
+  "sanity_replay_passed",
+  "real_replay_missing_tool_proof",
+  "stub_only",
+  "not_verified",
+  "tool_snapshot_missing",
+  "inconclusive",
+  "real_replay_passed",
+  "covered_passed",
+]);
+
+function normalizedReplayStatus(issue: IssueItem): string {
+  return issue.replay_coverage_status.trim().toLowerCase();
 }
 
-function KpiDelta({
-  current,
-  previous,
-  lowerIsBetter,
-}: {
-  current: number;
-  previous: number;
-  lowerIsBetter: boolean;
-}) {
-  if (previous === 0) return <span className="kpi-delta-flat">vs yesterday</span>;
-  const delta = current - previous;
-  const pct = Math.abs((delta / previous) * 100);
-  const isGood = lowerIsBetter ? delta <= 0 : delta >= 0;
-  const arrow = delta > 0 ? "â†‘" : delta < 0 ? "â†“" : "â†’";
-  const colorClass = delta === 0 ? "kpi-delta-flat" : isGood ? "kpi-delta-good" : "kpi-delta-bad";
+function hasTrustedGoldenReplay(issue: IssueItem): boolean {
+  return GOLDEN_ELIGIBLE_REPLAY_STATUSES.has(normalizedReplayStatus(issue));
+}
+
+function isReplayGap(issue: IssueItem): boolean {
+  return REPLAY_GAP_STATUSES.has(normalizedReplayStatus(issue));
+}
+
+function usableUsd(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function issueImpactUsd(issue: IssueItem): number | null {
+  return usableUsd(issue.blast_radius_usd) ?? usableUsd(issue.cost_impact_usd);
+}
+
+function formatIssueImpact(issue: IssueItem): string {
+  const impactUsd = issueImpactUsd(issue);
+  return impactUsd == null ? "\u2014" : formatUsd(impactUsd);
+}
+
+function isAbortError(error: unknown): boolean {
+  return (error as { name?: string }).name === "AbortError";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Request failed.";
+}
+
+async function settleLoad<T>(
+  key: InboxLoadKey,
+  promise: Promise<T>,
+): Promise<{ key: InboxLoadKey; status: "fulfilled"; value: T } | { key: InboxLoadKey; status: "rejected"; reason: unknown }> {
+  try {
+    return { key, status: "fulfilled", value: await promise };
+  } catch (reason) {
+    return { key, status: "rejected", reason };
+  }
+}
+
+function sortIssues(items: IssueItem[]): IssueItem[] {
+  return [...items].sort((a, b) => {
+    const severityDelta = severityRank(b.severity) - severityRank(a.severity);
+    if (severityDelta !== 0) return severityDelta;
+
+    const replayDelta = Number(isReplayGap(b)) - Number(isReplayGap(a));
+    if (replayDelta !== 0) return replayDelta;
+
+    const impactDelta = (issueImpactUsd(b) ?? 0) - (issueImpactUsd(a) ?? 0);
+    if (impactDelta !== 0) return impactDelta;
+
+    const occurrenceDelta = b.occurrence_count - a.occurrence_count;
+    if (occurrenceDelta !== 0) return occurrenceDelta;
+
+    const priorityDelta = b.priority_score - a.priority_score;
+    if (priorityDelta !== 0) return priorityDelta;
+
+    return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
+  });
+}
+
+function isCiRun(run: ReplayRunItem): boolean {
+  return run.trigger === "github" || run.golden_set_id.startsWith("regression-ci:");
+}
+
+function isPendingRun(run: ReplayRunItem): boolean {
+  return run.status === "pending" || run.status === "running";
+}
+
+function isFailedCiRun(run: ReplayRunItem): boolean {
+  return isCiRun(run) && ["fail", "failed", "error", "not_verified"].includes(run.status);
+}
+
+function needsGoldenReview(set: GoldenSetView): boolean {
+  return set.trace_count === 0 || set.is_flaky || !set.blocks_ci;
+}
+
+function goldenReviewReason(set: GoldenSetView): string {
+  if (set.trace_count === 0) return "No traces yet";
+  if (set.is_flaky) return "Marked flaky";
+  if (!set.blocks_ci) return "Not blocking CI";
+  return "Needs review";
+}
+
+function chooseIssueAction(
+  issue: IssueItem,
+  caps: { canReplay: boolean; canGoldens: boolean },
+): IssueAction {
+  if (hasTrustedGoldenReplay(issue) && issue.sample_call_id) {
+    return caps.canGoldens ? "open_goldens" : "upgrade";
+  }
+  if (isReplayGap(issue) || issue.sample_call_id) {
+    return caps.canReplay ? "replay" : "upgrade";
+  }
+  return "view";
+}
+
+function planLimitText(quota: ReplayQuotaResponse | null): string {
+  if (!quota) return "Replay quota unavailable";
+  if (!quota.enabled) return "Replay disabled on current plan";
+  if (quota.limit === -1) return `${formatCount(quota.used)} used / unlimited`;
+  return `${formatCount(quota.used)} used / ${formatCount(quota.limit)} runs`;
+}
+
+function issueAgent(issue: IssueItem): string {
+  return issue.affected_agent ?? issue.agent_name ?? "Agent not captured";
+}
+
+function issueEnvironment(): string {
+  const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
+  return envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
+}
+
+function issueNumber(issue: IssueItem): string {
+  const parts = issue.id.split(/[_-]/);
+  return parts[parts.length - 1] || issue.id;
+}
+
+function evidenceSummary(issue: IssueItem): string {
   return (
-    <span className={colorClass}>
-      {arrow} {pct.toFixed(1)}% vs yesterday
+    issue.evidence_traces.find((trace) => trace.evidence_summary)?.evidence_summary ??
+    issue.root_cause ??
+    issue.user_impact ??
+    "No evidence summary captured yet."
+  );
+}
+
+function nextActionTitle(action: IssueAction): string {
+  if (action === "replay") return "Run trusted replay";
+  if (action === "open_goldens") return "Open Goldens";
+  if (action === "upgrade") return "Upgrade to unlock action";
+  return "View issue";
+}
+
+function nextActionOutcome(action: IssueAction): string {
+  if (action === "replay") {
+    return "Next: replay the exact failed scenario, compare the candidate fix, then make it eligible for a Golden.";
+  }
+  if (action === "open_goldens") {
+    return "Next: choose a Golden set, add the verified behavior, then use it as release protection.";
+  }
+  if (action === "upgrade") {
+    return "Next: unlock replay and Golden actions before this issue can protect releases.";
+  }
+  return "Next: inspect the full issue, evidence, root cause, and available remediation path.";
+}
+
+function hasEvidence(issue: IssueItem): boolean {
+  return issue.evidence_traces.length > 0 || Boolean(issue.sample_call_id);
+}
+
+function hasRootCause(issue: IssueItem): boolean {
+  return Boolean(issue.root_cause?.trim()) || Boolean(issue.evidence_traces.find((trace) => trace.evidence_summary));
+}
+
+function goldenReady(issue: IssueItem): boolean {
+  return hasTrustedGoldenReplay(issue) && Boolean(issue.sample_call_id);
+}
+
+function filterIssuesForFocus(items: IssueItem[], focus: InboxQueueFocus): IssueItem[] {
+  if (focus === "critical_high") {
+    return items.filter((issue) => ["critical", "high"].includes(issue.severity.toLowerCase()));
+  }
+  if (focus === "replay_gap") {
+    return items.filter((issue) => !hasTrustedGoldenReplay(issue));
+  }
+  if (focus === "impact") {
+    return [...items]
+      .filter((issue) => issueImpactUsd(issue) != null)
+      .sort((a, b) => (issueImpactUsd(b) ?? 0) - (issueImpactUsd(a) ?? 0));
+  }
+  if (focus === "verified") {
+    return items.filter(hasTrustedGoldenReplay);
+  }
+  return items;
+}
+
+function queueFocusDescription(focus: InboxQueueFocus): string {
+  if (focus === "critical_high") return "Showing critical and high severity issues.";
+  if (focus === "replay_gap") return "Showing issues that cannot become Goldens or block CI yet.";
+  if (focus === "impact") return "Showing issues with cost impact, sorted by spend exposure.";
+  if (focus === "verified") return "Showing issues with verified fixes ready for Golden coverage.";
+  return "Sorted by severity, impact, and replay trust gaps.";
+}
+
+function formatLastUpdated(value: number | null): string {
+  if (!value) return "Not refreshed yet";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
+function readinessState(count: number, total: number, inverted = false): ReadinessState {
+  if (total === 0) return "neutral";
+  if (inverted) return count === 0 ? "good" : "blocked";
+  if (count === total) return "good";
+  if (count > 0) return "warn";
+  return "blocked";
+}
+
+function severityBadge(issue: IssueItem) {
+  return (
+    <span className={`alert-cat-badge badge-${severityBadgeColor(issue.severity)} fi-severity-badge`}>
+      <AlertTriangle aria-hidden="true" />
+      {issue.severity}
     </span>
   );
 }
 
-function captureHealthText(captureHealth: CaptureHealthResponse | null): string {
-  if (!captureHealth) return "Checking ingest path";
-  if (captureHealth.status === "no_data") return "No calls received yet";
-  if (captureHealth.status === "stale") {
-    return `Last event ${captureHealth.last_seen_at ? formatDateTime(captureHealth.last_seen_at) : "unknown"}`;
+function EmptyQueue({ children }: { children: string }) {
+  return <div className="fi-empty">{children}</div>;
+}
+
+function QueueList<T>({
+  items,
+  renderItem,
+  empty,
+}: {
+  items: readonly T[];
+  renderItem: (item: T) => ReactNode;
+  empty: string;
+}) {
+  if (items.length === 0) {
+    return <EmptyQueue>{empty}</EmptyQueue>;
   }
-  return `${formatCount(captureHealth.calls_24h)} events in 24h`;
+  return <div className="fi-queue-list">{items.map(renderItem)}</div>;
+}
+
+function LockedUpgradeLink({ label }: { label: string }) {
+  return (
+    <Link href="/settings/billing" className="btn btn-soft btn-sm fi-btn-secondary" title={label}>
+      <LockKeyhole aria-hidden="true" />
+      Upgrade
+    </Link>
+  );
+}
+
+function KpiCard({
+  icon,
+  label,
+  value,
+  helper,
+  active,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  helper: string;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`fi-kpi-card${active ? " is-active" : ""}`}
+      onClick={onClick}
+      aria-pressed={active}
+    >
+      <div className="fi-kpi-topline">
+        <span>{label}</span>
+        <div className="fi-kpi-icon">{icon}</div>
+      </div>
+      <strong>{value}</strong>
+      <p>{helper}</p>
+    </button>
+  );
+}
+
+function SectionHeader({
+  title,
+  description,
+  action,
+  icon,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <header className="fi-section-header">
+      <div>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+      {action ?? (icon ? <div className="fi-section-icon">{icon}</div> : null)}
+    </header>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="fi-detail-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function DecisionChip({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="fi-decision-chip">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ReadinessStep({
+  icon,
+  label,
+  value,
+  helper,
+  state,
+  href,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  helper: string;
+  state: ReadinessState;
+  href: string;
+}) {
+  return (
+    <Link className="fi-readiness-step" data-state={state} href={href}>
+      <div className="fi-readiness-head">
+        <span className="fi-readiness-icon">{icon}</span>
+        <span className="fi-readiness-state" />
+      </div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{helper}</p>
+    </Link>
+  );
+}
+
+function ProofStep({
+  icon,
+  label,
+  helper,
+  state,
+}: {
+  icon: ReactNode;
+  label: string;
+  helper: string;
+  state: ReadinessState;
+}) {
+  return (
+    <div className="fi-proof-step" data-state={state}>
+      <span className="fi-proof-icon">{icon}</span>
+      <div>
+        <strong>{label}</strong>
+        <p>{helper}</p>
+      </div>
+    </div>
+  );
 }
 
 export default function HomePage() {
+  const router = useRouter();
+  const [data, setData] = useState<InboxData>({
+    issues: [],
+    replayRuns: [],
+    goldenSets: [],
+    billing: null,
+    quota: null,
+    summary: null,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<AnalyticsSummaryResponse | null>(null);
-  const [health, setHealth] = useState<HealthScoreResponse | null>(null);
-  const [captureHealth, setCaptureHealth] = useState<CaptureHealthResponse | null>(null);
-  const [activityFeed, setActivityFeed] = useState<ActivityFeedItemResponse[]>([]);
-  const [authSummary, setAuthSummary] = useState<AuthSummaryResponse | null>(null);
-  const [windowDays, setWindowDays] = useState<1 | 7 | 30>(1);
-  const setSdkConnected = useDashboardStore((s) => s.setSdkConnected);
-  const sdkConnected = useDashboardStore((s) => s.sdkConnected);
-  const [onboardingWizardOpened, setOnboardingWizardOpened] = useState(false);
+  const [loadErrors, setLoadErrors] = useState<InboxLoadErrors>({});
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busyIssueId, setBusyIssueId] = useState<string | null>(null);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [queueFocus, setQueueFocus] = useState<InboxQueueFocus>("all");
+  const loadInFlightRef = useRef(false);
 
-  const load = useCallback(async () => {
-    try {
+  const load = useCallback(async (signal?: AbortSignal) => {
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
+    if (!signal?.aborted) {
+      setRefreshing(true);
       setError(null);
-      const [summaryPayload, healthPayload, capturePayload, activityPayload, authPayload] = await Promise.all([
-        getAnalyticsSummary(windowDays),
-        getHealthScore(),
-        getCaptureHealth(),
-        getActivityFeed({ limit: 12, offset: 0 }),
-        getAuthSummary(24),
+    }
+
+    try {
+      const results = await Promise.all([
+        settleLoad("issues", listIssues({ status: "open", limit: 50 }, signal)),
+        settleLoad("replayRuns", listReplayRuns({ limit: 50 }, signal)),
+        settleLoad("goldenSets", listGoldenSets({ limit: 50 }, signal)),
+        settleLoad("billing", getBillingMe(signal)),
+        settleLoad("quota", getReplayQuota(signal)),
+        settleLoad("summary", getAnalyticsSummary(1, signal)),
       ]);
 
-      setSummary(summaryPayload);
-      setHealth(healthPayload);
-      setCaptureHealth(capturePayload);
-      setSdkConnected(capturePayload.status === "connected");
-      setActivityFeed(activityPayload.items);
-      setAuthSummary(authPayload);
+      if (signal?.aborted || results.every((result) => result.status === "rejected" && isAbortError(result.reason))) {
+        return;
+      }
+
+      const nextErrors: InboxLoadErrors = {};
+      const updates: Partial<InboxData> = {};
+      let successCount = 0;
+
+      for (const result of results) {
+        if (result.status === "rejected") {
+          if (!isAbortError(result.reason)) {
+            nextErrors[result.key] = errorMessage(result.reason);
+          }
+          continue;
+        }
+
+        successCount += 1;
+        if (result.key === "issues") {
+          updates.issues = (result.value as { items: IssueItem[] }).items;
+        } else if (result.key === "replayRuns") {
+          updates.replayRuns = (result.value as { items: ReplayRunItem[] }).items;
+        } else if (result.key === "goldenSets") {
+          updates.goldenSets = (result.value as { items: GoldenSetView[] }).items;
+        } else if (result.key === "billing") {
+          updates.billing = result.value as BillingMeResponse;
+        } else if (result.key === "quota") {
+          updates.quota = result.value as ReplayQuotaResponse;
+        } else if (result.key === "summary") {
+          updates.summary = result.value as AnalyticsSummaryResponse;
+        }
+      }
+
+      setData((prev) => ({ ...prev, ...updates }));
+      setLoadErrors(nextErrors);
+      if (successCount > 0) {
+        setLastUpdatedAt(Date.now());
+      } else {
+        setError("Failure Inbox could not refresh. Showing the last loaded state.");
+      }
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Failed to load dashboard state.";
-      setError(message);
+      if (!signal?.aborted) {
+        setError(errorMessage(loadError));
+      }
     } finally {
-      setLoading(false);
+      loadInFlightRef.current = false;
+      if (!signal?.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [setSdkConnected, windowDays]);
+  }, []);
 
   useEffect(() => {
-    void load();
+    const ctrl = new AbortController();
+    void load(ctrl.signal);
+
     const timer = window.setInterval(() => {
-      void load();
-    }, pollMs);
-    return () => window.clearInterval(timer);
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    }, refreshIntervalMs);
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      ctrl.abort();
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [load]);
 
+  const planTemplate = data.billing?.plan_template;
+  const caps = useMemo(
+    () => ({
+      canDiagnose: hasPlanEntitlement(planTemplate, "pilot.root_cause_diagnosis"),
+      canReplay: hasPlanEntitlement(planTemplate, "pilot.replay_stub"),
+      canGoldens: hasPlanEntitlement(planTemplate, "pilot.goldens_basic"),
+      canCi:
+        hasPlanEntitlement(planTemplate, "pro.ci_gate_nonblocking") ||
+        hasPlanEntitlement(planTemplate, "pro.ci_gate_blocking"),
+    }),
+    [planTemplate],
+  );
+
+  const sortedIssues = useMemo(() => sortIssues(data.issues), [data.issues]);
+  const focusedIssues = useMemo(() => filterIssuesForFocus(sortedIssues, queueFocus), [queueFocus, sortedIssues]);
+  const selectedIssue = useMemo(
+    () => focusedIssues.find((issue) => issue.id === selectedIssueId) ?? focusedIssues[0] ?? sortedIssues[0] ?? null,
+    [focusedIssues, selectedIssueId, sortedIssues],
+  );
+  const nextBestIssue = useMemo(() => {
+    return sortedIssues.find((issue) => chooseIssueAction(issue, caps) !== "view") ?? sortedIssues[0] ?? null;
+  }, [caps, sortedIssues]);
+
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    if (loading || sortedIssues.length === 0) return;
+    const selectedStillVisible = focusedIssues.some((issue) => issue.id === selectedIssueId);
+    if (!selectedIssueId || !selectedStillVisible) {
+      setSelectedIssueId(focusedIssues[0]?.id ?? sortedIssues[0].id);
     }
-    setOnboardingWizardOpened(window.localStorage.getItem(ONBOARDING_WIZARD_OPENED_KEY) === "1");
-  }, []);
+  }, [focusedIssues, loading, selectedIssueId, sortedIssues]);
 
-  const markOnboardingWizardOpened = useCallback(() => {
-    setOnboardingWizardOpened(true);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(ONBOARDING_WIZARD_OPENED_KEY, "1");
+  const criticalHighCount = data.issues.filter((issue) =>
+    ["critical", "high"].includes(issue.severity.toLowerCase()),
+  ).length;
+  const needsTrustedReplayCount = data.issues.filter((issue) => !hasTrustedGoldenReplay(issue)).length;
+  const openIssuesCount = data.issues.length;
+  const diagnosedCount = data.issues.filter(hasRootCause).length;
+  const evidenceCount = data.issues.filter(hasEvidence).length;
+  const trustedReplayCount = data.issues.filter(hasTrustedGoldenReplay).length;
+  const goldenReadyCount = data.issues.filter(goldenReady).length;
+  const loadedIssueImpactUsd = data.issues.reduce((sum, issue) => sum + (issueImpactUsd(issue) ?? 0), 0);
+  const verifiedFixesCount = data.issues.filter(hasTrustedGoldenReplay).length;
+  const pendingRuns = data.replayRuns.filter((run) => isPendingRun(run) && !isCiRun(run)).slice(0, 6);
+  const failedCiRuns = data.replayRuns.filter(isFailedCiRun).slice(0, 6);
+  const goldensNeedingReview = data.goldenSets.filter(needsGoldenReview).slice(0, 6);
+  const planLabel = data.billing?.plan_code ? data.billing.plan_code.toUpperCase() : "PLAN";
+  const headerSubtitle = `${formatCount(needsTrustedReplayCount)} issues need trusted replay before they can become Goldens or block CI.`;
+  const loadErrorKeys = Object.keys(loadErrors) as InboxLoadKey[];
+  const loadErrorText = loadErrorKeys.map((key) => loadSourceLabels[key]).join(", ");
+  const lastUpdatedLabel = formatLastUpdated(lastUpdatedAt);
+
+  function focusQueue(nextFocus: InboxQueueFocus) {
+    setQueueFocus(nextFocus);
+    const nextItems = filterIssuesForFocus(sortedIssues, nextFocus);
+    setSelectedIssueId(nextItems[0]?.id ?? sortedIssues[0]?.id ?? null);
+  }
+
+  async function onReplay(issue: IssueItem) {
+    setActionError(null);
+    setBusyIssueId(issue.id);
+    try {
+      const run = await createReplayRunFromIssue(issue.id, {
+        replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE,
+      });
+      router.push(`/replay/${run.id}`);
+    } catch (replayError) {
+      setActionError(replayError instanceof Error ? replayError.message : "Failed to create replay run.");
+    } finally {
+      setBusyIssueId(null);
     }
-  }, []);
+  }
 
-  const unusualActivity = useMemo(() => {
-    if (!summary?.unusual_activity) {
-      return null;
+  async function onResolve(issue: IssueItem) {
+    setActionError(null);
+    setBusyIssueId(issue.id);
+    try {
+      const updated = await resolveIssue(issue.id, { resolution_source: "manual" });
+      setData((prev) => ({
+        ...prev,
+        issues: prev.issues.filter((item) => item.id !== updated.id),
+      }));
+      setLastUpdatedAt(Date.now());
+    } catch (resolveError) {
+      setActionError(resolveError instanceof Error ? resolveError.message : "Failed to resolve issue.");
+    } finally {
+      setBusyIssueId(null);
     }
+  }
 
-    const multiplier = numberFromUnknown(summary.unusual_activity.anomaly_multiplier);
-    const callMultiplier = numberFromUnknown(summary.unusual_activity.call_multiplier);
-    const costMultiplier = numberFromUnknown(summary.unusual_activity.cost_multiplier);
-    const currentCalls = Math.max(0, Math.round(numberFromUnknown(summary.unusual_activity.current_calls)));
-    const normalCallsPerUser = numberFromUnknown(summary.unusual_activity.normal_calls_per_user);
-    const currentCostUsd = numberFromUnknown(summary.unusual_activity.current_cost_usd);
-    const normalCostPerUserUsd = numberFromUnknown(summary.unusual_activity.normal_cost_per_user_usd);
-
-    return {
-      impactedUser: safeString(summary.unusual_activity.impacted_user, "unknown"),
-      multiplier,
-      callMultiplier: callMultiplier > 0 ? callMultiplier : multiplier,
-      costMultiplier: costMultiplier > 0 ? costMultiplier : multiplier,
-      currentCalls,
-      normalCallsPerUser,
-      currentCostUsd,
-      normalCostPerUserUsd,
-      wasteUsd: numberFromUnknown(summary.unusual_activity.current_waste_estimate_usd),
-      action: safeString(summary.unusual_activity.suggested_action, "Review activity"),
-    };
-  }, [summary]);
-
-  const healthBreakdown = useMemo(() => {
-    if (!health) {
-      return null;
+  function renderIssueAction(issue: IssueItem, options?: { replayLabel?: string; viewLabel?: string }) {
+    const action = chooseIssueAction(issue, caps);
+    if (action === "upgrade") {
+      return <LockedUpgradeLink label="Upgrade to unlock this action" />;
     }
+    if (action === "replay") {
+      return (
+        <button
+          type="button"
+          className="btn btn-primary btn-sm fi-btn-primary"
+          onClick={() => void onReplay(issue)}
+          disabled={busyIssueId === issue.id}
+        >
+          <RotateCcw aria-hidden="true" />
+          {busyIssueId === issue.id ? "Creating..." : options?.replayLabel ?? "Replay"}
+        </button>
+      );
+    }
+    if (action === "open_goldens") {
+      return (
+        <Link href="/goldens" className="btn btn-primary btn-sm fi-btn-primary">
+          <ShieldCheck aria-hidden="true" />
+          Open Goldens
+        </Link>
+      );
+    }
+    return (
+      <Link href={`/issues/${issue.id}`} className="btn btn-primary btn-sm fi-btn-primary">
+        <ArrowRight aria-hidden="true" />
+        {options?.viewLabel ?? "View Issue"}
+      </Link>
+    );
+  }
 
-    const details = health.details;
-    const successfulCalls24h = Math.max(0, Math.round(numberFromUnknown(details["successful_calls_24h"])));
-    const totalCalls24h = Math.max(0, Math.round(numberFromUnknown(details["total_calls_24h"])));
-    const latencySloMs = numberFromUnknown(details["latency_slo_ms"]);
-    const projectP95LatencyMs = numberFromUnknown(details["project_p95_latency_ms"]);
-    const current15mSpendUsd = numberFromUnknown(details["current_15m_spend_usd"]);
-    const baseline15mSpendUsd = numberFromUnknown(details["baseline_15m_spend_usd"]);
-    const costRatio = numberFromUnknown(details["cost_ratio"]);
-    const openHighSeverityIssues = Math.max(0, Math.round(numberFromUnknown(details["open_high_severity_issues"])));
-    const issuesPer1000Calls = numberFromUnknown(details["issues_per_1000_calls"]);
+  function onIssueRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, issue: IssueItem) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    setSelectedIssueId(issue.id);
+  }
 
-    const items: HealthBreakdownItem[] = [
-      {
-        key: "success_rate",
-        label: "Success Rate",
-        weight: 0.4,
-        score: health.success_rate,
-        weightedPoints: health.success_rate * 0.4,
-        inputSummary: `${formatCount(successfulCalls24h)} / ${formatCount(totalCalls24h)} successful calls (24h)` ,
-        thresholdSummary: "Score = (successful_calls / total_calls) * 100",
-      },
-      {
-        key: "latency_score",
-        label: "Latency Score",
-        weight: 0.25,
-        score: health.latency_score,
-        weightedPoints: health.latency_score * 0.25,
-        inputSummary: `P95 ${projectP95LatencyMs.toFixed(2)}ms vs SLO ${latencySloMs.toFixed(2)}ms`,
-        thresholdSummary: "100 when p95 <= SLO, else 100 * (SLO / p95)",
-      },
-      {
-        key: "cost_anomaly_score",
-        label: "Cost Issue",
-        weight: 0.2,
-        score: health.cost_anomaly_score,
-        weightedPoints: health.cost_anomaly_score * 0.2,
-        inputSummary: `${formatUsd(current15mSpendUsd)} current / ${formatUsd(baseline15mSpendUsd)} baseline (15m)` ,
-        thresholdSummary: `Ratio ${costRatio.toFixed(2)}x; buckets: <=1.25 => 100, <=2 => 70, <=3 => 40, >3 => 10`,
-      },
-      {
-        key: "open_issues_score",
-        label: "Open Issues",
-        weight: 0.15,
-        score: health.open_issues_score,
-        weightedPoints: health.open_issues_score * 0.15,
-        inputSummary: `${formatCount(openHighSeverityIssues)} high/critical open issues, ${issuesPer1000Calls.toFixed(2)} per 1000 calls`,
-        thresholdSummary: "Buckets: 0 => 100, <=3 => 70, <=6 => 40, >6 => 10",
-      },
-    ];
-
-    const weightedTotal = items.reduce((sum, item) => sum + item.weightedPoints, 0);
-
-    return {
-      items,
-      weightedTotal,
-      reconciliationDelta: Math.abs(health.health_score - weightedTotal),
-      successfulCalls24h,
-      totalCalls24h,
-      projectP95LatencyMs,
-      latencySloMs,
-      current15mSpendUsd,
-      baseline15mSpendUsd,
-      costRatio,
-      openHighSeverityIssues,
-      issuesPer1000Calls,
-    };
-  }, [health]);
-
-  const fixAdoption = summary?.fix_adoption ?? null;
-  const feedbackLoop = summary?.feedback_loop ?? null;
-  const shouldShowCaptureSetup =
-    !loading &&
-    captureHealth !== null &&
-    (captureHealth.status !== "connected" || (summary !== null && summary.calls_today === 0 && summary.calls_yesterday === 0));
-  const onboardingChecklist = useMemo(() => {
-    const captureConnected = sdkConnected || captureHealth?.status === "connected";
-    const items = [
-      { label: "Capture stream connected", done: captureConnected },
-      { label: "At least one call ingested", done: (summary?.calls_today ?? 0) > 0 },
-      { label: "Setup path opened", done: onboardingWizardOpened },
-    ];
-    const completed = items.filter((item) => item.done).length;
-    return {
-      items,
-      completed,
-      total: items.length,
-      pct: Math.round((completed / items.length) * 100),
-    };
-  }, [captureHealth?.status, onboardingWizardOpened, sdkConnected, summary?.calls_today]);
+  const nextAction = nextBestIssue ? chooseIssueAction(nextBestIssue, caps) : "view";
+  const selectedEvidence = selectedIssue?.evidence_traces ?? [];
+  const selectedPrimaryEvidence = selectedEvidence[0] ?? null;
 
   return (
-    <>
-      <section className="hero panel page-enter">
-        <h1>Command Center</h1>
-        <p>
-          Monitor system health, spot unusual spend, and land fixes in minutes. Data refreshes every {Math.floor(pollMs / 1000)} seconds while this page is open.
-        </p>
-        <div className="hero-footer">
-          <div className="actions">
-            <Link href="/issues" className="btn btn-primary">
-              Triage Top Issues
-            </Link>
+    <div className="fi-screen">
+      <section className="fi-hero">
+        <div className="fi-hero-main">
+          <div className="fi-eyebrow">
+            <AlertTriangle aria-hidden="true" />
+            Production failure queue
           </div>
-          <div className="window-toggle" role="group" aria-label="Time window">
-            {([1, 7, 30] as const).map((d) => (
-              <button
-                key={d}
-                type="button"
-                className={`window-toggle-btn ${windowDays === d ? "window-toggle-btn-active" : ""}`}
-                onClick={() => setWindowDays(d)}
-              >
-                {d === 1 ? "24h" : d === 7 ? "7d" : "30d"}
-              </button>
+          <h1>Failure Inbox</h1>
+          <p>{loading ? "Loading trusted replay gaps for open production issues." : headerSubtitle}</p>
+        </div>
+        <div className="fi-hero-actions">
+          <div className="fi-refresh-meta" aria-live="polite">
+            <span>
+              <Clock3 aria-hidden="true" />
+              Updated {lastUpdatedLabel}
+            </span>
+            <span>
+              <span className={`fi-live-dot${refreshing ? " is-refreshing" : ""}`} />
+              Auto-refresh 30s
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-soft btn-sm fi-btn-secondary"
+            onClick={() => void load()}
+            disabled={refreshing}
+          >
+            <RefreshCw aria-hidden="true" className={refreshing ? "fi-spin" : undefined} />
+            {refreshing ? "Refreshing" : "Refresh"}
+          </button>
+          <Link href="/issues" className="btn btn-soft btn-sm fi-btn-secondary">
+            View all issues
+          </Link>
+        </div>
+      </section>
+
+      {error ? (
+        <section className="fi-notice fi-notice-error" role="alert">
+          <p>{error}</p>
+          <button type="button" className="btn btn-soft btn-sm fi-btn-secondary" onClick={() => void load()} disabled={refreshing}>
+            Retry
+          </button>
+        </section>
+      ) : null}
+
+      {!error && loadErrorKeys.length > 0 ? (
+        <section className="fi-notice fi-notice-warning" role="status" aria-live="polite">
+          <p>
+            Partial refresh: {loadErrorText} failed. Showing latest successful data for the rest.
+          </p>
+          <button type="button" className="btn btn-soft btn-sm fi-btn-secondary" onClick={() => void load()} disabled={refreshing}>
+            Retry failed sources
+          </button>
+        </section>
+      ) : null}
+
+      {actionError ? (
+        <section className="fi-notice fi-notice-error" role="alert">
+          <p>{actionError}</p>
+        </section>
+      ) : null}
+
+      <section className="fi-next-card" aria-label="Next best action">
+        <div className="fi-next-content">
+          <span className="fi-section-kicker">Next best action</span>
+          {nextBestIssue ? (
+            <>
+              <h2>
+                {nextActionTitle(nextAction)} for {nextBestIssue.title}
+              </h2>
+              <div className="fi-next-reasons" aria-label="Next action decision reasons">
+                <DecisionChip label="Severity" value={nextBestIssue.severity} />
+                <DecisionChip label="Impact" value={formatIssueImpact(nextBestIssue)} />
+                <DecisionChip label="Affected calls" value={formatCount(nextBestIssue.occurrence_count)} />
+                <DecisionChip label="Replay proof" value={replayLabel(nextBestIssue.replay_coverage_status)} />
+              </div>
+              <p className="fi-next-outcome">{nextActionOutcome(nextAction)}</p>
+            </>
+          ) : (
+            <>
+              <h2>No open issue needs action.</h2>
+              <p className="fi-next-outcome">
+                Open production issues will appear here when they need replay proof, Golden coverage, or CI protection.
+              </p>
+            </>
+          )}
+        </div>
+        {nextBestIssue ? (
+          <div className="fi-next-action">
+            {renderIssueAction(nextBestIssue, { replayLabel: "Run trusted replay" })}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="fi-readiness-rail" aria-label="Failure readiness pipeline">
+        <ReadinessStep
+          icon={<AlertTriangle aria-hidden="true" />}
+          label="Captured failures"
+          value={loading ? "-" : formatCount(openIssuesCount)}
+          helper={loading ? "Checking capture evidence." : `${formatCount(evidenceCount)} with sample call or trace evidence.`}
+          state={readinessState(openIssuesCount, Math.max(openIssuesCount, 1), true)}
+          href="/issues"
+        />
+        <ReadinessStep
+          icon={<ListChecks aria-hidden="true" />}
+          label="Diagnosed"
+          value={loading ? "-" : `${formatCount(diagnosedCount)} / ${formatCount(openIssuesCount)}`}
+          helper="Root cause or evidence summary is attached."
+          state={readinessState(diagnosedCount, openIssuesCount)}
+          href="/issues"
+        />
+        <ReadinessStep
+          icon={<RotateCcw aria-hidden="true" />}
+          label="Replay proof"
+          value={loading ? "-" : `${formatCount(trustedReplayCount)} / ${formatCount(openIssuesCount)}`}
+          helper="Verified fixes can move toward Goldens."
+          state={readinessState(trustedReplayCount, openIssuesCount)}
+          href="/replay"
+        />
+        <ReadinessStep
+          icon={<ShieldCheck aria-hidden="true" />}
+          label="Golden ready"
+          value={loading ? "-" : formatCount(goldenReadyCount)}
+          helper="Verified traces ready for regression coverage."
+          state={readinessState(goldenReadyCount, openIssuesCount)}
+          href="/goldens"
+        />
+        <ReadinessStep
+          icon={<GitPullRequest aria-hidden="true" />}
+          label="CI risk"
+          value={loading ? "-" : formatCount(failedCiRuns.length)}
+          helper="Failed or not_verified gate runs need review."
+          state={readinessState(failedCiRuns.length, Math.max(failedCiRuns.length, 1), true)}
+          href="/ci-gates"
+        />
+      </section>
+
+      <section className="fi-kpi-grid" aria-label="Failure Inbox summary">
+        <KpiCard
+          icon={<AlertTriangle aria-hidden="true" />}
+          label="Critical & high"
+          value={loading ? "-" : formatCount(criticalHighCount)}
+          helper="Highest-risk loaded open issues."
+          active={queueFocus === "critical_high"}
+          onClick={() => focusQueue("critical_high")}
+        />
+        <KpiCard
+          icon={<RotateCcw aria-hidden="true" />}
+          label="Needs trusted replay"
+          value={loading ? "-" : formatCount(needsTrustedReplayCount)}
+          helper="Cannot become Goldens or block CI yet."
+          active={queueFocus === "replay_gap"}
+          onClick={() => focusQueue("replay_gap")}
+        />
+        <KpiCard
+          icon={<DollarSign aria-hidden="true" />}
+          label="Loaded issue impact"
+          value={loading ? "-" : formatUsd(loadedIssueImpactUsd)}
+          helper="Cost signal from loaded open issues."
+          active={queueFocus === "impact"}
+          onClick={() => focusQueue("impact")}
+        />
+        <KpiCard
+          icon={<ShieldCheck aria-hidden="true" />}
+          label="Verified fixes"
+          value={loading ? "-" : formatCount(verifiedFixesCount)}
+          helper="Eligible for Golden creation when a sample call exists."
+          active={queueFocus === "verified"}
+          onClick={() => focusQueue("verified")}
+        />
+      </section>
+
+      <section className="fi-command-grid">
+        <section className="fi-section fi-priority-section">
+          <SectionHeader
+            title="Failure queue"
+            description={queueFocusDescription(queueFocus)}
+            action={
+              queueFocus === "all" ? undefined : (
+                <button type="button" className="btn btn-soft btn-sm fi-btn-secondary" onClick={() => focusQueue("all")}>
+                  Clear focus
+                </button>
+              )
+            }
+          />
+
+          {loading ? (
+            <div className="fi-loading" aria-label="Loading Failure Inbox" />
+          ) : focusedIssues.length === 0 ? (
+            <EmptyQueue>No open failures loaded.</EmptyQueue>
+          ) : (
+            <div className="fi-table-wrap">
+              <table className="fi-issues-table">
+                <thead>
+                  <tr>
+                    <th>Issue</th>
+                    <th>Impact</th>
+                    <th>Replay proof</th>
+                    <th>Last seen</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {focusedIssues.map((issue) => (
+                    <tr
+                      key={issue.id}
+                      className={selectedIssue?.id === issue.id ? "is-selected" : undefined}
+                      aria-selected={selectedIssue?.id === issue.id}
+                      tabIndex={0}
+                      onClick={() => setSelectedIssueId(issue.id)}
+                      onKeyDown={(event) => onIssueRowKeyDown(event, issue)}
+                    >
+                      <td>
+                        <div className="fi-issue-cell">
+                          {severityBadge(issue)}
+                          <button type="button" className="fi-issue-title-button" onClick={() => setSelectedIssueId(issue.id)}>
+                            {issue.title}
+                          </button>
+                          <span>
+                            {detectorLabel(issue.failure_code)} - {issueAgent(issue)} - {formatCount(issue.occurrence_count)} affected calls
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <strong className="fi-impact-value">{formatIssueImpact(issue)}</strong>
+                      </td>
+                      <td>
+                        <span className="fi-replay-state">{replayLabel(issue.replay_coverage_status)}</span>
+                      </td>
+                      <td>{formatDateTime(issue.last_seen_at)}</td>
+                      <td>
+                        <div className="fi-row-actions">{renderIssueAction(issue)}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <aside className="fi-section fi-detail-panel" aria-label="Selected issue detail">
+          {selectedIssue ? (
+            <>
+              <div className="fi-detail-head">
+                <span className="fi-section-kicker">Issue #{issueNumber(selectedIssue)}</span>
+                <h2>{selectedIssue.title}</h2>
+                {severityBadge(selectedIssue)}
+              </div>
+
+              <div className="fi-detail-grid">
+                <DetailMetric label="Detected" value={formatDateTime(selectedIssue.last_seen_at)} />
+                <DetailMetric label="First seen" value={formatDateTime(selectedIssue.first_seen_at)} />
+                <DetailMetric label="Occurrences" value={formatCount(selectedIssue.occurrence_count)} />
+                <DetailMetric label="Affected agent" value={issueAgent(selectedIssue)} />
+                <DetailMetric label="Environment" value={issueEnvironment()} />
+                <DetailMetric label="Replay proof" value={replayLabel(selectedIssue.replay_coverage_status)} />
+              </div>
+
+              <div className="fi-detail-block">
+                <span>Root cause</span>
+                <p>{selectedIssue.root_cause || evidenceSummary(selectedIssue)}</p>
+              </div>
+
+              <div className="fi-detail-block">
+                <span>Cost impact</span>
+                <p>
+                  {formatIssueImpact(selectedIssue)} from {formatCount(selectedIssue.occurrence_count)} affected calls
+                </p>
+              </div>
+
+              <div className="fi-detail-block">
+                <span>Example trace</span>
+                {selectedPrimaryEvidence ? (
+                  <p>
+                    {selectedPrimaryEvidence.evidence_summary ??
+                      `${selectedPrimaryEvidence.workflow_name ?? "Workflow not captured"} on ${
+                        selectedPrimaryEvidence.provider ?? "unknown provider"
+                      }/${selectedPrimaryEvidence.model ?? "unknown model"}`}
+                  </p>
+                ) : (
+                  <p>No trace evidence attached to this issue yet.</p>
+                )}
+              </div>
+
+              <div className="fi-proof-ladder" aria-label="Selected issue proof ladder">
+                <ProofStep
+                  icon={<ListChecks aria-hidden="true" />}
+                  label="Evidence captured"
+                  helper={hasEvidence(selectedIssue) ? "Sample call or trace evidence is available." : "Capture data is missing."}
+                  state={hasEvidence(selectedIssue) ? "good" : "blocked"}
+                />
+                <ProofStep
+                  icon={<AlertTriangle aria-hidden="true" />}
+                  label="Diagnosis ready"
+                  helper={hasRootCause(selectedIssue) ? "Diagnosis has an explainable failure reason." : "Diagnosis needs evidence before replay."}
+                  state={hasRootCause(selectedIssue) ? "good" : "warn"}
+                />
+                <ProofStep
+                  icon={<RotateCcw aria-hidden="true" />}
+                  label="Trusted replay"
+                  helper={hasTrustedGoldenReplay(selectedIssue) ? "Replay verified the fix." : replayLabel(selectedIssue.replay_coverage_status)}
+                  state={hasTrustedGoldenReplay(selectedIssue) ? "good" : "blocked"}
+                />
+                <ProofStep
+                  icon={<ShieldCheck aria-hidden="true" />}
+                  label="Golden coverage"
+                  helper={goldenReady(selectedIssue) ? "Ready to become a regression guard." : "Needs verified replay and a sample call."}
+                  state={goldenReady(selectedIssue) ? "good" : "warn"}
+                />
+                <ProofStep
+                  icon={<GitPullRequest aria-hidden="true" />}
+                  label="CI gate"
+                  helper={goldenReady(selectedIssue) && caps.canCi ? "Can protect pull requests." : "Needs Golden coverage before CI can block regressions."}
+                  state={goldenReady(selectedIssue) && caps.canCi ? "good" : "neutral"}
+                />
+              </div>
+
+              <div className="fi-detail-actions">
+                {renderIssueAction(selectedIssue, { replayLabel: "Run trusted replay" })}
+                <Link href={`/issues/${selectedIssue.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
+                  View issue
+                </Link>
+                <button
+                  type="button"
+                  className="btn btn-soft btn-sm fi-btn-secondary"
+                  onClick={() => void onResolve(selectedIssue)}
+                  disabled={busyIssueId === selectedIssue.id}
+                >
+                  <CheckCircle2 aria-hidden="true" />
+                  Resolve
+                </button>
+              </div>
+            </>
+          ) : (
+            <EmptyQueue>No issue selected.</EmptyQueue>
+          )}
+        </aside>
+      </section>
+
+      <section className="fi-section fi-trace-section">
+        <SectionHeader
+          title="Trace evidence"
+          description="Evidence timeline for the selected issue."
+          icon={<ListChecks aria-hidden="true" />}
+        />
+        {selectedIssue && selectedEvidence.length > 0 ? (
+          <div className="fi-trace-list">
+            {selectedEvidence.slice(0, 4).map((trace, index) => (
+              <div key={`${trace.call_id ?? trace.trace_id ?? index}`} className="fi-trace-row">
+                <div>
+                  <strong>{trace.evidence_summary ?? trace.workflow_name ?? "Trace evidence"}</strong>
+                  <span>
+                    {trace.provider ?? "unknown provider"} / {trace.model ?? "unknown model"} - {trace.status ?? "unknown status"}
+                  </span>
+                </div>
+                <div className="fi-trace-meta">
+                  <span>{trace.created_at ? formatDateTime(trace.created_at) : "Time not captured"}</span>
+                  <span>{trace.call_id ?? trace.trace_id ?? "Trace id unavailable"}</span>
+                </div>
+              </div>
             ))}
           </div>
-          <p className="hint" style={{ fontSize: "0.72rem", marginTop: "0.25rem", opacity: 0.7 }}>Applies to KPI cards</p>
-        </div>
+        ) : (
+          <EmptyQueue>No trace evidence attached.</EmptyQueue>
+        )}
       </section>
 
-      {shouldShowCaptureSetup ? (
-        <CaptureConnectPanel
-          captureHealth={captureHealth}
-          checklistItems={onboardingChecklist.items}
-          completedCount={onboardingChecklist.completed}
-          totalCount={onboardingChecklist.total}
-          progressPct={onboardingChecklist.pct}
-          onRefresh={() => void load()}
-          onMarkOpened={markOnboardingWizardOpened}
-        />
-      ) : null}
-
-      {error ? <section className="panel"><p>{error}</p></section> : null}
-
-      {authSummary && authSummary.open_alert_count > 0 ? (
-        <section className="panel home-auth-banner">
-          <header className="panel-header">
-            <div>
-              <h3 className="home-auth-banner-title">
-                {authSummary.open_alert_count > 1 ? "âš  Auth Failures Detected" : "âš  Auth Failure Detected"}
-              </h3>
-              <p>
-                {authSummary.open_alert_count} unacknowledged auth failure alert{authSummary.open_alert_count > 1 ? "s" : ""} in the last 24 hours.
-                {authSummary.total_auth_failures > 0 ? ` ${authSummary.total_auth_failures} total failure${authSummary.total_auth_failures > 1 ? "s" : ""} detected.` : ""}
-                {authSummary.affected_providers.length > 0 ? ` Providers: ${authSummary.affected_providers.join(", ")}.` : ""}
-                {authSummary.mean_time_to_acknowledge_minutes != null
-                  ? ` Mean time to acknowledge: ${authSummary.mean_time_to_acknowledge_minutes.toFixed(1)} min.`
-                  : " Not yet acknowledged."}
-              </p>
-            </div>
-            <Link href="/issues?failure_code=AUTH_FAILURE" className="btn btn-primary home-auth-banner-btn">
-              Triage Auth Issues
-            </Link>
-          </header>
-        </section>
-      ) : null}
-
-      {loading && !summary ? (
-        <section className="kpi-grid">
-          <div className="loading" />
-          <div className="loading" />
-          <div className="loading" />
-          <div className="loading" />
-        </section>
-      ) : null}
-
-      <section className="kpi-grid">
-        <article className="kpi-card">
-          <span className="kpi-label">Health Score</span>
-          <strong className="kpi-value">{health ? formatPercent(health.health_score) : "-"}</strong>
-          <div className="kpi-helper">Updated: {health ? formatDateTime(health.updated_at) : "-"}</div>
-        </article>
-
-        <article className="kpi-card">
-          <span className="kpi-label">Capture Health</span>
-          <strong className="kpi-value">
-            <StatusPill value={captureHealth?.status ?? "checking"} />
-          </strong>
-          <div className="kpi-helper">{captureHealthText(captureHealth)}</div>
-        </article>
-
-        <article className="kpi-card">
-          <span className="kpi-label">Calls ({windowDays === 1 ? "24h" : windowDays === 7 ? "7d" : "30d"})</span>
-          <strong className="kpi-value">{summary ? formatCount(summary.calls_today) : "-"}</strong>
-          <div className="kpi-helper">
-            {summary && summary.calls_yesterday > 0 ? (
-              <KpiDelta current={summary.calls_today} previous={summary.calls_yesterday} lowerIsBetter={false} />
-            ) : (
-              `Traffic Â· last ${windowDays === 1 ? "24 hours" : windowDays === 7 ? "7 days" : "30 days"}`
-            )}
-          </div>
-        </article>
-
-        <article className="kpi-card">
-          <span className="kpi-label">Cost ({windowDays === 1 ? "24h" : windowDays === 7 ? "7d" : "30d"})</span>
-          <strong className="kpi-value mono">{summary ? formatUsd(summary.cost_today_usd) : "$0.00"}</strong>
-          <div className="kpi-helper">
-            {summary && summary.cost_yesterday_usd > 0 ? (
-              <KpiDelta current={summary.cost_today_usd} previous={summary.cost_yesterday_usd} lowerIsBetter={true} />
-            ) : (
-              "Current burn estimate"
-            )}
-          </div>
-        </article>
-
-        <article className="kpi-card">
-          <span className="kpi-label">Open Issues</span>
-          <strong className="kpi-value">{summary ? formatCount(summary.open_issues) : "0"}</strong>
-          <div className="kpi-helper">Grouped product problems, ranked by impact</div>
-        </article>
-
-        <article className="kpi-card">
-          <span className="kpi-label">Fix Adoption Rate</span>
-          <strong className="kpi-value">{fixAdoption ? formatPercent(fixAdoption.adoption_rate_percent) : "-"}</strong>
-          <div className="kpi-helper">
-            {fixAdoption
-              ? `${formatCount(fixAdoption.resolved_diagnoses)} resolved of ${formatCount(fixAdoption.viewed_diagnoses)} viewed`
-              : "Needs viewed and resolved activity"}
-          </div>
-        </article>
-      </section>
-
-      {/* Top Issues Queue: top-5 open grouped Issues ranked by priority_score */}
-      <TopIssuesQueue />
-
-      <JudgeHealthPanel />
-
-      <section className="grid-two">
-        <RecentIssueActivity />
-
-        <article className="panel panel-muted">
-          <header className="panel-header">
-            <div>
-              <h3>Unusual Activity</h3>
-              <p>Automatic issue hint for bursty users.</p>
-            </div>
-          </header>
-
-          {unusualActivity ? (
-            <div className="list unusual-activity-panel">
-              <div className="list-row unusual-activity-headline">
-                <div className="list-main">
-                  <strong>{unusualActivity.multiplier.toFixed(2)} times normal</strong>
-                  <span>{unusualActivity.impactedUser} is showing burst behavior vs project baseline.</span>
-                </div>
-                <StatusPill value={unusualActivity.multiplier >= 3 ? "critical" : "warning"} />
-              </div>
-
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Impacted User</strong>
-                </div>
-                <span className="mono">{unusualActivity.impactedUser}</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Issue Multiplier</strong>
-                  <span className="list-subtle">Maximum of call and cost multiplier.</span>
-                </div>
-                <span className="mono">{unusualActivity.multiplier.toFixed(2)} times normal</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Call Pattern</strong>
-                  <span className="list-subtle">
-                    {formatCount(unusualActivity.currentCalls)} current vs {unusualActivity.normalCallsPerUser.toFixed(2)} normal calls per user
-                  </span>
-                </div>
-                <span className="mono">{unusualActivity.callMultiplier.toFixed(2)}x</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Cost Pattern</strong>
-                  <span className="list-subtle">
-                    {formatUsd(unusualActivity.currentCostUsd)} current vs {formatUsd(unusualActivity.normalCostPerUserUsd)} normal spend per user
-                  </span>
-                </div>
-                <span className="mono">{unusualActivity.costMultiplier.toFixed(2)}x</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Current Waste Estimate</strong>
-                </div>
-                <span className="mono">{formatUsd(unusualActivity.wasteUsd)}</span>
-              </div>
-              <div className="list-row">
-                <div className="list-main">
-                  <strong>Suggested Action</strong>
-                </div>
-                <span>{unusualActivity.action}</span>
-              </div>
-
-              <div className="actions unusual-activity-actions">
-                <Link
-                  href={`/calls?user_id=${encodeURIComponent(unusualActivity.impactedUser)}`}
-                  className="btn btn-primary"
-                >
-                  Investigate User Calls
+      <section className="fi-grid fi-secondary-grid" aria-label="Secondary system cards">
+        <article className="fi-section fi-secondary-card">
+          <SectionHeader
+            title="Pending replay runs"
+            description="Replay work still waiting or running."
+            action={
+              caps.canReplay ? (
+                <Link href="/replay" className="btn btn-soft btn-sm fi-btn-secondary">
+                  Replay Lab
                 </Link>
-                <Link href="/issues" className="btn btn-soft">
-                  Open Issues
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="empty">No unusual user activity detected in current window.</div>
-          )}
-        </article>
-      </section>
-
-      <section className="grid-two">
-        <OpenIssuesBySeverity />
-
-        <article className="panel panel-muted">
-          <header className="panel-header">
-            <div>
-              <h3>Health Breakdown</h3>
-              <p>Expandable widget with transparent weighted scoring.</p>
-            </div>
-            <StatusPill value={health?.status_band} />
-          </header>
-
-          <details className="health-breakdown-widget" open>
-            <summary className="health-breakdown-summary">
-              <div className="list-main">
-                <strong>Health Score Breakdown</strong>
-                <span>4 sub-scores, weighted contributions, and raw inputs.</span>
-              </div>
-              <span className="mono">{health ? formatPercent(health.health_score) : "-"}</span>
-            </summary>
-
-            {health && healthBreakdown ? (
-              <div className="health-breakdown-body">
-                <div className="list">
-                  {healthBreakdown.items.map((item) => (
-                    <div key={item.key} className="list-row health-breakdown-row">
-                      <div className="list-main">
-                        <strong>
-                          {item.label} ({Math.round(item.weight * 100)}%)
-                        </strong>
-                        <span>{item.inputSummary}</span>
-                        <span className="list-subtle">{item.thresholdSummary}</span>
-                      </div>
-
-                      <div className="health-breakdown-values">
-                        <span className="mono">{formatPercent(item.score)}</span>
-                        <span className="mono health-weighted-points">{item.weightedPoints.toFixed(2)} pts</span>
-                      </div>
-                    </div>
-                  ))}
+              ) : (
+                <LockedUpgradeLink label="Upgrade to unlock replay" />
+              )
+            }
+          />
+          <QueueList
+            items={pendingRuns}
+            empty="No pending replay runs."
+            renderItem={(run) => (
+              <Link key={run.id} href={`/replay/${run.id}`} className="fi-queue-row">
+                <div className="fi-queue-main">
+                  <strong>{run.replay_mode.replace(/_/g, " ")} replay</strong>
+                  <span>{run.golden_set_id} - created {formatDateTime(run.created_at)}</span>
                 </div>
-
-                <div className="health-transparency-block">
-                  <p className="hint">Calculation transparency</p>
-                  <p className="mono">
-                    Health = (40% x {health.success_rate.toFixed(2)}) + (25% x {health.latency_score.toFixed(2)}) + (20% x {health.cost_anomaly_score.toFixed(2)}) + (15% x {health.open_issues_score.toFixed(2)}) = {healthBreakdown.weightedTotal.toFixed(2)}
-                  </p>
-
-                  <div className="health-transparency-grid">
-                    <div className="health-transparency-item">
-                      <span>Successful Calls (24h)</span>
-                      <span className="mono">
-                        {formatCount(healthBreakdown.successfulCalls24h)} / {formatCount(healthBreakdown.totalCalls24h)}
-                      </span>
-                    </div>
-                    <div className="health-transparency-item">
-                      <span>Latency p95 vs SLO</span>
-                      <span className="mono">
-                        {healthBreakdown.projectP95LatencyMs.toFixed(2)}ms / {healthBreakdown.latencySloMs.toFixed(2)}ms
-                      </span>
-                    </div>
-                    <div className="health-transparency-item">
-                      <span>15m Spend Ratio</span>
-                      <span className="mono">
-                        {formatUsd(healthBreakdown.current15mSpendUsd)} / {formatUsd(healthBreakdown.baseline15mSpendUsd)} ({healthBreakdown.costRatio.toFixed(2)}x)
-                      </span>
-                    </div>
-                    <div className="health-transparency-item">
-                      <span>Open High Severity Issues</span>
-                      <span className="mono">
-                        {formatCount(healthBreakdown.openHighSeverityIssues)} ({healthBreakdown.issuesPer1000Calls.toFixed(2)} per 1000)
-                      </span>
-                    </div>
-                    <div className="health-transparency-item">
-                      <span>API Score vs Recomputed</span>
-                      <span className="mono">
-                        {health.health_score.toFixed(2)} vs {healthBreakdown.weightedTotal.toFixed(2)} (delta {healthBreakdown.reconciliationDelta.toFixed(4)})
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="empty">Health score data unavailable.</div>
-            )}
-          </details>
-        </article>
-      </section>
-
-      {fixAdoption && fixAdoption.viewed_diagnoses > 0 ? (
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Fix Adoption and Feedback Loop</h3>
-            <p>Track diagnose-to-fix conversion and thumbs-down visibility by category.</p>
-          </div>
-        </header>
-
-        <div className="grid-two">
-          <article className="panel panel-muted">
-            <header className="panel-header">
-              <div>
-                <h3>Fix Adoption Tracking</h3>
-                <p>Formula: resolved diagnoses / viewed diagnoses.</p>
-              </div>
-              <StatusPill value={fixAdoption?.status_band} />
-            </header>
-
-            {fixAdoption ? (
-              <div className="list">
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Adoption Rate</strong>
-                    <span>North-star conversion from diagnosis views to fixes.</span>
-                  </div>
-                  <span className="mono">{formatPercent(fixAdoption.adoption_rate_percent)}</span>
-                </div>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Viewed Diagnoses</strong>
-                  </div>
-                  <span className="mono">{formatCount(fixAdoption.viewed_diagnoses)}</span>
-                </div>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Resolved Diagnoses</strong>
-                  </div>
-                  <span className="mono">{formatCount(fixAdoption.resolved_diagnoses)}</span>
-                </div>
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Status Band</strong>
-                    <span className="list-subtle">Strong: &gt;= 40%, Warning: 20-39%, Critical: &lt; 20%</span>
-                  </div>
-                  <StatusPill value={fixAdoption.status_band} />
-                </div>
-              </div>
-            ) : (
-              <div className="empty">Fix adoption data unavailable.</div>
-            )}
-          </article>
-
-          <article className="panel">
-            <header className="panel-header">
-              <div>
-                <h3>Feedback Loop Visibility</h3>
-                <p>Thumbs-down percentage by diagnosis category.</p>
-              </div>
-            </header>
-
-            {feedbackLoop && feedbackLoop.feedback_total > 0 ? (
-              <div className="list">
-                <div className="list-row">
-                  <div className="list-main">
-                    <strong>Overall Thumbs Down</strong>
-                    <span>
-                      {formatCount(feedbackLoop.thumbs_down_total)} downvotes from {formatCount(feedbackLoop.feedback_total)} feedback votes
-                    </span>
-                  </div>
-                  <span className="mono">{formatPercent(feedbackLoop.thumbs_down_rate_percent)}</span>
-                </div>
-
-                {feedbackLoop.by_category.slice(0, 6).map((item) => (
-                  <div className="list-row" key={item.category}>
-                    <div className="list-main">
-                      <strong>{item.category}</strong>
-                      <span>
-                        {formatCount(item.thumbs_down_count)} thumbs-down of {formatCount(item.feedback_total)} feedback
-                      </span>
-                    </div>
-                    <span className="mono">{formatPercent(item.thumbs_down_rate_percent)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty">No feedback yet. Ask developers for quick thumbs-up/down on diagnoses.</div>
-            )}
-          </article>
-        </div>
-      </section>
-      ) : null}
-
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>What&apos;s coming next</h3>
-            <p>Vote on features we&apos;re evaluating. Your feedback shapes the roadmap.</p>
-          </div>
-        </header>
-        <ComingSoonPoll
-          featureKey="pilot.tier1_autonomy"
-          title="Tier-1 Autonomy"
-          description="Auto-apply safe config fixes (model rollback, fallback swap, retry tune) without a PR. Fully reversible, kill-switch protected. Today: only Tier-2 PR-based fixes ship."
-          useCasePrompt="What's the #1 AI agent failure you'd want fixed without a PR? (your answer shapes what we build)"
-        />
-      </section>
-
-      <details className="panel">
-        <summary className="panel-header" style={{ cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <h3>Enterprise Audit Feed</h3>
-            <p>Immutable action trail: diagnosis viewed, fix copied, PR generated, and resolved.</p>
-          </div>
-          <span className="mono hint">{activityFeed.length > 0 ? activityFeed.length + " events" : "No events"}</span>
-        </summary>
-
-        <div className="list">
-          {activityFeed.length === 0 ? (
-            <div className="empty">No audited actions yet.</div>
-          ) : (
-            activityFeed.map((item) => (
-              <Link key={item.log_id} href={`/calls/${item.diagnosis_id}`} className="list-row">
-                <div className="list-main">
-                  <strong>{actionLabel(item.action)}</strong>
-                  <span>
-                    {item.diagnosis_id} Â· {safeString(item.actor_subject, "system")} Â· {formatDateTime(item.created_at)}
-                  </span>
-                </div>
-                <StatusPill value={item.action} />
+                <StatusPill value={run.status} />
               </Link>
-            ))
-          )}
-        </div>
-      </details>
-    </>
+            )}
+          />
+        </article>
+
+        <article className="fi-section fi-secondary-card">
+          <SectionHeader
+            title="Failed/not_verified CI gates"
+            description="Regression CI runs that need human review."
+            icon={<GitPullRequest aria-hidden="true" />}
+          />
+          <QueueList
+            items={failedCiRuns}
+            empty="No failed or not_verified CI gates."
+            renderItem={(run) => (
+              <div key={run.id} className="fi-queue-row">
+                <div className="fi-queue-main">
+                  <strong>{run.status === "not_verified" ? "Not verified" : "CI gate failed"}</strong>
+                  <span>{run.git_sha ?? run.id} - {formatDateTime(run.created_at)}</span>
+                </div>
+                <div className="fi-row-actions">
+                  <StatusPill value={run.status} />
+                  {caps.canCi ? (
+                    <Link href={`/ci-gates/${run.id}`} className="btn btn-primary btn-sm fi-btn-primary">
+                      Review CI run
+                    </Link>
+                  ) : (
+                    <LockedUpgradeLink label="Upgrade to unlock CI actions" />
+                  )}
+                </div>
+              </div>
+            )}
+          />
+        </article>
+
+        <article className="fi-section fi-secondary-card">
+          <SectionHeader
+            title="Goldens needing review"
+            description="Empty, flaky, or non-blocking Golden sets."
+            action={
+              caps.canGoldens ? (
+                <Link href="/goldens" className="btn btn-soft btn-sm fi-btn-secondary">
+                  Goldens
+                </Link>
+              ) : (
+                <LockedUpgradeLink label="Upgrade to unlock Goldens" />
+              )
+            }
+          />
+          <QueueList
+            items={goldensNeedingReview}
+            empty="No goldens needing review."
+            renderItem={(set) => (
+              <Link key={set.id} href={`/goldens/${set.id}`} className="fi-queue-row">
+                <div className="fi-queue-main">
+                  <strong>{set.name}</strong>
+                  <span>{goldenReviewReason(set)} - {formatCount(set.trace_count)} traces</span>
+                </div>
+                <StatusPill value={set.is_flaky ? "warning" : set.blocks_ci ? "stable" : "pending"} />
+              </Link>
+            )}
+          />
+        </article>
+
+        <article className="fi-section fi-secondary-card">
+          <SectionHeader
+            title="Usage/plan status"
+            description="Plan and usage indicators for action gates."
+            action={
+              <Link href="/cost" className="btn btn-soft btn-sm fi-btn-secondary">
+                Cost
+              </Link>
+            }
+          />
+          <div className="fi-queue-list">
+            <div className="fi-queue-row">
+              <div className="fi-queue-main">
+                <strong>Plan</strong>
+                <span>{data.billing?.status ?? "Subscription status unavailable"}</span>
+              </div>
+              <span className="mono fi-mono">{planLabel}</span>
+            </div>
+            <div className="fi-queue-row">
+              <div className="fi-queue-main">
+                <strong>Replay quota</strong>
+                <span>{planLimitText(data.quota)}</span>
+              </div>
+              <StatusPill value={data.quota?.enabled ? "stable" : "warning"} />
+            </div>
+            <div className="fi-queue-row">
+              <div className="fi-queue-main">
+                <strong>Calls in 24h</strong>
+                <span>Latest analytics summary.</span>
+              </div>
+              <span className="mono fi-mono">{formatCount(data.summary?.calls_today)}</span>
+            </div>
+          </div>
+        </article>
+      </section>
+    </div>
   );
 }

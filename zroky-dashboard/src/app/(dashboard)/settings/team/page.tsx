@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ShieldCheck, UserPlus, Users, AlertTriangle } from "lucide-react";
+
 import { useDashboardStore } from "@/lib/store";
+import { useProjectSettings } from "@/lib/hooks";
 import {
   createProjectInvitation,
   listProjectInvitations,
@@ -14,6 +17,8 @@ import type { ProjectInvitationItem, ProjectMembershipResponse } from "@/lib/typ
 
 export default function TeamPage() {
   const { selectedProject } = useDashboardStore();
+  const projectQuery = useProjectSettings();
+  const projectId = projectQuery.data?.project_id ?? selectedProject;
 
   const [members, setMembers] = useState<ProjectMembershipResponse[]>([]);
   const [invitations, setInvitations] = useState<ProjectInvitationItem[]>([]);
@@ -23,17 +28,25 @@ export default function TeamPage() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{
+    member: ProjectMembershipResponse;
+    role: string;
+  } | null>(null);
+  const [activeChangeTarget, setActiveChangeTarget] = useState<{
+    member: ProjectMembershipResponse;
+    active: boolean;
+  } | null>(null);
 
   const loadData = useCallback(async () => {
-    if (!selectedProject) return;
+    if (!projectId) return;
     setLoading(true);
     setError(null);
     try {
       const [m, i] = await Promise.all([
-        listProjectMembers(selectedProject),
-        listProjectInvitations(selectedProject),
+        listProjectMembers(projectId),
+        listProjectInvitations(projectId),
       ]);
-      setMembers(m.items ?? []);
+      setMembers(m);
       setInvitations(i ?? []);
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
@@ -41,7 +54,7 @@ export default function TeamPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedProject]);
+  }, [projectId]);
 
   useEffect(() => {
     loadData();
@@ -49,11 +62,11 @@ export default function TeamPage() {
 
   async function onInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedProject || !inviteEmail.trim()) return;
+    if (!projectId || !inviteEmail.trim()) return;
     setInviteBusy(true);
     setError(null);
     try {
-      await createProjectInvitation(selectedProject, {
+      await createProjectInvitation(projectId, {
         email: inviteEmail.trim(),
         role: inviteRole,
       });
@@ -69,9 +82,9 @@ export default function TeamPage() {
   }
 
   async function onRevoke(invitationId: string) {
-    if (!selectedProject) return;
+    if (!projectId) return;
     try {
-      await revokeProjectInvitation(selectedProject, invitationId);
+      await revokeProjectInvitation(projectId, invitationId);
       setInvitations((prev) => prev.filter((i) => i.invitation_id !== invitationId));
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
@@ -79,40 +92,98 @@ export default function TeamPage() {
     }
   }
 
-  async function changeMemberRole(membershipId: string, subject: string, newRole: string) {
-    if (!selectedProject) return;
-    setBusyMemberId(membershipId);
+  function isLastActiveOwner(member: ProjectMembershipResponse): boolean {
+    return member.is_active && member.role === "owner" && members.filter((item) => item.is_active && item.role === "owner").length <= 1;
+  }
+
+  function requestRoleChange(member: ProjectMembershipResponse, newRole: string) {
+    if (member.role === newRole) return;
+    if (isLastActiveOwner(member) && newRole !== "owner") {
+      setError("You cannot demote the last active owner on the project.");
+      return;
+    }
+    if (member.role === "owner" || newRole === "owner" || newRole === "admin") {
+      setRoleChangeTarget({ member, role: newRole });
+      return;
+    }
+    void changeMemberRole(member, newRole);
+  }
+
+  async function changeMemberRole(member: ProjectMembershipResponse, newRole: string) {
+    if (!projectId) return;
+    setBusyMemberId(member.membership_id);
     setError(null);
     try {
-      const updated = await upsertProjectMember(selectedProject, { subject, role: newRole });
+      const updated = await upsertProjectMember(projectId, { subject: member.subject, role: newRole });
       setMembers((prev) => prev.map((m) => (m.membership_id === updated.membership_id ? updated : m)));
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
       setError(msg || "Failed to update member role.");
     } finally {
       setBusyMemberId(null);
+      setRoleChangeTarget(null);
     }
   }
 
-  async function setMemberActive(membershipId: string, subject: string, active: boolean) {
-    if (!selectedProject) return;
-    if (!active && !confirm("Remove this member from the project?")) return;
-    setBusyMemberId(membershipId);
+  function requestMemberActive(member: ProjectMembershipResponse, active: boolean) {
+    if (!active && isLastActiveOwner(member)) {
+      setError("You cannot remove the last active owner on the project.");
+      return;
+    }
+    setActiveChangeTarget({ member, active });
+  }
+
+  async function setMemberActive() {
+    if (!projectId || !activeChangeTarget) return;
+    const { member, active } = activeChangeTarget;
+    setBusyMemberId(member.membership_id);
     setError(null);
     try {
-      const updated = await upsertProjectMember(selectedProject, { subject, role: "member", is_active: active });
+      const updated = await upsertProjectMember(projectId, { subject: member.subject, role: member.role, is_active: active });
       setMembers((prev) => prev.map((m) => (m.membership_id === updated.membership_id ? updated : m)));
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
       setError(msg || (active ? "Failed to reactivate member." : "Failed to remove member."));
     } finally {
       setBusyMemberId(null);
+      setActiveChangeTarget(null);
     }
   }
 
+  const activeMembers = members.filter((member) => member.is_active);
+  const ownerCount = activeMembers.filter((member) => member.role === "owner").length;
+  const pendingInvites = invitations.filter((invitation) => !invitation.accepted_at && !invitation.revoked_at).length;
+
   return (
     <>
-      {/* ── Invite form ── */}
+      <section className="settings-summary-grid">
+        <article className="panel settings-summary-card">
+          <Users aria-hidden="true" />
+          <span>Active members</span>
+          <strong>{activeMembers.length}</strong>
+          <small>{members.length} total memberships loaded.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <ShieldCheck aria-hidden="true" />
+          <span>Owners</span>
+          <strong>{ownerCount}</strong>
+          <small>Last owner is protected from demotion or removal.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <UserPlus aria-hidden="true" />
+          <span>Pending invites</span>
+          <strong>{pendingInvites}</strong>
+          <small>Invites can be revoked before acceptance.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <AlertTriangle aria-hidden="true" />
+          <span>Project source</span>
+          <strong>{projectQuery.data?.project_id ? "Backend" : selectedProject ? "Store fallback" : "Missing"}</strong>
+          <small className="mono">{projectId || "No project id available"}</small>
+        </article>
+      </section>
+
+      {/* Invite form */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -124,6 +195,7 @@ export default function TeamPage() {
           </button>
         </header>
 
+        {!projectId ? <p className="notif-error team-error">Project context is missing. Reload the dashboard before changing members.</p> : null}
         {error && <p className="notif-error team-error">{error}</p>}
 
         <form onSubmit={onInvite} className="keys-create-form team-invite-form">
@@ -158,12 +230,12 @@ export default function TeamPage() {
             className="btn btn-primary"
             disabled={inviteBusy || !inviteEmail.trim()}
           >
-            {inviteBusy ? "Sending…" : "Send invite"}
+            {inviteBusy ? "Sending..." : "Send invite"}
           </button>
         </form>
       </section>
 
-      {/* ── Members list ── */}
+      {/* Members list */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -191,8 +263,9 @@ export default function TeamPage() {
                   <label className="sr-only">Change role</label>
                   <select
                     className="input team-role-select"
+                    aria-label={`Change role for ${m.email ?? m.subject}`}
                     value={m.role}
-                    onChange={(e) => void changeMemberRole(m.membership_id, m.subject, e.target.value)}
+                    onChange={(e) => requestRoleChange(m, e.target.value)}
                     disabled={busyMemberId === m.membership_id}
                   >
                     <option value="viewer">Viewer</option>
@@ -205,7 +278,7 @@ export default function TeamPage() {
                     <button
                       type="button"
                       className="btn btn-soft"
-                      onClick={() => void setMemberActive(m.membership_id, m.subject, false)}
+                      onClick={() => requestMemberActive(m, false)}
                       disabled={busyMemberId === m.membership_id}
                       title="Remove member"
                     >
@@ -215,7 +288,7 @@ export default function TeamPage() {
                     <button
                       type="button"
                       className="btn btn-primary"
-                      onClick={() => void setMemberActive(m.membership_id, m.subject, true)}
+                      onClick={() => requestMemberActive(m, true)}
                       disabled={busyMemberId === m.membership_id}
                     >
                       Reactivate
@@ -230,7 +303,7 @@ export default function TeamPage() {
         )}
       </section>
 
-      {/* ── Invitations list ── */}
+      {/* Invitations list */}
       <section className="panel">
         <header className="panel-header">
           <div>
@@ -247,11 +320,11 @@ export default function TeamPage() {
           <div className="list">
             {invitations.map((inv) => (
               <div key={inv.invitation_id} className="team-member-row">
-                <div className="team-inv-icon">✉</div>
+                <div className="team-inv-icon">INV</div>
                 <div className="team-member-info">
                   <strong>{inv.email}</strong>
                   <span className="provider-meta">
-                    Role: {inv.role} · Expires {formatDateTime(inv.expires_at)}
+                    Role: {inv.role} - Expires {formatDateTime(inv.expires_at)}
                   </span>
                 </div>
                 <div className="team-invite-actions">
@@ -268,7 +341,7 @@ export default function TeamPage() {
                         title="Revoke invitation"
                         onClick={() => void onRevoke(inv.invitation_id)}
                       >
-                        ✕
+                        Revoke
                       </button>
                     </>
                   )}
@@ -278,6 +351,101 @@ export default function TeamPage() {
           </div>
         )}
       </section>
+
+      {roleChangeTarget ? (
+        <div
+          className="fix-modal-backdrop"
+          role="presentation"
+          onClick={() => !busyMemberId && setRoleChangeTarget(null)}
+        >
+          <section
+            className="panel keys-revoke-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm role change"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header">
+              <div>
+                <h3>Confirm Role Change</h3>
+                <p>
+                  Change <strong>{roleChangeTarget.member.email ?? roleChangeTarget.member.subject}</strong> from {roleChangeTarget.member.role} to {roleChangeTarget.role}.
+                </p>
+              </div>
+            </header>
+            <div className="actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busyMemberId === roleChangeTarget.member.membership_id}
+                onClick={() => void changeMemberRole(roleChangeTarget.member, roleChangeTarget.role)}
+              >
+                {busyMemberId === roleChangeTarget.member.membership_id ? "Saving..." : "Apply role change"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-soft"
+                disabled={busyMemberId === roleChangeTarget.member.membership_id}
+                onClick={() => setRoleChangeTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {activeChangeTarget ? (
+        <div
+          className="fix-modal-backdrop"
+          role="presentation"
+          onClick={() => !busyMemberId && setActiveChangeTarget(null)}
+        >
+          <section
+            className="panel keys-revoke-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeChangeTarget.active ? "Reactivate member" : "Remove member"}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header">
+              <div>
+                <h3>{activeChangeTarget.active ? "Reactivate Member" : "Remove Member"}</h3>
+                <p>
+                  {activeChangeTarget.active ? "Restore project access for" : "Remove project access for"}{" "}
+                  <strong>{activeChangeTarget.member.email ?? activeChangeTarget.member.subject}</strong>.
+                </p>
+              </div>
+            </header>
+            <div className="settings-modal-facts">
+              <span>Role stays <strong>{activeChangeTarget.member.role}</strong></span>
+              <span>Subject <strong className="mono">{activeChangeTarget.member.subject}</strong></span>
+            </div>
+            <div className="actions">
+              <button
+                type="button"
+                className={activeChangeTarget.active ? "btn btn-primary" : "btn btn-danger"}
+                disabled={busyMemberId === activeChangeTarget.member.membership_id}
+                onClick={() => void setMemberActive()}
+              >
+                {busyMemberId === activeChangeTarget.member.membership_id
+                  ? "Saving..."
+                  : activeChangeTarget.active
+                    ? "Reactivate member"
+                    : "Remove member"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-soft"
+                disabled={busyMemberId === activeChangeTarget.member.membership_id}
+                onClick={() => setActiveChangeTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </>
   );
 }

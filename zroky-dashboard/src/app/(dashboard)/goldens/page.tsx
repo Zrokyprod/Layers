@@ -2,68 +2,46 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowRight,
   BookOpen,
-  CheckCircle2,
-  GitBranch,
-  History,
+  Eye,
+  Filter,
   Loader2,
-  PlayCircle,
   Plus,
+  Search,
   ShieldCheck,
-  TriangleAlert,
+  Sparkles,
 } from "lucide-react";
 
+import { hasGoldensAccess, hasPlanEntitlement, isPaidGoldensPlan, normalizePlanCode } from "@/components/feature-gate";
 import {
-  addGoldenTrace,
   createGoldenSet,
+  getBillingMe,
   listGoldenSets,
-  listGoldenTraces,
   listReplayRuns,
   runGoldenSet,
-  updateGoldenSet,
   type GoldenSetView,
-  type GoldenTraceView,
   type ReplayRunItem,
 } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import {
+  ciBadgeClass,
+  ciBlockingLabel,
+  healthBadgeClass,
+  healthForSet,
+  lastRunLabel,
+  latestRunForSet,
+  passRateForRuns,
+  setMetadataLine,
+} from "./golden-utils";
 
-function timeAgo(iso: string | null | undefined) {
-  if (!iso) return "Never";
-  const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
-  return `${Math.floor(secs / 86400)}d ago`;
-}
+type GoldenFilter = "all" | "blocking" | "review";
 
-function statusClass(status: string) {
-  if (status === "pass") return "badge-green";
-  if (status === "fail" || status === "error") return "badge-red";
-  if (status === "running" || status === "pending") return "badge-yellow";
-  return "badge-gray";
-}
-
-function passFailLabel(run: ReplayRunItem | null) {
-  if (!run) return "No runs yet";
-  const summary = run.summary;
-  return `${summary.pass_count} pass / ${summary.fail_count} fail${summary.error_count ? ` / ${summary.error_count} error` : ""}`;
-}
-
-function GoldenMetric({ label, value, helper }: { label: string; value: string; helper: string }) {
-  return (
-    <div className="metric-card golden-metric-card">
-      <div className="notif-meta">{label}</div>
-      <strong>{value}</strong>
-      <span>{helper}</span>
-    </div>
-  );
-}
-
-function CreateSetPanel() {
-  const qc = useQueryClient();
+function CreateSetPanel({ enabled, onCreated }: { enabled: boolean; onCreated: () => void }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const createMutation = useMutation({
@@ -71,259 +49,356 @@ function CreateSetPanel() {
     onSuccess: () => {
       setName("");
       setDescription("");
-      void qc.invalidateQueries({ queryKey: ["golden-sets"] });
+      onCreated();
+      void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
     },
   });
 
   return (
-    <section className="panel golden-create-panel">
-      <header className="panel-header">
+    <section className="panel gm-create-panel" aria-label="Create Golden set">
+      <header className="gm-section-header">
         <div>
-          <h3>Create Golden Set</h3>
-          <p>Group production traces into reusable regression memory.</p>
+          <h2>Create set</h2>
+          <p>Group verified production behaviors before they protect future CI runs.</p>
         </div>
+        {!enabled ? <span className="alert-cat-badge badge-yellow">Locked</span> : null}
       </header>
-      <div className="golden-create-grid">
+      <div className="gm-create-grid">
         <label>
-          <span className="notif-meta">Name</span>
-          <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Checkout agent regressions" />
+          <span>Name</span>
+          <input
+            aria-label="Golden set name"
+            className="input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Refund protected flow"
+            disabled={!enabled}
+          />
         </label>
         <label>
-          <span className="notif-meta">Description</span>
-          <input className="input" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Critical production memory" />
+          <span>Description</span>
+          <input
+            aria-label="Golden set description"
+            className="input"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Verified refund-agent behavior"
+            disabled={!enabled}
+          />
         </label>
-        <button type="button" className="btn btn-primary" disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!enabled || !name.trim() || createMutation.isPending}
+          onClick={() => createMutation.mutate()}
+        >
           {createMutation.isPending ? <Loader2 aria-hidden="true" /> : <Plus aria-hidden="true" />}
           {createMutation.isPending ? "Creating..." : "Create set"}
         </button>
       </div>
-      {createMutation.error && <p className="notif-error">{createMutation.error.message}</p>}
+      {createMutation.error ? <p className="notif-error">{createMutation.error.message}</p> : null}
     </section>
   );
 }
 
-function AddTracePanel({ set }: { set: GoldenSetView }) {
-  const qc = useQueryClient();
-  const [callId, setCallId] = useState("");
-  const [expectedOutput, setExpectedOutput] = useState("");
-  const addMutation = useMutation({
-    mutationFn: () =>
-      addGoldenTrace(set.id, {
-        call_id: callId.trim() || undefined,
-        expected_output_text: expectedOutput.trim() || undefined,
-        criteria_json: JSON.stringify({ source: "manual_goldens_page", added_at: new Date().toISOString() }),
-        weight: 1,
-      }),
-    onSuccess: () => {
-      setCallId("");
-      setExpectedOutput("");
-      void qc.invalidateQueries({ queryKey: ["golden-sets"] });
-      void qc.invalidateQueries({ queryKey: ["golden-traces", set.id] });
-    },
-  });
-
-  return (
-    <div className="golden-add-trace">
-      <input className="input input-sm" value={callId} onChange={(event) => setCallId(event.target.value)} placeholder="Source call ID" />
-      <input className="input input-sm" value={expectedOutput} onChange={(event) => setExpectedOutput(event.target.value)} placeholder="Expected output text" />
-      <button type="button" className="btn btn-soft btn-sm" disabled={(!callId.trim() && !expectedOutput.trim()) || addMutation.isPending} onClick={() => addMutation.mutate()}>
-        {addMutation.isPending ? "Adding..." : "Add trace"}
-      </button>
-      {addMutation.error && <p className="notif-error">{addMutation.error.message}</p>}
-    </div>
-  );
-}
-
-function TracePreview({ set }: { set: GoldenSetView }) {
-  const tracesQuery = useQuery({
-    queryKey: ["golden-traces", set.id],
-    queryFn: ({ signal }) => listGoldenTraces(set.id, { limit: 5 }, signal),
-    enabled: set.trace_count > 0,
-  });
-  const traces = tracesQuery.data?.items ?? [];
-
-  if (set.trace_count === 0) {
-    return <p className="golden-empty-traces">No traces yet. Add a source call or promote a replay.</p>;
-  }
-
-  if (tracesQuery.isLoading) {
-    return <p className="notif-meta">Loading traces...</p>;
-  }
-
-  return (
-    <div className="golden-trace-list">
-      {traces.map((trace: GoldenTraceView) => (
-        <div key={trace.id} className="golden-trace-row">
-          <div>
-            <strong className="mono">{trace.call_id ?? trace.id}</strong>
-            <span>{trace.expected_output_text ? trace.expected_output_text.slice(0, 120) : "No expected output text captured"}</span>
-          </div>
-          {trace.call_id && (
-            <Link href={`/calls/${trace.call_id}`} className="btn btn-soft btn-sm">
-              Call
-            </Link>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function GoldenSetCard({ set }: { set: GoldenSetView }) {
-  const qc = useQueryClient();
-  const runsQuery = useQuery({
-    queryKey: ["replay-runs", { golden_set_id: set.id, limit: 5 }],
-    queryFn: ({ signal }) => listReplayRuns({ golden_set_id: set.id, limit: 5 }, signal),
-  });
-  const latestRun = runsQuery.data?.items[0] ?? null;
+function GoldenSetRow({
+  set,
+  runs,
+  canUseGoldens,
+}: {
+  set: GoldenSetView;
+  runs: ReplayRunItem[];
+  canUseGoldens: boolean;
+}) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const setRuns = runs.filter((run) => run.golden_set_id === set.id);
+  const latestRun = latestRunForSet(runs, set.id);
+  const health = healthForSet(set, setRuns);
+  const ciLabel = ciBlockingLabel(set, setRuns);
   const runMutation = useMutation({
-    mutationFn: () => runGoldenSet(set.id, { trigger: "manual", replay_mode: "real_llm" }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["replay-runs"] });
-    },
-  });
-  const updateMutation = useMutation({
-    mutationFn: (body: { is_flaky?: boolean; blocks_ci?: boolean }) => updateGoldenSet(set.id, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["golden-sets"] });
+    mutationFn: () => runGoldenSet(set.id, { trigger: "manual" }),
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: ["replay-runs"] });
+      router.push(`/replay/${created.id}`);
     },
   });
 
   return (
-    <article className="panel golden-set-card">
-      <div className="golden-set-grid">
-        <div className="golden-set-main">
-          <div className="golden-set-badges">
-            <h3>{set.name}</h3>
-            <span className={`alert-cat-badge ${set.blocks_ci ? "badge-red" : "badge-gray"}`}>
-              {set.blocks_ci ? "Blocking" : "Advisory"}
-            </span>
-            <span className={`alert-cat-badge ${set.is_flaky ? "badge-yellow" : "badge-green"}`}>
-              {set.is_flaky ? "Flaky" : "Stable"}
-            </span>
-            {latestRun && <span className={`alert-cat-badge ${statusClass(latestRun.status)}`}>{latestRun.status}</span>}
-          </div>
-
-          {set.description && <p className="golden-description">{set.description}</p>}
-
-          <div className="golden-set-meta">
-            <span>{set.trace_count} trace{set.trace_count === 1 ? "" : "s"}</span>
-            <span>Last run: {timeAgo(latestRun?.created_at)}</span>
-            <span>{passFailLabel(latestRun)}</span>
-            <span>Updated {formatDateTime(set.updated_at)}</span>
-          </div>
-
-          <TracePreview set={set} />
-          <AddTracePanel set={set} />
+    <tr className="gm-table-row">
+      <td>
+        <div className="gm-set-cell">
+          <Link href={`/goldens/${set.id}`}>{set.name}</Link>
+          <span>{setMetadataLine(set)}</span>
         </div>
-
-        <div className="golden-action-rail">
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => runMutation.mutate()} disabled={set.trace_count === 0 || runMutation.isPending}>
-            {runMutation.isPending ? <Loader2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
-            {runMutation.isPending ? "Running..." : "Run set"}
-          </button>
+      </td>
+      <td>{set.trace_count}</td>
+      <td>
+        <span className="gm-run-label">{lastRunLabel(latestRun)}</span>
+      </td>
+      <td>
+        <span className={`alert-cat-badge ${ciBadgeClass(ciLabel)}`}>{ciLabel}</span>
+      </td>
+      <td>
+        <span className={`alert-cat-badge ${healthBadgeClass(health)}`}>{health}</span>
+      </td>
+      <td>
+        <div className="gm-row-actions">
           <button
             type="button"
             className="btn btn-soft btn-sm"
-            onClick={() => updateMutation.mutate({ is_flaky: !set.is_flaky })}
-            disabled={updateMutation.isPending}
+            disabled={!canUseGoldens || set.trace_count === 0 || runMutation.isPending}
+            onClick={() => runMutation.mutate()}
           >
-            <TriangleAlert aria-hidden="true" />
-            {set.is_flaky ? "Clear flaky" : "Mark flaky"}
+            {runMutation.isPending ? <Loader2 aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+            {runMutation.isPending ? "Running..." : "Run"}
           </button>
-          <button
-            type="button"
-            className="btn btn-soft btn-sm"
-            onClick={() => updateMutation.mutate({ blocks_ci: !set.blocks_ci })}
-            disabled={updateMutation.isPending}
-          >
-            <ShieldCheck aria-hidden="true" />
-            {set.blocks_ci ? "Mark advisory" : "Mark blocking"}
-          </button>
-          <Link href={`/replay?golden_set_id=${encodeURIComponent(set.id)}`} className="btn btn-soft btn-sm">
-            <History aria-hidden="true" />
-            Replay history
-          </Link>
-          <Link href="/settings/evaluation" className="btn btn-soft btn-sm">
-            <GitBranch aria-hidden="true" />
-            Evaluation settings
+          <Link href={`/goldens/${set.id}`} className="btn btn-soft btn-sm">
+            <Eye aria-hidden="true" />
+            View
           </Link>
         </div>
-      </div>
-
-      {runMutation.error && <p className="notif-error">{runMutation.error.message}</p>}
-      {updateMutation.error && <p className="notif-error">{updateMutation.error.message}</p>}
-    </article>
+      </td>
+    </tr>
   );
 }
 
 export default function GoldensPage() {
+  const router = useRouter();
+  const [showCreate, setShowCreate] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<GoldenFilter>("all");
+  const [selectedSetId, setSelectedSetId] = useState("");
+  const queryClient = useQueryClient();
+  const billingQuery = useQuery({
+    queryKey: ["billing-me"],
+    queryFn: ({ signal }) => getBillingMe(signal),
+  });
   const setsQuery = useQuery({
     queryKey: ["golden-sets"],
     queryFn: ({ signal }) => listGoldenSets({ limit: 100 }, signal),
   });
+  const runsQuery = useQuery({
+    queryKey: ["replay-runs", { limit: 100 }],
+    queryFn: ({ signal }) => listReplayRuns({ limit: 100 }, signal),
+  });
+
   const sets = useMemo(() => setsQuery.data?.items ?? [], [setsQuery.data?.items]);
-  const totalTraces = useMemo(() => sets.reduce((sum, set) => sum + set.trace_count, 0), [sets]);
-  const blockingCount = sets.filter((set) => set.blocks_ci).length;
-  const flakyCount = sets.filter((set) => set.is_flaky).length;
-  const stableCount = sets.filter((set) => !set.is_flaky).length;
+  const runs = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data?.items]);
+  const planTemplate = billingQuery.data?.plan_template;
+  const planCode = billingQuery.data?.plan_code;
+  const explicitGoldensEntitlement = hasPlanEntitlement(planTemplate, "pilot.goldens_basic");
+  const canUseGoldens = hasGoldensAccess(planTemplate, planCode);
+  const normalizedPlanCode = normalizePlanCode(planCode);
+  const isFreeGoldensPlan = normalizedPlanCode === "free" || normalizedPlanCode === "watch";
+  const showLockedBanner = !billingQuery.isLoading && !canUseGoldens && isFreeGoldensPlan;
+  const showEntitlementWarning =
+    !billingQuery.isLoading &&
+    !showLockedBanner &&
+    (!billingQuery.data || (isPaidGoldensPlan(planCode) && !explicitGoldensEntitlement));
+  const entitlementUnavailableTitle = showEntitlementWarning
+    ? "Plan entitlement unavailable. Refresh workspace plan or contact admin."
+    : undefined;
+  const canOperateGoldens = canUseGoldens && !showEntitlementWarning;
+  const selectedSet = sets.find((set) => set.id === selectedSetId) ?? null;
+  const firstRunnableSet = (selectedSet?.trace_count ? selectedSet : null) ?? sets.find((set) => set.trace_count > 0) ?? sets[0] ?? null;
+  const activeGoldens = sets.reduce((sum, set) => sum + set.trace_count, 0);
+  const blockingCi = sets.filter((set) => ciBlockingLabel(set, runs.filter((run) => run.golden_set_id === set.id)) === "Blocks CI").length;
+  const needReview = sets.filter((set) => healthForSet(set, runs.filter((run) => run.golden_set_id === set.id)) !== "Healthy").length;
+  const lastPassRate = passRateForRuns(runs);
+  const filteredSets = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return sets.filter((set) => {
+      const setRuns = runs.filter((run) => run.golden_set_id === set.id);
+      const health = healthForSet(set, setRuns);
+      const ciLabel = ciBlockingLabel(set, setRuns);
+      if (filter === "blocking" && ciLabel !== "Blocks CI") return false;
+      if (filter === "review" && health === "Healthy") return false;
+      if (!normalizedSearch) return true;
+      return [set.name, set.description, set.id, setMetadataLine(set)]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+    });
+  }, [filter, runs, search, sets]);
+  const runFirstMutation = useMutation({
+    mutationFn: () => {
+      if (!firstRunnableSet) throw new Error("No Golden set available.");
+      return runGoldenSet(firstRunnableSet.id, { trigger: "manual" });
+    },
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: ["replay-runs"] });
+      router.push(`/replay/${created.id}`);
+    },
+  });
 
   return (
-    <div className="goldens-workspace">
-      <section className="module-hero golden-hero">
-        <div className="module-hero-header">
-          <div>
-            <div className="module-eyebrow">
-              <BookOpen aria-hidden="true" />
-              Production regression memory
-            </div>
-            <h1>Goldens</h1>
-            <p>Pinned production traces that make replays reusable, CI blocking possible, and fixes measurable over time.</p>
-          </div>
-          <Link href="/replay" className="btn btn-primary">
-            Replay history
-            <ArrowRight aria-hidden="true" />
-          </Link>
-        </div>
-      </section>
-
-      <section className="metric-strip" aria-label="Golden set summary">
-        <GoldenMetric label="Golden sets" value={sets.length.toLocaleString()} helper={`${stableCount.toLocaleString()} stable sets`} />
-        <GoldenMetric label="Golden traces" value={totalTraces.toLocaleString()} helper="Pinned source calls" />
-        <GoldenMetric label="Blocking sets" value={blockingCount.toLocaleString()} helper="Can block CI once wired" />
-        <GoldenMetric label="Flaky sets" value={flakyCount.toLocaleString()} helper="Needs review before blocking" />
-      </section>
-
-      <CreateSetPanel />
-
-      {setsQuery.isLoading ? (
-        <section className="panel issue-loading-panel" aria-label="Loading golden sets">
-          <Loader2 aria-hidden="true" />
-          <div>
-            <strong>Loading goldens</strong>
-            <p className="notif-meta">Reading golden sets and trace counts.</p>
-          </div>
-        </section>
-      ) : sets.length === 0 ? (
-        <section className="empty golden-empty">
-          <BookOpen aria-hidden="true" />
-          <strong>No golden sets yet.</strong>
-          <span>Create one, add traces, then run it as production regression memory.</span>
-        </section>
-      ) : (
-        <section className="golden-set-list" aria-label="Golden sets">
-          {sets.map((set) => (
-            <GoldenSetCard key={set.id} set={set} />
-          ))}
-        </section>
-      )}
-
-      <section className="panel panel-muted golden-ci-panel">
+    <div className="goldens-mvp">
+      <section className="gm-hero">
         <div>
-          <CheckCircle2 aria-hidden="true" />
-          <strong>Golden rule</strong>
+          <div className="gm-eyebrow">
+            <BookOpen aria-hidden="true" />
+            Verified memory
+          </div>
+          <h1>Goldens</h1>
+          <p>Verified production behaviors protected from future regressions.</p>
         </div>
-        <p>Passing replays become reusable production memory only when they come from honest non-stub comparisons. Flaky sets should stay advisory until stable.</p>
+        <div className="gm-hero-actions">
+          <label className="gm-run-select">
+            <span>Run set</span>
+            <select
+              className="input"
+              value={selectedSetId}
+              onChange={(event) => setSelectedSetId(event.target.value)}
+              disabled={!canOperateGoldens || sets.length === 0}
+            >
+              <option value="">First runnable set</option>
+              {sets.map((set) => (
+                <option key={set.id} value={set.id} disabled={set.trace_count === 0}>
+                  {set.name} - {set.trace_count} traces
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!canOperateGoldens || !firstRunnableSet || firstRunnableSet.trace_count === 0 || runFirstMutation.isPending}
+            title={entitlementUnavailableTitle}
+            onClick={() => runFirstMutation.mutate()}
+          >
+            {runFirstMutation.isPending ? <Loader2 aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+            {runFirstMutation.isPending ? "Running..." : "Run Golden set"}
+            <ArrowRight aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn btn-soft"
+            disabled={showEntitlementWarning}
+            title={entitlementUnavailableTitle}
+            onClick={() => setShowCreate((value) => !value)}
+          >
+            <Plus aria-hidden="true" />
+            Create set
+          </button>
+        </div>
+      </section>
+
+      {showLockedBanner ? (
+        <section className="gm-notice" aria-label="Goldens locked">
+          <AlertTriangle aria-hidden="true" />
+          <div>
+            <strong>Goldens locked</strong>
+            <p>Upgrade to Pilot to create protected flows from verified replay evidence.</p>
+          </div>
+          <Link href="/settings/billing" className="btn btn-soft">Upgrade</Link>
+        </section>
+      ) : null}
+
+      {showEntitlementWarning ? (
+        <section className="gm-notice gm-notice-muted" aria-label="Goldens entitlement unavailable">
+          <AlertTriangle aria-hidden="true" />
+          <div>
+            <strong>Goldens entitlement unavailable</strong>
+            <p>Refresh workspace plan or contact admin.</p>
+          </div>
+        </section>
+      ) : null}
+
+      {showCreate && !showEntitlementWarning ? <CreateSetPanel enabled={canUseGoldens} onCreated={() => setShowCreate(false)} /> : null}
+
+      <section className="gm-kpi-grid" aria-label="Golden KPI summary">
+        <button type="button" className={`gm-kpi-card${filter === "all" ? " is-active" : ""}`} onClick={() => setFilter("all")}>
+          <span>Active Goldens</span>
+          <strong>{activeGoldens}</strong>
+          <p>Loaded protected traces</p>
+        </button>
+        <button type="button" className={`gm-kpi-card${filter === "blocking" ? " is-active" : ""}`} onClick={() => setFilter("blocking")}>
+          <span>Blocking CI</span>
+          <strong>{blockingCi}</strong>
+          <p>Healthy blocking sets</p>
+        </button>
+        <button type="button" className={`gm-kpi-card${filter === "review" ? " is-active" : ""}`} onClick={() => setFilter("review")}>
+          <span>Need review</span>
+          <strong>{needReview}</strong>
+          <p>Empty, flaky, drift, or failed</p>
+        </button>
+        <button type="button" className="gm-kpi-card" onClick={() => setFilter("all")}>
+          <span>Last pass rate</span>
+          <strong>{lastPassRate}</strong>
+          <p>Recent Golden runs</p>
+        </button>
+      </section>
+
+      <section className="gm-table-section">
+        <header className="gm-section-header">
+          <div>
+            <h2>Golden sets</h2>
+            <p>Protected flows, run status, and CI blocking visibility.</p>
+          </div>
+          <div className="gm-table-tools">
+            <label>
+              <Search aria-hidden="true" />
+              <input
+                className="input"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search Golden sets..."
+              />
+            </label>
+            <span className="gm-trust-copy">
+              <Filter aria-hidden="true" />
+              {filter === "all" ? "All sets" : filter}
+            </span>
+            <span className="gm-trust-copy">
+              <Sparkles aria-hidden="true" />
+              Only verified replay fixes can become active Goldens.
+            </span>
+          </div>
+        </header>
+
+        {setsQuery.isLoading ? (
+          <div className="gm-empty">
+            <Loader2 aria-hidden="true" />
+            <strong>Loading Golden sets...</strong>
+          </div>
+        ) : sets.length === 0 ? (
+          <div className="gm-empty">
+            <BookOpen aria-hidden="true" />
+            <strong>No Goldens yet</strong>
+            <p>Create a Golden from a verified replay to protect that flow in future CI runs.</p>
+            {showEntitlementWarning ? (
+              <p>Replay Lab and Golden creation require an active Pilot, Pro, or Enterprise entitlement.</p>
+            ) : canUseGoldens ? (
+              <Link href="/replay" className="btn btn-primary">Go to Replay Lab</Link>
+            ) : null}
+          </div>
+        ) : filteredSets.length === 0 ? (
+          <div className="gm-empty">
+            <Search aria-hidden="true" />
+            <strong>No matching Goldens</strong>
+            <p>Clear search or switch KPI filters.</p>
+          </div>
+        ) : (
+          <div className="gm-table-wrap">
+            <table className="gm-table">
+              <thead>
+                <tr>
+                  <th>Golden set</th>
+                  <th>Traces</th>
+                  <th>Last run</th>
+                  <th>CI blocking</th>
+                  <th>Health</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSets.map((set) => (
+                  <GoldenSetRow key={set.id} set={set} runs={runs} canUseGoldens={canUseGoldens} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

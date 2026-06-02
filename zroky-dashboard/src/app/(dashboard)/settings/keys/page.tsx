@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { AlertTriangle, Clock3, Copy, KeyRound, RotateCcw, ShieldCheck } from "lucide-react";
 
 import { formatDateTime } from "@/lib/format";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
@@ -29,6 +30,7 @@ export default function ApiKeysPage() {
   const [statusMsg, setStatusMsg] = useState("");
   const [expiresInDays, setExpiresInDays] = useState("90");
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyResponse | null>(null);
+  const [rotateTarget, setRotateTarget] = useState<ApiKeyResponse | null>(null);
 
   const {
     register,
@@ -71,14 +73,16 @@ export default function ApiKeysPage() {
     }
   }
 
-  async function onRotate(target: ApiKeyResponse) {
-    if (!projectId) return;
+  async function onRotate() {
+    if (!projectId || !rotateTarget) return;
     try {
-      const rotated = await rotateMutation.mutateAsync({ projectId, keyId: target.key_id });
+      const rotated = await rotateMutation.mutateAsync({ projectId, keyId: rotateTarget.key_id });
       setNewKey(rotated);
-      setStatusMsg(`Key "${target.name}" rotated. Copy the replacement key now.`);
+      setStatusMsg(`Key "${rotateTarget.name}" rotated. Copy the replacement key now.`);
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Rotation failed.");
+    } finally {
+      setRotateTarget(null);
     }
   }
 
@@ -92,6 +96,13 @@ export default function ApiKeysPage() {
   const keys = keysQuery.data ?? [];
   const loading = projectQuery.isLoading || keysQuery.isLoading;
   const error = projectQuery.error?.message ?? keysQuery.error?.message ?? null;
+  const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
+  const neverUsedKeys = activeKeys.filter((key) => !key.last_used_at).length;
+  const expiringSoonKeys = activeKeys.filter((key) => {
+    if (!key.expires_at) return false;
+    const expiresAt = new Date(key.expires_at).getTime();
+    return Number.isFinite(expiresAt) && expiresAt - Date.now() < 14 * 24 * 60 * 60 * 1000;
+  }).length;
 
   return (
     <div className="page-content">
@@ -106,6 +117,7 @@ export default function ApiKeysPage() {
           <div className="share-url-row keys-newkey-row">
             <span className="share-url settings-key-reveal">{newKey.api_key}</span>
             <button type="button" className="btn btn-soft" onClick={() => copyKey(newKey.api_key)}>
+              <Copy aria-hidden="true" />
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
@@ -128,6 +140,33 @@ export default function ApiKeysPage() {
           </button>
         </section>
       )}
+
+      <section className="settings-summary-grid">
+        <article className="panel settings-summary-card">
+          <KeyRound aria-hidden="true" />
+          <span>Active keys</span>
+          <strong>{activeKeys.length}</strong>
+          <small>{keys.length} total including revoked or expired keys.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <Clock3 aria-hidden="true" />
+          <span>Never used</span>
+          <strong>{neverUsedKeys}</strong>
+          <small>Rotate unused production keys after rollout.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <AlertTriangle aria-hidden="true" />
+          <span>Expiring soon</span>
+          <strong>{expiringSoonKeys}</strong>
+          <small>Keys expiring within 14 days need replacement planning.</small>
+        </article>
+        <article className="panel settings-summary-card">
+          <ShieldCheck aria-hidden="true" />
+          <span>Scope policy</span>
+          <strong>project:member</strong>
+          <small>MVP backend accepts one project-scoped role.</small>
+        </article>
+      </section>
 
       <section className="panel">
         <header className="panel-header">
@@ -231,8 +270,9 @@ export default function ApiKeysPage() {
                             type="button"
                             className="btn btn-soft btn-sm"
                             disabled={rotateMutation.isPending}
-                            onClick={() => void onRotate(key)}
+                            onClick={() => setRotateTarget(key)}
                           >
+                            <RotateCcw aria-hidden="true" />
                             Rotate
                           </button>
                           <button
@@ -288,6 +328,53 @@ export default function ApiKeysPage() {
                 className="btn btn-soft"
                 disabled={revokeMutation.isPending}
                 onClick={() => setRevokeTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {rotateTarget && (
+        <div
+          className="fix-modal-backdrop"
+          role="presentation"
+          onClick={() => !rotateMutation.isPending && setRotateTarget(null)}
+        >
+          <section
+            className="panel keys-revoke-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Rotate API key"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="panel-header">
+              <div>
+                <h3>Rotate API Key</h3>
+                <p>
+                  Zroky will revoke <strong>{rotateTarget.name}</strong> and create a replacement. Copy the replacement before closing the banner.
+                </p>
+              </div>
+            </header>
+            <div className="settings-modal-facts">
+              <span>Current prefix <strong className="mono">{rotateTarget.key_prefix}...</strong></span>
+              <span>Scope <strong>{rotateTarget.scopes?.join(", ") || "project:member"}</strong></span>
+            </div>
+            <div className="actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={rotateMutation.isPending}
+                onClick={() => void onRotate()}
+              >
+                {rotateMutation.isPending ? "Rotating..." : "Rotate and show replacement"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-soft"
+                disabled={rotateMutation.isPending}
+                onClick={() => setRotateTarget(null)}
               >
                 Cancel
               </button>

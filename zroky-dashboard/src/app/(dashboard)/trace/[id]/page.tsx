@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
-import { ArrowLeft, Copy, Play, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Copy, Download, ExternalLink, Play, RefreshCw, ShieldCheck } from "lucide-react";
 
 import type { ReplayMode } from "@/lib/api";
 import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
@@ -19,6 +19,8 @@ import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
 import type { JsonMap, TraceListItem, TraceTreeNode } from "@/lib/types";
 
 const DASH = "—";
+const TRACE_LIMIT = 100;
+type ActionState = { kind: "success" | "error"; message: string } | null;
 
 function asObject(value: unknown): JsonMap {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonMap : {};
@@ -189,6 +191,18 @@ function diagnosisSummary(payload: JsonMap | null): { code: string; rootCause: s
   return { code, rootCause, confidence };
 }
 
+function downloadJson(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <article className="trace-detail-metric">
@@ -203,8 +217,9 @@ export default function TraceDetailPage() {
   const router = useRouter();
   const traceId = params?.id ?? "";
   const [copied, setCopied] = useState(false);
+  const [actionState, setActionState] = useState<ActionState>(null);
 
-  const tracesQuery = useRecentTraces(30, 500);
+  const tracesQuery = useRecentTraces(30, TRACE_LIMIT);
   const traceByIdQuery = useTraceById(traceId, 30);
   const traceItem = useMemo(() => {
     const fromRecent = (tracesQuery.data?.items ?? []).find((trace) => trace.trace_id === traceId) ?? null;
@@ -238,13 +253,47 @@ export default function TraceDetailPage() {
     });
   }
 
+  function showAction(kind: "success" | "error", message: string) {
+    setActionState({ kind, message });
+  }
+
+  async function refreshTraceDetail() {
+    setActionState(null);
+    try {
+      await Promise.all([
+        tracesQuery.refetch(),
+        traceByIdQuery.refetch(),
+        traceTreeQuery.refetch(),
+        callDetailQuery.refetch(),
+      ]);
+      showAction("success", "Trace detail refreshed.");
+    } catch {
+      showAction("error", "Refresh failed. Try again.");
+    }
+  }
+
+  async function copyValue(value: string, successMessage: string) {
+    if (!value) {
+      showAction("error", "Nothing to copy.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      showAction("success", successMessage);
+    } catch {
+      showAction("error", "Clipboard copy failed.");
+    }
+  }
+
   async function copyTraceId() {
     try {
       await navigator.clipboard.writeText(traceId);
       setCopied(true);
+      showAction("success", "Trace ID copied.");
       setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
+      showAction("error", "Clipboard copy failed.");
     }
   }
 
@@ -270,6 +319,16 @@ export default function TraceDetailPage() {
     payload,
     trace_tree: tree,
   };
+  const rawPayloadJson = JSON.stringify(rawPayload, null, 2);
+
+  async function copyRawPayload() {
+    await copyValue(rawPayloadJson, "Raw trace JSON copied.");
+  }
+
+  function exportRawPayload() {
+    downloadJson(`zroky-trace-${traceId}.json`, rawPayload);
+    showAction("success", "Raw trace JSON exported.");
+  }
 
   return (
     <div className="trace-detail-mvp">
@@ -288,7 +347,27 @@ export default function TraceDetailPage() {
           <h1>{agentLabel(traceItem, rootNode)} trace</h1>
           <p>{statusLabel(traceItem)} · {agentLabel(traceItem, rootNode)} · {traceItem.providers[0] ?? "Production"}</p>
         </div>
+        <div className="trace-detail-hero-actions">
+          <button type="button" className="btn btn-soft" onClick={() => void refreshTraceDetail()} disabled={tracesQuery.isFetching || traceByIdQuery.isFetching || traceTreeQuery.isFetching || callDetailQuery.isFetching}>
+            <RefreshCw aria-hidden="true" />
+            {tracesQuery.isFetching || traceByIdQuery.isFetching || traceTreeQuery.isFetching || callDetailQuery.isFetching ? "Refreshing..." : "Refresh"}
+          </button>
+          <button type="button" className="btn btn-soft" onClick={() => void copyTraceId()}>
+            <Copy aria-hidden="true" />
+            {copied ? "Copied" : "Copy trace ID"}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={runReplay} disabled={!rootCallId || replayMutation.isPending}>
+            <Play aria-hidden="true" />
+            {replayMutation.isPending ? "Running..." : "Run replay"}
+          </button>
+        </div>
       </section>
+
+      {actionState ? (
+        <div className={`trace-mvp-action-message ${actionState.kind === "error" ? "is-error" : ""}`} role="status">
+          {actionState.message}
+        </div>
+      ) : null}
 
       <section className="trace-detail-metrics" aria-label="Trace metadata">
         <MetricCard label="Latency" value={latencyLabel(latency)} />
@@ -317,6 +396,16 @@ export default function TraceDetailPage() {
                       <span className="trace-detail-step-type">{stepTypeLabel(node, depth)}</span>
                       <strong>{nodeTitle(node, depth)}</strong>
                       <p>{nodeSummary(node)}</p>
+                      <div className="trace-detail-step-actions">
+                        <Link href={`/calls/${node.call_id}`} className="btn btn-soft btn-sm">
+                          <ExternalLink aria-hidden="true" />
+                          View call
+                        </Link>
+                        <button type="button" className="btn btn-soft btn-sm" onClick={() => void copyValue(node.call_id, "Call ID copied.")}>
+                          <Copy aria-hidden="true" />
+                          Copy call ID
+                        </button>
+                      </div>
                     </div>
                     <span className={`trace-mvp-status ${/fail|error|timeout/i.test(node.status) ? "trace-status-failed" : "trace-status-success"}`}>{node.status}</span>
                   </div>
@@ -396,9 +485,25 @@ export default function TraceDetailPage() {
           </article>
 
           <article className="trace-detail-card">
+            <header>
+              <div>
+                <h2>Raw evidence</h2>
+                <p>Original trace, root call, payload, and tree response for debugging.</p>
+              </div>
+              <div className="trace-detail-raw-actions">
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => void copyRawPayload()}>
+                  <Copy aria-hidden="true" />
+                  Copy JSON
+                </button>
+                <button type="button" className="btn btn-soft btn-sm" onClick={exportRawPayload}>
+                  <Download aria-hidden="true" />
+                  Download
+                </button>
+              </div>
+            </header>
             <details className="trace-raw-disclosure">
               <summary>View raw payload JSON</summary>
-              <pre>{JSON.stringify(rawPayload, null, 2)}</pre>
+              <pre>{rawPayloadJson}</pre>
             </details>
           </article>
         </main>
@@ -412,7 +517,15 @@ export default function TraceDetailPage() {
           <div className="trace-detail-panel-card">
             <span>Related evidence</span>
             <strong>{rootCallId || DASH}</strong>
-            {rootCallId ? <Link href={`/calls/${rootCallId}`} className="btn btn-soft btn-sm">View source call</Link> : null}
+            <div className="trace-detail-panel-actions">
+              {rootCallId ? <Link href={`/calls/${rootCallId}`} className="btn btn-soft btn-sm">View source call</Link> : null}
+              {rootCallId ? (
+                <button type="button" className="btn btn-soft btn-sm" onClick={() => void copyValue(rootCallId, "Root call ID copied.")}>
+                  <Copy aria-hidden="true" />
+                  Copy root ID
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="trace-detail-actions">
             <button type="button" className="btn btn-primary" onClick={runReplay} disabled={!rootCallId || replayMutation.isPending}>
@@ -422,6 +535,10 @@ export default function TraceDetailPage() {
             <button type="button" className="btn btn-soft" onClick={() => void copyTraceId()}>
               <Copy aria-hidden="true" />
               {copied ? "Copied" : "Copy trace ID"}
+            </button>
+            <button type="button" className="btn btn-soft" onClick={exportRawPayload}>
+              <Download aria-hidden="true" />
+              Export raw JSON
             </button>
           </div>
           <div className="trace-detail-panel-card">

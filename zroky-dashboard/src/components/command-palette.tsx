@@ -14,15 +14,17 @@ interface CommandItem {
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
   return [
-    { id: "agents", label: "Go to Agents", description: "Agent launchpad with real health, reliability, cost, and determinism data", shortcut: "Ctrl+A", action: () => router.push("/agents") },
+    { id: "failure-inbox", label: "Go to Failure Inbox", description: "Open issues, replay gaps, CI gates, goldens, and plan status", shortcut: "Ctrl+A", action: () => router.push("/home") },
+    { id: "agents", label: "Go to Agent Console", description: "Agent reliability, cost, and determinism data", action: () => router.push("/agents") },
     { id: "issues", label: "Go to Issues", description: "Grouped production issues with root cause and action context", shortcut: "Ctrl+I", action: () => router.push("/issues") },
-    { id: "replay", label: "Go to Replay", description: "Test a fix against past data before deploying", action: () => router.push("/replay") },
+    { id: "replay", label: "Go to Replay Lab", description: "Test a fix against past data before deploying", action: () => router.push("/replay") },
     { id: "goldens", label: "Go to Goldens", description: "Golden datasets for regression-safe evaluation", action: () => router.push("/goldens") },
+    { id: "ci-gates", label: "Go to CI Gates", description: "Regression CI status, PR comments, and protected-flow gates", action: () => router.push("/ci-gates") },
     { id: "drift", label: "Go to Drift", description: "Provider and model behavior drift over time", action: () => router.push("/drift") },
     { id: "calls", label: "Go to Calls", description: "What your agent said — prompts, responses, latency", shortcut: "Ctrl+C", action: () => router.push("/calls") },
     { id: "cost", label: "Go to Cost", description: "Spend, waste, and cost of failures", action: () => router.push("/cost") },
     { id: "alerts", label: "Go to Alerts", description: "Triage open alerts — acknowledge, resolve, reopen", action: () => router.push("/alerts") },
-    { id: "home", label: "Open Command Center", description: "Secondary operational command center", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "home", label: "Open Failure Inbox", description: "Default dashboard home", shortcut: "Ctrl+H", action: () => router.push("/home") },
     { id: "settings-evaluation", label: "Settings → Evaluation", description: "Calibration and judge controls live in settings", action: () => router.push("/settings/evaluation") },
     { id: "settings-evaluation-calibration", label: "Settings → Evaluation → Calibration", description: "Open calibration controls in settings", action: () => router.push("/settings/evaluation?workspace=calibration") },
     { id: "settings-evaluation-judge", label: "Settings → Evaluation → Judge", description: "Open judge controls in settings", action: () => router.push("/settings/evaluation?workspace=judge") },
@@ -34,7 +36,7 @@ function useCommandItems(): CommandItem[] {
     { id: "settings-providers", label: "Settings → Providers", description: "Provider keys vault for replay", action: () => router.push("/settings/providers") },
     { id: "settings-slack", label: "Settings → Slack", description: "Connect Slack alerts and reliability events", action: () => router.push("/settings/integrations/slack") },
     { id: "settings-teams", label: "Settings → Microsoft Teams", description: "Connect Teams alerts and reliability events", action: () => router.push("/settings/integrations/teams") },
-    { id: "settings-profile", label: "Settings → Profile", description: "Identity, password, 2FA, account deletion", action: () => router.push("/settings/profile") },
+    { id: "account-profile", label: "Account → Profile", description: "Identity, password, sessions, and account deletion", action: () => router.push("/account") },
   ];
 }
 

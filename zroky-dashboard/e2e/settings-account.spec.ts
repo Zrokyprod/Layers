@@ -1,0 +1,115 @@
+import { expect, test } from "@playwright/test";
+
+import { expectAnyVisibleText, expectDashboardShell, expectHealthyPage, readSeed } from "./helpers";
+
+test.describe.configure({ mode: "serial" });
+
+test.describe("settings and account", () => {
+  test("workspace settings pages render cleanly", async ({ page }) => {
+    const pages = [
+      { path: "/settings", labels: ["Project", "Data"] },
+      { path: "/settings/keys", labels: ["API Keys", "Create New API Key"] },
+      { path: "/settings/providers", labels: ["Provider Key Vault", "fake-provider"] },
+      { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
+      { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },
+      { path: "/settings/evaluation", labels: ["Evaluation", "Calibration"] },
+      { path: "/settings/integrations", labels: ["Integrations", "Slack", "Teams"] },
+      { path: "/settings/integrations/slack", labels: ["Slack", "Disconnected", "Install"] },
+      { path: "/settings/integrations/teams", labels: ["Teams", "Disconnected", "webhook"] },
+      { path: "/account", labels: ["Your Identity", "Account Security"] },
+    ];
+
+    for (const item of pages) {
+      await page.goto(item.path);
+      await expectDashboardShell(page);
+      await expectAnyVisibleText(page, item.labels);
+    }
+  });
+
+  test("settings profile compatibility route redirects to account", async ({ page }) => {
+    await page.goto("/settings/profile");
+    await expect(page).toHaveURL(/\/account/);
+    await expectDashboardShell(page);
+    await expect(page.getByText("Your Identity", { exact: false })).toBeVisible();
+  });
+
+  test("API key create, rotate, and revoke flow works", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Mutation flow runs once in the desktop Chromium project.");
+
+    await page.goto("/settings/keys");
+    await expectDashboardShell(page);
+
+    const keyName = `E2E key ${Date.now()}`;
+    await page.getByLabel("Key name").fill(keyName);
+    await page.getByLabel("Expires in days").fill("30");
+    await page.getByRole("button", { name: "Create key" }).click();
+    await expect(page.getByText("New API Key Created")).toBeVisible();
+    await expect(page.locator(".settings-key-reveal")).toContainText("zroky_api_");
+    await page.getByRole("button", { name: "Done" }).click();
+
+    await page.getByRole("button", { name: "Rotate" }).first().click();
+    await expect(page.locator(".keys-status-msg")).toContainText("rotated");
+    await expect(page.getByText("New API Key Created")).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+
+    await page.getByRole("button", { name: "Revoke" }).first().click();
+    await expect(page.getByRole("dialog", { name: "Revoke API key" })).toBeVisible();
+    await page.getByRole("button", { name: "Yes, revoke key" }).click();
+    await expect(page.getByText("revoked", { exact: false })).toBeVisible();
+    await expectHealthyPage(page);
+  });
+
+  test("members invite and revoke flow works", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Mutation flow runs once in the desktop Chromium project.");
+
+    await page.goto("/settings/team");
+    await expectDashboardShell(page);
+
+    const inviteEmail = `e2e-${Date.now()}@zroky.local`;
+    await page.getByLabel("Email").fill(inviteEmail);
+    await page.locator("#invite-role").selectOption("member");
+    await page.getByRole("button", { name: "Send invite" }).click();
+    const row = page.locator(".team-member-row").filter({ hasText: inviteEmail });
+    await expect(row).toBeVisible();
+    await expect(row.getByText("Pending", { exact: true })).toBeVisible();
+
+    await row.getByTitle("Revoke invitation").click();
+    await expect(page.locator(".team-member-row").filter({ hasText: inviteEmail })).toHaveCount(0);
+    await expectHealthyPage(page);
+  });
+
+  test("account profile, password, sessions, and delete confirmation are wired", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "Password mutation runs once in the desktop Chromium project.");
+    test.setTimeout(60_000);
+
+    const seed = readSeed();
+    const temporaryPassword = "ZrokyDemo124!";
+
+    await page.goto("/account");
+    await expectDashboardShell(page);
+
+    await page.getByLabel("Display name").fill("Zroky Demo Owner");
+    await page.getByRole("button", { name: "Save profile" }).click();
+    await expect(page.getByText("Profile updated.")).toBeVisible();
+
+    await page.getByRole("textbox", { name: "Current password" }).fill(seed.password);
+    await page.getByRole("textbox", { name: "New password", exact: true }).fill(temporaryPassword);
+    await page.getByRole("textbox", { name: "Confirm new password" }).fill(temporaryPassword);
+    await page.getByRole("button", { name: "Change password" }).click();
+    await expect(page.getByText("Password changed successfully.")).toBeVisible();
+
+    await page.getByRole("textbox", { name: "Current password" }).fill(temporaryPassword);
+    await page.getByRole("textbox", { name: "New password", exact: true }).fill(seed.password);
+    await page.getByRole("textbox", { name: "Confirm new password" }).fill(seed.password);
+    await page.getByRole("button", { name: "Change password" }).click();
+    await expect(page.getByText("Password changed successfully.")).toBeVisible();
+
+    await expect(page.getByRole("button", { name: "Log out all sessions" })).toBeEnabled();
+    await page.getByRole("button", { name: "Delete my account" }).click();
+    await expect(page.getByRole("button", { name: "Permanently delete account" })).toBeDisabled();
+    await page.locator("input[placeholder='demo@zroky.local']").fill(seed.email);
+    await expect(page.getByRole("button", { name: "Permanently delete account" })).toBeEnabled();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expectHealthyPage(page);
+  });
+});

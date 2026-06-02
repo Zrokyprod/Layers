@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowLeft,
+  AlertTriangle,
   CheckCircle2,
+  Clock3,
+  DollarSign,
   ExternalLink,
+  FileSearch,
   GitPullRequest,
+  ListChecks,
   LockKeyhole,
   RotateCcw,
   Save,
@@ -22,7 +28,9 @@ import {
   getBillingMe,
   getIssue,
   ignoreIssue,
+  promoteIssueToGolden,
   resolveIssue,
+  runIssueCiGate,
   updateIssueTriage,
 } from "@/lib/api";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
@@ -31,7 +39,20 @@ import { replayLabel } from "@/lib/issue-format";
 import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
 import type { BillingMeResponse, IssueEvidenceTrace, IssueItem } from "@/lib/types";
 
-type ActionState = "issue_replay" | "call_replay" | "resolve" | "ignore" | "triage" | null;
+type ActionState = "issue_replay" | "call_replay" | "promote_golden" | "ci_gate" | "resolve" | "ignore" | "triage" | null;
+type ConfirmAction = "resolve" | "ignore" | null;
+type ProofState = "good" | "warn" | "blocked" | "neutral";
+type PrimaryAction =
+  | "run_replay"
+  | "promote_golden"
+  | "run_ci_gate"
+  | "open_ci_gate"
+  | "upgrade_replay"
+  | "upgrade_goldens"
+  | "upgrade_ci"
+  | "blocked_missing_sample"
+  | "link_pr"
+  | "back_to_queue";
 
 function normalizedReplayStatus(issue: IssueItem): string {
   return issue.replay_coverage_status?.trim().toLowerCase() || "unknown";
@@ -58,8 +79,18 @@ function formatIssueImpact(issue: IssueItem): string {
   return impact == null ? "\u2014" : formatUsd(impact);
 }
 
+function averageFailedCallCost(issue: IssueItem): string {
+  const impact = issueImpactUsd(issue);
+  if (!impact || issue.occurrence_count <= 0) return "\u2014";
+  return formatUsd(impact / issue.occurrence_count);
+}
+
 function issueAgent(issue: IssueItem): string {
   return issue.affected_agent ?? issue.agent_name ?? "Agent not captured";
+}
+
+function issueWorkflow(issue: IssueItem): string {
+  return issue.affected_workflow ?? "Workflow not captured";
 }
 
 function issueEnvironment(): string {
@@ -68,7 +99,7 @@ function issueEnvironment(): string {
 }
 
 function titleCase(value: string): string {
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : "Unknown";
+  return value ? value.replace(/_/g, " ").replace(/^\w/, (match) => match.toUpperCase()) : "Unknown";
 }
 
 function sortedEvidence(traces: IssueEvidenceTrace[]): IssueEvidenceTrace[] {
@@ -79,29 +110,260 @@ function sortedEvidence(traces: IssueEvidenceTrace[]): IssueEvidenceTrace[] {
   });
 }
 
-function averageFailedCallCost(issue: IssueItem): string {
-  const impact = issueImpactUsd(issue);
-  if (!impact || issue.occurrence_count <= 0) return "\u2014";
-  return formatUsd(impact / issue.occurrence_count);
-}
-
 function traceTarget(trace: IssueEvidenceTrace): string | null {
   return trace.trace_id ?? trace.call_id;
+}
+
+function hasEvidence(issue: IssueItem): boolean {
+  return issue.evidence_traces.length > 0 || Boolean(issue.sample_call_id);
+}
+
+function hasRootCause(issue: IssueItem): boolean {
+  return Boolean(issue.root_cause?.trim()) || issue.evidence_traces.some((trace) => Boolean(trace.evidence_summary?.trim()));
+}
+
+function goldenEligible(issue: IssueItem): boolean {
+  return hasVerifiedFix(issue) && Boolean(issue.sample_call_id);
+}
+
+function hasActiveGolden(issue: IssueItem): boolean {
+  return Boolean(issue.proof?.golden?.golden_trace_id && issue.proof.golden.status === "active");
+}
+
+function hasCiGateRun(issue: IssueItem): boolean {
+  return Boolean(issue.proof?.ci_gate?.run_id);
+}
+
+function replayBlocker(issue: IssueItem): string {
+  if (!issue.sample_call_id) return "Trusted replay needs a representative sample call.";
+  if (hasVerifiedFix(issue)) return "Trusted replay verified the fix.";
+  const label = replayLabel(issue.replay_coverage_status);
+  return `${label} is not trusted enough for Goldens or CI gates.`;
+}
+
+function goldenBlocker(issue: IssueItem, canGoldens: boolean): string {
+  if (hasActiveGolden(issue)) return "Active Golden guard is linked to this issue.";
+  if (!hasVerifiedFix(issue)) return "Needs trusted replay before Golden promotion.";
+  if (!issue.sample_call_id) return "Needs a sample call before Golden promotion.";
+  if (!canGoldens) return "Current plan does not unlock Goldens.";
+  return "Ready to promote this verified scenario into a Golden guard.";
+}
+
+function ciBlocker(issue: IssueItem, canCi: boolean): string {
+  if (hasCiGateRun(issue)) return "A replay-backed CI gate run is linked to this issue.";
+  if (!hasActiveGolden(issue)) return "Promote this verified issue to an active Golden before CI can block regressions.";
+  if (!canCi) return "Current plan does not unlock CI gates.";
+  if (!issue.deploy_pr_url) return "Ready for CI, but no deployment PR is linked yet.";
+  return "Ready to run a replay-backed CI gate for the linked PR.";
+}
+
+function costInterpretation(issue: IssueItem): string {
+  if (hasCiGateRun(issue)) {
+    return "CI gate proof exists. Repeat spend is now guarded by replay before merge.";
+  }
+  if (hasActiveGolden(issue)) {
+    return "Golden proof exists. Run the CI gate to turn this into a release blocker.";
+  }
+  if (hasVerifiedFix(issue)) {
+    return "Verified replay exists. Promote the scenario to Golden and CI to prevent repeat spend.";
+  }
+  if (issueImpactUsd(issue) != null) {
+    return "This is current loaded exposure, not projected savings. Verify the fix before treating it as avoided cost.";
+  }
+  return "No reliable cost estimate is attached yet. Capture more failed calls to quantify exposure.";
+}
+
+function evidenceSummary(issue: IssueItem): string {
+  return (
+    issue.evidence_traces.find((trace) => trace.evidence_summary?.trim())?.evidence_summary ??
+    issue.user_impact ??
+    "No evidence summary captured yet."
+  );
+}
+
+function primaryActionForIssue(
+  issue: IssueItem,
+  caps: { canReplay: boolean; canGoldens: boolean; canCi: boolean },
+): PrimaryAction {
+  if (issue.status !== "open") return "back_to_queue";
+  if (isUntrustedReplay(issue)) {
+    if (!issue.sample_call_id) return "blocked_missing_sample";
+    return caps.canReplay ? "run_replay" : "upgrade_replay";
+  }
+  if (hasCiGateRun(issue)) return "open_ci_gate";
+  if (hasActiveGolden(issue)) {
+    if (!caps.canCi) return "upgrade_ci";
+    if (!issue.deploy_pr_url) return "link_pr";
+    return "run_ci_gate";
+  }
+  if (goldenEligible(issue)) {
+    if (!caps.canGoldens) return "upgrade_goldens";
+    return "promote_golden";
+  }
+  return "back_to_queue";
+}
+
+function primaryActionLabel(action: PrimaryAction): string {
+  if (action === "run_replay") return "Run trusted replay";
+  if (action === "promote_golden") return "Promote to Golden";
+  if (action === "run_ci_gate") return "Run CI gate";
+  if (action === "open_ci_gate") return "Open CI gate";
+  if (action === "upgrade_replay") return "Upgrade for replay";
+  if (action === "upgrade_goldens") return "Upgrade for Goldens";
+  if (action === "upgrade_ci") return "Upgrade for CI gates";
+  if (action === "blocked_missing_sample") return "Sample call required";
+  if (action === "link_pr") return "Link deployment PR";
+  return "Back to queue";
+}
+
+function primaryActionReason(action: PrimaryAction, issue: IssueItem, canCi: boolean): string {
+  if (action === "run_replay") return "Replay the exact failed scenario before any Golden or CI gate can be trusted.";
+  if (action === "promote_golden") return "The fix is verified. Create the active Golden guard now.";
+  if (action === "run_ci_gate") return ciBlocker(issue, canCi);
+  if (action === "open_ci_gate") return "CI proof is already linked. Review the replay-backed gate result.";
+  if (action === "upgrade_replay") return "Replay is locked on the current plan.";
+  if (action === "upgrade_goldens") return "Golden promotion is locked on the current plan.";
+  if (action === "upgrade_ci") return "CI gates are locked on the current plan.";
+  if (action === "blocked_missing_sample") return replayBlocker(issue);
+  if (action === "link_pr") return "Add the deployment PR URL in triage so this issue can run as a CI gate.";
+  return "This issue no longer needs an active remediation action.";
 }
 
 function severityBadge(issue: IssueItem) {
   return (
     <span className={`alert-cat-badge badge-${severityBadgeColor(issue.severity)} im-severity-badge`}>
+      <AlertTriangle aria-hidden="true" />
       {issue.severity}
     </span>
   );
 }
 
-function DetailMetric({ label, value }: { label: string; value: string }) {
+function DetailMetric({ label, value, helper }: { label: string; value: string; helper?: string }) {
   return (
     <div className="imd-metric">
       <span>{label}</span>
       <strong>{value}</strong>
+      {helper ? <small>{helper}</small> : null}
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="imd-section-header">
+      <div>
+        <h2>{title}</h2>
+        {description ? <p>{description}</p> : null}
+      </div>
+      {action}
+    </header>
+  );
+}
+
+function ProofStep({
+  icon,
+  label,
+  state,
+  value,
+  helper,
+}: {
+  icon: ReactNode;
+  label: string;
+  state: ProofState;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="imd-proof-step" data-state={state}>
+      <div className="imd-proof-icon">{icon}</div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{helper}</p>
+    </div>
+  );
+}
+
+function DiagnosisBlock({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="imd-diagnosis-block">
+      <span>{label}</span>
+      <p>{value}</p>
+    </div>
+  );
+}
+
+function ReadinessCard({
+  icon,
+  title,
+  status,
+  state,
+  detail,
+  action,
+}: {
+  icon: ReactNode;
+  title: string;
+  status: string;
+  state: ProofState;
+  detail: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="imd-readiness-card" data-state={state}>
+      <div className="imd-readiness-head">
+        <span>{icon}</span>
+        <strong>{title}</strong>
+      </div>
+      <b>{status}</b>
+      <p>{detail}</p>
+      {action}
+    </div>
+  );
+}
+
+function ConfirmPanel({
+  action,
+  busyAction,
+  onCancel,
+  onConfirm,
+}: {
+  action: ConfirmAction;
+  busyAction: ActionState;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!action) return null;
+  const isResolve = action === "resolve";
+  return (
+    <div className="imd-confirm-panel" role="alert">
+      <div>
+        <strong>{isResolve ? "Resolve this issue?" : "Ignore this issue?"}</strong>
+        <p>
+          {isResolve
+            ? "Only resolve after the fix path is understood or verified."
+            : "Ignoring removes this issue from the active remediation queue."}
+        </p>
+      </div>
+      <div className="imd-row-actions">
+        <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm im-btn-primary"
+          onClick={onConfirm}
+          disabled={busyAction === action}
+        >
+          {busyAction === action ? "Working..." : isResolve ? "Confirm resolve" : "Confirm ignore"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -114,7 +376,9 @@ export default function IssueDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<ActionState>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [assigneeDraft, setAssigneeDraft] = useState("");
   const [deployDraft, setDeployDraft] = useState("");
 
@@ -136,21 +400,29 @@ export default function IssueDetailPage() {
         if ((loadError as { name?: string }).name === "AbortError") return;
         setError(loadError instanceof Error ? loadError.message : "Failed to load issue.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
     return () => ctrl.abort();
   }, [id]);
 
   const planTemplate = billing?.plan_template;
-  const canReplay = hasPlanEntitlement(planTemplate, "pilot.replay_stub");
-  const canGoldens = hasPlanEntitlement(planTemplate, "pilot.goldens_basic");
-  const orderedEvidence = useMemo(
-    () => (issue ? sortedEvidence(issue.evidence_traces) : []),
-    [issue],
+  const caps = useMemo(
+    () => ({
+      canReplay: hasPlanEntitlement(planTemplate, "pilot.replay_stub"),
+      canGoldens: hasPlanEntitlement(planTemplate, "pilot.goldens_basic"),
+      canCi:
+        hasPlanEntitlement(planTemplate, "pro.ci_gate_nonblocking") ||
+        hasPlanEntitlement(planTemplate, "pro.ci_gate_blocking"),
+    }),
+    [planTemplate],
   );
+  const orderedEvidence = useMemo(() => (issue ? sortedEvidence(issue.evidence_traces) : []), [issue]);
 
   async function onReplayIssue() {
     if (!issue) return;
     setActionError(null);
+    setSuccessMessage(null);
     setBusyAction("issue_replay");
     try {
       const run = await createReplayRunFromIssue(issue.id, {
@@ -166,6 +438,7 @@ export default function IssueDetailPage() {
 
   async function onReplayCall(callId: string) {
     setActionError(null);
+    setSuccessMessage(null);
     setBusyAction("call_replay");
     try {
       const run = await createReplayRunFromCall(callId, {
@@ -179,13 +452,50 @@ export default function IssueDetailPage() {
     }
   }
 
+  async function onPromoteGolden() {
+    if (!issue) return;
+    setActionError(null);
+    setSuccessMessage(null);
+    setBusyAction("promote_golden");
+    try {
+      const response = await promoteIssueToGolden(issue.id, { blocks_ci: true });
+      setIssue(response.issue);
+      setSuccessMessage("Golden guard created and linked to this issue.");
+    } catch (goldenError) {
+      setActionError(goldenError instanceof Error ? goldenError.message : "Failed to promote issue to Golden.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function onRunCiGate() {
+    if (!issue) return;
+    setActionError(null);
+    setSuccessMessage(null);
+    setBusyAction("ci_gate");
+    try {
+      const response = await runIssueCiGate(issue.id, {
+        replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE,
+      });
+      setIssue(response.issue);
+      if (response.ci_gate.run_id) router.push(`/ci-gates/${response.ci_gate.run_id}`);
+    } catch (ciError) {
+      setActionError(ciError instanceof Error ? ciError.message : "Failed to run CI gate.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function onResolve() {
     if (!issue) return;
     setActionError(null);
+    setSuccessMessage(null);
     setBusyAction("resolve");
     try {
-      await resolveIssue(issue.id, { resolution_source: "manual" });
-      router.push("/issues");
+      const updated = await resolveIssue(issue.id, { resolution_source: "manual" });
+      setIssue(updated);
+      setConfirmAction(null);
+      setSuccessMessage("Issue resolved. It is no longer part of the active failure queue.");
     } catch (resolveError) {
       setActionError(resolveError instanceof Error ? resolveError.message : "Failed to resolve issue.");
     } finally {
@@ -196,10 +506,13 @@ export default function IssueDetailPage() {
   async function onIgnore() {
     if (!issue) return;
     setActionError(null);
+    setSuccessMessage(null);
     setBusyAction("ignore");
     try {
-      await ignoreIssue(issue.id);
-      router.push("/issues");
+      const updated = await ignoreIssue(issue.id);
+      setIssue(updated);
+      setConfirmAction(null);
+      setSuccessMessage("Issue ignored. It will not appear in the active remediation queue.");
     } catch (ignoreError) {
       setActionError(ignoreError instanceof Error ? ignoreError.message : "Failed to ignore issue.");
     } finally {
@@ -210,6 +523,7 @@ export default function IssueDetailPage() {
   async function onSaveTriage() {
     if (!issue) return;
     setActionError(null);
+    setSuccessMessage(null);
     setBusyAction("triage");
     try {
       const updated = await updateIssueTriage(issue.id, {
@@ -219,6 +533,7 @@ export default function IssueDetailPage() {
       setIssue(updated);
       setAssigneeDraft(updated.assigned_to ?? "");
       setDeployDraft(updated.deploy_pr_url ?? "");
+      setSuccessMessage("Triage saved.");
     } catch (triageError) {
       setActionError(triageError instanceof Error ? triageError.message : "Failed to update issue triage.");
     } finally {
@@ -231,7 +546,7 @@ export default function IssueDetailPage() {
   if (error) {
     return (
       <div className="issue-detail-mvp">
-        <section className="imd-notice imd-notice-error">
+        <section className="imd-notice imd-notice-error" role="alert">
           <p>{error}</p>
           <Link href="/issues" className="btn btn-soft btn-sm im-btn-secondary">
             <ArrowLeft aria-hidden="true" />
@@ -245,47 +560,129 @@ export default function IssueDetailPage() {
   if (!issue) return null;
 
   const verifiedFix = hasVerifiedFix(issue);
-  const goldenEligible = verifiedFix && Boolean(issue.sample_call_id);
-  const canCreateGolden = goldenEligible && canGoldens;
+  const hasSampleCall = Boolean(issue.sample_call_id);
+  const activeGolden = hasActiveGolden(issue);
+  const linkedCiGate = hasCiGateRun(issue);
+  const canPromoteGolden = goldenEligible(issue) && caps.canGoldens;
+  const canRunCiGate = activeGolden && caps.canCi && Boolean(issue.deploy_pr_url);
   const rootCause = issue.root_cause?.trim() || "No structured root cause available yet.";
+  const primaryAction = primaryActionForIssue(issue, caps);
+  const proofSteps = [
+    {
+      icon: <FileSearch aria-hidden="true" />,
+      label: "Evidence",
+      value: hasEvidence(issue) ? "Captured" : "Missing",
+      helper: hasEvidence(issue) ? "Sample call or trace evidence exists." : "No sample call or evidence traces attached.",
+      state: hasEvidence(issue) ? ("good" as const) : ("blocked" as const),
+    },
+    {
+      icon: <ListChecks aria-hidden="true" />,
+      label: "Root cause",
+      value: hasRootCause(issue) ? "Explained" : "Missing",
+      helper: hasRootCause(issue) ? "A diagnosis is available for review." : "Diagnosis needs stronger evidence.",
+      state: hasRootCause(issue) ? ("good" as const) : ("warn" as const),
+    },
+    {
+      icon: <RotateCcw aria-hidden="true" />,
+      label: "Replay",
+      value: verifiedFix ? "Trusted" : replayLabel(issue.replay_coverage_status),
+      helper: replayBlocker(issue),
+      state: verifiedFix ? ("good" as const) : hasSampleCall ? ("blocked" as const) : ("warn" as const),
+    },
+    {
+      icon: <ShieldCheck aria-hidden="true" />,
+      label: "Golden",
+      value: activeGolden ? "Active" : canPromoteGolden ? "Ready" : "Blocked",
+      helper: goldenBlocker(issue, caps.canGoldens),
+      state: activeGolden ? ("good" as const) : canPromoteGolden ? ("warn" as const) : ("blocked" as const),
+    },
+    {
+      icon: <GitPullRequest aria-hidden="true" />,
+      label: "CI gate",
+      value: linkedCiGate ? "Linked" : canRunCiGate ? "Ready" : "Blocked",
+      helper: ciBlocker(issue, caps.canCi),
+      state: linkedCiGate ? ("good" as const) : canRunCiGate ? ("warn" as const) : ("blocked" as const),
+    },
+    {
+      icon: <CheckCircle2 aria-hidden="true" />,
+      label: "Resolution",
+      value: titleCase(issue.status),
+      helper: issue.status === "open" ? "Issue is still in the active queue." : "Issue has left the active queue.",
+      state: issue.status === "resolved" ? ("good" as const) : issue.status === "ignored" ? ("neutral" as const) : ("warn" as const),
+    },
+  ];
 
   function renderPrimaryAction() {
-    if (canCreateGolden && issue?.sample_call_id) {
-      return (
-        <Link href={`/goldens?call_id=${encodeURIComponent(issue.sample_call_id)}`} className="btn btn-primary btn-sm im-btn-primary">
-          <ShieldCheck aria-hidden="true" />
-          Create Golden
-        </Link>
-      );
-    }
-    if (goldenEligible && !canGoldens) {
-      return (
-        <Link href="/settings/billing" className="btn btn-soft btn-sm im-btn-secondary">
-          <LockKeyhole aria-hidden="true" />
-          Upgrade for Goldens
-        </Link>
-      );
-    }
-    if (isUntrustedReplay(issue)) {
-      if (!canReplay) {
-        return (
-          <Link href="/settings/billing" className="btn btn-soft btn-sm im-btn-secondary">
-            <LockKeyhole aria-hidden="true" />
-            Upgrade for replay
-          </Link>
-        );
-      }
+    if (!issue) return null;
+    if (primaryAction === "run_replay") {
       return (
         <button
           type="button"
           className="btn btn-primary btn-sm im-btn-primary"
           onClick={() => void onReplayIssue()}
-          disabled={!issue.sample_call_id || busyAction === "issue_replay"}
-          title={issue.sample_call_id ? "Run trusted replay" : "Trusted replay needs a sample call."}
+          disabled={busyAction === "issue_replay"}
         >
           <RotateCcw aria-hidden="true" />
           {busyAction === "issue_replay" ? "Creating..." : "Run trusted replay"}
         </button>
+      );
+    }
+    if (primaryAction === "promote_golden") {
+      return (
+        <button
+          type="button"
+          className="btn btn-primary btn-sm im-btn-primary"
+          onClick={() => void onPromoteGolden()}
+          disabled={busyAction === "promote_golden"}
+        >
+          <ShieldCheck aria-hidden="true" />
+          {busyAction === "promote_golden" ? "Promoting..." : "Promote to Golden"}
+        </button>
+      );
+    }
+    if (primaryAction === "run_ci_gate") {
+      return (
+        <button
+          type="button"
+          className="btn btn-primary btn-sm im-btn-primary"
+          onClick={() => void onRunCiGate()}
+          disabled={busyAction === "ci_gate"}
+        >
+          <GitPullRequest aria-hidden="true" />
+          {busyAction === "ci_gate" ? "Dispatching..." : "Run CI gate"}
+        </button>
+      );
+    }
+    if (primaryAction === "open_ci_gate") {
+      return (
+        <Link href={`/ci-gates/${issue.proof?.ci_gate?.run_id}`} className="btn btn-primary btn-sm im-btn-primary">
+          <GitPullRequest aria-hidden="true" />
+          Open CI gate
+        </Link>
+      );
+    }
+    if (primaryAction === "upgrade_replay" || primaryAction === "upgrade_goldens" || primaryAction === "upgrade_ci") {
+      return (
+        <Link href="/settings/billing" className="btn btn-primary btn-sm im-btn-primary">
+          <LockKeyhole aria-hidden="true" />
+          {primaryActionLabel(primaryAction)}
+        </Link>
+      );
+    }
+    if (primaryAction === "link_pr") {
+      return (
+        <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => document.getElementById("issue-deploy-pr")?.focus()}>
+          <GitPullRequest aria-hidden="true" />
+          Add PR URL
+        </button>
+      );
+    }
+    if (primaryAction === "blocked_missing_sample") {
+      return (
+        <Link href="/calls" className="btn btn-soft btn-sm im-btn-secondary">
+          <FileSearch aria-hidden="true" />
+          Find sample call
+        </Link>
       );
     }
     return (
@@ -302,15 +699,21 @@ export default function IssueDetailPage() {
         Back to issues
       </Link>
 
+      {successMessage ? (
+        <section className="imd-notice imd-notice-success" role="status" aria-live="polite">
+          <p>{successMessage}</p>
+        </section>
+      ) : null}
+
       {actionError ? (
-        <section className="imd-notice imd-notice-error">
+        <section className="imd-notice imd-notice-error" role="alert">
           <p>{actionError}</p>
         </section>
       ) : null}
 
-      <section className="imd-hero" aria-label="Issue detail header">
-        <div className="imd-hero-top">
-          <div>
+      <section className="imd-hero imd-command-hero" aria-label="Issue command center">
+        <div className="imd-hero-grid">
+          <div className="imd-hero-main">
             <div className="imd-badge-row">
               {severityBadge(issue)}
               <span className="im-status-pill">{replayLabel(issue.replay_coverage_status)}</span>
@@ -318,13 +721,27 @@ export default function IssueDetailPage() {
             </div>
             <h1>{issue.title}</h1>
             <p>
-              {detectorLabel(issue.failure_code)} &middot; {issueAgent(issue)} &middot; {issueEnvironment()}
+              {detectorLabel(issue.failure_code)} - {issueAgent(issue)} - {issueWorkflow(issue)} - {issueEnvironment()}
             </p>
           </div>
+
+          <aside className="imd-next-action-card" aria-label="Recommended next action">
+            <span>Recommended next action</span>
+            <strong>{primaryActionLabel(primaryAction)}</strong>
+            <p>{primaryActionReason(primaryAction, issue, caps.canCi)}</p>
+            {renderPrimaryAction()}
+          </aside>
         </div>
+
+        <div className="imd-proof-ladder" aria-label="Issue proof ladder">
+          {proofSteps.map((step) => (
+            <ProofStep key={step.label} {...step} />
+          ))}
+        </div>
+
         <div className="imd-meta-strip" aria-label="Issue metadata">
-          <DetailMetric label="Occurrences" value={formatCount(issue.occurrence_count)} />
-          <DetailMetric label="Impact" value={formatIssueImpact(issue)} />
+          <DetailMetric label="Occurrences" value={formatCount(issue.occurrence_count)} helper="Loaded failed calls" />
+          <DetailMetric label="Impact" value={formatIssueImpact(issue)} helper="Current exposure" />
           <DetailMetric label="First seen" value={formatDateTime(issue.first_seen_at)} />
           <DetailMetric label="Last seen" value={formatDateTime(issue.last_seen_at)} />
           <DetailMetric label="Sample call" value={issue.sample_call_id ?? "Not captured"} />
@@ -333,25 +750,28 @@ export default function IssueDetailPage() {
 
       <section className="imd-layout">
         <main className="imd-main">
-          <section className="imd-card">
-            <header className="imd-section-header">
-              <h2>Root cause</h2>
-            </header>
-            <p>{rootCause}</p>
-            {issue.recommended_next_action ? (
-              <div className="imd-recommendation">
-                <span>Recommended next step</span>
-                <strong>{issue.recommended_next_action}</strong>
-              </div>
-            ) : null}
-            {isUntrustedReplay(issue) ? <p className="imd-muted">No trusted replay proof exists yet.</p> : null}
+          <section className="imd-card imd-diagnosis-card">
+            <SectionHeader
+              title="Executive diagnosis"
+              description="The shortest reliable explanation of the failure and why this issue matters."
+            />
+            <div className="imd-diagnosis-grid">
+              <DiagnosisBlock label="What happened" value={evidenceSummary(issue)} />
+              <DiagnosisBlock label="Root cause" value={rootCause} />
+              <DiagnosisBlock label="User impact" value={issue.user_impact || "User impact not captured."} />
+              <DiagnosisBlock
+                label="Recommended path"
+                value={issue.recommended_next_action || primaryActionReason(primaryAction, issue, caps.canCi)}
+              />
+            </div>
           </section>
 
           <section className="imd-card">
-            <header className="imd-section-header">
-              <h2>Evidence timeline</h2>
-              <span>{formatCount(orderedEvidence.length)} traces</span>
-            </header>
+            <SectionHeader
+              title="Evidence workbench"
+              description="Trace-level evidence attached to this issue. Use this to replay or inspect the exact failure."
+              action={<span>{formatCount(orderedEvidence.length)} traces</span>}
+            />
             {orderedEvidence.length === 0 ? (
               <div className="imd-empty">No structured evidence yet.</div>
             ) : (
@@ -367,24 +787,19 @@ export default function IssueDetailPage() {
                 ))}
               </ol>
             )}
-          </section>
 
-          <section className="imd-card">
-            <header className="imd-section-header">
-              <h2>Sample traces</h2>
-            </header>
             <div className="imd-trace-list">
               {issue.sample_call_id ? (
                 <div className="imd-trace-row">
                   <div>
                     <strong>{issue.sample_call_id}</strong>
-                    <span>Representative sample call</span>
+                    <span>Representative sample call for replay.</span>
                   </div>
                   <div className="imd-row-actions">
                     <Link href={`/calls/${issue.sample_call_id}`} className="btn btn-soft btn-sm im-btn-secondary">
                       View call
                     </Link>
-                    {canReplay ? (
+                    {caps.canReplay ? (
                       <button
                         type="button"
                         className="btn btn-soft btn-sm im-btn-secondary"
@@ -406,7 +821,8 @@ export default function IssueDetailPage() {
                       <strong>{target ?? "Trace unavailable"}</strong>
                       <span>
                         {trace.workflow_name ?? "Workflow not captured"} - {trace.status ?? "status unknown"} -{" "}
-                        {trace.latency_ms != null ? `${Math.round(trace.latency_ms)} ms` : "latency unknown"}
+                        {trace.latency_ms != null ? `${Math.round(trace.latency_ms)} ms` : "latency unknown"} -{" "}
+                        {trace.cost_usd != null ? formatUsd(trace.cost_usd) : "cost unknown"}
                       </span>
                     </div>
                     <div className="imd-row-actions">
@@ -415,7 +831,7 @@ export default function IssueDetailPage() {
                           View trace
                         </Link>
                       ) : null}
-                      {trace.call_id && trace.call_id !== issue.sample_call_id && canReplay ? (
+                      {trace.call_id && trace.call_id !== issue.sample_call_id && caps.canReplay ? (
                         <button
                           type="button"
                           className="btn btn-soft btn-sm im-btn-secondary"
@@ -436,62 +852,90 @@ export default function IssueDetailPage() {
           </section>
 
           <section className="imd-card">
-            <header className="imd-section-header">
-              <h2>Replay proof</h2>
-            </header>
-            <div className="imd-proof-row">
-              <strong>{replayLabel(issue.replay_coverage_status)}</strong>
-              {isUntrustedReplay(issue) ? (
-                <p>This state is not trusted enough to create a Golden or block CI. Run trusted replay first.</p>
-              ) : (
-                <p>Verified fix evidence is available for this issue.</p>
-              )}
+            <SectionHeader
+              title="Replay, Golden, and CI readiness"
+              description="This is the trust path from one failed run to a release gate."
+            />
+            <div className="imd-readiness-grid">
+              <ReadinessCard
+                icon={<RotateCcw aria-hidden="true" />}
+                title="Replay proof"
+                status={verifiedFix ? "Trusted replay verified" : replayLabel(issue.replay_coverage_status)}
+                state={verifiedFix ? "good" : "blocked"}
+                detail={replayBlocker(issue)}
+                action={
+                  isUntrustedReplay(issue) && caps.canReplay && issue.sample_call_id ? (
+                    <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onReplayIssue()}>
+                      Run replay
+                    </button>
+                  ) : null
+                }
+              />
+              <ReadinessCard
+                icon={<ShieldCheck aria-hidden="true" />}
+                title="Golden readiness"
+                status={activeGolden ? "Active Golden linked" : canPromoteGolden ? "Ready for Golden" : "Not ready"}
+                state={activeGolden ? "good" : canPromoteGolden ? "warn" : "blocked"}
+                detail={goldenBlocker(issue, caps.canGoldens)}
+                action={
+                  activeGolden && issue.proof?.golden?.golden_set_id ? (
+                    <Link href={`/goldens/${issue.proof.golden.golden_set_id}`} className="btn btn-soft btn-sm im-btn-secondary">
+                      Open Golden
+                    </Link>
+                  ) : canPromoteGolden ? (
+                    <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onPromoteGolden()} disabled={busyAction === "promote_golden"}>
+                      {busyAction === "promote_golden" ? "Promoting..." : "Promote Golden"}
+                    </button>
+                  ) : null
+                }
+              />
+              <ReadinessCard
+                icon={<GitPullRequest aria-hidden="true" />}
+                title="CI gate readiness"
+                status={linkedCiGate ? "Gate linked" : canRunCiGate ? "Gate-ready" : "Blocked"}
+                state={linkedCiGate ? "good" : canRunCiGate ? "warn" : "blocked"}
+                detail={ciBlocker(issue, caps.canCi)}
+                action={
+                  linkedCiGate && issue.proof?.ci_gate?.run_id ? (
+                    <Link href={`/ci-gates/${issue.proof.ci_gate.run_id}`} className="btn btn-soft btn-sm im-btn-secondary">
+                      Open CI gate
+                    </Link>
+                  ) : canRunCiGate ? (
+                    <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onRunCiGate()} disabled={busyAction === "ci_gate"}>
+                      {busyAction === "ci_gate" ? "Dispatching..." : "Run CI gate"}
+                    </button>
+                  ) : null
+                }
+              />
             </div>
           </section>
 
           <section className="imd-card">
-            <header className="imd-section-header">
-              <h2>Golden status</h2>
-            </header>
-            {goldenEligible && issue.sample_call_id ? (
-              <div className="imd-proof-row">
-                <strong>Eligible</strong>
-                <p>This issue has a verified replay fix and a sample call.</p>
-                {canCreateGolden ? (
-                  <Link href={`/goldens?call_id=${encodeURIComponent(issue.sample_call_id)}`} className="btn btn-soft btn-sm im-btn-secondary">
-                    <ShieldCheck aria-hidden="true" />
-                    Create Golden
-                  </Link>
-                ) : (
-                  <Link href="/settings/billing" className="btn btn-soft btn-sm im-btn-secondary">
-                    <LockKeyhole aria-hidden="true" />
-                    Upgrade for Goldens
-                  </Link>
-                )}
-              </div>
-            ) : (
-              <div className="imd-proof-row">
-                <strong>Not eligible yet</strong>
-                <p>
-                  {verifiedFix
-                    ? "A sample call and Golden entitlement are required before creating a Golden."
-                    : "Run trusted replay before creating a Golden."}
-                </p>
-              </div>
-            )}
+            <SectionHeader title="Cost impact" description="Business signal for prioritization. No avoided-cost claim is made without proof." />
+            <div className="imd-cost-grid">
+              <DetailMetric label="Estimated wasted spend" value={formatIssueImpact(issue)} />
+              <DetailMetric label="Affected failed calls" value={formatCount(issue.occurrence_count)} />
+              <DetailMetric label="Average failed call cost" value={averageFailedCallCost(issue)} />
+            </div>
+            <p className="imd-cost-note">
+              <DollarSign aria-hidden="true" />
+              {costInterpretation(issue)}
+            </p>
           </section>
         </main>
 
         <aside className="imd-side" aria-label="Resolution">
           <section className="imd-card imd-sticky-card imd-action-panel">
             <div className="imd-side-head">
-              <span>Resolution</span>
+              <span>Resolution controls</span>
               <strong>Status: {titleCase(issue.status)}</strong>
             </div>
             <div className="imd-side-list">
               <div>
                 <span>Status / owner</span>
-                <strong>{titleCase(issue.status)} &middot; {issue.assigned_to ?? "Unassigned"}</strong>
+                <strong>
+                  {titleCase(issue.status)} - {issue.assigned_to ?? "Unassigned"}
+                </strong>
               </div>
               <div>
                 <span>Deploy / PR</span>
@@ -504,22 +948,33 @@ export default function IssueDetailPage() {
                 )}
               </div>
               <div>
-                <span>Replay proof summary</span>
+                <span>Replay proof</span>
                 <strong>{replayLabel(issue.replay_coverage_status)}</strong>
               </div>
               <div>
+                <span>Gate readiness</span>
+                <strong>{linkedCiGate ? "CI gate linked" : canRunCiGate ? "CI-ready" : "Not CI-ready"}</strong>
+              </div>
+              <div>
+                <span>Golden proof</span>
+                <strong>{issue.proof?.golden?.golden_trace_id ? issue.proof.golden.status ?? "Linked" : "Not promoted"}</strong>
+              </div>
+              <div>
+                <span>CI proof</span>
+                <strong>{issue.proof?.ci_gate?.run_id ? issue.proof.ci_gate.status ?? "Linked" : "Not run"}</strong>
+              </div>
+              <div>
                 <span>Cost impact</span>
-                <strong>{formatIssueImpact(issue)} from {formatCount(issue.occurrence_count)} calls</strong>
+                <strong>
+                  {formatIssueImpact(issue)} from {formatCount(issue.occurrence_count)} calls
+                </strong>
               </div>
               <div>
                 <span>Avg failed call cost</span>
                 <strong>{averageFailedCallCost(issue)}</strong>
               </div>
             </div>
-            <div className="imd-primary-action">
-              <span>Primary action</span>
-              {renderPrimaryAction()}
-            </div>
+
             <div className="imd-triage-form">
               <span className="imd-side-section-title">Triage</span>
               <label>
@@ -528,21 +983,29 @@ export default function IssueDetailPage() {
               </label>
               <label>
                 <span>Add PR URL</span>
-                <input value={deployDraft} onChange={(event) => setDeployDraft(event.target.value)} placeholder="https://github.com/..." />
+                <input id="issue-deploy-pr" value={deployDraft} onChange={(event) => setDeployDraft(event.target.value)} placeholder="https://github.com/..." />
               </label>
               <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onSaveTriage()} disabled={busyAction === "triage"}>
                 <Save aria-hidden="true" />
                 {busyAction === "triage" ? "Saving..." : "Save triage"}
               </button>
             </div>
+
+            <ConfirmPanel
+              action={confirmAction}
+              busyAction={busyAction}
+              onCancel={() => setConfirmAction(null)}
+              onConfirm={() => void (confirmAction === "resolve" ? onResolve() : onIgnore())}
+            />
+
             <div className="imd-row-actions imd-side-actions">
-              <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onResolve()} disabled={busyAction === "resolve"}>
+              <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => setConfirmAction("resolve")} disabled={busyAction === "resolve"}>
                 <CheckCircle2 aria-hidden="true" />
-                {busyAction === "resolve" ? "Resolving..." : "Resolve"}
+                Resolve
               </button>
-              <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onIgnore()} disabled={busyAction === "ignore"}>
+              <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => setConfirmAction("ignore")} disabled={busyAction === "ignore"}>
                 <Archive aria-hidden="true" />
-                {busyAction === "ignore" ? "Ignoring..." : "Ignore"}
+                Ignore
               </button>
               {issue.deploy_pr_url ? (
                 <a href={issue.deploy_pr_url} target="_blank" rel="noreferrer" className="btn btn-soft btn-sm im-btn-secondary">
@@ -550,6 +1013,11 @@ export default function IssueDetailPage() {
                   Open PR
                 </a>
               ) : null}
+            </div>
+
+            <div className="imd-side-footnote">
+              <Clock3 aria-hidden="true" />
+              Updated {formatDateTime(issue.updated_at)}
             </div>
           </section>
         </aside>

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,11 @@ import CiGatesPage from "./page";
 const api = vi.hoisted(() => ({
   getRegressionCIRun: vi.fn(),
   listReplayRuns: vi.fn(),
+  runRegressionCI: vi.fn(),
+}));
+
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -25,6 +30,10 @@ vi.mock("next/link", () => ({
       {children}
     </a>
   ),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigation,
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -154,6 +163,7 @@ function mockCi({
 describe("CI Gates list MVP", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.push.mockClear();
   });
 
   it("renders list header, KPI cards, required columns, and CI rows", async () => {
@@ -214,6 +224,54 @@ describe("CI Gates list MVP", () => {
     expect(screen.getByRole("link", { name: "View status" }).getAttribute("href")).toBe("/ci-gates/run_pending");
   });
 
+  it("filters live from KPI cards, status controls, and search", async () => {
+    mockCi();
+
+    render(<CiGatesPage />);
+
+    expect(await screen.findByText("PR #42 - Refund retry guard")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Failed \/ blocked/i }));
+    expect(screen.getByText("PR #42 - Refund retry guard")).toBeInTheDocument();
+    expect(screen.queryByText("PR #41 - Billing schema patch")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Protected flows/i }));
+    fireEvent.change(screen.getByLabelText("Search CI gates"), { target: { value: "Billing" } });
+    expect(screen.getByText("PR #41 - Billing schema patch")).toBeInTheDocument();
+    expect(screen.queryByText("PR #42 - Refund retry guard")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Status filter"), { target: { value: "not_verified" } });
+    expect(screen.getByText("No CI gates match filters")).toBeInTheDocument();
+  });
+
+  it("queues a live CI gate from the run form", async () => {
+    mockCi();
+    api.runRegressionCI.mockResolvedValue({
+      run_id: "ci_new",
+      project_id: "proj_1",
+      git_sha: "abc1234",
+      status: "queued",
+      summary_url: "/v1/regression-ci/runs/ci_new",
+    });
+
+    render(<CiGatesPage />);
+
+    await screen.findByRole("heading", { name: "CI Gates" });
+    fireEvent.click(screen.getByRole("button", { name: "Run gate" }));
+    fireEvent.change(screen.getByLabelText("Commit SHA"), { target: { value: "abc1234" } });
+    fireEvent.change(screen.getByLabelText("Changed files"), { target: { value: "src/agent/refund.ts\nprompts/refund.md" } });
+    fireEvent.click(screen.getByRole("button", { name: "Queue CI gate" }));
+
+    await waitFor(() =>
+      expect(api.runRegressionCI).toHaveBeenCalledWith({
+        git_sha: "abc1234",
+        threshold: 0.02,
+        changed_files: [{ path: "src/agent/refund.ts" }, { path: "prompts/refund.md" }],
+      }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/ci-gates/ci_new");
+  });
+
   it("renders empty state", async () => {
     mockCi({ runs: [], details: [] });
 
@@ -235,7 +293,7 @@ describe("CI Gates list MVP", () => {
     expect(screen.queryByText("GET /v1/replay/runs failed (500)")).not.toBeInTheDocument();
     expect(api.getRegressionCIRun).not.toHaveBeenCalled();
 
-    const protectedFlowsCard = screen.getByText("Protected flows").closest("article");
+    const protectedFlowsCard = screen.getByText("Protected flows").closest("button");
     expect(protectedFlowsCard).not.toBeNull();
     expect(within(protectedFlowsCard as HTMLElement).getByText("0")).toBeInTheDocument();
   });
