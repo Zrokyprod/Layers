@@ -94,7 +94,7 @@ const features = [
       'Projected waste per Issue',
       'Cost breakdown by workflow and agent',
       'Token usage and retry cost tracking',
-      'Spend anomaly detection',
+      'Cost issue detection',
     ],
     log: [
       'issue: #47 · cost_impact: $281',

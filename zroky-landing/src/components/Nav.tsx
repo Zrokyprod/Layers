@@ -4,6 +4,7 @@ import { ArrowRight, Github, Menu, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const navItems = [
+  { label: 'Product', to: '/' },
   { label: 'Features', to: '/features' },
   { label: 'Changelog', to: '/changelog' },
   { label: 'Docs', to: '/docs' },

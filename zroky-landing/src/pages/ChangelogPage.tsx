@@ -32,7 +32,7 @@ const entries = [
       'Root cause attribution with confidence scoring (ablation engine)',
       'Ask Zroky — natural language Q&A backed by real evidence',
       'Issue ownership, resolution tracking, and accepted risk workflow',
-      'Issues Command Queue replaces the old Anomalies list',
+      'Issues Command Queue replaces the previous grouped-failures list',
     ],
   },
   {
