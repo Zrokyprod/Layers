@@ -48,14 +48,15 @@ test.describe("settings and account", () => {
     await page.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "Rotate" }).first().click();
-    await expect(page.locator(".keys-status-msg")).toContainText("rotated");
+    await expect(page.getByRole("dialog", { name: "Rotate API key" })).toBeVisible();
+    await page.getByRole("button", { name: "Rotate and show replacement" }).click();
     await expect(page.getByText("New API Key Created")).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "Revoke" }).first().click();
     await expect(page.getByRole("dialog", { name: "Revoke API key" })).toBeVisible();
     await page.getByRole("button", { name: "Yes, revoke key" }).click();
-    await expect(page.getByText("revoked", { exact: false })).toBeVisible();
+    await expect(page.getByText("Revoked", { exact: true })).toBeVisible();
     await expectHealthyPage(page);
   });
 
@@ -84,6 +85,15 @@ test.describe("settings and account", () => {
 
     const seed = readSeed();
     const temporaryPassword = "ZrokyDemo124!";
+    const submitPasswordChange = async () => {
+      const responsePromise = page.waitForResponse((response) => {
+        return response.url().includes("/v1/auth/me/password") && response.request().method() === "PATCH";
+      });
+      await page.getByRole("button", { name: "Change password" }).click();
+      const response = await responsePromise;
+      expect(response.ok()).toBeTruthy();
+      await expect(page.getByText("Password changed successfully.")).toBeVisible({ timeout: 15_000 });
+    };
 
     await page.goto("/account");
     await expectDashboardShell(page);
@@ -95,14 +105,12 @@ test.describe("settings and account", () => {
     await page.getByRole("textbox", { name: "Current password" }).fill(seed.password);
     await page.getByRole("textbox", { name: "New password", exact: true }).fill(temporaryPassword);
     await page.getByRole("textbox", { name: "Confirm new password" }).fill(temporaryPassword);
-    await page.getByRole("button", { name: "Change password" }).click();
-    await expect(page.getByText("Password changed successfully.")).toBeVisible();
+    await submitPasswordChange();
 
     await page.getByRole("textbox", { name: "Current password" }).fill(temporaryPassword);
     await page.getByRole("textbox", { name: "New password", exact: true }).fill(seed.password);
     await page.getByRole("textbox", { name: "Confirm new password" }).fill(seed.password);
-    await page.getByRole("button", { name: "Change password" }).click();
-    await expect(page.getByText("Password changed successfully.")).toBeVisible();
+    await submitPasswordChange();
 
     await expect(page.getByRole("button", { name: "Log out all sessions" })).toBeEnabled();
     await page.getByRole("button", { name: "Delete my account" }).click();

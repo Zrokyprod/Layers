@@ -6,22 +6,22 @@ test.describe("public auth pages", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   const publicPages = [
-    { path: "/login", text: /Welcome back/i },
-    { path: "/signup", text: /Create workspace/i },
-    { path: "/forgot-password", text: /Reset .*password/i },
+    { path: "/login", text: /Sign in to Zroky/i },
+    { path: "/signup", text: /Create your Zroky workspace/i },
+    { path: "/forgot-password", text: /Recover workspace access/i },
     { path: "/reset-password", text: /New password|Invalid or missing reset token/i },
-    { path: "/verify-email", text: /Verify email/i },
-    { path: "/auth", text: /Welcome back/i },
-    { path: "/auth/login", text: /Welcome back/i },
-    { path: "/auth/register", text: /Create workspace/i },
-    { path: "/auth/forgot-password", text: /Reset .*password/i },
+    { path: "/verify-email", text: /Verify your email/i },
+    { path: "/auth", text: /Sign in to Zroky/i },
+    { path: "/auth/login", text: /Sign in to Zroky/i },
+    { path: "/auth/register", text: /Create your Zroky workspace/i },
+    { path: "/auth/forgot-password", text: /Recover workspace access/i },
     { path: "/auth/reset-password", text: /New password|Invalid or missing reset token/i },
-    { path: "/auth/verify-email", text: /Verify email/i },
-    { path: "/auth/check-email", text: /Verify email|Check your email/i },
+    { path: "/auth/verify-email", text: /Verify your email/i },
+    { path: "/auth/check-email", text: /Verify your email|Check your email/i },
     { path: "/auth/github/callback", text: /GitHub/i },
     { path: "/auth/github/connect/callback", text: /GitHub/i },
-    { path: "/auth/oauth/callback", text: /Welcome back|Signing you in|OAuth/i },
-    { path: "/auth/handoff", text: /Welcome back|Signing you in|handoff/i },
+    { path: "/auth/oauth/callback", text: /Sign in to Zroky|Signing you in|OAuth/i },
+    { path: "/auth/handoff", text: /Sign in to Zroky|Signing you in|handoff/i },
   ];
 
   for (const item of publicPages) {

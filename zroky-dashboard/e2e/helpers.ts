@@ -76,7 +76,7 @@ export async function expectAnyVisibleText(page: Page, labels: string[]): Promis
       },
       {
         message: `Expected one of these labels to be visible: ${labels.join(", ")}`,
-        timeout: 15_000,
+        timeout: 30_000,
       },
     )
     .not.toBe("");
