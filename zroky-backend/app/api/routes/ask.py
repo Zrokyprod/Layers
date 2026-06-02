@@ -39,7 +39,15 @@ class AskContext(BaseModel):
     call_id: str | None = Field(default=None, max_length=64)
     issue_id: str | None = Field(default=None, max_length=64)
     # Deprecated alias retained for older dashboard clients.
-    anomaly_id: str | None = Field(default=None, max_length=64)
+    anomaly_id: str | None = Field(
+        default=None,
+        max_length=64,
+        title="Issue Id Deprecated Alias",
+        description=(
+            "Deprecated compatibility alias for issue_id; the wire field name "
+            "is retained for older clients."
+        ),
+    )
 
 
 class AskRequest(BaseModel):

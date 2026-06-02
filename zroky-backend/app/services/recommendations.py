@@ -482,7 +482,6 @@ def _project_avg_failure_cost(
     db: Session,
     project_id: str,
 ) -> float:
-    from app.db.models import OutcomeEvent
     row = db.execute(
         select(func.avg(OutcomeEvent.estimated_cost_usd)).where(
             OutcomeEvent.project_id == project_id,

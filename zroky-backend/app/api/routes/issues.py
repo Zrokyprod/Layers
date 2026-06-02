@@ -1,7 +1,8 @@
 """GET /v1/issues - customer-facing product issue triage.
 
-`Anomaly` is the canonical backend model. This route keeps `/v1/issues` as the
-stable public API by projecting anomalies into plain-English product problems.
+`Anomaly` is the internal detector grouping model. This route keeps
+`/v1/issues` as the stable public API by projecting those rows into
+plain-English product problems.
 """
 from __future__ import annotations
 
@@ -9,23 +10,38 @@ import base64
 import json
 import logging
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session
 
+from app.api.dependencies.entitlements import require_entitlement
 from app.api.dependencies.tenant import require_tenant_id
 from app.api.routes.issue_schemas import (
+    IssueCiGateProof,
+    IssueCiGateRequest,
+    IssueCiGateResponse,
     IssueEvidenceTrace,
+    IssueGoldenProof,
+    IssueGoldenPromotionRequest,
+    IssueGoldenPromotionResponse,
     IssueListResponse,
+    IssueProofSnapshot,
+    IssueReplayProof,
     IssueResolveRequest,
     IssueResponse,
 )
 from app.core.limiter import limiter
-from app.db.models import Anomaly, Call, GoldenTrace, ReplayJob, ReplayRun, ReplayRunTrace
+from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, Project, ReplayJob, ReplayRun, ReplayRunTrace
 from app.db.session import get_db_session
+from app.services.goldens import (
+    GoldenSetNameConflict,
+    count_traces,
+    create_golden_set,
+    get_golden_set,
+)
 from app.services.issue_projection import (
     PUBLIC_ISSUE_STATUSES,
     IssueProjection,
@@ -33,6 +49,14 @@ from app.services.issue_projection import (
     issue_projection_from_anomaly,
 )
 from app.services.issues import ignore_issue, resolve_issue, update_issue_triage
+from app.services.replay_runs import (
+    VALID_REPLAY_MODES,
+    build_summary_url,
+    check_replay_monthly_quota,
+    dispatch_replay_run,
+    mark_call_as_golden,
+    parse_summary,
+)
 
 router = APIRouter(prefix="/v1/issues")
 logger = logging.getLogger(__name__)
@@ -40,6 +64,8 @@ logger = logging.getLogger(__name__)
 _DEFAULT_LIMIT = 5
 _MAX_LIMIT = 100
 _MAX_EVIDENCE_TRACES = 3
+_ISSUE_GOLDEN_SET_NAME = "Issue regression guards"
+_TRUSTED_REPLAY_STATUSES = {"verified_fix", "real_replay_passed"}
 
 
 def _optional_trimmed_text(value: str | None, *, max_len: int, field_name: str) -> str | None:
@@ -569,6 +595,129 @@ def _recommended_next_action(issue: IssueProjection, replay_status: str) -> str:
     return f"{replay_prefix}validate the grouped failure and ship the smallest targeted fix."
 
 
+def _latest_replay_for_issue(
+    db: Session,
+    issue: IssueProjection,
+    *,
+    golden_set_id: str | None = None,
+) -> ReplayRun | None:
+    rows = db.execute(
+        select(ReplayRun)
+        .where(ReplayRun.project_id == issue.project_id)
+        .order_by(ReplayRun.created_at.desc(), ReplayRun.id.desc())
+        .limit(200)
+    ).scalars().all()
+    for run in rows:
+        summary = parse_summary(run.summary_json)
+        if summary.get("source_issue_id") == issue.id:
+            return run
+        if issue.sample_call_id and summary.get("source_call_id") == issue.sample_call_id:
+            return run
+        if golden_set_id and run.golden_set_id == golden_set_id:
+            return run
+    return None
+
+
+def _latest_golden_for_issue(
+    db: Session,
+    issue: IssueProjection,
+) -> tuple[GoldenTrace | None, GoldenSet | None]:
+    if not issue.sample_call_id:
+        return None, None
+    row = db.execute(
+        select(GoldenTrace, GoldenSet)
+        .join(GoldenSet, GoldenSet.id == GoldenTrace.golden_set_id)
+        .where(
+            GoldenTrace.project_id == issue.project_id,
+            GoldenTrace.call_id == issue.sample_call_id,
+            GoldenSet.project_id == issue.project_id,
+        )
+        .order_by(GoldenTrace.created_at.desc(), GoldenTrace.id.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None, None
+    return row[0], row[1]
+
+
+def _latest_ci_gate_for_golden_set(
+    db: Session,
+    *,
+    project_id: str,
+    golden_set_id: str | None,
+) -> ReplayRun | None:
+    if not golden_set_id:
+        return None
+    return db.execute(
+        select(ReplayRun)
+        .where(
+            ReplayRun.project_id == project_id,
+            ReplayRun.golden_set_id == golden_set_id,
+            ReplayRun.trigger == "github",
+        )
+        .order_by(ReplayRun.created_at.desc(), ReplayRun.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _issue_proof_snapshot(db: Session, issue: IssueProjection) -> IssueProofSnapshot:
+    golden_trace, golden_set = _latest_golden_for_issue(db, issue)
+    replay_run = _latest_replay_for_issue(
+        db,
+        issue,
+        golden_set_id=golden_set.id if golden_set else None,
+    )
+    ci_run = _latest_ci_gate_for_golden_set(
+        db,
+        project_id=issue.project_id,
+        golden_set_id=golden_set.id if golden_set else None,
+    )
+
+    replay_summary = parse_summary(replay_run.summary_json if replay_run else None)
+    replay_mode = None
+    if replay_run is not None:
+        replay_mode = str(
+            replay_summary.get("requested_replay_mode")
+            or replay_summary.get("replay_mode")
+            or "stub"
+        )
+
+    return IssueProofSnapshot(
+        replay=IssueReplayProof(
+            run_id=replay_run.id if replay_run else None,
+            status=replay_run.status if replay_run else None,
+            replay_mode=replay_mode,
+            verified_fix=bool(replay_summary.get("verified_fix") or False),
+            summary_url=build_summary_url(replay_run) if replay_run else None,
+            created_at=replay_run.created_at if replay_run else None,
+            completed_at=replay_run.completed_at if replay_run else None,
+        ),
+        golden=IssueGoldenProof(
+            golden_set_id=golden_set.id if golden_set else None,
+            golden_set_name=golden_set.name if golden_set else None,
+            golden_trace_id=golden_trace.id if golden_trace else None,
+            status=golden_trace.status if golden_trace else None,
+            blocks_ci=bool(golden_set.blocks_ci) if golden_set else False,
+            trace_count=count_traces(
+                db,
+                project_id=issue.project_id,
+                golden_set_id=golden_set.id,
+            )
+            if golden_set
+            else 0,
+            created_at=golden_trace.created_at if golden_trace else None,
+        ),
+        ci_gate=IssueCiGateProof(
+            run_id=ci_run.id if ci_run else None,
+            status=ci_run.status if ci_run else None,
+            git_sha=ci_run.git_sha if ci_run else None,
+            summary_url=build_summary_url(ci_run) if ci_run else None,
+            created_at=ci_run.created_at if ci_run else None,
+            completed_at=ci_run.completed_at if ci_run else None,
+        ),
+    )
+
+
 def _build_issue_response(db: Session, issue: IssueProjection | Anomaly) -> IssueResponse:
     if isinstance(issue, Anomaly):
         issue = issue_projection_from_anomaly(issue)
@@ -607,6 +756,7 @@ def _build_issue_response(db: Session, issue: IssueProjection | Anomaly) -> Issu
         replay_coverage_status=replay_status,
         recommended_next_action=_recommended_next_action(issue, replay_status),
         priority_score=_priority_score(issue),
+        proof=_issue_proof_snapshot(db, issue),
     )
 
 
@@ -734,6 +884,436 @@ def get_issue(
     if issue is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     return _build_issue_response(db, issue)
+
+
+def _load_anomaly_or_404(db: Session, *, project_id: str, issue_id: str) -> Anomaly:
+    anomaly = db.execute(
+        select(Anomaly).where(Anomaly.project_id == project_id, Anomaly.id == issue_id)
+    ).scalar_one_or_none()
+    if anomaly is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+    return anomaly
+
+
+def _criteria_json_for_issue(
+    issue: IssueProjection,
+    *,
+    root_cause: str,
+    provided: str | None,
+) -> str:
+    if provided and provided.strip():
+        try:
+            json.loads(provided)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="criteria_json must be valid JSON",
+            ) from exc
+        return provided.strip()
+
+    return json.dumps(
+        {
+            "kind": "issue_regression_guard",
+            "issue_id": issue.id,
+            "failure_code": issue.failure_code,
+            "root_cause": root_cause,
+            "must_not_reproduce_failure": True,
+            "evidence_call_id": issue.sample_call_id,
+        },
+        separators=(",", ":"),
+    )
+
+
+def _extract_pr_number(url: str | None) -> int | None:
+    if not url:
+        return None
+    marker = "/pull/"
+    if marker not in url:
+        return None
+    suffix = url.rsplit(marker, 1)[-1].split("/", 1)[0].split("?", 1)[0]
+    try:
+        return int(suffix)
+    except ValueError:
+        return None
+
+
+def _set_project_default_golden_if_empty(
+    db: Session,
+    *,
+    project_id: str,
+    golden_set_id: str,
+) -> None:
+    project = db.execute(select(Project).where(Project.id == project_id)).scalar_one_or_none()
+    if project is None or project.default_golden_set_id:
+        return
+    project.default_golden_set_id = golden_set_id
+    db.add(project)
+
+
+def _ensure_issue_golden_set(
+    db: Session,
+    *,
+    project_id: str,
+    golden_set_id: str | None,
+    blocks_ci: bool,
+) -> GoldenSet:
+    if golden_set_id:
+        golden_set = get_golden_set(db, project_id=project_id, golden_set_id=golden_set_id)
+        if golden_set is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Golden set not found",
+            )
+    else:
+        golden_set = db.execute(
+            select(GoldenSet)
+            .where(
+                GoldenSet.project_id == project_id,
+                GoldenSet.name == _ISSUE_GOLDEN_SET_NAME,
+            )
+            .order_by(GoldenSet.created_at.desc(), GoldenSet.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if golden_set is None:
+            try:
+                golden_set = create_golden_set(
+                    db,
+                    project_id=project_id,
+                    name=_ISSUE_GOLDEN_SET_NAME,
+                    description="Verified issue scenarios promoted from the Failure Inbox.",
+                )
+            except GoldenSetNameConflict:
+                golden_set = db.execute(
+                    select(GoldenSet).where(
+                        GoldenSet.project_id == project_id,
+                        GoldenSet.name == _ISSUE_GOLDEN_SET_NAME,
+                    )
+                ).scalar_one()
+
+    if blocks_ci and not bool(golden_set.blocks_ci):
+        golden_set.blocks_ci = True
+        golden_set.updated_at = datetime.now(timezone.utc)
+        db.add(golden_set)
+    _set_project_default_golden_if_empty(
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set.id,
+    )
+    db.commit()
+    db.refresh(golden_set)
+    return golden_set
+
+
+def _existing_issue_trace(
+    db: Session,
+    *,
+    project_id: str,
+    golden_set_id: str,
+    call_id: str,
+) -> GoldenTrace | None:
+    return db.execute(
+        select(GoldenTrace)
+        .where(
+            GoldenTrace.project_id == project_id,
+            GoldenTrace.golden_set_id == golden_set_id,
+            GoldenTrace.call_id == call_id,
+        )
+        .order_by(GoldenTrace.created_at.desc(), GoldenTrace.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _stamp_issue_trace_evidence(
+    trace: GoldenTrace,
+    issue: IssueProjection,
+    *,
+    root_cause: str,
+) -> None:
+    evidence = _safe_json_object(trace.source_evidence_json)
+    evidence.update(
+        {
+            "source_issue_id": issue.id,
+            "source_issue_failure_code": issue.failure_code,
+            "source_issue_severity": issue.severity,
+            "source_issue_root_cause": root_cause,
+            "source_issue_last_seen_at": issue.last_seen_at.isoformat(),
+        }
+    )
+    trace.source_evidence_json = json.dumps(evidence, separators=(",", ":"), default=str)
+
+
+def _record_issue_proof(
+    anomaly: Anomaly,
+    *,
+    golden_set_id: str | None = None,
+    golden_trace_id: str | None = None,
+    ci_run_id: str | None = None,
+) -> None:
+    evidence = _safe_json_object(anomaly.evidence_json)
+    proof = evidence.get("issue_proof")
+    if not isinstance(proof, dict):
+        proof = {}
+    if golden_set_id:
+        proof["golden_set_id"] = golden_set_id
+    if golden_trace_id:
+        proof["golden_trace_id"] = golden_trace_id
+        proof["golden_promoted_at"] = datetime.now(timezone.utc).isoformat()
+    if ci_run_id:
+        proof["ci_run_id"] = ci_run_id
+        proof["ci_dispatched_at"] = datetime.now(timezone.utc).isoformat()
+    evidence["issue_proof"] = proof
+    anomaly.evidence_json = json.dumps(evidence, separators=(",", ":"), default=str)
+    anomaly.updated_at = datetime.now(timezone.utc)
+
+
+def _promote_issue_to_golden(
+    db: Session,
+    *,
+    anomaly: Anomaly,
+    body: IssueGoldenPromotionRequest,
+) -> GoldenTrace:
+    issue = issue_projection_from_anomaly(anomaly)
+    if not issue.sample_call_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Issue has no sample_call_id to promote.",
+        )
+
+    replay_status = _replay_coverage_status(db, issue)
+    if replay_status not in _TRUSTED_REPLAY_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Trusted replay must verify the fix before Golden promotion.",
+        )
+
+    evidence = _safe_json_object(issue.sample_evidence_json)
+    calls = _load_evidence_calls(db, issue)
+    root_cause = _root_cause(issue, evidence, calls)
+    criteria_json = _criteria_json_for_issue(
+        issue,
+        root_cause=root_cause,
+        provided=body.criteria_json,
+    )
+    expected_output_text = body.expected_output_text.strip() if body.expected_output_text else None
+
+    golden_set = _ensure_issue_golden_set(
+        db,
+        project_id=issue.project_id,
+        golden_set_id=body.golden_set_id,
+        blocks_ci=body.blocks_ci,
+    )
+    trace = _existing_issue_trace(
+        db,
+        project_id=issue.project_id,
+        golden_set_id=golden_set.id,
+        call_id=issue.sample_call_id,
+    )
+    if trace is None:
+        try:
+            trace = mark_call_as_golden(
+                db,
+                project_id=issue.project_id,
+                call_id=issue.sample_call_id,
+                golden_set_id=golden_set.id,
+                status="active",
+                expected_output_text=expected_output_text,
+                criteria_json=criteria_json,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        if trace is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Call or golden set not found",
+            )
+    else:
+        trace.status = "active"
+        trace.criteria_json = criteria_json
+        if expected_output_text:
+            trace.expected_output_text = expected_output_text
+        trace.updated_at = datetime.now(timezone.utc)
+
+    _stamp_issue_trace_evidence(trace, issue, root_cause=root_cause)
+    _record_issue_proof(
+        anomaly,
+        golden_set_id=golden_set.id,
+        golden_trace_id=trace.id,
+    )
+    db.add(trace)
+    db.add(anomaly)
+    db.commit()
+    db.refresh(trace)
+    db.refresh(anomaly)
+    return trace
+
+
+def _golden_proof_from_trace(db: Session, trace: GoldenTrace) -> IssueGoldenProof:
+    golden_set = get_golden_set(
+        db,
+        project_id=trace.project_id,
+        golden_set_id=trace.golden_set_id,
+    )
+    return IssueGoldenProof(
+        golden_set_id=trace.golden_set_id,
+        golden_set_name=golden_set.name if golden_set else None,
+        golden_trace_id=trace.id,
+        status=trace.status,
+        blocks_ci=bool(golden_set.blocks_ci) if golden_set else False,
+        trace_count=count_traces(
+            db,
+            project_id=trace.project_id,
+            golden_set_id=trace.golden_set_id,
+        ),
+        created_at=trace.created_at,
+    )
+
+
+def _check_replay_quota_or_raise(db: Session, tenant_id: str) -> None:
+    quota = check_replay_monthly_quota(db, tenant_id)
+    if quota.limit != -1 and quota.used >= quota.limit:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Monthly replay limit reached ({quota.used}/{quota.limit}). Resets {quota.resets_at}.",
+            headers={"X-Zroky-Plan-Hint": quota.plan_code},
+        )
+
+
+def _enqueue_replay_run(run_id: str, tenant_id: str) -> None:
+    try:
+        from app.worker.tasks import process_replay_run
+
+        process_replay_run.apply_async(
+            args=(tenant_id, run_id),
+            queue="diagnosis_pattern",
+            countdown=2,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("issue_gate.enqueue_failed run=%s - row remains pending", run_id, exc_info=True)
+
+
+def _ci_gate_proof_from_run(run: ReplayRun) -> IssueCiGateProof:
+    return IssueCiGateProof(
+        run_id=run.id,
+        status=run.status,
+        git_sha=run.git_sha,
+        summary_url=build_summary_url(run),
+        created_at=run.created_at,
+        completed_at=run.completed_at,
+    )
+
+
+@router.post(
+    "/{issue_id}/promote-golden",
+    response_model=IssueGoldenPromotionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/minute")
+def promote_issue_golden_endpoint(
+    request: Request,
+    issue_id: str,
+    body: IssueGoldenPromotionRequest = Body(default_factory=IssueGoldenPromotionRequest),
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+    _: None = Depends(require_entitlement("pilot.goldens_basic")),
+) -> IssueGoldenPromotionResponse:
+    anomaly = _load_anomaly_or_404(db, project_id=tenant_id, issue_id=issue_id)
+    trace = _promote_issue_to_golden(db, anomaly=anomaly, body=body)
+    return IssueGoldenPromotionResponse(
+        issue=_build_issue_response(db, anomaly),
+        golden=_golden_proof_from_trace(db, trace),
+    )
+
+
+@router.post(
+    "/{issue_id}/ci-gate",
+    response_model=IssueCiGateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@limiter.limit("12/minute")
+def run_issue_ci_gate_endpoint(
+    request: Request,
+    issue_id: str,
+    body: IssueCiGateRequest = Body(default_factory=IssueCiGateRequest),
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+    _: None = Depends(require_entitlement("pro.ci_gate_nonblocking")),
+) -> IssueCiGateResponse:
+    anomaly = _load_anomaly_or_404(db, project_id=tenant_id, issue_id=issue_id)
+    issue = issue_projection_from_anomaly(anomaly)
+    if not issue.deploy_pr_url and not body.git_sha:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Link a deploy PR or provide git_sha before running an issue CI gate.",
+        )
+
+    _check_replay_quota_or_raise(db, tenant_id)
+    trace = _promote_issue_to_golden(
+        db,
+        anomaly=anomaly,
+        body=IssueGoldenPromotionRequest(blocks_ci=True),
+    )
+
+    replay_mode = body.replay_mode.strip() if body.replay_mode else None
+    if replay_mode is not None and replay_mode not in VALID_REPLAY_MODES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="replay_mode must be one of: " + ", ".join(sorted(VALID_REPLAY_MODES)),
+        )
+
+    pr_number = body.pr_number if body.pr_number is not None else _extract_pr_number(issue.deploy_pr_url)
+    try:
+        run = dispatch_replay_run(
+            db,
+            project_id=tenant_id,
+            golden_set_id=trace.golden_set_id,
+            trigger="github",
+            git_sha=body.git_sha,
+            branch_name=body.branch_name,
+            pr_number=pr_number,
+            commit_message=body.commit_message,
+            replay_mode=replay_mode,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Golden set not found",
+        )
+
+    summary = parse_summary(run.summary_json)
+    summary.update(
+        {
+            "source_kind": "issue_ci_gate",
+            "source_issue_id": issue.id,
+            "source_issue_failure_code": issue.failure_code,
+            "source_issue_severity": issue.severity,
+            "golden_set_id": trace.golden_set_id,
+            "golden_trace_id": trace.id,
+            "pr_url": issue.deploy_pr_url,
+        }
+    )
+    if pr_number is not None:
+        summary["pr_number"] = pr_number
+    run.summary_json = json.dumps(summary, separators=(",", ":"), default=str)
+    _record_issue_proof(anomaly, ci_run_id=run.id)
+    db.add(run)
+    db.add(anomaly)
+    db.commit()
+    db.refresh(run)
+    db.refresh(anomaly)
+    _enqueue_replay_run(run.id, tenant_id)
+
+    return IssueCiGateResponse(
+        issue=_build_issue_response(db, anomaly),
+        ci_gate=_ci_gate_proof_from_run(run),
+    )
 
 
 @router.patch("/{issue_id}/triage", response_model=IssueResponse)

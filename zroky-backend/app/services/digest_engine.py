@@ -171,10 +171,10 @@ def _recommendation(calls: dict[str, Any], anomalies: dict[str, Any]) -> str:
         return "No calls were ingested this week. Verify SDK capture before relying on the digest."
     top = anomalies["by_detector"][0] if anomalies["by_detector"] else None
     if top:
-        return f"Most common anomaly this week: {top['detector']} ({top['count']} occurrences)."
+        return f"Most common issue this week: {top['detector']} ({top['count']} occurrences)."
     if calls["failed"] > 0:
         return f"{round(calls['failure_rate'] * 100, 1)}% of calls failed this week. Review the top failed traces first."
-    return "No major anomalies detected this week. Keep replay coverage current."
+    return "No major issues detected this week. Keep replay coverage current."
 
 
 def compute_summary(
@@ -335,7 +335,7 @@ def render_html(summary: dict[str, Any]) -> str:
         f"<p>Week: {html_escape(str(summary.get('week_start')))} to {html_escape(str(summary.get('week_end')))}</p>",
         f"<h2>Calls</h2><p>{calls.get('total', 0)} total, {calls.get('failed', 0)} failed</p>",
         f"<h2>Cost</h2><p>${cost.get('total_usd', 0)} total, ${cost.get('prevented_waste_usd', 0)} prevented waste</p>",
-        f"<h2>Anomalies</h2><p>{anomalies.get('total', 0)} total</p>",
+        f"<h2>Issues</h2><p>{anomalies.get('total', 0)} total</p>",
         f"<p>{recommendation}</p>",
     ]
     if audience in {"manager", "executive"}:
@@ -364,7 +364,7 @@ def render_plain(summary: dict[str, Any]) -> str:
         f"ZROKY weekly digest ({audience})",
         f"Calls: {calls.get('total', 0)} total, {calls.get('failed', 0)} failed",
         f"Cost: ${cost.get('total_usd', 0)} total, ${cost.get('prevented_waste_usd', 0)} prevented waste",
-        f"Anoms: {anomalies.get('total', 0)} total",
+        f"Issues: {anomalies.get('total', 0)} total",
         str(summary.get("recommendation") or ""),
     ]
     if audience in {"manager", "executive"}:

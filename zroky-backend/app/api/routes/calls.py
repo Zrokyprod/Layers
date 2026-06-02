@@ -51,6 +51,7 @@ STATUS_FILTER_ALIASES = {
 class MarkCallGoldenRequest(BaseModel):
     golden_set_id: str = Field(min_length=1)
     weight: float = Field(default=1.0, gt=0)
+    status: str | None = None
     expected_output_text: str | None = None
     criteria_json: str | None = None
 
@@ -60,7 +61,10 @@ class MarkCallGoldenResponse(BaseModel):
     golden_set_id: str
     project_id: str
     call_id: str | None
+    status: str
     expected_output_text: str | None
+    source_output_text: str | None
+    source_evidence_json: str | None
     expected_tokens: int | None
     expected_cost_usd: float | None
     expected_latency_ms: int | None
@@ -853,6 +857,7 @@ def mark_call_golden_route(
             call_id=call_id,
             golden_set_id=body.golden_set_id,
             weight=body.weight,
+            status=body.status,
             expected_output_text=body.expected_output_text,
             criteria_json=body.criteria_json,
         )

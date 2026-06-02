@@ -1,22 +1,26 @@
 """
-Anomalies service — Phase B of the legacy `issues → anomalies` rename.
+Anomalies service: internal detector grouping for customer-facing Issues.
+
+Product contract:
+  - "Issue" is the customer-facing term used by dashboard and public APIs.
+  - "Anomaly" is the internal persisted detector grouping. Keep the model,
+    table, and detector plumbing unchanged; project rows through
+    `issue_projection_from_anomaly()` before rendering to customers.
 
 Schema notes (ZROKY-TECHNICAL-PLAN-V2 §5.2 + §6.1 + §6.3):
-  - `anomalies` is the canonical Pilot-tier replacement for `issues`. The
-    grouping key is a single `fingerprint` column instead of the legacy
-    triple `(failure_code, prompt_fingerprint, agent_name)`. Fingerprint is
-    a deterministic SHA-256 over the inputs that identify the same logical
-    detection event.
+  - `anomalies` groups repeated detector events by a single `fingerprint`
+    column instead of the legacy triple `(failure_code, prompt_fingerprint,
+    agent_name)`. Fingerprint is a deterministic SHA-256 over the inputs
+    that identify the same logical detection event.
   - The detector enum is INTENTIONALLY narrower than legacy `failure_code`s.
     Per plan §6.1 the following codes are demoted to SDK-side preflight
     warnings only and **must not** create anomaly rows:
         AUTH_FAILURE, TOKEN_OVERFLOW, RATE_LIMIT, PROVIDER_ERROR, UNKNOWN
     The mapping helper `map_failure_code_to_detector()` returns None for
     these so callers can skip the upsert cleanly.
-  - The legacy `Issue` table is still written by the existing call site in
-    `app/worker/tasks.py` to preserve the `/v1/issues` read API during the
-    refactor. A follow-up migration drops `issues` once the dashboard +
-    every consumer reads from `/v1/anomalies`.
+  - The public `/v1/issues` API is backed by these internal rows and should
+    remain the primary customer-facing route. `/v1/anomalies` is retained
+    only as a deprecated compatibility/internal surface.
   - This module never queries the legacy `issues` table.
 """
 from __future__ import annotations

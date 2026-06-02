@@ -396,7 +396,8 @@ def resolve_plan_template(
     """Resolve the full entitlement template for a plan.
 
     Legacy ``SubscriptionPlan`` rows can overlay capabilities via
-    ``features_json`` and numeric caps via their existing columns.
+    ``features_json`` and numeric caps via their existing columns. For
+    legacy ``TenantSubscription`` callers, pass ``tenant_subscription.plan``.
     """
     selected_plan_code = _plan_code_from_args(plan_code, subscription_plan)
     template = get_catalog_entry(selected_plan_code).template()

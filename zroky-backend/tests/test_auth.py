@@ -374,6 +374,21 @@ def test_me_security_and_logout_all_flow(client):
     me = client.get("/v1/auth/me", headers=headers)
     assert me.status_code == 200
     assert me.json()["email"] == "security@example.com"
+    assert me.json()["display_name"] is None
+    assert me.json()["is_active"] is True
+    assert me.json()["email_verified"] is False
+
+    profile_update = client.patch(
+        "/v1/auth/me",
+        headers=headers,
+        json={"display_name": "Security Owner"},
+    )
+    assert profile_update.status_code == 200
+    assert profile_update.json()["display_name"] == "Security Owner"
+
+    updated_me = client.get("/v1/auth/me", headers=headers)
+    assert updated_me.status_code == 200
+    assert updated_me.json()["display_name"] == "Security Owner"
 
     security = client.get("/v1/auth/me/security", headers=headers)
     assert security.status_code == 200

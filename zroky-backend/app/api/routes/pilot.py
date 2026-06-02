@@ -4,7 +4,7 @@
 API surface per ZROKY-TECHNICAL-PLAN-V2 §13 (4 endpoints):
 
   GET  /v1/pilot/actions                cursor-paginated; filters by
-                                        status, tier, action_type, anomaly_id
+                                        status, tier, action_type, issue id
   POST /v1/pilot/actions/{id}/revert    200; 404 if missing; 409 if not
                                         applied OR not tier-1
   GET  /v1/pilot/policy                 returns current policy
@@ -66,7 +66,14 @@ _MAX_LIMIT = 100
 class PilotActionResponse(BaseModel):
     id: str
     project_id: str
-    anomaly_id: str
+    anomaly_id: str = Field(
+        ...,
+        title="Issue Id",
+        description=(
+            "Compatibility wire field retained as anomaly_id; identifies the "
+            "customer-facing Issue/internal detector grouping row."
+        ),
+    )
     tier: int
     action_type: str
     status: str
@@ -177,7 +184,14 @@ def list_actions(
     status_filter: str | None = Query(default=None, alias="status"),
     tier: int | None = Query(default=None, ge=1, le=3),
     action_type: str | None = Query(default=None),
-    anomaly_id: str | None = Query(default=None),
+    anomaly_id: str | None = Query(
+        default=None,
+        title="Issue Id",
+        description=(
+            "Compatibility wire filter retained as anomaly_id; filters by the "
+            "Issue/internal detector grouping id."
+        ),
+    ),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
     tenant_id: str = Depends(require_tenant_id),
@@ -326,10 +340,10 @@ def retry_action(
 ) -> PilotActionRetryResponse:
     """Re-dispatch a previously `failed` or `skipped` Tier-2 action.
 
-    Reads the original anomaly + replay_run_id_gate off the action
-    row and re-runs `evaluate_tier2_dispatch` from scratch. Because
-    the dispatcher always writes a fresh row, this never mutates the
-    original action; the response describes the *new* action.
+    Reads the original issue/internal grouping row and replay_run_id_gate
+    off the action row and re-runs `evaluate_tier2_dispatch` from scratch.
+    Because the dispatcher always writes a fresh row, this never mutates
+    the original action; the response describes the *new* action.
 
     Requires the original action to be tier-2 and in one of the
     non-applied terminal states. Tier-1 retries flow through the
@@ -373,8 +387,8 @@ def retry_action(
             ),
         )
 
-    # Re-load the anomaly + replay run to feed the dispatcher. Cross-
-    # tenant rows are filtered by project_id at the SELECT level.
+    # Re-load the internal grouping row + replay run to feed the dispatcher.
+    # Cross-tenant rows are filtered by project_id at the SELECT level.
     anomaly = db.execute(
         select(Anomaly).where(
             Anomaly.id == original.anomaly_id,
@@ -391,7 +405,7 @@ def retry_action(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                "anomaly or replay_run referenced by the original action "
+                "issue or replay_run referenced by the original action "
                 "no longer exists — cannot retry"
             ),
         )

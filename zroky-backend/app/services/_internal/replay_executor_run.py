@@ -86,6 +86,7 @@ def execute_replay_run(
             .where(
                 GoldenTrace.project_id == project_id,
                 GoldenTrace.golden_set_id == run.golden_set_id,
+                GoldenTrace.status == "active",
             )
             .order_by(GoldenTrace.created_at.asc(), GoldenTrace.id.asc())
             .limit(max_traces + 1)

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./.data/zroky.db"
     REDIS_URL: str = "redis://localhost:6379/0"
+    RATE_LIMIT_STORAGE_URI: Optional[str] = None
 
     OPENROUTER_API_KEY: Optional[str] = None
 

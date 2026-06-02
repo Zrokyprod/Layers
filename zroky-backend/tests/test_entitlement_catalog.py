@@ -4,11 +4,12 @@ import json
 
 import pytest
 
-from app.db.models import SubscriptionPlan
+from app.db.models import SubscriptionPlan, TenantSubscription
 from app.services.entitlement_catalog import (
     CANONICAL_PLAN_CODES,
     ENTITLEMENT_KEYS,
     LIMIT_KEYS,
+    PLAN_CATALOG,
     PLAN_ENTITLEMENTS,
     PLAN_KEYS_BINDING,
     InvalidPlanCodeError,
@@ -93,6 +94,13 @@ def test_required_keys_present_for_every_canonical_plan(plan_code: str) -> None:
     assert LIMIT_KEYS.issubset(template)
     assert LEGACY_COMPATIBILITY_KEYS.issubset(template)
     assert set(template).issubset(PLAN_KEYS_BINDING)
+
+
+@pytest.mark.parametrize("plan_code", CANONICAL_PLAN_CODES)
+def test_catalog_entries_have_exact_required_key_sets(plan_code: str) -> None:
+    entry = PLAN_CATALOG[plan_code]
+    assert set(entry.entitlements) == ENTITLEMENT_KEYS
+    assert set(entry.limits) == LIMIT_KEYS
 
 
 @pytest.mark.parametrize("plan_code", CANONICAL_PLAN_CODES)
@@ -201,3 +209,30 @@ def test_subscription_plan_slug_can_select_plan_code() -> None:
         "plus",
         subscription_plan=plan,
     )
+
+
+def test_tenant_subscription_plan_relationship_can_feed_resolver() -> None:
+    plan = SubscriptionPlan(
+        id="plan-pilot",
+        slug="pilot",
+        name="Pilot",
+        monthly_cost_usd=0,
+        annual_cost_usd=0,
+        max_projects=4,
+        max_members_per_project=6,
+        max_calls_per_month=600_000,
+        features_json=json.dumps({"pilot.replay_real_llm": True}),
+    )
+    subscription = TenantSubscription(
+        tenant_id="tenant-1",
+        plan_id=plan.id,
+        plan=plan,
+    )
+
+    template = resolve_plan_template(None, subscription_plan=subscription.plan)
+
+    assert template["pilot.failure_inbox"] is True
+    assert template["pilot.replay_real_llm"] is True
+    assert template["max_projects"] == 4
+    assert template["max_members"] == 6
+    assert template["max_calls_per_month"] == 600_000

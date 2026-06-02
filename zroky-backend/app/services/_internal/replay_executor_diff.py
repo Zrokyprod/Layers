@@ -113,6 +113,7 @@ def _source_failure_signal(
             select(GoldenTrace.call_id).where(
                 GoldenTrace.project_id == run.project_id,
                 GoldenTrace.golden_set_id == run.golden_set_id,
+                GoldenTrace.status == "active",
                 GoldenTrace.call_id.is_not(None),
             )
         ).all()

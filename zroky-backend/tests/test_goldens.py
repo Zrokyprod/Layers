@@ -10,6 +10,7 @@ Module 4.1 coverage:
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -24,7 +25,11 @@ from app.db.models import Call, GoldenSet, GoldenTrace
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.goldens import (
+    ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR,
+    GOLDEN_TRACE_STATUS_ACTIVE,
+    GOLDEN_TRACE_STATUS_DRAFT,
     GoldenSetNameConflict,
+    VALID_GOLDEN_TRACE_STATUSES,
     add_trace,
     count_traces,
     create_golden_set,
@@ -340,6 +345,7 @@ class TestAddTrace:
         assert trace is not None
         assert trace.project_id == "proj-1"
         assert trace.golden_set_id == gs.id
+        assert trace.status == GOLDEN_TRACE_STATUS_ACTIVE
         assert trace.expected_output_text == "hello"
         assert trace.expected_tokens == 42
         assert float(trace.weight) == 2.5
@@ -387,7 +393,9 @@ class TestAddTrace:
             id="call-1",
             project_id="proj-1",
             event_id="evt-1",
-            status="ok",
+            status="failed",
+            error_code="OUTPUT_MISMATCH",
+            payload_json=json.dumps({"response": "bad original output"}),
         )
         db_session.add(call)
         db_session.commit()
@@ -399,6 +407,38 @@ class TestAddTrace:
         )
         assert trace is not None
         assert trace.call_id == "call-1"
+        assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
+        assert trace.expected_output_text is None
+        assert trace.source_output_text == "bad original output"
+        evidence = json.loads(trace.source_evidence_json)
+        assert evidence["call_id"] == "call-1"
+        assert evidence["status"] == "failed"
+
+    def test_add_trace_active_without_expected_behavior_rejected(self, db_session) -> None:
+        gs = create_golden_set(db_session, project_id="proj-1", name="x")
+        with pytest.raises(
+            ValueError, match=ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR
+        ):
+            add_trace(
+                db_session,
+                project_id="proj-1",
+                golden_set_id=gs.id,
+                status=GOLDEN_TRACE_STATUS_ACTIVE,
+            )
+
+    def test_add_trace_with_source_evidence_defaults_to_draft(self, db_session) -> None:
+        gs = create_golden_set(db_session, project_id="proj-1", name="x")
+        trace = add_trace(
+            db_session,
+            project_id="proj-1",
+            golden_set_id=gs.id,
+            source_output_text="observed but not approved",
+            source_evidence_json=json.dumps({"source": "test"}),
+        )
+        assert trace is not None
+        assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
+        assert trace.expected_output_text is None
+        assert trace.source_output_text == "observed but not approved"
 
     def test_add_trace_with_cross_tenant_call_id_rejected(self, db_session) -> None:
         gs = create_golden_set(db_session, project_id="proj-A", name="x")
@@ -760,9 +800,43 @@ class TestTraceRoutes:
         )
         assert response.status_code == 201
         body = response.json()
+        assert body["status"] == GOLDEN_TRACE_STATUS_ACTIVE
         assert body["expected_output_text"] == "hi"
+        assert body["source_output_text"] is None
+        assert body["source_evidence_json"] is None
         assert body["weight"] == 2.0
         assert body["golden_set_id"] == gs.id
+
+    def test_add_trace_active_without_expected_behavior_422(
+        self, client: TestClient
+    ) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        gs = _create_golden_via_factory(factory, project_id="proj-1", name="x")
+        response = client.post(
+            f"/v1/goldens/{gs.id}/traces",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={"status": "active"},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR
+
+    def test_add_trace_draft_with_source_evidence(self, client: TestClient) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        gs = _create_golden_via_factory(factory, project_id="proj-1", name="x")
+        response = client.post(
+            f"/v1/goldens/{gs.id}/traces",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={
+                "source_output_text": "observed failed output",
+                "source_evidence_json": json.dumps({"source": "route-test"}),
+            },
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["status"] == GOLDEN_TRACE_STATUS_DRAFT
+        assert body["expected_output_text"] is None
+        assert body["source_output_text"] == "observed failed output"
+        assert json.loads(body["source_evidence_json"])["source"] == "route-test"
 
     def test_add_trace_404_for_missing_set(self, client: TestClient) -> None:
         response = client.post(
@@ -837,3 +911,18 @@ class TestTraceRoutes:
             headers={PROJECT_HEADER: "proj-B"},
         )
         assert response.status_code == 404
+
+
+class TestInvariants:
+    def test_valid_golden_trace_statuses_match_db_check(self) -> None:
+        assert VALID_GOLDEN_TRACE_STATUSES == frozenset({"draft", "active"})
+
+    def test_legacy_rows_without_expected_behavior_are_draft(self, db_session) -> None:
+        gs = create_golden_set(db_session, project_id="proj-1", name="legacy")
+        trace = add_trace(
+            db_session,
+            project_id="proj-1",
+            golden_set_id=gs.id,
+        )
+        assert trace is not None
+        assert trace.status == GOLDEN_TRACE_STATUS_DRAFT

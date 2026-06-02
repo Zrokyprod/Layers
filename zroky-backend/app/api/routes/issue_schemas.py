@@ -21,6 +21,41 @@ class IssueEvidenceTrace(BaseModel):
     evidence_summary: str | None
 
 
+class IssueReplayProof(BaseModel):
+    run_id: str | None = None
+    status: str | None = None
+    replay_mode: str | None = None
+    verified_fix: bool = False
+    summary_url: str | None = None
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class IssueGoldenProof(BaseModel):
+    golden_set_id: str | None = None
+    golden_set_name: str | None = None
+    golden_trace_id: str | None = None
+    status: str | None = None
+    blocks_ci: bool = False
+    trace_count: int = 0
+    created_at: datetime | None = None
+
+
+class IssueCiGateProof(BaseModel):
+    run_id: str | None = None
+    status: str | None = None
+    git_sha: str | None = None
+    summary_url: str | None = None
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class IssueProofSnapshot(BaseModel):
+    replay: IssueReplayProof
+    golden: IssueGoldenProof
+    ci_gate: IssueCiGateProof
+
+
 class IssueResponse(BaseModel):
     id: str
     project_id: str
@@ -53,6 +88,7 @@ class IssueResponse(BaseModel):
     replay_coverage_status: str
     recommended_next_action: str
     priority_score: float
+    proof: IssueProofSnapshot
 
 
 class IssueListResponse(BaseModel):
@@ -64,3 +100,28 @@ class IssueListResponse(BaseModel):
 class IssueResolveRequest(BaseModel):
     fix_id: str | None = None
     resolution_source: str = "manual"
+
+
+class IssueGoldenPromotionRequest(BaseModel):
+    golden_set_id: str | None = None
+    expected_output_text: str | None = None
+    criteria_json: str | None = None
+    blocks_ci: bool = True
+
+
+class IssueGoldenPromotionResponse(BaseModel):
+    issue: IssueResponse
+    golden: IssueGoldenProof
+
+
+class IssueCiGateRequest(BaseModel):
+    git_sha: str | None = None
+    branch_name: str | None = None
+    pr_number: int | None = None
+    commit_message: str | None = None
+    replay_mode: str | None = None
+
+
+class IssueCiGateResponse(BaseModel):
+    issue: IssueResponse
+    ci_gate: IssueCiGateProof

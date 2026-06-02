@@ -1,4 +1,4 @@
-"""Public issue service backed by canonical `Anomaly` rows.
+"""Public issue service backed by internal `Anomaly` rows.
 
 The legacy `issues` table is now migration/input compatibility only. New
 runtime writes go through `anomalies`, while `/v1/issues` keeps the stable

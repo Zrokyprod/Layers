@@ -277,7 +277,7 @@ def list_labels(
         q = q.where(GoldenLabel.golden_trace_id == trace_id)
     q = q.order_by(GoldenLabel.golden_trace_id, desc(GoldenLabel.version))
     rows = db.execute(q).scalars().all()
-    return [_serialize_label(l) for l in rows]
+    return [_serialize_label(label) for label in rows]
 
 
 @router.post("/labels", response_model=LabelView)

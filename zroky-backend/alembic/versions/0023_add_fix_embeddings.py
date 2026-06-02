@@ -21,10 +21,31 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     is_postgres = bind.dialect.name == "postgresql"
+    vector_enabled = False
 
-    # Enable pgvector extension for PostgreSQL
     if is_postgres:
-        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        # Local Postgres installs often do not ship pgvector. Keep the migration
+        # usable for local/demo DBs, while still enabling the vector column and
+        # ivfflat index anywhere the extension is actually installed.
+        op.execute(
+            """
+            DO $$
+            BEGIN
+                CREATE EXTENSION IF NOT EXISTS vector;
+            EXCEPTION
+                WHEN feature_not_supported OR insufficient_privilege OR undefined_file THEN
+                    RAISE NOTICE 'pgvector extension unavailable; using text embedding fallback';
+            END
+            $$;
+            """
+        )
+        vector_enabled = bool(
+            bind.execute(
+                sa.text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')"
+                )
+            ).scalar()
+        )
 
     # Create fix_embeddings table with TEXT embedding column (works on both DBs)
     op.create_table(
@@ -48,8 +69,10 @@ def upgrade() -> None:
     op.create_index("ix_fix_embeddings_project_fix", "fix_embeddings", ["project_id", "fix_id"])
     op.create_index("ix_fix_embeddings_diagnosis_type", "fix_embeddings", ["project_id", "diagnosis_type"])
 
-    # For PostgreSQL, convert to proper vector(1536) type and create ivfflat index
-    if is_postgres:
+    # For PostgreSQL with pgvector, convert to proper vector(1536) type and
+    # create the similarity index. Without pgvector, the TEXT fallback keeps the
+    # rest of the schema and local demos operational.
+    if vector_enabled:
         op.execute(
             "ALTER TABLE fix_embeddings ALTER COLUMN embedding TYPE vector(1536) USING NULL"
         )
@@ -57,6 +80,7 @@ def upgrade() -> None:
             "CREATE INDEX ix_fix_embeddings_embedding ON fix_embeddings "
             "USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
         )
+    if is_postgres:
         op.execute("ALTER TABLE fix_embeddings ENABLE ROW LEVEL SECURITY")
         op.execute(
             "CREATE POLICY fix_embeddings_tenant_isolation ON fix_embeddings "

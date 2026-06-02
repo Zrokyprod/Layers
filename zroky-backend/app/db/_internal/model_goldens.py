@@ -44,12 +44,12 @@ class GoldenSet(Base):
 
 
 class GoldenTrace(Base):
-    """One canonical call promoted to "expected behaviour" inside a golden set.
+    """One canonical call captured for a golden set.
 
-    Stores the expected output text and baseline tokens/cost/latency, plus
-    per-trace judge criteria (criteria_json may include `expected_schema_json`
-    for SCHEMA_VIOLATION detection). `project_id` is denormalised from the
-    parent golden_set so the Postgres RLS policy can filter by tenant
+    Active traces store explicit expected behavior in `expected_output_text`
+    or `criteria_json`. Draft traces can retain source evidence without
+    affecting replay pass/fail results. `project_id` is denormalised from
+    the parent golden_set so the Postgres RLS policy can filter by tenant
     without a JOIN.
     """
 
@@ -67,7 +67,12 @@ class GoldenTrace(Base):
         ForeignKey("calls.id", ondelete="SET NULL"),
         nullable=True,
     )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'draft'")
+    )
     expected_output_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_output_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     expected_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expected_cost_usd: Mapped[float | None] = mapped_column(Numeric(18, 8), nullable=True)
     expected_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -85,7 +90,12 @@ class GoldenTrace(Base):
     golden_set: Mapped["GoldenSet"] = relationship("GoldenSet", back_populates="traces")
 
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'active')",
+            name="ck_golden_traces_status",
+        ),
         Index("ix_golden_traces_set_id", "golden_set_id"),
+        Index("ix_golden_traces_set_status", "golden_set_id", "status"),
         Index("ix_golden_traces_project_created", "project_id", "created_at"),
         Index("ix_golden_traces_call_id", "call_id"),
     )

@@ -44,7 +44,7 @@ def load_prompt_suite(path: Path | None = None) -> tuple[PromptSpec, ...]:
 
     prompts_raw = raw["prompts"]
     if not isinstance(prompts_raw, list):
-        raise ValueError(f"Prompt suite 'prompts' must be a list")
+        raise ValueError("Prompt suite 'prompts' must be a list")
 
     suite_version = int(raw.get("version", 1))
 

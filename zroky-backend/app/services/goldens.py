@@ -16,6 +16,7 @@ context — callers cannot spoof it via request body.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -28,6 +29,15 @@ from sqlalchemy.orm import Session
 from app.db.models import Call, GoldenSet, GoldenTrace
 
 logger = logging.getLogger(__name__)
+
+GOLDEN_TRACE_STATUS_DRAFT = "draft"
+GOLDEN_TRACE_STATUS_ACTIVE = "active"
+VALID_GOLDEN_TRACE_STATUSES = frozenset(
+    {GOLDEN_TRACE_STATUS_DRAFT, GOLDEN_TRACE_STATUS_ACTIVE}
+)
+ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR = (
+    "active golden traces require expected_output_text or criteria_json"
+)
 
 
 # ── exceptions ───────────────────────────────────────────────────────────────
@@ -235,7 +245,10 @@ def add_trace(
     project_id: str,
     golden_set_id: str,
     call_id: str | None = None,
+    status: str | None = None,
     expected_output_text: str | None = None,
+    source_output_text: str | None = None,
+    source_evidence_json: str | None = None,
     expected_tokens: int | None = None,
     expected_cost_usd: float | None = None,
     expected_latency_ms: int | None = None,
@@ -251,6 +264,7 @@ def add_trace(
     if parent is None:
         return None
 
+    call_row: Call | None = None
     if call_id is not None:
         call_row = db.execute(
             select(Call).where(Call.id == call_id, Call.project_id == project_id)
@@ -263,13 +277,31 @@ def add_trace(
     if weight <= 0:
         raise ValueError("weight must be > 0")
 
+    if call_row is not None:
+        auto_source_output_text, auto_source_evidence_json = source_evidence_from_call(
+            call_row
+        )
+        if source_output_text is None:
+            source_output_text = auto_source_output_text
+        if source_evidence_json is None:
+            source_evidence_json = auto_source_evidence_json
+
+    resolved_status = _resolve_trace_status(
+        status=status,
+        expected_output_text=expected_output_text,
+        criteria_json=criteria_json,
+    )
+
     now = datetime.now(timezone.utc)
     trace = GoldenTrace(
         id=str(uuid4()),
         golden_set_id=golden_set_id,
         project_id=project_id,
         call_id=call_id,
+        status=resolved_status,
         expected_output_text=expected_output_text,
+        source_output_text=source_output_text,
+        source_evidence_json=source_evidence_json,
         expected_tokens=expected_tokens,
         expected_cost_usd=expected_cost_usd,
         expected_latency_ms=expected_latency_ms,
@@ -282,6 +314,90 @@ def add_trace(
     db.commit()
     db.refresh(trace)
     return trace
+
+
+def _has_expected_behavior(
+    *, expected_output_text: str | None, criteria_json: str | None
+) -> bool:
+    return bool(
+        (expected_output_text is not None and expected_output_text.strip())
+        or (criteria_json is not None and criteria_json.strip())
+    )
+
+
+def _resolve_trace_status(
+    *,
+    status: str | None,
+    expected_output_text: str | None,
+    criteria_json: str | None,
+) -> str:
+    has_expected_behavior = _has_expected_behavior(
+        expected_output_text=expected_output_text,
+        criteria_json=criteria_json,
+    )
+    if status is None:
+        return (
+            GOLDEN_TRACE_STATUS_ACTIVE
+            if has_expected_behavior
+            else GOLDEN_TRACE_STATUS_DRAFT
+        )
+
+    normalized = status.strip().lower()
+    if normalized not in VALID_GOLDEN_TRACE_STATUSES:
+        raise ValueError(
+            f"status must be one of {sorted(VALID_GOLDEN_TRACE_STATUSES)}, got {status!r}"
+        )
+    if normalized == GOLDEN_TRACE_STATUS_ACTIVE and not has_expected_behavior:
+        raise ValueError(ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR)
+    return normalized
+
+
+def _safe_json_object(raw: str | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        decoded = json.loads(raw)
+        return decoded if isinstance(decoded, dict) else {}
+    except Exception:
+        return {}
+
+
+def _first_text(payload: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    for value in payload.values():
+        if isinstance(value, dict):
+            nested = _first_text(value, *keys)
+            if nested is not None and nested.strip():
+                return nested
+    return None
+
+
+def source_evidence_from_call(call: Call) -> tuple[str | None, str]:
+    payload = _safe_json_object(call.payload_json)
+    source_output_text = _first_text(
+        payload,
+        "response",
+        "output",
+        "completion",
+        "result",
+        "response_text",
+        "error",
+        "message",
+    )
+    evidence = {
+        "source": "call",
+        "call_id": call.id,
+        "status": call.status,
+        "provider": call.provider,
+        "model": call.model,
+        "error_code": call.error_code,
+        "created_at": call.created_at.isoformat() if call.created_at else None,
+        "has_payload_response": source_output_text is not None,
+    }
+    return source_output_text, json.dumps(evidence, separators=(",", ":"), default=str)
 
 
 def list_traces(
@@ -343,15 +459,24 @@ def remove_trace(
 
 
 def count_traces(
-    db: Session, *, project_id: str, golden_set_id: str
+    db: Session, *, project_id: str, golden_set_id: str, status: str | None = None
 ) -> int:
     """Cheap count helper used by list_golden_sets responses."""
     from sqlalchemy import func as sa_func
 
+    conditions = [
+        GoldenTrace.project_id == project_id,
+        GoldenTrace.golden_set_id == golden_set_id,
+    ]
+    if status is not None:
+        normalized = status.strip().lower()
+        if normalized not in VALID_GOLDEN_TRACE_STATUSES:
+            raise ValueError(
+                f"status must be one of {sorted(VALID_GOLDEN_TRACE_STATUSES)}, got {status!r}"
+            )
+        conditions.append(GoldenTrace.status == normalized)
+
     result = db.execute(
-        select(sa_func.count(GoldenTrace.id)).where(
-            GoldenTrace.project_id == project_id,
-            GoldenTrace.golden_set_id == golden_set_id,
-        )
+        select(sa_func.count(GoldenTrace.id)).where(*conditions)
     ).scalar()
     return int(result or 0)

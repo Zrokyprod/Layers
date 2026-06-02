@@ -290,7 +290,14 @@ class HealthScoreResponse(BaseModel):
     status_band: Literal["perfect", "green", "yellow", "red"]
     success_rate: float
     latency_score: float
-    cost_anomaly_score: float
+    cost_anomaly_score: float = Field(
+        ...,
+        title="Cost Issue Score",
+        description=(
+            "Compatibility wire field retained as cost_anomaly_score; scores "
+            "cost-related issue pressure in the health calculation."
+        ),
+    )
     cost_total_usd: float = 0.0
     cost_total_display: float = 0.0
     display_currency: Literal["USD", "INR"] = "USD"

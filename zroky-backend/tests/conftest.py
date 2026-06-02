@@ -17,6 +17,8 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///./.data/test_shared.db")
 os.environ.setdefault("AUTH_JWT_SECRET", "test-secret-key-for-auth-tests")
 os.environ.setdefault("ALLOW_PROJECT_HEADER_CONTEXT", "true")
 os.environ.setdefault("REQUIRE_PROVISIONING_TOKEN", "false")
+os.environ.setdefault("JWT_ISSUER", "")
+os.environ.setdefault("JWT_AUDIENCE", "")
 
 # Clear the settings lru_cache so any subsequent get_settings() call reads
 # the env vars we just set above instead of a cached production value.

@@ -116,4 +116,4 @@ def delete_notification(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
     db.delete(notification)
     db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

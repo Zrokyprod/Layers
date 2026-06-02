@@ -844,6 +844,22 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class UpdateMeRequest(BaseModel):
+    display_name: str | None = None
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if len(normalized) > 80:
+            raise ValueError("Display name must be 80 characters or fewer.")
+        return normalized
+
+
 class SecurityStatusResponse(BaseModel):
     two_factor_enabled: bool
     password_login_enabled: bool
@@ -898,12 +914,7 @@ def _decode_current_session_expiry(authorization: str | None) -> str | None:
     return None
 
 
-@router.get("/me", response_model=MeResponse)
-def get_current_user_profile(
-    authorization: Annotated[str | None, Header()] = None,
-    db: Annotated[Session, Depends(get_db)] = None,
-) -> MeResponse:
-    user = _get_current_user(authorization=authorization, db=db)
+def _me_response(user: User) -> MeResponse:
     return MeResponse(
         user_id=user.id,
         email=user.email,
@@ -915,6 +926,31 @@ def get_current_user_profile(
         email_verified=user.email_verified_at is not None,
         created_at=user.created_at.isoformat() if hasattr(user, "created_at") and user.created_at else "",
     )
+
+
+@router.get("/me", response_model=MeResponse)
+def get_current_user_profile(
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> MeResponse:
+    user = _get_current_user(authorization=authorization, db=db)
+    return _me_response(user)
+
+
+@router.patch("/me", response_model=MeResponse)
+@limiter.limit("10/minute")
+def update_current_user_profile(
+    request: Request,
+    body: UpdateMeRequest,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> MeResponse:
+    user = _get_current_user(authorization=authorization, db=db)
+    user.display_name = body.display_name
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _me_response(user)
 
 
 @router.patch("/me/password", status_code=status.HTTP_200_OK)

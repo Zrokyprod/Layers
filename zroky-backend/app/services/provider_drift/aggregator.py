@@ -201,7 +201,7 @@ def build_alert_spec(
 def _load_models(
     db: Session, *, model_ids: Sequence[str] | None
 ) -> list[ProviderDriftModel]:
-    stmt = select(ProviderDriftModel).where(ProviderDriftModel.active == True)
+    stmt = select(ProviderDriftModel).where(ProviderDriftModel.active.is_(True))
     if model_ids:
         stmt = stmt.where(ProviderDriftModel.id.in_(list(model_ids)))
     return list(db.execute(stmt).scalars().all())
@@ -210,7 +210,7 @@ def _load_models(
 def _category_sizes(db: Session) -> dict[str, int]:
     rows = (
         db.execute(
-            select(ProviderDriftPrompt).where(ProviderDriftPrompt.active == True)
+            select(ProviderDriftPrompt).where(ProviderDriftPrompt.active.is_(True))
         )
         .scalars()
         .all()

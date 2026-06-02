@@ -141,7 +141,7 @@ def _load_labeled_traces(
         )
         .order_by(GoldenTrace.created_at)
     ).all()
-    return [(t, l) for t, l in rows]
+    return [(trace, label) for trace, label in rows]
 
 
 def _trace_context(trace: GoldenTrace) -> dict[str, Any]:

@@ -107,7 +107,10 @@ class GoldenTraceResponse(BaseModel):
     golden_set_id: str
     project_id: str
     call_id: str | None
+    status: str
     expected_output_text: str | None
+    source_output_text: str | None
+    source_evidence_json: str | None
     expected_tokens: int | None
     expected_cost_usd: float | None
     expected_latency_ms: int | None
@@ -126,7 +129,10 @@ class GoldenTraceListResponse(BaseModel):
 
 class GoldenTraceCreate(BaseModel):
     call_id: str | None = None
+    status: str | None = None
     expected_output_text: str | None = None
+    source_output_text: str | None = None
+    source_evidence_json: str | None = None
     expected_tokens: int | None = Field(default=None, ge=0)
     expected_cost_usd: float | None = Field(default=None, ge=0)
     expected_latency_ms: int | None = Field(default=None, ge=0)
@@ -362,7 +368,10 @@ def add_golden_trace(
             project_id=tenant_id,
             golden_set_id=golden_set_id,
             call_id=body.call_id,
+            status=body.status,
             expected_output_text=body.expected_output_text,
+            source_output_text=body.source_output_text,
+            source_evidence_json=body.source_evidence_json,
             expected_tokens=body.expected_tokens,
             expected_cost_usd=body.expected_cost_usd,
             expected_latency_ms=body.expected_latency_ms,

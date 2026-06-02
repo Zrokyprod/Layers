@@ -40,10 +40,12 @@ from app.db.models import (
     ReplayRunTrace,
 )
 from app.services.goldens import (
+    GOLDEN_TRACE_STATUS_ACTIVE,
     add_trace,
     count_traces,
     create_golden_set,
     get_golden_set,
+    source_evidence_from_call,
 )
 from app.services.issue_projection import issue_projection_from_anomaly
 
@@ -384,7 +386,10 @@ def dispatch_replay_run(
             return existing
 
     snapshot_count = count_traces(
-        db, project_id=project_id, golden_set_id=golden_set_id
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set_id,
+        status=GOLDEN_TRACE_STATUS_ACTIVE,
     )
     summary: dict[str, Any] = {
         "trace_count_at_dispatch": snapshot_count,
@@ -467,31 +472,6 @@ def _safe_json_object(raw: str | None) -> dict[str, Any]:
         return {}
 
 
-def _first_text(payload: dict[str, Any], *keys: str) -> str | None:
-    for key in keys:
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    for value in payload.values():
-        if isinstance(value, dict):
-            nested = _first_text(value, *keys)
-            if nested:
-                return nested
-    return None
-
-
-def _expected_output_from_call(call: Call) -> str | None:
-    payload = _safe_json_object(call.payload_json)
-    return _first_text(
-        payload,
-        "response",
-        "output",
-        "completion",
-        "result",
-        "response_text",
-    )
-
-
 def _one_click_set_name(*, source_kind: str, source_id: str) -> str:
     return f"One-click replay: {source_kind} {source_id[:12]} {str(uuid4())[:8]}"
 
@@ -527,7 +507,6 @@ def create_replay_from_call(
         project_id=project_id,
         call_id=call_id,
         golden_set_id=golden_set.id,
-        expected_output_text=_expected_output_from_call(call),
     )
     if trace is None:
         return None
@@ -684,6 +663,7 @@ def mark_call_as_golden(
     call_id: str,
     golden_set_id: str,
     weight: float = 1.0,
+    status: str | None = None,
     expected_output_text: str | None = None,
     criteria_json: str | None = None,
 ) -> GoldenTrace | None:
@@ -714,13 +694,17 @@ def mark_call_as_golden(
     expected_latency_ms = (
         int(call.latency_ms) if call.latency_ms is not None else None
     )
+    source_output_text, source_evidence_json = source_evidence_from_call(call)
 
     return add_trace(
         db,
         project_id=project_id,
         golden_set_id=golden_set_id,
         call_id=call_id,
+        status=status,
         expected_output_text=expected_output_text,
+        source_output_text=source_output_text,
+        source_evidence_json=source_evidence_json,
         expected_tokens=expected_tokens,
         expected_cost_usd=expected_cost_usd,
         expected_latency_ms=expected_latency_ms,

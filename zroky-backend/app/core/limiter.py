@@ -21,7 +21,11 @@ def _build_limiter() -> Limiter:
     try:
         from app.core.config import get_settings
         settings = get_settings()
-        storage_uri: str = getattr(settings, "REDIS_URL", None) or "memory://"
+        storage_uri: str = (
+            getattr(settings, "RATE_LIMIT_STORAGE_URI", None)
+            or getattr(settings, "REDIS_URL", None)
+            or "memory://"
+        )
     except Exception:
         storage_uri = "memory://"
     return Limiter(key_func=get_remote_address, storage_uri=storage_uri)

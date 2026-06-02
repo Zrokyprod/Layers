@@ -440,7 +440,7 @@ def load_active_prompts(db: Session) -> tuple[PromptSpec, ...]:
     """Read active prompts from DB and return as PromptSpec tuple."""
     rows = (
         db.execute(
-            select(ProviderDriftPrompt).where(ProviderDriftPrompt.active == True)
+            select(ProviderDriftPrompt).where(ProviderDriftPrompt.active.is_(True))
         )
         .scalars()
         .all()
@@ -467,7 +467,7 @@ def load_active_models(db: Session) -> tuple[ModelSpec, ...]:
     """Read active models from DB."""
     rows = (
         db.execute(
-            select(ProviderDriftModel).where(ProviderDriftModel.active == True)
+            select(ProviderDriftModel).where(ProviderDriftModel.active.is_(True))
         )
         .scalars()
         .all()

@@ -3,12 +3,10 @@
 Allows owners/admins to invite users by email, and invited users to accept
 invitations via a secure token link.
 """
-from __future__ import annotations
-
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -60,7 +58,7 @@ def _invitation_to_response(invitation: ProjectInvitation) -> ProjectInvitationR
 def create_invitation(
     request: Request,
     project_id: str,
-    body: ProjectInvitationCreateRequest,
+    body: ProjectInvitationCreateRequest = Body(...),
     db: Session = Depends(get_db_session),
     context: TenantContext = Depends(require_tenant_context),
 ) -> ProjectInvitationResponse:
@@ -165,7 +163,7 @@ def revoke_invitation(
 @limiter.limit("10/minute")
 def accept_invitation(
     request: Request,
-    body: AcceptInvitationRequest,
+    body: AcceptInvitationRequest = Body(...),
     db: Session = Depends(get_db_session),
     context: TenantContext = Depends(require_tenant_context),
 ) -> AcceptInvitationResponse:

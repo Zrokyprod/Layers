@@ -26,7 +26,13 @@ from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, ReplayRun, Repl
 from app.services.anomalies import compute_fingerprint
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
-from app.services.goldens import add_trace, create_golden_set
+from app.services.goldens import (
+    ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR,
+    GOLDEN_TRACE_STATUS_ACTIVE,
+    GOLDEN_TRACE_STATUS_DRAFT,
+    add_trace,
+    create_golden_set,
+)
 from app.services.replay_runs import (
     REPLAY_MODE_MOCKED_TOOL,
     REPLAY_MODE_REAL_LLM,
@@ -345,11 +351,14 @@ class TestDispatchReplayRun:
         summary = parse_summary(run.summary_json)
         assert summary["source_kind"] == "call"
         assert summary["source_call_id"] == "call-1"
+        assert summary["trace_count_at_dispatch"] == 0
         trace = db_session.execute(
             select(GoldenTrace).where(GoldenTrace.golden_set_id == run.golden_set_id)
         ).scalar_one()
         assert trace.call_id == "call-1"
-        assert trace.expected_output_text == "ok"
+        assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
+        assert trace.expected_output_text is None
+        assert trace.source_output_text == "ok"
 
     def test_override_bypasses_idempotency(
         self, db_session, monkeypatch: pytest.MonkeyPatch
@@ -513,6 +522,9 @@ class TestMarkCallAsGolden:
             total_tokens=150,
             cost_total=0.0123,
             latency_ms=275.5,
+            status="failed",
+            error_code="OUTPUT_MISMATCH",
+            payload_json=json.dumps({"response": "bad original output"}),
         )
         gs = create_golden_set(db_session, project_id="proj-1", name="x")
         trace = mark_call_as_golden(
@@ -523,6 +535,12 @@ class TestMarkCallAsGolden:
         )
         assert trace is not None
         assert trace.call_id == "call-1"
+        assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
+        assert trace.expected_output_text is None
+        assert trace.source_output_text == "bad original output"
+        evidence = json.loads(trace.source_evidence_json)
+        assert evidence["call_id"] == "call-1"
+        assert evidence["status"] == "failed"
         assert trace.expected_tokens == 150
         assert float(trace.expected_cost_usd) == pytest.approx(0.0123)
         assert trace.expected_latency_ms == 275
@@ -540,9 +558,45 @@ class TestMarkCallAsGolden:
             weight=2.5,
         )
         assert trace is not None
+        assert trace.status == GOLDEN_TRACE_STATUS_ACTIVE
         assert trace.expected_output_text == "hello world"
         assert trace.criteria_json == '{"contains":"hello"}'
         assert float(trace.weight) == 2.5
+
+    def test_active_without_expected_behavior_rejected(self, db_session) -> None:
+        _seed_call(db_session, project_id="proj-1", call_id="call-active")
+        gs = create_golden_set(db_session, project_id="proj-1", name="x")
+        with pytest.raises(
+            ValueError, match=ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR
+        ):
+            mark_call_as_golden(
+                db_session,
+                project_id="proj-1",
+                call_id="call-active",
+                golden_set_id=gs.id,
+                status=GOLDEN_TRACE_STATUS_ACTIVE,
+            )
+
+    def test_failed_call_with_explicit_output_can_create_active(self, db_session) -> None:
+        _seed_call(
+            db_session,
+            project_id="proj-1",
+            call_id="call-verified",
+            status="failed",
+            payload_json=json.dumps({"response": "source failure"}),
+        )
+        gs = create_golden_set(db_session, project_id="proj-1", name="x")
+        trace = mark_call_as_golden(
+            db_session,
+            project_id="proj-1",
+            call_id="call-verified",
+            golden_set_id=gs.id,
+            expected_output_text="verified expected behavior",
+        )
+        assert trace is not None
+        assert trace.status == GOLDEN_TRACE_STATUS_ACTIVE
+        assert trace.expected_output_text == "verified expected behavior"
+        assert trace.source_output_text == "source failure"
 
     def test_missing_call_returns_none(self, db_session) -> None:
         gs = create_golden_set(db_session, project_id="proj-1", name="x")
@@ -997,7 +1051,9 @@ class TestCreateReplayFromIssueRoute:
                 select(GoldenTrace).where(GoldenTrace.golden_set_id == run.golden_set_id)
             ).scalar_one()
             assert trace.call_id == "call-issue"
-            assert trace.expected_output_text == "issue fixed"
+            assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
+            assert trace.expected_output_text is None
+            assert trace.source_output_text == "issue fixed"
 
 class TestMarkGoldenRoute:
     def test_201(self, client: TestClient) -> None:
@@ -1010,6 +1066,8 @@ class TestMarkGoldenRoute:
                 total_tokens=42,
                 cost_total=0.05,
                 latency_ms=200,
+                status="failed",
+                payload_json=json.dumps({"response": "bad original output"}),
             )
             gs = create_golden_set(session, project_id="proj-1", name="x")
             gs_id = gs.id
@@ -1023,10 +1081,57 @@ class TestMarkGoldenRoute:
         body = response.json()
         assert body["call_id"] == "call-1"
         assert body["golden_set_id"] == gs_id
+        assert body["status"] == GOLDEN_TRACE_STATUS_DRAFT
+        assert body["expected_output_text"] is None
+        assert body["source_output_text"] == "bad original output"
+        evidence = json.loads(body["source_evidence_json"])
+        assert evidence["call_id"] == "call-1"
         assert body["expected_tokens"] == 42
         assert float(body["expected_cost_usd"]) == pytest.approx(0.05)
         assert body["expected_latency_ms"] == 200
         assert body["weight"] == 1.5
+
+    def test_active_without_expected_behavior_422(self, client: TestClient) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            _seed_call(session, project_id="proj-1", call_id="call-1")
+            gs = create_golden_set(session, project_id="proj-1", name="x")
+            gs_id = gs.id
+
+        response = client.post(
+            "/v1/calls/call-1/mark-golden",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={"golden_set_id": gs_id, "status": "active"},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR
+
+    def test_explicit_expected_output_returns_active(self, client: TestClient) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            _seed_call(
+                session,
+                project_id="proj-1",
+                call_id="call-1",
+                status="failed",
+                payload_json=json.dumps({"response": "source failure"}),
+            )
+            gs = create_golden_set(session, project_id="proj-1", name="x")
+            gs_id = gs.id
+
+        response = client.post(
+            "/v1/calls/call-1/mark-golden",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={
+                "golden_set_id": gs_id,
+                "expected_output_text": "verified expected behavior",
+            },
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["status"] == GOLDEN_TRACE_STATUS_ACTIVE
+        assert body["expected_output_text"] == "verified expected behavior"
+        assert body["source_output_text"] == "source failure"
 
     def test_missing_call_404(self, client: TestClient) -> None:
         factory = client._session_factory  # type: ignore[attr-defined]

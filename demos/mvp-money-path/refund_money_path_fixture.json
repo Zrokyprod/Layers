@@ -1,0 +1,93 @@
+{
+  "demo": {
+    "name": "Zroky MVP money path - refund support",
+    "project_id": "demo-refund-money-path",
+    "project_name": "Refund Support Demo",
+    "user_email": "demo@zroky.local",
+    "user_password": "ZrokyDemo123!"
+  },
+  "ids": {
+    "user": "demo-user-refund-money-path",
+    "membership": "demo-membership-refund-money-path",
+    "subscription": "demo-subscription-refund-money-path",
+    "bad_call": "demo-call-refund-missed-tool",
+    "diagnosis": "demo-diagnosis-refund-tool",
+    "issue": "demo-issue-refund-tool-not-called",
+    "golden_set": "demo-golden-refund-status",
+    "golden_trace": "demo-golden-trace-refund-status",
+    "verified_replay": "demo-replay-refund-fixed",
+    "verified_replay_trace": "demo-replay-trace-refund-fixed",
+    "regression_ci_set": "regression-ci:demo-refund-money-path",
+    "regression_ci_run": "demo-ci-refund-tool-regression",
+    "regression_ci_trace": "demo-ci-trace-refund-tool-regression"
+  },
+  "scenario": {
+    "agent_name": "refund-support-agent",
+    "workflow_name": "refund-status",
+    "prompt_fingerprint": "fp-demo-refund-v1",
+    "prompt_version": "refund-agent.bad.v1",
+    "trace_id": "trace-demo-refund-missed-tool",
+    "customer_id": "cus_demo_001",
+    "order_id": "ORD-1001",
+    "refund_id": "RF-1001",
+    "user_input": "Where is my refund?",
+    "failure_code": "TOOL_NOT_CALLED",
+    "expected_tool": "get_refund_status"
+  },
+  "fake_model_responses": {
+    "bad_version": {
+      "provider": "fake-provider",
+      "model": "refund-agent-bad-v1",
+      "output": "Refunds are usually processed within 5-10 business days. Please check your payment provider or contact support if you still have questions.",
+      "tool_calls": []
+    },
+    "fixed_version": {
+      "provider": "fake-provider",
+      "model": "refund-agent-fixed-v2",
+      "candidate_prompt": "For refund status questions, call get_refund_status before answering. Use the tool result to give the customer their refund ID, status, issued date, ETA, and amount.",
+      "output": "Your refund RF-1001 for order ORD-1001 was issued on 2026-01-14 for $42.18. It should arrive by 2026-01-19.",
+      "tool_calls": [
+        {
+          "name": "get_refund_status",
+          "arguments": {
+            "customer_id": "cus_demo_001",
+            "order_id": "ORD-1001"
+          }
+        }
+      ]
+    },
+    "broken_pr": {
+      "provider": "fake-provider",
+      "model": "refund-agent-pr-breakage",
+      "output": "Refunds are usually processed within 5-10 business days. Please check your bank for updates.",
+      "tool_calls": []
+    }
+  },
+  "fake_tools": {
+    "get_refund_status": {
+      "arguments": {
+        "customer_id": "cus_demo_001",
+        "order_id": "ORD-1001"
+      },
+      "response": {
+        "refund_id": "RF-1001",
+        "order_id": "ORD-1001",
+        "status": "issued",
+        "issued_at": "2026-01-14",
+        "eta": "2026-01-19",
+        "amount_usd": 42.18
+      }
+    }
+  },
+  "timing": {
+    "base_time": "2026-01-15T10:00:00+00:00",
+    "bad_call_latency_ms": 384,
+    "verified_replay_latency_ms": 522,
+    "ci_latency_ms": 391
+  },
+  "costs": {
+    "bad_call_usd": 0.0021,
+    "verified_replay_usd": 0.0034,
+    "ci_replay_usd": 0.0023
+  }
+}

@@ -96,14 +96,18 @@ def export_project_data(
             break
 
     diagnosis_ids = [job.diagnosis_id for job in selected_jobs]
-    feedback_rows = []
+    feedback_rows: list[DiagnosisFeedback] = []
     if diagnosis_ids:
-        feedback_rows = db.execute(
-            select(DiagnosisFeedback).where(
-                DiagnosisFeedback.tenant_id == tenant_id,
-                DiagnosisFeedback.diagnosis_id.in_(diagnosis_ids),
+        feedback_rows = list(
+            db.execute(
+                select(DiagnosisFeedback).where(
+                    DiagnosisFeedback.tenant_id == tenant_id,
+                    DiagnosisFeedback.diagnosis_id.in_(diagnosis_ids),
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     feedback_summary_map: dict[str, CallFeedbackSummary] = {
         diagnosis_id: CallFeedbackSummary(helpful_count=0, not_helpful_count=0)

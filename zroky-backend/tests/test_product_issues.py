@@ -9,10 +9,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, ReplayJob, ReplayRun, ReplayRunTrace
+from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, ReplayJob, ReplayRun, ReplayRunTrace, Subscription
 from app.services.anomalies import VALID_DETECTORS, compute_fingerprint
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.services.entitlements import seed_plan_entitlements
+from app.services.entitlements_resolver import invalidate_all
 
 
 PROJECT_HEADER = "X-Project-Id"
@@ -21,6 +23,7 @@ PROJECT_HEADER = "X-Project-Id"
 @pytest.fixture()
 def client_ctx(tmp_path: Path):
     get_settings.cache_clear()
+    invalidate_all()
     db_path = tmp_path / "test_product_issues.db"
     engine = create_engine(
         f"sqlite:///{db_path}",
@@ -47,6 +50,7 @@ def client_ctx(tmp_path: Path):
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
     get_settings.cache_clear()
+    invalidate_all()
 
 
 def _seed_call(
@@ -93,6 +97,23 @@ def _seed_call(
             metadata_json=json.dumps(payload, separators=(",", ":")),
         )
     )
+
+
+def _seed_org(session, *, project_id: str, plan_code: str = "pro") -> None:
+    session.add(
+        Subscription(
+            id=f"sub-{project_id}",
+            org_id=project_id,
+            plan_code=plan_code,
+            status="active",
+            seats=1,
+            stripe_customer_id=f"cus_{project_id}",
+            stripe_sub_id=f"si_{project_id}",
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
+        )
+    )
+    session.commit()
+    seed_plan_entitlements(session, org_id=project_id, plan_code=plan_code)
 
 
 def _seed_issue(
@@ -451,3 +472,221 @@ def test_issue_replay_coverage_is_mode_aware(client_ctx) -> None:
     body = response.json()
     assert body["replay_coverage_status"] == "verified_fix"
     assert "Use the covered replay trace" in body["recommended_next_action"]
+    assert body["proof"]["replay"]["run_id"] == "replay-run-verified"
+    assert body["proof"]["replay"]["verified_fix"] is True
+    assert body["proof"]["golden"]["golden_trace_id"] == "golden-trace-verified"
+    assert body["proof"]["golden"]["golden_set_id"] == "golden-set-verified"
+
+
+def test_promote_issue_to_golden_creates_active_ci_blocking_guard(client_ctx) -> None:
+    client, session_local = client_ctx
+    project_id = "proj-issue-promote"
+    now = datetime.now(timezone.utc)
+
+    with session_local() as session:
+        _seed_org(session, project_id=project_id, plan_code="pro")
+        _seed_call(
+            session,
+            project_id=project_id,
+            call_id="call-promote",
+            agent_name="refund-agent",
+            prompt_fingerprint="fp-promote",
+            prompt_version="support-v45",
+            workflow_name="refund-resolution",
+            trace_id="trace-promote",
+            created_at=now,
+        )
+        verified_set = GoldenSet(
+            id="verified-set-promote",
+            project_id=project_id,
+            name="One-click replay verified",
+            created_at=now,
+            updated_at=now,
+        )
+        verified_trace = GoldenTrace(
+            id="verified-trace-promote",
+            golden_set_id=verified_set.id,
+            project_id=project_id,
+            call_id="call-promote",
+            expected_output_text="ok",
+            created_at=now,
+            updated_at=now,
+        )
+        verified_run = ReplayRun(
+            id="verified-run-promote",
+            project_id=project_id,
+            golden_set_id=verified_set.id,
+            trigger="manual",
+            status="pass",
+            summary_json=json.dumps(
+                {
+                    "source_issue_id": "issue-promote",
+                    "requested_replay_mode": "mocked-tool",
+                    "replay_mode": "real_llm",
+                    "verified_fix": True,
+                    "verification_status": "verified_fix",
+                },
+                separators=(",", ":"),
+            ),
+            created_at=now,
+        )
+        verified_run_trace = ReplayRunTrace(
+            id="verified-run-trace-promote",
+            replay_run_id=verified_run.id,
+            golden_trace_id=verified_trace.id,
+            project_id=project_id,
+            call_id_replayed="call-promote",
+            status="pass",
+            created_at=now,
+        )
+        session.add_all([verified_set, verified_trace, verified_run, verified_run_trace])
+        _seed_issue(
+            session,
+            project_id=project_id,
+            issue_id="issue-promote",
+            failure_code="SCHEMA_VIOLATION",
+            severity="high",
+            occurrence_count=3,
+            blast_radius_usd=1.0,
+            sample_call_id="call-promote",
+            prompt_fingerprint="fp-promote",
+        )
+        session.commit()
+
+    response = client.post(
+        "/v1/issues/issue-promote/promote-golden",
+        headers={PROJECT_HEADER: project_id},
+        json={},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["golden"]["status"] == "active"
+    assert body["golden"]["blocks_ci"] is True
+    assert body["issue"]["proof"]["golden"]["golden_trace_id"] == body["golden"]["golden_trace_id"]
+
+    with session_local() as session:
+        promoted = session.get(GoldenTrace, body["golden"]["golden_trace_id"])
+        assert promoted is not None
+        assert promoted.status == "active"
+        assert promoted.call_id == "call-promote"
+        assert promoted.criteria_json is not None
+        criteria = json.loads(promoted.criteria_json)
+        assert criteria["issue_id"] == "issue-promote"
+        evidence = json.loads(promoted.source_evidence_json)
+        assert evidence["source_issue_id"] == "issue-promote"
+
+
+def test_issue_ci_gate_dispatches_github_replay_run(client_ctx, monkeypatch) -> None:
+    client, session_local = client_ctx
+    project_id = "proj-issue-ci"
+    now = datetime.now(timezone.utc)
+    enqueued: list[tuple[str, str]] = []
+
+    class _Task:
+        @staticmethod
+        def apply_async(args, queue=None, countdown=None):
+            enqueued.append((args[1], args[0]))
+
+    import types
+    import sys
+
+    monkeypatch.setitem(sys.modules, "app.worker.tasks", types.SimpleNamespace(process_replay_run=_Task))
+
+    with session_local() as session:
+        _seed_org(session, project_id=project_id, plan_code="pro")
+        _seed_call(
+            session,
+            project_id=project_id,
+            call_id="call-ci",
+            agent_name="refund-agent",
+            prompt_fingerprint="fp-ci",
+            prompt_version="support-v46",
+            workflow_name="refund-resolution",
+            trace_id="trace-ci",
+            created_at=now,
+        )
+        verified_set = GoldenSet(
+            id="verified-set-ci",
+            project_id=project_id,
+            name="One-click replay verified",
+            created_at=now,
+            updated_at=now,
+        )
+        verified_trace = GoldenTrace(
+            id="verified-trace-ci",
+            golden_set_id=verified_set.id,
+            project_id=project_id,
+            call_id="call-ci",
+            expected_output_text="ok",
+            created_at=now,
+            updated_at=now,
+        )
+        verified_run = ReplayRun(
+            id="verified-run-ci",
+            project_id=project_id,
+            golden_set_id=verified_set.id,
+            trigger="manual",
+            status="pass",
+            summary_json=json.dumps(
+                {
+                    "source_issue_id": "issue-ci",
+                    "requested_replay_mode": "mocked-tool",
+                    "replay_mode": "real_llm",
+                    "verified_fix": True,
+                    "verification_status": "verified_fix",
+                },
+                separators=(",", ":"),
+            ),
+            created_at=now,
+        )
+        verified_run_trace = ReplayRunTrace(
+            id="verified-run-trace-ci",
+            replay_run_id=verified_run.id,
+            golden_trace_id=verified_trace.id,
+            project_id=project_id,
+            call_id_replayed="call-ci",
+            status="pass",
+            created_at=now,
+        )
+        session.add_all([verified_set, verified_trace, verified_run, verified_run_trace])
+        _seed_issue(
+            session,
+            project_id=project_id,
+            issue_id="issue-ci",
+            failure_code="SCHEMA_VIOLATION",
+            severity="high",
+            occurrence_count=3,
+            blast_radius_usd=1.0,
+            sample_call_id="call-ci",
+            prompt_fingerprint="fp-ci",
+        )
+        session.commit()
+
+    triage = client.patch(
+        "/v1/issues/issue-ci/triage",
+        headers={PROJECT_HEADER: project_id},
+        json={"deploy_pr_url": "https://github.com/acme/repo/pull/42"},
+    )
+    assert triage.status_code == 200
+
+    response = client.post(
+        "/v1/issues/issue-ci/ci-gate",
+        headers={PROJECT_HEADER: project_id},
+        json={"git_sha": "abc1234", "replay_mode": "stub"},
+    )
+    assert response.status_code == 202
+    body = response.json()
+    assert body["ci_gate"]["run_id"] is not None
+    assert body["ci_gate"]["status"] == "pending"
+    assert body["issue"]["proof"]["ci_gate"]["run_id"] == body["ci_gate"]["run_id"]
+    assert enqueued == [(body["ci_gate"]["run_id"], project_id)]
+
+    with session_local() as session:
+        run = session.get(ReplayRun, body["ci_gate"]["run_id"])
+        assert run is not None
+        assert run.trigger == "github"
+        assert run.git_sha == "abc1234"
+        summary = json.loads(run.summary_json)
+        assert summary["source_kind"] == "issue_ci_gate"
+        assert summary["source_issue_id"] == "issue-ci"
+        assert summary["pr_url"] == "https://github.com/acme/repo/pull/42"

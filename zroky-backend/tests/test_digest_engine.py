@@ -587,7 +587,7 @@ def _summary_for(audience: str, **overrides: Any) -> dict[str, Any]:
             "by_severity": {"low": 1, "medium": 1, "high": 1, "critical": 0},
             "open_at_week_end": 2,
         },
-        "recommendation": "Most common anomaly this week: LOOP_DETECTED (2 occurrences).",
+        "recommendation": "Most common issue this week: LOOP_DETECTED (2 occurrences).",
     }
     if audience in ("manager", "executive"):
         base["pilot"] = {
@@ -647,7 +647,7 @@ class TestRenderPlain:
         assert "ZROKY weekly digest (engineer)" in plain
         assert "Calls:" in plain
         assert "Cost:" in plain
-        assert "Anoms:" in plain
+        assert "Issues:" in plain
         # No manager/exec sections in engineer plain output.
         assert "Pilot:" not in plain
         assert "Replay:" not in plain

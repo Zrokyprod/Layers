@@ -44,7 +44,11 @@ from app.db.models import (
     ReplayRunTrace,
 )
 from app.services import judge_calibration
-from app.services.goldens import add_trace, create_golden_set
+from app.services.goldens import (
+    GOLDEN_TRACE_STATUS_DRAFT,
+    add_trace,
+    create_golden_set,
+)
 from app.services.judge_engine import (
     DeterministicStubEvaluator,
     Evaluator,
@@ -172,7 +176,7 @@ def _seed_run_with_traces(
             expected_tokens=30,
             expected_cost_usd=0.001,
             expected_latency_ms=120,
-            criteria_json=None,
+            criteria_json='{"allow_empty_expected":true}' if expected == "" else None,
             weight=1.0,
         )
         assert t is not None
@@ -323,6 +327,60 @@ class TestExecuteReplayRun:
         for t in traces:
             scores = json.loads(t.judge_scores_json)
             assert scores["verdict"] == "pass"
+
+    def test_draft_traces_are_not_executed(self, db_session) -> None:
+        gs = create_golden_set(db_session, project_id="p1", name="draft-skip")
+        active_call = _make_call(
+            db_session,
+            project_id="p1",
+            call_id="call-active",
+            response_text="approved",
+        )
+        active_trace = add_trace(
+            db_session,
+            project_id="p1",
+            golden_set_id=gs.id,
+            call_id=active_call.id,
+            expected_output_text="approved",
+        )
+        draft_call = _make_call(
+            db_session,
+            project_id="p1",
+            call_id="call-draft",
+            response_text="observed only",
+        )
+        draft_trace = add_trace(
+            db_session,
+            project_id="p1",
+            golden_set_id=gs.id,
+            call_id=draft_call.id,
+        )
+        assert active_trace is not None
+        assert draft_trace is not None
+        assert draft_trace.status == GOLDEN_TRACE_STATUS_DRAFT
+
+        run = dispatch_replay_run(
+            db_session, project_id="p1", golden_set_id=gs.id, trigger="manual"
+        )
+        assert run is not None
+        assert json.loads(run.summary_json)["trace_count_at_dispatch"] == 1
+
+        updated = execute_replay_run(
+            db_session,
+            project_id="p1",
+            run_id=run.id,
+            evaluator=DeterministicStubEvaluator(),
+        )
+
+        assert updated is not None
+        assert updated.status == "pass"
+        summary = json.loads(updated.summary_json)
+        assert summary["trace_count_executed"] == 1
+        traces = db_session.execute(
+            select(ReplayRunTrace).where(ReplayRunTrace.replay_run_id == run.id)
+        ).scalars().all()
+        assert len(traces) == 1
+        assert traces[0].golden_trace_id == active_trace.id
 
     def test_any_fail_finalizes_fail(self, db_session) -> None:
         run, _ = _seed_run_with_traces(

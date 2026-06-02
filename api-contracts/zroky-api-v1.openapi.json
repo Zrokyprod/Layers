@@ -7276,6 +7276,7 @@
             "name": "anomaly_id",
             "in": "query",
             "required": false,
+            "description": "Compatibility wire filter retained as anomaly_id; filters by the Issue/internal detector grouping id.",
             "schema": {
               "anyOf": [
                 {
@@ -7285,7 +7286,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Anomaly Id"
+              "title": "Issue Id"
             }
           },
           {
@@ -7433,7 +7434,7 @@
           "pilot"
         ],
         "summary": "Retry Action",
-        "description": "Re-dispatch a previously `failed` or `skipped` Tier-2 action.\n\nReads the original anomaly + replay_run_id_gate off the action\nrow and re-runs `evaluate_tier2_dispatch` from scratch. Because\nthe dispatcher always writes a fresh row, this never mutates the\noriginal action; the response describes the *new* action.\n\nRequires the original action to be tier-2 and in one of the\nnon-applied terminal states. Tier-1 retries flow through the\nTier-1 revert/apply worker (not this endpoint).\n\nReturns:\n  404 if the original action doesn't exist for the tenant.\n  409 if the action is tier != 2 or already in pending/applied.\n  422 if the original action is missing the gate evidence\n      (replay_run_id_gate is NULL) — happens on actions skipped\n      BEFORE the gate was checked (e.g. entitlement gate).",
+        "description": "Re-dispatch a previously `failed` or `skipped` Tier-2 action.\n\nReads the original issue/internal grouping row and replay_run_id_gate\noff the action row and re-runs `evaluate_tier2_dispatch` from scratch.\nBecause the dispatcher always writes a fresh row, this never mutates\nthe original action; the response describes the *new* action.\n\nRequires the original action to be tier-2 and in one of the\nnon-applied terminal states. Tier-1 retries flow through the\nTier-1 revert/apply worker (not this endpoint).\n\nReturns:\n  404 if the original action doesn't exist for the tenant.\n  409 if the action is tier != 2 or already in pending/applied.\n  422 if the original action is missing the gate evidence\n      (replay_run_id_gate is NULL) — happens on actions skipped\n      BEFORE the gate was checked (e.g. entitlement gate).",
         "operationId": "retry_action_v1_pilot_actions__action_id__retry_post",
         "parameters": [
           {
@@ -19260,6 +19261,7 @@
             "name": "anomaly_id",
             "in": "query",
             "required": false,
+            "description": "Compatibility wire filter retained as anomaly_id; filters by the Issue/internal detector grouping id.",
             "schema": {
               "anyOf": [
                 {
@@ -19269,7 +19271,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Anomaly Id"
+              "title": "Issue Id"
             }
           },
           {
@@ -19417,7 +19419,7 @@
           "pilot"
         ],
         "summary": "Retry Action",
-        "description": "Re-dispatch a previously `failed` or `skipped` Tier-2 action.\n\nReads the original anomaly + replay_run_id_gate off the action\nrow and re-runs `evaluate_tier2_dispatch` from scratch. Because\nthe dispatcher always writes a fresh row, this never mutates the\noriginal action; the response describes the *new* action.\n\nRequires the original action to be tier-2 and in one of the\nnon-applied terminal states. Tier-1 retries flow through the\nTier-1 revert/apply worker (not this endpoint).\n\nReturns:\n  404 if the original action doesn't exist for the tenant.\n  409 if the action is tier != 2 or already in pending/applied.\n  422 if the original action is missing the gate evidence\n      (replay_run_id_gate is NULL) — happens on actions skipped\n      BEFORE the gate was checked (e.g. entitlement gate).",
+        "description": "Re-dispatch a previously `failed` or `skipped` Tier-2 action.\n\nReads the original issue/internal grouping row and replay_run_id_gate\noff the action row and re-runs `evaluate_tier2_dispatch` from scratch.\nBecause the dispatcher always writes a fresh row, this never mutates\nthe original action; the response describes the *new* action.\n\nRequires the original action to be tier-2 and in one of the\nnon-applied terminal states. Tier-1 retries flow through the\nTier-1 revert/apply worker (not this endpoint).\n\nReturns:\n  404 if the original action doesn't exist for the tenant.\n  409 if the action is tier != 2 or already in pending/applied.\n  422 if the original action is missing the gate evidence\n      (replay_run_id_gate is NULL) — happens on actions skipped\n      BEFORE the gate was checked (e.g. entitlement gate).",
         "operationId": "retry_action_api_v1_pilot_actions__action_id__retry_post",
         "parameters": [
           {
@@ -25403,7 +25405,8 @@
                 "type": "null"
               }
             ],
-            "title": "Anomaly Id"
+            "description": "Deprecated compatibility alias for issue_id; the wire field name is retained for older clients.",
+            "title": "Issue Id Deprecated Alias"
           }
         },
         "type": "object",
@@ -31390,7 +31393,8 @@
           },
           "cost_anomaly_score": {
             "type": "number",
-            "title": "Cost Anomaly Score"
+            "description": "Compatibility wire field retained as cost_anomaly_score; scores cost-related issue pressure in the health calculation.",
+            "title": "Cost Issue Score"
           },
           "cost_total_usd": {
             "type": "number",
@@ -34438,7 +34442,8 @@
           },
           "anomaly_id": {
             "type": "string",
-            "title": "Anomaly Id"
+            "description": "Compatibility wire field retained as anomaly_id; identifies the customer-facing Issue/internal detector grouping row.",
+            "title": "Issue Id"
           },
           "tier": {
             "type": "integer",
@@ -34565,7 +34570,8 @@
           },
           "anomaly_id": {
             "type": "string",
-            "title": "Anomaly Id"
+            "description": "Compatibility wire field retained as anomaly_id; identifies the customer-facing Issue/internal detector grouping row.",
+            "title": "Issue Id"
           },
           "tier": {
             "type": "integer",
