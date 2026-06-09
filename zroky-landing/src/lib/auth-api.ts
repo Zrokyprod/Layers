@@ -6,6 +6,9 @@ export interface AuthTokens {
   refresh_token: string;
   access_expires_in_seconds: number;
   refresh_expires_in_seconds: number;
+  token_type?: string;
+  user_id?: string;
+  email?: string | null;
   email_verified?: boolean;
 }
 
@@ -40,15 +43,24 @@ export async function registerUser(data: {
   }
 }
 
-export function redirectToDashboard(tokens: AuthTokens): void {
-  const params = new URLSearchParams({
-    at: tokens.access_token,
-    rt: tokens.refresh_token,
-    at_exp: String(tokens.access_expires_in_seconds ?? 259200),
-    rt_exp: String(tokens.refresh_expires_in_seconds ?? 2592000),
-    ev: String(tokens.email_verified ?? true),
+export async function redirectToDashboard(tokens: AuthTokens): Promise<void> {
+  const res = await fetch(`${API_URL}/v1/auth/session/handoff`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tokens),
   });
-  window.location.href = `${DASHBOARD_URL}/auth/handoff?${params.toString()}`;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string };
+    throw new Error(err.detail ?? 'Could not create dashboard session');
+  }
+
+  const body = await res.json() as { handoff_id?: string };
+  if (!body.handoff_id) {
+    throw new Error('Could not create dashboard session');
+  }
+
+  const params = new URLSearchParams({ handoff_id: body.handoff_id });
+  window.location.href = `${DASHBOARD_URL}/auth/oauth/callback?${params.toString()}`;
 }
 
 export function getGithubOAuthUrl(): string {

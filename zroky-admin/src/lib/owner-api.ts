@@ -1,5 +1,5 @@
-// Owner Dashboard API. Uses the provisioning token stored in sessionStorage and
-// forwards it as x-zroky-admin-token through the Next.js proxy.
+// Owner Dashboard API. The owner token is held in an HttpOnly cookie by the
+// Next.js admin BFF; sessionStorage stores only a non-sensitive UI marker.
 
 import type {
   FeatureFlag,
@@ -8,31 +8,40 @@ import type {
 } from "@/lib/types";
 
 const BASE = "/api/zroky";
-const TOKEN_KEY = "zroky_owner_token";
+const SESSION_MARKER_KEY = "zroky_owner_session";
 
 export function getOwnerToken(): string {
   if (typeof window === "undefined") return "";
-  return sessionStorage.getItem(TOKEN_KEY) ?? "";
+  return sessionStorage.getItem(SESSION_MARKER_KEY) ? "active" : "";
 }
 
 export function setOwnerToken(token: string): void {
-  sessionStorage.setItem(TOKEN_KEY, token);
+  void token;
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem(SESSION_MARKER_KEY, "active");
+  }
 }
 
 export function clearOwnerToken(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem(SESSION_MARKER_KEY);
+  }
+  void fetch("/api/owner/session", {
+    method: "DELETE",
+    cache: "no-store",
+    credentials: "same-origin",
+  });
 }
 
 async function ownerRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getOwnerToken();
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",
-      "x-zroky-admin-token": token,
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
+    credentials: "same-origin",
   });
 
   if (res.status === 401) {
@@ -85,6 +94,67 @@ export interface InfraStats {
   worker_count: number;
   worker_names: string[];
   db_table_sizes: Record<string, number>;
+}
+
+export interface OwnerReplayQuotaStatus {
+  state: string;
+  enabled: boolean;
+  used: number;
+  limit: number;
+  resets_at: string;
+}
+
+export interface OwnerProviderKeyStatus {
+  state: string;
+  active_provider_count: number;
+}
+
+export interface OwnerLastDeployedSmoke {
+  status: string;
+  checked_at: string | null;
+  project_id: string | null;
+  call_id: string | null;
+  golden_trace_id: string | null;
+  ci_run_id: string | null;
+  detail: string | null;
+}
+
+export interface OwnerMoneyPathPlatformSummary {
+  captures_24h: number;
+  issues_open: number;
+  replay_runs_7d: number;
+  verified_replay_runs_7d: number;
+  golden_traces_active: number;
+  ci_runs_7d: number;
+  ci_blocks_7d: number;
+  tenants_missing_provider_key: number;
+  tenants_near_replay_quota: number;
+  tenants_without_recent_capture: number;
+  last_deployed_smoke: OwnerLastDeployedSmoke;
+}
+
+export interface OwnerMoneyPathTenantRow {
+  project_id: string;
+  project_name: string;
+  plan_code: string;
+  last_capture_at: string | null;
+  captures_24h: number;
+  open_issue_count: number;
+  replay_run_count_7d: number;
+  verified_replay_count_7d: number;
+  golden_trace_count: number;
+  ci_run_count_7d: number;
+  blocking_ci_failures_7d: number;
+  provider_key_status: OwnerProviderKeyStatus;
+  replay_quota_status: OwnerReplayQuotaStatus;
+  next_owner_action: string;
+}
+
+export interface OwnerMoneyPathHealth {
+  generated_at: string;
+  windows: Record<string, number>;
+  platform: OwnerMoneyPathPlatformSummary;
+  tenants: OwnerMoneyPathTenantRow[];
 }
 
 export interface OwnerUserItem {
@@ -153,6 +223,49 @@ export interface PricingConfigResponse {
   config: Record<string, unknown>;
   path: string;
   exists: boolean;
+}
+
+export interface OwnerPricingPlanPrice {
+  label: string;
+  monthly_usd: number | null;
+  period: string;
+}
+
+export interface OwnerPricingPlanPublicLimits {
+  calls_per_month: number;
+  retention_days: number;
+  replay_credits: number;
+  golden_traces: number;
+  golden_sets: number;
+  non_blocking_ci: boolean;
+  blocking_ci: boolean;
+  provider_key_vault: boolean;
+}
+
+export interface OwnerPricingPlan {
+  code: string;
+  name: string;
+  price: OwnerPricingPlanPrice;
+  description: string;
+  note: string;
+  featured: boolean;
+  pricing: OwnerPricingPlanPublicLimits;
+  enforcement: {
+    limits: Record<string, number>;
+    entitlements: Record<string, boolean>;
+    compatibility: Record<string, unknown>;
+  };
+}
+
+export interface OwnerPricingPlansResponse {
+  schema_version: string;
+  source_of_truth: string;
+  currency: string;
+  unlimited: number;
+  canonical_plan_order: string[];
+  aliases: Record<string, string>;
+  plans: OwnerPricingPlan[];
+  drift: string[];
 }
 
 export interface RateLimitConfig {
@@ -245,6 +358,11 @@ export interface OwnerBillingAccountItem {
   seats: number;
   current_period_end: string | null;
   trial_end: string | null;
+  payment_provider: string;
+  payment_customer_ref: string | null;
+  payment_subscription_ref: string | null;
+  payment_request_ref: string | null;
+  payment_dashboard_url: string | null;
   stripe_customer_id: string | null;
   stripe_sub_id: string | null;
   stripe_customer_url: string | null;
@@ -255,6 +373,26 @@ export interface OwnerBillingAccountItem {
 export interface OwnerBillingAccountsResponse {
   items: OwnerBillingAccountItem[];
   total: number;
+}
+
+export interface OwnerBillingPaymentConfirmRequest {
+  org_id: string;
+  plan_code: string;
+  payment_ref: string;
+  customer_ref?: string | null;
+  payment_request_ref?: string | null;
+  current_period_end?: string | null;
+  seats?: number | null;
+}
+
+export interface OwnerBillingPaymentConfirmResponse {
+  ok: boolean;
+  org_id: string;
+  plan_code: string;
+  status: string;
+  payment_provider: string;
+  payment_subscription_ref: string | null;
+  current_period_end: string | null;
 }
 
 export interface OwnerRetentionConfig {
@@ -314,6 +452,10 @@ export function fetchOwnerHealth(signal?: AbortSignal): Promise<OwnerHealth> {
 
 export function fetchOwnerInfra(signal?: AbortSignal): Promise<InfraStats> {
   return ownerRequest<InfraStats>("/v1/owner/infra", { signal });
+}
+
+export function fetchOwnerMoneyPathHealth(signal?: AbortSignal): Promise<OwnerMoneyPathHealth> {
+  return ownerRequest<OwnerMoneyPathHealth>("/v1/owner/money-path-health", { signal });
 }
 
 export function fetchOwnerUsers(limit = 100, offset = 0): Promise<OwnerUsersResponse> {
@@ -396,6 +538,10 @@ export async function setMaintenanceMode(enabled: boolean, message?: string): Pr
 
 export function fetchOwnerPricing(): Promise<PricingConfigResponse> {
   return ownerRequest<PricingConfigResponse>("/v1/owner/pricing");
+}
+
+export function fetchOwnerPricingPlans(signal?: AbortSignal): Promise<OwnerPricingPlansResponse> {
+  return ownerRequest<OwnerPricingPlansResponse>("/v1/owner/pricing/plans", { signal });
 }
 
 export async function updateOwnerPricing(config: Record<string, unknown>): Promise<PricingConfigResponse> {
@@ -490,6 +636,15 @@ export function fetchOwnerBillingAccounts(
   return ownerRequest<OwnerBillingAccountsResponse>(`/v1/owner/billing/accounts${qs ? `?${qs}` : ""}`);
 }
 
+export function confirmOwnerSkydoPayment(
+  body: OwnerBillingPaymentConfirmRequest,
+): Promise<OwnerBillingPaymentConfirmResponse> {
+  return ownerRequest<OwnerBillingPaymentConfirmResponse>("/v1/owner/billing/payments/confirm", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function fetchPlatformLlmUsageSummary(signal?: AbortSignal): Promise<PlatformLlmUsageSummaryResponse> {
   return ownerRequest<PlatformLlmUsageSummaryResponse>("/v1/owner/platform-llm-usage", { signal });
 }
@@ -534,11 +689,37 @@ export async function deleteOwnerFeatureFlag(flagId: string): Promise<void> {
 
 export async function verifyOwnerToken(token: string): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/v1/owner/stats`, {
-      headers: { "x-zroky-admin-token": token },
+    const res = await fetch("/api/owner/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
       cache: "no-store",
+      credentials: "same-origin",
     });
-    return res.ok;
+    if (res.ok) {
+      setOwnerToken(token);
+      return true;
+    }
+    clearOwnerToken();
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyOwnerSession(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/owner/session", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (res.ok) {
+      setOwnerToken("active");
+      return true;
+    }
+    clearOwnerToken();
+    return false;
   } catch {
     return false;
   }

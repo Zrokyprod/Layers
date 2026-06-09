@@ -11,9 +11,10 @@ import json
 import logging
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session
 
@@ -33,9 +34,11 @@ from app.api.routes.issue_schemas import (
     IssueResolveRequest,
     IssueResponse,
 )
+from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, Project, ReplayJob, ReplayRun, ReplayRunTrace
 from app.db.session import get_db_session
+from app.services.discovery.sink import DISCOVERY_DETECTOR
 from app.services.goldens import (
     GoldenSetNameConflict,
     count_traces,
@@ -60,6 +63,7 @@ from app.services.replay_runs import (
 
 router = APIRouter(prefix="/v1/issues")
 logger = logging.getLogger(__name__)
+_RequestModel = TypeVar("_RequestModel", bound=BaseModel)
 
 _DEFAULT_LIMIT = 5
 _MAX_LIMIT = 100
@@ -99,6 +103,16 @@ def _optional_deploy_url(value: str | None) -> str | None:
     return text
 
 
+def _validated_body(model: type[_RequestModel], body: Mapping[str, Any]) -> _RequestModel:
+    try:
+        return model.model_validate(body or {})
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors(),
+        ) from exc
+
+
 def _severity_rank(severity: str | None) -> int:
     return {
         "critical": 4,
@@ -116,6 +130,12 @@ def _severity_rank_expr():
         (Anomaly.severity == "low", 1),
         else_=0,
     )
+
+
+def _customer_issue_conditions() -> list[Any]:
+    if get_settings().DISCOVERY_CUSTOMER_SURFACE_ENABLED:
+        return []
+    return [Anomaly.detector != DISCOVERY_DETECTOR]
 
 
 def _priority_score(issue: IssueProjection) -> float:
@@ -780,7 +800,7 @@ def list_issues(
             detail="status must be one of: open, resolved, ignored, all",
         )
 
-    conditions = [Anomaly.project_id == tenant_id]
+    conditions = [Anomaly.project_id == tenant_id, *_customer_issue_conditions()]
 
     if status_filter and status_filter != "all":
         anomaly_status = anomaly_status_from_public(status_filter)
@@ -879,7 +899,11 @@ def get_issue(
     db: Session = Depends(get_db_session),
 ) -> IssueResponse:
     issue = db.execute(
-        select(Anomaly).where(Anomaly.project_id == tenant_id, Anomaly.id == issue_id)
+        select(Anomaly).where(
+            Anomaly.project_id == tenant_id,
+            Anomaly.id == issue_id,
+            *_customer_issue_conditions(),
+        )
     ).scalar_one_or_none()
     if issue is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
@@ -888,7 +912,11 @@ def get_issue(
 
 def _load_anomaly_or_404(db: Session, *, project_id: str, issue_id: str) -> Anomaly:
     anomaly = db.execute(
-        select(Anomaly).where(Anomaly.project_id == project_id, Anomaly.id == issue_id)
+        select(Anomaly).where(
+            Anomaly.project_id == project_id,
+            Anomaly.id == issue_id,
+            *_customer_issue_conditions(),
+        )
     ).scalar_one_or_none()
     if anomaly is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
@@ -1214,13 +1242,18 @@ def _ci_gate_proof_from_run(run: ReplayRun) -> IssueCiGateProof:
 def promote_issue_golden_endpoint(
     request: Request,
     issue_id: str,
-    body: IssueGoldenPromotionRequest = Body(default_factory=IssueGoldenPromotionRequest),
+    body: dict[str, Any] = Body(default_factory=dict),
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
     _: None = Depends(require_entitlement("pilot.goldens_basic")),
 ) -> IssueGoldenPromotionResponse:
+    promotion_request = _validated_body(IssueGoldenPromotionRequest, body)
     anomaly = _load_anomaly_or_404(db, project_id=tenant_id, issue_id=issue_id)
-    trace = _promote_issue_to_golden(db, anomaly=anomaly, body=body)
+    trace = _promote_issue_to_golden(
+        db,
+        anomaly=anomaly,
+        body=promotion_request,
+    )
     return IssueGoldenPromotionResponse(
         issue=_build_issue_response(db, anomaly),
         golden=_golden_proof_from_trace(db, trace),
@@ -1236,14 +1269,15 @@ def promote_issue_golden_endpoint(
 def run_issue_ci_gate_endpoint(
     request: Request,
     issue_id: str,
-    body: IssueCiGateRequest = Body(default_factory=IssueCiGateRequest),
+    body: dict[str, Any] = Body(default_factory=dict),
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
     _: None = Depends(require_entitlement("pro.ci_gate_nonblocking")),
 ) -> IssueCiGateResponse:
+    ci_gate_request = _validated_body(IssueCiGateRequest, body)
     anomaly = _load_anomaly_or_404(db, project_id=tenant_id, issue_id=issue_id)
     issue = issue_projection_from_anomaly(anomaly)
-    if not issue.deploy_pr_url and not body.git_sha:
+    if not issue.deploy_pr_url and not ci_gate_request.git_sha:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Link a deploy PR or provide git_sha before running an issue CI gate.",
@@ -1256,24 +1290,28 @@ def run_issue_ci_gate_endpoint(
         body=IssueGoldenPromotionRequest(blocks_ci=True),
     )
 
-    replay_mode = body.replay_mode.strip() if body.replay_mode else None
+    replay_mode = ci_gate_request.replay_mode.strip() if ci_gate_request.replay_mode else None
     if replay_mode is not None and replay_mode not in VALID_REPLAY_MODES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="replay_mode must be one of: " + ", ".join(sorted(VALID_REPLAY_MODES)),
         )
 
-    pr_number = body.pr_number if body.pr_number is not None else _extract_pr_number(issue.deploy_pr_url)
+    pr_number = (
+        ci_gate_request.pr_number
+        if ci_gate_request.pr_number is not None
+        else _extract_pr_number(issue.deploy_pr_url)
+    )
     try:
         run = dispatch_replay_run(
             db,
             project_id=tenant_id,
             golden_set_id=trace.golden_set_id,
             trigger="github",
-            git_sha=body.git_sha,
-            branch_name=body.branch_name,
+            git_sha=ci_gate_request.git_sha,
+            branch_name=ci_gate_request.branch_name,
             pr_number=pr_number,
-            commit_message=body.commit_message,
+            commit_message=ci_gate_request.commit_message,
             replay_mode=replay_mode,
         )
     except ValueError as exc:
@@ -1335,6 +1373,7 @@ def update_issue_triage_endpoint(
     if "deploy_pr_url" in body:
         updates["deploy_pr_url"] = _optional_deploy_url(body.get("deploy_pr_url"))
 
+    _load_anomaly_or_404(db, project_id=tenant_id, issue_id=issue_id)
     updated = update_issue_triage(
         db,
         project_id=tenant_id,
@@ -1355,6 +1394,7 @@ def resolve_issue_endpoint(
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> IssueResponse:
+    _load_anomaly_or_404(db, project_id=tenant_id, issue_id=issue_id)
     resolved = resolve_issue(
         db,
         project_id=tenant_id,
@@ -1375,6 +1415,7 @@ def ignore_issue_endpoint(
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> IssueResponse:
+    _load_anomaly_or_404(db, project_id=tenant_id, issue_id=issue_id)
     ignored = ignore_issue(db, project_id=tenant_id, issue_id=issue_id)
     if ignored is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")

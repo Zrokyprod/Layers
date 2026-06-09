@@ -8,9 +8,10 @@ Endpoints:
     GET  /v1/auth/github/start    — redirect to GitHub OAuth
     GET  /v1/auth/github/callback — exchange code -> JWT
 """
+import hashlib
 import re
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -18,7 +19,7 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.identity import extract_bearer_token
@@ -52,6 +53,10 @@ _GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+_OAUTH_HANDOFF_KEY_PREFIX = "oauth_handoff:"
+_OAUTH_HANDOFF_TTL_SECONDS = 300
+_EMAIL_VERIFICATION_TOKEN_PREFIX = "sha256:"
+_EMAIL_VERIFICATION_TTL_SECONDS = 24 * 60 * 60
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +127,48 @@ class RefreshTokenRequest(BaseModel):
         return token
 
 
+class OAuthHandoffRequest(BaseModel):
+    handoff_id: str
+
+    @field_validator("handoff_id")
+    @classmethod
+    def validate_handoff_id(cls, value: str) -> str:
+        handoff_id = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{20,160}", handoff_id):
+            raise ValueError("Invalid OAuth handoff id.")
+        return handoff_id
+
+
+class SessionHandoffRequest(BaseModel):
+    access_token: str
+    refresh_token: str
+    access_expires_in_seconds: int
+    refresh_expires_in_seconds: int
+    token_type: str = "bearer"
+    user_id: str | None = None
+    email: str | None = None
+    email_verified: bool = True
+
+    @field_validator("access_token", "refresh_token")
+    @classmethod
+    def validate_token(cls, value: str) -> str:
+        token = value.strip()
+        if not token:
+            raise ValueError("Token is required.")
+        return token
+
+    @field_validator("access_expires_in_seconds", "refresh_expires_in_seconds")
+    @classmethod
+    def validate_expiry(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Token expiry must be positive.")
+        return value
+
+
+class SessionHandoffResponse(BaseModel):
+    handoff_id: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -168,6 +215,116 @@ def _issue_token(user: User) -> AuthTokenResponse:
     )
 
 
+def _store_oauth_handoff(token: AuthTokenResponse) -> str:
+    handoff_id = secrets.token_urlsafe(32)
+    token_store.set_with_ttl(
+        f"{_OAUTH_HANDOFF_KEY_PREFIX}{handoff_id}",
+        token.model_dump_json(),
+        _OAUTH_HANDOFF_TTL_SECONDS,
+    )
+    return handoff_id
+
+
+def _consume_oauth_handoff(handoff_id: str) -> AuthTokenResponse:
+    key = f"{_OAUTH_HANDOFF_KEY_PREFIX}{handoff_id}"
+    raw = token_store.get(key)
+    if raw is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OAuth handoff.",
+        )
+
+    token_store.delete(key)
+    try:
+        return AuthTokenResponse.model_validate_json(raw)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OAuth handoff.",
+        ) from exc
+
+
+def _email_verification_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _store_email_verification_token(token: str, *, now: datetime | None = None) -> str:
+    issued_at = int((now or datetime.now(UTC)).timestamp())
+    return f"{_EMAIL_VERIFICATION_TOKEN_PREFIX}{issued_at}:{_email_verification_digest(token)}"
+
+
+def _email_verification_token_filter(token: str):
+    digest = _email_verification_digest(token)
+    return or_(
+        User.email_verification_token == f"{_EMAIL_VERIFICATION_TOKEN_PREFIX}{digest}",
+        User.email_verification_token == token,
+        User.email_verification_token.like(f"{_EMAIL_VERIFICATION_TOKEN_PREFIX}%:{digest}"),
+    )
+
+
+def _email_verification_token_expired(stored_token: str | None, *, now: datetime | None = None) -> bool:
+    if not stored_token or not stored_token.startswith(_EMAIL_VERIFICATION_TOKEN_PREFIX):
+        return False
+    parts = stored_token.split(":", 2)
+    if len(parts) != 3:
+        return False
+    try:
+        issued_at = datetime.fromtimestamp(int(parts[1]), tz=UTC)
+    except (TypeError, ValueError, OSError):
+        return True
+    return (now or datetime.now(UTC)) - issued_at > timedelta(seconds=_EMAIL_VERIFICATION_TTL_SECONDS)
+
+
+def _validated_session_handoff_token(body: SessionHandoffRequest, db: Session) -> AuthTokenResponse:
+    secret = _require_auth_secret()
+    try:
+        access_claims = decode_session_token(body.access_token, secret, expected_use="access")
+        refresh_claims = decode_session_token(body.refresh_token, secret, expected_use="refresh")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session handoff tokens.",
+        ) from exc
+
+    access_user_id = str(access_claims.get("user_id") or "").strip()
+    refresh_user_id = str(refresh_claims.get("user_id") or "").strip()
+    if not access_user_id or access_user_id != refresh_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session handoff tokens.",
+        )
+
+    if body.user_id and body.user_id != access_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session handoff tokens.",
+        )
+
+    user = db.execute(select(User).where(User.id == access_user_id)).scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session handoff tokens.",
+        )
+
+    if token_store.get(f"jwt_blacklisted_user:{access_user_id}"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="All sessions for this user have been revoked.",
+        )
+
+    return AuthTokenResponse(
+        access_token=body.access_token,
+        refresh_token=body.refresh_token,
+        access_expires_in_seconds=body.access_expires_in_seconds,
+        refresh_expires_in_seconds=body.refresh_expires_in_seconds,
+        token_type=body.token_type,
+        user_id=access_user_id,
+        email=user.email,
+        email_verified=user.email_verified_at is not None,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Register
 # ---------------------------------------------------------------------------
@@ -193,7 +350,7 @@ def register(request: Request, body: RegisterRequest, db: Annotated[Session, Dep
         subject=f"email:{body.email}",
         email=body.email,
         password_hash=hash_password(body.password),
-        email_verification_token=verification_token,
+        email_verification_token=_store_email_verification_token(verification_token),
     )
     db.add(user)
     db.flush()  # get user.id without committing
@@ -247,8 +404,14 @@ def verify_email(
     token: Annotated[str, Query()],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, str]:
+    normalized_token = token.strip()
+    if not normalized_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link.",
+        )
     user = db.execute(
-        select(User).where(User.email_verification_token == token)
+        select(User).where(_email_verification_token_filter(normalized_token)).limit(1)
     ).scalar_one_or_none()
     if user is None:
         raise HTTPException(
@@ -257,6 +420,14 @@ def verify_email(
         )
     if user.email_verified_at is not None:
         return {"detail": "Email already verified."}
+    if _email_verification_token_expired(user.email_verification_token):
+        user.email_verification_token = None
+        db.add(user)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link.",
+        )
     user.email_verified_at = datetime.now(UTC)
     user.email_verification_token = None
     db.commit()
@@ -280,7 +451,7 @@ def resend_verification(
     if not user.email:
         raise HTTPException(status_code=400, detail="No email on this account.")
     token = secrets.token_urlsafe(48)
-    user.email_verification_token = token
+    user.email_verification_token = _store_email_verification_token(token)
     db.commit()
     settings = get_settings()
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
@@ -375,6 +546,27 @@ def refresh_token(
 
 
 # ---------------------------------------------------------------------------
+# OAuth handoff
+# ---------------------------------------------------------------------------
+
+@router.post("/session/handoff", response_model=SessionHandoffResponse)
+@limiter.limit("30/minute")
+def create_session_handoff(
+    request: Request,
+    body: SessionHandoffRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> SessionHandoffResponse:
+    token = _validated_session_handoff_token(body, db)
+    return SessionHandoffResponse(handoff_id=_store_oauth_handoff(token))
+
+
+@router.post("/oauth/handoff", response_model=AuthTokenResponse)
+@limiter.limit("30/minute")
+def complete_oauth_handoff(request: Request, body: OAuthHandoffRequest) -> AuthTokenResponse:
+    return _consume_oauth_handoff(body.handoff_id)
+
+
+# ---------------------------------------------------------------------------
 # Forgot password
 # ---------------------------------------------------------------------------
 
@@ -440,6 +632,7 @@ def reset_password(
     user.password_hash = hash_password(body.new_password)
     db.add(user)
     db.commit()
+    token_store.revoke_all_user_tokens(user.id)
     # Consume the token so it cannot be reused.
     token_store.delete(f"pw_reset:{body.token}")
 
@@ -687,14 +880,19 @@ def google_oauth_start() -> RedirectResponse:
     }
     return RedirectResponse(url=f"{_GOOGLE_AUTH_URL}?{urlencode(params)}")
 
-@router.get("/google/callback")
+@router.get(
+    "/google/callback",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+    responses={status.HTTP_302_FOUND: {"description": "Redirect to dashboard OAuth handoff callback."}},
+)
 @limiter.limit("10/minute")
 def google_oauth_callback(
     request: Request,
     code: Annotated[str, Query()],
     state: Annotated[str, Query()],
     db: Annotated[Session, Depends(get_db)],
-) -> AuthTokenResponse:
+) -> RedirectResponse:
     settings = get_settings()
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(
@@ -762,15 +960,10 @@ def google_oauth_callback(
     db.commit()
     db.refresh(user)
 
-    # Redirect to frontend with tokens
-    settings = get_settings()
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
-    token = _issue_token(user)
+    handoff_id = _store_oauth_handoff(_issue_token(user))
     params = urlencode({
-        "access_token": token.access_token,
-        "refresh_token": token.refresh_token,
-        "expires_in": token.access_expires_in_seconds,
-        "user_id": token.user_id,
+        "handoff_id": handoff_id,
     })
     return RedirectResponse(url=f"{frontend_url}/auth/oauth/callback?{params}", status_code=302)
 
@@ -882,7 +1075,7 @@ def _get_current_user(authorization: str | None = None, db: Session | None = Non
     token = authorization[len("Bearer "):]
     secret = _require_auth_secret()
     try:
-        payload = decode_session_token(token, secret)
+        payload = decode_session_token(token, secret, expected_use="access")
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
     jti = str(payload.get("jti") or "").strip()

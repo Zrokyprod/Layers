@@ -1,0 +1,120 @@
+{
+  "project_id": "dogfood_discovery_project",
+  "discovery_enabled": true,
+  "customer_surface": {
+    "enabled": false,
+    "blocked_reason": "real_trace_precision_gate_required"
+  },
+  "baselines": {
+    "total": 2,
+    "active": 1,
+    "learning": 1,
+    "suspect": 0,
+    "superseded": 0,
+    "items": [
+      {
+        "id": "2f163fa0-bdd2-477e-a96e-38e90581c535",
+        "behavior_key": "project=dogfood_discovery_project|agent=billing-agent|workflow=invoice_question",
+        "agent_name": "billing-agent",
+        "workflow_name": "invoice_question",
+        "specificity": "exact",
+        "version": 1,
+        "status": "learning",
+        "sample_count": 50,
+        "distinct_days": 2,
+        "error_rate": 0.0,
+        "window_start_at": "2026-06-02T09:00:00+00:00",
+        "window_end_at": "2026-06-03T15:13:00+00:00",
+        "updated_at": "2026-06-05T22:58:43.552589+00:00"
+      },
+      {
+        "id": "0b7c92b7-3fae-4bd4-ae50-aaa1c911256b",
+        "behavior_key": "project=dogfood_discovery_project|agent=refund-support-agent|workflow=refund_status_check",
+        "agent_name": "refund-support-agent",
+        "workflow_name": "refund_status_check",
+        "specificity": "exact",
+        "version": 1,
+        "status": "active",
+        "sample_count": 404,
+        "distinct_days": 5,
+        "error_rate": 0.029703,
+        "window_start_at": "2026-06-01T09:00:00+00:00",
+        "window_end_at": "2026-06-06T16:53:00+00:00",
+        "updated_at": "2026-06-05T22:58:42.945554+00:00"
+      }
+    ]
+  },
+  "scan_state": {
+    "last_scanned_call_id": "synthetic_fail_latency_cost_0007",
+    "last_scanned_call_created_at": "2026-06-06T16:53:00+00:00",
+    "updated_at": "2026-06-10T00:00:00+00:00"
+  },
+  "surfaced_anomalies": {
+    "total_in_page": 3,
+    "items": [
+      {
+        "id": "d7481c36-a9e7-41ce-8b11-2c5b6960b236",
+        "fingerprint": "495a4665db1a29fcb990346b9cd4dce6635228f2d3e729d5278d59ec7d7dabcf",
+        "severity": "low",
+        "status": "open",
+        "occurrence_count": 1,
+        "first_seen_at": "2026-06-10T00:00:00+00:00",
+        "last_seen_at": "2026-06-10T00:00:00+00:00",
+        "sample_call_ids": [
+          "synthetic_fail_missing_tool_0000"
+        ],
+        "primary_dimension": "missing_critical_tool",
+        "summary": "On refund_status_check, trace synthetic_fail_missing_tool_0000 deviated: missing critical tool(s): render_refund_answer (97%), get_refund_status (97%); rare output shape text:short; output length z-score 4.2.",
+        "confidence": 1.0,
+        "anomaly_score": 0.9801,
+        "corroboration": [
+          "missing critical tool(s): render_refund_answer (97%), get_refund_status (97%)",
+          "rare output shape text:short",
+          "output length z-score 4.2"
+        ],
+        "discovery_signature": "9abfd3e7b55e482c49415bea"
+      },
+      {
+        "id": "390df468-59e5-4d26-872c-7c2af1559e7b",
+        "fingerprint": "d12dd969313197b0e8bf4ac16718f4679b2627cbc7de66c65a247a46ba99c4f5",
+        "severity": "low",
+        "status": "open",
+        "occurrence_count": 1,
+        "first_seen_at": "2026-06-10T00:00:00+00:00",
+        "last_seen_at": "2026-06-10T00:00:00+00:00",
+        "sample_call_ids": [
+          "synthetic_fail_outcome_mismatch_0000"
+        ],
+        "primary_dimension": "outcome_mismatch",
+        "summary": "On refund_status_check, trace synthetic_fail_outcome_mismatch_0000 deviated: outcome changed from baseline success to failure.",
+        "confidence": 0.9667,
+        "anomaly_score": 1.0,
+        "corroboration": [
+          "outcome changed from baseline success to failure"
+        ],
+        "discovery_signature": "c93df077a6b7ab195817760c"
+      },
+      {
+        "id": "2123050d-8bf9-412e-a83e-7cd88ba40eb3",
+        "fingerprint": "bbe4c632c0fa60a5fb934f60403d92098ce8b46de2bf872458a0e89a157ddb36",
+        "severity": "low",
+        "status": "open",
+        "occurrence_count": 1,
+        "first_seen_at": "2026-06-10T00:00:00+00:00",
+        "last_seen_at": "2026-06-10T00:00:00+00:00",
+        "sample_call_ids": [
+          "synthetic_fail_schema_break_0000"
+        ],
+        "primary_dimension": "output_shape",
+        "summary": "On refund_status_check, trace synthetic_fail_schema_break_0000 deviated: rare output shape json:{unexpected}; output length z-score 3.7.",
+        "confidence": 0.8533,
+        "anomaly_score": 0.8548,
+        "corroboration": [
+          "rare output shape json:{unexpected}",
+          "output length z-score 3.7"
+        ],
+        "discovery_signature": "46a6c4f206dff87ffbc6e942"
+      }
+    ]
+  }
+}

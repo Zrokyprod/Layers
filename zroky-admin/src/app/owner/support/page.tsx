@@ -1,17 +1,30 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  useOwnerMoneyPathHealth,
   useOwnerSupportTickets,
   useOwnerSupportTicket,
   useReplyOwnerSupportTicket,
   useUpdateOwnerSupportTicket,
 } from "@/lib/hooks";
-import type { OwnerSupportTicketItem } from "@/lib/owner-api";
+import type { OwnerMoneyPathTenantRow, OwnerSupportTicketItem } from "@/lib/owner-api";
 
 const STATUS_OPTIONS = ["open", "waiting", "resolved", "closed"];
 const PRIORITY_OPTIONS = ["low", "normal", "high", "urgent"];
+const ACTION_LABELS: Record<string, string> = {
+  review_blocked_ci: "Review blocked CI",
+  restore_capture: "Restore capture",
+  connect_provider_key: "Connect provider key",
+  review_replay_quota: "Review replay quota",
+  run_replay: "Run replay",
+  promote_golden: "Promote Golden",
+  run_ci_gate: "Run CI gate",
+  continue_triage: "Continue triage",
+  monitor: "Monitor",
+};
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString();
@@ -29,6 +42,95 @@ function TicketBadge({ ticket }: { ticket: OwnerSupportTicketItem }) {
     <span className={`owner-ops-badge owner-ops-badge-${ticketTone(ticket)}`}>
       {ticket.priority} - {ticket.status}
     </span>
+  );
+}
+
+function fmtCount(value: number): string {
+  return value.toLocaleString();
+}
+
+function actionLabel(action: string): string {
+  return ACTION_LABELS[action] ?? action.replaceAll("_", " ");
+}
+
+function evidenceTone(tenant: OwnerMoneyPathTenantRow): "ok" | "warn" | "danger" | "neutral" {
+  if (tenant.blocking_ci_failures_7d > 0 || tenant.provider_key_status.state === "missing") return "danger";
+  if (tenant.open_issue_count > 0 || ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)) return "warn";
+  if (tenant.next_owner_action === "monitor") return "ok";
+  return "neutral";
+}
+
+function ProductEvidenceBadge({
+  tenant,
+  error,
+}: {
+  tenant: OwnerMoneyPathTenantRow | null;
+  error: string;
+}) {
+  if (error) {
+    return <span className="owner-ops-badge owner-ops-badge-danger">Evidence unavailable</span>;
+  }
+  if (!tenant) {
+    return <span className="owner-ops-badge owner-ops-badge-neutral">No tenant proof</span>;
+  }
+  return (
+    <span className={`owner-ops-badge owner-ops-badge-${evidenceTone(tenant)}`}>
+      {actionLabel(tenant.next_owner_action)}
+    </span>
+  );
+}
+
+function SupportProductEvidencePanel({
+  tenant,
+  error,
+}: {
+  tenant: OwnerMoneyPathTenantRow | null;
+  error: string;
+}) {
+  if (error) {
+    return <div className="alert-strip alert-strip-error">{error}</div>;
+  }
+  if (!tenant) {
+    return (
+      <section className="owner-product-evidence-card">
+        <div>
+          <span className="owner-section-label">Regression firewall evidence</span>
+          <p className="hint">No money-path health row exists for this ticket tenant.</p>
+        </div>
+        <Link href="/owner/money-path" className="btn btn-soft">Money path</Link>
+      </section>
+    );
+  }
+
+  return (
+    <section className="owner-product-evidence-card">
+      <div className="owner-product-evidence-head">
+        <div>
+          <span className="owner-section-label">Regression firewall evidence</span>
+          <strong>{tenant.project_name}</strong>
+          <p className="hint">{tenant.project_id} - {tenant.plan_code}</p>
+        </div>
+        <ProductEvidenceBadge tenant={tenant} error="" />
+      </div>
+      <div className="owner-product-evidence-grid">
+        <div><span>Open issues</span><strong>{fmtCount(tenant.open_issue_count)}</strong></div>
+        <div><span>Replay</span><strong>{fmtCount(tenant.replay_run_count_7d)}</strong></div>
+        <div><span>Goldens</span><strong>{fmtCount(tenant.golden_trace_count)}</strong></div>
+        <div><span>CI blocks</span><strong>{fmtCount(tenant.blocking_ci_failures_7d)}</strong></div>
+      </div>
+      <div className="owner-product-evidence-meta">
+        <span>Provider: {tenant.provider_key_status.state} ({tenant.provider_key_status.active_provider_count})</span>
+        <span>
+          Replay quota: {tenant.replay_quota_status.limit === -1
+            ? `${fmtCount(tenant.replay_quota_status.used)} used`
+            : `${fmtCount(tenant.replay_quota_status.used)} / ${fmtCount(tenant.replay_quota_status.limit)}`}
+        </span>
+      </div>
+      <div className="owner-product-evidence-links">
+        <Link href={`/owner/projects/${tenant.project_id}`} className="btn btn-soft">Project detail</Link>
+        <Link href="/owner/money-path" className="btn btn-soft">Money path</Link>
+      </div>
+    </section>
   );
 }
 
@@ -50,14 +152,24 @@ export default function OwnerSupportPage() {
     assigned_to: assignedTo || undefined,
     limit: 100,
   });
+  const moneyPathQuery = useOwnerMoneyPathHealth();
   const updateTicket = useUpdateOwnerSupportTicket();
   const replyTicket = useReplyOwnerSupportTicket();
 
   const tickets = useMemo(() => ticketsQuery.data?.items ?? [], [ticketsQuery.data?.items]);
+  const tenantsByProjectId = useMemo(() => {
+    const map = new Map<string, OwnerMoneyPathTenantRow>();
+    for (const tenant of moneyPathQuery.data?.tenants ?? []) {
+      map.set(tenant.project_id, tenant);
+    }
+    return map;
+  }, [moneyPathQuery.data?.tenants]);
   const selected = useMemo(
     () => tickets.find((ticket) => ticket.ticket_id === selectedId) ?? tickets[0] ?? null,
     [selectedId, tickets],
   );
+  const selectedTenant = selected?.tenant_id ? tenantsByProjectId.get(selected.tenant_id) ?? null : null;
+  const moneyPathError = moneyPathQuery.error?.message ?? "";
   const detailQuery = useOwnerSupportTicket(selected?.ticket_id ?? null);
   const detail = detailQuery.data ?? null;
 
@@ -115,14 +227,22 @@ export default function OwnerSupportPage() {
       <div className="owner-page-header">
         <div>
           <h2 className="owner-page-title">Support</h2>
-          <p className="hint">Ticket triage, assignment, priority, status and owner replies.</p>
+          <p className="hint">Ticket triage with tenant money-path evidence, assignment, priority, status and owner replies.</p>
         </div>
-        <button className="btn btn-soft" onClick={() => ticketsQuery.refetch()} disabled={ticketsQuery.isFetching}>
+        <button
+          className="btn btn-soft"
+          onClick={() => {
+            void ticketsQuery.refetch();
+            void moneyPathQuery.refetch();
+          }}
+          disabled={ticketsQuery.isFetching || moneyPathQuery.isFetching}
+        >
           Refresh
         </button>
       </div>
 
       {ticketsQuery.error ? <div className="alert-strip alert-strip-error">{ticketsQuery.error.message}</div> : null}
+      {moneyPathError ? <div className="alert-strip alert-strip-error">{moneyPathError}</div> : null}
       {actionMsg ? (
         <div className={actionMsg.includes("failed") || actionMsg.includes("HTTP") ? "alert-strip alert-strip-error" : "alert-strip"}>
           {actionMsg}
@@ -166,16 +286,16 @@ export default function OwnerSupportPage() {
           <table className="owner-table">
             <thead>
               <tr>
-                {["Ticket", "Priority", "Assignee", "Tenant", "Updated"].map((header) => (
+                {["Ticket", "Priority", "Product Evidence", "Assignee", "Tenant", "Updated"].map((header) => (
                   <th key={header} className="owner-th">{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {ticketsQuery.isLoading ? (
-                <tr><td colSpan={5} className="owner-td owner-td-empty">Loading tickets...</td></tr>
+                <tr><td colSpan={6} className="owner-td owner-td-empty">Loading tickets...</td></tr>
               ) : tickets.length === 0 ? (
-                <tr><td colSpan={5} className="owner-td owner-td-empty">No tickets match the current filters.</td></tr>
+                <tr><td colSpan={6} className="owner-td owner-td-empty">No tickets match the current filters.</td></tr>
               ) : (
                 tickets.map((ticket) => (
                   <tr
@@ -188,6 +308,12 @@ export default function OwnerSupportPage() {
                       <div className="hint">{ticket.category ?? "general"} - {ticket.message_count} messages</div>
                     </td>
                     <td className="owner-td"><TicketBadge ticket={ticket} /></td>
+                    <td className="owner-td">
+                      <ProductEvidenceBadge
+                        tenant={ticket.tenant_id ? tenantsByProjectId.get(ticket.tenant_id) ?? null : null}
+                        error={moneyPathError}
+                      />
+                    </td>
                     <td className="owner-td owner-td-truncate">{ticket.assigned_to ?? "Unassigned"}</td>
                     <td className="owner-td-mono">{ticket.tenant_id ?? "tenant:unknown"}</td>
                     <td className="owner-td owner-td-ts">{formatDate(ticket.updated_at)}</td>
@@ -215,6 +341,8 @@ export default function OwnerSupportPage() {
                   <span>{formatDate(selected.created_at)}</span>
                 </div>
               </div>
+
+              <SupportProductEvidencePanel tenant={selectedTenant} error={moneyPathError} />
 
               <label className="field">
                 <span className="field-label">Assignee</span>

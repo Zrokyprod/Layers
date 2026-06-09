@@ -269,8 +269,8 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         call_type="chat",
         provider=str(bad["provider"]),
         model=str(bad["model"]),
-        status="success",
-        error_code=None,
+        status="failed",
+        error_code=str(scenario["failure_code"]),
         latency_ms=float(timing["bad_call_latency_ms"]),
         input_tokens=118,
         output_tokens=39,
@@ -347,6 +347,23 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
             "deploy_pr_url": "https://github.com/acme/refund-agent/pull/42",
             "updated_at": base_time.isoformat(),
         },
+    }
+    source_context = {
+        "kind": "issue",
+        "id": str(ids["issue"]),
+        "issue_id": str(ids["issue"]),
+        "call_id": str(ids["bad_call"]),
+        "title": "Refund status tool skipped",
+        "reason": diagnosis_result["failure_reason"],
+        "failure_code": str(scenario["failure_code"]),
+        "severity": "critical",
+        "affected_agent": str(scenario["agent_name"]),
+        "affected_workflow": str(scenario["workflow_name"]),
+        "occurrence_count": 17,
+        "last_seen_at": (base_time + timedelta(minutes=8)).isoformat(),
+        "origin": "issue",
+        "confidence": 0.99,
+        "discovery_signature": str(scenario["prompt_fingerprint"]),
     }
     detector = "TOOL_SELECTION_FAILURE"
     anomaly = Anomaly(
@@ -494,6 +511,13 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         "verification_status": "verified_fix",
         "requested_replay_mode": "mocked-tool",
         "replay_mode": "mocked-tool",
+        "source_kind": "issue",
+        "source_id": str(ids["issue"]),
+        "source_issue_id": str(ids["issue"]),
+        "source_call_id": str(ids["bad_call"]),
+        "source_issue_failure_code": str(scenario["failure_code"]),
+        "source_issue_severity": "critical",
+        "source_context": source_context,
         "candidate_prompt_override": fixed["candidate_prompt"],
         "candidate_model_override": fixed["model"],
         "output_diff": output_diff,
@@ -599,6 +623,17 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
     }
     ci_summary = {
         **ci_report,
+        "source_kind": "issue_ci_gate",
+        "source_id": str(ids["issue"]),
+        "source_issue_id": str(ids["issue"]),
+        "source_call_id": str(ids["bad_call"]),
+        "source_issue_failure_code": str(scenario["failure_code"]),
+        "source_issue_severity": "critical",
+        "source_context": {
+            **source_context,
+            "kind": "issue_ci_gate",
+            "origin": "ci_gate",
+        },
         "report": ci_report,
         "pr_comment_markdown": (
             "<!-- zroky-regression-ci -->\n\n"
@@ -609,7 +644,7 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
     ci_run = ReplayRun(
         id=str(ids["regression_ci_run"]),
         project_id=project_id,
-        golden_set_id=str(ids["regression_ci_set"]),
+        golden_set_id=str(ids["golden_set"]),
         trigger="github",
         git_sha=str(ci_report["git_sha"]),
         status="fail",
@@ -655,6 +690,7 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         "user_id": user_id,
         "membership_id": str(ids["membership"]),
         "api_key_id": str(ids.get("api_key", "demo-api-key-refund-money-path")),
+        "api_key_prefix": api_key.key_prefix,
         "invitation_id": str(ids.get("invitation", "demo-invite-refund-money-path")),
         "call_id": str(ids["bad_call"]),
         "diagnosis_id": str(ids["diagnosis"]),

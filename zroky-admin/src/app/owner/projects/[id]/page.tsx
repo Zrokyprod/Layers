@@ -2,18 +2,35 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { AlertTriangle, ArrowRight, GitBranch, KeyRound, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   useClearProjectRateLimit,
+  useOwnerMoneyPathHealth,
   useOwnerProject,
   useProjectMembers,
   useProjectRateLimit,
   useSetProjectRateLimit,
   useSetProjectStatus,
 } from "@/lib/hooks";
+import type { OwnerMoneyPathTenantRow } from "@/lib/owner-api";
 
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+type Tone = "ok" | "warn" | "danger" | "neutral";
+
+const ACTION_LABELS: Record<string, string> = {
+  review_blocked_ci: "Review blocked CI",
+  restore_capture: "Restore capture",
+  connect_provider_key: "Connect provider key",
+  review_replay_quota: "Review replay quota",
+  run_replay: "Run replay",
+  promote_golden: "Promote Golden",
+  run_ci_gate: "Run CI gate",
+  continue_triage: "Continue triage",
+  monitor: "Monitor",
+};
+
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div
       style={{
@@ -33,11 +50,230 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(n);
 
+function fmtCount(value: number): string {
+  return value.toLocaleString();
+}
+
+function fmtDate(value: string | null): string {
+  if (!value) return "No recent capture";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Invalid timestamp";
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function actionLabel(action: string): string {
+  return ACTION_LABELS[action] ?? action.replaceAll("_", " ");
+}
+
+function stateTone(state: string): Tone {
+  if (["passed", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
+  if (["failed", "down", "error", "exceeded", "blocked", "missing"].includes(state)) return "danger";
+  if (["partial", "running", "near_limit", "disabled", "not_configured"].includes(state)) return "warn";
+  return "neutral";
+}
+
+function actionTone(action: string): Tone {
+  if (["review_blocked_ci", "restore_capture"].includes(action)) return "danger";
+  if (["connect_provider_key", "review_replay_quota", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
+  if (action === "monitor") return "ok";
+  return "neutral";
+}
+
+function loopTone(tenant: OwnerMoneyPathTenantRow, step: string): Tone {
+  if (step === "capture") return tenant.captures_24h > 0 ? "ok" : "danger";
+  if (step === "issue") return tenant.open_issue_count > 0 ? "danger" : "ok";
+  if (step === "replay") {
+    if (tenant.verified_replay_count_7d > 0) return "ok";
+    if (tenant.replay_run_count_7d > 0) return "warn";
+    return tenant.open_issue_count > 0 ? "danger" : "neutral";
+  }
+  if (step === "golden") {
+    if (tenant.golden_trace_count > 0) return "ok";
+    return tenant.verified_replay_count_7d > 0 ? "warn" : "neutral";
+  }
+  if (step === "ci") {
+    if (tenant.blocking_ci_failures_7d > 0) return "danger";
+    if (tenant.ci_run_count_7d > 0) return "ok";
+    return tenant.golden_trace_count > 0 ? "warn" : "neutral";
+  }
+  return "neutral";
+}
+
+function quotaText(tenant: OwnerMoneyPathTenantRow): string {
+  if (tenant.replay_quota_status.limit === -1) return `${fmtCount(tenant.replay_quota_status.used)} used`;
+  return `${fmtCount(tenant.replay_quota_status.used)} / ${fmtCount(tenant.replay_quota_status.limit)}`;
+}
+
+function StatusBadge({ value, tone }: { value: string; tone?: Tone }) {
+  const resolved = tone ?? stateTone(value);
+  return <span className={`owner-money-badge owner-money-badge-${resolved}`}>{value.replaceAll("_", " ")}</span>;
+}
+
+function EvidenceItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="owner-money-proof-item">
+      <span>{label}</span>
+      <code>{value}</code>
+    </div>
+  );
+}
+
+function TenantLoopEvidence({ tenant }: { tenant: OwnerMoneyPathTenantRow }) {
+  const steps = [
+    { id: "capture", label: "Capture", value: `${fmtCount(tenant.captures_24h)} in 24h`, detail: fmtDate(tenant.last_capture_at) },
+    { id: "issue", label: "Issue", value: `${fmtCount(tenant.open_issue_count)} open`, detail: tenant.open_issue_count ? "triage required" : "no open issue" },
+    { id: "replay", label: "Replay", value: `${fmtCount(tenant.replay_run_count_7d)} runs`, detail: `${fmtCount(tenant.verified_replay_count_7d)} verified` },
+    { id: "golden", label: "Golden", value: `${fmtCount(tenant.golden_trace_count)} active`, detail: tenant.golden_trace_count ? "CI eligible" : "no active trace" },
+    { id: "ci", label: "CI Gate", value: `${fmtCount(tenant.ci_run_count_7d)} runs`, detail: `${fmtCount(tenant.blocking_ci_failures_7d)} blocked` },
+  ];
+
+  return (
+    <div className="owner-money-tenant-loop">
+      {steps.map((step) => (
+        <div key={step.id} className={`owner-money-tenant-step owner-money-badge-${loopTone(tenant, step.id)}`}>
+          <span>{step.label}</span>
+          <strong>{step.value}</strong>
+          <small>{step.detail}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProductIntelligencePanel({
+  tenant,
+  error,
+  loading,
+}: {
+  tenant: OwnerMoneyPathTenantRow | null;
+  error: string;
+  loading: boolean;
+}) {
+  if (error) {
+    return (
+      <div className="panel owner-project-intel-panel">
+        <div className="panel-header">
+          Regression Firewall
+          <span className="panel-header-note">Backend money-path health unavailable</span>
+        </div>
+        <div className="owner-project-intel-body">
+          <div className="alert-strip alert-strip-error">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !tenant) {
+    return (
+      <div className="panel owner-project-intel-panel">
+        <div className="panel-header">Regression Firewall</div>
+        <div className="owner-project-intel-empty">
+          <ShieldCheck size={20} aria-hidden="true" />
+          <p>Loading tenant money-path evidence...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tenant) {
+    return (
+      <div className="panel owner-project-intel-panel">
+        <div className="panel-header">
+          Regression Firewall
+          <span className="panel-header-note">No backend row for this tenant</span>
+        </div>
+        <div className="owner-project-intel-empty">
+          <AlertTriangle size={20} aria-hidden="true" />
+          <p>No regression-firewall health row exists for this tenant.</p>
+          <Link href="/owner/money-path" className="btn btn-soft">
+            <GitBranch size={15} aria-hidden="true" />
+            Money path
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const providerValue = `${tenant.provider_key_status.state} (${tenant.provider_key_status.active_provider_count})`;
+
+  return (
+    <div className="panel owner-project-intel-panel">
+      <div className="panel-header">
+        <span>Regression Firewall</span>
+        <StatusBadge value={actionLabel(tenant.next_owner_action)} tone={actionTone(tenant.next_owner_action)} />
+      </div>
+      <div className="owner-project-intel-body">
+        <div className="owner-project-intel-grid">
+          <div className="owner-project-intel-card">
+            <span className="owner-stat-label">Open Issues</span>
+            <strong>{fmtCount(tenant.open_issue_count)}</strong>
+            <p>{tenant.open_issue_count ? "Failure groups still need replay proof." : "No open issue reported by backend."}</p>
+          </div>
+          <div className="owner-project-intel-card">
+            <span className="owner-stat-label">Verified Replay</span>
+            <strong>{fmtCount(tenant.verified_replay_count_7d)}</strong>
+            <p>{fmtCount(tenant.replay_run_count_7d)} total replay run(s) in 7 days.</p>
+          </div>
+          <div className="owner-project-intel-card">
+            <span className="owner-stat-label">Goldens</span>
+            <strong>{fmtCount(tenant.golden_trace_count)}</strong>
+            <p>{tenant.golden_trace_count ? "Active Golden trace available for CI." : "No active Golden trace yet."}</p>
+          </div>
+          <div className="owner-project-intel-card">
+            <span className="owner-stat-label">CI Gate</span>
+            <strong>{fmtCount(tenant.ci_run_count_7d)}</strong>
+            <p>{fmtCount(tenant.blocking_ci_failures_7d)} blocking failure(s) in 7 days.</p>
+          </div>
+        </div>
+
+        <TenantLoopEvidence tenant={tenant} />
+
+        <div className="owner-project-intel-proof">
+          <div className="owner-money-proof-grid">
+            <EvidenceItem label="Project Plan" value={tenant.plan_code} />
+            <EvidenceItem label="Last Capture" value={fmtDate(tenant.last_capture_at)} />
+            <EvidenceItem label="Provider Keys" value={providerValue} />
+            <EvidenceItem label="Replay Quota" value={quotaText(tenant)} />
+          </div>
+          <div className="owner-project-intel-actions">
+            <div className="owner-project-intel-action-copy">
+              <KeyRound size={16} aria-hidden="true" />
+              <span>
+                Provider key is <StatusBadge value={tenant.provider_key_status.state} /> and replay quota is{" "}
+                <StatusBadge value={tenant.replay_quota_status.state} />.
+              </span>
+            </div>
+            <div className="owner-project-intel-action-links">
+              <Link href="/owner/money-path" className="btn btn-soft">
+                <GitBranch size={15} aria-hidden="true" />
+                Money path
+              </Link>
+              <Link href="/owner/pricing" className="btn btn-soft">
+                Entitlements
+              </Link>
+              <Link href="/owner/rate-limits" className="btn btn-soft">
+                Rate limits
+                <ArrowRight size={14} aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const projectQuery = useOwnerProject(id);
   const membersQuery = useProjectMembers(id);
   const rateLimitQuery = useProjectRateLimit(id);
+  const moneyPathQuery = useOwnerMoneyPathHealth();
   const toggleMutation = useSetProjectStatus();
   const setRateLimitMutation = useSetProjectRateLimit(id);
   const clearRateLimitMutation = useClearProjectRateLimit(id);
@@ -49,8 +285,13 @@ export default function ProjectDetailPage() {
 
   const project = projectQuery.data ?? null;
   const members = membersQuery.data?.members ?? [];
+  const tenantHealth = useMemo(
+    () => moneyPathQuery.data?.tenants.find((tenant) => tenant.project_id === id) ?? null,
+    [id, moneyPathQuery.data?.tenants],
+  );
   const loading = projectQuery.isLoading || membersQuery.isLoading;
   const error = projectQuery.error?.message ?? membersQuery.error?.message ?? "";
+  const moneyPathError = moneyPathQuery.error?.message ?? "";
 
   useEffect(() => {
     const overrides = rateLimitQuery.data?.overrides;
@@ -108,7 +349,7 @@ export default function ProjectDetailPage() {
   if (!project) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div className="owner-page owner-project-detail-page">
       {/* Breadcrumb */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
         <Link href="/owner/projects" style={{ color: "var(--accent)", textDecoration: "none" }}>Projects</Link>
@@ -181,6 +422,12 @@ export default function ProjectDetailPage() {
           </div>
         ))}
       </div>
+
+      <ProductIntelligencePanel
+        tenant={tenantHealth}
+        error={moneyPathError}
+        loading={moneyPathQuery.isLoading}
+      />
 
       {/* Project Info */}
       <div className="panel">

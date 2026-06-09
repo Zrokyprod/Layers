@@ -39,6 +39,7 @@ import {
   shortSha,
   statusBadgeClass,
   statusLabel,
+  summaryUrl,
 } from "./ci-utils";
 
 type CiStatusFilter = "all" | "blocked" | "not_verified" | "running" | "pass";
@@ -99,6 +100,7 @@ function searchableText(run: ReplayRunItem, detail: RegressionCIRunDetailRespons
     statusLabel(status),
     runTitle(run, detail),
     runMeta(run, detail),
+    summaryUrl(run, detail),
     replayProofLabel(run, detail),
   ]
     .filter(Boolean)
@@ -444,6 +446,7 @@ export default function CiGatesPage() {
                   <th>Failed flows</th>
                   <th>Replay proof</th>
                   <th>Git SHA</th>
+                  <th>Summary URL</th>
                   <th>Completed</th>
                   <th>Action</th>
                 </tr>
@@ -463,6 +466,11 @@ export default function CiGatesPage() {
                       <td>{failedFlowDisplay(run, detail)}</td>
                       <td><ReplayProofBadge run={run} detail={detail} /></td>
                       <td><span className="ci-sha">{shortSha(run.git_sha)}</span></td>
+                      <td>
+                        <Link href={`/ci-gates/${run.id}`} className="ci-summary-url">
+                          {summaryUrl(run, detail)}
+                        </Link>
+                      </td>
                       <td>{formatDateTime(run.completed_at ?? run.started_at ?? run.created_at)}</td>
                       <td>
                         <Link href={`/ci-gates/${run.id}`} className="btn btn-soft btn-sm">

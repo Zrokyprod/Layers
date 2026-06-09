@@ -31,7 +31,10 @@ function CallbackContent() {
         if (cancelled) {
           return;
         }
-        storeAuthSession(auth);
+        await storeAuthSession(auth);
+        if (cancelled) {
+          return;
+        }
         router.replace(getPostAuthRedirectPath("/home"));
         router.refresh();
       } catch (callbackError) {

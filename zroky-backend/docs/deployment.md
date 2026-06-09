@@ -37,7 +37,7 @@ python -m uvicorn app.main:app --reload --port 8000
 | `DB_POOL_TIMEOUT` | 30 s | Seconds to wait for a connection |
 | `DB_POOL_RECYCLE` | 1800 s | Close connections older than this |
 | `DB_STATEMENT_TIMEOUT_MS` | 30 000 | Kill long-running queries (Postgres only) |
-| `SECURITY_CONTACT_EMAIL` | `security@zroky.ai` | Published in `/.well-known/security.txt` |
+| `SECURITY_CONTACT_EMAIL` | `security@zroky.com` | Published in `/.well-known/security.txt` |
 | `APP_DOMAIN` | — | Used in `security.txt` policy URL |
 
 ## Production checklist

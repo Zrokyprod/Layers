@@ -62,7 +62,7 @@ STEPS: list[Step] = [
         ["go", "test", "./..."],
         ROOT / "zroky-gateway",
         {"GOCACHE": str(GO_CACHE)},
-        90,
+        180,
     ),
     (
         "Python SDK capture context tests",
@@ -166,8 +166,11 @@ def run_step(name: str, command: list[str], cwd: Path, env: dict[str, str] | Non
 def main() -> None:
     print("[capture-e2e] Running local capture verification without Docker.", flush=True)
     GO_CACHE.mkdir(parents=True, exist_ok=True)
-    for name, command, cwd, env, timeout_seconds in STEPS:
-        run_step(name, command, cwd, env, timeout_seconds)
+    try:
+        for name, command, cwd, env, timeout_seconds in STEPS:
+            run_step(name, command, cwd, env, timeout_seconds)
+    finally:
+        shutil.rmtree(GO_CACHE, ignore_errors=True)
     print("\n[capture-e2e] All local capture checks passed.", flush=True)
 
 

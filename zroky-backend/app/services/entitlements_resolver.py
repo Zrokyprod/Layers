@@ -89,6 +89,10 @@ _MEMORY_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
 # Source precedence — higher number wins.
 _SOURCE_RANK: dict[str, int] = {"plan": 1, "trial": 2, "override": 3}
 
+_ENTITLEMENT_ELIGIBLE_SUBSCRIPTION_STATUSES: frozenset[str] = frozenset(
+    {"active", "trialing", "past_due"}
+)
+
 
 # ── public API ──────────────────────────────────────────────────────────────
 
@@ -195,15 +199,17 @@ def invalidate_all() -> None:
 
 
 def get_plan_code(db: Session, org_id: str) -> str:
-    """Return the org's current plan_code, defaulting to 'free' when
-    no `subscriptions` row exists. Used by the 402 response builder
-    to populate the `X-Zroky-Plan-Hint` header."""
+    """Return the org's entitlement-bearing plan_code.
+
+    Payment-request shells (`incomplete`) and ended subscriptions
+    (`canceled`, `unpaid`) are deliberately treated as free so plan gates
+    and quota checks cannot be unlocked by starting checkout or after a
+    cancellation clears paid entitlements.
+    """
     sub = db.execute(
         select(Subscription).where(Subscription.org_id == org_id)
     ).scalar_one_or_none()
-    if sub is None or not sub.plan_code:
-        return DEFAULT_PLAN_CODE
-    return sub.plan_code
+    return _plan_code_for_entitlements(sub)
 
 
 # ── internals ───────────────────────────────────────────────────────────────
@@ -251,8 +257,9 @@ def _resolve_from_db(db: Session, org_id: str) -> dict[str, Any]:
     sub = db.execute(
         select(Subscription).where(Subscription.org_id == org_id)
     ).scalar_one_or_none()
-    plan_code = (sub.plan_code if sub else DEFAULT_PLAN_CODE) or DEFAULT_PLAN_CODE
+    plan_code = _plan_code_for_entitlements(sub)
     template = PLAN_ENTITLEMENTS.get(plan_code) or PLAN_ENTITLEMENTS[DEFAULT_PLAN_CODE]
+    plan_source_allowed = _subscription_entitlement_eligible(sub)
 
     rows = db.execute(
         select(Entitlement).where(Entitlement.org_id == org_id)
@@ -274,6 +281,8 @@ def _resolve_from_db(db: Session, org_id: str) -> dict[str, Any]:
         rank = _SOURCE_RANK.get(row.source, 0)
         if rank == 0:
             continue
+        if row.source == "plan" and not plan_source_allowed:
+            continue
         existing = best.get(row.key)
         if existing is not None and existing[0] >= rank:
             continue
@@ -285,6 +294,20 @@ def _resolve_from_db(db: Session, org_id: str) -> dict[str, Any]:
     for key, (_rank, value) in best.items():
         resolved[key] = value
     return resolved
+
+
+def _subscription_entitlement_eligible(sub: Subscription | None) -> bool:
+    if sub is None:
+        return False
+    status = (sub.status or "").strip().lower()
+    return status in _ENTITLEMENT_ELIGIBLE_SUBSCRIPTION_STATUSES
+
+
+def _plan_code_for_entitlements(sub: Subscription | None) -> str:
+    if not _subscription_entitlement_eligible(sub):
+        return DEFAULT_PLAN_CODE
+    plan_code = (sub.plan_code or "").strip().lower()
+    return plan_code if plan_code in PLAN_ENTITLEMENTS else DEFAULT_PLAN_CODE
 
 
 __all__ = [

@@ -284,7 +284,7 @@ _RSS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title>Zroky Provider Drift Watch</title>
-    <link>https://zroky.ai/drift</link>
+    <link>https://zroky.com/drift</link>
     <description>Silent-update alerts for major LLM providers.</description>
     <language>en-us</language>
     <lastBuildDate>{build_date}</lastBuildDate>
@@ -296,9 +296,9 @@ _RSS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 _ATOM_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Zroky Provider Drift Watch</title>
-  <link href="https://zroky.ai/drift" />
+  <link href="https://zroky.com/drift" />
   <updated>{updated}</updated>
-  <id>tag:zroky.ai,2026:/drift</id>
+  <id>tag:zroky.com,2026:/drift</id>
 {entries}
 </feed>
 """
@@ -313,7 +313,7 @@ def _iso8601(dt: datetime) -> str:
 
 
 def _rss_item(a: ProviderDriftAlert) -> str:
-    url = f"https://zroky.ai/drift?alert={a.id}"
+    url = f"https://zroky.com/drift?alert={a.id}"
     return f"""    <item>
       <title>{a.headline}</title>
       <link>{url}</link>
@@ -325,11 +325,11 @@ def _rss_item(a: ProviderDriftAlert) -> str:
 
 
 def _atom_entry(a: ProviderDriftAlert) -> str:
-    url = f"https://zroky.ai/drift?alert={a.id}"
+    url = f"https://zroky.com/drift?alert={a.id}"
     return f"""  <entry>
     <title>{a.headline}</title>
     <link href="{url}" />
-    <id>tag:zroky.ai,2026:{a.id}</id>
+    <id>tag:zroky.com,2026:{a.id}</id>
     <updated>{_iso8601(a.created_at)}</updated>
     <summary>Model: {a.model_id} | Category: {a.category} | Severity: {a.severity}</summary>
   </entry>"""

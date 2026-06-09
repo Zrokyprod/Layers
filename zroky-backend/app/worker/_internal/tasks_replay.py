@@ -125,11 +125,26 @@ def process_replay_run(
                     run = _finalize_error(
                         session, run, reason="real_llm_entitlement_missing"
                     )
+                    summary_payload = json.loads(run.summary_json) if run.summary_json else {}
+                    try:
+                        from app.services.notification_dispatch import dispatch_replay_slack_alert
+
+                        dispatch_replay_slack_alert(
+                            db=session,
+                            tenant_id=tenant_id,
+                            run_id=run.id,
+                            status=run.status,
+                            trigger=run.trigger,
+                            git_sha=run.git_sha,
+                            summary=summary_payload,
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.debug("process_replay_run.slack_alert_failed", exc_info=True)
                     return {
                         "status": run.status,
                         "tenant_id": tenant_id,
                         "run_id": run_id,
-                        "summary": json.loads(run.summary_json) if run.summary_json else {},
+                        "summary": summary_payload,
                     }
                 else:
                     use_live_resolver = True
@@ -155,6 +170,7 @@ def process_replay_run(
                 else default_resolver
             )
 
+            run_was_pending = run.status == "pending"
             run = execute_replay_run(
                 session,
                 project_id=tenant_id,
@@ -202,11 +218,28 @@ def process_replay_run(
                         tenant_id, run_id,
                     )
 
+            summary_payload = json.loads(run.summary_json) if run.summary_json else {}
+            if run_was_pending:
+                try:
+                    from app.services.notification_dispatch import dispatch_replay_slack_alert
+
+                    dispatch_replay_slack_alert(
+                        db=session,
+                        tenant_id=tenant_id,
+                        run_id=run.id,
+                        status=run.status,
+                        trigger=run.trigger,
+                        git_sha=run.git_sha,
+                        summary=summary_payload,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.debug("process_replay_run.slack_alert_failed", exc_info=True)
+
             return {
                 "status": run.status,
                 "tenant_id": tenant_id,
                 "run_id": run_id,
-                "summary": json.loads(run.summary_json) if run.summary_json else {},
+                "summary": summary_payload,
             }
         except Exception as exc:
             session.rollback()

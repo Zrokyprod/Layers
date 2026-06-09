@@ -3,7 +3,7 @@ from collections.abc import Callable
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.provisioning import has_provisioning_access
+from app.api.dependencies.provisioning import has_strict_provisioning_access
 from app.auth.identity import build_identity_context, decode_jwt_claims, extract_bearer_token
 from app.db.session import get_db_session
 from app.services.membership import VALID_PROJECT_ROLES, get_membership
@@ -26,7 +26,7 @@ def require_project_role(min_role: str) -> Callable:
         request: Request,
         db: Session = Depends(get_db_session),
     ) -> None:
-        if has_provisioning_access(request):
+        if has_strict_provisioning_access(request):
             return
 
         token = extract_bearer_token(request)

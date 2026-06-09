@@ -205,6 +205,16 @@ export function runMeta(run: ReplayRunItem, detail?: RegressionCIRunDetailRespon
   );
 }
 
+export function summaryUrl(run: Pick<ReplayRunItem, "id">, detail?: RegressionCIRunDetailResponse | null): string {
+  return (
+    stringField(detail?.report, "summary_url") ??
+    stringField(detail?.report, "summaryUrl") ??
+    stringField(detail?.report, "details_url") ??
+    stringField(detail?.report, "detailsUrl") ??
+    `/v1/regression-ci/runs/${detail?.run_id ?? run.id}`
+  );
+}
+
 export function failedProtectedFlows(run: ReplayRunItem, detail?: RegressionCIRunDetailResponse | null): string[] {
   const clusters = detail?.report?.clusters;
   if (Array.isArray(clusters)) {

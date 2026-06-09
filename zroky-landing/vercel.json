@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/auth/:path*", "destination": "/index.html" },
+    { "source": "/docs/:path*", "destination": "/index.html" },
+    { "source": "/features", "destination": "/index.html" },
+    { "source": "/pricing", "destination": "/index.html" },
+    { "source": "/changelog", "destination": "/index.html" }
+  ]
+}

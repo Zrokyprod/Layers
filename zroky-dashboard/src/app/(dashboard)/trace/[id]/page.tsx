@@ -104,6 +104,10 @@ function latencyLabel(value: number | null | undefined): string {
   return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(2)}s`;
 }
 
+function traceDateLabel(value: string | null | undefined): string {
+  return formatDateTime(value?.replace(/\+00:00Z$/, "Z"));
+}
+
 function statusLabel(trace: TraceListItem): string {
   return trace.has_failure ? "Failed" : "Success";
 }
@@ -374,7 +378,7 @@ export default function TraceDetailPage() {
         <MetricCard label="Cost" value={cost > 0 ? formatUsd(cost) : DASH} />
         <MetricCard label="Model" value={modelLabel(traceItem, rootNode)} />
         <MetricCard label="Spans / steps" value={formatCount(spans)} />
-        <MetricCard label="Created" value={formatDateTime(traceItem.started_at)} />
+        <MetricCard label="Created" value={traceDateLabel(traceItem.started_at)} />
       </section>
 
       <section className="trace-detail-layout" aria-label="Trace investigation">

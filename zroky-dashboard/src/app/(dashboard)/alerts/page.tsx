@@ -42,14 +42,14 @@ const channelOptions: AlertChannel[] = ["email", "slack", "browser", "terminal"]
 const QUICK_CATEGORIES = QUICK_FILTER_CATEGORIES;
 
 const SEVERITY_STRIPE: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#ea580c",
-  medium: "#ca8a04",
-  low: "#16a34a",
+  critical: "var(--dashboard-danger)",
+  high: "var(--dashboard-accent)",
+  medium: "var(--dashboard-warning)",
+  low: "var(--dashboard-success)",
 };
 
 function severityStripe(severity: string): string {
-  return SEVERITY_STRIPE[severity.toLowerCase()] ?? "#64748b";
+  return SEVERITY_STRIPE[severity.toLowerCase()] ?? "var(--dashboard-muted)";
 }
 
 function EvidenceDisplay({ evidence }: { evidence: AlertItemResponse["evidence"] }) {

@@ -1,7 +1,7 @@
 import secrets
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.services.digest_engine import (
     monday_of,
     serialize_digest,
 )
+from app.services.discovery.read_model import get_discovery_project_status
 
 router = APIRouter(prefix="/internal")
 
@@ -211,6 +212,27 @@ def generate_digest_internal(
         "week_start": week_start.isoformat(),
         "task_id": async_result.id,
     }
+
+
+@router.get("/discovery/status", include_in_schema=False)
+def discovery_status_internal(
+    project_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    set_db_tenant_context(db, project_id)
+    return get_discovery_project_status(
+        db,
+        project_id=project_id,
+        anomaly_limit=limit,
+    )
 
 
 # ---------------------------------------------------------------------------

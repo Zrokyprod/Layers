@@ -4,13 +4,16 @@ import {
   anonymizeOwnerUser,
   clearRateLimitOverrides,
   clearProjectRateLimit,
+  confirmOwnerSkydoPayment,
   deleteOwnerUser,
   fetchAuditLog,
   fetchOwnerBillingSummary,
   fetchOwnerBillingAccounts,
   fetchOwnerHealth,
   fetchOwnerInfra,
+  fetchOwnerMoneyPathHealth,
   fetchOwnerPricing,
+  fetchOwnerPricingPlans,
   fetchOwnerProject,
   fetchOwnerProjects,
   fetchOwnerRetention,
@@ -32,6 +35,7 @@ import {
   updateOwnerPricing,
   updateOwnerSupportTicket,
 } from "./owner-api";
+import type { OwnerBillingPaymentConfirmRequest } from "./owner-api";
 
 export function useOwnerHealth() {
   return useQuery({
@@ -51,6 +55,13 @@ export function useOwnerStats() {
   return useQuery({
     queryKey: ["owner", "stats"],
     queryFn: () => fetchOwnerStats(),
+  });
+}
+
+export function useOwnerMoneyPathHealth() {
+  return useQuery({
+    queryKey: ["owner", "money-path-health"],
+    queryFn: () => fetchOwnerMoneyPathHealth(),
   });
 }
 
@@ -282,6 +293,13 @@ export function useOwnerPricing() {
   });
 }
 
+export function useOwnerPricingPlans() {
+  return useQuery({
+    queryKey: ["owner", "pricing", "plans"],
+    queryFn: ({ signal }) => fetchOwnerPricingPlans(signal),
+  });
+}
+
 export function useOwnerRetention() {
   return useQuery({
     queryKey: ["owner", "retention"],
@@ -301,5 +319,16 @@ export function useUpdateOwnerPricing() {
   return useMutation({
     mutationFn: (config: Record<string, unknown>) => updateOwnerPricing(config),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["owner", "pricing"] }),
+  });
+}
+
+export function useConfirmOwnerSkydoPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: OwnerBillingPaymentConfirmRequest) => confirmOwnerSkydoPayment(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["owner", "billing"] });
+      queryClient.invalidateQueries({ queryKey: ["owner", "money-path-health"] });
+    },
   });
 }

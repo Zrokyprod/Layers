@@ -12,7 +12,14 @@ from typing import Any
 import httpx
 from sqlalchemy.orm import Session
 
-from app.services.slack_integration import get_slack_install
+from app.services.slack_integration import decrypt_slack_webhook_url, get_slack_install
+from app.services.slack_judgment import (
+    build_ci_gate_failed_alert_payload,
+    build_judgment_alert_payload,
+    build_new_issue_alert_payload,
+    build_replay_failed_alert_payload,
+    build_replay_verified_alert_payload,
+)
 from app.services.teams_integration import get_teams_install, decrypt_teams_webhook_url
 
 logger = logging.getLogger(__name__)
@@ -62,6 +69,186 @@ def _post_sync(url: str, payload: dict[str, Any]) -> bool:
         return False
 
 
+def dispatch_slack_payload_to_tenant_channel(
+    db: Session,
+    tenant_id: str,
+    payload: dict[str, Any],
+    *,
+    event_name: str,
+) -> bool:
+    """Deliver one Slack-only event payload to the tenant install."""
+    try:
+        slack_install = get_slack_install(db, tenant_id)
+        if not slack_install or not slack_install.webhook_url:
+            return False
+        webhook_url = decrypt_slack_webhook_url(slack_install.webhook_url)
+        if not webhook_url:
+            return False
+        delivered = _post_sync(webhook_url, payload)
+        if delivered:
+            logger.info(
+                "notification_dispatch: Slack event delivered tenant=%s event=%s",
+                tenant_id,
+                event_name,
+            )
+        return delivered
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "notification_dispatch: Slack event lookup failed tenant=%s event=%s: %s",
+            tenant_id,
+            event_name,
+            exc,
+        )
+        return False
+
+
+def dispatch_new_issue_slack_alert(
+    db: Session,
+    *,
+    tenant_id: str,
+    issue_id: str,
+    failure_code: str,
+    severity: str | None,
+    agent_name: str | None,
+    diagnosis_id: str | None,
+    call_id: str | None,
+) -> bool:
+    return dispatch_slack_payload_to_tenant_channel(
+        db,
+        tenant_id,
+        build_new_issue_alert_payload(
+            issue_id=issue_id,
+            failure_code=failure_code,
+            severity=severity,
+            agent_name=agent_name,
+            diagnosis_id=diagnosis_id,
+            call_id=call_id,
+        ),
+        event_name="new_issue",
+    )
+
+
+def dispatch_replay_slack_alert(
+    db: Session,
+    *,
+    tenant_id: str,
+    run_id: str,
+    status: str,
+    trigger: str | None,
+    git_sha: str | None,
+    summary: dict[str, Any],
+) -> bool:
+    run_status = str(status or "").strip().lower()
+    if summary.get("verified_fix") is True:
+        return dispatch_slack_payload_to_tenant_channel(
+            db,
+            tenant_id,
+            build_replay_verified_alert_payload(
+                run_id=run_id,
+                source_issue_id=_optional_str(summary.get("source_issue_id")),
+                source_call_id=_optional_str(summary.get("source_call_id")),
+                failure_code=_optional_str(summary.get("source_issue_failure_code")),
+                verification_status=_optional_str(summary.get("verification_status")),
+                git_sha=git_sha,
+            ),
+            event_name="replay_verified",
+        )
+
+    if run_status not in {"fail", "error"}:
+        return False
+
+    is_ci_gate = str(trigger or "").strip().lower() == "github"
+    if is_ci_gate:
+        return dispatch_slack_payload_to_tenant_channel(
+            db,
+            tenant_id,
+            build_ci_gate_failed_alert_payload(
+                run_id=run_id,
+                status=run_status,
+                git_sha=git_sha,
+                source_issue_id=_optional_str(summary.get("source_issue_id")),
+                failure_code=_optional_str(summary.get("source_issue_failure_code")),
+                regressed_count=_optional_int(summary.get("regressed_count") or summary.get("fail_count")),
+                error_count=_optional_int(summary.get("error_count")),
+                trace_count=_optional_int(summary.get("trace_count") or summary.get("trace_count_executed")),
+                regression_rate=_optional_float(summary.get("regression_rate")),
+                threshold=_optional_float(summary.get("threshold")),
+            ),
+            event_name="ci_gate_failed",
+        )
+
+    return dispatch_slack_payload_to_tenant_channel(
+        db,
+        tenant_id,
+        build_replay_failed_alert_payload(
+            run_id=run_id,
+            status=run_status,
+            source_issue_id=_optional_str(summary.get("source_issue_id")),
+            source_call_id=_optional_str(summary.get("source_call_id")),
+            failure_code=_optional_str(summary.get("source_issue_failure_code")),
+            verification_status=_optional_str(summary.get("verification_status")),
+            fail_count=_optional_int(summary.get("fail_count")),
+            error_count=_optional_int(summary.get("error_count")),
+            git_sha=git_sha,
+        ),
+        event_name="replay_failed",
+    )
+
+
+def dispatch_ci_gate_failed_slack_alert(
+    db: Session,
+    *,
+    tenant_id: str,
+    run_id: str,
+    status: str,
+    git_sha: str | None,
+    report: dict[str, Any],
+) -> bool:
+    run_status = str(status or report.get("verdict") or "").strip().lower()
+    if run_status not in {"fail", "error"}:
+        return False
+    return dispatch_slack_payload_to_tenant_channel(
+        db,
+        tenant_id,
+        build_ci_gate_failed_alert_payload(
+            run_id=run_id,
+            status=run_status,
+            git_sha=git_sha,
+            regressed_count=_optional_int(report.get("regressed_count")),
+            error_count=_optional_int(report.get("error_count")),
+            trace_count=_optional_int(report.get("trace_count")),
+            regression_rate=_optional_float(report.get("regression_rate")),
+            threshold=_optional_float(report.get("threshold")),
+        ),
+        event_name="ci_gate_failed",
+    )
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def dispatch_alert_to_tenant_channels(
     db: Session,
     tenant_id: str,
@@ -87,16 +274,23 @@ def dispatch_alert_to_tenant_channels(
     try:
         slack_install = get_slack_install(db, tenant_id)
         if slack_install and slack_install.webhook_url:
-            result["slack"] = _post_sync(
-                slack_install.webhook_url,
-                {"text": msg},
-            )
-            if result["slack"]:
-                logger.info(
-                    "notification_dispatch: Slack delivered tenant=%s categories=%s",
-                    tenant_id,
-                    categories,
+            webhook_url = decrypt_slack_webhook_url(slack_install.webhook_url)
+            if webhook_url:
+                result["slack"] = _post_sync(
+                    webhook_url,
+                    build_judgment_alert_payload(
+                        text=msg,
+                        categories=categories,
+                        agent_name=agent_name,
+                        diagnosis_id=diagnosis_id,
+                    ),
                 )
+                if result["slack"]:
+                    logger.info(
+                        "notification_dispatch: Slack delivered tenant=%s categories=%s",
+                        tenant_id,
+                        categories,
+                    )
     except Exception as exc:  # noqa: BLE001
         logger.error("notification_dispatch: Slack lookup failed tenant=%s: %s", tenant_id, exc)
 

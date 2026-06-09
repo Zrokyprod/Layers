@@ -9,6 +9,7 @@ import {
   Cpu,
   Flag,
   Gauge,
+  GitBranch,
   Home,
   KeyRound,
   LogOut,
@@ -24,8 +25,7 @@ import {
 
 import {
   clearOwnerToken,
-  getOwnerToken,
-  setOwnerToken,
+  verifyOwnerSession,
   verifyOwnerToken,
 } from "@/lib/owner-api";
 
@@ -40,8 +40,9 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<OwnerNavIt
   {
     label: "Operate",
     items: [
-      { href: "/owner", label: "Overview", icon: Home, description: "Platform snapshot" },
-      { href: "/owner/ops", label: "Ops", icon: Gauge, description: "Daily command queue" },
+      { href: "/owner", label: "Overview", icon: Home, description: "Regression firewall health" },
+      { href: "/owner/money-path", label: "Money Path", icon: GitBranch, description: "Capture to CI proof" },
+      { href: "/owner/ops", label: "Ops", icon: Gauge, description: "Founder operating queue" },
       { href: "/owner/infrastructure", label: "Infrastructure", icon: ServerCog, description: "Workers and queues" },
       { href: "/owner/support", label: "Support", icon: MessageSquare, description: "Tickets and replies" },
     ],
@@ -87,12 +88,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
 
   // Check if stored token is still valid on mount
   useEffect(() => {
-    const stored = getOwnerToken();
-    if (!stored) {
-      setAuthed(false);
-      return;
-    }
-    verifyOwnerToken(stored).then((ok) => setAuthed(ok));
+    verifyOwnerSession().then((ok) => setAuthed(ok));
   }, []);
 
   const handleLogin = useCallback(
@@ -102,8 +98,8 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
       setLoading(true);
       const ok = await verifyOwnerToken(tokenInput.trim());
       if (ok) {
-        setOwnerToken(tokenInput.trim());
         setAuthed(true);
+        setTokenInput("");
       } else {
         setError("Invalid token. Check your PROVISIONING_TOKEN.");
       }
@@ -135,7 +131,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
           <div className="owner-gate-header">
             <div className="owner-gate-logo">Z</div>
             <h1 className="auth-heading">Owner Dashboard</h1>
-            <p className="auth-sub">Enter your provisioning token to continue</p>
+            <p className="auth-sub">Enter your provisioning token to open the owner control plane</p>
           </div>
           <form onSubmit={handleLogin} className="auth-form">
             <div className="field">
@@ -171,8 +167,8 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
         <div className="owner-topbar-brand owner-sidebar-brand">
           <div className="owner-logo">Z</div>
           <div>
-            <span className="owner-brand-name">Zroky Admin</span>
-            <span className="owner-brand-sub">Founder console</span>
+            <span className="owner-brand-name">Zroky Owner</span>
+            <span className="owner-brand-sub">Owner control plane</span>
           </div>
         </div>
 
@@ -206,7 +202,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
             </div>
             <div>
               <strong>Owner session</strong>
-              <span>Provisioning token</span>
+              <span>Provisioning-token access</span>
             </div>
           </div>
           <button className="owner-signout-btn" onClick={handleLogout}>
@@ -219,7 +215,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
       <section className="owner-main">
         <header className="owner-topbar">
           <div>
-            <p className="owner-topbar-kicker">Zroky Admin</p>
+            <p className="owner-topbar-kicker">Zroky Owner</p>
             <h1>{currentPage(pathname).label}</h1>
             <p>{currentPage(pathname).description}</p>
           </div>

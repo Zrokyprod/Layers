@@ -13,6 +13,7 @@ from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, ReplayJob, Repl
 from app.services.anomalies import VALID_DETECTORS, compute_fingerprint
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.services.discovery.sink import DISCOVERY_DETECTOR
 from app.services.entitlements import seed_plan_entitlements
 from app.services.entitlements_resolver import invalidate_all
 
@@ -323,6 +324,88 @@ def test_issue_detail_keeps_same_product_projection(client_ctx) -> None:
     assert body["replay_coverage_status"] == "not_covered"
     assert body["evidence_traces"][0]["evidence_summary"] == "refund lookup called before validating order id"
     assert body["priority_score"] > 0
+
+
+def test_discovery_behavioral_drift_hidden_from_customer_issues_by_default(client_ctx) -> None:
+    client, session_local = client_ctx
+    project_id = "proj-discovery-hidden"
+
+    with session_local() as session:
+        _seed_issue(
+            session,
+            project_id=project_id,
+            issue_id="issue-schema-visible",
+            failure_code="SCHEMA_VIOLATION",
+            severity="high",
+            occurrence_count=5,
+            blast_radius_usd=1.25,
+            sample_call_id=None,
+        )
+        _seed_issue(
+            session,
+            project_id=project_id,
+            issue_id="issue-discovery-hidden",
+            failure_code=DISCOVERY_DETECTOR,
+            severity="high",
+            occurrence_count=99,
+            blast_radius_usd=12.0,
+            sample_call_id=None,
+            evidence={"summary": "critical tool went missing against baseline"},
+        )
+        session.commit()
+
+    response = client.get("/v1/issues", headers={PROJECT_HEADER: project_id})
+    assert response.status_code == 200
+    ids = [item["id"] for item in response.json()["items"]]
+    assert ids == ["issue-schema-visible"]
+
+    detail = client.get(
+        "/v1/issues/issue-discovery-hidden",
+        headers={PROJECT_HEADER: project_id},
+    )
+    assert detail.status_code == 404
+
+    triage = client.patch(
+        "/v1/issues/issue-discovery-hidden/triage",
+        headers={PROJECT_HEADER: project_id},
+        json={"assigned_to": "Maya"},
+    )
+    assert triage.status_code == 404
+
+
+def test_discovery_behavioral_drift_can_be_enabled_for_customer_issues(
+    client_ctx,
+    monkeypatch,
+) -> None:
+    client, session_local = client_ctx
+    project_id = "proj-discovery-visible"
+    monkeypatch.setenv("DISCOVERY_CUSTOMER_SURFACE_ENABLED", "true")
+    get_settings.cache_clear()
+
+    with session_local() as session:
+        _seed_issue(
+            session,
+            project_id=project_id,
+            issue_id="issue-discovery-visible",
+            failure_code=DISCOVERY_DETECTOR,
+            severity="high",
+            occurrence_count=4,
+            blast_radius_usd=2.0,
+            sample_call_id=None,
+            evidence={"summary": "critical tool went missing against baseline"},
+        )
+        session.commit()
+
+    response = client.get("/v1/issues", headers={PROJECT_HEADER: project_id})
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == ["issue-discovery-visible"]
+
+    detail = client.get(
+        "/v1/issues/issue-discovery-visible",
+        headers={PROJECT_HEADER: project_id},
+    )
+    assert detail.status_code == 200
+    assert detail.json()["failure_code"] == DISCOVERY_DETECTOR
 
 
 def test_issue_triage_update_persists_assignment_and_deploy_link(client_ctx) -> None:

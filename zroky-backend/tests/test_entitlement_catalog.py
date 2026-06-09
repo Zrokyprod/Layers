@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +16,7 @@ from app.services.entitlement_catalog import (
     InvalidPlanCodeError,
     canonical_plan_code,
     get_catalog_entry,
+    load_pricing_contract,
     resolve_plan_entitlements,
     resolve_plan_limits,
     resolve_plan_template,
@@ -106,6 +108,46 @@ def test_catalog_entries_have_exact_required_key_sets(plan_code: str) -> None:
 @pytest.mark.parametrize("plan_code", CANONICAL_PLAN_CODES)
 def test_default_limits(plan_code: str) -> None:
     assert resolve_plan_limits(plan_code) == EXPECTED_LIMITS[plan_code]
+
+
+def test_pricing_contract_matches_backend_enforcement() -> None:
+    contract = load_pricing_contract()
+    plans = {plan["code"]: plan for plan in contract["plans"]}
+
+    assert tuple(plans) == CANONICAL_PLAN_CODES
+
+    for plan_code in CANONICAL_PLAN_CODES:
+        plan = plans[plan_code]
+        entry = get_catalog_entry(plan_code)
+        pricing = plan["pricing"]
+        enforcement = plan["enforcement"]
+
+        assert enforcement["limits"] == entry.limits
+        assert enforcement["entitlements"] == entry.entitlements
+        assert enforcement["compatibility"] == entry.compatibility
+        assert pricing["calls_per_month"] == entry.limits["max_calls_per_month"]
+        assert pricing["retention_days"] == entry.limits["retention_days"]
+        assert pricing["replay_credits"] == entry.compatibility["replay.monthly_runs"]
+        assert pricing["golden_traces"] == entry.limits["max_golden_traces"]
+        assert pricing["golden_sets"] == entry.compatibility["goldens.max_sets"]
+        assert pricing["non_blocking_ci"] == entry.entitlements[
+            "pro.ci_gate_nonblocking"
+        ]
+        assert pricing["blocking_ci"] == entry.entitlements["pro.ci_gate_blocking"]
+        assert pricing["provider_key_vault"] == entry.entitlements[
+            "enterprise.provider_key_vault"
+        ]
+
+
+def test_packaged_pricing_contract_matches_shared_source() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    repo_root = backend_root.parent
+    shared = repo_root / "api-contracts" / "pricing-plans.json"
+    packaged = backend_root / "api-contracts" / "pricing-plans.json"
+
+    assert json.loads(packaged.read_text(encoding="utf-8")) == json.loads(
+        shared.read_text(encoding="utf-8")
+    )
 
 
 def test_default_boolean_entitlements_by_tier() -> None:

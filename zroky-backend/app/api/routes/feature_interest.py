@@ -7,8 +7,8 @@ Two routers exported from this file:
                       Always mounted.
 
   • `admin_router`  — owner surface at `/v1/admin/feature-interest/*`.
-                      Requires `X-Provisioning-Token` (or admin JWT)
-                      via `require_provisioning_access`. Always mounted.
+                      Requires owner provisioning credentials (or admin JWT)
+                      via `require_owner_provisioning_access`. Always mounted.
                       Founder Console (Module 11) will consume these
                       endpoints from the zroky-admin app.
 
@@ -25,7 +25,9 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, sta
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.provisioning import require_provisioning_access
+from app.api.dependencies.provisioning import (
+    require_owner_provisioning_access as require_provisioning_access,
+)
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.limiter import limiter
 from app.db.session import get_db_session

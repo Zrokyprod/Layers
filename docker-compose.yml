@@ -71,7 +71,7 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       ENABLE_READY_DB_CHECK: "true"
       ENABLE_READY_REDIS_CHECK: "true"
-      APP_ENV: "production"
+      APP_ENV: "self-host"
     command: ["sh", "scripts/start-api.sh"]
     depends_on:
       postgres:
@@ -95,7 +95,7 @@ services:
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/zroky"
       REDIS_URL: "redis://redis:6379/0"
-      APP_ENV: "production"
+      APP_ENV: "self-host"
       GATEWAY_INGEST_STREAM_ENABLED: "true"
       GATEWAY_INGEST_STREAM_NAME: "zroky:ingest:v2"
     command: ["sh", "scripts/start-worker.sh"]
@@ -114,7 +114,7 @@ services:
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/zroky"
       REDIS_URL: "redis://redis:6379/0"
-      APP_ENV: "production"
+      APP_ENV: "self-host"
       GATEWAY_INGEST_STREAM_ENABLED: "true"
       GATEWAY_INGEST_STREAM_NAME: "zroky:ingest:v2"
     command: ["sh", "scripts/start-beat.sh"]

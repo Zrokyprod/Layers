@@ -11,17 +11,20 @@ test.describe("public auth pages", () => {
     { path: "/forgot-password", text: /Recover workspace access/i },
     { path: "/reset-password", text: /New password|Invalid or missing reset token/i },
     { path: "/verify-email", text: /Verify your email/i },
-    { path: "/auth", text: /Sign in to Zroky/i },
-    { path: "/auth/login", text: /Sign in to Zroky/i },
-    { path: "/auth/register", text: /Create your Zroky workspace/i },
-    { path: "/auth/forgot-password", text: /Recover workspace access/i },
-    { path: "/auth/reset-password", text: /New password|Invalid or missing reset token/i },
-    { path: "/auth/verify-email", text: /Verify your email/i },
-    { path: "/auth/check-email", text: /Verify your email|Check your email/i },
     { path: "/auth/github/callback", text: /GitHub/i },
     { path: "/auth/github/connect/callback", text: /GitHub/i },
     { path: "/auth/oauth/callback", text: /Sign in to Zroky|Signing you in|OAuth/i },
     { path: "/auth/handoff", text: /Sign in to Zroky|Signing you in|handoff/i },
+  ];
+
+  const authAliases = [
+    { path: "/auth?next=%2Fissues", canonical: /\/login\?next=%2Fissues$/ },
+    { path: "/auth/login?next=%2Fhome", canonical: /\/login\?next=%2Fhome$/ },
+    { path: "/auth/register?source=pricing", canonical: /\/signup\?source=pricing$/ },
+    { path: "/auth/forgot-password?email=demo%40zroky.local", canonical: /\/forgot-password\?email=demo%40zroky.local$/ },
+    { path: "/auth/reset-password?token=reset-token", canonical: /\/reset-password\?token=reset-token$/ },
+    { path: "/auth/verify-email?token=verify-token", canonical: /\/verify-email\?token=verify-token$/ },
+    { path: "/auth/check-email?email=demo%40zroky.local", canonical: /\/verify-email\?email=demo%40zroky.local$/ },
   ];
 
   for (const item of publicPages) {
@@ -30,6 +33,16 @@ test.describe("public auth pages", () => {
       await expect(page.locator("body")).toContainText(item.text);
       await expect(page.locator("body")).not.toContainText("This page could not be found.");
       await expect(page.locator("body")).not.toContainText("Requested resource was not found");
+      await expectNoHorizontalOverflow(page);
+    });
+  }
+
+  for (const item of authAliases) {
+    test(`${item.path} redirects to the canonical top-level auth route`, async ({ page }) => {
+      await page.goto(item.path);
+
+      await expect(page).toHaveURL(item.canonical);
+      await expect(page.locator("body")).not.toContainText("This page could not be found.");
       await expectNoHorizontalOverflow(page);
     });
   }
@@ -45,6 +58,13 @@ test.describe("public auth pages", () => {
     await page.getByRole("button", { name: "Show password" }).click();
     await expect(password).toHaveAttribute("type", "text");
   });
+
+  test("logged-out dashboard routes redirect to login with return path", async ({ page }) => {
+    await page.goto("/home");
+
+    await expect(page).toHaveURL(/\/login\?next=%2Fhome$/);
+    await expect(page.getByRole("heading", { name: "Sign in to Zroky" })).toBeVisible();
+  });
 });
 
 test.describe("authenticated session", () => {
@@ -53,16 +73,13 @@ test.describe("authenticated session", () => {
     await page.goto("/home");
 
     await expect(page.getByRole("heading", { name: "Failure Inbox" })).toBeVisible();
-    const viewport = page.viewportSize();
-    if (viewport && viewport.width <= 640) {
-      await page.getByRole("button", { name: "Toggle sidebar" }).click();
-    } else {
-      await expect(page.getByText(seed.email, { exact: false })).toBeVisible();
-    }
+    await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
     await expectHealthyPage(page);
 
     await page.getByRole("button", { name: "Open account menu" }).click();
-    await expect(page.getByRole("menu", { name: "Account menu" })).toBeVisible();
+    const accountMenu = page.getByRole("menu", { name: "Account menu" });
+    await expect(accountMenu).toBeVisible();
+    await expect(accountMenu).toContainText(seed.email);
     await page.getByRole("menuitem", { name: "Log out" }).click();
     await expect(page).toHaveURL(/\/login/);
   });

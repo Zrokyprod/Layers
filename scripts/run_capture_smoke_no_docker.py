@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -21,6 +22,7 @@ GATEWAY = ROOT / "zroky-gateway"
 PROJECT_ID = "proj_capture_smoke"
 CALL_ID = "call_capture_smoke"
 GO_CACHE = ROOT / ".data" / f"go-cache-capture-smoke-{os.getpid()}"
+CAPTURE_SMOKE_DB = BACKEND / ".data" / "capture_smoke.db"
 
 
 class ManagedProcess:
@@ -111,7 +113,7 @@ def merged_env(overrides: dict[str, str]) -> dict[str, str]:
 
 
 def init_backend_db(env: dict[str, str]) -> None:
-    db_path = BACKEND / ".data" / "capture_smoke.db"
+    db_path = CAPTURE_SMOKE_DB
     db_path.parent.mkdir(parents=True, exist_ok=True)
     if db_path.exists():
         db_path.unlink()
@@ -206,6 +208,7 @@ def main() -> None:
     backend_url = f"http://127.0.0.1:{backend_port}"
     gateway_url = f"http://127.0.0.1:{gateway_port}"
     upstream_url = f"http://127.0.0.1:{upstream_port}"
+    gateway_binary: Path | None = None
 
     backend_env = merged_env(
         {
@@ -308,6 +311,10 @@ def main() -> None:
             process.stop()
         mock_upstream.shutdown()
         mock_upstream.server_close()
+        if gateway_binary is not None:
+            gateway_binary.unlink(missing_ok=True)
+        CAPTURE_SMOKE_DB.unlink(missing_ok=True)
+        shutil.rmtree(GO_CACHE, ignore_errors=True)
 
 
 if __name__ == "__main__":

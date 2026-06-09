@@ -21,7 +21,6 @@ import {
   fetchFeatureInterestDetail,
   fetchFeatureInterestList,
   featureInterestExportUrl,
-  getOwnerToken,
 } from "@/lib/owner-api";
 
 
@@ -156,14 +155,13 @@ export default function OwnerFeatureVotesPage() {
     return () => controller.abort();
   }, [selected, filter]);
 
-  // CSV export with the admin token to trigger download.
+  // CSV export uses the HttpOnly owner session through the admin proxy.
   const handleExport = useCallback(async () => {
     if (!selected) return;
-    const token = getOwnerToken();
     try {
       const res = await fetch(featureInterestExportUrl(selected), {
-        headers: { "x-zroky-admin-token": token },
         cache: "no-store",
+        credentials: "same-origin",
       });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);

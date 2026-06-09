@@ -15,14 +15,15 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import ProviderKeyVault
+from app.db.models import ApiKey, Project, ProviderKeyVault
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.services.entitlements import set_override_entitlement
 from app.services.provider_key_cipher import (
     EnvelopeFormatError,
     VaultCipherUnavailable,
@@ -44,10 +45,40 @@ from app.services.provider_key_vault import (
     serialize_vault_row,
     store_provider_key,
 )
+from app.services.security import generate_api_key_material
 
 
 PROJECT_HEADER = "X-Project-Id"
 _TEST_KEK = "test-kek-must-be-at-least-32-chars-yes!"
+_DEFAULT_ROUTE_ENTITLED_PROJECTS = ("proj-1", "proj-A", "proj-B")
+
+
+def _grant_provider_key_vault(session_factory, project_id: str) -> None:
+    with session_factory() as session:
+        set_override_entitlement(
+            session,
+            org_id=project_id,
+            key="enterprise.provider_key_vault",
+            value=True,
+        )
+
+
+def _create_member_api_key(client: TestClient, project_id: str = "proj-member") -> str:
+    raw_key, key_prefix, key_hash = generate_api_key_material()
+    session_factory = client._session_factory  # type: ignore[attr-defined]
+    with session_factory() as session:
+        if session.get(Project, project_id) is None:
+            session.add(Project(id=project_id, name="Member Project"))
+        session.add(
+            ApiKey(
+                project_id=project_id,
+                name="member-key",
+                key_prefix=key_prefix,
+                key_hash=key_hash,
+            )
+        )
+        session.commit()
+    return raw_key
 
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
@@ -105,6 +136,8 @@ def client(tmp_path: Path):
 
     app.dependency_overrides[get_db_session] = override_get_db_session
     app.dependency_overrides[get_db_session_read] = override_get_db_session
+    for project_id in _DEFAULT_ROUTE_ENTITLED_PROJECTS:
+        _grant_provider_key_vault(session_factory, project_id)
 
     with TestClient(app) as test_client:
         test_client._session_factory = session_factory  # type: ignore[attr-defined]
@@ -566,6 +599,27 @@ class TestCreateRoute:
         assert "1234567890" not in str(body.get("key_fingerprint", ""))
         assert "sk-proj" not in str(body)
 
+    def test_402_create_requires_provider_key_vault_entitlement(
+        self, client: TestClient
+    ) -> None:
+        response = client.post(
+            "/v1/providers/keys",
+            headers={PROJECT_HEADER: "proj-free"},
+            json={"provider": "openai", "plaintext_key": "sk-1234567890"},
+        )
+        assert response.status_code == 402
+        detail = response.json()["detail"]
+        assert detail["required_entitlement"] == "enterprise.provider_key_vault"
+
+        session_factory = client._session_factory  # type: ignore[attr-defined]
+        with session_factory() as session:
+            count = session.execute(
+                select(func.count())
+                .select_from(ProviderKeyVault)
+                .where(ProviderKeyVault.project_id == "proj-free")
+            ).scalar_one()
+        assert count == 0
+
     def test_422_bad_provider(self, client: TestClient) -> None:
         response = client.post(
             "/v1/providers/keys",
@@ -644,6 +698,13 @@ class TestListRoute:
         )
         assert response.status_code == 200
         assert response.json()["items"] == []
+
+    def test_member_api_key_cannot_list_provider_keys(
+        self, client: TestClient
+    ) -> None:
+        api_key = _create_member_api_key(client)
+        response = client.get("/v1/providers/keys", headers={"X-Api-Key": api_key})
+        assert response.status_code == 403
 
     def test_filter_invalid_provider_422(self, client: TestClient) -> None:
         response = client.get(

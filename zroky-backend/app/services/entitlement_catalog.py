@@ -1,14 +1,14 @@
-"""Centralized plan entitlement catalog.
+"""Backend entitlement catalog derived from the shared pricing contract.
 
-This module is the canonical source for Zroky plan capabilities and
-numeric limits. ``services.billing_plans`` keeps the legacy export surface
-for billing, Stripe sync, and resolver code, but derives its templates from
-this catalog.
+``api-contracts/pricing-plans.json`` is the source of truth for Zroky plan
+capabilities and numeric limits. This module validates that contract and keeps
+the legacy export surface used by billing, Stripe sync, and resolver code.
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping
 
 
@@ -82,238 +82,150 @@ class PlanCatalogEntry:
         return merged
 
 
-def _entitlements(
-    *,
-    watch: bool,
-    pilot: bool,
-    real_llm: bool,
-    pro: bool,
-    enterprise: bool,
-) -> dict[str, bool]:
-    return {
-        "watch.cloud_capture": watch,
-        "watch.basic_trace_view": watch,
-        "pilot.failure_inbox": pilot,
-        "pilot.issue_grouping": pilot,
-        "pilot.root_cause_diagnosis": pilot,
-        "pilot.replay_stub": pilot,
-        "pilot.replay_real_llm": real_llm,
-        "pilot.replay_mocked_tool": pilot,
-        "pilot.goldens_basic": pilot,
-        "pilot.alerts_basic": pilot,
-        "pro.replay_live_sandbox": pro,
-        "pro.replay_shadow": pro,
-        "pro.ci_gate_nonblocking": pro,
-        "pro.ci_gate_blocking": pro,
-        "pro.outcome_attribution": pro,
-        "pro.team_workflow": pro,
-        "pro.advanced_goldens": pro,
-        "enterprise.private_replay_worker": enterprise,
-        "enterprise.sso": enterprise,
-        "enterprise.audit_logs": enterprise,
-        "enterprise.custom_retention": enterprise,
-        "enterprise.provider_key_vault": enterprise,
-        "enterprise.custom_detectors": enterprise,
+PRICING_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[3] / "api-contracts" / "pricing-plans.json"
+)
+
+
+def load_pricing_contract(path: Path | None = None) -> dict[str, Any]:
+    """Load the shared backend/landing pricing contract JSON."""
+    source = path or PRICING_CONTRACT_PATH
+    with source.open("r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    if not isinstance(raw, dict) or not isinstance(raw.get("plans"), list):
+        raise ValueError(f"Pricing contract at {source} must contain a plans list")
+    return raw
+
+
+def _as_bool_map(raw: Any, *, plan_code: str) -> dict[str, bool]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"plan {plan_code!r} entitlements must be an object")
+    values = {str(key): bool(value) for key, value in raw.items()}
+    if set(values) != ENTITLEMENT_KEYS:
+        raise ValueError(
+            f"plan {plan_code!r} entitlement keys drifted; expected "
+            f"{sorted(ENTITLEMENT_KEYS)}"
+        )
+    return values
+
+
+def _as_int_map(raw: Any, *, plan_code: str) -> dict[str, int]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"plan {plan_code!r} limits must be an object")
+    values = {str(key): int(value) for key, value in raw.items()}
+    if set(values) != LIMIT_KEYS:
+        raise ValueError(
+            f"plan {plan_code!r} limit keys drifted; expected {sorted(LIMIT_KEYS)}"
+        )
+    return values
+
+
+def _as_compatibility_map(raw: Any, *, plan_code: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"plan {plan_code!r} compatibility must be an object")
+    values = {str(key): value for key, value in raw.items()}
+    required = {
+        "events.monthly_quota",
+        "retention.days",
+        "goldens.max_sets",
+        "replay.monthly_runs",
+        "pilot.autopilot_enabled",
+        "pilot.tier2_pr_enabled",
+        "pilot.real_llm_replay_enabled",
+        "pilot.autofix_pr_enabled",
+        "judge.ensemble_enabled",
+        "digest.audience",
+        "compliance.export_enabled",
+        "selfhost.enabled",
+        "sso.enabled",
+        "seats.included",
     }
+    if set(values) != required:
+        raise ValueError(
+            f"plan {plan_code!r} compatibility keys drifted; expected "
+            f"{sorted(required)}"
+        )
+    return values
 
 
-def _limits(
+def _validate_public_pricing(
     *,
-    max_projects: int,
-    max_members: int,
-    max_calls_per_month: int,
-    max_diagnosis_jobs_per_month: int,
-    max_real_replay_runs_per_month: int,
-    max_mocked_tool_replay_runs_per_month: int,
-    max_live_sandbox_replay_runs_per_month: int,
-    max_golden_traces: int,
-    retention_days: int,
-) -> dict[str, int]:
-    return {
-        "max_projects": max_projects,
-        "max_members": max_members,
-        "max_calls_per_month": max_calls_per_month,
-        "max_diagnosis_jobs_per_month": max_diagnosis_jobs_per_month,
-        "max_real_replay_runs_per_month": max_real_replay_runs_per_month,
-        "max_mocked_tool_replay_runs_per_month": max_mocked_tool_replay_runs_per_month,
-        "max_live_sandbox_replay_runs_per_month": max_live_sandbox_replay_runs_per_month,
-        "max_golden_traces": max_golden_traces,
-        "retention_days": retention_days,
-    }
-
-
-def _compatibility(
-    *,
-    limits: Mapping[str, int],
-    entitlements: Mapping[str, bool],
-    goldens_max_sets: int,
-    replay_monthly_runs: int,
-    tier2_pr_enabled: bool,
-    autofix_pr_enabled: bool,
-    judge_ensemble_enabled: bool,
-    digest_audience: str,
-    compliance_export_enabled: bool,
-) -> dict[str, Any]:
-    return {
-        "events.monthly_quota": limits["max_calls_per_month"],
-        "retention.days": limits["retention_days"],
-        "goldens.max_sets": goldens_max_sets,
-        "replay.monthly_runs": replay_monthly_runs,
-        "pilot.autopilot_enabled": entitlements["pilot.failure_inbox"],
-        "pilot.tier2_pr_enabled": tier2_pr_enabled,
-        "pilot.real_llm_replay_enabled": entitlements["pilot.replay_real_llm"],
-        "pilot.autofix_pr_enabled": autofix_pr_enabled,
-        "judge.ensemble_enabled": judge_ensemble_enabled,
-        "digest.audience": digest_audience,
-        "compliance.export_enabled": compliance_export_enabled,
-        "selfhost.enabled": entitlements["enterprise.private_replay_worker"],
-        "sso.enabled": entitlements["enterprise.sso"],
-        "seats.included": limits["max_members"],
-    }
-
-
-def _entry(
     plan_code: str,
-    *,
-    entitlements: dict[str, bool],
-    limits: dict[str, int],
-    goldens_max_sets: int,
-    replay_monthly_runs: int,
-    tier2_pr_enabled: bool,
-    autofix_pr_enabled: bool,
-    judge_ensemble_enabled: bool,
-    digest_audience: str,
-    compliance_export_enabled: bool,
-) -> PlanCatalogEntry:
-    return PlanCatalogEntry(
-        plan_code=plan_code,
-        entitlements=entitlements,
-        limits=limits,
-        compatibility=_compatibility(
-            limits=limits,
+    pricing: Mapping[str, Any],
+    entitlements: Mapping[str, bool],
+    limits: Mapping[str, int],
+    compatibility: Mapping[str, Any],
+) -> None:
+    checks = {
+        "calls_per_month": limits["max_calls_per_month"],
+        "retention_days": limits["retention_days"],
+        "replay_credits": compatibility["replay.monthly_runs"],
+        "golden_traces": limits["max_golden_traces"],
+        "golden_sets": compatibility["goldens.max_sets"],
+        "non_blocking_ci": entitlements["pro.ci_gate_nonblocking"],
+        "blocking_ci": entitlements["pro.ci_gate_blocking"],
+        "provider_key_vault": entitlements["enterprise.provider_key_vault"],
+    }
+    for key, expected in checks.items():
+        if pricing.get(key) != expected:
+            raise ValueError(
+                f"plan {plan_code!r} public pricing {key!r}={pricing.get(key)!r} "
+                f"does not match enforcement value {expected!r}"
+            )
+
+
+def _build_plan_catalog_from_contract() -> dict[str, PlanCatalogEntry]:
+    contract = load_pricing_contract()
+    aliases = contract.get("aliases")
+    if aliases != PLAN_ALIASES:
+        raise ValueError("pricing contract aliases do not match PLAN_ALIASES")
+    order = tuple(contract.get("canonical_plan_order", ()))
+    if order != CANONICAL_PLAN_CODES:
+        raise ValueError(
+            "pricing contract canonical_plan_order does not match "
+            "CANONICAL_PLAN_CODES"
+        )
+
+    entries: dict[str, PlanCatalogEntry] = {}
+    for raw_plan in contract["plans"]:
+        if not isinstance(raw_plan, dict):
+            raise ValueError("pricing contract plan entries must be objects")
+        plan_code = str(raw_plan.get("code") or "").strip().lower()
+        if plan_code not in CANONICAL_PLAN_CODES:
+            raise ValueError(f"pricing contract has unknown plan code: {plan_code!r}")
+        enforcement = raw_plan.get("enforcement")
+        if not isinstance(enforcement, dict):
+            raise ValueError(f"plan {plan_code!r} missing enforcement object")
+        entitlements = _as_bool_map(
+            enforcement.get("entitlements"), plan_code=plan_code
+        )
+        limits = _as_int_map(enforcement.get("limits"), plan_code=plan_code)
+        compatibility = _as_compatibility_map(
+            enforcement.get("compatibility"), plan_code=plan_code
+        )
+        pricing = raw_plan.get("pricing")
+        if not isinstance(pricing, dict):
+            raise ValueError(f"plan {plan_code!r} missing public pricing object")
+        _validate_public_pricing(
+            plan_code=plan_code,
+            pricing=pricing,
             entitlements=entitlements,
-            goldens_max_sets=goldens_max_sets,
-            replay_monthly_runs=replay_monthly_runs,
-            tier2_pr_enabled=tier2_pr_enabled,
-            autofix_pr_enabled=autofix_pr_enabled,
-            judge_ensemble_enabled=judge_ensemble_enabled,
-            digest_audience=digest_audience,
-            compliance_export_enabled=compliance_export_enabled,
-        ),
-    )
+            limits=limits,
+            compatibility=compatibility,
+        )
+        entries[plan_code] = PlanCatalogEntry(
+            plan_code=plan_code,
+            entitlements=entitlements,
+            limits=limits,
+            compatibility=compatibility,
+        )
+
+    if tuple(entries) != CANONICAL_PLAN_CODES:
+        raise ValueError("pricing contract plans are not in canonical order")
+    return entries
 
 
-_FREE_ENTITLEMENTS = _entitlements(
-    watch=True, pilot=False, real_llm=False, pro=False, enterprise=False
-)
-_FREE_LIMITS = _limits(
-    max_projects=1,
-    max_members=2,
-    max_calls_per_month=50_000,
-    max_diagnosis_jobs_per_month=0,
-    max_real_replay_runs_per_month=0,
-    max_mocked_tool_replay_runs_per_month=0,
-    max_live_sandbox_replay_runs_per_month=0,
-    max_golden_traces=0,
-    retention_days=7,
-)
-
-_PILOT_ENTITLEMENTS = _entitlements(
-    watch=True, pilot=True, real_llm=False, pro=False, enterprise=False
-)
-_PILOT_LIMITS = _limits(
-    max_projects=3,
-    max_members=5,
-    max_calls_per_month=500_000,
-    max_diagnosis_jobs_per_month=100,
-    max_real_replay_runs_per_month=0,
-    max_mocked_tool_replay_runs_per_month=100,
-    max_live_sandbox_replay_runs_per_month=0,
-    max_golden_traces=100,
-    retention_days=30,
-)
-
-_PRO_ENTITLEMENTS = _entitlements(
-    watch=True, pilot=True, real_llm=True, pro=True, enterprise=False
-)
-_PRO_LIMITS = _limits(
-    max_projects=10,
-    max_members=10,
-    max_calls_per_month=3_000_000,
-    max_diagnosis_jobs_per_month=1_000,
-    max_real_replay_runs_per_month=100,
-    max_mocked_tool_replay_runs_per_month=1_000,
-    max_live_sandbox_replay_runs_per_month=100,
-    max_golden_traces=1_000,
-    retention_days=90,
-)
-
-_ENTERPRISE_ENTITLEMENTS = _entitlements(
-    watch=True, pilot=True, real_llm=True, pro=True, enterprise=True
-)
-_ENTERPRISE_LIMITS = _limits(
-    max_projects=UNLIMITED,
-    max_members=UNLIMITED,
-    max_calls_per_month=UNLIMITED,
-    max_diagnosis_jobs_per_month=UNLIMITED,
-    max_real_replay_runs_per_month=UNLIMITED,
-    max_mocked_tool_replay_runs_per_month=UNLIMITED,
-    max_live_sandbox_replay_runs_per_month=UNLIMITED,
-    max_golden_traces=UNLIMITED,
-    retention_days=UNLIMITED,
-)
-
-
-PLAN_CATALOG: dict[str, PlanCatalogEntry] = {
-    "free": _entry(
-        "free",
-        entitlements=_FREE_ENTITLEMENTS,
-        limits=_FREE_LIMITS,
-        goldens_max_sets=0,
-        replay_monthly_runs=0,
-        tier2_pr_enabled=False,
-        autofix_pr_enabled=False,
-        judge_ensemble_enabled=False,
-        digest_audience="engineer",
-        compliance_export_enabled=False,
-    ),
-    "pilot": _entry(
-        "pilot",
-        entitlements=_PILOT_ENTITLEMENTS,
-        limits=_PILOT_LIMITS,
-        goldens_max_sets=5,
-        replay_monthly_runs=100,
-        tier2_pr_enabled=False,
-        autofix_pr_enabled=False,
-        judge_ensemble_enabled=False,
-        digest_audience="manager",
-        compliance_export_enabled=False,
-    ),
-    "pro": _entry(
-        "pro",
-        entitlements=_PRO_ENTITLEMENTS,
-        limits=_PRO_LIMITS,
-        goldens_max_sets=50,
-        replay_monthly_runs=1_000,
-        tier2_pr_enabled=True,
-        autofix_pr_enabled=False,
-        judge_ensemble_enabled=True,
-        digest_audience="executive",
-        compliance_export_enabled=True,
-    ),
-    "enterprise": _entry(
-        "enterprise",
-        entitlements=_ENTERPRISE_ENTITLEMENTS,
-        limits=_ENTERPRISE_LIMITS,
-        goldens_max_sets=UNLIMITED,
-        replay_monthly_runs=UNLIMITED,
-        tier2_pr_enabled=True,
-        autofix_pr_enabled=True,
-        judge_ensemble_enabled=True,
-        digest_audience="executive",
-        compliance_export_enabled=True,
-    ),
-}
+PLAN_CATALOG: dict[str, PlanCatalogEntry] = _build_plan_catalog_from_contract()
 
 
 def canonical_plan_code(plan_code: str | None) -> str:
@@ -456,12 +368,14 @@ __all__ = [
     "VALID_PLAN_CODES",
     "ENTITLEMENT_KEYS",
     "LIMIT_KEYS",
+    "PRICING_CONTRACT_PATH",
     "PLAN_CATALOG",
     "PLAN_ENTITLEMENTS",
     "PLAN_KEYS_BINDING",
     "DIGEST_AUDIENCE_VALUES",
     "InvalidPlanCodeError",
     "PlanCatalogEntry",
+    "load_pricing_contract",
     "canonical_plan_code",
     "get_catalog_entry",
     "resolve_plan_template",

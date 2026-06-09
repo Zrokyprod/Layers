@@ -18,8 +18,9 @@ Vault surface:
   GET    /v1/providers/keys/{key_id}     fetch single key metadata
   DELETE /v1/providers/keys/{key_id}     revoke (idempotent)
 
-Entitlements plan-gate (402) is centralised in Module 6. For 4.5 the
-routes accept any authenticated tenant.
+Create is plan-gated by `enterprise.provider_key_vault`. Vault metadata
+and revoke operations are admin-only so project member API keys cannot
+manage BYOK credentials.
 """
 import logging
 
@@ -27,7 +28,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, sta
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.tenant import require_tenant_id, require_tenant_role
+from app.api.dependencies.entitlements import require_entitlement
+from app.api.dependencies.tenant import require_tenant_role
 from app.api.routes.settings import (
     list_provider_verifications,
     test_provider_connection,
@@ -134,7 +136,8 @@ class ProviderKeyListResponse(BaseModel):
 def create_provider_key(
     request: Request,
     body: ProviderKeyCreateRequest = Body(...),
-    tenant_id: str = Depends(require_tenant_id),
+    _: None = Depends(require_entitlement("enterprise.provider_key_vault")),
+    tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
 ) -> ProviderKeyResponse:
     """Encrypt and persist a provider key for this project.
@@ -185,7 +188,7 @@ def list_provider_key_rows(
         default=False,
         description="When true, also returns is_active=false rows",
     ),
-    tenant_id: str = Depends(require_tenant_id),
+    tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session_read),
 ) -> ProviderKeyListResponse:
     """List provider keys for the calling tenant.
@@ -215,7 +218,7 @@ def list_provider_key_rows(
 def get_provider_key_detail(
     request: Request,
     key_id: str,
-    tenant_id: str = Depends(require_tenant_id),
+    tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session_read),
 ) -> ProviderKeyResponse:
     """Fetch a single key's metadata. 404 if missing or cross-tenant."""
@@ -233,7 +236,7 @@ def get_provider_key_detail(
 def delete_provider_key(
     request: Request,
     key_id: str,
-    tenant_id: str = Depends(require_tenant_id),
+    tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
 ) -> ProviderKeyResponse:
     """Revoke a key. Idempotent — calling on an already-revoked row

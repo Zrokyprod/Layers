@@ -31,7 +31,7 @@ const footerGroups = [
     title: "Company",
     links: [
       { label: "Docs", href: "/#quickstart" },
-      { label: "Contact", href: "mailto:sales@zroky.ai" },
+      { label: "Contact", href: "mailto:sales@zroky.com" },
       { label: "Sign in", href: "/login" },
     ],
   },

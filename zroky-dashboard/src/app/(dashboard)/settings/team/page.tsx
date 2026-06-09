@@ -65,17 +65,22 @@ export default function TeamPage() {
     if (!projectId || !inviteEmail.trim()) return;
     setInviteBusy(true);
     setError(null);
+    const email = inviteEmail.trim();
     try {
-      await createProjectInvitation(projectId, {
-        email: inviteEmail.trim(),
+      const created = await createProjectInvitation(projectId, {
+        email,
         role: inviteRole,
       });
+      setInvitations((prev) => [
+        created,
+        ...prev.filter((invitation) => invitation.invitation_id !== created.invitation_id),
+      ]);
       setInviteEmail("");
       setInviteRole("member");
       await loadData();
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
-      setError(msg || "Failed to send invitation.");
+      setError(`Failed to send invitation to ${email}: ${msg || "Unknown error."}`);
     } finally {
       setInviteBusy(false);
     }

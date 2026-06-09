@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { hasPlanEntitlement } from "@/components/feature-gate";
+import { ProviderKeyReplayGate } from "@/components/provider-key-replay-gate";
 import {
   createReplayRunFromCall,
   createReplayRunFromIssue,
@@ -35,12 +36,15 @@ import {
 } from "@/lib/api";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
 import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
+import { useActiveProviderKeys } from "@/lib/hooks";
 import { replayLabel } from "@/lib/issue-format";
-import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
+import { DEFAULT_VERIFICATION_REPLAY_MODE, STUB_REPLAY_MODE } from "@/lib/replay-mode";
+import { hasActiveProviderKey } from "@/lib/provider-key-gate";
 import type { BillingMeResponse, IssueEvidenceTrace, IssueItem } from "@/lib/types";
 
 type ActionState = "issue_replay" | "call_replay" | "promote_golden" | "ci_gate" | "resolve" | "ignore" | "triage" | null;
 type ConfirmAction = "resolve" | "ignore" | null;
+type ProviderKeyPendingAction = { type: "issue" } | { type: "call"; callId: string } | { type: "ci" };
 type ProofState = "good" | "warn" | "blocked" | "neutral";
 type PrimaryAction =
   | "run_replay"
@@ -381,6 +385,8 @@ export default function IssueDetailPage() {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [assigneeDraft, setAssigneeDraft] = useState("");
   const [deployDraft, setDeployDraft] = useState("");
+  const [providerKeyPendingAction, setProviderKeyPendingAction] = useState<ProviderKeyPendingAction | null>(null);
+  const providerKeysQuery = useActiveProviderKeys();
 
   useEffect(() => {
     if (!id) return;
@@ -419,14 +425,20 @@ export default function IssueDetailPage() {
   );
   const orderedEvidence = useMemo(() => (issue ? sortedEvidence(issue.evidence_traces) : []), [issue]);
 
-  async function onReplayIssue() {
+  async function hasProviderKeyForReplay() {
+    if (hasActiveProviderKey(providerKeysQuery.data?.items)) return true;
+    const refreshed = await providerKeysQuery.refetch();
+    return hasActiveProviderKey(refreshed.data?.items);
+  }
+
+  async function runIssueReplay(replayMode = DEFAULT_VERIFICATION_REPLAY_MODE) {
     if (!issue) return;
     setActionError(null);
     setSuccessMessage(null);
     setBusyAction("issue_replay");
     try {
       const run = await createReplayRunFromIssue(issue.id, {
-        replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE,
+        replay_mode: replayMode,
       });
       router.push(`/replay/${run.id}`);
     } catch (replayError) {
@@ -436,13 +448,21 @@ export default function IssueDetailPage() {
     }
   }
 
-  async function onReplayCall(callId: string) {
+  async function onReplayIssue() {
+    if (await hasProviderKeyForReplay()) {
+      await runIssueReplay();
+      return;
+    }
+    setProviderKeyPendingAction({ type: "issue" });
+  }
+
+  async function runCallReplay(callId: string, replayMode = DEFAULT_VERIFICATION_REPLAY_MODE) {
     setActionError(null);
     setSuccessMessage(null);
     setBusyAction("call_replay");
     try {
       const run = await createReplayRunFromCall(callId, {
-        replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE,
+        replay_mode: replayMode,
       });
       router.push(`/replay/${run.id}`);
     } catch (replayError) {
@@ -450,6 +470,14 @@ export default function IssueDetailPage() {
     } finally {
       setBusyAction(null);
     }
+  }
+
+  async function onReplayCall(callId: string) {
+    if (await hasProviderKeyForReplay()) {
+      await runCallReplay(callId);
+      return;
+    }
+    setProviderKeyPendingAction({ type: "call", callId });
   }
 
   async function onPromoteGolden() {
@@ -470,6 +498,15 @@ export default function IssueDetailPage() {
 
   async function onRunCiGate() {
     if (!issue) return;
+    if (!(await hasProviderKeyForReplay())) {
+      setProviderKeyPendingAction({ type: "ci" });
+      return;
+    }
+    await runCiGate();
+  }
+
+  async function runCiGate() {
+    if (!issue) return;
     setActionError(null);
     setSuccessMessage(null);
     setBusyAction("ci_gate");
@@ -484,6 +521,34 @@ export default function IssueDetailPage() {
     } finally {
       setBusyAction(null);
     }
+  }
+
+  function onProviderKeySavedAndRun() {
+    if (!providerKeyPendingAction) return;
+    if (providerKeyPendingAction.type === "issue") {
+      void runIssueReplay();
+      return;
+    }
+    if (providerKeyPendingAction.type === "call") {
+      void runCallReplay(providerKeyPendingAction.callId);
+      return;
+    }
+    void runCiGate();
+  }
+
+  function onUseStubReplay() {
+    if (!providerKeyPendingAction || providerKeyPendingAction.type === "ci") {
+      setProviderKeyPendingAction(null);
+      setActionError("CI gates require verified replay. Connect a provider key before running a CI gate.");
+      return;
+    }
+    const pending = providerKeyPendingAction;
+    setProviderKeyPendingAction(null);
+    if (pending.type === "issue") {
+      void runIssueReplay(STUB_REPLAY_MODE);
+      return;
+    }
+    void runCallReplay(pending.callId, STUB_REPLAY_MODE);
   }
 
   async function onResolve() {
@@ -709,6 +774,15 @@ export default function IssueDetailPage() {
         <section className="imd-notice imd-notice-error" role="alert">
           <p>{actionError}</p>
         </section>
+      ) : null}
+
+      {providerKeyPendingAction ? (
+        <ProviderKeyReplayGate
+          onClose={() => setProviderKeyPendingAction(null)}
+          onSavedAndRun={onProviderKeySavedAndRun}
+          onUseStub={onUseStubReplay}
+          showUseStub={providerKeyPendingAction.type !== "ci"}
+        />
       ) : null}
 
       <section className="imd-hero imd-command-hero" aria-label="Issue command center">

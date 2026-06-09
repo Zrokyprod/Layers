@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useCallback, useEffect, useState } from "react";
-import { FlaskConical, GitBranch, PlayCircle, ShieldCheck } from "lucide-react";
+import { FlaskConical, GitBranch, PlayCircle, RefreshCw, ShieldCheck } from "lucide-react";
 
 import { getEvaluationSettings, updateEvaluationSettings } from "@/lib/api";
 import { useCalibrationLatest, useJudgeHealth, useTriggerCalibrationRunNow } from "@/lib/hooks";
@@ -134,6 +134,7 @@ function CalibrationWorkspace() {
 function JudgeWorkspace() {
   const judgeQuery = useJudgeHealth(true);
   const health = judgeQuery.data;
+  const judgePending = judgeQuery.isLoading || judgeQuery.isFetching;
 
   return (
     <section className="panel">
@@ -145,8 +146,16 @@ function JudgeWorkspace() {
         {health ? <span className={health.any_breached ? "pill pill-red" : "pill pill-green"}>{health.any_breached ? "Drift breached" : "Healthy"}</span> : null}
       </header>
 
-      {judgeQuery.error ? <p className="field-error">{judgeQuery.error.message}</p> : null}
-      {judgeQuery.isLoading ? <div className="loading" /> : null}
+      {judgeQuery.error ? (
+        <div className="field-error field-error-row">
+          <span>Judge diagnostics are taking longer than expected. {judgeQuery.error.message}</span>
+          <button type="button" className="btn btn-soft" onClick={() => void judgeQuery.refetch()}>
+            <RefreshCw aria-hidden="true" />
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {judgePending ? <div className="loading" /> : null}
 
       {health ? (
         <div className="grid gap-4">

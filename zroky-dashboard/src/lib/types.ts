@@ -1025,6 +1025,10 @@ export interface BillingMeResponse {
   plan_code: string;
   status: string;
   seats: number;
+  payment_provider: string;
+  payment_customer_ref: string | null;
+  payment_subscription_ref: string | null;
+  payment_request_ref: string | null;
   stripe_customer_id: string | null;
   stripe_sub_id: string | null;
   current_period_end: string | null;
@@ -1038,12 +1042,44 @@ export interface BillingCheckoutResponse {
   checkout_url: string;
   plan_code: string;
   org_id: string;
+  payment_provider: string;
+  payment_request_id: string;
+  manual_confirmation_required: boolean;
+  instructions: string;
+  amount_usd: number | null;
+  currency: string;
+}
+
+export interface RazorpayOrderResponse {
+  order_id: string;
+  amount: number;
+  currency: string;
+  receipt: string | null;
+  plan_code: string | null;
+  org_id: string;
+  payment_provider: "razorpay";
+  amount_usd: number | null;
+}
+
+export interface RazorpayVerifyPaymentRequest {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+export interface RazorpayVerifyPaymentResponse {
+  success: boolean;
+  order_id: string;
+  payment_id: string;
+  org_id: string;
+  plan_code: string | null;
 }
 
 export interface BillingPortalResponse {
   session_id: string;
   portal_url: string;
   org_id: string;
+  payment_provider: string;
 }
 
 export interface EvaluationSettingsResponse {

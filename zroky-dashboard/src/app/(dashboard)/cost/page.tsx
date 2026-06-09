@@ -586,7 +586,7 @@ export default function CostOverviewPage() {
             <CircleDollarSign aria-hidden="true" />
             Cost of failure
           </div>
-          <h1>Cost Command Center</h1>
+          <h1>Cost</h1>
           <p>See where AI failures burn money, prove which replays protected spend, and enforce live budget guardrails before repeat regressions ship.</p>
         </div>
         <div className="cost-command-hero-actions">
@@ -706,7 +706,7 @@ export default function CostOverviewPage() {
         <header className="cost-command-section-header">
           <div>
             <h2>Spend timeline</h2>
-            <p>Total provider spend with failed-call spend overlaid in orange.</p>
+            <p>Total provider spend with failed-call spend highlighted.</p>
           </div>
           <CostBadge tone={statusTone(trendQuery.data?.cost_confidence)}>
             confidence: {costConfidenceLabel(trendQuery.data?.cost_confidence)}
@@ -743,17 +743,17 @@ export default function CostOverviewPage() {
                 <tbody>
                   {failureRows.map((issue) => (
                     <tr key={issue.id}>
-                      <td>
+                      <td data-label="Issue">
                         <div className="cost-command-primary-cell">
                           <Link href={`/issues/${issue.id}`}>{issue.title}</Link>
                           <span>{issue.failure_code} / {issue.severity.toUpperCase()}</span>
                         </div>
                       </td>
-                      <td>{agentLabel(issue)}</td>
-                      <td>{numberOrDash(issue.occurrence_count)}</td>
-                      <td>{moneyOrDash(issueCost(issue))}</td>
-                      <td><CostBadge tone={statusTone(issue.replay_coverage_status)}>{replayLabel(issue.replay_coverage_status)}</CostBadge></td>
-                      <td>
+                      <td data-label="Agent">{agentLabel(issue)}</td>
+                      <td data-label="Calls">{numberOrDash(issue.occurrence_count)}</td>
+                      <td data-label="Cost">{moneyOrDash(issueCost(issue))}</td>
+                      <td data-label="Proof"><CostBadge tone={statusTone(issue.replay_coverage_status)}>{replayLabel(issue.replay_coverage_status)}</CostBadge></td>
+                      <td data-label="Action">
                         <div className="cost-command-row-actions">
                           <Link href={`/issues/${issue.id}`} className="btn btn-soft btn-sm">View issue</Link>
                           {issue.replay_coverage_status === "verified_fix" ? null : (
@@ -815,11 +815,11 @@ export default function CostOverviewPage() {
                 <tbody>
                   {replayRows.map((run) => (
                     <tr key={run.id}>
-                      <td><Link href={`/replay/${run.id}`}>{run.id}</Link></td>
-                      <td>{normalizedMode(run.replay_mode || run.executor_replay_mode)}</td>
-                      <td><CostBadge tone={statusTone(run.summary.verification_status || run.status)}>{statusLabel(run.summary.verification_status || run.status)}</CostBadge></td>
-                      <td>{moneyOrDash(run.summary.replay_cost_usd)}</td>
-                      <td><Link href={`/replay/${run.id}`} className="btn btn-soft btn-sm">View replay</Link></td>
+                      <td data-label="Run"><Link href={`/replay/${run.id}`}>{run.id}</Link></td>
+                      <td data-label="Mode">{normalizedMode(run.replay_mode || run.executor_replay_mode)}</td>
+                      <td data-label="Status"><CostBadge tone={statusTone(run.summary.verification_status || run.status)}>{statusLabel(run.summary.verification_status || run.status)}</CostBadge></td>
+                      <td data-label="Replay cost">{moneyOrDash(run.summary.replay_cost_usd)}</td>
+                      <td data-label="Action"><Link href={`/replay/${run.id}`} className="btn btn-soft btn-sm">View replay</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -858,18 +858,18 @@ export default function CostOverviewPage() {
               <tbody>
                 {topCalls.map((call) => (
                   <tr key={call.call_id}>
-                    <td>
+                    <td data-label="Call">
                       <div className="cost-command-primary-cell">
                         <Link href={`/calls/${call.call_id}`}>{topCallLabel(call)}</Link>
                         <span>{call.call_id}</span>
                       </div>
                     </td>
-                    <td>{call.agent_name ?? "Unknown agent"}</td>
-                    <td><CostBadge tone={statusTone(call.status)}>{statusLabel(call.status)}</CostBadge></td>
-                    <td>{call.error_code ?? DASH}</td>
-                    <td>{moneyOrDash(call.cost_usd)}</td>
-                    <td>{costConfidenceLabel(call.cost_confidence)}</td>
-                    <td>
+                    <td data-label="Agent">{call.agent_name ?? "Unknown agent"}</td>
+                    <td data-label="Status"><CostBadge tone={statusTone(call.status)}>{statusLabel(call.status)}</CostBadge></td>
+                    <td data-label="Error">{call.error_code ?? DASH}</td>
+                    <td data-label="Cost">{moneyOrDash(call.cost_usd)}</td>
+                    <td data-label="Trust">{costConfidenceLabel(call.cost_confidence)}</td>
+                    <td data-label="Action">
                       <div className="cost-command-row-actions">
                         <Link href={`/calls/${call.call_id}`} className="btn btn-soft btn-sm">View call</Link>
                         <button type="button" className="btn btn-soft btn-sm" onClick={() => void copyValue(call.call_id, "Call ID copied.")}>

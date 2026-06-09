@@ -46,6 +46,7 @@ import {
   statusBadgeClass,
   statusLabel,
   stringField,
+  summaryUrl,
   thresholdRate,
   verdictSubtitle,
 } from "../ci-utils";
@@ -291,6 +292,7 @@ export default function CiGateDetailPage() {
         <MetadataCard label="Failed flows" value={status === "not_verified" ? "-" : failedCount == null ? "-" : String(failedCount)} />
         <MetadataCard label="Threshold" value={formatRate(thresholdRate(detail))} />
         <MetadataCard label="Git SHA" value={shortSha(run.git_sha)} />
+        <MetadataCard label="Summary URL" value={summaryUrl(run, detail)} helper="Backend detail endpoint for this gate." />
         <MetadataCard label="Completed at" value={formatDateTime(run.completed_at ?? run.started_at ?? run.created_at)} />
       </section>
 
@@ -340,6 +342,7 @@ export default function CiGateDetailPage() {
               <div><span>Replay mode</span><strong>{replayProofLabel(run, detail)}</strong></div>
               <div><span>Executed traces</span><strong>{run.summary.trace_count_executed || "-"}</strong></div>
               <div><span>Git SHA</span><strong>{shortSha(run.git_sha)}</strong></div>
+              <div><span>Summary URL</span><strong>{summaryUrl(run, detail)}</strong></div>
               <div><span>Last refreshed</span><strong>{lastUpdated ? formatDateTime(lastUpdated) : "-"}</strong></div>
             </div>
           </section>

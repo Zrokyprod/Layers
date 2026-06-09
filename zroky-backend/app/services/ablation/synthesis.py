@@ -112,7 +112,7 @@ Synthesise the root cause."""
             base_url=_OPENROUTER_BASE_URL,
             api_key=settings.OPENROUTER_API_KEY,
             default_headers={
-                "HTTP-Referer": settings.FRONTEND_URL or "https://zroky.ai",
+                "HTTP-Referer": settings.FRONTEND_URL or "https://zroky.com",
                 "X-Title": settings.APP_NAME or "Zroky AI",
             },
         )

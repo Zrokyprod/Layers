@@ -1,0 +1,10 @@
+{
+  "trace_paths": [
+    "..\\artifacts\\discovery_dogfood_db\\traces.jsonl"
+  ],
+  "harness_report": "..\\artifacts\\discovery_precision_gate_dogfood\\harness\\discovery_harness_report.json",
+  "harness_findings_csv": "..\\artifacts\\discovery_precision_gate_dogfood\\harness\\discovery_harness_findings.csv",
+  "label_template": "..\\artifacts\\discovery_precision_gate_dogfood\\labels_template.csv",
+  "manual_labels": null,
+  "exit_code": 1
+}

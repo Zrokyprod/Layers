@@ -81,7 +81,7 @@ def synthesize(
             base_url=_OPENROUTER_BASE_URL,
             api_key=api_key,
             default_headers={
-                "HTTP-Referer": settings.FRONTEND_URL or "https://zroky.ai",
+                "HTTP-Referer": settings.FRONTEND_URL or "https://zroky.com",
                 "X-Title": settings.APP_NAME or "Zroky AI",
             },
         )
@@ -165,6 +165,62 @@ def _fallback(intent: Intent, evidence: EvidenceBundle, *, reason: str) -> AskAn
         )
 
     summary = evidence.summary
+    focused_issue = summary.get("focused_issue")
+    if isinstance(focused_issue, dict):
+        issue_id = focused_issue.get("issue_id") or "this issue"
+        failure_code = focused_issue.get("failure_code") or "UNKNOWN"
+        agent = focused_issue.get("agent_name") or "the affected agent"
+        occurrences = int(focused_issue.get("occurrence_count") or 0)
+        blast = float(focused_issue.get("blast_radius_usd") or 0)
+        sample_call_id = focused_issue.get("sample_call_id")
+        impact = (
+            f"{occurrences} affected call(s), ${blast:.2f} estimated wasted spend"
+            if blast > 0
+            else f"{occurrences} affected call(s)"
+        )
+        actions = [f"Open issue {issue_id} and inspect the evidence trace"]
+        if sample_call_id:
+            actions.append(f"Replay sample call {sample_call_id} before shipping a fix")
+        else:
+            actions.append("Promote one failing trace into replay coverage")
+        return AskAnswer(
+            answer=(
+                f"{issue_id} is a {failure_code} problem on {agent}. "
+                f"The current impact is {impact}. Use the linked evidence to confirm "
+                "the grouped failure, then add replay coverage before changing the prompt or tool policy."
+            ),
+            suggested_actions=actions,
+            confidence=0.65,
+            intent=intent.name,
+            evidence=[_link_to_dict(link) for link in evidence.links],
+            used_llm=False,
+            fallback_reason=reason,
+        )
+
+    focused_call = summary.get("focused_call")
+    if isinstance(focused_call, dict):
+        call_id = focused_call.get("call_id") or "this call"
+        status = focused_call.get("status") or "unknown"
+        agent = focused_call.get("agent_name") or focused_call.get("model") or "the agent"
+        latency_ms = focused_call.get("latency_ms")
+        cost_usd = float(focused_call.get("cost_usd") or 0)
+        latency_text = f" in {float(latency_ms):.0f} ms" if latency_ms is not None else ""
+        return AskAnswer(
+            answer=(
+                f"{call_id} finished with status {status} on {agent}{latency_text}. "
+                f"It cost ${cost_usd:.4f}. Open the call evidence and compare it with nearby failures before changing runtime behavior."
+            ),
+            suggested_actions=[
+                f"Open call {call_id} to inspect prompt, response, and tool spans",
+                "Compare this call against recent failures from the same agent",
+            ],
+            confidence=0.6,
+            intent=intent.name,
+            evidence=[_link_to_dict(link) for link in evidence.links],
+            used_llm=False,
+            fallback_reason=reason,
+        )
+
     pieces: list[str] = []
     if "total_calls" in summary:
         pieces.append(

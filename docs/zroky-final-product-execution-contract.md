@@ -2,6 +2,8 @@
 
 Date: 2026-05-26
 
+Phase 1 product contract update: Zroky is the AI Agent Regression Firewall. The hero promise is "Stop shipping the same agent failure twice." The primary loop is Capture -> Diagnose -> Issue -> Replay -> Golden -> CI Gate. The primary dashboard nav is Failure Inbox, Issues, Replay Lab, Goldens, CI Gates, Cost, Settings. Older IA notes in this document are historical context only when they conflict with this contract.
+
 Role assigned for this audit: Principal Product Architect plus Production Systems Engineer.
 
 This document is the final build contract for turning the current Zroky repo into a production-grade product that a team building complex AI agents can run directly, trust in production, and use daily without reading raw traces first.
@@ -45,18 +47,25 @@ Resolved in current branch:
 2. Local Python runtime and backend virtual environment are usable.
 3. Full no-Docker capture E2E passes.
 4. ClickHouse sync reads token, cost, status, and error fields from `Call` columns.
-5. Dashboard primary nav exposes Agents, Issues, Replay, Goldens, Drift, Calls, Cost, Alerts, and Settings.
+5. Dashboard primary nav exposes Failure Inbox, Issues, Replay Lab, Goldens, CI Gates, Cost, and Settings.
 6. Customer-facing product wording uses Issues; `/v1/issues` is backed by the canonical problem model.
 7. API contract has no `MagicMock`, `Magicmock`, or fake-summary leakage.
 8. Core CI gates are strict; optional benchmark and chaos jobs remain intentionally non-blocking.
 9. Repo-local binaries/generated artifacts were removed and ignored.
 
-Still not proven until external production smoke runs:
+Proven by Phase 8 deployed smoke:
 
-1. Managed Postgres and Redis boot with production secrets.
-2. Real provider proxy traffic flows through the deployed gateway.
-3. Fresh signup can create a project/key and capture the first production event.
-4. Issue -> replay -> golden -> CI proof works against deployed services.
+1. Railway backend health and readiness pass against managed Postgres and Redis.
+2. Provisioned production project and API key can ingest a capture event.
+3. The deployed money path can create an issue, dispatch replay, create a Golden, and run a CI gate.
+4. Vercel dashboard login, signup, proxy, session set, and session clear routes work.
+5. Landing production home and auth CTA routes work.
+
+Remaining pre-launch scope is Phase 9 enterprise finish: no generated artifacts,
+no dead primary navigation routes, no misleading copy, no placeholder metrics in
+the authenticated dashboard, no plaintext secrets in examples, complete env
+examples, current deployment secrets docs, current README, and current product
+lock docs.
 
 ## 2.1 Bold Action Scope
 
@@ -71,8 +80,8 @@ These items are the implementation and verification scope. Resolved items remain
 7. **Remove local binaries, installers, generated coverage, stale logs, and scratch files.**
 8. **Regenerate OpenAPI and remove every `Magicmock` summary.**
 9. **Make CI strict for core lint, tests, type checks, security audit, and replay honesty checks.**
-10. **Add `/agents` Launchpad and make it the default product landing page.**
-11. **Update dashboard primary nav to Agents, Issues, Replay, Goldens, Drift, Calls, Cost, Alerts, Settings.**
+10. **Keep `/home` as the Failure Inbox and make it the default product landing page.**
+11. **Update dashboard primary nav to Failure Inbox, Issues, Replay Lab, Goldens, CI Gates, Cost, Settings.**
 12. **Move Calibration/Judge under Settings -> Evaluation.**
 13. **Keep Trace as deep-linked debug surface, not primary nav.**
 14. **Merge Root Cause into Issue detail and remove standalone product dependency.**
@@ -106,9 +115,9 @@ Commands run during the current verification pass:
 9. E2E sub-gate `Dashboard capture lint`: passed.
 10. E2E sub-gate `Live no-Docker capture smoke`: passed with `status=connected source=gateway_http_direct calls_24h=1`.
 
-Earlier Gateway/Python blockers are resolved in the current branch. The only
-remaining production-readiness proof is external: deploy fresh managed
-Postgres/Redis/secrets/domains, then run the final production smoke sequence.
+Earlier Gateway/Python blockers are resolved in the current branch. The external
+production smoke has passed; launch now depends on the Phase 9 verification
+bundle and worktree hygiene.
 
 ## 4. Target Architecture
 
@@ -166,10 +175,10 @@ Primary nav:
 
 Secondary or hidden routes:
 
-1. `/home`: keep as Command Center, but not default.
+1. `/home`: keep as Failure Inbox and default dashboard landing.
 2. `/trace`: keep deep-linked from Calls and Issues, not primary nav.
 3. `/calibration`: move under Settings -> Evaluation.
-4. `/reliability`: merge into `/agents` or keep as an advanced subpage.
+4. `/reliability` and `/agents`: keep as secondary support surfaces unless they directly serve the Failure Inbox.
 5. `/outcomes`: fold into Cost and Issue impact unless a paid reporting module needs it.
 6. `/root-cause`: merge into Issue Detail and remove as a standalone product route.
 7. `/judge`: keep redirect only, or replace with Settings -> Evaluation.
@@ -177,11 +186,11 @@ Secondary or hidden routes:
 
 ## 6. Dashboard Modules, Exact Behavior
 
-### 6.1 Agents Launchpad
+### 6.1 Failure Inbox
 
-Route: `/agents`
+Route: `/home`
 
-Purpose: simple first screen for vibe-coding developers and agent teams.
+Purpose: primary queue for production agent failures and next actions.
 
 Show one row per agent:
 
@@ -201,7 +210,7 @@ Actions:
 2. Create Replay for latest failing trace.
 3. View Calls.
 4. View Trace tree.
-5. Generate Fix Queue recommendation.
+5. Generate gated fix-review recommendation.
 
 Do not show:
 
@@ -548,7 +557,7 @@ Keep only:
 
 ### Rewrite or supersede stale docs
 
-1. `docs/dashboard-build-contract.md` is stale because it locks V1 to 5 pages and says no multi-agent UI. Final product now needs Agents, Issues, Replay, Goldens, Drift, Calls, Cost, Alerts, Settings.
+1. `docs/dashboard-build-contract.md` must follow the Phase 1 primary nav: Failure Inbox, Issues, Replay Lab, Goldens, CI Gates, Cost, Settings.
 2. Replace it with a short pointer to this document and the blueprint, or rewrite it fully.
 
 ### Regenerate API contract
@@ -575,7 +584,7 @@ Cleanup buckets:
 1. Capture layer: Python SDK, JS SDK, Gateway, backend ingest, capture health.
 2. Replay layer: replay run API, replay executor, replay worker, replay dashboard, replay tests.
 3. Issues product object: issues API, issue grouping, issue detail UI, issue CTAs.
-4. Dashboard IA: shell nav, Agents Launchpad, Home, Calls, Goldens, Drift, Alerts, Settings.
+4. Dashboard IA: shell nav, Failure Inbox, Issues, Replay Lab, Goldens, CI Gates, Cost, Settings.
 5. Digest cleanup: weekly impact removal, digest engine, digest routes, worker tasks.
 6. Docs/contracts: blueprint, operating protocol, final execution contract.
 7. Repo hygiene: `.gitignore`, generated coverage removal, stale logs, large binary removal.
@@ -774,13 +783,13 @@ Goal: user sees the closed loop without knowing internals.
 
 Tasks:
 
-1. Add `/agents` Launchpad.
-2. Make `/agents` default landing.
+1. Keep `/home` as Failure Inbox.
+2. Make `/home` default landing.
 3. Update primary nav.
 4. Move Calibration under Settings.
 5. Hide Trace from primary nav.
-6. Put Goldens, Drift, Calls, Alerts into nav.
-7. Add first-run capture setup to Agents.
+6. Keep Goldens and CI Gates in primary nav; keep Drift, Calls, Alerts secondary.
+7. Add first-run capture setup to Failure Inbox and Settings.
 8. Add issue inline CTAs.
 9. Add Promote to Golden on Replay detail.
 10. Add Ask Zroky action buttons.
@@ -885,7 +894,7 @@ Rules:
 1. Do not invent product behavior. Verify with rg and file reads before editing.
 2. Do not say complete unless the relevant tests pass or you explicitly list the blocker.
 3. Do not rebuild solved contract surfaces unless tests prove they are broken.
-4. Keep the product loop first: Capture -> Issues -> Replay -> Goldens -> CI -> Monitor.
+4. Keep the product loop first: Capture -> Diagnose -> Issue -> Replay -> Golden -> CI Gate.
 5. Raw Calls and Traces are debug surfaces, not the main product.
 6. Stub replay is never a verified fix.
 7. Before edits, state which files will change and why.
@@ -1585,11 +1594,11 @@ Correct result:
 1. Critical Golden fail blocks release.
 2. Flaky Golden is visible and not treated as a hard production proof until stabilized.
 
-### 11.21 Agents Launchpad
+### 11.21 Failure Inbox
 
 UI path:
 
-1. Open `/agents`.
+1. Open `/home`.
 
 Expected row per agent:
 
@@ -1737,18 +1746,19 @@ Correct:
 2. Stub-only run cannot approve production fix.
 3. Missing evidence gives a warning or failure, not a false pass.
 
-### 11.27 Admin separation
+### 11.27 Owner dashboard separation
 
 Customer dashboard expected:
 
 1. No `/owner/*` route in customer dashboard production build.
 2. No founder/admin nav in customer UI.
 
-Admin app expected:
+Owner app expected:
 
 1. Owner routes live in `zroky-admin`.
 2. Owner APIs are gated by owner/admin auth.
 3. `FEATURE_LEGACY_OWNER=false` for customer deployments.
+4. Owner product scope follows `docs/OWNER_DASHBOARD_CONTRACT.md`.
 
 ### 11.28 Final test pass output
 
@@ -1798,7 +1808,7 @@ Zroky is production-ready only when all of these are true:
 11. Real comparison replay is verified only with real comparison evidence.
 12. User can promote passing replay trace to Golden.
 13. CI can run Goldens and block risky deploys.
-14. Agents Launchpad is the default dashboard.
+14. Failure Inbox is the default dashboard.
 15. Ask Zroky answers with evidence and creates actions.
 16. Gateway tests pass.
 17. Backend focused tests pass.

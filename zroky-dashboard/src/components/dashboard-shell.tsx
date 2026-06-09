@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
+  Bell,
   Bot,
   Calendar,
   Check,
@@ -22,11 +23,11 @@ import {
   LockKeyhole,
   LogOut,
   Menu,
+  MessageSquareText,
   RotateCcw,
   Search,
   Settings2,
   Shield,
-  SlidersHorizontal,
   UserRound,
   X,
 } from "lucide-react";
@@ -99,6 +100,22 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
+    id: "cost",
+    href: "/cost",
+    label: "Cost",
+    subtitle: "Failure cost, model mix, budget risk, and spend controls.",
+    Icon: DollarSign,
+    visibleInNav: true,
+  },
+  {
+    id: "calls",
+    href: "/calls",
+    label: "Calls",
+    subtitle: "Search individual calls, diagnoses, and call-level evidence.",
+    Icon: MessageSquareText,
+    visibleInNav: true,
+  },
+  {
     id: "traces",
     href: "/trace",
     label: "Traces",
@@ -107,11 +124,11 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
-    id: "cost",
-    href: "/cost",
-    label: "Cost",
-    subtitle: "Failure cost, model mix, budget risk, and spend controls.",
-    Icon: DollarSign,
+    id: "alerts",
+    href: "/alerts",
+    label: "Alerts",
+    subtitle: "Production attention queue, routing tests, and alert lifecycle controls.",
+    Icon: Bell,
     visibleInNav: true,
   },
   {
@@ -134,23 +151,10 @@ const DATE_PRESETS = [
 ] as const;
 
 type DatePresetId = (typeof DATE_PRESETS)[number]["id"];
-type ShellMenu = "workspace" | "route" | "date" | "env" | "filters" | "account";
-
-type ShellActionLink = {
-  href: string;
-  label: string;
-  description: string;
-};
+type ShellMenu = "workspace" | "route" | "date" | "env" | "account";
 
 const DASHBOARD_ROUTES = [
   ...NAV_ITEMS,
-  {
-    id: "calls",
-    href: "/calls",
-    label: "Calls",
-    subtitle: "Search individual calls, diagnoses, and call-level evidence.",
-    Icon: GitBranch,
-  },
   {
     id: "home",
     href: "/home",
@@ -164,13 +168,6 @@ const DASHBOARD_ROUTES = [
     label: "Alerts",
     subtitle: "Alert routing, triage, acknowledgement, and resolution.",
     Icon: AlertTriangle,
-  },
-  {
-    id: "drift",
-    href: "/drift",
-    label: "Provider Drift",
-    subtitle: "Provider and model behavior drift over time.",
-    Icon: GitBranch,
   },
   {
     id: "account",
@@ -258,86 +255,6 @@ function dateRangeLabel(
     return `${formatDateShort(dateRange.from)} - ${formatDateShort(dateRange.to)}`;
   }
   return "Last 7 days";
-}
-
-function filterLinksForPath(pathname: string): ShellActionLink[] {
-  if (pathname.startsWith("/calls")) {
-    return [
-      {
-        href: "/calls?status=failed&sort_by=created_at&sort_order=desc",
-        label: "Failed calls",
-        description: "Open the Calls table with failed calls first.",
-      },
-      {
-        href: "/calls?sort_by=cost_usd&sort_order=desc",
-        label: "Highest spend",
-        description: "Sort calls by cost impact.",
-      },
-      {
-        href: "/cost",
-        label: "Cost explorer",
-        description: "Move from call-level evidence to spend impact.",
-      },
-    ];
-  }
-
-  if (pathname.startsWith("/settings")) {
-    return [
-      { href: "/settings/billing", label: "Plan & billing", description: "Open plan, quota, and Stripe controls." },
-      { href: "/settings/providers", label: "Providers", description: "Check model provider connection health." },
-      { href: "/settings/keys", label: "API keys", description: "Manage project capture keys." },
-    ];
-  }
-
-  if (pathname.startsWith("/cost")) {
-    return [
-      {
-        href: "/calls?sort_by=cost_usd&sort_order=desc",
-        label: "Expensive calls",
-        description: "Inspect the calls driving this spend.",
-      },
-      { href: "/settings/billing", label: "Budget settings", description: "Tune spend limits and plan controls." },
-      { href: "/issues", label: "Costly issues", description: "Review clustered failures with business impact." },
-    ];
-  }
-
-  if (pathname.startsWith("/replay")) {
-    return [
-      { href: "/issues", label: "Issues needing proof", description: "Find failures that need trusted replay." },
-      { href: "/goldens", label: "Golden traces", description: "Promote verified scenarios into release guards." },
-      { href: "/ci-gates", label: "CI gates", description: "Run regression gates after replay proof." },
-    ];
-  }
-
-  if (pathname.startsWith("/goldens")) {
-    return [
-      { href: "/replay", label: "Replay lab", description: "Run candidates before promotion." },
-      { href: "/ci-gates", label: "CI gates", description: "Use goldens as merge protection." },
-      { href: "/issues", label: "Open issues", description: "Find failures that need coverage." },
-    ];
-  }
-
-  if (pathname.startsWith("/ci-gates")) {
-    return [
-      { href: "/goldens", label: "Golden coverage", description: "Review the guard set behind CI." },
-      { href: "/replay", label: "Replay runs", description: "Verify exact scenarios before gate runs." },
-      { href: "/issues", label: "Open regressions", description: "Review failures blocked by gates." },
-    ];
-  }
-
-  if (pathname.startsWith("/trace")) {
-    return [
-      { href: "/calls?status=failed", label: "Failed calls", description: "Open failed call evidence with filters applied." },
-      { href: "/issues", label: "Clustered issues", description: "Move from traces to root-cause clusters." },
-      { href: "/replay", label: "Replay scenario", description: "Verify a trace path in Replay Lab." },
-    ];
-  }
-
-  return [
-    { href: "/issues", label: "Open issues", description: "Review unresolved production failures." },
-    { href: "/calls?status=failed", label: "Failed calls", description: "Open captured failed calls." },
-    { href: "/cost", label: "Cost impact", description: "Inspect wasted spend and budget risk." },
-  ];
 }
 
 function navClass(pathname: string, href: string): string {
@@ -442,7 +359,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const routeMenuRef = useRef<HTMLDivElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
   const envMenuRef = useRef<HTMLDivElement>(null);
-  const filtersMenuRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
   const [activeDatePreset, setActiveDatePreset] = useState<DatePresetId>("7d");
@@ -451,8 +367,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const accountMenuOpen = openMenu === "account";
 
   const {
-    sidebarOpen,
-    toggleSidebar,
     closeSidebar,
     setLastVisitedPage,
     selectedProject,
@@ -506,7 +420,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         routeMenuRef,
         dateMenuRef,
         envMenuRef,
-        filtersMenuRef,
         accountMenuRef,
       ].some((ref) => ref.current?.contains(target));
       if (!isInsideMenu) setOpenMenu(null);
@@ -584,17 +497,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     budgetStatus?.status === "critical" ? "is-critical" : budgetStatus?.status === "warning" ? "is-warning" : "is-ok";
   const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);
   const currentRoute = getRouteMeta(pathname);
-  const filterLinks = filterLinksForPath(pathname);
-  const sidebarVisible = compactShell ? compactSidebarOpen : sidebarOpen;
+  const sidebarVisible = compactShell ? compactSidebarOpen : true;
 
   const badges: Record<string, number> = {};
   if (issuesCount > 0) badges.issues = issuesCount;
   if (agentsCount > 0) badges.agents = agentsCount;
 
-  const orgName = projectQuery.data?.name ?? "Acme Corp";
+  const orgName = projectQuery.data?.name?.trim() || (projectQuery.isLoading ? "Loading workspace" : "Workspace unavailable");
   const envDisplay = envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
-  const accountEmail = meQuery.data?.email ?? "sanket@acme.com";
-  const accountName = meQuery.data?.display_name?.trim() || accountEmail?.split("@")[0] || "Sanket K.";
+  const accountEmail = meQuery.data?.email?.trim() || null;
+  const accountName =
+    meQuery.data?.display_name?.trim() ||
+    (accountEmail ? accountEmail.split("@")[0] : null) ||
+    (meQuery.isLoading ? "Loading account" : "Account");
   const accountInitials = initials(accountName || accountEmail || "User");
 
   function toggleMenu(menu: ShellMenu) {
@@ -605,9 +520,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     setOpenMenu(null);
     if (compactShell) {
       setCompactSidebarOpen((open) => !open);
-      return;
     }
-    toggleSidebar();
   }
 
   function applyDatePreset(presetId: DatePresetId) {
@@ -645,19 +558,37 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     <div className={`app-shell ${sidebarVisible ? "" : "sidebar-collapsed"}`}>
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarVisible ? "" : "hidden lg:flex"}`}>
-        <div className="sidebar-logo">
+        <Link href="/home" className="sidebar-logo" aria-label="Zroky dashboard home">
           <Image
-            src="/zroky-sidebar-logo.png"
+            src="/zroky-sidebar-logo-transparent.png"
             alt="Zroky"
-            width={40}
-            height={40}
+            width={34}
+            height={34}
             priority
             className="sidebar-logo-image"
           />
-        </div>
+          <span className="sidebar-logo-word">Zroky</span>
+        </Link>
 
         <nav className="nav-links" aria-label="Primary">
-          {VISIBLE_NAV.map((item) => {
+          <span className="nav-section-label">Main Menu</span>
+          {VISIBLE_NAV.filter((item) => item.id !== "settings").map((item) => {
+            const { badgeKey } = item;
+            const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
+            return (
+              <NavFeatureGate
+                key={item.id}
+                item={item}
+                pathname={pathname}
+                badgeCount={count}
+                planTemplate={planTemplate}
+                planCode={planCode}
+                entitlementLoading={billingQuery.isLoading}
+              />
+            );
+          })}
+          <span className="nav-section-label nav-section-label-spaced">Settings</span>
+          {VISIBLE_NAV.filter((item) => item.id === "settings").map((item) => {
             const { badgeKey } = item;
             const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
             return (
@@ -675,6 +606,24 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-foot">
+          <Link href="/settings/billing" className={`plan-card ${planCardStatusClass}`} aria-label="Open billing and usage">
+            <div className="plan-card-head">
+              <span className="plan-badge">{planLabel}</span>
+              <span className="plan-status">{billingStatus}</span>
+            </div>
+            <span className="plan-renew">{planPeriod}</span>
+            <div className="plan-usage-label">
+              <span>{planMetricMain}</span>
+              <span className="plan-usage-total">{planMetricTotal}</span>
+            </div>
+            <div className="plan-usage-track">
+              <div className="plan-usage-fill" style={{ width: `${budgetPercent}%` }} />
+            </div>
+            <span className="plan-usage-link">
+              View billing <ArrowRight size={12} aria-hidden="true" />
+            </span>
+          </Link>
+
           <div className="org-menu" ref={workspaceMenuRef}>
             <button
               type="button"
@@ -726,66 +675,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             ) : null}
           </div>
 
-          <Link href="/settings/billing" className={`plan-card ${planCardStatusClass}`} aria-label="Open billing and usage">
-            <div className="plan-card-head">
-              <span className="plan-badge">{planLabel}</span>
-              <span className="plan-status">{billingStatus}</span>
-            </div>
-            <span className="plan-renew">{planPeriod}</span>
-            <div className="plan-usage-label">
-              <span>{planMetricMain}</span>
-              <span className="plan-usage-total">{planMetricTotal}</span>
-            </div>
-            <div className="plan-usage-track">
-              <div className="plan-usage-fill" style={{ width: `${budgetPercent}%` }} />
-            </div>
-            <span className="plan-usage-link">
-              View billing <ArrowRight size={12} aria-hidden="true" />
-            </span>
-          </Link>
-
-          <div className="user-menu" ref={accountMenuRef}>
-            <button
-              type="button"
-              className={`user-row${accountMenuOpen ? " user-row-active" : ""}`}
-              aria-label="Open account menu"
-              aria-haspopup="menu"
-              aria-expanded={accountMenuOpen}
-              onClick={() => toggleMenu("account")}
-            >
-              <span className="user-avatar">{accountInitials}</span>
-              <span className="user-info">
-                <span className="user-name">{accountName}</span>
-                <span className="user-email">{accountEmail ?? "No email set"}</span>
-              </span>
-              <ChevronDown size={13} className="user-row-chevron" aria-hidden="true" />
-            </button>
-
-            {accountMenuOpen ? (
-              <div className="user-menu-popover" role="menu" aria-label="Account menu">
-                <div className="user-menu-head">
-                  <span className="user-avatar">{accountInitials}</span>
-                  <span className="user-info">
-                    <span className="user-name">{accountName}</span>
-                    <span className="user-email">{accountEmail ?? "No email set"}</span>
-                  </span>
-                </div>
-                <Link
-                  href="/account"
-                  className="user-menu-item"
-                  role="menuitem"
-                  onClick={() => setOpenMenu(null)}
-                >
-                  <UserRound size={15} aria-hidden="true" />
-                  Account
-                </Link>
-                <button type="button" className="user-menu-item user-menu-danger" role="menuitem" onClick={onLogout}>
-                  <LogOut size={15} aria-hidden="true" />
-                  Log out
-                </button>
-              </div>
-            ) : null}
-          </div>
         </div>
       </aside>
 
@@ -810,7 +699,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               onClick={() => toggleMenu("route")}
             >
               <FolderOpen size={14} className="topbar-bc-icon" />
-              <span className="topbar-bc-org">{orgName}</span>
+              <span className="topbar-bc-org">Dashboard</span>
               <span className="topbar-bc-sep">/</span>
               <span className="topbar-bc-page">{currentRoute?.label ?? getTitle(pathname)}</span>
               <ChevronDown size={12} className="topbar-bc-chevron" />
@@ -941,45 +830,41 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               ) : null}
             </div>
 
-            <div className="topbar-menu-wrap" ref={filtersMenuRef}>
+            <div className="topbar-menu-wrap topbar-account-menu" ref={accountMenuRef}>
               <button
                 type="button"
-                className="topbar-icon-btn"
-                aria-label="Open page actions and filters"
+                className={`topbar-account-btn${accountMenuOpen ? " topbar-account-btn-active" : ""}`}
+                aria-label="Open account menu"
                 aria-haspopup="menu"
-                aria-expanded={openMenu === "filters"}
-                onClick={() => toggleMenu("filters")}
+                aria-expanded={accountMenuOpen}
+                onClick={() => toggleMenu("account")}
               >
-                <SlidersHorizontal size={14} aria-hidden="true" />
+                <span className="user-avatar">{accountInitials}</span>
+                <span className="topbar-account-name">{accountName}</span>
+                <ChevronDown size={11} className="user-row-chevron" aria-hidden="true" />
               </button>
-              {openMenu === "filters" ? (
-                <div className="shell-popover topbar-popover filter-popover" role="menu" aria-label="Page actions and filters">
-                  <div className="shell-popover-head">
-                    <span>Page actions</span>
-                    <strong>{getTitle(pathname)}</strong>
-                  </div>
-                  {filterLinks.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="shell-menu-item"
-                      role="menuitem"
-                      onClick={() => setOpenMenu(null)}
-                    >
-                      <SlidersHorizontal size={15} aria-hidden="true" />
-                      <span>
-                        <strong>{item.label}</strong>
-                        <small>{item.description}</small>
-                      </span>
-                      <ArrowRight size={14} className="shell-menu-check" aria-hidden="true" />
-                    </Link>
-                  ))}
-                  <button type="button" className="shell-menu-item" role="menuitem" onClick={openCommandPalette}>
-                    <Search size={15} aria-hidden="true" />
-                    <span>
-                      <strong>Search everything</strong>
-                      <small>Open command palette for traces, issues, and routes.</small>
+
+              {accountMenuOpen ? (
+                <div className="user-menu-popover topbar-account-popover" role="menu" aria-label="Account menu">
+                  <div className="user-menu-head">
+                    <span className="user-avatar">{accountInitials}</span>
+                    <span className="user-info">
+                      <span className="user-name">{accountName}</span>
+                      <span className="user-email">{accountEmail ?? "No email set"}</span>
                     </span>
+                  </div>
+                  <Link
+                    href="/account"
+                    className="user-menu-item"
+                    role="menuitem"
+                    onClick={() => setOpenMenu(null)}
+                  >
+                    <UserRound size={15} aria-hidden="true" />
+                    Account
+                  </Link>
+                  <button type="button" className="user-menu-item user-menu-danger" role="menuitem" onClick={onLogout}>
+                    <LogOut size={15} aria-hidden="true" />
+                    Log out
                   </button>
                 </div>
               ) : null}

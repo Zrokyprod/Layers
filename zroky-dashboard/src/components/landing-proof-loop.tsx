@@ -42,9 +42,10 @@ const failedRuns: FailureRun[] = [
 ];
 
 const outcomes = [
-  { title: "Root cause found", body: "Invalid refund amount format", icon: Search },
+  { title: "Failure diagnosed", body: "Invalid refund amount format", icon: Search },
+  { title: "Issue created", body: "43 repeats, owner assigned", icon: Database },
   { title: "Replay passed", body: "Exact scenario verified", icon: Play },
-  { title: "Golden locked", body: "gld_refund_amount_v1", icon: Database },
+  { title: "Golden promoted", body: "gld_refund_amount_v1", icon: Database },
   { title: "CI gate ready", body: "Will block regressions", icon: Shield },
   { title: "Cost risk reduced", body: "Est. $1,240/mo saved", icon: CircleDollarSign },
 ];
@@ -137,10 +138,10 @@ const evidenceTabs: EvidenceTab[] = [
 const proofSteps = [
   { title: "Capture", body: "Capture every run with full context, cost and outcome.", icon: Code2 },
   { title: "Diagnose", body: "Group failures and pinpoint the root cause.", icon: Search },
+  { title: "Issue", body: "Own the repeated failure with impact, evidence, and next action.", icon: Database },
   { title: "Replay", body: "Replay the exact scenario and compare results.", icon: Play },
   { title: "Golden", body: "Promote verified traces as golden behavior.", icon: Database },
-  { title: "Gate", body: "Run in CI and block regressions before ship.", icon: Shield },
-  { title: "Cost", body: "Reduce repeat failures and save on token spend.", icon: CircleDollarSign },
+  { title: "CI Gate", body: "Run in CI and block regressions before ship.", icon: Shield },
 ];
 
 export default function LandingProofLoop() {
@@ -160,13 +161,12 @@ export default function LandingProofLoop() {
     <>
       <section className="zl-hero" id="product">
         <div className="zl-hero-copy">
-          <span className="zl-badge">AI agent reliability platform</span>
+          <span className="zl-badge">AI Agent Regression Firewall</span>
           <h1>
-            AI agents fail in production. <span>Zroky</span> proves the fix.
+            Stop shipping the same agent failure twice.
           </h1>
           <p>
-            Capture failed runs, find root cause, replay the exact scenario, lock the fix as a golden trace, and block
-            regressions in CI.
+            Capture failed runs, diagnose repeats into issues, replay candidate fixes, promote verified Goldens, and block regressions in CI.
           </p>
           <div className="zl-actions">
             <Link href="/signup" className="zl-button zl-button-primary">
@@ -280,19 +280,19 @@ export default function LandingProofLoop() {
         <h2>Start free. Upgrade when replay proof protects releases.</h2>
         <div className="zl-pricing-grid">
           <article>
-            <span>Free Watch</span>
+            <span>Free</span>
             <strong>$0</strong>
             <p>Capture first failures and review issue evidence.</p>
           </article>
           <article>
-            <span>Pro</span>
-            <strong>$299/mo</strong>
-            <p>Replay proof, golden traces, CI gates, and cost impact.</p>
+            <span>Pilot</span>
+            <strong>$29/mo</strong>
+            <p>Issue grouping, diagnosis, mocked replay, and basic Goldens.</p>
           </article>
           <article>
-            <span>Team</span>
-            <strong>Custom</strong>
-            <p>Controls, rollout support, audit, and custom retention.</p>
+            <span>Pro</span>
+            <strong>$149/mo</strong>
+            <p>Real replay proof, Goldens, CI gates, and cost impact.</p>
           </article>
         </div>
       </section>

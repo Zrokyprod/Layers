@@ -35,9 +35,9 @@ The worker handles execution only. Zroky Cloud/Pilot handles issue grouping, rep
 docker run -d \
   --name zroky-replay-worker \
   -e CONTROL_PLANE_URL=https://api.zroky.com \
-  -e WORKER_TOKEN=your-worker-token \
-  -e ARTIFACT_SIGNING_KEY=your-signing-key \
-  -e OPENROUTER_API_KEY=your-openrouter-key \
+  -e WORKER_TOKEN=$ZROKY_WORKER_TOKEN \
+  -e ARTIFACT_SIGNING_KEY=$ZROKY_ARTIFACT_SIGNING_KEY \
+  -e OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
   ghcr.io/zroky-ai/zroky-replay-worker:latest
 ```
 

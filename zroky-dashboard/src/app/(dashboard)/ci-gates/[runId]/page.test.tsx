@@ -105,6 +105,7 @@ function ciDetail(overrides: Partial<RegressionCIRunDetailResponse> = {}): Regre
       pr_title: "Refund retry guard",
       branch: "refund-retry",
       pr_url: "https://github.com/acme/app/pull/42",
+      summary_url: "/v1/regression-ci/runs/run_ci_1",
       clusters: [{ label: "Refund protected flow", size: 3, reason: "Refund status changed" }],
       notes: "Regression exceeded threshold.",
     },
@@ -134,6 +135,7 @@ describe("CI Gate detail MVP", () => {
     expect(screen.getAllByText("Regression CI blocked this change.").length).toBeGreaterThan(0);
     expect(screen.getByText("Refund protected flow (3)")).toBeInTheDocument();
     expect(screen.getByText("Refund status changed")).toBeInTheDocument();
+    expect(screen.getAllByText("/v1/regression-ci/runs/run_ci_1").length).toBeGreaterThan(0);
     expect(screen.getByText(/Replay CI regressed/)).toBeInTheDocument();
   });
 

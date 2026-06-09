@@ -23,7 +23,7 @@ docker run -d \
   -e ZROKY_EMIT_MODE=http \
   -e ZROKY_API_URL=https://api.zroky.com \
   -e ZROKY_INGEST_URL=https://api.zroky.com/api/v1/ingest \
-  -e ZROKY_GATEWAY_API_KEY=your-gateway-api-key \
+  -e ZROKY_GATEWAY_API_KEY=$ZROKY_GATEWAY_API_KEY \
   ghcr.io/zroky-ai/zroky-gateway:latest
 ```
 
@@ -41,7 +41,7 @@ import OpenAI from "openai";
 const openai = new OpenAI({
   baseURL: "http://localhost:8090/v1",
   defaultHeaders: {
-    "X-Zroky-Project-Id": "proj_xxxx",
+    "X-Zroky-Project-Id": process.env.ZROKY_PROJECT_ID!,
     "X-Zroky-Agent-Name": "refund-agent",
     "X-Zroky-Workflow-Name": "refund-review",
     "X-Zroky-Prompt-Version": "refund-v42",

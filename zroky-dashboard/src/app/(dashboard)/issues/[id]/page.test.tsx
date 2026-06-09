@@ -7,6 +7,7 @@ import IssueDetailPage from "./page";
 const api = vi.hoisted(() => ({
   createReplayRunFromCall: vi.fn(),
   createReplayRunFromIssue: vi.fn(),
+  createProviderKey: vi.fn(),
   getBillingMe: vi.fn(),
   getIssue: vi.fn(),
   ignoreIssue: vi.fn(),
@@ -14,6 +15,10 @@ const api = vi.hoisted(() => ({
   resolveIssue: vi.fn(),
   runIssueCiGate: vi.fn(),
   updateIssueTriage: vi.fn(),
+}));
+
+const providerKeyState = vi.hoisted(() => ({
+  active: true,
 }));
 
 const navigation = vi.hoisted(() => ({
@@ -51,6 +56,21 @@ vi.mock("@/lib/api", async () => {
     ...api,
   };
 });
+
+vi.mock("@/lib/hooks", () => ({
+  useActiveProviderKeys: () => ({
+    data: {
+      items: providerKeyState.active ? [{ id: "key_1", is_active: true }] : [],
+      total_in_page: providerKeyState.active ? 1 : 0,
+    },
+    refetch: vi.fn(async () => ({
+      data: {
+        items: providerKeyState.active ? [{ id: "key_1", is_active: true }] : [],
+        total_in_page: providerKeyState.active ? 1 : 0,
+      },
+    })),
+  }),
+}));
 
 const now = "2026-05-29T10:00:00.000Z";
 
@@ -154,6 +174,10 @@ function mockDetail(
     plan_code: Object.keys(planTemplate).length === 0 ? "free" : "pilot",
     status: "active",
     seats: 1,
+    payment_provider: "skydo",
+    payment_customer_ref: null,
+    payment_subscription_ref: null,
+    payment_request_ref: null,
     stripe_customer_id: null,
     stripe_sub_id: null,
     current_period_end: null,
@@ -246,6 +270,7 @@ function mockDetail(
 describe("IssueDetailPage MVP investigation layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    providerKeyState.active = true;
     navigation.push.mockReset();
     navigation.issueId = "issue_1";
   });

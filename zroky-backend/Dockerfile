@@ -19,6 +19,7 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY scripts ./scripts
+COPY api-contracts /api-contracts
 COPY pricing_config.json ./pricing_config.json
 
 RUN chmod +x scripts/start.sh scripts/start-api.sh scripts/start-worker.sh scripts/start-beat.sh

@@ -3,8 +3,6 @@
  * Follows the same request pattern as api.ts (cookie-based auth, /api/zroky proxy).
  */
 
-import { readAccessTokenFromBrowser } from "@/lib/auth";
-
 export interface ToolSource {
   tool: string;
   summary: string;
@@ -17,26 +15,19 @@ export interface AssistantChatResponse {
   off_topic: boolean;
 }
 
-function buildAuthHeader(token: string): string {
-  return token.toLowerCase().startsWith("bearer ") ? token : `Bearer ${token}`;
-}
-
 export async function sendAssistantMessage(
   message: string,
   sessionId: string,
   signal?: AbortSignal,
 ): Promise<AssistantChatResponse> {
-  const token = readAccessTokenFromBrowser();
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
-  if (token) {
-    headers.authorization = buildAuthHeader(token);
-  }
 
   const response = await fetch("/api/zroky/v1/assistant/chat", {
     method: "POST",
     cache: "no-store",
+    credentials: "same-origin",
     headers,
     body: JSON.stringify({ message, session_id: sessionId }),
     signal,
@@ -57,15 +48,9 @@ export async function sendAssistantMessage(
 }
 
 export async function clearAssistantSession(sessionId: string): Promise<void> {
-  const token = readAccessTokenFromBrowser();
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers.authorization = buildAuthHeader(token);
-  }
-
   await fetch(`/api/zroky/v1/assistant/chat/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
     cache: "no-store",
-    headers,
+    credentials: "same-origin",
   });
 }

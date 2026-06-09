@@ -5,11 +5,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Project, Subscription, SupportTicket, SupportTicketMessage
+from app.db.models import Entitlement, Project, Subscription, SupportTicket, SupportTicketMessage
 from app.db.session import get_db_session
 from app.main import app
 
@@ -37,11 +38,20 @@ def client(tmp_path: Path):
         yield TestClient(app), session_factory
     finally:
         app.dependency_overrides.clear()
+        get_settings.cache_clear()
         engine.dispose()
 
 
-def test_owner_support_ticket_detail_and_reply(client) -> None:
+def _set_owner_auth(monkeypatch: pytest.MonkeyPatch, token: str = "owner-token") -> dict[str, str]:
+    monkeypatch.setenv("REQUIRE_PROVISIONING_TOKEN", "false")
+    monkeypatch.setenv("PROVISIONING_TOKEN", token)
+    get_settings.cache_clear()
+    return {"x-zroky-admin-token": token}
+
+
+def test_owner_support_ticket_detail_and_reply(client, monkeypatch: pytest.MonkeyPatch) -> None:
     test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
     with session_factory() as db:
         ticket = SupportTicket(
             id="ticket_1",
@@ -68,7 +78,7 @@ def test_owner_support_ticket_detail_and_reply(client) -> None:
         )
         db.commit()
 
-    detail = test_client.get("/v1/owner/support/tickets/ticket_1")
+    detail = test_client.get("/v1/owner/support/tickets/ticket_1", headers=owner_headers)
     assert detail.status_code == 200
     payload = detail.json()
     assert payload["ticket"]["description"] == "Gateway emits but dashboard is empty."
@@ -77,11 +87,12 @@ def test_owner_support_ticket_detail_and_reply(client) -> None:
 
     reply = test_client.post(
         "/v1/owner/support/tickets/ticket_1/reply",
+        headers=owner_headers,
         json={"body": "Checking the capture stream now.", "is_internal": True},
     )
     assert reply.status_code == 201
 
-    detail_after = test_client.get("/v1/owner/support/tickets/ticket_1")
+    detail_after = test_client.get("/v1/owner/support/tickets/ticket_1", headers=owner_headers)
     assert detail_after.status_code == 200
     messages = detail_after.json()["messages"]
     assert len(messages) == 2
@@ -89,8 +100,9 @@ def test_owner_support_ticket_detail_and_reply(client) -> None:
     assert messages[1]["is_internal"] is True
 
 
-def test_owner_billing_accounts_include_stripe_links(client) -> None:
+def test_owner_billing_accounts_include_stripe_links(client, monkeypatch: pytest.MonkeyPatch) -> None:
     test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
     now = datetime.now(UTC)
     with session_factory() as db:
         db.add(Project(id="org_1", name="Acme AI", owner_ref="acme", is_active=True))
@@ -109,7 +121,7 @@ def test_owner_billing_accounts_include_stripe_links(client) -> None:
         )
         db.commit()
 
-    res = test_client.get("/v1/owner/billing/accounts?status=active")
+    res = test_client.get("/v1/owner/billing/accounts?status=active", headers=owner_headers)
     assert res.status_code == 200
     payload = res.json()
     assert payload["total"] == 1
@@ -118,3 +130,76 @@ def test_owner_billing_accounts_include_stripe_links(client) -> None:
     assert row["project_name"] == "Acme AI"
     assert row["stripe_customer_url"].endswith("/customers/cus_123")
     assert row["stripe_subscription_url"].endswith("/subscriptions/sub_123")
+
+
+def test_owner_confirms_skydo_payment_and_seeds_entitlements(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    period_end = datetime.now(UTC) + timedelta(days=30)
+
+    res = test_client.post(
+        "/v1/owner/billing/payments/confirm",
+        headers=owner_headers,
+        json={
+            "org_id": "org_skydo",
+            "plan_code": "pro",
+            "payment_ref": "skydo_pay_123",
+            "customer_ref": "billing@example.com",
+            "payment_request_ref": "skydo_req_123",
+            "current_period_end": period_end.isoformat(),
+            "seats": 10,
+        },
+    )
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["ok"] is True
+    assert payload["org_id"] == "org_skydo"
+    assert payload["plan_code"] == "pro"
+    assert payload["payment_provider"] == "skydo"
+    assert payload["payment_subscription_ref"] == "skydo_pay_123"
+
+    with session_factory() as db:
+        sub = db.scalar(select(Subscription).where(Subscription.org_id == "org_skydo"))
+        assert sub is not None
+        assert sub.status == "active"
+        assert sub.seats == 10
+        assert sub.payment_customer_ref == "billing@example.com"
+        rows = db.execute(
+            select(Entitlement).where(
+                Entitlement.org_id == "org_skydo",
+                Entitlement.source == "plan",
+            )
+        ).scalars().all()
+        assert len(rows) > 0
+
+    replay = test_client.post(
+        "/v1/owner/billing/payments/confirm",
+        headers=owner_headers,
+        json={
+            "org_id": "org_skydo",
+            "plan_code": "pro",
+            "payment_ref": "skydo_pay_123",
+        },
+    )
+    assert replay.status_code == 200
+
+
+def test_owner_pricing_plans_exposes_backend_entitlement_contract(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    test_client, _ = client
+    owner_headers = _set_owner_auth(monkeypatch)
+
+    res = test_client.get("/v1/owner/pricing/plans", headers=owner_headers)
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["source_of_truth"] == "api-contracts/pricing-plans.json"
+    assert payload["canonical_plan_order"] == ["free", "pilot", "pro", "enterprise"]
+    assert payload["aliases"] == {"plus": "pro"}
+    assert payload["drift"] == []
+
+    plans = {plan["code"]: plan for plan in payload["plans"]}
+    assert plans["free"]["pricing"]["replay_credits"] == 0
+    assert plans["pilot"]["pricing"]["golden_sets"] == 5
+    assert plans["pro"]["pricing"]["blocking_ci"] is True
+    assert plans["enterprise"]["pricing"]["provider_key_vault"] is True

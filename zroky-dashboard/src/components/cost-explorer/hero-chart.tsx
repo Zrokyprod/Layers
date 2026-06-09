@@ -311,7 +311,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
                     y={legitY}
                     width={barWidth}
                     height={legitH}
-                    fill="#22c55e"
+                    fill="var(--dashboard-success)"
                     rx={2}
                   />
                 ) : null}
@@ -334,7 +334,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
             <path
               d={forecastLinePath}
               fill="none"
-              stroke="#6366f1"
+              stroke="var(--dashboard-info)"
               strokeWidth={2}
               strokeDasharray="5 4"
             />
@@ -374,7 +374,7 @@ export function CostHeroChart({ windowDays }: { windowDays: number }) {
                 y={CHART_HEIGHT - CHART_PAD.bottom + 16}
                 textAnchor="middle"
                 fontSize="10"
-                fill={p.isForecast ? "#6366f1" : "var(--text-secondary)"}
+                fill={p.isForecast ? "var(--dashboard-info)" : "var(--text-secondary)"}
                 fontWeight={p.isForecast ? 600 : 400}
               >
                 {formatShortDay(p.day)}

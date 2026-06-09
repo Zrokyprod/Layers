@@ -1,0 +1,19 @@
+{
+  "rows_exported": 454,
+  "project_id": "dogfood_discovery_project",
+  "agent_name": null,
+  "since": null,
+  "until": null,
+  "production_only": true,
+  "privacy_mode": "shape-only",
+  "created_at_min": "2026-06-01T09:00:00+00:00",
+  "created_at_max": "2026-06-06T16:53:00+00:00",
+  "agents": {
+    "billing-agent": 50,
+    "refund-support-agent": 404
+  },
+  "workflows": {
+    "invoice_question": 50,
+    "refund_status_check": 404
+  }
+}

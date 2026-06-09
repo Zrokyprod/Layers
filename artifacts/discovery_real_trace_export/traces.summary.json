@@ -1,0 +1,17 @@
+{
+  "rows_exported": 1,
+  "project_id": "demo-refund-money-path",
+  "agent_name": null,
+  "since": null,
+  "until": null,
+  "production_only": true,
+  "privacy_mode": "shape-only",
+  "created_at_min": "2026-06-04T22:46:25+00:00",
+  "created_at_max": "2026-06-04T22:46:25+00:00",
+  "agents": {
+    "refund-support-agent": 1
+  },
+  "workflows": {
+    "refund-status": 1
+  }
+}

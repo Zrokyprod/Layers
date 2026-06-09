@@ -9,6 +9,7 @@ from app.db._internal.model_diagnosis import *
 from app.db._internal.model_identity import *
 from app.db._internal.model_runtime import *
 from app.db._internal.model_goldens import *
+from app.db._internal.model_discovery import *
 from app.db._internal.model_growth import *
 from app.db._internal.model_provider_drift import *
 from app.db._internal.model_reliability import *

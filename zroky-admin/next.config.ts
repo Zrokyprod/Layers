@@ -14,7 +14,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self'",
-      "connect-src 'self' https://api.zroky.com",
+      "connect-src 'self'",
       "frame-ancestors 'none'",
     ].join("; "),
   },

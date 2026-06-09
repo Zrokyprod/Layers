@@ -297,7 +297,7 @@ export default function DriftPage() {
   const [activeTab, setActiveTab] = useState<DriftTab>("provider");
   const [showZero, setShowZero] = useState(false);
   const providerQuery = useDriftStatus();
-  const judgeQuery = useJudgeHealth(showZero);
+  const judgeQuery = useJudgeHealth(showZero, { enabled: activeTab === "judge" });
   const currentOutcomeQuery = useOutcomeSummary(7);
   const baselineOutcomeQuery = useOutcomeSummary(30);
 
@@ -323,8 +323,18 @@ export default function DriftPage() {
   );
 
   const currentRows = activeTab === "provider" ? providerDriftRows : activeTab === "judge" ? judgeDriftRows : outcomeDriftRows;
-  const activeLoading = activeTab === "provider" ? providerQuery.isLoading : activeTab === "judge" ? judgeQuery.isLoading : currentOutcomeQuery.isLoading || baselineOutcomeQuery.isLoading;
+  const activeLoading = activeTab === "provider" ? providerQuery.isLoading : activeTab === "judge" ? judgeQuery.isLoading || judgeQuery.isFetching : currentOutcomeQuery.isLoading || baselineOutcomeQuery.isLoading;
   const activeError = activeTab === "provider" ? providerQuery.isError : activeTab === "judge" ? judgeQuery.isError : currentOutcomeQuery.isError || baselineOutcomeQuery.isError;
+  const judgeSummaryValue = judgeQuery.isError
+    ? "Delayed"
+    : judgeQuery.data
+      ? String(judgeQuery.data.any_breached ? judgeDriftRows.filter((row) => row.tone === "critical" || row.tone === "warn").length : 0)
+      : "-";
+  const judgeSummarySub = judgeQuery.data
+    ? `${judgeQuery.data.window_hours}h calibration window`
+    : activeTab === "judge"
+      ? "Loading judge diagnostics"
+      : "Open judge tab to load";
 
   return (
     <div className="drift-workspace">
@@ -356,7 +366,7 @@ export default function DriftPage() {
 
       <section className="metric-strip" aria-label="Drift summary">
         <SummaryCard label="Provider alerts" value={String(providerQuery.data?.total_alerts ?? 0)} sub={`${providerQuery.data?.critical_count ?? 0} critical, ${providerQuery.data?.warn_count ?? 0} watch`} />
-        <SummaryCard label="Judge breaches" value={String(judgeQuery.data?.any_breached ? judgeDriftRows.filter((row) => row.tone === "critical" || row.tone === "warn").length : 0)} sub={`${judgeQuery.data?.window_hours ?? 0}h calibration window`} />
+        <SummaryCard label="Judge breaches" value={judgeSummaryValue} sub={judgeSummarySub} />
         <SummaryCard label="Outcome cost" value={usd(currentOutcomeQuery.data?.total_outcome_usd ?? 0)} sub="Current 7d window" />
         <SummaryCard label="Replay targets" value={String(currentRows.length)} sub="Rows with action evidence" />
       </section>
@@ -377,7 +387,7 @@ export default function DriftPage() {
       {activeError ? (
         <div className="drift-error">
           <BadgeAlert aria-hidden="true" />
-          Drift data failed to load.
+          <span>{activeTab === "judge" ? "Judge health is taking longer than expected. Replay and outcome drift remain available." : "Drift data failed to load."}</span>
         </div>
       ) : null}
 
@@ -385,11 +395,11 @@ export default function DriftPage() {
         <section className="panel issue-loading-panel" aria-label="Loading drift rows">
           <RefreshCw aria-hidden="true" />
           <div>
-            <strong>Loading drift rows</strong>
-            <p className="notif-meta">Reading provider, judge, and outcome evidence.</p>
+            <strong>{activeTab === "judge" ? "Checking judge health" : "Loading drift rows"}</strong>
+            <p className="notif-meta">{activeTab === "judge" ? "Reading calibration drift with a bounded dashboard wait." : "Reading provider, judge, and outcome evidence."}</p>
           </div>
         </section>
-      ) : (
+      ) : activeError ? null : (
         <DriftTable
           rows={currentRows}
           empty={

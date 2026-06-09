@@ -17,9 +17,10 @@ Every change must directly support at least one part of the Zroky reliability lo
 ```text
 Capture
 -> Diagnose
+-> Issue
 -> Replay
--> Verify
--> Prevent
+-> Golden
+-> CI Gate
 ```
 
 If a change does not help one of these, it is secondary and should not distract from the core product.
@@ -275,7 +276,7 @@ Example:
 Map the task to the reliability loop:
 
 ```text
-Capture / Diagnose / Replay / Verify / Prevent
+Capture / Diagnose / Issue / Replay / Golden / CI Gate
 ```
 
 If it maps to none, reconsider the task.
@@ -470,17 +471,17 @@ Avoid:
 - expert-only language
 - scattered workflows
 
-Use:
+Use the primary dashboard nav:
 
-- Agent Launchpad
+- Failure Inbox
 - Issues
-- Traces
-- Replay
+- Replay Lab
 - Goldens
-- Fix Queue
-- Drift
-- Outcomes
-- Ask Zroky
+- CI Gates
+- Cost
+- Settings
+
+Keep Traces, Calls, Drift, Alerts, Ask Zroky, and admin views as secondary surfaces unless they directly support the primary loop.
 
 ## Ask Zroky Guardrails
 

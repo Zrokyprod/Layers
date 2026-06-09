@@ -14,7 +14,7 @@ type RouteContext = {
 };
 
 function getBaseUrl(): string {
-  const raw = process.env.ZROKY_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  const raw = process.env.ZROKY_API_BASE_URL;
   const isProduction = process.env.NODE_ENV === "production";
   const allowLocalProductionBaseUrl = process.env.ZROKY_ALLOW_LOCAL_API_BASE_URL === "1";
 
@@ -60,19 +60,14 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
     headers.set("content-type", contentType);
   }
 
-  const incomingAuth = request.headers.get("authorization");
   const cookieToken = request.cookies.get("zroky_access_token")?.value;
-  if (incomingAuth) {
-    headers.set("authorization", incomingAuth);
-  } else if (cookieToken) {
+  if (cookieToken) {
     const bearer = cookieToken.toLowerCase().startsWith("bearer ") ? cookieToken : `Bearer ${cookieToken}`;
     headers.set("authorization", bearer);
   }
 
   const projectId = process.env.ZROKY_PROJECT_ID;
   const apiKey = process.env.ZROKY_API_KEY;
-  const provisioningToken = process.env.ZROKY_PROVISIONING_TOKEN;
-  const provisioningHeader = process.env.ZROKY_PROVISIONING_TOKEN_HEADER ?? "x-provisioning-token";
 
   if (projectId) {
     headers.set("x-project-id", projectId);
@@ -80,10 +75,6 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
 
   if (apiKey) {
     headers.set("x-api-key", apiKey);
-  }
-
-  if (provisioningToken) {
-    headers.set(provisioningHeader, provisioningToken);
   }
 
   const timeoutMsRaw = Number(process.env.ZROKY_API_PROXY_TIMEOUT_MS ?? defaultTimeoutMs);
@@ -95,6 +86,7 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
     method: request.method,
     headers,
     cache: "no-store",
+    redirect: "manual",
     signal: controller.signal,
   };
 

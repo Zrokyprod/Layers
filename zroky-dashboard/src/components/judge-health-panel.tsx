@@ -96,7 +96,7 @@ export function JudgeHealthPanel({ pollMs = 30000 }: JudgeHealthPanelProps) {
 
     const load = async () => {
       try {
-        const fresh = await getJudgeHealth({ signal: ctrl.signal });
+        const fresh = await getJudgeHealth({ signal: ctrl.signal, timeoutMs: 4_000 });
         setData(fresh);
         setError(null);
       } catch (err) {
@@ -136,7 +136,7 @@ export function JudgeHealthPanel({ pollMs = 30000 }: JudgeHealthPanelProps) {
         <header className="panel-header">
           <div>
             <h3>Judge Health</h3>
-            <p>Failed to load calibration drift.</p>
+            <p>Judge health check is delayed.</p>
           </div>
         </header>
         <div className="empty">{error}</div>

@@ -4,6 +4,7 @@ import path from "node:path";
 
 export type E2ESeed = {
   api_key_id: string;
+  api_key_prefix?: string;
   call_id: string;
   ci_run_id: string;
   diagnosis_id: string;
@@ -18,6 +19,7 @@ export type E2ESeed = {
   replay_run_id: string;
   trace_id: string;
   user_id: string;
+  provider_key_id?: string;
 };
 
 export const e2eDir = __dirname;
@@ -80,4 +82,27 @@ export async function expectAnyVisibleText(page: Page, labels: string[]): Promis
       },
     )
     .not.toBe("");
+}
+
+export async function expectVisibleTexts(page: Page, labels: string[], timeout = 30_000): Promise<void> {
+  for (const label of labels) {
+    await expect
+      .poll(
+        async () => {
+          const locator = page.getByText(label, { exact: false });
+          const count = await locator.count();
+          for (let index = 0; index < count; index += 1) {
+            if (await locator.nth(index).isVisible().catch(() => false)) {
+              return true;
+            }
+          }
+          return false;
+        },
+        {
+          message: `Expected text to be visible: ${label}`,
+          timeout,
+        },
+      )
+      .toBeTruthy();
+  }
 }

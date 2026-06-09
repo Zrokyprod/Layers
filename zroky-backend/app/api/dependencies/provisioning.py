@@ -29,6 +29,12 @@ def has_provisioning_access(request: Request) -> bool:
     if not settings.REQUIRE_PROVISIONING_TOKEN:
         return True
 
+    return has_strict_provisioning_access(request)
+
+
+def has_strict_provisioning_access(request: Request) -> bool:
+    settings = get_settings()
+
     if settings.PROVISIONING_TOKEN:
         provided_token = request.headers.get(settings.PROVISIONING_TOKEN_HEADER_NAME)
         if provided_token and secrets.compare_digest(provided_token, settings.PROVISIONING_TOKEN):
@@ -53,4 +59,20 @@ def require_provisioning_access(request: Request) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid provisioning credentials.",
+        )
+
+
+def require_owner_provisioning_access(request: Request) -> None:
+    settings = get_settings()
+
+    if not settings.PROVISIONING_TOKEN and not _allow_via_admin_jwt(request):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Owner auth is enabled but PROVISIONING_TOKEN is not configured.",
+        )
+
+    if not has_strict_provisioning_access(request):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid owner credentials.",
         )

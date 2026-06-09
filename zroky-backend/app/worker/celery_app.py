@@ -96,6 +96,24 @@ if settings.GATEWAY_INGEST_STREAM_ENABLED:
         "options": {"queue": "diagnosis_fast"},
     }
 
+if settings.DISCOVERY_ENABLED:
+    _discovery_refresh_hour = min(max(int(settings.DISCOVERY_REFRESH_CRON_HOUR), 0), 23)
+    _discovery_refresh_minute = min(max(int(settings.DISCOVERY_REFRESH_CRON_MINUTE), 0), 59)
+    _discovery_scan_interval = max(60, int(settings.DISCOVERY_SCAN_INTERVAL_SECONDS))
+    beat_schedule["discovery-baseline-refresh-daily"] = {
+        "task": "app.worker.tasks.refresh_discovery_baselines",
+        "schedule": crontab(
+            minute=_discovery_refresh_minute,
+            hour=_discovery_refresh_hour,
+        ),
+        "options": {"queue": "diagnosis_fast"},
+    }
+    beat_schedule["discovery-anomaly-scan"] = {
+        "task": "app.worker.tasks.scan_discovery_anomalies",
+        "schedule": _discovery_scan_interval,
+        "options": {"queue": "diagnosis_fast"},
+    }
+
 celery_app = Celery(
     "zroky",
     broker=broker_url,

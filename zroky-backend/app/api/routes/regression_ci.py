@@ -349,7 +349,7 @@ def _run_regression_ci_background(
                 tenant_id, exc_info=True,
             )
 
-        run_regression_ci(
+        report = run_regression_ci(
             inputs,
             db=session,
             candidate_resolver=_adapter,
@@ -358,6 +358,20 @@ def _run_regression_ci_background(
             operator_override=op_override,
             run_id_override=run_id,
         )
+        if report.verdict in {"fail", "error"}:
+            try:
+                from app.services.notification_dispatch import dispatch_ci_gate_failed_slack_alert
+
+                dispatch_ci_gate_failed_slack_alert(
+                    db=session,
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    status=report.verdict,
+                    git_sha=request_payload.get("git_sha"),
+                    report=report.to_dict(),
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug("regression_ci.background.slack_alert_failed", exc_info=True)
         # Orchestrator commits at the end. Nothing else to do.
     except Exception as exc:  # noqa: BLE001
         logger.exception(
@@ -373,17 +387,31 @@ def _run_regression_ci_background(
                 )
             ).scalar_one_or_none()
             if row is not None:
-                row.status = "error"
-                row.completed_at = datetime.now(timezone.utc)
-                row.summary_json = json.dumps({
+                error_summary = {
                     "schema_version": "v1",
                     "run_id": run_id,
                     "project_id": tenant_id,
                     "verdict": "error",
                     "notes": [f"background_task_failed:{type(exc).__name__}"],
-                })
+                }
+                row.status = "error"
+                row.completed_at = datetime.now(timezone.utc)
+                row.summary_json = json.dumps(error_summary)
                 session.add(row)
                 session.commit()
+                try:
+                    from app.services.notification_dispatch import dispatch_ci_gate_failed_slack_alert
+
+                    dispatch_ci_gate_failed_slack_alert(
+                        db=session,
+                        tenant_id=tenant_id,
+                        run_id=run_id,
+                        status="error",
+                        git_sha=request_payload.get("git_sha"),
+                        report=error_summary,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.debug("regression_ci.background.slack_alert_failed", exc_info=True)
         except Exception:  # noqa: BLE001
             logger.exception(
                 "regression_ci.background.finalize_error_failed run=%s", run_id,

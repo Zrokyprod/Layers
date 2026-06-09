@@ -22,6 +22,7 @@ _PARTS = (
     "tasks_replay.py",
     "tasks_billing.py",
     "tasks_drift.py",
+    "tasks_discovery.py",
 )
 
 

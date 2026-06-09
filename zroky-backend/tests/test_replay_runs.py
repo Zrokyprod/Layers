@@ -971,6 +971,39 @@ class TestReplayModeInResponse:
         assert body["replay_mode"] == "stub"
         assert _STUB_MODE_WARNING in body["replay_mode_warning"]
 
+    def test_backfills_source_context_from_legacy_summary_keys(
+        self, client: TestClient
+    ) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            gs = _seed_set_with_traces(session, project_id="proj-1", name="x")
+            run = dispatch_replay_run(session, project_id="proj-1", golden_set_id=gs.id)
+            run.summary_json = json.dumps(
+                {
+                    "trace_count_at_dispatch": 1,
+                    "source_kind": "issue",
+                    "source_id": "issue-legacy",
+                    "source_issue_id": "issue-legacy",
+                    "source_call_id": "call-legacy",
+                    "source_issue_failure_code": "OUTPUT_MISMATCH",
+                    "source_issue_severity": "high",
+                },
+                separators=(",", ":"),
+            )
+            session.add(run)
+            session.commit()
+            run_id = run.id
+
+        response = client.get(
+            f"/v1/replay/runs/{run_id}", headers={PROJECT_HEADER: "proj-1"}
+        )
+        assert response.status_code == 200
+        context = response.json()["source_context"]
+        assert context["kind"] == "issue"
+        assert context["issue_id"] == "issue-legacy"
+        assert context["call_id"] == "call-legacy"
+        assert context["failure_code"] == "OUTPUT_MISMATCH"
+
 
 # ── route: POST /v1/calls/{call_id}/mark-golden ──────────────────────────────
 
@@ -1016,6 +1049,7 @@ class TestCreateReplayFromIssueRoute:
                         "failure_code": "OUTPUT_MISMATCH",
                         "prompt_fingerprint": "fp-issue",
                         "agent_name": "support-agent",
+                        "root_cause": "Support agent returned the wrong refund status.",
                         "legacy_issue": {
                             "failure_code": "OUTPUT_MISMATCH",
                             "prompt_fingerprint": "fp-issue",
@@ -1047,6 +1081,8 @@ class TestCreateReplayFromIssueRoute:
             assert summary["source_kind"] == "issue"
             assert summary["source_issue_id"] == "issue-1"
             assert summary["source_call_id"] == "call-issue"
+            assert summary["source_context"]["reason"] == "Support agent returned the wrong refund status."
+            assert summary["source_context"]["issue_id"] == "issue-1"
             trace = session.execute(
                 select(GoldenTrace).where(GoldenTrace.golden_set_id == run.golden_set_id)
             ).scalar_one()
@@ -1054,6 +1090,79 @@ class TestCreateReplayFromIssueRoute:
             assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
             assert trace.expected_output_text is None
             assert trace.source_output_text == "issue fixed"
+
+        detail = client.get(
+            f"/v1/replay/runs/{body['id']}",
+            headers={PROJECT_HEADER: "proj-1"},
+        )
+        assert detail.status_code == 200
+        context = detail.json()["source_context"]
+        assert context["title"] == "support-agent - output mismatch"
+        assert context["reason"] == "Support agent returned the wrong refund status."
+        assert context["failure_code"] == "OUTPUT_MISMATCH"
+
+    def test_discovery_issue_replay_maps_discovery_source_context(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.api.routes import replay_runs as replay_runs_routes
+
+        monkeypatch.setattr(replay_runs_routes, "_enqueue_replay_run", lambda run_id, tenant_id: None)
+        now = datetime.now(timezone.utc)
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            _seed_call(
+                session,
+                project_id="proj-1",
+                call_id="call-discovery",
+                payload_json=json.dumps({"response": "tool skipped"}),
+            )
+            issue = Anomaly(
+                id="issue-discovery",
+                project_id="proj-1",
+                fingerprint=compute_fingerprint(
+                    detector="UNKNOWN",
+                    prompt_fingerprint=None,
+                    agent_name=None,
+                    extra="sig-refund-tool",
+                ),
+                detector="BEHAVIORAL_DRIFT",
+                severity="high",
+                status="open",
+                occurrence_count=4,
+                first_seen_at=now - timedelta(hours=1),
+                last_seen_at=now,
+                sample_call_ids_json=json.dumps(["call-discovery"]),
+                evidence_json=json.dumps(
+                    {
+                        "source": "discovery",
+                        "summary": "refund_agent skipped get_refund_status in 96% normal trace context",
+                        "confidence": 0.91,
+                        "discovery_signature": "sig-refund-tool",
+                        "primary_dimension": "missing_critical_tool",
+                        "workflow_name": "refund-resolution",
+                    },
+                    separators=(",", ":"),
+                ),
+            )
+            session.add(issue)
+            session.commit()
+
+        response = client.post(
+            "/v1/replay/runs/from-issue/issue-discovery",
+            headers={PROJECT_HEADER: "proj-1"},
+            json={"replay_mode": "stub"},
+        )
+        assert response.status_code == 202
+        detail = client.get(
+            f"/v1/replay/runs/{response.json()['id']}",
+            headers={PROJECT_HEADER: "proj-1"},
+        )
+        assert detail.status_code == 200
+        context = detail.json()["source_context"]
+        assert context["origin"] == "discovery"
+        assert context["reason"] == "refund_agent skipped get_refund_status in 96% normal trace context"
+        assert context["confidence"] == pytest.approx(0.91)
+        assert context["discovery_signature"] == "sig-refund-tool"
 
 class TestMarkGoldenRoute:
     def test_201(self, client: TestClient) -> None:

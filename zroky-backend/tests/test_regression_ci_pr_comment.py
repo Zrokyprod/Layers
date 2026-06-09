@@ -214,9 +214,9 @@ class TestFooter:
     def test_dashboard_link_when_base_provided(self, base_blast, base_spec) -> None:
         md = format_markdown(
             _mk_report(base_blast=base_blast, base_spec=base_spec),
-            dashboard_base="https://app.zroky.ai",
+            dashboard_base="https://app.zroky.com",
         )
-        assert "https://app.zroky.ai/replay-runs/run-abc" in md
+        assert "https://app.zroky.com/replay-runs/run-abc" in md
 
     def test_placeholder_when_no_base(self, base_blast, base_spec) -> None:
         md = format_markdown(_mk_report(

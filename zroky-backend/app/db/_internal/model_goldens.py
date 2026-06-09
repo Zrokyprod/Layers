@@ -255,7 +255,7 @@ class Anomaly(Base):
             "'RATE_LIMIT', 'AUTH_FAILURE', 'PROVIDER_ERROR', "
             "'LATENCY_ANOMALY', 'LATENCY_DRIFT', 'ERROR_RATE_DRIFT', "
             "'EMPTY_OUTPUT', 'OUTPUT_TRUNCATED', 'OUTPUT_LENGTH_DRIFT', "
-            "'REPEATED_OUTPUT', 'UNKNOWN'"
+            "'REPEATED_OUTPUT', 'BEHAVIORAL_DRIFT', 'UNKNOWN'"
             ")",
             name="ck_anomalies_detector",
         ),

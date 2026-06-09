@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Filter,
+  GitPullRequest,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -16,13 +17,17 @@ import {
   createReplayRunFromIssue,
   listIssues,
 } from "@/lib/api";
+import { ProviderKeyReplayGate } from "@/components/provider-key-replay-gate";
 import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
 import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
+import { useActiveProviderKeys } from "@/lib/hooks";
 import { replayLabel, severityRank } from "@/lib/issue-format";
-import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
+import { DEFAULT_VERIFICATION_REPLAY_MODE, STUB_REPLAY_MODE } from "@/lib/replay-mode";
+import { hasActiveProviderKey } from "@/lib/provider-key-gate";
 import type { IssueItem, IssueStatus } from "@/lib/types";
 
 type StatusFilter = IssueStatus | "all";
+type IssueNextAction = "run_replay" | "promote_golden" | "run_ci_gate" | "open_ci_gate" | "assign_resolve";
 
 type Filters = {
   status: StatusFilter;
@@ -72,6 +77,18 @@ function isUntrustedReplay(issue: IssueItem): boolean {
   return !hasVerifiedFix(issue) || UNTRUSTED_REPLAY_STATUSES.has(normalizedReplayStatus(issue));
 }
 
+function hasActiveGolden(issue: IssueItem): boolean {
+  return Boolean(issue.proof?.golden?.golden_trace_id && issue.proof.golden.status === "active");
+}
+
+function hasCiGateRun(issue: IssueItem): boolean {
+  return Boolean(issue.proof?.ci_gate?.run_id);
+}
+
+function hasDeployPr(issue: IssueItem): boolean {
+  return Boolean(issue.deploy_pr_url?.trim());
+}
+
 function usableUsd(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
@@ -97,8 +114,33 @@ function sortIssues(items: IssueItem[]): IssueItem[] {
     if (trustDelta !== 0) return trustDelta;
     const impactDelta = (issueImpactUsd(b) ?? 0) - (issueImpactUsd(a) ?? 0);
     if (impactDelta !== 0) return impactDelta;
+    const occurrenceDelta = b.occurrence_count - a.occurrence_count;
+    if (occurrenceDelta !== 0) return occurrenceDelta;
     return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
   });
+}
+
+function issueNextAction(issue: IssueItem): IssueNextAction {
+  if (isUntrustedReplay(issue) && issue.sample_call_id) return "run_replay";
+  if (hasCiGateRun(issue)) return "open_ci_gate";
+  if (hasActiveGolden(issue) && hasDeployPr(issue)) return "run_ci_gate";
+  if (hasVerifiedFix(issue) && issue.sample_call_id && !hasActiveGolden(issue)) return "promote_golden";
+  return "assign_resolve";
+}
+
+function issueNextActionLabel(action: IssueNextAction): string {
+  if (action === "run_replay") return "Run replay";
+  if (action === "promote_golden") return "Promote Golden";
+  if (action === "run_ci_gate") return "Run CI gate";
+  if (action === "open_ci_gate") return "Open CI gate";
+  return "Assign / resolve";
+}
+
+function issueNextActionHref(issue: IssueItem): string {
+  const action = issueNextAction(issue);
+  if (action === "open_ci_gate" && issue.proof?.ci_gate?.run_id) return `/ci-gates/${issue.proof.ci_gate.run_id}`;
+  if (action === "promote_golden" && issue.sample_call_id) return `/goldens?call_id=${encodeURIComponent(issue.sample_call_id)}`;
+  return `/issues/${issue.id}`;
 }
 
 function replayProofMatches(issue: IssueItem, filter: string): boolean {
@@ -153,7 +195,9 @@ export default function IssuesPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyIssueId, setBusyIssueId] = useState<string | null>(null);
+  const [providerKeyGateIssue, setProviderKeyGateIssue] = useState<IssueItem | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const providerKeysQuery = useActiveProviderKeys();
 
   const loadIssues = useCallback(
     async (nextCursor?: string | null) => {
@@ -206,12 +250,12 @@ export default function IssuesPage() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function onReplay(issue: IssueItem) {
+  async function runReplay(issue: IssueItem, replayMode = DEFAULT_VERIFICATION_REPLAY_MODE) {
     setActionError(null);
     setBusyIssueId(issue.id);
     try {
       const run = await createReplayRunFromIssue(issue.id, {
-        replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE,
+        replay_mode: replayMode,
       });
       router.push(`/replay/${run.id}`);
     } catch (replayError) {
@@ -221,8 +265,49 @@ export default function IssuesPage() {
     }
   }
 
+  async function onReplay(issue: IssueItem) {
+    if (hasActiveProviderKey(providerKeysQuery.data?.items)) {
+      await runReplay(issue);
+      return;
+    }
+    const refreshed = await providerKeysQuery.refetch();
+    if (hasActiveProviderKey(refreshed.data?.items)) {
+      await runReplay(issue);
+      return;
+    }
+    setProviderKeyGateIssue(issue);
+  }
+
+  function onProviderKeySavedAndRun() {
+    if (!providerKeyGateIssue) return;
+    void runReplay(providerKeyGateIssue);
+  }
+
+  function onUseStubReplay() {
+    if (!providerKeyGateIssue) return;
+    const issue = providerKeyGateIssue;
+    setProviderKeyGateIssue(null);
+    void runReplay(issue, STUB_REPLAY_MODE);
+  }
+
   function primaryAction(issue: IssueItem) {
-    if (hasVerifiedFix(issue) && issue.sample_call_id) {
+    if (hasCiGateRun(issue) && issue.proof?.ci_gate?.run_id) {
+      return (
+        <Link href={`/ci-gates/${issue.proof.ci_gate.run_id}`} className="btn btn-primary btn-sm im-btn-primary">
+          <GitPullRequest aria-hidden="true" />
+          Open CI gate
+        </Link>
+      );
+    }
+    if (hasActiveGolden(issue) && hasDeployPr(issue)) {
+      return (
+        <Link href={`/issues/${issue.id}`} className="btn btn-primary btn-sm im-btn-primary">
+          <GitPullRequest aria-hidden="true" />
+          Run CI gate
+        </Link>
+      );
+    }
+    if (hasVerifiedFix(issue) && issue.sample_call_id && !hasActiveGolden(issue)) {
       return (
         <Link href={`/goldens?call_id=${encodeURIComponent(issue.sample_call_id)}`} className="btn btn-primary btn-sm im-btn-primary">
           <ShieldCheck aria-hidden="true" />
@@ -287,6 +372,14 @@ export default function IssuesPage() {
         <section className="im-notice im-notice-error">
           <p>{actionError}</p>
         </section>
+      ) : null}
+
+      {providerKeyGateIssue ? (
+        <ProviderKeyReplayGate
+          onClose={() => setProviderKeyGateIssue(null)}
+          onSavedAndRun={onProviderKeySavedAndRun}
+          onUseStub={onUseStubReplay}
+        />
       ) : null}
 
       <section className="im-filter-panel" aria-label="Issue filters">
@@ -384,6 +477,7 @@ export default function IssuesPage() {
                 <col className="im-col-replay" />
                 <col className="im-col-status" />
                 <col className="im-col-last-seen" />
+                <col className="im-col-next-action" />
                 <col className="im-col-action" />
               </colgroup>
               <thead>
@@ -394,39 +488,48 @@ export default function IssuesPage() {
                   <th>Replay proof</th>
                   <th>Status</th>
                   <th>Last seen</th>
+                  <th>Next action</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleIssues.map((issue) => (
-                  <tr key={issue.id}>
-                    <td>
-                      <div className="im-issue-cell">
-                        <Link href={`/issues/${issue.id}`}>{issue.title}</Link>
-                        <span>
-                          {detectorLabel(issue.failure_code)} &middot; {issueAgent(issue)} &middot; {formatCount(issue.occurrence_count)} affected calls
-                        </span>
-                      </div>
-                    </td>
-                    <td>{severityBadge(issue)}</td>
-                    <td>
-                      <strong className="im-impact-value">{formatIssueImpact(issue)}</strong>
-                    </td>
-                    <td>{replayLabel(issue.replay_coverage_status)}</td>
-                    <td>
-                      <span className="im-status-pill">{issue.status}</span>
-                    </td>
-                    <td>{formatDateTime(issue.last_seen_at)}</td>
-                    <td>
-                      <div className="im-row-actions">
-                        {primaryAction(issue)}
-                        <Link href={`/issues/${issue.id}`} className="btn btn-soft btn-sm im-btn-secondary">
-                          View issue
+                {visibleIssues.map((issue) => {
+                  const nextAction = issueNextAction(issue);
+                  return (
+                    <tr key={issue.id}>
+                      <td>
+                        <div className="im-issue-cell">
+                          <Link href={`/issues/${issue.id}`}>{issue.title}</Link>
+                          <span>
+                            {detectorLabel(issue.failure_code)} &middot; {issueAgent(issue)} &middot; {formatCount(issue.occurrence_count)} affected calls
+                          </span>
+                        </div>
+                      </td>
+                      <td>{severityBadge(issue)}</td>
+                      <td>
+                        <strong className="im-impact-value">{formatIssueImpact(issue)}</strong>
+                      </td>
+                      <td>{replayLabel(issue.replay_coverage_status)}</td>
+                      <td>
+                        <span className="im-status-pill">{issue.status}</span>
+                      </td>
+                      <td>{formatDateTime(issue.last_seen_at)}</td>
+                      <td>
+                        <Link href={issueNextActionHref(issue)} className="im-next-action-link">
+                          {issueNextActionLabel(nextAction)}
                         </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        <div className="im-row-actions">
+                          {primaryAction(issue)}
+                          <Link href={`/issues/${issue.id}`} className="btn btn-soft btn-sm im-btn-secondary">
+                            View issue
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

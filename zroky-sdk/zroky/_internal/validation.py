@@ -380,7 +380,7 @@ if __name__ == "__main__":
     # 1) Very long input -> TOKEN_OVERFLOW warning.
     long_payload = {
         "model": "gpt-3.5-turbo",
-        "api_key": "sk-example-1234567890",
+        "api_key": "__PROVIDER_API_KEY__",
         "messages": [{"role": "user", "content": "x" * 16000}],
     }
     print(validate(long_payload))
@@ -388,7 +388,7 @@ if __name__ == "__main__":
     # 2) Normal input -> no warnings.
     normal_payload = {
         "model": "gpt-4o",
-        "api_key": "sk-example-1234567890",
+        "api_key": "__PROVIDER_API_KEY__",
         "messages": [{"role": "user", "content": "Summarize this short note."}],
     }
     print(validate(normal_payload))

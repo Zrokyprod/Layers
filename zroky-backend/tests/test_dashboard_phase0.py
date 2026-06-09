@@ -1149,15 +1149,17 @@ def test_retention_data_erasure_requires_admin_role(test_ctx, monkeypatch: pytes
     client: TestClient = test_ctx["client"]
 
     project_id = _create_project(client, "Dash Retention Role Project")
+    monkeypatch.setenv("PROVISIONING_TOKEN", "top-secret")
+    monkeypatch.setenv("ALLOW_PROJECT_HEADER_CONTEXT", "false")
+    get_settings.cache_clear()
+
     api_key_response = client.post(
         f"/v1/projects/{project_id}/api-keys",
+        headers={"X-Zroky-Admin-Token": "top-secret"},
         json={"name": "retention-member-key"},
     )
     assert api_key_response.status_code == 201
     api_key = api_key_response.json()["api_key"]
-
-    monkeypatch.setenv("ALLOW_PROJECT_HEADER_CONTEXT", "false")
-    get_settings.cache_clear()
 
     try:
         forbidden = client.delete(

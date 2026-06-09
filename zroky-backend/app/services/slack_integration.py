@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.models import TenantSlackInstall
 
+_SLACK_WEBHOOK_CIPHERTEXT_PREFIX = "fernet:"
+
 
 def normalize_slack_scopes(raw_scope: str | None) -> list[str]:
     if not raw_scope:
@@ -60,6 +62,19 @@ def encrypt_slack_token(token: str) -> str:
     return encrypted.decode("utf-8")
 
 
+def encrypt_slack_webhook_url(webhook_url: str | None) -> str | None:
+    if webhook_url is None:
+        return None
+    normalized = webhook_url.strip()
+    if not normalized:
+        return None
+    if not normalized.startswith("https://"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slack webhook URL must start with https://")
+    ensure_slack_token_encryption_ready()
+    encrypted = _cipher_for_key(_require_encryption_key()).encrypt(normalized.encode("utf-8"))
+    return f"{_SLACK_WEBHOOK_CIPHERTEXT_PREFIX}{encrypted.decode('utf-8')}"
+
+
 def decrypt_slack_token(encrypted_token: str | None) -> str | None:
     if not encrypted_token:
         return None
@@ -70,6 +85,27 @@ def decrypt_slack_token(encrypted_token: str | None) -> str | None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stored Slack token is invalid. Reconnect Slack in settings.",
+        ) from exc
+    return decrypted.decode("utf-8").strip() or None
+
+
+def decrypt_slack_webhook_url(stored_webhook_url: str | None) -> str | None:
+    if not stored_webhook_url:
+        return None
+    normalized = stored_webhook_url.strip()
+    if not normalized:
+        return None
+    if not normalized.startswith(_SLACK_WEBHOOK_CIPHERTEXT_PREFIX):
+        return normalized
+
+    ensure_slack_token_encryption_ready()
+    encrypted = normalized[len(_SLACK_WEBHOOK_CIPHERTEXT_PREFIX):]
+    try:
+        decrypted = _cipher_for_key(_require_encryption_key()).decrypt(encrypted.encode("utf-8"))
+    except InvalidToken as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stored Slack webhook is invalid. Reconnect Slack in settings.",
         ) from exc
     return decrypted.decode("utf-8").strip() or None
 
@@ -108,10 +144,22 @@ def build_slack_status(install: TenantSlackInstall | None) -> dict[str, Any]:
     }
 
 
-async def send_slack_message(db: Session, tenant_id: str, text: str) -> bool:
+async def send_slack_message(
+    db: Session,
+    tenant_id: str,
+    text: str,
+    *,
+    blocks: list[dict[str, Any]] | None = None,
+) -> bool:
     install = get_slack_install(db, tenant_id)
     if install is None or not install.webhook_url:
         return False
+    webhook_url = decrypt_slack_webhook_url(install.webhook_url)
+    if not webhook_url:
+        return False
+    payload: dict[str, Any] = {"text": text}
+    if blocks:
+        payload["blocks"] = blocks
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(install.webhook_url, json={"text": text})
+        response = await client.post(webhook_url, json=payload)
     return 200 <= response.status_code < 300

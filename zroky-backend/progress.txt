@@ -73,7 +73,7 @@ Decisions (with reasoning):
 
   - build_summary_url() reads FRONTEND_URL at call time (not
     import time). Test settings overrides work without
-    cache_clear(). Falls back to https://zroky.ai when unset.
+    cache_clear(). Falls back to https://zroky.com when unset.
 
 Files touched:
 

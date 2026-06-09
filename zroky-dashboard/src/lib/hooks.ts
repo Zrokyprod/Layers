@@ -47,6 +47,7 @@ import {
 } from "./api";
 import {
   getActivityFeed,
+  listProviderKeys,
   listProviderVerifications,
   testProviderConnection,
   changePassword,
@@ -146,8 +147,10 @@ import type {
   ProjectInviteResponse,
   GithubConnectionStatusResponse,
   ProjectMembershipResponse,
+  ProviderKeyListResponse,
 } from "./types";
 import type { AdjacentCallsResponse } from "./types";
+import { PROVIDER_KEY_QUERY_KEY } from "./provider-key-gate";
 
 // ─── Activity Feed ──────────────────────────────────────────────────────────
 
@@ -576,6 +579,14 @@ export function useProviderVerifications() {
   });
 }
 
+export function useActiveProviderKeys() {
+  return useQuery<ProviderKeyListResponse>({
+    queryKey: PROVIDER_KEY_QUERY_KEY,
+    queryFn: ({ signal }) => listProviderKeys({ include_revoked: false }, signal),
+    staleTime: 60_000,
+  });
+}
+
 export function useTestProviderConnection() {
   return useMutation({
     mutationFn: (provider: string) => testProviderConnection(provider),
@@ -915,11 +926,14 @@ export function useReplayRunDetail(
   });
 }
 
-export function useReplayQuota() {
+export function useReplayQuota(options?: Partial<UseQueryOptions<ReplayQuotaResponse>>) {
   return useQuery<ReplayQuotaResponse>({
     queryKey: ["replay-quota"],
     queryFn: ({ signal }) => getReplayQuota(signal),
     staleTime: 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    ...options,
   });
 }
 
@@ -965,7 +979,9 @@ export function useJudgeHealth(
   return useQuery<JudgeHealthResponse>({
     queryKey: ["judge-health", includeZeroSample],
     queryFn: ({ signal }) => getJudgeHealth({ includeZeroSample, signal }),
-    staleTime: 60_000,
+    staleTime: 300_000,
+    retry: false,
+    refetchOnWindowFocus: false,
     ...options,
   });
 }

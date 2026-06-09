@@ -36,7 +36,7 @@ export type DetectorLayer = "fast" | "pattern" | "judge";
 
 export type DetectorBadgeColor =
   | "red"
-  | "orange"
+  | "accent"
   | "yellow"
   | "purple"
   | "blue"
@@ -66,7 +66,7 @@ const CATALOG: Record<DetectorCategory, DetectorMeta> = {
     code: "TOKEN_OVERFLOW",
     label: "Token Overflow",
     description: "Request exceeded the model's max context window.",
-    badgeColor: "orange",
+    badgeColor: "accent",
     defaultSeverity: "high",
     layer: "fast",
     icon: "⛔",
@@ -102,7 +102,7 @@ const CATALOG: Record<DetectorCategory, DetectorMeta> = {
     code: "EMPTY_OUTPUT",
     label: "Empty Output",
     description: "Call succeeded but the response payload was blank.",
-    badgeColor: "orange",
+    badgeColor: "accent",
     defaultSeverity: "high",
     layer: "fast",
     icon: "∅",
@@ -111,7 +111,7 @@ const CATALOG: Record<DetectorCategory, DetectorMeta> = {
     code: "OUTPUT_TRUNCATED",
     label: "Output Truncated",
     description: "Response hit `max_tokens` before the model finished.",
-    badgeColor: "orange",
+    badgeColor: "accent",
     defaultSeverity: "high",
     layer: "fast",
     icon: "✂",
@@ -299,7 +299,7 @@ export function severityBadgeColor(
     case "critical":
       return "red";
     case "high":
-      return "orange";
+      return "red";
     case "medium":
       return "yellow";
     case "low":

@@ -4,17 +4,15 @@ import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { AuthCard, AuthShell } from "@/components/auth-shell";
-import { storeAuthSession } from "@/lib/auth";
+import { completeOAuthHandoff } from "@/lib/api";
+import { getPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
 
 function OAuthCallbackHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const accessToken = searchParams.get("access_token");
-    const refreshToken = searchParams.get("refresh_token");
-    const expiresIn = searchParams.get("expires_in");
-    const userId = searchParams.get("user_id");
+    const handoffId = searchParams.get("handoff_id");
     const errorParam = searchParams.get("error");
 
     if (errorParam) {
@@ -22,23 +20,19 @@ function OAuthCallbackHandler() {
       return;
     }
 
-    if (!accessToken || !refreshToken) {
+    if (!handoffId) {
       router.replace("/login?error=oauth_failed");
       return;
     }
 
     const finish = async () => {
-      await storeAuthSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        access_expires_in_seconds: Number(expiresIn) || 3600,
-        refresh_expires_in_seconds: 604800,
-        token_type: "bearer",
-        user_id: userId || "",
-        email: null,
-        email_verified: true,
-      });
-      router.replace("/home");
+      try {
+        const tokens = await completeOAuthHandoff(handoffId);
+        await storeAuthSession(tokens);
+        router.replace(getPostAuthRedirectPath("/home"));
+      } catch {
+        router.replace("/login?error=oauth_failed");
+      }
     };
 
     void finish();

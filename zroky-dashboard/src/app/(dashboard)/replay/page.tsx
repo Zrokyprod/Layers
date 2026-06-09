@@ -10,7 +10,6 @@ import {
   DollarSign,
   GitBranch,
   History,
-  Loader2,
   PlayCircle,
   ShieldCheck,
   TriangleAlert,
@@ -26,15 +25,18 @@ import {
   runRegressionCI,
 } from "@/lib/api";
 import type {
+  GoldenSetView,
   RegressionCIRunResponse,
   ReplayCreatePayload,
   ReplayCreateResponse,
   ReplayMode,
   ReplayRunItem,
+  ReplaySourceContext,
 } from "@/lib/api";
 import {
   useCreateReplayRunFromCall,
   useCreateReplayRunFromIssue,
+  useActiveProviderKeys,
   useListCalls,
   useReplayQuota,
   useReplayRuns,
@@ -42,11 +44,14 @@ import {
 import {
   DEFAULT_VERIFICATION_REPLAY_MODE,
   REPLAY_MODE_OPTIONS,
+  STUB_REPLAY_MODE,
   replayModeLabel,
   replayModeProof,
   replayVerificationLabel,
   replayVerifiedFix,
 } from "@/lib/replay-mode";
+import { ProviderKeyReplayGate } from "@/components/provider-key-replay-gate";
+import { hasActiveProviderKey, replayModeRequiresProviderKey } from "@/lib/provider-key-gate";
 import type { CallListItem, IssueItem } from "@/lib/types";
 
 const STATUSES = ["", "pending", "running", "pass", "fail", "error"] as const;
@@ -127,6 +132,115 @@ function optionCallLabel(call: CallListItem) {
   return `${call.error_code ?? call.status} - ${call.agent_name ?? "unknown agent"} - ${call.call_id.slice(0, 12)}`;
 }
 
+function issueReason(issue: IssueItem | null | undefined) {
+  return issue?.root_cause || issue?.recommended_next_action || issue?.user_impact || "No source finding reason captured.";
+}
+
+function sourceContextLabel(context: ReplaySourceContext | null | undefined) {
+  if (!context) return "Source context not captured";
+  return context.title || context.failure_code || context.id || "Source context";
+}
+
+function sourceContextReason(context: ReplaySourceContext | null | undefined) {
+  return context?.reason || "No source finding reason captured.";
+}
+
+function sourceContextMeta(context: ReplaySourceContext | null | undefined) {
+  if (!context) return "legacy replay";
+  const parts = [
+    context.origin,
+    context.severity,
+    context.affected_agent,
+    context.affected_workflow,
+    context.occurrence_count != null ? `${context.occurrence_count}x` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" - ") : context.kind ?? "source";
+}
+
+function sourceContextId(context: ReplaySourceContext | null | undefined) {
+  return context?.issue_id || context?.call_id || context?.id || null;
+}
+
+function sourceContextHref(context: ReplaySourceContext | null | undefined) {
+  if (context?.issue_id) return `/issues/${context.issue_id}`;
+  if (context?.call_id) return `/calls/${context.call_id}`;
+  return null;
+}
+
+function matchesSearch(value: string, query: string) {
+  const normalized = query.trim().toLowerCase();
+  return !normalized || value.toLowerCase().includes(normalized);
+}
+
+function SourcePicker<T>({
+  label,
+  searchValue,
+  searchPlaceholder,
+  items,
+  selectedId,
+  emptyLabel,
+  getId,
+  getTitle,
+  getMeta,
+  getReason,
+  getDisabled,
+  onSearch,
+  onSelect,
+}: {
+  label: string;
+  searchValue: string;
+  searchPlaceholder: string;
+  items: T[];
+  selectedId: string;
+  emptyLabel: string;
+  getId: (item: T) => string;
+  getTitle: (item: T) => string;
+  getMeta: (item: T) => string;
+  getReason: (item: T) => string;
+  getDisabled?: (item: T) => boolean;
+  onSearch: (value: string) => void;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="replay-source-picker">
+      <label className="detail-field">
+        <span className="detail-field-label">{label}</span>
+        <input
+          className="input"
+          value={searchValue}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder={searchPlaceholder}
+        />
+      </label>
+      <div className="replay-source-option-list" role="listbox" aria-label={label}>
+        {items.length === 0 ? (
+          <div className="replay-source-option-empty">{emptyLabel}</div>
+        ) : (
+          items.map((item) => {
+            const id = getId(item);
+            const disabled = getDisabled?.(item) ?? false;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="option"
+                aria-selected={selectedId === id}
+                className={selectedId === id ? "is-active" : ""}
+                disabled={disabled}
+                onClick={() => onSelect(id)}
+              >
+                <strong>{getTitle(item)}</strong>
+                <span>{getMeta(item)}</span>
+                <small>{getReason(item)}</small>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ReplayMetric({
   icon,
   label,
@@ -182,7 +296,31 @@ function SourceCard({
   return <div className="replay-source-card">{body}</div>;
 }
 
+function ReplayProofStrip({ run }: { run: ReplayRunItem }) {
+  const total = Math.max(run.summary.trace_count_at_dispatch, run.summary.trace_count_executed, 1);
+  const passPct = Math.round((run.summary.pass_count / total) * 100);
+  const failPct = Math.round((run.summary.fail_count / total) * 100);
+  const errorPct = Math.round((run.summary.error_count / total) * 100);
+  return (
+    <div className="replay-proof-strip" aria-label="Replay proof composition">
+      <div className="replay-proof-bars" aria-hidden="true">
+        <span className="is-pass" style={{ width: `${passPct}%` }} />
+        <span className="is-fail" style={{ width: `${failPct}%` }} />
+        <span className="is-error" style={{ width: `${errorPct}%` }} />
+      </div>
+      <div className="replay-proof-facts">
+        <span>{run.summary.trace_count_executed}/{run.summary.trace_count_at_dispatch} executed</span>
+        <span>reproduced {proofLabel(run.summary.reproduced_original_failure)}</span>
+        <span>fix {proofLabel(run.summary.fix_passed)}</span>
+      </div>
+    </div>
+  );
+}
+
 function RunRow({ run }: { run: ReplayRunItem }) {
+  const replayHref = `/replay/${run.id}`;
+  const sourceId = sourceContextId(run.source_context);
+  const sourceHref = sourceContextHref(run.source_context);
   const total = run.summary.trace_count_at_dispatch;
   const executed = run.summary.trace_count_executed;
   const passRate = total > 0 ? Math.round((run.summary.pass_count / total) * 100) : null;
@@ -193,7 +331,7 @@ function RunRow({ run }: { run: ReplayRunItem }) {
   const latencyDelta = deltaLabel(run.summary.latency_delta_ms, "ms");
 
   return (
-    <Link href={`/replay/${run.id}`} className="replay-run-card">
+    <article className="replay-run-card">
       <div className="replay-run-main">
         <div className="replay-run-badges">
           <StatusBadge status={run.status} />
@@ -204,8 +342,10 @@ function RunRow({ run }: { run: ReplayRunItem }) {
         </div>
 
         <h2>
-          Run {run.id.slice(0, 16)}
-          <span>...</span>
+          <Link href={replayHref} className="replay-run-title-link">
+            Run {run.id.slice(0, 16)}
+            <span>...</span>
+          </Link>
         </h2>
 
         <div className="replay-run-meta">
@@ -216,6 +356,18 @@ function RunRow({ run }: { run: ReplayRunItem }) {
         </div>
 
         <p className="replay-proof-copy">proof: {replayModeProof(run.replay_mode)}</p>
+        <div className="replay-run-source-context">
+          <span>{sourceContextMeta(run.source_context)}</span>
+          {sourceId && sourceHref ? (
+            <Link href={sourceHref} className="replay-run-source-link mono">
+              {sourceId}
+            </Link>
+          ) : sourceId ? (
+            <small>{sourceId}</small>
+          ) : null}
+          <strong>{sourceContextLabel(run.source_context)}</strong>
+          <p>{sourceContextReason(run.source_context)}</p>
+        </div>
         {(run.replay_mode_warning || isStub) && (
           <p className="replay-warning">
             <TriangleAlert aria-hidden="true" />
@@ -249,13 +401,14 @@ function RunRow({ run }: { run: ReplayRunItem }) {
           <strong>{costDelta} / {latencyDelta}</strong>
           <span>cost / latency delta</span>
         </div>
+        <ReplayProofStrip run={run} />
       </div>
 
-      <div className="replay-run-open">
+      <Link href={replayHref} className="replay-run-open" aria-label={`Open replay run ${run.id}`}>
         Open
         <ArrowRight aria-hidden="true" />
-      </div>
-    </Link>
+      </Link>
+    </article>
   );
 }
 
@@ -281,16 +434,23 @@ function ReplayPageContent() {
   const [issueId, setIssueId] = useState(searchParams.get("issue_id") ?? "");
   const [callId, setCallId] = useState(searchParams.get("call_id") ?? "");
   const [selectedGoldenSetId, setSelectedGoldenSetId] = useState(searchParams.get("golden_set_id") ?? "");
+  const [issueSearch, setIssueSearch] = useState("");
+  const [callSearch, setCallSearch] = useState("");
+  const [goldenSearch, setGoldenSearch] = useState("");
   const [replayMode, setReplayMode] = useState<ReplayMode>(DEFAULT_VERIFICATION_REPLAY_MODE);
   const [candidatePrompt, setCandidatePrompt] = useState("");
   const [candidateModel, setCandidateModel] = useState("");
   const [gitSha, setGitSha] = useState(searchParams.get("git_sha") ?? "");
   const [prNumber, setPrNumber] = useState(searchParams.get("pr_number") ?? "");
   const [launchMessage, setLaunchMessage] = useState<string | null>(null);
+  const [providerKeyGateOpen, setProviderKeyGateOpen] = useState(false);
 
   const quotaQuery = useReplayQuota();
+  const providerKeysQuery = useActiveProviderKeys();
   const quota = quotaQuery.data;
   const isPlanEnabled = quota?.enabled ?? null;
+  const quotaIsPending = quotaQuery.isLoading || quotaQuery.isFetching;
+  const quotaErrorMessage = quotaQuery.error instanceof Error ? quotaQuery.error.message : "Replay quota check failed.";
 
   const issuesQuery = useQuery({
     queryKey: ["issues", "replay-launcher"],
@@ -327,13 +487,48 @@ function ReplayPageContent() {
   });
   const runs = useMemo(() => query.data?.items ?? [], [query.data?.items]);
   const nextCursor = query.data?.next_cursor;
-  const issues = issuesQuery.data?.items ?? [];
-  const calls = callsQuery.data?.items ?? [];
-  const goldenSets = goldenSetsQuery.data?.items ?? [];
+  const issues = useMemo(() => issuesQuery.data?.items ?? [], [issuesQuery.data?.items]);
+  const calls = useMemo(() => callsQuery.data?.items ?? [], [callsQuery.data?.items]);
+  const goldenSets = useMemo(() => goldenSetsQuery.data?.items ?? [], [goldenSetsQuery.data?.items]);
   const runnableGoldenSets = goldenSets.filter((set) => set.trace_count > 0);
   const selectedIssueId = issueId.trim() || issues[0]?.id || "";
   const selectedCallId = callId.trim() || calls[0]?.call_id || "";
-  const selectedGoldenId = selectedGoldenSetId.trim() || runnableGoldenSets[0]?.id || goldenSets[0]?.id || "";
+  const requestedGoldenSet = goldenSets.find((set) => set.id === selectedGoldenSetId.trim());
+  const selectedGoldenId = requestedGoldenSet && requestedGoldenSet.trace_count > 0
+    ? requestedGoldenSet.id
+    : runnableGoldenSets[0]?.id || "";
+  const filteredIssues = useMemo(
+    () =>
+      issues.filter((issue) =>
+        matchesSearch(
+          [issue.title, issue.failure_code, issue.agent_name, issue.affected_workflow, issue.root_cause, issue.recommended_next_action]
+            .filter(Boolean)
+            .join(" "),
+          issueSearch,
+        ),
+      ),
+    [issueSearch, issues],
+  );
+  const filteredCalls = useMemo(
+    () =>
+      calls.filter((call) =>
+        matchesSearch(
+          [call.call_id, call.error_code, call.status, call.agent_name, call.provider, call.model].filter(Boolean).join(" "),
+          callSearch,
+        ),
+      ),
+    [callSearch, calls],
+  );
+  const filteredGoldenSets = useMemo(
+    () =>
+      goldenSets.filter((set) =>
+        matchesSearch([set.id, set.name, set.description, set.blocks_ci ? "blocks ci" : "non blocking"].filter(Boolean).join(" "), goldenSearch),
+      ),
+    [goldenSearch, goldenSets],
+  );
+  const selectedIssue = issues.find((issue) => issue.id === selectedIssueId) ?? issues[0] ?? null;
+  const selectedCall = calls.find((call) => call.call_id === selectedCallId) ?? calls[0] ?? null;
+  const selectedGolden = goldenSets.find((set) => set.id === selectedGoldenId) ?? runnableGoldenSets[0] ?? goldenSets[0] ?? null;
 
   const runStats = useMemo(() => {
     const verified = runs.filter((run) => replayVerifiedFix(run.replay_mode, run.summary.verified_fix)).length;
@@ -380,11 +575,11 @@ function ReplayPageContent() {
     onError: (error) => setLaunchMessage(error instanceof Error ? error.message : "Replay from issue failed."),
   });
   const goldenRunMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (mode: ReplayMode) => {
       if (!selectedGoldenId) throw new Error("Select a Golden Set with at least one trace.");
       return runGoldenSet(selectedGoldenId, {
         trigger: "manual",
-        replay_mode: replayMode,
+        replay_mode: mode,
         ...(candidatePrompt.trim() ? { candidate_prompt_override: candidatePrompt.trim() } : {}),
         ...(candidateModel.trim() ? { candidate_model_override: candidateModel.trim() } : {}),
       });
@@ -414,14 +609,26 @@ function ReplayPageContent() {
 
   const launchDisabled =
     isLaunching ||
+    isPlanEnabled !== true ||
     (launchSource === "issue" && !selectedIssueId) ||
     (launchSource === "call" && !selectedCallId) ||
     (launchSource === "golden" && !selectedGoldenId) ||
     (launchSource === "ci" && gitSha.trim().length < 4);
 
-  function startReplay() {
+  function actionRequiresProviderKey(mode: ReplayMode) {
+    return launchSource === "ci" || replayModeRequiresProviderKey(mode);
+  }
+
+  async function hasProviderKeyForReplay(mode: ReplayMode) {
+    if (!actionRequiresProviderKey(mode)) return true;
+    if (hasActiveProviderKey(providerKeysQuery.data?.items)) return true;
+    const refreshed = await providerKeysQuery.refetch();
+    return hasActiveProviderKey(refreshed.data?.items);
+  }
+
+  function dispatchReplay(mode: ReplayMode = replayMode) {
     setLaunchMessage(null);
-    const payload = replayPayload(replayMode, candidatePrompt, candidateModel);
+    const payload = replayPayload(mode, candidatePrompt, candidateModel);
     if (launchSource === "issue") {
       issueReplayMutation.mutate({ issueId: selectedIssueId, payload });
       return;
@@ -431,10 +638,33 @@ function ReplayPageContent() {
       return;
     }
     if (launchSource === "golden") {
-      goldenRunMutation.mutate();
+      goldenRunMutation.mutate(mode);
       return;
     }
     ciRunMutation.mutate();
+  }
+
+  async function startReplay() {
+    setLaunchMessage(null);
+    if (!(await hasProviderKeyForReplay(replayMode))) {
+      setProviderKeyGateOpen(true);
+      return;
+    }
+    dispatchReplay(replayMode);
+  }
+
+  function onProviderKeySavedAndRun() {
+    dispatchReplay(replayMode);
+  }
+
+  function onUseStubReplay() {
+    if (launchSource === "ci") {
+      setLaunchMessage("CI gates require verified replay. Connect a provider key before running a CI gate.");
+      return;
+    }
+    setReplayMode(STUB_REPLAY_MODE);
+    setProviderKeyGateOpen(false);
+    dispatchReplay(STUB_REPLAY_MODE);
   }
 
   function loadMore() {
@@ -447,18 +677,6 @@ function ReplayPageContent() {
     const prev = pages[pages.length - 1];
     setPages((p) => p.slice(0, -1));
     setCursor(prev || undefined);
-  }
-
-  if (quotaQuery.isLoading) {
-    return (
-      <section className="panel issue-loading-panel" aria-label="Loading replay quota">
-        <Loader2 aria-hidden="true" />
-        <div>
-          <strong>Loading replay proof engine</strong>
-          <p className="notif-meta">Checking plan quota and recent replay runs.</p>
-        </div>
-      </section>
-    );
   }
 
   if (isPlanEnabled === false) {
@@ -530,6 +748,23 @@ function ReplayPageContent() {
         <ReplayMetric icon={<DollarSign aria-hidden="true" />} label="Protected spend" value={moneyLabel(runStats.preventedCost)} helper={`${moneyLabel(runStats.replayCost)} replay cost visible`} />
       </section>
 
+      {isPlanEnabled !== true ? (
+        <section className="replay-quota-panel replay-quota-panel-warning" aria-live="polite">
+          <div>
+            <strong>{quotaIsPending ? "Checking replay quota" : "Replay quota unavailable"}</strong>
+            <span>
+              {quotaIsPending
+                ? "Launch stays disabled while Zroky confirms plan and monthly replay usage."
+                : `${quotaErrorMessage} Launch stays disabled until quota reloads.`}
+            </span>
+          </div>
+          <span className="alert-cat-badge badge-yellow">Launch gated</span>
+          <button type="button" className="btn btn-soft" onClick={() => void quotaQuery.refetch()} disabled={quotaIsPending}>
+            {quotaIsPending ? "Checking..." : "Retry"}
+          </button>
+        </section>
+      ) : null}
+
       <section id="replay-launcher" className="panel replay-launcher" aria-label="Start replay">
         <header className="panel-header">
           <div>
@@ -559,45 +794,57 @@ function ReplayPageContent() {
         <div className="replay-launch-grid">
           <div className="replay-launch-form">
             {launchSource === "issue" ? (
-              <label className="detail-field">
-                <span className="detail-field-label">Open Issue</span>
-                <select className="input" value={issueId} onChange={(event) => setIssueId(event.target.value)}>
-                  <option value="">{issues.length ? "Use highest priority open issue" : "No open issues loaded"}</option>
-                  {issues.map((issue) => (
-                    <option key={issue.id} value={issue.id}>
-                      {optionIssueLabel(issue)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SourcePicker<IssueItem>
+                label="Open Issue"
+                searchValue={issueSearch}
+                searchPlaceholder="Search failure code, agent, workflow, or reason..."
+                items={filteredIssues}
+                selectedId={selectedIssueId}
+                emptyLabel={issues.length ? "No issues match this search." : "No open issues loaded."}
+                getId={(issue) => issue.id}
+                getTitle={(issue) => issue.title || optionIssueLabel(issue)}
+                getMeta={(issue) =>
+                  `${issue.failure_code} - ${issue.severity} - ${issue.occurrence_count}x - ${issue.affected_agent ?? issue.agent_name ?? "unknown agent"}`
+                }
+                getReason={issueReason}
+                onSearch={setIssueSearch}
+                onSelect={setIssueId}
+              />
             ) : null}
 
             {launchSource === "call" ? (
-              <label className="detail-field">
-                <span className="detail-field-label">Failed Call</span>
-                <select className="input" value={callId} onChange={(event) => setCallId(event.target.value)}>
-                  <option value="">{calls.length ? "Use most recent failed call" : "No failed calls loaded"}</option>
-                  {calls.map((call) => (
-                    <option key={call.call_id} value={call.call_id}>
-                      {optionCallLabel(call)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SourcePicker<CallListItem>
+                label="Failed Call"
+                searchValue={callSearch}
+                searchPlaceholder="Search call id, agent, model, or error..."
+                items={filteredCalls}
+                selectedId={selectedCallId}
+                emptyLabel={calls.length ? "No calls match this search." : "No failed calls loaded."}
+                getId={(call) => call.call_id}
+                getTitle={optionCallLabel}
+                getMeta={(call) => `${call.provider} - ${call.model} - ${call.status} - ${call.latency_ms ?? "-"}ms`}
+                getReason={(call) => call.error_code ?? call.status}
+                onSearch={setCallSearch}
+                onSelect={setCallId}
+              />
             ) : null}
 
             {launchSource === "golden" ? (
-              <label className="detail-field">
-                <span className="detail-field-label">Golden Set</span>
-                <select className="input" value={selectedGoldenSetId} onChange={(event) => setSelectedGoldenSetId(event.target.value)}>
-                  <option value="">{goldenSets.length ? "Use first runnable Golden Set" : "No Golden Sets loaded"}</option>
-                  {goldenSets.map((set) => (
-                    <option key={set.id} value={set.id} disabled={set.trace_count === 0}>
-                      {set.name} - {set.trace_count} traces
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SourcePicker<GoldenSetView>
+                label="Golden Set"
+                searchValue={goldenSearch}
+                searchPlaceholder="Search Golden Set name or id..."
+                items={filteredGoldenSets}
+                selectedId={selectedGoldenId}
+                emptyLabel={goldenSets.length ? "No Golden Sets match this search." : "No Golden Sets loaded."}
+                getId={(set) => set.id}
+                getTitle={(set) => set.name}
+                getMeta={(set) => `${set.trace_count} traces - ${set.blocks_ci ? "blocks CI" : "does not block CI"}`}
+                getReason={(set) => set.description ?? (set.trace_count > 0 ? "Runnable regression pack." : "No traces yet.")}
+                getDisabled={(set) => set.trace_count === 0}
+                onSearch={setGoldenSearch}
+                onSelect={setSelectedGoldenSetId}
+              />
             ) : null}
 
             {launchSource === "ci" ? (
@@ -650,6 +897,15 @@ function ReplayPageContent() {
               </button>
               {launchMessage ? <span className={launchMessage.includes("failed") || launchMessage.includes("Enter") ? "notif-error" : "notif-meta"}>{launchMessage}</span> : null}
             </div>
+
+            {providerKeyGateOpen ? (
+              <ProviderKeyReplayGate
+                onClose={() => setProviderKeyGateOpen(false)}
+                onSavedAndRun={onProviderKeySavedAndRun}
+                onUseStub={onUseStubReplay}
+                showUseStub={launchSource !== "ci"}
+              />
+            ) : null}
           </div>
 
           <aside className="replay-launch-proof">
@@ -657,14 +913,22 @@ function ReplayPageContent() {
               title="Selected source"
               value={
                 launchSource === "issue"
-                  ? selectedIssueId || "No issue"
+                  ? selectedIssue?.title || selectedIssueId || "No issue"
                   : launchSource === "call"
-                    ? selectedCallId || "No call"
+                    ? selectedCall ? optionCallLabel(selectedCall) : selectedCallId || "No call"
                     : launchSource === "golden"
-                      ? selectedGoldenId || "No Golden Set"
+                      ? selectedGolden?.name || selectedGoldenId || "No Golden Set"
                       : gitSha.trim() || "No SHA"
               }
-              helper="This is the live backend source used for dispatch."
+              helper={
+                launchSource === "issue"
+                  ? issueReason(selectedIssue)
+                  : launchSource === "call"
+                    ? `${selectedCall?.provider ?? "provider"} / ${selectedCall?.model ?? "model"} - ${selectedCall?.status ?? "status"}`
+                    : launchSource === "golden"
+                      ? `${selectedGolden?.trace_count ?? 0} traces - ${selectedGolden?.blocks_ci ? "blocks CI" : "manual replay"}`
+                      : "Commit-linked regression gate."
+              }
               href={
                 launchSource === "issue" && selectedIssueId
                   ? `/issues/${selectedIssueId}`
@@ -676,7 +940,23 @@ function ReplayPageContent() {
               }
             />
             <SourceCard title="Proof strength" value={replayModeLabel(replayMode)} helper={replayModeProof(replayMode)} />
-            <SourceCard title="Golden coverage" value={`${runnableGoldenSets.length}/${goldenSets.length}`} helper="Runnable sets with at least one trace." />
+            <SourceCard
+              title={launchSource === "issue" ? "Sample call" : launchSource === "call" ? "Call id" : "Golden coverage"}
+              value={
+                launchSource === "issue"
+                  ? selectedIssue?.sample_call_id ?? "No sample call"
+                  : launchSource === "call"
+                    ? selectedCall?.call_id ?? "No call"
+                    : `${runnableGoldenSets.length}/${goldenSets.length}`
+              }
+              helper={
+                launchSource === "issue"
+                  ? `${selectedIssue?.failure_code ?? "issue"} - ${selectedIssue?.occurrence_count ?? 0} occurrences`
+                  : launchSource === "call"
+                    ? selectedCall?.error_code ?? "Replay the captured failed call."
+                    : "Runnable sets with at least one trace."
+              }
+            />
           </aside>
         </div>
       </section>
@@ -731,18 +1011,20 @@ function ReplayPageContent() {
       </section>
 
       {query.isLoading ? (
-        <section className="panel issue-loading-panel" aria-label="Loading replay runs">
-          <Loader2 aria-hidden="true" />
-          <div>
-            <strong>Loading replay runs</strong>
-            <p className="notif-meta">Reading recent proof results.</p>
-          </div>
+        <section className="replay-skeleton" aria-label="Loading replay runs" aria-busy="true">
+          <div className="replay-skel-row" />
+          <div className="replay-skel-row" />
+          <div className="replay-skel-row" />
         </section>
       ) : runs.length === 0 ? (
         <section className="empty replay-empty">
           <History aria-hidden="true" />
-          <strong>No replay runs found.</strong>
-          <span>Start a replay from an Issue, Call, Golden Set, or CI commit above.</span>
+          <strong>No replay runs yet.</strong>
+          <span>Prove a discovered failure: launch a replay from an Issue, Call, Golden Set, or CI commit above — Zroky reproduces the failure and scores how faithfully the fix holds.</span>
+          <Link href="/home" className="btn btn-soft" style={{ marginTop: 6 }}>
+            Go to Failure Inbox
+            <ArrowRight aria-hidden="true" />
+          </Link>
         </section>
       ) : (
         <section className="replay-run-list" aria-label="Replay runs">

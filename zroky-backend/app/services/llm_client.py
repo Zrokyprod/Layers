@@ -36,7 +36,7 @@ class OpenRouterClient:
             base_url=_OPENROUTER_BASE_URL,
             api_key=api_key,
             default_headers={
-                "HTTP-Referer": settings.FRONTEND_URL or "https://zroky.ai",
+                "HTTP-Referer": settings.FRONTEND_URL or "https://zroky.com",
                 "X-Title": settings.APP_NAME or "Zroky AI",
             },
         )

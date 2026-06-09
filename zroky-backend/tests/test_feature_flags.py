@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import app
@@ -36,6 +37,7 @@ def client(tmp_path: Path):
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+        get_settings.cache_clear()
         engine.dispose()
 
 
@@ -47,9 +49,19 @@ def _set_tenant(project_id: str) -> None:
     )
 
 
-def test_owner_feature_flag_crud_and_tenant_resolution(client: TestClient) -> None:
+def _set_owner_auth(monkeypatch: pytest.MonkeyPatch, token: str = "owner-token") -> dict[str, str]:
+    monkeypatch.setenv("REQUIRE_PROVISIONING_TOKEN", "false")
+    monkeypatch.setenv("PROVISIONING_TOKEN", token)
+    get_settings.cache_clear()
+    return {"x-zroky-admin-token": token}
+
+
+def test_owner_feature_flag_crud_and_tenant_resolution(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    owner_headers = _set_owner_auth(monkeypatch)
+
     created = client.post(
         "/v1/feature-flags/admin",
+        headers=owner_headers,
         json={
             "key": "admin_console_v2",
             "description": "Enable the new owner admin console.",
@@ -61,12 +73,13 @@ def test_owner_feature_flag_crud_and_tenant_resolution(client: TestClient) -> No
     assert flag["key"] == "admin_console_v2"
     assert flag["enabled_globally"] is False
 
-    listed = client.get("/v1/feature-flags/admin")
+    listed = client.get("/v1/feature-flags/admin", headers=owner_headers)
     assert listed.status_code == 200
     assert [item["key"] for item in listed.json()["items"]] == ["admin_console_v2"]
 
     updated = client.put(
         f"/v1/feature-flags/admin/{flag['id']}",
+        headers=owner_headers,
         json={
             "enabled_globally": False,
             "add_enabled_tenants": ["proj_enabled"],
@@ -87,9 +100,9 @@ def test_owner_feature_flag_crud_and_tenant_resolution(client: TestClient) -> No
     assert disabled_view.status_code == 200
     assert disabled_view.json()["flags"]["admin_console_v2"] is False
 
-    deleted = client.delete(f"/v1/feature-flags/admin/{flag['id']}")
+    deleted = client.delete(f"/v1/feature-flags/admin/{flag['id']}", headers=owner_headers)
     assert deleted.status_code == 204
 
-    listed_after_delete = client.get("/v1/feature-flags/admin")
+    listed_after_delete = client.get("/v1/feature-flags/admin", headers=owner_headers)
     assert listed_after_delete.status_code == 200
     assert listed_after_delete.json()["items"] == []

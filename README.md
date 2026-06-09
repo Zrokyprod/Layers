@@ -1,128 +1,125 @@
-# Zroky — AI Fix Engine
+# Zroky
 
-> **Capture → Diagnose → Verified-Fix PR. This is the product. Not a dashboard.**
+> AI Agent Regression Firewall.
 
-Zroky is the reliability platform for agent builders. It watches every AI call your LangGraph, CrewAI, AutoGen, or custom agent makes, groups failures into issues, generates fix PRs verified by a replay sandbox, and closes the loop automatically.
+Hero promise: **Stop shipping the same agent failure twice.**
 
-**ICP:** Teams running 1 K–1 M agent calls/day who ship fixes weekly.
+Zroky captures production AI-agent failures, groups repeats into owned issues, verifies candidate changes with replay, promotes trusted cases into Goldens, and blocks repeated regressions in CI.
 
-[![Gateway CI](https://github.com/zroky-ai/zroky-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/zroky-ai/zroky-gateway/actions/workflows/ci.yml)
-[![JS SDK CI](https://github.com/zroky-ai/zroky-sdk-js/actions/workflows/ci.yml/badge.svg)](https://github.com/zroky-ai/zroky-sdk-js/actions/workflows/ci.yml)
-[![Replay Worker CI](https://github.com/zroky-ai/zroky-replay-worker/actions/workflows/ci.yml/badge.svg)](https://github.com/zroky-ai/zroky-replay-worker/actions/workflows/ci.yml)
+This is not positioned as an automatic fix engine. Zroky can draft reviewer-ready remediation evidence, but the core product promise is regression prevention: the same production failure should not ship twice.
+
+**ICP:** teams running production AI agents at 10k-1M calls/month that need release protection for support, refund, sales, ops, or workflow agents.
 
 ---
 
-## Quickstart — capture in 2 minutes
+## Product Loop
+
+```text
+Capture -> Diagnose -> Issue -> Replay -> Golden -> CI Gate
+```
+
+1. Capture the real production call through the SDK or gateway.
+2. Diagnose the failure with high-confidence detectors.
+3. Group repeated failures into one owned issue.
+4. Replay the failed case against a candidate prompt, model, policy, or tool change.
+5. Promote verified replay evidence into a Golden.
+6. Run Goldens in CI and block pull requests that reintroduce protected failures.
+
+The default money path is:
+
+```text
+capture failure -> diagnose -> issue -> replay -> promote Golden -> CI gate
+```
+
+---
+
+## Quickstart
 
 ```bash
 pip install zroky
 ```
 
 ```python
+import os
 import zroky
 
-zroky.init(api_key="zk-your-key", project_id="your-project")
+zroky.init(
+    api_key=os.environ["ZROKY_API_KEY"],
+    project_id=os.environ["ZROKY_PROJECT_ID"],
+)
+
+@zroky.trace(agent="refund_agent", workflow="status_lookup")
+async def call_agent(prompt: str):
+    return await agent.run(prompt)
 ```
 
-Captured events are sent to Zroky Cloud by default. The public OSS repos provide SDK, gateway, and replay-worker capture components; the backend and dashboard remain private Zroky control-plane services.
+Captured events are sent to Zroky Cloud by default. Self-hosted deployments can point the SDK at a private ingest URL.
 
 ---
 
-## What the closed loop looks like
+## Core Surfaces
 
-1. Agent makes an LLM call → Zroky SDK captures it (< 5 ms p95 overhead)
-2. Call appears in `/issues` grouped by `(failure_code, prompt_fingerprint, agent_name)`
-3. Diagnosis engine assigns a failure code (`LOOP_DETECTED`, `CONTEXT_OVERFLOW`, …)
-4. Fix generator produces a candidate patch
-5. Replay worker executes the patch in an isolated sandbox → `PASS` or `FAIL`
-6. On `PASS`: GitHub PR opened, linked to the issue
-7. PR merged → failure absent on next run → issue auto-resolved
+| Surface | Purpose |
+|---|---|
+| `Failure Inbox` | Ranked production failure queue and next actions |
+| `Issues` | Clustered failure patterns with owner, impact, and proof status |
+| `Replay Lab` | Original-vs-candidate replay verification |
+| `Goldens` | Promoted regression guards for critical workflows |
+| `CI Gates` | Pull-request release decisions backed by replay evidence |
+| `Cost` | Wasted spend, blast radius, and prevented-repeat value |
+| `Settings` | API keys, provider keys, billing, team, and integrations |
+
+Secondary diagnostic surfaces such as traces, calls, drift, recommendations, and admin tools exist to support the core loop, but they are not the primary product wedge.
 
 ---
 
-## Repository layout
+## Repository Layout
 
 | Path | What it contains |
 |---|---|
 | `zroky-backend/` | FastAPI backend, Celery workers, Alembic migrations |
-| `zroky-dashboard/` | Next.js 16 dashboard (App Router + TypeScript) |
-| `zroky-sdk/` | Python SDK (`pip install zroky`) |
-| `api-contracts/` | Frozen OpenAPI spec + IngestEvent v2 JSON Schema |
-| `scripts/` | CI lint, code generators, seed data |
-| `prometheus/` | Prometheus config + SLO burn-rate alert rules |
-| `grafana/` | Pre-built dashboards (cost, diagnosis engine, system overview) |
-| `docs/` | Architecture and agent-coverage docs |
+| `zroky-dashboard/` | Next.js dashboard and authenticated product UI |
+| `zroky-landing/` | Public marketing site |
+| `zroky-sdk/` | Python SDK |
+| `zroky-sdk-js/` | JavaScript SDK |
+| `zroky-regression-ci-action/` | GitHub Action for Golden replay gates |
+| `zroky-replay-worker/` | Customer-hostable replay worker |
+| `zroky-gateway/` | Optional OpenAI-compatible capture gateway |
+| `api-contracts/` | Frozen OpenAPI and ingest schemas |
+| `docs/` | Product, architecture, and deployment docs |
 
 ---
 
-## SDK — 3-line integration
-
-```python
-import zroky
-
-zroky.init(api_key="zk-your-key", project_id="your-project")
-
-@zroky.trace
-async def call_agent(prompt: str):
-    return await openai.chat.completions.create(...)
-```
-
-SDK overhead p95 < 5 ms (CI-enforced, Rule 4; BENCH_TAG:trace_wrapper_overhead).
-
----
-
-## Engineering guardrails
-
-Ten rules, every one CI-enforced. See [ZROKY-Q1-90DAY-PLAN.md](ZROKY-Q1-90DAY-PLAN.md) §2.
-
-| Rule | Enforcement |
-|---|---|
-| 1 — One schema source of truth (`IngestEvent`) | `schema-drift-check` CI job |
-| 2 — Plugin architecture for detectors & fixes | Contract-test gate per plugin |
-| 3 — No new file > 30 KB | `file-size-lint` CI job |
-| 4 — Every customer-facing number has a CI benchmark | `benchmarks` CI job |
-| 5 — Chaos tests weekly | `chaos-weekly` scheduled workflow |
-| 6 — Labeled eval sets per detector | Precision/recall gate per PR |
-| 7 — Zroky observes Zroky | SLO burn-rate alerts, live dashboard at every Friday demo |
-| 8 — Cloud-first capture on Day 1 | SDK default ingest targets `https://api.zroky.com/v1/ingest` |
-| 9 — API v1 frozen; breakage goes to v2 | `api-v1-frozen-check` CI job |
-| 10 — Docs as code | `check_docs_drift` CI job |
-
----
-
-## Development
-
-### Local capture verification without Docker
-
-Use this when changing the gateway, backend ingest path, JS SDK capture contract, or dashboard capture health UI.
+## Verification Commands
 
 ```powershell
-.\make.ps1 capture-e2e-local
-```
-
-On macOS/Linux, or any shell with Python available:
-
-```bash
 python scripts/run_capture_e2e_local.py
-```
 
-This runs the gateway Go tests, backend capture ingest tests, JS SDK tests/build/size gate, and targeted dashboard lint.
-It also runs a live no-Docker smoke test that starts the backend, gateway, and a mock OpenAI upstream, then verifies `/capture/health` reports a gateway event.
-The same command is enforced in `.github/workflows/capture-e2e-local.yml`.
-
-```bash
-# Backend
-cd zroky-backend
-pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest -x -q
-
-# Dashboard
 cd zroky-dashboard
-npm install && npm run dev
+npm test
+npm run build
 
-# Regenerate IngestEvent v2 artifacts (after schema changes)
-python scripts/gen_from_schema.py
+cd ..\zroky-landing
+npm run build
+
+cd ..\zroky-sdk
+..\.venv\Scripts\python.exe -m pytest -q
+
+cd ..\zroky-sdk-js
+npm test
+npm run build
+npm run size
+
+cd ..\zroky-regression-ci-action
+npm test -- --runInBand
 ```
 
-Full spec: [ZROKY-PRODUCT-DOC-V1.1.md](ZROKY-PRODUCT-DOC-V1.1.md)
-Q1 90-day plan: [ZROKY-Q1-90DAY-PLAN.md](ZROKY-Q1-90DAY-PLAN.md)
+---
+
+## Guardrails
+
+- SDK overhead must remain low enough for production capture.
+- PII masking and provider-key handling must fail closed.
+- Goldens only become blocking when replay evidence is trusted.
+- Auto-fix and PR generation remain gated, reviewable, and optional.
+- Product copy must not claim automatic code repair unless the feature is explicitly enabled and verified.

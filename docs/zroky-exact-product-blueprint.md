@@ -2,9 +2,11 @@
 
 ## One-Line Product
 
-Zroky is the production reliability system for complex AI agents.
+Zroky is the AI Agent Regression Firewall for complex production agents.
 
-It captures every important agent failure, explains the real root cause, turns the failure into a replayable test, verifies the fix, and prevents the same failure from shipping again.
+Hero promise: Stop shipping the same agent failure twice.
+
+It captures every important agent failure, explains the real root cause, groups it into an issue, turns it into replay proof, promotes trusted proof into a Golden, and prevents the same failure from shipping again through a CI gate.
 
 This is not a generic LLM dashboard.
 This is not only tracing.
@@ -23,17 +25,16 @@ Production agent run
 -> detect failure or risk
 -> diagnose root cause
 -> group into issue
--> create replay/golden test
--> verify fix against replay suite
+-> create replay proof
+-> promote a Golden
 -> block regression in CI
--> monitor after deploy
 ```
 
 ## Product Positioning
 
 ### What Zroky Is
 
-Zroky is an AI Agent Reliability Platform.
+Zroky is an AI Agent Regression Firewall.
 
 It is built for teams running real agents in production:
 
@@ -808,9 +809,9 @@ The dashboard should never leave the user thinking:
 
 > "Okay, now what?"
 
-### Agent Launchpad
+### Secondary Agent View
 
-Zroky should have an Agent Launchpad for non-expert users.
+Zroky can have an agent-level support view for non-expert users, but the default product surface is the Failure Inbox.
 
 It should show each agent as a simple row/card:
 
@@ -904,26 +905,23 @@ The ideal user reaction should be:
 
 That is the friendly dashboard standard.
 
-Navigation should be organized around work:
+Primary navigation should be organized around the Phase 1 contract:
 
-1. Command Center
+1. Failure Inbox
 2. Issues
-3. Traces
-4. Replay
-5. Goldens
-6. Fix Queue
-7. Drift
-8. Outcomes
-9. Cost
-10. Alerts
-11. Ask Zroky
-12. Settings
+3. Replay Lab
+4. Goldens
+5. CI Gates
+6. Cost
+7. Settings
 
-## Module 1: Command Center
+Secondary diagnostic surfaces such as Traces, Calls, Drift, Alerts, Ask Zroky, and admin views can exist when they support the primary loop, but they should not dominate the nav.
+
+## Module 1: Failure Inbox
 
 ### User Problem
 
-"What is the health of my production agents right now, and what needs attention first?"
+"Which production agent failures need attention first?"
 
 ### Shows
 
@@ -1160,11 +1158,11 @@ The user can reproduce the incident and know whether a candidate change fixes it
 
 Every important production failure becomes a permanent regression guard.
 
-## Module 6: Fix Queue
+## Secondary Module: Gated Fix Review
 
 ### User Problem
 
-"Which fixes are proposed, which are verified, and which are safe to merge?"
+"Which proposed fixes are reviewed, verified, and safe to consider?"
 
 ### Shows
 
@@ -1179,7 +1177,7 @@ Every important production failure becomes a permanent regression guard.
 - latency delta
 - quality delta
 - confidence
-- recommended action
+- reviewable recommended action
 
 ### Fix Detail Shows
 
@@ -1196,7 +1194,7 @@ Every important production failure becomes a permanent regression guard.
 
 - run verification
 - request review
-- open PR
+- open PR only when enabled by policy
 - mark as unsafe
 - re-run after changes
 - monitor after deploy
@@ -1209,7 +1207,7 @@ Every important production failure becomes a permanent regression guard.
 
 ### Success Criteria
 
-The user trusts the fix because Zroky proves it.
+The user trusts the decision because Zroky proves it. Auto-fix remains gated, reviewable, and optional.
 
 ## Module 7: Drift
 
@@ -1493,7 +1491,7 @@ An enterprise team can adopt Zroky without fearing data leakage or workflow disr
    - outcomes missing
    - prompt version missing
 8. User fixes instrumentation.
-9. Command Center shows first reliability baseline.
+9. Failure Inbox shows first reliability baseline.
 
 ### Product Must Solve
 
@@ -1508,7 +1506,7 @@ They should get from install to useful trace quickly.
 
 ### Flow
 
-1. Alert fires or user opens Command Center.
+1. Alert fires or user opens Failure Inbox.
 2. User opens top issue.
 3. Zroky shows root cause summary and evidence.
 4. User opens representative trace.
@@ -1584,14 +1582,14 @@ Model selection becomes production-evidence-based.
 
 ### Flow
 
-1. Engineering lead opens Command Center.
+1. Engineering lead opens Failure Inbox.
 2. Sees top issues by customer impact and wasted cost.
 3. Opens Ask Zroky:
    - "What should we fix first?"
 4. Zroky returns ranked list with evidence.
 5. Lead assigns owners.
 6. Team converts top issues to replay/goldens.
-7. Fix Queue tracks progress.
+7. Gated fix review tracks progress when enabled.
 
 ### Product Must Solve
 
@@ -1758,7 +1756,7 @@ Ask Zroky becomes powerful only when the underlying reliability graph is strong.
 The first strong sellable MVP should include:
 
 1. SDK/gateway captures full model calls, tool calls, retrieval spans, and outcomes.
-2. Dashboard shows Command Center, Issues, Traces, Replay, Goldens, Fix Queue, Settings.
+2. Dashboard shows Failure Inbox, Issues, Replay Lab, Goldens, CI Gates, Cost, Settings.
 3. Zroky detects at least 10 high-value failure classes:
    - provider error
    - timeout
@@ -1773,7 +1771,7 @@ The first strong sellable MVP should include:
 4. User can create replay from failed trace.
 5. User can promote replay to golden.
 6. CI can run selected goldens and comment on PR.
-7. Fix Queue can show before/after verification.
+7. Gated fix review can show before/after verification when enabled.
 8. Ask Zroky can answer evidence-based questions for issues and traces.
 
 This is enough to make serious AI teams care.
@@ -1798,7 +1796,7 @@ If any step is missing, the loop is incomplete.
 
 ### Every Page Must Answer One Question
 
-Command Center:
+Failure Inbox:
 
 > What needs attention now?
 
@@ -1818,7 +1816,7 @@ Goldens:
 
 > Are old failures protected?
 
-Fix Queue:
+Gated fix review:
 
 > Which fixes are proven safe?
 
@@ -1911,7 +1909,7 @@ The main value metric should be production agent reliability, not only event cou
 
 The website should lead with this:
 
-> Stop shipping the same AI agent failure twice.
+> Stop shipping the same agent failure twice.
 
 Subline:
 

@@ -14,7 +14,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self'",
-      "connect-src 'self' https://api.zroky.ai https://api.zroky.com",
+      "connect-src 'self' https://api.zroky.com",
       "frame-ancestors 'none'",
     ].join("; "),
   },
@@ -40,6 +40,16 @@ const nextConfig: NextConfig = {
         permanent: false,
       },
       {
+        source: "/agents",
+        destination: "/labs/agents",
+        permanent: false,
+      },
+      {
+        source: "/drift",
+        destination: "/labs/drift",
+        permanent: false,
+      },
+      {
         source: "/notifications",
         destination: "/issues",
         permanent: true,
@@ -56,7 +66,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/reliability",
-        destination: "/agents",
+        destination: "/labs/agents",
         permanent: true,
       },
       {

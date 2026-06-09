@@ -20,6 +20,8 @@ import { registerWithPassword } from "@/lib/api";
 import { storeAuthSession } from "@/lib/auth";
 import { registerSchema, type RegisterFormData } from "@/lib/schemas";
 
+const googleOAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_OAUTH === "true";
+
 export default function SignupPage() {
   const [error, setError] = useState("");
   const router = useRouter();
@@ -61,7 +63,7 @@ export default function SignupPage() {
         footer={<Link href="/login" className="auth-link">Already have an account? Sign in</Link>}
       >
         <div className="auth-oauth-stack">
-          <AuthProviderButton provider="google" onClick={() => handleOAuth("google")} />
+          {googleOAuthEnabled ? <AuthProviderButton provider="google" onClick={() => handleOAuth("google")} /> : null}
           <AuthProviderButton provider="github" onClick={() => handleOAuth("github")} />
         </div>
         <AuthDivider>Or register with email</AuthDivider>

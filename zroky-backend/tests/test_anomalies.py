@@ -713,6 +713,7 @@ class TestInvariants:
             "OUTPUT_TRUNCATED",
             "OUTPUT_LENGTH_DRIFT",
             "REPEATED_OUTPUT",
+            "BEHAVIORAL_DRIFT",
             "UNKNOWN",
         })
 

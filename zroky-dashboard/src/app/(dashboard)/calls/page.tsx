@@ -485,7 +485,7 @@ function CallsPageContent() {
                     className={`${selectedIds.has(row.call_id) ? "row-selected " : ""}calls-row-clickable`}
                     onClick={() => router.push(`/calls/${row.call_id}`)}
                   >
-                    <td onClick={(e) => e.stopPropagation()}>
+                    <td data-label="Select" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedIds.has(row.call_id)}
@@ -493,19 +493,19 @@ function CallsPageContent() {
                         aria-label={`Select call ${row.call_id}`}
                       />
                     </td>
-                    <td className="mono calls-row-id" title={row.call_id}>{row.call_id.slice(0, 12)}</td>
-                    <td>{formatDateTime(row.created_at)}</td>
-                    <td>{safeString(row.provider, "unknown")}</td>
-                    <td>{safeString(row.model, "unknown")}</td>
-                    <td>{safeString(row.agent_name, "-")}</td>
-                    <td className="calls-user-cell" title={safeString(row.user_id, "")}>{safeString(row.user_id, "-")}</td>
-                    <td className="mono">{formatCount(row.total_tokens)}</td>
-                    <td className="mono">{formatUsd(row.cost_usd)}</td>
-                    <td className="mono">{row.latency_ms != null ? (row.latency_ms < 1000 ? `${row.latency_ms}ms` : `${(row.latency_ms / 1000).toFixed(1)}s`) : "-"}</td>
-                    <td>
+                    <td data-label="Call ID" className="mono calls-row-id" title={row.call_id}>{row.call_id.slice(0, 12)}</td>
+                    <td data-label="Time">{formatDateTime(row.created_at)}</td>
+                    <td data-label="Provider">{safeString(row.provider, "unknown")}</td>
+                    <td data-label="Model">{safeString(row.model, "unknown")}</td>
+                    <td data-label="Agent">{safeString(row.agent_name, "-")}</td>
+                    <td data-label="User ID" className="calls-user-cell" title={safeString(row.user_id, "")}>{safeString(row.user_id, "-")}</td>
+                    <td data-label="Tokens" className="mono">{formatCount(row.total_tokens)}</td>
+                    <td data-label="Cost" className="mono">{formatUsd(row.cost_usd)}</td>
+                    <td data-label="Latency" className="mono">{row.latency_ms != null ? (row.latency_ms < 1000 ? `${row.latency_ms}ms` : `${(row.latency_ms / 1000).toFixed(1)}s`) : "-"}</td>
+                    <td data-label="Status">
                       <StatusPill value={row.status} />
                     </td>
-                    <td>{row.error_code ? <span className="calls-row-error">{row.error_code}</span> : <span className="calls-row-muted">{"\u2014"}</span>}</td>
+                    <td data-label="Error">{row.error_code ? <span className="calls-row-error">{row.error_code}</span> : <span className="calls-row-muted">{"\u2014"}</span>}</td>
                   </tr>
                 ))}
               </tbody>

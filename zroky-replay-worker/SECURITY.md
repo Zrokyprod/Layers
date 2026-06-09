@@ -4,7 +4,7 @@ Zroky Watch OSS handles sensitive telemetry paths, so please report security iss
 
 ## Reporting a vulnerability
 
-Email `security@zroky.ai` with:
+Email `security@zroky.com` with:
 
 - affected repo and version
 - impact summary

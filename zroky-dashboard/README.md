@@ -19,13 +19,10 @@ Create `.env.local` with:
 # Backend base URL used by the /api/zroky proxy
 ZROKY_API_BASE_URL=http://127.0.0.1:8000
 
-# Optional server-side fallback project context for proxy calls
+# Optional server-side fallback for single-project local smoke/testing only.
+# Do not use these for normal authenticated customer dashboard traffic.
 ZROKY_PROJECT_ID=
 ZROKY_API_KEY=
-
-# Optional project provisioning token pass-through
-ZROKY_PROVISIONING_TOKEN=
-ZROKY_PROVISIONING_TOKEN_HEADER=x-provisioning-token
 
 # UI labels
 NEXT_PUBLIC_DASHBOARD_ENV=staging
@@ -33,9 +30,10 @@ NEXT_PUBLIC_DASHBOARD_PROJECT_LABEL=project
 ```
 
 For production, set `ZROKY_API_BASE_URL` on the dashboard server/runtime to
-the deployed backend origin, for example `https://api.zroky.ai`. Do not rely on
-`NEXT_PUBLIC_API_URL` for dashboard proxy traffic; `/api/zroky/*` is a
-server-side proxy and reads `ZROKY_API_BASE_URL`.
+the deployed backend origin, for example `https://api.zroky.com`. Do not rely on
+`NEXT_PUBLIC_*` API URL variables for dashboard proxy traffic; `/api/zroky/*`
+and auth refresh routes are server-side proxies and read `ZROKY_API_BASE_URL`
+only.
 
 ## GitHub OAuth Redirect (Required)
 

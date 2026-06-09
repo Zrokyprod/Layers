@@ -132,6 +132,23 @@ function baseRun(overrides: Partial<ReplayRunDetailItem> = {}): ReplayRunDetailI
     candidate_prompt_override: "Use the payment retry guard.",
     candidate_model_override: "gpt-4.1",
     prevented_outcome_cost_usd: null,
+    source_context: {
+      kind: "issue",
+      id: "issue_1",
+      call_id: "call_1",
+      issue_id: "issue_1",
+      title: "Checkout payment timeout",
+      reason: "Payment provider timed out before receipt creation.",
+      failure_code: "PAYMENT_TIMEOUT",
+      severity: "high",
+      affected_agent: "checkout-agent",
+      affected_workflow: "checkout",
+      occurrence_count: 12,
+      last_seen_at: now,
+      origin: "issue",
+      confidence: null,
+      discovery_signature: null,
+    },
     summary: {
       trace_count_at_dispatch: 1,
       trace_count_executed: 1,
@@ -277,8 +294,11 @@ describe("ReplayRunDetailPage Replay Lab MVP", () => {
     expect(screen.getByRole("heading", { name: "Replay Lab" })).toBeInTheDocument();
     expect(screen.getByText("Replay failed agent calls, compare candidate behavior, and verify fixes before creating Goldens.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Replay setup" })).toBeInTheDocument();
+    expect(screen.getByText("What this replay is proving")).toBeInTheDocument();
+    expect(screen.getAllByText("Checkout payment timeout").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Payment provider timed out before receipt creation.").length).toBeGreaterThan(0);
     expect(screen.getByText("Source type")).toBeInTheDocument();
-    expect(screen.getByText("Source call")).toBeInTheDocument();
+    expect(screen.getByText("Source issue")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Original Failure" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Candidate Replay" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Verification Result" })).toBeInTheDocument();
@@ -286,8 +306,8 @@ describe("ReplayRunDetailPage Replay Lab MVP", () => {
     expect(screen.getByText("Candidate replay passed with real comparison.")).toBeInTheDocument();
     expect(screen.getByText("Tool behavior corrected")).toBeInTheDocument();
     expect(screen.getByText("Charge customer order 42.")).toBeInTheDocument();
-    expect(screen.getByText("Payment failed with timeout.")).toBeInTheDocument();
-    expect(screen.getByText("Payment completed successfully.")).toBeInTheDocument();
+    expect(screen.getAllByText("Payment failed with timeout.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Payment completed successfully.").length).toBeGreaterThan(0);
     expect(screen.getByText("openai")).toBeInTheDocument();
     expect(screen.getAllByText("gpt-4.1").length).toBeGreaterThan(0);
   });
@@ -461,9 +481,16 @@ describe("ReplayRunDetailPage Replay Lab MVP", () => {
     expect(screen.getAllByText("View JSON").length).toBeGreaterThan(0);
     expect(screen.getByText("cost_delta")).toBeInTheDocument();
     expect(screen.getByText("latency_delta")).toBeInTheDocument();
-    expect(screen.getByText("91%")).toBeInTheDocument();
+    expect(screen.getAllByText("91%").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Use the payment retry guard.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("-240 ms").length).toBeGreaterThan(0);
     expect(screen.getByText("$0.34")).toBeInTheDocument();
+  });
+
+  it("shows an honest fallback when source reason context is absent", () => {
+    renderRun(baseRun({ source_context: null }));
+
+    expect(screen.getByText("What this replay is proving")).toBeInTheDocument();
+    expect(screen.getByText("No source finding reason captured.")).toBeInTheDocument();
   });
 });

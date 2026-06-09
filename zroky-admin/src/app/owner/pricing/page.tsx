@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  useConfirmOwnerSkydoPayment,
   useOwnerBillingAccounts,
   useOwnerBillingSummary,
+  useOwnerMoneyPathHealth,
   useOwnerPricing,
+  useOwnerPricingPlans,
   useUpdateOwnerPricing,
 } from "@/lib/hooks";
-import type { OwnerBillingAccountItem } from "@/lib/owner-api";
+import type {
+  OwnerBillingAccountItem,
+  OwnerBillingSummary,
+  OwnerMoneyPathTenantRow,
+  OwnerPricingPlan,
+} from "@/lib/owner-api";
 
 interface ModelPricing {
   billing_unit: string;
@@ -27,6 +35,86 @@ interface ProviderConfig {
 interface PricingConfig {
   meta?: Record<string, unknown>;
   providers?: Record<string, ProviderConfig>;
+}
+
+type Tone = "ok" | "warn" | "danger" | "neutral";
+
+const BILLING_RISK_STATUSES = new Set(["past_due", "unpaid", "canceled", "incomplete"]);
+
+function fmtCount(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  if (value === -1) return "Unlimited";
+  return value.toLocaleString();
+}
+
+function fmtMoney(value: number | null): string {
+  if (value === null) return "Custom";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+}
+
+function statusCount(summary: OwnerBillingSummary | null, status: string): number | null {
+  if (!summary) return null;
+  return summary.by_status.find((row) => row.status === status)?.count ?? 0;
+}
+
+function planMapFromCatalog(plans: OwnerPricingPlan[], aliases: Record<string, string>) {
+  const map = new Map<string, OwnerPricingPlan>();
+  for (const plan of plans) map.set(plan.code, plan);
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    const plan = map.get(canonical);
+    if (plan) map.set(alias, plan);
+  }
+  return map;
+}
+
+function boolBadge(value: boolean) {
+  return (
+    <span className={`owner-money-badge owner-money-badge-${value ? "ok" : "neutral"}`}>
+      {value ? "Included" : "Not included"}
+    </span>
+  );
+}
+
+function StatusBadge({ value, tone }: { value: string; tone: Tone }) {
+  return <span className={`owner-money-badge owner-money-badge-${tone}`}>{value}</span>;
+}
+
+function accountRisk({
+  account,
+  plan,
+  tenant,
+  moneyPathReady,
+}: {
+  account: OwnerBillingAccountItem;
+  plan: OwnerPricingPlan | undefined;
+  tenant: OwnerMoneyPathTenantRow | undefined;
+  moneyPathReady: boolean;
+}): { label: string; detail: string; tone: Tone } {
+  if (!plan) {
+    return { label: "Unknown plan", detail: "No catalog entry matches this billing row.", tone: "danger" };
+  }
+  if (BILLING_RISK_STATUSES.has(account.status)) {
+    return { label: "Billing risk", detail: `Subscription status is ${account.status}.`, tone: "danger" };
+  }
+  if (!moneyPathReady) {
+    return { label: "Money-path unavailable", detail: "Product entitlement risk cannot be evaluated.", tone: "warn" };
+  }
+  if (!tenant) {
+    return { label: "No product row", detail: "Tenant has no money-path health row.", tone: "warn" };
+  }
+  if (tenant.replay_quota_status.state === "exceeded") {
+    return { label: "Replay exceeded", detail: "Tenant is above replay entitlement.", tone: "danger" };
+  }
+  if (tenant.replay_quota_status.state === "near_limit") {
+    return { label: "Replay quota", detail: "Tenant is near replay entitlement.", tone: "warn" };
+  }
+  if (tenant.provider_key_status.state === "missing" && plan.pricing.replay_credits !== 0) {
+    return { label: "Provider missing", detail: "Replay-capable plan has no provider key.", tone: "warn" };
+  }
+  if (plan.pricing.blocking_ci && tenant.golden_trace_count === 0) {
+    return { label: "CI proof missing", detail: "Blocking CI is included but no Golden exists.", tone: "warn" };
+  }
+  return { label: "Monitor", detail: "Billing and product evidence are aligned.", tone: "ok" };
 }
 
 function ModelRow({
@@ -57,7 +145,18 @@ function ModelRow({
   );
 }
 
-function BillingAccountRow({ account }: { account: OwnerBillingAccountItem }) {
+function BillingAccountRow({
+  account,
+  plan,
+  tenant,
+  moneyPathReady,
+}: {
+  account: OwnerBillingAccountItem;
+  plan: OwnerPricingPlan | undefined;
+  tenant: OwnerMoneyPathTenantRow | undefined;
+  moneyPathReady: boolean;
+}) {
+  const risk = accountRisk({ account, plan, tenant, moneyPathReady });
   return (
     <tr className="owner-tr">
       <td className="owner-td">
@@ -71,23 +170,43 @@ function BillingAccountRow({ account }: { account: OwnerBillingAccountItem }) {
         <span className={`status-pill status-${account.status}`}>{account.status}</span>
       </td>
       <td className="owner-td">{account.sla_tier}</td>
+      <td className="owner-td">
+        <div>{tenant ? fmtCount(tenant.replay_quota_status.used) : "-"}</div>
+        <span className="owner-td-secondary">
+          {tenant ? `${fmtCount(tenant.golden_trace_count)} Golden` : "No money-path row"}
+        </span>
+      </td>
+      <td className="owner-td">
+        <StatusBadge value={risk.label} tone={risk.tone} />
+        <div className="owner-user-id">{risk.detail}</div>
+      </td>
       <td className="owner-td owner-td-ts">
         {account.current_period_end ? new Date(account.current_period_end).toLocaleDateString() : "-"}
       </td>
-      <td className="owner-td owner-td-truncate">{account.stripe_customer_id ?? "-"}</td>
+      <td className="owner-td owner-td-truncate">
+        <div>{account.payment_subscription_ref ?? account.payment_request_ref ?? "-"}</div>
+        <span className="owner-td-secondary">{account.payment_provider || "manual"}</span>
+      </td>
       <td className="owner-td">
         <div className="owner-billing-links">
+          {account.payment_dashboard_url ? (
+            <a className="owner-row-link" href={account.payment_dashboard_url} target="_blank" rel="noopener noreferrer">
+              Skydo
+            </a>
+          ) : null}
           {account.stripe_customer_url ? (
             <a className="owner-row-link" href={account.stripe_customer_url} target="_blank" rel="noopener noreferrer">
-              Customer
+              Legacy customer
             </a>
           ) : null}
           {account.stripe_subscription_url ? (
             <a className="owner-row-link" href={account.stripe_subscription_url} target="_blank" rel="noopener noreferrer">
-              Subscription
+              Legacy subscription
             </a>
           ) : null}
-          {!account.stripe_customer_url && !account.stripe_subscription_url ? <span className="hint">No Stripe link</span> : null}
+          {!account.payment_dashboard_url && !account.stripe_customer_url && !account.stripe_subscription_url ? (
+            <span className="hint">No payment link</span>
+          ) : null}
         </div>
       </td>
     </tr>
@@ -96,7 +215,9 @@ function BillingAccountRow({ account }: { account: OwnerBillingAccountItem }) {
 
 export default function PricingPage() {
   const pricingQuery = useOwnerPricing();
+  const pricingPlansQuery = useOwnerPricingPlans();
   const summaryQuery = useOwnerBillingSummary();
+  const moneyPathQuery = useOwnerMoneyPathHealth();
   const [accountStatus, setAccountStatus] = useState("");
   const [planCode, setPlanCode] = useState("");
   const accountsQuery = useOwnerBillingAccounts({
@@ -105,9 +226,18 @@ export default function PricingPage() {
     limit: 100,
   });
   const updateMutation = useUpdateOwnerPricing();
+  const confirmPaymentMutation = useConfirmOwnerSkydoPayment();
 
   const [config, setConfig] = useState<PricingConfig | null>(null);
   const [saveMsg, setSaveMsg] = useState("");
+  const [confirmMsg, setConfirmMsg] = useState("");
+  const [confirmOrgId, setConfirmOrgId] = useState("");
+  const [confirmPlanCode, setConfirmPlanCode] = useState("pro");
+  const [confirmPaymentRef, setConfirmPaymentRef] = useState("");
+  const [confirmCustomerRef, setConfirmCustomerRef] = useState("");
+  const [confirmPaymentRequestRef, setConfirmPaymentRequestRef] = useState("");
+  const [confirmPeriodEnd, setConfirmPeriodEnd] = useState("");
+  const [confirmSeats, setConfirmSeats] = useState("10");
 
   const loading = pricingQuery.isLoading;
   const error = pricingQuery.error?.message ?? "";
@@ -155,17 +285,61 @@ export default function PricingPage() {
     }
   }, [config, updateMutation]);
 
+  const handleConfirmPayment = useCallback(async () => {
+    setConfirmMsg("");
+    try {
+      const parsedSeats = confirmSeats.trim() ? Number(confirmSeats) : null;
+      await confirmPaymentMutation.mutateAsync({
+        org_id: confirmOrgId.trim(),
+        plan_code: confirmPlanCode.trim(),
+        payment_ref: confirmPaymentRef.trim(),
+        customer_ref: confirmCustomerRef.trim() || null,
+        payment_request_ref: confirmPaymentRequestRef.trim() || null,
+        current_period_end: confirmPeriodEnd.trim() ? new Date(confirmPeriodEnd).toISOString() : null,
+        seats: parsedSeats !== null && Number.isFinite(parsedSeats) ? parsedSeats : null,
+      });
+      setConfirmMsg("Skydo payment confirmed and entitlements activated.");
+      setConfirmPaymentRef("");
+      setConfirmPaymentRequestRef("");
+    } catch (e: unknown) {
+      setConfirmMsg(`Error: ${(e as Error).message}`);
+    }
+  }, [
+    confirmCustomerRef,
+    confirmOrgId,
+    confirmPaymentMutation,
+    confirmPaymentRef,
+    confirmPaymentRequestRef,
+    confirmPeriodEnd,
+    confirmPlanCode,
+    confirmSeats,
+  ]);
+
   const fieldLabels = ["Input ($/1M)", "Output ($/1M)", "Reasoning ($/1M)", "Cache Create ($/1M)", "Cache Read ($/1M)"];
   const summary = summaryQuery.data ?? null;
   const accounts = accountsQuery.data?.items ?? [];
+  const planCatalog = pricingPlansQuery.data ?? null;
+  const plans = useMemo(() => planCatalog?.plans ?? [], [planCatalog]);
+  const aliases = useMemo(() => planCatalog?.aliases ?? {}, [planCatalog]);
+  const plansByCode = useMemo(() => planMapFromCatalog(plans, aliases), [aliases, plans]);
+  const moneyPathTenantsByProject = useMemo(() => {
+    const map = new Map<string, OwnerMoneyPathTenantRow>();
+    for (const tenant of moneyPathQuery.data?.tenants ?? []) map.set(tenant.project_id, tenant);
+    return map;
+  }, [moneyPathQuery.data?.tenants]);
+  const activeAccounts = (statusCount(summary, "active") ?? 0) + (statusCount(summary, "trialing") ?? 0);
+  const driftCount = planCatalog?.drift.length ?? null;
+  const providerGaps = moneyPathQuery.data?.platform.tenants_missing_provider_key ?? null;
+  const quotaRisk = moneyPathQuery.data?.platform.tenants_near_replay_quota ?? null;
+  const moneyPathReady = Boolean(moneyPathQuery.data && !moneyPathQuery.error);
 
   return (
-    <div className="owner-page">
+    <div className="owner-page owner-pricing-page">
       <div className="owner-page-header">
         <div>
-          <h2 className="owner-page-title">Billing</h2>
+          <h2 className="owner-page-title">Revenue & Entitlements</h2>
           <p className="hint">
-            Plan/status breakdown, Stripe-linked accounts and model pricing controls.
+            Plan contract, billing accounts, quota risk, and model pricing controls.
           </p>
         </div>
         <div className="owner-page-header-actions">
@@ -181,9 +355,96 @@ export default function PricingPage() {
       </div>
 
       {error && <div className="alert-strip alert-strip-error">{error}</div>}
+      {pricingPlansQuery.error && <div className="alert-strip alert-strip-error">{pricingPlansQuery.error.message}</div>}
       {summaryQuery.error && <div className="alert-strip alert-strip-error">{summaryQuery.error.message}</div>}
       {accountsQuery.error && <div className="alert-strip alert-strip-error">{accountsQuery.error.message}</div>}
+      {moneyPathQuery.error && <div className="alert-strip alert-strip-error">{moneyPathQuery.error.message}</div>}
       {loading && !error && <p className="hint">Loading...</p>}
+
+      <section className="owner-pricing-contract-grid">
+        <div className={`owner-stat-card ${driftCount === 0 ? "owner-stat-card-accent" : ""}`}>
+          <span className="owner-stat-label">Plan Contract</span>
+          <span className="owner-stat-value">{driftCount === null ? "-" : driftCount === 0 ? "In sync" : `${driftCount} drift`}</span>
+          <span className="owner-stat-sub">{planCatalog?.source_of_truth ?? "Backend pricing contract"}</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Active + Trialing</span>
+          <span className="owner-stat-value">{summary ? activeAccounts.toLocaleString() : "-"}</span>
+          <span className="owner-stat-sub">billing rows in sellable state</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Replay Quota Risk</span>
+          <span className="owner-stat-value">{fmtCount(quotaRisk)}</span>
+          <span className="owner-stat-sub">tenants near or above replay credits</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Provider Gaps</span>
+          <span className="owner-stat-value">{fmtCount(providerGaps)}</span>
+          <span className="owner-stat-sub">tenants blocked from provider-backed replay</span>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          Plan Entitlement Matrix
+          <span className="panel-header-note">
+            {planCatalog ? `${planCatalog.currency}, unlimited=${planCatalog.unlimited}` : "Backend contract loading"}
+          </span>
+        </div>
+        {pricingPlansQuery.isLoading ? <p className="hint owner-panel-padding">Loading plan entitlement contract...</p> : null}
+        {!pricingPlansQuery.isLoading && plans.length === 0 ? (
+          <div className="alert-strip">No pricing plans returned by backend.</div>
+        ) : null}
+        {planCatalog?.drift.length ? (
+          <div className="alert-strip alert-strip-error">
+            Pricing contract drift: {planCatalog.drift.join(", ")}
+          </div>
+        ) : null}
+        {plans.length > 0 ? (
+          <div className="owner-table-wrap owner-table-wrap-embedded">
+            <table className="owner-table owner-pricing-matrix">
+              <thead>
+                <tr>
+                  {[
+                    "Plan",
+                    "Price",
+                    "Calls/mo",
+                    "Retention",
+                    "Replay credits",
+                    "Goldens",
+                    "Non-blocking CI",
+                    "Blocking CI",
+                    "Provider vault",
+                  ].map((header) => (
+                    <th key={header} className="owner-th">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {plans.map((plan) => (
+                  <tr key={plan.code} className="owner-tr">
+                    <td className="owner-td">
+                      <strong>{plan.name}</strong>
+                      <div className="hint"><code>{plan.code}</code></div>
+                    </td>
+                    <td className="owner-td">{fmtMoney(plan.price.monthly_usd)}{plan.price.period}</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.calls_per_month)}</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.retention_days)} days</td>
+                    <td className="owner-td">{fmtCount(plan.pricing.replay_credits)}</td>
+                    <td className="owner-td">
+                      <div>{fmtCount(plan.pricing.golden_traces)} traces</div>
+                      <span className="owner-td-secondary">{fmtCount(plan.pricing.golden_sets)} sets</span>
+                    </td>
+                    <td className="owner-td">{boolBadge(plan.pricing.non_blocking_ci)}</td>
+                    <td className="owner-td">{boolBadge(plan.pricing.blocking_ci)}</td>
+                    <td className="owner-td">{boolBadge(plan.pricing.provider_key_vault)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
 
       <section className="owner-stat-grid">
         <div className="owner-stat-card owner-stat-card-accent">
@@ -202,9 +463,9 @@ export default function PricingPage() {
           <span className="owner-stat-sub">canceled accounts</span>
         </div>
         <div className="owner-stat-card">
-          <span className="owner-stat-label">Stripe accounts</span>
+          <span className="owner-stat-label">Billing accounts</span>
           <span className="owner-stat-value">{accountsQuery.data?.total.toLocaleString() ?? "-"}</span>
-          <span className="owner-stat-sub">new billing rows</span>
+          <span className="owner-stat-sub">Skydo and legacy billing rows</span>
         </div>
       </section>
 
@@ -238,8 +499,63 @@ export default function PricingPage() {
 
       <section className="panel">
         <div className="panel-header">
-          Stripe-linked Accounts
-          <span className="panel-header-note">Shows new subscription rows with direct Stripe dashboard links.</span>
+          Confirm Skydo Payment
+          <span className="panel-header-note">Marks a received Skydo payment as active and seeds plan entitlements.</span>
+        </div>
+        {confirmMsg && (
+          <div className={`alert-strip${confirmMsg.startsWith("Error") ? " alert-strip-error" : ""}`}>
+            {confirmMsg}
+          </div>
+        )}
+        <div className="owner-panel-filter owner-panel-filter-embedded">
+          <div className="owner-filter-row">
+            <label className="owner-filter-group">
+              <span className="owner-filter-label">Org ID</span>
+              <input className="input" value={confirmOrgId} onChange={(event) => setConfirmOrgId(event.target.value)} placeholder="project/org id" />
+            </label>
+            <label className="owner-filter-group">
+              <span className="owner-filter-label">Plan</span>
+              <select className="owner-select" value={confirmPlanCode} onChange={(event) => setConfirmPlanCode(event.target.value)}>
+                <option value="pilot">pilot</option>
+                <option value="pro">pro</option>
+                <option value="enterprise">enterprise</option>
+              </select>
+            </label>
+            <label className="owner-filter-group">
+              <span className="owner-filter-label">Payment ref</span>
+              <input className="input" value={confirmPaymentRef} onChange={(event) => setConfirmPaymentRef(event.target.value)} placeholder="Skydo payment/invoice id" />
+            </label>
+            <label className="owner-filter-group">
+              <span className="owner-filter-label">Request ref</span>
+              <input className="input" value={confirmPaymentRequestRef} onChange={(event) => setConfirmPaymentRequestRef(event.target.value)} placeholder="skydo_req_..." />
+            </label>
+            <label className="owner-filter-group">
+              <span className="owner-filter-label">Customer ref</span>
+              <input className="input" value={confirmCustomerRef} onChange={(event) => setConfirmCustomerRef(event.target.value)} placeholder="email/client id" />
+            </label>
+            <label className="owner-filter-group">
+              <span className="owner-filter-label">Period end</span>
+              <input className="input" type="datetime-local" value={confirmPeriodEnd} onChange={(event) => setConfirmPeriodEnd(event.target.value)} />
+            </label>
+            <label className="owner-filter-group">
+              <span className="owner-filter-label">Seats</span>
+              <input className="input" type="number" min="1" value={confirmSeats} onChange={(event) => setConfirmSeats(event.target.value)} />
+            </label>
+            <button
+              className="btn btn-primary"
+              onClick={() => void handleConfirmPayment()}
+              disabled={confirmPaymentMutation.isPending || !confirmOrgId.trim() || !confirmPaymentRef.trim()}
+            >
+              {confirmPaymentMutation.isPending ? "Confirming..." : "Confirm payment"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          Skydo Billing Accounts
+          <span className="panel-header-note">Shows subscription rows with Skydo payment references and legacy fallback links.</span>
         </div>
         <div className="owner-panel-filter owner-panel-filter-embedded">
           <div className="owner-filter-row">
@@ -258,7 +574,7 @@ export default function PricingPage() {
                 className="input"
                 value={planCode}
                 onChange={(event) => setPlanCode(event.target.value)}
-                placeholder="free, starter, pro"
+                placeholder="free, pilot, pro"
               />
             </label>
             <button className="btn btn-soft" onClick={() => accountsQuery.refetch()} disabled={accountsQuery.isFetching}>
@@ -270,18 +586,26 @@ export default function PricingPage() {
           <table className="owner-table">
             <thead>
               <tr>
-                {["Account", "Plan", "Status", "SLA", "Period End", "Stripe Customer", "Links"].map((header) => (
+                {["Account", "Plan", "Status", "SLA", "Money Path", "Risk", "Period End", "Payment Ref", "Links"].map((header) => (
                   <th key={header} className="owner-th">{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {accountsQuery.isLoading ? (
-                <tr><td colSpan={7} className="owner-td owner-td-empty">Loading accounts...</td></tr>
+                <tr><td colSpan={9} className="owner-td owner-td-empty">Loading accounts...</td></tr>
               ) : accounts.length === 0 ? (
-                <tr><td colSpan={7} className="owner-td owner-td-empty">No Stripe-linked billing accounts found.</td></tr>
+                <tr><td colSpan={9} className="owner-td owner-td-empty">No billing accounts found.</td></tr>
               ) : (
-                accounts.map((account) => <BillingAccountRow key={account.org_id} account={account} />)
+                accounts.map((account) => (
+                  <BillingAccountRow
+                    key={account.org_id}
+                    account={account}
+                    plan={plansByCode.get(account.plan_code)}
+                    tenant={moneyPathTenantsByProject.get(account.org_id)}
+                    moneyPathReady={moneyPathReady}
+                  />
+                ))
               )}
             </tbody>
           </table>

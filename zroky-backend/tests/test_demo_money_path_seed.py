@@ -53,6 +53,7 @@ def test_seed_money_path_demo_creates_deterministic_product_loop(tmp_path: Path)
             assert summary["replay_run_id"] == "demo-replay-refund-fixed"
             assert summary["ci_run_id"] == "demo-ci-refund-tool-regression"
             assert summary["trace_id"] == "trace-demo-refund-missed-tool"
+            assert summary["api_key_prefix"] == "zroky_api_live_demo"
 
             seeded_key = session.execute(
                 select(ApiKey).where(ApiKey.id == summary["api_key_id"])
@@ -72,7 +73,8 @@ def test_seed_money_path_demo_creates_deterministic_product_loop(tmp_path: Path)
             payload = _json(bad_call.payload_json)
             tools = _json(bad_call.tool_lifecycle_summary_json)
             assert bad_call.project_id == project_id
-            assert bad_call.status == "success"
+            assert bad_call.status == "failed"
+            assert bad_call.error_code == "TOOL_NOT_CALLED"
             assert "Refunds are usually processed within 5-10 business days" in payload["output"]
             assert tools["expected_tool"] == "get_refund_status"
             assert tools["tool_calls"] == []
@@ -101,6 +103,8 @@ def test_seed_money_path_demo_creates_deterministic_product_loop(tmp_path: Path)
             assert verified_summary["verification_status"] == "verified_fix"
             assert verified_summary["replay_mode"] == "mocked-tool"
             assert verified_summary["tool_behavior_diff"]["required_tool_called"] is True
+            assert verified_summary["source_issue_id"] == "demo-issue-refund-tool-not-called"
+            assert verified_summary["source_context"]["issue_id"] == "demo-issue-refund-tool-not-called"
 
             golden_trace = session.execute(
                 select(GoldenTrace).where(GoldenTrace.id == "demo-golden-trace-refund-status")
@@ -117,10 +121,12 @@ def test_seed_money_path_demo_creates_deterministic_product_loop(tmp_path: Path)
             ).scalar_one()
             ci_summary = _json(ci_run.summary_json)
             assert ci_run.status == "fail"
+            assert ci_run.golden_set_id == "demo-golden-refund-status"
             assert ci_summary["verdict"] == "fail"
             assert ci_summary["regression_rate"] == 1.0
             assert ci_summary["regressed_count"] == 1
             assert ci_summary["verdict"] != "pass"
+            assert ci_summary["source_issue_id"] == "demo-issue-refund-tool-not-called"
             assert "blocked this PR" in ci_summary["pr_comment_markdown"]
     finally:
         Base.metadata.drop_all(bind=engine)

@@ -102,6 +102,7 @@ function ciDetail(overrides: Partial<RegressionCIRunDetailResponse> = {}): Regre
       pr_title: "Refund retry guard",
       branch: "refund-retry",
       pr_url: "https://github.com/acme/app/pull/42",
+      summary_url: "/v1/regression-ci/runs/run_ci_1",
     },
     pr_comment_markdown: "## Replay CI regressed\n\n3 protected flows failed.",
     ...overrides,
@@ -179,11 +180,14 @@ describe("CI Gates list MVP", () => {
     }
 
     const table = await screen.findByRole("table");
-    for (const heading of ["Run", "Status", "Regression", "Failed flows", "Replay proof", "Git SHA", "Completed", "Action"]) {
+    for (const heading of ["Run", "Status", "Regression", "Failed flows", "Replay proof", "Git SHA", "Summary URL", "Completed", "Action"]) {
       expect(within(table).getByRole("columnheader", { name: heading })).toBeInTheDocument();
     }
     expect(screen.getByText("PR #42 - Refund retry guard")).toBeInTheDocument();
     expect(screen.getByText("refund-retry")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "/v1/regression-ci/runs/run_ci_1" }).getAttribute("href")).toBe(
+      "/ci-gates/run_ci_1",
+    );
     expect(screen.queryByText("manual_1")).not.toBeInTheDocument();
   });
 

@@ -158,7 +158,10 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                 # table. The public `/v1/issues` API projects these grouped
                 # problem rows for customer-facing triage.
                 try:
+                    from app.db.models import Anomaly
+                    from app.services.anomalies import compute_fingerprint, map_failure_code_to_detector
                     from app.services.issues import upsert_issue
+                    from app.services.notification_dispatch import dispatch_new_issue_slack_alert
                     _call_cost = float(getattr(call, "cost_total", None) or 0.0) if call else 0.0
                     _occurred_at = getattr(job, "created_at", None) or datetime.now(timezone.utc)
                     _prompt_fp = _as_text(payload_with_db_context.get("prompt_fingerprint"))
@@ -175,7 +178,21 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                             "confidence": _diag_item.get("confidence"),
                             "summary": _diag_item.get("summary") or _diag_item.get("title"),
                         }
-                        upsert_issue(
+                        _detector = map_failure_code_to_detector(_code)
+                        _existing_issue_id = None
+                        if _detector is not None:
+                            _fingerprint = compute_fingerprint(
+                                detector=_detector,
+                                prompt_fingerprint=_prompt_fp,
+                                agent_name=_agent_name,
+                            )
+                            _existing_issue_id = session.execute(
+                                select(Anomaly.id).where(
+                                    Anomaly.project_id == tenant_id,
+                                    Anomaly.fingerprint == _fingerprint,
+                                )
+                            ).scalar_one_or_none()
+                        _issue = upsert_issue(
                             session,
                             project_id=tenant_id,
                             failure_code=_code,
@@ -187,6 +204,17 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                             call_cost_usd=_call_cost,
                             evidence=_evidence,
                         )
+                        if _issue is not None and _existing_issue_id is None:
+                            dispatch_new_issue_slack_alert(
+                                db=session,
+                                tenant_id=tenant_id,
+                                issue_id=_issue.id,
+                                failure_code=_code,
+                                severity=_issue.severity,
+                                agent_name=_agent_name,
+                                diagnosis_id=diagnosis_id,
+                                call_id=str(job.call_id or "") or None,
+                            )
                 except Exception:
                     logger.warning("issue_upsert_failed", exc_info=True)
                 # Write shown event so the fix appears in adoption funnel analytics.

@@ -62,7 +62,7 @@ const proofCards = [
 ] satisfies Array<{ icon: LucideIcon; title: string; copy: string }>;
 
 const consoleRows = [
-  { label: "Failed run", value: "Captured", tone: "orange" },
+  { label: "Failed run", value: "Captured", tone: "accent" },
   { label: "Root cause", value: "Diagnosed", tone: "neutral" },
   { label: "Replay proof", value: "Verified", tone: "green" },
   { label: "Regression gate", value: "Ready", tone: "neutral" },

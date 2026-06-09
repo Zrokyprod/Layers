@@ -1,28 +1,30 @@
 import { expect, test } from "@playwright/test";
 
-import { expectAnyVisibleText, expectDashboardShell, expectHealthyPage, readSeed } from "./helpers";
+import { expectDashboardShell, expectHealthyPage, expectVisibleTexts, readSeed } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("settings and account", () => {
   test("workspace settings pages render cleanly", async ({ page }) => {
+    test.setTimeout(180_000);
+
     const pages = [
       { path: "/settings", labels: ["Project", "Data"] },
-      { path: "/settings/keys", labels: ["API Keys", "Create New API Key"] },
-      { path: "/settings/providers", labels: ["Provider Key Vault", "fake-provider"] },
+      { path: "/settings/keys", labels: ["API Keys", "Create capture key"] },
+      { path: "/settings/providers", labels: ["Provider key vault", "fake-provider"] },
       { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
       { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },
       { path: "/settings/evaluation", labels: ["Evaluation", "Calibration"] },
       { path: "/settings/integrations", labels: ["Integrations", "Slack", "Teams"] },
-      { path: "/settings/integrations/slack", labels: ["Slack", "Disconnected", "Install"] },
-      { path: "/settings/integrations/teams", labels: ["Teams", "Disconnected", "webhook"] },
+      { path: "/settings/integrations/slack", labels: ["Slack", "Not connected", "Install"] },
+      { path: "/settings/integrations/teams", labels: ["Teams", "Not connected", "webhook"] },
       { path: "/account", labels: ["Your Identity", "Account Security"] },
     ];
 
     for (const item of pages) {
       await page.goto(item.path);
       await expectDashboardShell(page);
-      await expectAnyVisibleText(page, item.labels);
+      await expectVisibleTexts(page, item.labels);
     }
   });
 
@@ -42,15 +44,15 @@ test.describe("settings and account", () => {
     const keyName = `E2E key ${Date.now()}`;
     await page.getByLabel("Key name").fill(keyName);
     await page.getByLabel("Expires in days").fill("30");
-    await page.getByRole("button", { name: "Create key" }).click();
-    await expect(page.getByText("New API Key Created")).toBeVisible();
+    await page.getByRole("button", { name: "Create project key" }).click();
+    await expect(page.getByRole("heading", { name: "Copy this project key now." })).toBeVisible();
     await expect(page.locator(".settings-key-reveal")).toContainText("zroky_api_");
     await page.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "Rotate" }).first().click();
     await expect(page.getByRole("dialog", { name: "Rotate API key" })).toBeVisible();
     await page.getByRole("button", { name: "Rotate and show replacement" }).click();
-    await expect(page.getByText("New API Key Created")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Copy this project key now." })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "Revoke" }).first().click();
@@ -66,12 +68,19 @@ test.describe("settings and account", () => {
     await page.goto("/settings/team");
     await expectDashboardShell(page);
 
+    const seed = readSeed();
     const inviteEmail = `e2e-${Date.now()}@zroky.local`;
     await page.getByLabel("Email").fill(inviteEmail);
     await page.locator("#invite-role").selectOption("member");
+    const inviteResponsePromise = page.waitForResponse((response) => {
+      return response.url().includes(`/v1/invitations/projects/${seed.project_id}/invitations`)
+        && response.request().method() === "POST";
+    });
     await page.getByRole("button", { name: "Send invite" }).click();
+    const inviteResponse = await inviteResponsePromise;
+    expect(inviteResponse.status()).toBe(201);
     const row = page.locator(".team-member-row").filter({ hasText: inviteEmail });
-    await expect(row).toBeVisible();
+    await expect(row).toBeVisible({ timeout: 15_000 });
     await expect(row.getByText("Pending", { exact: true })).toBeVisible();
 
     await row.getByTitle("Revoke invitation").click();

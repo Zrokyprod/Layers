@@ -40,13 +40,13 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="errb-screen">
           <div className="errb-card">
-            <div className="errb-icon-wrap" aria-hidden="true">ΓÜá</div>
+            <div className="errb-icon-wrap" aria-hidden="true">⚠</div>
             <h2 className="errb-heading">Something went wrong</h2>
             <p className="errb-message">
               {this.state.error?.message || "An unexpected error occurred"}
             </p>
             <button type="button" className="btn btn-primary" onClick={this.handleRetry}>
-              Γå║ Retry
+              ↺ Retry
             </button>
           </div>
         </div>

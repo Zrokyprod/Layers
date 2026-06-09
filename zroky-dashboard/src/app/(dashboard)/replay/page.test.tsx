@@ -17,8 +17,24 @@ const hooks = vi.hoisted(() => ({
 }));
 
 const api = vi.hoisted(() => ({
+  createProviderKey: vi.fn(),
   runGoldenSet: vi.fn(),
   runRegressionCI: vi.fn(),
+}));
+
+const providerKeyState = vi.hoisted(() => ({
+  active: true,
+}));
+
+const quotaState = vi.hoisted(() => ({
+  data: { enabled: true, limit: 100, used: 8, resets_at: "2026-06-30" } as
+    | { enabled: boolean; limit: number; used: number; resets_at: string }
+    | undefined,
+  error: null as Error | null,
+  isError: false,
+  isFetching: false,
+  isLoading: false,
+  refetch: vi.fn(),
 }));
 
 const queryState = vi.hoisted(() => ({
@@ -55,16 +71,36 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     listIssues: vi.fn(),
     listGoldenSets: vi.fn(),
+    createProviderKey: api.createProviderKey,
     runGoldenSet: api.runGoldenSet,
     runRegressionCI: api.runRegressionCI,
   };
 });
 
 vi.mock("@/lib/hooks", () => ({
+  useActiveProviderKeys: () => ({
+    data: {
+      items: providerKeyState.active
+        ? [{ id: "key_1", is_active: true }]
+        : [],
+      total_in_page: providerKeyState.active ? 1 : 0,
+    },
+    refetch: vi.fn(async () => ({
+      data: {
+        items: providerKeyState.active
+          ? [{ id: "key_1", is_active: true }]
+          : [],
+        total_in_page: providerKeyState.active ? 1 : 0,
+      },
+    })),
+  }),
   useReplayQuota: () => ({
-    data: { enabled: true, limit: 100, used: 8, resets_at: "2026-06-30" },
-    isLoading: false,
-    error: null,
+    data: quotaState.data,
+    error: quotaState.error,
+    isError: quotaState.isError,
+    isFetching: quotaState.isFetching,
+    isLoading: quotaState.isLoading,
+    refetch: quotaState.refetch,
   }),
   useReplayRuns: () => ({
     data: { items: queryState.runs, next_cursor: null, total_in_page: queryState.runs.length },
@@ -135,13 +171,13 @@ vi.mock("@tanstack/react-query", () => ({
     return { data: undefined, isLoading: false, error: null };
   }),
   useMutation: vi.fn((options: {
-    mutationFn: () => unknown;
+    mutationFn: (variables?: unknown) => unknown;
     onSuccess?: (data: unknown) => void;
     onError?: (error: Error) => void;
   }) => ({
-    mutate: () => {
+    mutate: (variables?: unknown) => {
       Promise.resolve()
-        .then(() => options.mutationFn())
+        .then(() => options.mutationFn(variables))
         .then((data) => options.onSuccess?.(data))
         .catch((error: Error) => options.onError?.(error));
     },
@@ -251,6 +287,23 @@ function replayRun(overrides: Partial<ReplayRunItem> = {}): ReplayRunItem {
     candidate_prompt_override: null,
     candidate_model_override: null,
     prevented_outcome_cost_usd: 1240,
+    source_context: {
+      kind: "issue",
+      id: "issue_1",
+      call_id: "call_1",
+      issue_id: "issue_1",
+      title: "Checkout payment timeout",
+      reason: "Payment provider timed out before receipt creation.",
+      failure_code: "PAYMENT_TIMEOUT",
+      severity: "high",
+      affected_agent: "checkout-agent",
+      affected_workflow: "checkout",
+      occurrence_count: 12,
+      last_seen_at: now,
+      origin: "issue",
+      confidence: null,
+      discovery_signature: null,
+    },
     summary: {
       trace_count_at_dispatch: 3,
       trace_count_executed: 3,
@@ -274,6 +327,12 @@ function replayRun(overrides: Partial<ReplayRunItem> = {}): ReplayRunItem {
 describe("ReplayPage command center", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    providerKeyState.active = true;
+    quotaState.data = { enabled: true, limit: 100, used: 8, resets_at: "2026-06-30" };
+    quotaState.error = null;
+    quotaState.isError = false;
+    quotaState.isFetching = false;
+    quotaState.isLoading = false;
     queryState.issues = [issue()];
     queryState.calls = [call()];
     queryState.goldenSets = [goldenSet()];
@@ -309,21 +368,53 @@ describe("ReplayPage command center", () => {
     expect(screen.getByRole("button", { name: /PR \/ CI/ })).toBeInTheDocument();
     expect(screen.getByText("Protected spend")).toBeInTheDocument();
     expect(screen.getByText("Run run_1")).toBeInTheDocument();
+    expect(screen.getAllByText("Payment provider timed out.").length).toBeGreaterThan(0);
+    expect(screen.getByText("Payment provider timed out before receipt creation.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Replay proof composition")).toBeInTheDocument();
   });
 
-  it("starts a replay from the highest priority issue", () => {
+  it("keeps the workspace visible but gates launch while quota is pending", () => {
+    quotaState.data = undefined;
+    quotaState.isLoading = true;
+    quotaState.isFetching = true;
+
+    render(<ReplayPage />);
+
+    expect(screen.getByRole("heading", { name: "Prove the fix before it ships." })).toBeInTheDocument();
+    expect(screen.getByText("Checking replay quota")).toBeInTheDocument();
+    expect((screen.getByRole("button", { name: "Start replay" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("starts a replay from the highest priority issue", async () => {
     render(<ReplayPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
 
-    expect(hooks.issueMutate).toHaveBeenCalledWith({
+    await waitFor(() => expect(hooks.issueMutate).toHaveBeenCalledWith({
       issueId: "issue_1",
       payload: { replay_mode: "real_llm" },
-    });
+    }));
     expect(router.push).toHaveBeenCalledWith("/replay/run_issue_1");
   });
 
-  it("starts a replay from a failed call with candidate overrides", () => {
+  it("prompts for a provider key before verified replay when no active key exists", async () => {
+    providerKeyState.active = false;
+    render(<ReplayPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
+
+    expect(await screen.findByText("Connect your provider key to run verified replay.")).toBeInTheDocument();
+    expect(hooks.issueMutate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use stub replay" }));
+
+    expect(hooks.issueMutate).toHaveBeenCalledWith({
+      issueId: "issue_1",
+      payload: { replay_mode: "stub" },
+    });
+  });
+
+  it("starts a replay from a failed call with candidate overrides", async () => {
     render(<ReplayPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /Call/ }));
@@ -331,27 +422,27 @@ describe("ReplayPage command center", () => {
     fireEvent.change(screen.getByPlaceholderText("optional prompt patch"), { target: { value: "Retry payment once before failing." } });
     fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
 
-    expect(hooks.callMutate).toHaveBeenCalledWith({
+    await waitFor(() => expect(hooks.callMutate).toHaveBeenCalledWith({
       callId: "call_1",
       payload: {
         replay_mode: "real_llm",
         candidate_model_override: "gpt-4.1-mini",
         candidate_prompt_override: "Retry payment once before failing.",
       },
-    });
+    }));
     expect(router.push).toHaveBeenCalledWith("/replay/run_call_1");
   });
 
-  it("sends the selected replay mode to Issue replay", () => {
+  it("sends the selected replay mode to Issue replay", async () => {
     render(<ReplayPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /mocked-tool/ }));
     fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
 
-    expect(hooks.issueMutate).toHaveBeenCalledWith({
+    await waitFor(() => expect(hooks.issueMutate).toHaveBeenCalledWith({
       issueId: "issue_1",
       payload: { replay_mode: "mocked-tool" },
-    });
+    }));
   });
 
   it("runs the selected Golden Set through the live replay endpoint", async () => {

@@ -406,6 +406,40 @@ function sourceTitleFor(run: ReplayRunDetailItem, trace: ReplayRunTraceItem | nu
   return run.golden_set_id;
 }
 
+function sourceContextTitle(run: ReplayRunDetailItem, trace: ReplayRunTraceItem | null): string {
+  return run.source_context?.title || run.source_context?.failure_code || sourceTitleFor(run, trace);
+}
+
+function sourceContextReason(run: ReplayRunDetailItem): string {
+  return run.source_context?.reason || "No source finding reason captured.";
+}
+
+function sourceContextMeta(run: ReplayRunDetailItem): { label: string; value: string }[] {
+  const context = run.source_context;
+  if (!context) {
+    return [{ label: "Source", value: "legacy replay" }];
+  }
+  return [
+    { label: "Origin", value: context.origin || context.kind || "source" },
+    { label: "Failure", value: context.failure_code || "unknown" },
+    { label: "Severity", value: context.severity || "unknown" },
+    { label: "Agent", value: context.affected_agent || "unknown" },
+    { label: "Workflow", value: context.affected_workflow || "unknown" },
+    { label: "Occurrences", value: context.occurrence_count == null ? "unknown" : `${context.occurrence_count}x` },
+  ].filter((item) => item.value !== "unknown");
+}
+
+function sourceContextHref(run: ReplayRunDetailItem, trace: ReplayRunTraceItem | null): string | null {
+  if (run.source_context?.issue_id) return `/issues/${run.source_context.issue_id}`;
+  if (run.source_context?.call_id) return `/calls/${run.source_context.call_id}`;
+  if (trace?.call_id_replayed) return `/calls/${trace.call_id_replayed}`;
+  return null;
+}
+
+function sourceContextId(run: ReplayRunDetailItem, trace: ReplayRunTraceItem | null): string | null {
+  return run.source_context?.issue_id || run.source_context?.call_id || run.source_context?.id || trace?.call_id_replayed || null;
+}
+
 function EmptyValue({ children = "Not captured." }: { children?: string }) {
   return <span className="notif-meta">{children}</span>;
 }
@@ -780,8 +814,10 @@ export default function ReplayRunDetailPage() {
   const confidence = confidenceLevel(run);
   const recommendedMode = recommendedNextReplayMode(run);
   const warning = warningFor(run, selectedTrace);
-  const sourceType = sourceTypeFor(run, selectedTrace);
-  const sourceTitle = sourceTitleFor(run, selectedTrace);
+  const sourceType = run.source_context?.kind || sourceTypeFor(run, selectedTrace);
+  const sourceTitle = sourceContextTitle(run, selectedTrace);
+  const sourceHref = sourceContextHref(run, selectedTrace);
+  const sourceId = sourceContextId(run, selectedTrace);
   const isSafeVerifiedFix = confidence === "verified_fix";
   const isUntrustedState = !isSafeVerifiedFix;
   const trustWarning = "This replay state is not trusted enough to create a Golden or block CI. Run trusted replay first.";
@@ -914,17 +950,38 @@ export default function ReplayRunDetailPage() {
           </span>
         </header>
 
+        <div className="replay-source-context-panel">
+          <div>
+            <span>What this replay is proving</span>
+            <h4>{sourceTitle}</h4>
+            <p>{sourceContextReason(run)}</p>
+          </div>
+          <div className="replay-source-context-facts">
+            {sourceContextMeta(run).map((item) => (
+              <span key={`${item.label}:${item.value}`}>
+                <strong>{item.label}</strong>
+                {item.value}
+              </span>
+            ))}
+          </div>
+          {sourceHref ? (
+            <Link href={sourceHref} className="btn btn-soft">
+              Open source
+            </Link>
+          ) : null}
+        </div>
+
         <div className="replay-lab-setup-grid">
           <DetailField title="Source type">
             <strong>{sourceType}</strong>
           </DetailField>
-          <DetailField title={sourceType === "call" ? "Source call" : "Source Golden"}>
-            {selectedTrace?.call_id_replayed ? (
-              <Link href={`/calls/${selectedTrace.call_id_replayed}`} className="replay-lab-source-link mono">
-                {sourceTitle}
+          <DetailField title={sourceType === "issue" ? "Source issue" : sourceType === "call" ? "Source call" : "Source Golden"}>
+            {sourceHref ? (
+              <Link href={sourceHref} className="replay-lab-source-link mono">
+                {sourceId ?? sourceTitle}
               </Link>
             ) : (
-              <span className="mono">{sourceTitle}</span>
+              <span className="mono">{sourceId ?? sourceTitle}</span>
             )}
           </DetailField>
           <DetailField title="Replay mode">
@@ -975,6 +1032,22 @@ export default function ReplayRunDetailPage() {
             </Link>
           ) : null}
         </div>
+      </section>
+
+      <section className="panel replay-lab-hero-diff" aria-label="Original versus candidate proof">
+        <article>
+          <span>Original failure</span>
+          <TextBlock value={originalOutput} empty="Original output was not captured for this trace." />
+        </article>
+        <div className="replay-lab-hero-diff-center">
+          <strong>Before / after proof</strong>
+          <p>{failureReason || "No failure reason captured."}</p>
+          <span>{formatMs(summary.latency_delta_ms)} latency delta</span>
+        </div>
+        <article>
+          <span>Candidate replay</span>
+          <TextBlock value={selectedTrace?.output_text} empty="No candidate output captured yet." />
+        </article>
       </section>
 
       <div className="replay-lab-comparison">
@@ -1091,6 +1164,32 @@ export default function ReplayRunDetailPage() {
             <span>Latency {formatMs(summary.latency_delta_ms)}</span>
           </div>
         </div>
+
+        {(() => {
+          const fid = judgeConfidence(selectedTrace);
+          const pct = fid == null ? null : Math.round(fid <= 1 ? fid * 100 : fid);
+          const ringTone = pct == null ? "" : confidence === "fix_failed" ? " is-low" : pct >= 85 ? " is-high" : pct >= 60 ? "" : " is-low";
+          return (
+            <div className="fidelity-panel">
+              <div className={`fidelity-ring${ringTone}`} style={{ ["--fid" as string]: pct ?? 0 }}>
+                <strong>{pct == null ? "—" : `${pct}%`}</strong>
+                <span>fidelity</span>
+              </div>
+              <div>
+                <h4>How faithfully did we reproduce this?</h4>
+                <p>
+                  {pct == null
+                    ? "Replay fidelity is not available for this run — Zroky will not infer a score it cannot measure."
+                    : confidence === "stub_only"
+                      ? "Stub replay only regraded recorded behavior. Fidelity reflects judge confidence, not a verified reproduction."
+                      : confidence === "verified_fix"
+                        ? `Replay reproduced the scenario and the candidate passed with ${replayModeProof(run.replay_mode)}.`
+                        : "Replay completed, but fidelity is not high enough to trust this as a verified fix."}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="detail-proof-grid">
           <ProofCard title="verification_status" value={summary.verification_status} tone={isSafeVerifiedFix ? "good" : confidence === "fix_failed" ? "bad" : "warn"} />

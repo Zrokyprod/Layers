@@ -1,7 +1,11 @@
-// This file is intentionally empty.
-// Auth middleware lives exclusively in /middleware.ts at the project root.
-// See ZROKY-008.
+import type { NextRequest } from "next/server";
 
-export function proxy() {
-  return undefined;
+import { guardDashboardRoute } from "./lib/route-auth-guard";
+
+export function proxy(request: NextRequest) {
+  return guardDashboardRoute(request);
 }
+
+export const config = {
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};

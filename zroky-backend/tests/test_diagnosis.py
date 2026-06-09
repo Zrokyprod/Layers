@@ -300,6 +300,69 @@ def test_submit_with_jwt_enforced_membership_rejects_non_member(
         get_settings.cache_clear()
 
 
+def test_jwt_multi_project_selection_requires_db_membership_when_enforced(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALLOW_PROJECT_HEADER_CONTEXT", "false")
+    monkeypatch.setenv("JWT_SIGNING_KEY", "jwt-secret-for-tests-minimum-32-bytes-2026")
+    monkeypatch.setenv("JWT_ALGORITHMS", "HS256")
+    monkeypatch.setenv("ENFORCE_JWT_PROJECT_MEMBERSHIP", "true")
+    get_settings.cache_clear()
+
+    try:
+        owned_project_response = client.post(
+            "/v1/projects",
+            json={"name": "JWT Owned Selector Project", "owner_ref": "member-sub-selector"},
+        )
+        assert owned_project_response.status_code == 201
+        owned_project_id = owned_project_response.json()["project_id"]
+
+        foreign_project_response = client.post(
+            "/v1/projects",
+            json={"name": "JWT Foreign Selector Project"},
+        )
+        assert foreign_project_response.status_code == 201
+        foreign_project_id = foreign_project_response.json()["project_id"]
+
+        token = jwt.encode(
+            {
+                "sub": "member-sub-selector",
+                "projects": [owned_project_id, foreign_project_id],
+            },
+            "jwt-secret-for-tests-minimum-32-bytes-2026",
+            algorithm="HS256",
+        )
+
+        foreign_submit_response = client.post(
+            "/v1/diagnosis/submit",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Project-Id": foreign_project_id,
+            },
+            json={
+                "diagnosis_id": "diag-jwt-selector-membership-deny",
+                "payload": {"prompt": "test"},
+            },
+        )
+        assert foreign_submit_response.status_code == 403
+
+        owned_submit_response = client.post(
+            "/v1/diagnosis/submit",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Project-Id": owned_project_id,
+            },
+            json={
+                "diagnosis_id": "diag-jwt-selector-membership-allow",
+                "payload": {"prompt": "test"},
+            },
+        )
+        assert owned_submit_response.status_code == 200
+    finally:
+        get_settings.cache_clear()
+
+
 def test_jwt_viewer_role_cannot_submit_but_can_read_status(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -318,16 +381,6 @@ def test_jwt_viewer_role_cannot_submit_but_can_read_status(
         assert project_response.status_code == 201
         project_id = project_response.json()["project_id"]
 
-        membership_response = client.post(
-            f"/v1/projects/{project_id}/memberships",
-            json={
-                "subject": "viewer-role-sub",
-                "role": "viewer",
-                "is_active": True,
-            },
-        )
-        assert membership_response.status_code == 200
-
         owner_token = jwt.encode(
             {
                 "sub": "owner-role-sub",
@@ -336,6 +389,18 @@ def test_jwt_viewer_role_cannot_submit_but_can_read_status(
             "jwt-secret-for-tests-minimum-32-bytes-2026",
             algorithm="HS256",
         )
+
+        membership_response = client.post(
+            f"/v1/projects/{project_id}/memberships",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={
+                "subject": "viewer-role-sub",
+                "role": "viewer",
+                "is_active": True,
+            },
+        )
+        assert membership_response.status_code == 200
+
         seed_submit = client.post(
             "/v1/diagnosis/submit",
             headers={"Authorization": f"Bearer {owner_token}"},

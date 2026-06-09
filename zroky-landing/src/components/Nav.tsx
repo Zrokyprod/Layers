@@ -1,150 +1,100 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowRight, Github, Menu, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Menu, X, Star, ArrowUpRight } from 'lucide-react';
 
-const navItems = [
-  { label: 'Product', to: '/' },
-  { label: 'Features', to: '/features' },
-  { label: 'Changelog', to: '/changelog' },
-  { label: 'Docs', to: '/docs' },
+const LINKS = [
+  { label: 'Product', to: '/#product' },
   { label: 'Pricing', to: '/pricing' },
+  { label: 'Docs', to: '/docs' },
+  { label: 'Changelog', to: '/changelog' },
 ];
+
+const DASHBOARD_URL = 'https://app.zroky.com';
+const GITHUB_URL = 'https://github.com/zroky/zroky-watch';
 
 export default function Nav() {
   const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 18);
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  useEffect(() => { setOpen(false); }, [location.pathname]);
 
   return (
-    <>
-      <motion.header
-        initial={{ y: -18, opacity: 0 }}
+    <header className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-3">
+      <motion.nav
+        initial={{ y: -16, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed left-0 right-0 top-10 z-50 px-3 pt-3 sm:px-4 lg:px-6"
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className={`flex w-full max-w-6xl items-center justify-between rounded-2xl border px-4 py-2.5 transition-all duration-300 ${
+          scrolled
+            ? 'border-line-strong bg-ink/80 backdrop-blur-xl shadow-card'
+            : 'border-line bg-ink/40 backdrop-blur-md'
+        }`}
       >
-        <div
-          className={`mx-auto flex max-w-[92rem] items-center justify-between rounded-full transition-all duration-300 ${
-            scrolled
-              ? 'border border-panel-border bg-white/92 px-4 py-2.5 shadow-premium backdrop-blur-2xl'
-              : 'bg-white/60 px-2 py-2 backdrop-blur-xl'
-          }`}
-        >
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 rounded-full px-2" aria-label="Zroky home">
-            <span className="flex h-11 w-[148px] items-center">
-              <img src="/zroky.logo.png" alt="Zroky" className="h-9 w-full object-contain" />
-            </span>
-          </Link>
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary text-ink font-black text-sm">Z</div>
+          <span className="text-[15px] font-bold tracking-tight">Zroky</span>
+        </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden items-center gap-1 rounded-full border border-panel-border bg-white/80 p-1 text-sm font-extrabold text-secondary shadow-sm lg:flex">
-            {navItems.map((item) => {
-              const active = pathname === item.to;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`inline-flex min-h-11 items-center rounded-full px-4 py-2 transition duration-200 focus:outline-none focus:ring-2 focus:ring-accent/35 ${
-                    active
-                      ? 'bg-primary text-white'
-                      : 'hover:bg-canvas hover:text-primary'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+        <div className="hidden items-center gap-1 md:flex">
+          {LINKS.map((l) => (
             <a
-              href="https://github.com/zroky-ai"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 transition duration-200 hover:bg-canvas hover:text-primary"
+              key={l.label}
+              href={l.to}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-secondary transition hover:text-primary"
             >
-              <Github className="h-4 w-4" />
-              <span>GitHub</span>
+              {l.label}
             </a>
-          </nav>
-
-          {/* Desktop CTAs */}
-          <div className="hidden items-center gap-2 lg:flex">
-            <a
-              href="/auth/login"
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-panel-border bg-white px-4 py-2 text-sm font-extrabold text-primary shadow-sm transition duration-200 hover:border-accent/35 hover:bg-accent/10"
-            >
-              Login
-            </a>
-            <Link
-              to="/pricing"
-              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-extrabold text-white shadow-sm transition duration-200 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-accent/35"
-            >
-              Get Started
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          {/* Mobile menu button */}
-          <button
-            type="button"
-            onClick={() => setMobileOpen((v) => !v)}
-            className="grid h-11 w-11 place-items-center rounded-full border border-panel-border bg-white text-primary lg:hidden"
-            aria-label="Toggle menu"
-          >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          ))}
         </div>
-      </motion.header>
 
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="fixed inset-x-3 top-[5.5rem] z-40 overflow-hidden rounded-3xl border border-panel-border bg-white shadow-premium lg:hidden"
-        >
-          <nav className="flex flex-col divide-y divide-panel-border p-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="flex min-h-12 items-center rounded-2xl px-4 text-sm font-extrabold text-primary transition hover:bg-canvas"
-              >
-                {item.label}
-              </Link>
-            ))}
-            <a
-              href="https://github.com/zroky-ai"
-              target="_blank"
-              rel="noreferrer"
-              className="flex min-h-12 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold text-primary transition hover:bg-canvas"
-            >
-              <Github className="h-4 w-4" />
-              GitHub
-            </a>
-          </nav>
-          <div className="flex gap-2 border-t border-panel-border p-3">
-            <a href="/auth/login" className="flex-1 inline-flex min-h-11 items-center justify-center rounded-full border border-panel-border text-sm font-extrabold text-primary transition hover:bg-canvas">
-              Login
-            </a>
-            <Link to="/pricing" className="flex-1 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary text-sm font-extrabold text-white transition hover:bg-accent">
-              Get Started
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </motion.div>
-      )}
-    </>
+        <div className="hidden items-center gap-2 md:flex">
+          <a href={GITHUB_URL} className="btn-ghost !px-3 !py-2" aria-label="Star zroky-watch on GitHub">
+            <Star size={14} /> <span className="text-xs">zroky-watch</span>
+          </a>
+          <a href={`${DASHBOARD_URL}/auth/login`} className="rounded-full px-3 py-2 text-sm font-semibold text-secondary transition hover:text-primary">
+            Sign in
+          </a>
+          <a href={`${DASHBOARD_URL}/auth/register`} className="btn-primary">
+            Start free <ArrowUpRight size={15} />
+          </a>
+        </div>
+
+        <button className="md:hidden p-2 text-primary" onClick={() => setOpen((v) => !v)} aria-label="Menu">
+          {open ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </motion.nav>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="absolute inset-x-4 top-[68px] z-50 rounded-2xl border border-line-strong bg-ink/95 p-4 backdrop-blur-xl md:hidden"
+          >
+            <div className="flex flex-col gap-1">
+              {LINKS.map((l) => (
+                <a key={l.label} href={l.to} className="rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-white/5 hover:text-primary">
+                  {l.label}
+                </a>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+              <a href={GITHUB_URL} className="btn-ghost w-full"><Star size={14} /> Star zroky-watch</a>
+              <a href={`${DASHBOARD_URL}/auth/register`} className="btn-primary w-full">Start free <ArrowUpRight size={15} /></a>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </header>
   );
 }

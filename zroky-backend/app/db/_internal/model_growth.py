@@ -20,7 +20,7 @@ _PROVIDER_KEYS_VAULT_PROVIDERS = (
 
 
 class Subscription(Base):
-    """Stripe-aligned per-org subscription. Replaces `TenantSubscription`.
+    """Per-org subscription. Replaces `TenantSubscription`.
 
     `org_id` is the billing entity (plan §5.1). The `orgs` table does not
     yet exist; for now `org_id` equals the project_id of the org's primary
@@ -31,6 +31,13 @@ class Subscription(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     org_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    payment_provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'skydo'")
+    )
+    payment_customer_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    payment_subscription_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    payment_request_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Deprecated Stripe-specific aliases kept for backward-compatible reads.
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     stripe_sub_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     plan_code: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -59,6 +66,10 @@ class Subscription(Base):
     __table_args__ = (
         UniqueConstraint("org_id", name="ux_subscriptions_org"),
         UniqueConstraint("stripe_sub_id", name="ux_subscriptions_stripe_sub_id"),
+        UniqueConstraint(
+            "payment_subscription_ref",
+            name="ux_subscriptions_payment_subscription_ref",
+        ),
         CheckConstraint(
             "status IN ('trialing', 'active', 'past_due', 'canceled', 'unpaid', 'incomplete')",
             name="ck_subscriptions_status",
@@ -67,6 +78,9 @@ class Subscription(Base):
             "sla_tier IN ('none', 'team', 'enterprise')",
             name="ck_subscriptions_sla_tier",
         ),
+        Index("ix_subscriptions_payment_provider", "payment_provider"),
+        Index("ix_subscriptions_payment_customer_ref", "payment_customer_ref"),
+        Index("ix_subscriptions_payment_request_ref", "payment_request_ref"),
         Index("ix_subscriptions_stripe_customer_id", "stripe_customer_id"),
         Index("ix_subscriptions_status", "status"),
         Index("ix_subscriptions_plan_code", "plan_code"),
@@ -421,6 +435,52 @@ class StripeEvent(Base):
         Index("ix_stripe_events_event_type", "event_type"),
         Index("ix_stripe_events_received_at", "received_at"),
         Index("ix_stripe_events_affected_org_id", "affected_org_id"),
+    )
+
+
+class BillingEvent(Base):
+    """Provider-neutral billing event audit log.
+
+    Skydo currently fits a payment-link/manual-confirmation flow, so this
+    table records each internal payment event before applying it to
+    subscriptions and entitlements.
+    """
+
+    __tablename__ = "billing_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_created_at: Mapped[datetime | None] = mapped_column(
+        UTCDateTime, nullable=True
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        UTCDateTime, nullable=True
+    )
+    result: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'pending'")
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    affected_org_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "provider_event_id",
+            name="ux_billing_events_provider_event_id",
+        ),
+        CheckConstraint(
+            "result IN ('pending', 'applied', 'skipped', 'failed')",
+            name="ck_billing_events_result",
+        ),
+        Index("ix_billing_events_provider", "provider"),
+        Index("ix_billing_events_event_type", "event_type"),
+        Index("ix_billing_events_received_at", "received_at"),
+        Index("ix_billing_events_affected_org_id", "affected_org_id"),
     )
 
 

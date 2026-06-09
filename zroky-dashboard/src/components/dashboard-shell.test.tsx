@@ -15,6 +15,12 @@ const navState = vi.hoisted(() => ({
   billingDataAvailable: true,
   billingLoading: false,
   budgetDataAvailable: true,
+  projectData: { project_id: "proj_1", name: "Acme Corp" } as { project_id: string; name: string } | undefined,
+  projectLoading: false,
+  meData: { email: "sanket@acme.com", display_name: "Sanket K." } as
+    | { email: string | null; display_name: string | null }
+    | undefined,
+  meLoading: false,
 }));
 
 const routerState = vi.hoisted(() => ({
@@ -127,13 +133,12 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/hooks", () => ({
   useMe: () => ({
-    data: {
-      email: "sanket@acme.com",
-      display_name: "Sanket K.",
-    },
+    data: navState.meData,
+    isLoading: navState.meLoading,
   }),
   useProjectSettings: () => ({
-    data: { project_id: "proj_1", name: "Acme Corp" },
+    data: navState.projectData,
+    isLoading: navState.projectLoading,
   }),
 }));
 
@@ -188,6 +193,10 @@ describe("DashboardShell primary navigation", () => {
     navState.billingDataAvailable = true;
     navState.billingLoading = false;
     navState.budgetDataAvailable = true;
+    navState.projectData = { project_id: "proj_1", name: "Acme Corp" };
+    navState.projectLoading = false;
+    navState.meData = { email: "sanket@acme.com", display_name: "Sanket K." };
+    navState.meLoading = false;
     routerState.push.mockClear();
     routerState.refresh.mockClear();
     routerState.replace.mockClear();
@@ -200,7 +209,7 @@ describe("DashboardShell primary navigation", () => {
     storeState.toggleRealTime.mockClear();
   });
 
-  it("renders the MVP primary nav in the required order", () => {
+  it("renders the primary nav in the required product order", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     expect(primaryNavLabels()).toEqual([
@@ -209,8 +218,10 @@ describe("DashboardShell primary navigation", () => {
       "Replay Lab",
       "Goldens",
       "CI Gates",
-      "Traces",
       "Cost",
+      "Calls",
+      "Traces",
+      "Alerts",
       "Settings",
     ]);
     expect(screen.queryByText("Provider Drift")).toBeNull();
@@ -221,18 +232,52 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const logo = screen.getByRole("img", { name: "Zroky" });
-    expect(logo.getAttribute("src")).toBe("/zroky-sidebar-logo.png");
+    expect(logo.getAttribute("src")).toBe("/zroky-sidebar-logo-transparent.png");
     expect(logo.classList.contains("sidebar-logo-image")).toBe(true);
     expect(screen.queryByText("ZROKY")).not.toBeInTheDocument();
   });
 
-  it("renders CI Gates as a disabled placeholder without a route", () => {
+  it("renders CI Gates as a live primary route", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const ciGates = navItem("ci-gates");
     expect(ciGates.getAttribute("aria-disabled")).toBeNull();
     expect(ciGates.getAttribute("href")).toBe("/ci-gates");
     expect(within(ciGates as HTMLElement).queryByText("soon")).toBeNull();
+  });
+
+  it("renders Calls, Traces, and Alerts as first-class evidence routes after Cost", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    const labels = primaryNavLabels();
+    expect(labels.indexOf("Calls")).toBe(labels.indexOf("Cost") + 1);
+    expect(labels.indexOf("Traces")).toBe(labels.indexOf("Calls") + 1);
+    expect(labels.indexOf("Alerts")).toBe(labels.indexOf("Traces") + 1);
+
+    const calls = navItem("calls");
+    expect(calls.getAttribute("aria-disabled")).toBeNull();
+    expect(calls.getAttribute("href")).toBe("/calls");
+
+    const traces = navItem("traces");
+    expect(traces.getAttribute("aria-disabled")).toBeNull();
+    expect(traces.getAttribute("href")).toBe("/trace");
+
+    const alerts = navItem("alerts");
+    expect(alerts.getAttribute("aria-disabled")).toBeNull();
+    expect(alerts.getAttribute("href")).toBe("/alerts");
+  });
+
+  it("does not show fake workspace or account data while identity APIs are unavailable", () => {
+    navState.projectData = undefined;
+    navState.meData = undefined;
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getAllByText("Workspace unavailable").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Account").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
+    expect(screen.queryByText("sanket@acme.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sanket K.")).not.toBeInTheDocument();
   });
 
   it("disables gated nav entries when the plan template lacks entitlement", () => {
@@ -276,7 +321,7 @@ describe("DashboardShell primary navigation", () => {
     expect(within(navItem("goldens") as HTMLElement).queryByText("locked")).toBeNull();
   });
 
-  it("opens an account menu from the sidebar user row instead of logging out immediately", () => {
+  it("opens an account menu from the topbar profile control instead of logging out immediately", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
@@ -309,6 +354,9 @@ describe("DashboardShell primary navigation", () => {
 
     expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /Cost/ }).getAttribute("href")).toBe("/cost");
+    expect(screen.getByRole("menuitem", { name: /Calls/ }).getAttribute("href")).toBe("/calls");
+    expect(screen.getByRole("menuitem", { name: /Traces/ }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("menuitem", { name: /Alerts/ }).getAttribute("href")).toBe("/alerts");
   });
 
   it("applies a dashboard date preset and invalidates dashboard queries", () => {
@@ -334,12 +382,17 @@ describe("DashboardShell primary navigation", () => {
     expect(storeState.toggleRealTime).toHaveBeenCalledTimes(1);
   });
 
-  it("opens page actions from the filter control", () => {
-    render(<DashboardShell>content</DashboardShell>);
+  it("keeps the profile in the topbar and the plan above workspace in the sidebar footer", () => {
+    const { container } = render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open page actions and filters" }));
+    expect(screen.queryByRole("button", { name: "Open page actions and filters" })).not.toBeInTheDocument();
 
-    expect(screen.getByRole("menu", { name: "Page actions and filters" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Failed calls/ }).getAttribute("href")).toBe("/calls?status=failed");
+    const topbar = container.querySelector(".topbar");
+    const accountButton = screen.getByRole("button", { name: "Open account menu" });
+    expect(topbar?.contains(accountButton)).toBe(true);
+
+    const planLink = screen.getByLabelText("Open billing and usage");
+    const workspaceButton = screen.getByRole("button", { name: "Open workspace menu" });
+    expect(planLink.compareDocumentPosition(workspaceButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

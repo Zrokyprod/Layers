@@ -1,6 +1,6 @@
-# Zroky Dashboard Build Contract (V1)
+# Zroky Dashboard Build Contract
 
-Last updated: 2026-04-23
+Last updated: 2026-06-04
 
 ## 1. Purpose
 
@@ -8,7 +8,7 @@ This document translates the product blueprint into an implementation-ready dash
 
 Primary objective:
 
-1. Convert failure telemetry into actionable fixes in <= 3 clicks.
+1. Convert production agent failures into the contract loop: Capture -> Diagnose -> Issue -> Replay -> Golden -> CI Gate.
 2. Keep V1 scope disciplined while delivering premium UX quality.
 3. Bind every important UI block to explicit backend data contracts.
 
@@ -18,22 +18,22 @@ Reference source:
 
 ## 2. Scope Lock (Non-negotiable)
 
-V1 dashboard scope:
+Phase 1 dashboard scope:
 
-1. Exactly 5 top-level pages: Home, Calls, Cost, Alerts, Settings.
-2. Call Detail is a route inside Calls, not a top-level page.
-3. Auth and Onboarding are required supporting flows, not counted in 5 pages.
-4. No full multi-agent UI pages in V1.
+1. Primary nav, in order: Failure Inbox, Issues, Replay Lab, Goldens, CI Gates, Cost, Settings.
+2. Calls, Traces, Drift, Alerts, Agents, and admin views are secondary/deep-linked support surfaces.
+3. Auth and onboarding are required supporting flows, not product wedges.
+4. Auto-fix is gated, reviewable, and optional; it is not the dashboard headline.
 
 ## 2.1 Implementation Snapshot (2026-04-23)
 
 Implemented now in `zroky-dashboard`:
 
 1. App shell with responsive sidebar/topbar and mobile navigation.
-2. Route coverage: `/home`, `/calls`, `/calls/:id`, `/cost`, `/alerts`, `/settings`, `/auth/login`, `/auth/register`, `/onboarding`.
+2. Primary route coverage: `/home`, `/issues`, `/replay`, `/goldens`, `/ci-gates`, `/cost`, `/settings`.
 3. Server-side proxy route (`/api/zroky/*`) that injects project/API key/provisioning headers from environment.
 4. Typed frontend API client mapped to phase-0 backend endpoints.
-5. Initial UX modules wired for KPI cards, alerts lifecycle actions, call detail evidence/fix panels, cost/budget widgets, settings controls, and onboarding synthetic trigger.
+5. UX modules wired for failure inbox, issue triage, replay proof, Goldens, CI gates, cost/budget widgets, settings controls, and provider-key setup.
 
 Still pending for parity with full blueprint depth:
 
@@ -81,31 +81,41 @@ Desktop V1 structure:
 1. Sidebar always visible (desktop only, >= 1024px target).
 2. Topbar includes project selector, environment badge, and profile menu.
 
-Route map:
+Primary route map:
 
 1. /home
-2. /calls
-3. /calls/:id
-4. /cost
-5. /alerts
-6. /settings
-7. /auth/login
-8. /auth/register
-9. /onboarding (wizard)
+2. /issues
+3. /replay
+4. /goldens
+5. /ci-gates
+6. /cost
+7. /settings
+
+Secondary/deep-link route map:
+
+1. /calls
+2. /calls/:id
+3. /trace
+4. /trace/:id
+5. /drift
+6. /alerts
+7. /account
+8. /auth/login
+9. /auth/register
 
 ## 5. Page-by-Page Component Map
 
-### 5.1 Home / Command Center
+### 5.1 Failure Inbox
 
 Required modules:
 
-1. Health Score KPI card with expandable sub-score breakdown and last update time.
-2. Calls today KPI.
-3. Cost today KPI.
-4. Open issues KPI.
-5. Open issues quick-fix panel.
-6. Live feed list.
-7. Unusual activity panel with anomaly multiplier and stop-action CTA.
+1. Ranked production failure queue with severity, impact, owner, replay readiness, Golden status, and CI gate status.
+2. Open issues KPI.
+3. Cost impact KPI.
+4. Replay coverage KPI.
+5. CI gate coverage KPI.
+6. Next-action panel for diagnose, replay, promote Golden, or run CI gate.
+7. Capture health warning when no usable production evidence exists.
 
 Health score formula must be fixed and transparent:
 

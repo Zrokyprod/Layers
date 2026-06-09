@@ -153,12 +153,12 @@ function StructuredObject({ data, emptyLabel = "No data" }: { data: JsonMap; emp
 
 const FAILED_STATUS_SET = new Set(["failed", "error", "timeout", "auth_failure", "loop_detected"]);
 const PROVIDER_COLORS: Record<string, string> = {
-  openai: "#10a37f",
-  anthropic: "#c9855e",
-  google: "#4285f4",
-  gemini: "#4285f4",
-  cohere: "#db4437",
-  mistral: "#7b5ea7",
+  openai: "#3a9663",
+  anthropic: "#f8fafc",
+  google: "#5088b7",
+  gemini: "#5088b7",
+  cohere: "#c94b5f",
+  mistral: "#9098a8",
 };
 function providerColor(p: string | null): string {
   return PROVIDER_COLORS[(p ?? "").toLowerCase()] ?? "#6b7280";
@@ -183,8 +183,8 @@ function TraceTreeView({ node, depth = 0 }: { node: TraceTreeNode; depth?: numbe
   const isFailed = FAILED_STATUS_SET.has(node.status.toLowerCase());
   const agentLabel = node.agent_name ?? node.call_id.slice(0, 8);
 
-  const borderColor = isFailed ? "#ef4444" : node.status === "success" ? "#22c55e" : "#f59e0b";
-  const bgColor = isFailed ? "rgba(239,68,68,0.06)" : "transparent";
+  const borderColor = isFailed ? "var(--dashboard-danger)" : node.status === "success" ? "var(--dashboard-success)" : "var(--dashboard-warning)";
+  const bgColor = isFailed ? "var(--dashboard-danger-soft)" : "transparent";
 
   return (
     <li style={{ listStyle: "none", paddingLeft: depth === 0 ? 0 : 20 }}>
@@ -352,11 +352,11 @@ export default function CallDetailPage() {
   });
 
   const detail = detailQuery.data ?? null;
-  const traceTree = traceTreeQuery.data ?? null;
-  const fixWatch = fixWatchQuery.data ?? null;
-  const prLinks = prLinksQuery.data ?? [];
-  const loading = detailQuery.isLoading || traceTreeQuery.isLoading;
-  const error = detailQuery.error?.message ?? traceTreeQuery.error?.message ?? null;
+  const traceTree = traceTreeQuery.isError ? null : traceTreeQuery.data ?? null;
+  const fixWatch = fixWatchQuery.isError ? null : fixWatchQuery.data ?? null;
+  const prLinks = prLinksQuery.isError ? [] : prLinksQuery.data ?? [];
+  const loading = detailQuery.isLoading;
+  const error = detailQuery.error?.message ?? null;
 
   const diagnosis = useMemo(() => {
     const diagnoses = detail?.diagnosis_result?.diagnoses;
@@ -473,7 +473,7 @@ export default function CallDetailPage() {
   const responsePayload = asObject(detail.payload.response);
 
   return (
-    <>
+    <div className="calls-detail-workspace">
       {/* ── Breadcrumb ── */}
       <nav className="detail-breadcrumb" aria-label="breadcrumb">
         <Link href="/calls" className="breadcrumb-back">← Calls</Link>
@@ -1001,6 +1001,6 @@ export default function CallDetailPage() {
           </p>
         </div>
       </section>
-    </>
+    </div>
   );
 }

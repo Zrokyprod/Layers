@@ -205,6 +205,10 @@ function mockInbox(
     plan_code: Object.keys(planTemplate).length === 0 ? "free" : "pro",
     status: "active",
     seats: 1,
+    payment_provider: "skydo",
+    payment_customer_ref: null,
+    payment_subscription_ref: null,
+    payment_request_ref: null,
     stripe_customer_id: null,
     stripe_sub_id: null,
     current_period_end: null,
@@ -304,6 +308,29 @@ describe("Failure Inbox home", () => {
     expect(screen.getByText("Failed/not_verified CI gates")).toBeInTheDocument();
     expect(screen.getByText("Goldens needing review")).toBeInTheDocument();
     expect(screen.getByText("Usage/plan status")).toBeInTheDocument();
+  });
+
+  it("guides first users through capture before replay when no issues are loaded", async () => {
+    mockInbox(
+      {
+        "pilot.root_cause_diagnosis": true,
+        "pilot.replay_stub": true,
+        "pilot.goldens_basic": true,
+      },
+      [],
+    );
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "Capture your first agent failure." })).toBeInTheDocument();
+    expect(screen.getByText("Start by capturing one agent call. Zroky turns failed runs into issues, stub replay, verified replay, Goldens, and CI gates.")).toBeInTheDocument();
+    expect(screen.getByText("Provider keys are only needed later for verified replay.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create project key" }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByRole("link", { name: "Confirm first trace" }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("link", { name: "Open provider settings" }).getAttribute("href")).toBe("/settings/providers");
+    expect(screen.getByLabelText("First run checklist")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Next best action")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Failure queue" })).toBeNull();
   });
 
   it("renders Cost Impact values and sums loaded issue impact", async () => {

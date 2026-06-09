@@ -1,5 +1,7 @@
 """Tests for auth routes — register, login, JWT issuance."""
 import os
+import re
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import pytest
@@ -11,10 +13,11 @@ os.environ.setdefault("AUTH_JWT_SECRET", "test-secret-key-for-auth-tests")
 os.environ.setdefault("ALLOW_PROJECT_HEADER_CONTEXT", "true")
 os.environ.setdefault("REQUIRE_PROVISIONING_TOKEN", "false")
 
-from app.db.models import User
+from app.db.models import User, compute_email_hash
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.main import app
+from app.api.routes.auth import AuthTokenResponse, _store_email_verification_token, _store_oauth_handoff
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -130,6 +133,67 @@ def test_register_supports_password_longer_than_72_bytes(client):
     assert user.password_hash.startswith("bcrypt_sha256$")
 
 
+def test_register_stores_hashed_email_verification_token_and_verifies(client, monkeypatch):
+    captured = {}
+
+    def fake_send_email(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr("app.api.routes.auth.send_email", fake_send_email)
+    email = "verify-hash@example.com"
+
+    register = client.post("/v1/auth/register", json={
+        "email": email,
+        "password": "verifyhash123",
+        "confirm_password": "verifyhash123",
+    })
+    assert register.status_code == 201
+
+    match = re.search(r"token=([A-Za-z0-9_-]+)", str(captured["plain_body"]))
+    assert match is not None
+    raw_token = match.group(1)
+
+    with SessionLocal() as session:
+        user = session.execute(select(User).where(User.email_hash == compute_email_hash(email))).scalar_one()
+        stored_token = user.email_verification_token
+    assert stored_token is not None
+    assert stored_token.startswith("sha256:")
+    assert raw_token not in stored_token
+    assert len(stored_token) <= 128
+
+    verify = client.get("/v1/auth/verify-email", params={"token": raw_token})
+    assert verify.status_code == 200
+
+    with SessionLocal() as session:
+        verified = session.execute(select(User).where(User.email_hash == compute_email_hash(email))).scalar_one()
+        assert verified.email_verified_at is not None
+        assert verified.email_verification_token is None
+
+
+def test_verify_email_rejects_expired_hashed_token(client):
+    token = "expired-verification-token"
+    email = "expired-verify@example.com"
+    issued_at = datetime.now(UTC) - timedelta(days=2)
+
+    with SessionLocal() as session:
+        user = User(
+            subject=f"email:{email}",
+            email=email,
+            email_verification_token=_store_email_verification_token(token, now=issued_at),
+        )
+        session.add(user)
+        session.commit()
+
+    response = client.get("/v1/auth/verify-email", params={"token": token})
+    assert response.status_code == 400
+
+    with SessionLocal() as session:
+        user = session.execute(select(User).where(User.email_hash == compute_email_hash(email))).scalar_one()
+        assert user.email_verified_at is None
+        assert user.email_verification_token is None
+
+
 # ---------------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------------
@@ -181,6 +245,65 @@ def test_refresh_rejects_access_token(client):
     token_bundle = register.json()
     refresh_resp = client.post("/v1/auth/refresh", json={"refresh_token": token_bundle["access_token"]})
     assert refresh_resp.status_code == 401
+
+
+def test_me_rejects_refresh_token_as_bearer(client):
+    register = client.post("/v1/auth/register", json={
+        "email": "refresh-as-bearer@example.com",
+        "password": "mypassword123",
+        "confirm_password": "mypassword123",
+    })
+    assert register.status_code == 201
+
+    refresh_token = register.json()["refresh_token"]
+    response = client.get(
+        "/v1/auth/me",
+        headers={"Authorization": f"Bearer {refresh_token}"},
+    )
+    assert response.status_code == 401
+
+
+def test_oauth_handoff_exchanges_once(client):
+    token = AuthTokenResponse(
+        access_token="oauth-access-token",
+        refresh_token="oauth-refresh-token",
+        access_expires_in_seconds=3600,
+        refresh_expires_in_seconds=7200,
+        token_type="bearer",
+        user_id="user_123",
+        email="oauth@example.com",
+        email_verified=True,
+    )
+    handoff_id = _store_oauth_handoff(token)
+
+    response = client.post("/v1/auth/oauth/handoff", json={"handoff_id": handoff_id})
+    assert response.status_code == 200
+    assert response.json() == token.model_dump()
+
+    replay = client.post("/v1/auth/oauth/handoff", json={"handoff_id": handoff_id})
+    assert replay.status_code == 400
+
+
+def test_session_handoff_validates_tokens_and_exchanges_once(client):
+    register = client.post("/v1/auth/register", json={
+        "email": "session-handoff@example.com",
+        "password": "mypassword123",
+        "confirm_password": "mypassword123",
+    })
+    assert register.status_code == 201
+    token_bundle = register.json()
+
+    create = client.post("/v1/auth/session/handoff", json=token_bundle)
+    assert create.status_code == 200
+    handoff_id = create.json()["handoff_id"]
+
+    complete = client.post("/v1/auth/oauth/handoff", json={"handoff_id": handoff_id})
+    assert complete.status_code == 200
+    assert complete.json()["access_token"] == token_bundle["access_token"]
+    assert complete.json()["refresh_token"] == token_bundle["refresh_token"]
+
+    replay = client.post("/v1/auth/oauth/handoff", json={"handoff_id": handoff_id})
+    assert replay.status_code == 400
 
 
 def test_login_wrong_password_returns_401(client):
@@ -321,6 +444,56 @@ def test_forgot_and_reset_password_full_flow(client):
         "password": "newpassword1",
     })
     assert login_resp.status_code == 200
+
+
+def test_reset_password_revokes_existing_sessions(client, monkeypatch):
+    captured_messages = []
+
+    def fake_send_email(**kwargs):
+        captured_messages.append(kwargs)
+        return True
+
+    monkeypatch.setattr("app.api.routes.auth.send_email", fake_send_email)
+    register = client.post("/v1/auth/register", json={
+        "email": "reset-revoke@example.com",
+        "password": "oldpassword1",
+        "confirm_password": "oldpassword1",
+    })
+    assert register.status_code == 201
+    token_bundle = register.json()
+
+    forgot = client.post("/v1/auth/forgot-password", json={"email": "reset-revoke@example.com"})
+    assert forgot.status_code == 200
+
+    reset_body = next(
+        str(message["plain_body"])
+        for message in captured_messages
+        if "reset-password?token=" in str(message.get("plain_body"))
+    )
+    match = re.search(r"token=([A-Za-z0-9_-]+)", reset_body)
+    assert match is not None
+    reset_token = match.group(1)
+
+    reset = client.post("/v1/auth/reset-password", json={
+        "token": reset_token,
+        "new_password": "newpassword1",
+    })
+    assert reset.status_code == 200
+
+    old_me = client.get(
+        "/v1/auth/me",
+        headers={"Authorization": f"Bearer {token_bundle['access_token']}"},
+    )
+    assert old_me.status_code == 401
+
+    old_refresh = client.post("/v1/auth/refresh", json={"refresh_token": token_bundle["refresh_token"]})
+    assert old_refresh.status_code == 401
+
+    new_login = client.post("/v1/auth/login", json={
+        "email": "reset-revoke@example.com",
+        "password": "newpassword1",
+    })
+    assert new_login.status_code == 200
 
 
 # ---------------------------------------------------------------------------

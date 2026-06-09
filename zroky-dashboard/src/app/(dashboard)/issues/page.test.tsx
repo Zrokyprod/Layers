@@ -9,6 +9,10 @@ const api = vi.hoisted(() => ({
   listIssues: vi.fn(),
 }));
 
+const providerKeyState = vi.hoisted(() => ({
+  active: true,
+}));
+
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
 }));
@@ -42,6 +46,21 @@ vi.mock("@/lib/api", async () => {
     ...api,
   };
 });
+
+vi.mock("@/lib/hooks", () => ({
+  useActiveProviderKeys: () => ({
+    data: {
+      items: providerKeyState.active ? [{ id: "key_1", is_active: true }] : [],
+      total_in_page: providerKeyState.active ? 1 : 0,
+    },
+    refetch: vi.fn(async () => ({
+      data: {
+        items: providerKeyState.active ? [{ id: "key_1", is_active: true }] : [],
+        total_in_page: providerKeyState.active ? 1 : 0,
+      },
+    })),
+  }),
+}));
 
 const now = "2026-05-29T10:00:00.000Z";
 
@@ -148,6 +167,7 @@ function rowForIssue(title: string): HTMLElement {
 describe("IssuesPage MVP list", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    providerKeyState.active = true;
     navigation.push.mockReset();
   });
 
@@ -166,17 +186,21 @@ describe("IssuesPage MVP list", () => {
     }
 
     const headers = within(screen.getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent);
-    expect(headers).toEqual(["Issue", "Severity", "Impact", "Replay proof", "Status", "Last seen", "Action"]);
+    expect(headers).toEqual(["Issue", "Severity", "Impact", "Replay proof", "Status", "Last seen", "Next action", "Action"]);
 
     const checkoutRow = rowForIssue("Checkout loop");
     expect(within(checkoutRow).getByText("Loop Detected · Checkout Agent · 42 affected calls")).toBeInTheDocument();
     expect(within(checkoutRow).getByText("$12.00")).toBeInTheDocument();
     expect(within(checkoutRow).getByText("No trusted replay")).toBeInTheDocument();
+    expect(within(checkoutRow).getByRole("link", { name: "Run replay" }).getAttribute("href")).toBe("/issues/issue_1");
     expect(within(checkoutRow).getByRole("button", { name: /Replay/i })).toBeInTheDocument();
     expect(within(checkoutRow).getByRole("link", { name: /View issue/i })).toBeInTheDocument();
 
     const verifiedRow = rowForIssue("Refund fix verified");
     expect(within(verifiedRow).getByText("Verified fix")).toBeInTheDocument();
+    expect(within(verifiedRow).getByRole("link", { name: "Promote Golden" }).getAttribute("href")).toBe(
+      "/goldens?call_id=call_2",
+    );
     expect(within(verifiedRow).getByRole("link", { name: /Create Golden/i }).getAttribute("href")).toBe(
       "/goldens?call_id=call_2",
     );
@@ -247,6 +271,180 @@ describe("IssuesPage MVP list", () => {
     await screen.findByText("Checkout loop");
     const row = rowForIssue("Checkout loop");
     expect(within(row).queryByRole("button", { name: /Replay/i })).toBeNull();
+    expect(within(row).getByRole("link", { name: "Assign / resolve" }).getAttribute("href")).toBe("/issues/issue_1");
     expect(within(row).getAllByRole("link", { name: /View issue/i }).length).toBeGreaterThan(0);
+  });
+
+  it("does not offer Golden promotion again when an active Golden already exists without a linked PR", async () => {
+    mockIssueList([
+      issue({
+        replay_coverage_status: "verified_fix",
+        proof: {
+          replay: {
+            run_id: "run_1",
+            status: "pass",
+            replay_mode: "real_llm",
+            verified_fix: true,
+            summary_url: "/v1/replay/runs/run_1",
+            created_at: now,
+            completed_at: now,
+          },
+          golden: {
+            golden_set_id: "golden_1",
+            golden_set_name: "Checkout guards",
+            golden_trace_id: "trace_golden_1",
+            status: "active",
+            blocks_ci: true,
+            trace_count: 1,
+            created_at: now,
+          },
+          ci_gate: {
+            run_id: null,
+            status: null,
+            git_sha: null,
+            summary_url: null,
+            created_at: null,
+            completed_at: null,
+          },
+        },
+      }),
+    ]);
+
+    render(<IssuesPage />);
+
+    await screen.findByText("Checkout loop");
+    const row = rowForIssue("Checkout loop");
+    expect(within(row).queryByRole("link", { name: /Create Golden/i })).not.toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "Assign / resolve" }).getAttribute("href")).toBe("/issues/issue_1");
+  });
+
+  it("sorts by severity, replay gap, cost, and occurrence count while showing proof-based next actions", async () => {
+    mockIssueList([
+      issue({
+        id: "issue_verified",
+        title: "Verified high impact",
+        severity: "high",
+        replay_coverage_status: "verified_fix",
+        blast_radius_usd: 500,
+        occurrence_count: 99,
+      }),
+      issue({
+        id: "issue_occurrence_low",
+        title: "Same cost fewer occurrences",
+        severity: "high",
+        replay_coverage_status: "not_covered",
+        blast_radius_usd: 10,
+        occurrence_count: 1,
+      }),
+      issue({
+        id: "issue_occurrence_high",
+        title: "Same cost more occurrences",
+        severity: "high",
+        replay_coverage_status: "not_covered",
+        blast_radius_usd: 10,
+        occurrence_count: 7,
+      }),
+      issue({
+        id: "issue_cost",
+        title: "Higher cost replay gap",
+        severity: "high",
+        replay_coverage_status: "not_covered",
+        blast_radius_usd: 12,
+        occurrence_count: 1,
+      }),
+      issue({
+        id: "issue_ci_ready",
+        title: "Golden ready for CI",
+        severity: "medium",
+        replay_coverage_status: "verified_fix",
+        deploy_pr_url: "https://github.com/acme/repo/pull/42",
+        proof: {
+          replay: {
+            run_id: "run_1",
+            status: "pass",
+            replay_mode: "real_llm",
+            verified_fix: true,
+            summary_url: "/v1/replay/runs/run_1",
+            created_at: now,
+            completed_at: now,
+          },
+          golden: {
+            golden_set_id: "golden_1",
+            golden_set_name: "Checkout guards",
+            golden_trace_id: "trace_golden_1",
+            status: "active",
+            blocks_ci: true,
+            trace_count: 1,
+            created_at: now,
+          },
+          ci_gate: {
+            run_id: null,
+            status: null,
+            git_sha: null,
+            summary_url: null,
+            created_at: null,
+            completed_at: null,
+          },
+        },
+      }),
+      issue({
+        id: "issue_ci_linked",
+        title: "CI already linked",
+        severity: "low",
+        replay_coverage_status: "verified_fix",
+        proof: {
+          replay: {
+            run_id: "run_2",
+            status: "pass",
+            replay_mode: "real_llm",
+            verified_fix: true,
+            summary_url: "/v1/replay/runs/run_2",
+            created_at: now,
+            completed_at: now,
+          },
+          golden: {
+            golden_set_id: "golden_2",
+            golden_set_name: "Linked guards",
+            golden_trace_id: "trace_golden_2",
+            status: "active",
+            blocks_ci: true,
+            trace_count: 1,
+            created_at: now,
+          },
+          ci_gate: {
+            run_id: "ci_run_2",
+            status: "fail",
+            git_sha: "abc123",
+            summary_url: "/v1/regression-ci/runs/ci_run_2",
+            created_at: now,
+            completed_at: now,
+          },
+        },
+      }),
+    ]);
+
+    render(<IssuesPage />);
+
+    await screen.findByText("Higher cost replay gap");
+    const tableRows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    expect(tableRows.map((row) => row.querySelector(".im-issue-cell a")?.textContent)).toEqual([
+      "Higher cost replay gap",
+      "Same cost more occurrences",
+      "Same cost fewer occurrences",
+      "Verified high impact",
+      "Golden ready for CI",
+      "CI already linked",
+    ]);
+
+    expect(
+      within(rowForIssue("Golden ready for CI"))
+        .getAllByRole("link", { name: "Run CI gate" })
+        .some((link) => link.getAttribute("href") === "/issues/issue_ci_ready"),
+    ).toBe(true);
+    expect(
+      within(rowForIssue("CI already linked"))
+        .getAllByRole("link", { name: "Open CI gate" })
+        .some((link) => link.getAttribute("href") === "/ci-gates/ci_run_2"),
+    ).toBe(true);
   });
 });

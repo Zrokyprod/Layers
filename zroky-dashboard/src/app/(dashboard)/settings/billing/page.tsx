@@ -9,9 +9,10 @@ import { AlertTriangle, CreditCard, Gauge, ReceiptText, ShieldCheck } from "luci
 import { useBudget, useBudgetStatus, useUpdateBudget } from "@/lib/hooks";
 import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
-  createBillingCheckout,
   createBillingPortal,
+  createRazorpayOrder,
   getBillingMe,
+  verifyRazorpayPayment,
 } from "@/lib/api";
 import type { BillingMeResponse } from "@/lib/types";
 
@@ -23,36 +24,143 @@ type PlanCatalogItem = {
   selfServe: boolean;
 };
 
+type RazorpayPaymentSuccess = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayPaymentFailure = {
+  error?: {
+    code?: string;
+    description?: string;
+    reason?: string;
+    source?: string;
+    step?: string;
+  };
+};
+
+type RazorpayCheckoutOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpayPaymentSuccess) => void;
+  modal: {
+    ondismiss: () => void;
+  };
+  theme: {
+    color: string;
+  };
+};
+
+type RazorpayCheckout = {
+  open: () => void;
+  on: (event: "payment.failed", handler: (response: RazorpayPaymentFailure) => void) => void;
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckout;
+  }
+}
+
+const RAZORPAY_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
+let razorpayScriptPromise: Promise<boolean> | null = null;
+
 const PLAN_CATALOG: PlanCatalogItem[] = [
   {
     code: "free",
     name: "Free",
     monthlyCostUsd: 0,
-    features: ["50K events/mo", "7 day retention", "2 seats"],
+    features: ["50K events/mo", "7 day retention", "2 seats", "Capture and trace review"],
     selfServe: false,
+  },
+  {
+    code: "pilot",
+    name: "Pilot",
+    monthlyCostUsd: 29,
+    features: ["500K events/mo", "30 day retention", "5 seats", "100 mocked-tool replay runs/mo", "100 Golden traces"],
+    selfServe: true,
   },
   {
     code: "pro",
     name: "Pro",
-    monthlyCostUsd: 29,
-    features: ["500K events/mo", "30 day retention", "5 seats", "100 replay runs/mo"],
-    selfServe: true,
-  },
-  {
-    code: "plus",
-    name: "Plus",
-    monthlyCostUsd: 99,
-    features: ["3M events/mo", "90 day retention", "10 seats", "Real LLM replay"],
+    monthlyCostUsd: 149,
+    features: [
+      "3M events/mo",
+      "90 day retention",
+      "10 seats",
+      "100 real LLM replay runs/mo",
+      "1,000 mocked-tool replay runs/mo",
+      "100 live-sandbox replay runs/mo",
+      "1,000 Golden traces",
+      "CI gates and outcome attribution",
+    ],
     selfServe: true,
   },
   {
     code: "enterprise",
     name: "Enterprise",
     monthlyCostUsd: null,
-    features: ["Unlimited scale", "Dedicated rollout", "SSO", "SLA tier"],
+    features: ["Unlimited events and replay limits", "Unlimited seats and projects", "Private replay worker", "SSO, audit logs, custom retention, provider key vault"],
     selfServe: false,
   },
 ];
+
+function loadRazorpayCheckout(): Promise<boolean> {
+  if (typeof window === "undefined") {
+    return Promise.resolve(false);
+  }
+  if (window.Razorpay) {
+    return Promise.resolve(true);
+  }
+  if (razorpayScriptPromise) {
+    return razorpayScriptPromise;
+  }
+
+  razorpayScriptPromise = new Promise((resolve) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${RAZORPAY_CHECKOUT_SCRIPT}"]`,
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(Boolean(window.Razorpay)), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SCRIPT;
+    script.async = true;
+    script.onload = () => resolve(Boolean(window.Razorpay));
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+  return razorpayScriptPromise;
+}
+
+function formatRazorpayAmount(amount: number, currency: string): string {
+  const majorUnits = amount / 100;
+  return `${currency.toUpperCase()} ${majorUnits.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function catalogPlanCode(planCode: string | null | undefined): string {
+  const normalized = (planCode ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return "free";
+  }
+  return normalized === "plus" ? "pro" : normalized;
+}
+
+function displayPlanCode(planCode: string | null | undefined): string {
+  const normalized = (planCode ?? "").trim();
+  return normalized ? normalized.toUpperCase() : "FREE";
+}
 
 function formatEntitlement(value: unknown): string {
   if (typeof value === "number") {
@@ -82,6 +190,17 @@ function isProblemMessage(value: string): boolean {
   return text.includes("failed") || text.includes("unavailable") || text.includes("not configured") || text.includes("disabled");
 }
 
+function paymentStatusLabel(billing: BillingMeResponse | null): { label: string; detail: string } {
+  const provider = billing?.payment_provider === "razorpay" ? "Razorpay" : "Skydo";
+  if (billing?.payment_subscription_ref) {
+    return { label: "Confirmed", detail: `${provider} payment is active for this billing period.` };
+  }
+  if (billing?.payment_request_ref) {
+    return { label: "Pending", detail: `${provider} payment request is waiting for confirmation.` };
+  }
+  return { label: "Not requested", detail: "Start a paid plan to create a Razorpay checkout order." };
+}
+
 function BillingSettingsContent() {
   const searchParams = useSearchParams();
   const budget = useBudget();
@@ -90,6 +209,7 @@ function BillingSettingsContent() {
 
   const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
@@ -156,17 +276,66 @@ function BillingSettingsContent() {
     try {
       const plan = PLAN_CATALOG.find((item) => item.code === planCode);
       if (planCode === "free") {
-        setActionMsg("Free is the default plan. Use Stripe portal to cancel an active paid subscription.");
+        setActionMsg("Free is the default plan. Ask Zroky support to cancel an active paid plan.");
         return;
       }
       if (!plan?.selfServe) {
         setActionMsg(`${plan?.name ?? "This plan"} is sales-led. Contact the Zroky team to activate it.`);
         return;
       }
-      const checkout = await createBillingCheckout({ plan_code: planCode });
-      window.open(checkout.checkout_url, "_self");
+      const key = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim();
+      if (!key) {
+        setActionMsg("Razorpay key is not configured for this dashboard environment.");
+        return;
+      }
+      setCheckoutBusy(true);
+      const loaded = await loadRazorpayCheckout();
+      if (!loaded || !window.Razorpay) {
+        setCheckoutBusy(false);
+        setActionMsg("Razorpay checkout script failed to load.");
+        return;
+      }
+
+      const order = await createRazorpayOrder({ plan_code: planCode });
+      const checkout = new window.Razorpay({
+        key,
+        amount: order.amount,
+        currency: order.currency,
+        name: "Zroky",
+        description: `${plan.name} monthly plan`,
+        order_id: order.order_id,
+        handler: (response) => {
+          void (async () => {
+            try {
+              await verifyRazorpayPayment(response);
+              setActionMsg(`Payment verified for ${plan.name}. Your plan is active.`);
+              await load();
+            } catch (e: unknown) {
+              setActionMsg(e instanceof Error ? e.message : "Payment verification failed.");
+            } finally {
+              setCheckoutBusy(false);
+            }
+          })();
+        },
+        modal: {
+          ondismiss: () => {
+            setCheckoutBusy(false);
+            setActionMsg("Razorpay checkout was closed before payment.");
+          },
+        },
+        theme: {
+          color: "#111827",
+        },
+      });
+      checkout.on("payment.failed", (response) => {
+        setCheckoutBusy(false);
+        setActionMsg(response.error?.description || "Razorpay payment failed.");
+      });
+      setActionMsg(`Opening Razorpay checkout for ${plan.name} (${formatRazorpayAmount(order.amount, order.currency)}).`);
+      checkout.open();
     } catch (e: unknown) {
       setActionMsg(e instanceof Error ? e.message : "Failed to update plan.");
+      setCheckoutBusy(false);
     }
   }
 
@@ -181,8 +350,11 @@ function BillingSettingsContent() {
   }
 
   const currentPlanCode = billingMe?.plan_code ?? "free";
+  const currentCatalogCode = catalogPlanCode(currentPlanCode);
+  const legacyPlanAliasNote = currentPlanCode.trim().toLowerCase() === "plus" ? "Legacy Plus maps to Pro entitlements." : null;
   const template = billingMe?.plan_template ?? {};
   const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
+  const paymentStatus = paymentStatusLabel(billingMe);
 
   return (
     <div className="page-content">
@@ -198,14 +370,14 @@ function BillingSettingsContent() {
         <article className="panel settings-summary-card">
           <CreditCard aria-hidden="true" />
           <span>Current plan</span>
-          <strong>{currentPlanCode.toUpperCase()}</strong>
-          <small>{billingMe?.status ?? "Loading billing status"}</small>
+          <strong>{displayPlanCode(currentPlanCode)}</strong>
+          <small>{legacyPlanAliasNote ?? billingMe?.status ?? "Loading billing status"}</small>
         </article>
         <article className="panel settings-summary-card">
           <ReceiptText aria-hidden="true" />
-          <span>Stripe portal</span>
-          <strong>{billingMe?.stripe_customer_id ? "Ready" : "Not created"}</strong>
-          <small>{billingMe?.stripe_customer_id ? "Customer portal can open." : "Checkout must create a customer first."}</small>
+          <span>Payment</span>
+          <strong>{paymentStatus.label}</strong>
+          <small>{paymentStatus.detail}</small>
         </article>
         <article className="panel settings-summary-card">
           <Gauge aria-hidden="true" />
@@ -225,17 +397,18 @@ function BillingSettingsContent() {
         <header className="panel-header">
           <div>
             <h3>Plan &amp; Pricing</h3>
-            <p>Your current plan and Stripe-managed upgrades.</p>
+            <p>Your current plan and Razorpay checkout upgrades.</p>
           </div>
-          <button
-            type="button"
-            className="btn btn-soft"
-            onClick={() => void openBillingPortal()}
-            disabled={loading || !billingMe?.stripe_customer_id}
-            title={!billingMe?.stripe_customer_id ? "Start checkout first to create a Stripe customer." : undefined}
-          >
-            Manage in Stripe
-          </button>
+          {billingMe?.payment_provider === "skydo" && (
+            <button
+              type="button"
+              className="btn btn-soft"
+              onClick={() => void openBillingPortal()}
+              disabled={loading}
+            >
+              Open Skydo
+            </button>
+          )}
         </header>
 
         {isProblemMessage(actionMsg) ? (
@@ -253,7 +426,7 @@ function BillingSettingsContent() {
         ) : (
           <div className="billing-plans-grid">
             {PLAN_CATALOG.map((plan) => {
-              const isCurrent = plan.code === currentPlanCode;
+              const isCurrent = plan.code === currentCatalogCode;
               return (
                 <div key={plan.code} className={`billing-plan-card${isCurrent ? " billing-plan-current" : ""}`}>
                   {isCurrent && <span className="pill pill-green billing-plan-badge">Current</span>}
@@ -272,9 +445,9 @@ function BillingSettingsContent() {
                       type="button"
                       className="btn btn-primary billing-plan-btn"
                       onClick={() => void changePlan(plan.code)}
-                      disabled={loading}
+                      disabled={loading || checkoutBusy}
                     >
-                      {plan.selfServe ? `Checkout for ${plan.name}` : `Contact us for ${plan.name}`}
+                      {plan.selfServe ? (checkoutBusy ? "Opening checkout..." : `Pay with Razorpay for ${plan.name}`) : `Contact us for ${plan.name}`}
                     </button>
                   )}
                 </div>
@@ -367,19 +540,22 @@ function BillingSettingsContent() {
       <section className="panel">
         <header className="panel-header">
           <h3>Invoices</h3>
-          <p>Stripe is the source of truth for invoices, payment methods, and receipts.</p>
+          <p>Razorpay is the self-serve payment surface; Zroky verifies paid plans into entitlements.</p>
         </header>
         <div className="actions billing-invoices-empty">
-          <button
-            type="button"
-            className="btn btn-soft"
-            onClick={() => void openBillingPortal()}
-            disabled={!billingMe?.stripe_customer_id}
-          >
-            Open invoice portal
-          </button>
-          {!billingMe?.stripe_customer_id && (
-            <span className="hint">Create a paid checkout session before opening the Stripe customer portal.</span>
+          {billingMe?.payment_provider === "skydo" ? (
+            <button
+              type="button"
+              className="btn btn-soft"
+              onClick={() => void openBillingPortal()}
+            >
+              Open Skydo dashboard
+            </button>
+          ) : (
+            <span className="hint">Razorpay payment receipts are confirmed immediately after checkout verification.</span>
+          )}
+          {!billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref && (
+            <span className="hint">Start a paid plan to create a Razorpay payment reference.</span>
           )}
         </div>
       </section>

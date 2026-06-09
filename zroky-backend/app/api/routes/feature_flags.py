@@ -5,7 +5,9 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.provisioning import require_provisioning_access
+from app.api.dependencies.provisioning import (
+    require_owner_provisioning_access as require_provisioning_access,
+)
 from app.api.dependencies.tenant import require_tenant_id
 from app.core.limiter import limiter
 from app.db.models import FeatureFlag

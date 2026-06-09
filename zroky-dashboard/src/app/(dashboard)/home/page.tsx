@@ -8,14 +8,19 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Code2,
   Clock3,
   DollarSign,
   GitPullRequest,
+  KeyRound,
   ListChecks,
   LockKeyhole,
+  PlayCircle,
   RefreshCw,
   RotateCcw,
+  Route,
   ShieldCheck,
+  Terminal,
 } from "lucide-react";
 
 import { hasPlanEntitlement } from "@/components/feature-gate";
@@ -349,7 +354,15 @@ function KpiCard({
     >
       <div className="fi-kpi-topline">
         <span>{label}</span>
-        <div className="fi-kpi-icon">{icon}</div>
+        <div className="fi-kpi-card-mark" aria-hidden="true">
+          <div className="fi-kpi-spark">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="fi-kpi-icon">{icon}</div>
+        </div>
       </div>
       <strong>{value}</strong>
       <p>{helper}</p>
@@ -414,13 +427,13 @@ function ReadinessStep({
 }) {
   return (
     <Link className="fi-readiness-step" data-state={state} href={href}>
-      <div className="fi-readiness-head">
-        <span className="fi-readiness-icon">{icon}</span>
-        <span className="fi-readiness-state" />
+      <span className="fi-readiness-icon">{icon}</span>
+      <div className="fi-readiness-copy">
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <p>{helper}</p>
       </div>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <p>{helper}</p>
+      <span className="fi-readiness-state" />
     </Link>
   );
 }
@@ -444,6 +457,125 @@ function ProofStep({
         <p>{helper}</p>
       </div>
     </div>
+  );
+}
+
+const onboardingSteps = [
+  "Create a project key for capture.",
+  "Install the SDK or route traffic through the Gateway.",
+  "Run one real agent call from staging or production.",
+  "Confirm the trace appears in Zroky.",
+  "Use stub replay for a first sanity check.",
+  "Connect your provider key only when verified replay needs to run.",
+];
+
+function FirstRunOnboarding() {
+  return (
+    <section className="fi-onboarding" aria-label="First capture setup">
+      <div className="fi-onboarding-top">
+        <div className="fi-onboarding-copy">
+          <span className="fi-section-kicker">First capture setup</span>
+          <h2>Capture your first agent failure.</h2>
+          <p>
+            Start by sending one agent call to Zroky. Capture works without a provider key; verified replay asks for
+            your key only when the replay actually runs.
+          </p>
+          <div className="fi-onboarding-actions">
+            <Link href="/settings/keys" className="btn btn-primary btn-sm fi-btn-primary">
+              <KeyRound aria-hidden="true" />
+              Create project key
+            </Link>
+            <Link href="/trace" className="btn btn-soft btn-sm fi-btn-secondary">
+              <PlayCircle aria-hidden="true" />
+              Confirm first trace
+            </Link>
+          </div>
+        </div>
+
+        <div className="fi-onboarding-flow" aria-label="Capture to verified replay path">
+          {["Capture", "Issue", "Stub replay", "Provider key", "Verified replay"].map((step, index) => (
+            <div className="fi-onboarding-flow-step" key={step}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <strong>{step}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="fi-onboarding-grid">
+        <article className="fi-onboarding-card">
+          <div className="fi-onboarding-card-head">
+            <span className="fi-onboarding-icon">
+              <Code2 aria-hidden="true" />
+            </span>
+            <div>
+              <h3>SDK capture</h3>
+              <p>Wrap the agent call where your application already invokes the model or tool chain.</p>
+            </div>
+          </div>
+          <pre className="fi-onboarding-code" aria-label="Python SDK capture snippet">
+            <code>{`pip install zroky
+export ZROKY_API_KEY=...
+
+zroky.init()
+zroky.call("checkout-agent", input=payload)`}</code>
+          </pre>
+        </article>
+
+        <article className="fi-onboarding-card">
+          <div className="fi-onboarding-card-head">
+            <span className="fi-onboarding-icon">
+              <Route aria-hidden="true" />
+            </span>
+            <div>
+              <h3>Gateway capture</h3>
+              <p>Route provider traffic through Zroky when you cannot change agent code quickly.</p>
+            </div>
+          </div>
+          <pre className="fi-onboarding-code" aria-label="Gateway capture snippet">
+            <code>{`docker run -p 8090:8090 \\
+  ghcr.io/zroky-ai/zroky-gateway:latest
+
+export OPENAI_BASE_URL=http://localhost:8090/v1`}</code>
+          </pre>
+        </article>
+
+        <article className="fi-onboarding-card fi-onboarding-provider">
+          <div className="fi-onboarding-card-head">
+            <span className="fi-onboarding-icon">
+              <Terminal aria-hidden="true" />
+            </span>
+            <div>
+              <h3>Provider key timing</h3>
+              <p>Provider keys are only needed later for verified replay.</p>
+            </div>
+          </div>
+          <p>
+            Capture, issues, traces, and stub replay stay usable without a provider key. Verified replay uses your
+            provider account so model spend remains visible to your team.
+          </p>
+          <Link href="/settings/providers" className="btn btn-soft btn-sm fi-btn-secondary">
+            <KeyRound aria-hidden="true" />
+            Open provider settings
+          </Link>
+        </article>
+      </div>
+
+      <div className="fi-onboarding-checklist" aria-label="First run checklist">
+        <div>
+          <span className="fi-section-kicker">Recommended order</span>
+          <h3>Do not start with replay. Start with evidence.</h3>
+        </div>
+        <ol>
+          {onboardingSteps.map((step) => (
+            <li key={step}>
+              <CheckCircle2 aria-hidden="true" />
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
   );
 }
 
@@ -608,9 +740,14 @@ export default function HomePage() {
   const failedCiRuns = data.replayRuns.filter(isFailedCiRun).slice(0, 6);
   const goldensNeedingReview = data.goldenSets.filter(needsGoldenReview).slice(0, 6);
   const planLabel = data.billing?.plan_code ? data.billing.plan_code.toUpperCase() : "PLAN";
-  const headerSubtitle = `${formatCount(needsTrustedReplayCount)} issues need trusted replay before they can become Goldens or block CI.`;
+  const hasLoadedIssues = sortedIssues.length > 0;
+  const headerSubtitle = hasLoadedIssues
+    ? `${formatCount(needsTrustedReplayCount)} issues need trusted replay before they can become Goldens or block CI.`
+    : "Start by capturing one agent call. Zroky turns failed runs into issues, stub replay, verified replay, Goldens, and CI gates.";
   const loadErrorKeys = Object.keys(loadErrors) as InboxLoadKey[];
   const loadErrorText = loadErrorKeys.map((key) => loadSourceLabels[key]).join(", ");
+  const issuesLoadFailed = loadErrorKeys.includes("issues");
+  const showFirstRunOnboarding = !loading && !error && !issuesLoadFailed && !hasLoadedIssues;
   const lastUpdatedLabel = formatLastUpdated(lastUpdatedAt);
 
   function focusQueue(nextFocus: InboxQueueFocus) {
@@ -758,79 +895,85 @@ export default function HomePage() {
         </section>
       ) : null}
 
-      <section className="fi-next-card" aria-label="Next best action">
-        <div className="fi-next-content">
-          <span className="fi-section-kicker">Next best action</span>
-          {nextBestIssue ? (
-            <>
-              <h2>
-                {nextActionTitle(nextAction)} for {nextBestIssue.title}
-              </h2>
-              <div className="fi-next-reasons" aria-label="Next action decision reasons">
-                <DecisionChip label="Severity" value={nextBestIssue.severity} />
-                <DecisionChip label="Impact" value={formatIssueImpact(nextBestIssue)} />
-                <DecisionChip label="Affected calls" value={formatCount(nextBestIssue.occurrence_count)} />
-                <DecisionChip label="Replay proof" value={replayLabel(nextBestIssue.replay_coverage_status)} />
-              </div>
-              <p className="fi-next-outcome">{nextActionOutcome(nextAction)}</p>
-            </>
-          ) : (
-            <>
-              <h2>No open issue needs action.</h2>
-              <p className="fi-next-outcome">
-                Open production issues will appear here when they need replay proof, Golden coverage, or CI protection.
-              </p>
-            </>
-          )}
-        </div>
-        {nextBestIssue ? (
-          <div className="fi-next-action">
-            {renderIssueAction(nextBestIssue, { replayLabel: "Run trusted replay" })}
+      {showFirstRunOnboarding ? (
+        <FirstRunOnboarding />
+      ) : (
+        <>
+      <section className="fi-command-overview" aria-label="Failure command overview">
+        <section className="fi-next-card" aria-label="Next best action">
+          <div className="fi-next-content">
+            <span className="fi-section-kicker">Next best action</span>
+            {nextBestIssue ? (
+              <>
+                <h2>
+                  {nextActionTitle(nextAction)} for {nextBestIssue.title}
+                </h2>
+                <div className="fi-next-reasons" aria-label="Next action decision reasons">
+                  <DecisionChip label="Severity" value={nextBestIssue.severity} />
+                  <DecisionChip label="Impact" value={formatIssueImpact(nextBestIssue)} />
+                  <DecisionChip label="Affected calls" value={formatCount(nextBestIssue.occurrence_count)} />
+                  <DecisionChip label="Replay proof" value={replayLabel(nextBestIssue.replay_coverage_status)} />
+                </div>
+                <p className="fi-next-outcome">{nextActionOutcome(nextAction)}</p>
+              </>
+            ) : (
+              <>
+                <h2>No open issue needs action.</h2>
+                <p className="fi-next-outcome">
+                  Open production issues will appear here when they need replay proof, Golden coverage, or CI protection.
+                </p>
+              </>
+            )}
           </div>
-        ) : null}
-      </section>
+          {nextBestIssue ? (
+            <div className="fi-next-action">
+              {renderIssueAction(nextBestIssue, { replayLabel: "Run trusted replay" })}
+            </div>
+          ) : null}
+        </section>
 
-      <section className="fi-readiness-rail" aria-label="Failure readiness pipeline">
-        <ReadinessStep
-          icon={<AlertTriangle aria-hidden="true" />}
-          label="Captured failures"
-          value={loading ? "-" : formatCount(openIssuesCount)}
-          helper={loading ? "Checking capture evidence." : `${formatCount(evidenceCount)} with sample call or trace evidence.`}
-          state={readinessState(openIssuesCount, Math.max(openIssuesCount, 1), true)}
-          href="/issues"
-        />
-        <ReadinessStep
-          icon={<ListChecks aria-hidden="true" />}
-          label="Diagnosed"
-          value={loading ? "-" : `${formatCount(diagnosedCount)} / ${formatCount(openIssuesCount)}`}
-          helper="Root cause or evidence summary is attached."
-          state={readinessState(diagnosedCount, openIssuesCount)}
-          href="/issues"
-        />
-        <ReadinessStep
-          icon={<RotateCcw aria-hidden="true" />}
-          label="Replay proof"
-          value={loading ? "-" : `${formatCount(trustedReplayCount)} / ${formatCount(openIssuesCount)}`}
-          helper="Verified fixes can move toward Goldens."
-          state={readinessState(trustedReplayCount, openIssuesCount)}
-          href="/replay"
-        />
-        <ReadinessStep
-          icon={<ShieldCheck aria-hidden="true" />}
-          label="Golden ready"
-          value={loading ? "-" : formatCount(goldenReadyCount)}
-          helper="Verified traces ready for regression coverage."
-          state={readinessState(goldenReadyCount, openIssuesCount)}
-          href="/goldens"
-        />
-        <ReadinessStep
-          icon={<GitPullRequest aria-hidden="true" />}
-          label="CI risk"
-          value={loading ? "-" : formatCount(failedCiRuns.length)}
-          helper="Failed or not_verified gate runs need review."
-          state={readinessState(failedCiRuns.length, Math.max(failedCiRuns.length, 1), true)}
-          href="/ci-gates"
-        />
+        <section className="fi-readiness-rail" aria-label="Failure readiness pipeline">
+          <ReadinessStep
+            icon={<AlertTriangle aria-hidden="true" />}
+            label="Captured failures"
+            value={loading ? "-" : formatCount(openIssuesCount)}
+            helper={loading ? "Checking capture evidence." : `${formatCount(evidenceCount)} with sample call or trace evidence.`}
+            state={readinessState(openIssuesCount, Math.max(openIssuesCount, 1), true)}
+            href="/issues"
+          />
+          <ReadinessStep
+            icon={<ListChecks aria-hidden="true" />}
+            label="Diagnosed"
+            value={loading ? "-" : `${formatCount(diagnosedCount)} / ${formatCount(openIssuesCount)}`}
+            helper="Root cause or evidence summary is attached."
+            state={readinessState(diagnosedCount, openIssuesCount)}
+            href="/issues"
+          />
+          <ReadinessStep
+            icon={<RotateCcw aria-hidden="true" />}
+            label="Replay proof"
+            value={loading ? "-" : `${formatCount(trustedReplayCount)} / ${formatCount(openIssuesCount)}`}
+            helper="Verified fixes can move toward Goldens."
+            state={readinessState(trustedReplayCount, openIssuesCount)}
+            href="/replay"
+          />
+          <ReadinessStep
+            icon={<ShieldCheck aria-hidden="true" />}
+            label="Golden ready"
+            value={loading ? "-" : formatCount(goldenReadyCount)}
+            helper="Verified traces ready for regression coverage."
+            state={readinessState(goldenReadyCount, openIssuesCount)}
+            href="/goldens"
+          />
+          <ReadinessStep
+            icon={<GitPullRequest aria-hidden="true" />}
+            label="CI risk"
+            value={loading ? "-" : formatCount(failedCiRuns.length)}
+            helper="Failed or not_verified gate runs need review."
+            state={readinessState(failedCiRuns.length, Math.max(failedCiRuns.length, 1), true)}
+            href="/ci-gates"
+          />
+        </section>
       </section>
 
       <section className="fi-kpi-grid" aria-label="Failure Inbox summary">
@@ -1169,7 +1312,7 @@ export default function HomePage() {
                 <strong>Plan</strong>
                 <span>{data.billing?.status ?? "Subscription status unavailable"}</span>
               </div>
-              <span className="mono fi-mono">{planLabel}</span>
+              <span className="fi-mono">{planLabel}</span>
             </div>
             <div className="fi-queue-row">
               <div className="fi-queue-main">
@@ -1183,11 +1326,13 @@ export default function HomePage() {
                 <strong>Calls in 24h</strong>
                 <span>Latest analytics summary.</span>
               </div>
-              <span className="mono fi-mono">{formatCount(data.summary?.calls_today)}</span>
+              <span className="fi-mono">{formatCount(data.summary?.calls_today)}</span>
             </div>
           </div>
         </article>
       </section>
+        </>
+      )}
     </div>
   );
 }

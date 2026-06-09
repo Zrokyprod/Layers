@@ -1,12 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BillingPage from "./page";
 
 const api = vi.hoisted(() => ({
-  createBillingCheckout: vi.fn(),
   createBillingPortal: vi.fn(),
+  createRazorpayOrder: vi.fn(),
   getBillingMe: vi.fn(),
+  verifyRazorpayPayment: vi.fn(),
 }));
 
 const hooks = vi.hoisted(() => ({
@@ -56,6 +57,10 @@ describe("BillingPage", () => {
       plan_code: "free",
       status: "active",
       seats: 1,
+      payment_provider: "skydo",
+      payment_customer_ref: null,
+      payment_subscription_ref: null,
+      payment_request_ref: null,
       stripe_customer_id: null,
       stripe_sub_id: null,
       current_period_end: null,
@@ -76,5 +81,51 @@ describe("BillingPage", () => {
       screen.getByText("Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity."),
     ).toBeInTheDocument();
     expect(await screen.findByText("Plan & Pricing")).toBeInTheDocument();
+  });
+
+  it("renders the backend-aligned self-serve plan catalog", async () => {
+    render(<BillingPage />);
+
+    expect(await screen.findByText("Pilot")).toBeInTheDocument();
+    expect(screen.getByText(/500K events\/mo/)).toBeInTheDocument();
+    expect(screen.getByText(/100 mocked-tool replay runs\/mo/)).toBeInTheDocument();
+    expect(screen.getByText("Pro")).toBeInTheDocument();
+    expect(screen.getByText("$149.00")).toBeInTheDocument();
+    expect(screen.getByText(/3M events\/mo/)).toBeInTheDocument();
+    expect(screen.getByText(/100 real LLM replay runs\/mo/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay with Razorpay for Pilot" })).toBeInTheDocument();
+    expect(screen.queryByText("Plus")).not.toBeInTheDocument();
+  });
+
+  it("maps legacy Plus subscriptions to the Pro catalog card", async () => {
+    api.getBillingMe.mockResolvedValue({
+      org_id: "org_1",
+      plan_code: "plus",
+      status: "active",
+      seats: 3,
+      payment_provider: "skydo",
+      payment_customer_ref: "billing@example.com",
+      payment_subscription_ref: "skydo_pay_123",
+      payment_request_ref: "skydo_req_123",
+      stripe_customer_id: "cus_123",
+      stripe_sub_id: "sub_123",
+      current_period_end: null,
+      trial_end: null,
+      sla_tier: "standard",
+      plan_template: {
+        "events.monthly_quota": 3000000,
+        "replay.monthly_runs": 1000,
+        "seats.included": 10,
+      },
+    });
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText("PLUS")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Plus maps to Pro entitlements.")).toBeInTheDocument();
+
+    const proCard = screen.getByText("Pro").closest(".billing-plan-card");
+    expect(proCard?.className).toContain("billing-plan-current");
+    expect(within(proCard as HTMLElement).getByText("Current")).toBeInTheDocument();
   });
 });

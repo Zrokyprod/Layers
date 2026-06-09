@@ -60,6 +60,7 @@ export function useKeyboardShortcuts() {
       {
         key: "c",
         ctrl: true,
+        alt: true,
         description: "Go to calls",
         action: () => router.push("/calls"),
       },
@@ -138,7 +139,7 @@ export const KEYBOARD_SHORTCUTS_HELP = [
   { keys: ["Ctrl", "B"], description: "Toggle sidebar" },
   { keys: ["Ctrl", "A"], description: "Go to Failure Inbox" },
   { keys: ["Ctrl", "H"], description: "Open Failure Inbox" },
-  { keys: ["Ctrl", "C"], description: "Go to calls" },
+  { keys: ["Ctrl", "Alt", "C"], description: "Go to calls" },
   { keys: ["Ctrl", "I"], description: "Go to issues" },
   { keys: ["Ctrl", "S"], description: "Go to settings" },
   { keys: ["Ctrl", "Shift", "R"], description: "Refresh data" },

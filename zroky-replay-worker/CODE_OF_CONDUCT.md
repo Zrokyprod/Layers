@@ -14,4 +14,4 @@ We follow the Contributor Covenant standard in spirit: be respectful, constructi
 
 Maintainers may moderate issues, discussions, pull requests, or access when behavior harms the project or community.
 
-For conduct concerns, contact `security@zroky.ai`.
+For conduct concerns, contact `security@zroky.com`.

@@ -11,6 +11,9 @@
   BillingCheckoutResponse,
   BillingMeResponse,
   BillingPortalResponse,
+  RazorpayOrderResponse,
+  RazorpayVerifyPaymentRequest,
+  RazorpayVerifyPaymentResponse,
   BudgetConfigResponse,
   BudgetStatusResponse,
   CacheSavingsResponse,
@@ -89,9 +92,6 @@
 } from "@/lib/types";
 import {
   clearAuthSession,
-  readAccessTokenFromBrowser,
-  readRefreshTokenFromBrowser,
-  storeAuthSession,
 } from "@/lib/auth";
 
 type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
@@ -101,9 +101,12 @@ type RequestOptions = {
   query?: Record<string, string | number | undefined | null>;
   body?: unknown;
   signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
 const defaultClientTimeoutMs = 12_000;
+const replayQuotaTimeoutMs = defaultClientTimeoutMs;
+const judgeHealthTimeoutMs = 4_000;
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(`/api/zroky${path}`, "http://local.zroky");
@@ -118,24 +121,12 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return `${url.pathname}${url.search}`;
 }
 
-function buildAuthHeader(token: string): string {
-  return token.toLowerCase().startsWith("bearer ") ? token : `Bearer ${token}`;
-}
-
 async function refreshAuthSession(): Promise<boolean> {
-  const refreshToken = readRefreshTokenFromBrowser();
-  if (!refreshToken) {
-    return false;  // no token in storage — don't clear session, just fail silently
-  }
-
   try {
-    const response = await fetch(buildUrl("/v1/auth/refresh"), {
+    const response = await fetch("/api/auth/refresh-session", {
       method: "POST",
       cache: "no-store",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: "same-origin",
     });
 
     if (!response.ok) {
@@ -145,13 +136,8 @@ async function refreshAuthSession(): Promise<boolean> {
       return false;
     }
 
-    const payload = (await response.json()) as AuthTokenResponse;
-    if (!payload.access_token || !payload.refresh_token) {
-      return false;
-    }
-
-    void storeAuthSession(payload);
-    return true;
+    const payload = (await response.json().catch(() => null)) as { ok?: unknown } | null;
+    return payload?.ok === true;
   } catch {
     return false;
   }
@@ -190,18 +176,21 @@ function fallbackHttpErrorMessage(status: number): string {
   return "Request failed. Please retry.";
 }
 
-function resolveClientTimeoutMs(): number {
+function resolveClientTimeoutMs(timeoutOverrideMs?: number): number {
+  if (typeof timeoutOverrideMs === "number" && Number.isFinite(timeoutOverrideMs) && timeoutOverrideMs > 0) {
+    return timeoutOverrideMs;
+  }
   const raw = Number(process.env.NEXT_PUBLIC_ZROKY_API_TIMEOUT_MS ?? defaultClientTimeoutMs);
   return Number.isFinite(raw) && raw > 0 ? raw : defaultClientTimeoutMs;
 }
 
-function createRequestSignal(externalSignal?: AbortSignal): {
+function createRequestSignal(externalSignal?: AbortSignal, timeoutOverrideMs?: number): {
   cleanup: () => void;
   signal: AbortSignal;
   timedOut: () => boolean;
   timeoutMs: number;
 } {
-  const timeoutMs = resolveClientTimeoutMs();
+  const timeoutMs = resolveClientTimeoutMs(timeoutOverrideMs);
   const controller = new AbortController();
   let didTimeOut = false;
 
@@ -269,20 +258,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const url = buildUrl(path, options.query);
 
   const performRequest = async (): Promise<Response> => {
-    const token = readAccessTokenFromBrowser();
-    const requestSignal = createRequestSignal(options.signal);
+    const requestSignal = createRequestSignal(options.signal, options.timeoutMs);
     const headers: Record<string, string> = {};
     if (options.body != null) {
       headers["content-type"] = "application/json";
-    }
-    if (token) {
-      headers.authorization = buildAuthHeader(token);
     }
 
     try {
       return await fetch(url, {
         method,
         cache: "no-store",
+        credentials: "same-origin",
         headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: options.body != null ? JSON.stringify(options.body) : undefined,
         signal: requestSignal.signal,
@@ -380,6 +366,15 @@ export function completeGithubLogin(code: string, state: string): Promise<AuthTo
   });
 }
 
+export function completeOAuthHandoff(handoffId: string): Promise<AuthTokenResponse> {
+  return request<AuthTokenResponse>("/v1/auth/oauth/handoff", {
+    method: "POST",
+    body: {
+      handoff_id: handoffId,
+    },
+  });
+}
+
 export function getAnalyticsSummary(windowDays = 1, signal?: AbortSignal): Promise<AnalyticsSummaryResponse> {
   return request<AnalyticsSummaryResponse>("/v1/analytics/summary", {
     query: { window_days: windowDays },
@@ -396,11 +391,12 @@ export function getCaptureHealth(signal?: AbortSignal): Promise<CaptureHealthRes
 }
 
 export function getJudgeHealth(
-  options: { includeZeroSample?: boolean; signal?: AbortSignal } = {},
+  options: { includeZeroSample?: boolean; signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<JudgeHealthResponse> {
   return request<JudgeHealthResponse>("/v1/judge/health", {
     query: options.includeZeroSample ? { include_zero_sample: "true" } : undefined,
     signal: options.signal,
+    timeoutMs: options.timeoutMs ?? judgeHealthTimeoutMs,
   });
 }
 
@@ -1207,6 +1203,28 @@ export function createBillingCheckout(body: {
   customer_email?: string | null;
 }): Promise<BillingCheckoutResponse> {
   return request<BillingCheckoutResponse>("/v1/billing/checkout", {
+    method: "POST",
+    body,
+  });
+}
+
+export function createRazorpayOrder(body: {
+  plan_code?: string | null;
+  amount?: number | null;
+  currency?: string;
+  receipt?: string | null;
+  customer_email?: string | null;
+}): Promise<RazorpayOrderResponse> {
+  return request<RazorpayOrderResponse>("/v1/billing/razorpay/order", {
+    method: "POST",
+    body,
+  });
+}
+
+export function verifyRazorpayPayment(
+  body: RazorpayVerifyPaymentRequest,
+): Promise<RazorpayVerifyPaymentResponse> {
+  return request<RazorpayVerifyPaymentResponse>("/v1/billing/razorpay/verify", {
     method: "POST",
     body,
   });
@@ -2066,6 +2084,24 @@ export interface ReplayRunSummary {
   replay_cost_usd: number | null;
 }
 
+export interface ReplaySourceContext {
+  kind: string | null;
+  id: string | null;
+  call_id: string | null;
+  issue_id: string | null;
+  title: string | null;
+  reason: string | null;
+  failure_code: string | null;
+  severity: string | null;
+  affected_agent: string | null;
+  affected_workflow: string | null;
+  occurrence_count: number | null;
+  last_seen_at: string | null;
+  origin: string | null;
+  confidence: number | null;
+  discovery_signature: string | null;
+}
+
 export interface ReplayRunItem {
   id: string;
   project_id: string;
@@ -2083,6 +2119,7 @@ export interface ReplayRunItem {
   candidate_prompt_override: string | null;
   candidate_model_override: string | null;
   prevented_outcome_cost_usd: number | null;
+  source_context?: ReplaySourceContext | null;
 }
 
 export interface ReplayRunTraceItem {
@@ -2245,7 +2282,7 @@ export interface ReplayQuotaResponse {
 }
 
 export function getReplayQuota(signal?: AbortSignal): Promise<ReplayQuotaResponse> {
-  return request<ReplayQuotaResponse>("/v1/replay/quota", { signal });
+  return request<ReplayQuotaResponse>("/v1/replay/quota", { signal, timeoutMs: replayQuotaTimeoutMs });
 }
 
 // ── Judge Health / Drift ──────────────────────────────────────────────────────

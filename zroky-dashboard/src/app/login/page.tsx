@@ -19,6 +19,8 @@ import { loginWithPassword } from "@/lib/api";
 import { storeAuthSession } from "@/lib/auth";
 import { loginSchema, type LoginFormData } from "@/lib/schemas";
 
+const googleOAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_OAUTH === "true";
+
 function LoginForm() {
   const [error, setError] = useState("");
   const router = useRouter();
@@ -57,7 +59,7 @@ function LoginForm() {
     >
       {error && <div className="auth-banner auth-banner-error">{error}</div>}
       <div className="auth-oauth-stack">
-        <AuthProviderButton provider="google" onClick={() => handleOAuthLogin("google")} />
+        {googleOAuthEnabled ? <AuthProviderButton provider="google" onClick={() => handleOAuthLogin("google")} /> : null}
         <AuthProviderButton provider="github" onClick={() => handleOAuthLogin("github")} />
       </div>
       <AuthDivider />

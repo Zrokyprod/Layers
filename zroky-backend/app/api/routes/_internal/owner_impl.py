@@ -7,3 +7,4 @@ from app.api.routes._internal.owner_users_projects import *
 from app.api.routes._internal.owner_rate_audit_llm import *
 from app.api.routes._internal.owner_support_billing import *
 from app.api.routes._internal.owner_operations import *
+from app.api.routes._internal.owner_money_path import *

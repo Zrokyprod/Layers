@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export function middleware(): NextResponse {
-  return NextResponse.next();
+import { guardDashboardRoute } from "./src/lib/route-auth-guard";
+
+export function middleware(request: NextRequest) {
+  return guardDashboardRoute(request);
 }
 
 export const config = {

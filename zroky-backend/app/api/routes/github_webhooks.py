@@ -12,12 +12,13 @@ from app.db.session import get_db_session
 from app.services.github_webhooks import process_github_webhook_event
 
 router = APIRouter(prefix="/v1/integrations/github")
+_UNSIGNED_WEBHOOK_DEV_ENVS = {"dev", "development", "local", "test", "testing"}
 
 
 def _verify_signature(raw_body: bytes, signature: str | None) -> bool:
     secret = (get_settings().GITHUB_WEBHOOK_SECRET or "").strip()
     if not secret:
-        return get_settings().APP_ENV.strip().lower() != "production"
+        return get_settings().APP_ENV.strip().lower() in _UNSIGNED_WEBHOOK_DEV_ENVS
     if not signature or not signature.startswith("sha256="):
         return False
     expected = "sha256=" + hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()

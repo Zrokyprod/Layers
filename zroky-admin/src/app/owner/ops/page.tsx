@@ -7,12 +7,13 @@ import {
   useAuditLog,
   useOwnerBillingSummary,
   useOwnerHealth,
+  useOwnerMoneyPathHealth,
   useOwnerProjects,
   useOwnerStats,
   useOwnerSupportTickets,
   useUpdateOwnerSupportTicket,
 } from "@/lib/hooks";
-import type { OwnerSupportTicketItem } from "@/lib/owner-api";
+import type { OwnerLastDeployedSmoke, OwnerMoneyPathPlatformSummary, OwnerSupportTicketItem } from "@/lib/owner-api";
 
 function MetricCard({
   label,
@@ -63,9 +64,90 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
 
+function smokeTone(status: string | null | undefined): "ok" | "warn" | "danger" | "neutral" {
+  if (status === "passed" || status === "pass" || status === "ok") return "ok";
+  if (status === "failed" || status === "fail" || status === "error") return "danger";
+  if (status === "running" || status === "pending") return "warn";
+  return "neutral";
+}
+
+function ProofItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="owner-ops-proof-item">
+      <span>{label}</span>
+      <code>{value ?? "-"}</code>
+    </div>
+  );
+}
+
+function DeployedSmokePanel({
+  smoke,
+  platform,
+  error,
+}: {
+  smoke: OwnerLastDeployedSmoke | null;
+  platform: OwnerMoneyPathPlatformSummary | null;
+  error: string;
+}) {
+  if (error) {
+    return (
+      <div className="panel owner-ops-panel owner-ops-smoke-panel">
+        <div className="panel-header">Deployed Smoke Proof</div>
+        <div className="owner-ops-proof-body">
+          <div className="alert-strip alert-strip-error">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!smoke) {
+    return (
+      <div className="panel owner-ops-panel owner-ops-smoke-panel">
+        <div className="panel-header">Deployed Smoke Proof</div>
+        <div className="owner-ops-proof-empty">No deployed money-path smoke has been reported by backend.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel owner-ops-panel owner-ops-smoke-panel">
+      <div className="panel-header">
+        Deployed Smoke Proof
+        <Badge tone={smokeTone(smoke.status)}>{smoke.status || "unknown"}</Badge>
+      </div>
+      <div className="owner-ops-proof-body">
+        <div className="owner-ops-proof-copy">
+          <strong>{smoke.detail ?? "Backend did not provide smoke detail."}</strong>
+          <span className="hint">
+            {smoke.checked_at ? `Checked ${formatDate(smoke.checked_at)}` : "No smoke timestamp reported."}
+          </span>
+        </div>
+        <div className="owner-ops-proof-grid">
+          <ProofItem label="Project" value={smoke.project_id} />
+          <ProofItem label="Call" value={smoke.call_id} />
+          <ProofItem label="Golden Trace" value={smoke.golden_trace_id} />
+          <ProofItem label="CI Run" value={smoke.ci_run_id} />
+        </div>
+        {platform ? (
+          <div className="owner-ops-release-grid">
+            <MetricCard label="Capture 24h" value={platform.captures_24h.toLocaleString()} sub="backend-reported ingest" tone={platform.captures_24h > 0 ? "accent" : "danger"} />
+            <MetricCard label="Open issues" value={platform.issues_open.toLocaleString()} sub="grouped failures" tone={platform.issues_open > 0 ? "warn" : "default"} />
+            <MetricCard label="CI blocks 7d" value={platform.ci_blocks_7d.toLocaleString()} sub={`${platform.ci_runs_7d.toLocaleString()} CI gate runs`} tone={platform.ci_blocks_7d > 0 ? "danger" : "accent"} />
+          </div>
+        ) : null}
+        <div className="owner-ops-actions">
+          <Link href="/owner/money-path" className="btn btn-soft">Money path</Link>
+          <Link href="/owner/infrastructure" className="btn btn-soft">Infrastructure</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FounderOpsPage() {
   const statsQuery = useOwnerStats();
   const healthQuery = useOwnerHealth();
+  const moneyPathQuery = useOwnerMoneyPathHealth();
   const billingQuery = useOwnerBillingSummary();
   const supportQuery = useOwnerSupportTickets({ limit: 8, status: "open" });
   const projectsQuery = useOwnerProjects(8, 0);
@@ -75,9 +157,11 @@ export default function FounderOpsPage() {
   const stats = statsQuery.data ?? null;
   const billing = billingQuery.data ?? null;
   const health = healthQuery.data ?? null;
+  const moneyPath = moneyPathQuery.data ?? null;
   const support = supportQuery.data ?? null;
   const auditEntries = auditQuery.data?.entries ?? [];
   const error = statsQuery.error?.message ?? billingQuery.error?.message ?? supportQuery.error?.message ?? projectsQuery.error?.message ?? auditQuery.error?.message ?? healthQuery.error?.message ?? "";
+  const moneyPathError = moneyPathQuery.error?.message ?? "";
 
   const lastUpdated = useMemo(() => {
     const timestamps = [
@@ -87,9 +171,10 @@ export default function FounderOpsPage() {
       projectsQuery.dataUpdatedAt,
       auditQuery.dataUpdatedAt,
       healthQuery.dataUpdatedAt,
+      moneyPathQuery.dataUpdatedAt,
     ].filter(Boolean);
     return timestamps.length ? new Date(Math.max(...timestamps)) : null;
-  }, [auditQuery.dataUpdatedAt, billingQuery.dataUpdatedAt, healthQuery.dataUpdatedAt, projectsQuery.dataUpdatedAt, statsQuery.dataUpdatedAt, supportQuery.dataUpdatedAt]);
+  }, [auditQuery.dataUpdatedAt, billingQuery.dataUpdatedAt, healthQuery.dataUpdatedAt, moneyPathQuery.dataUpdatedAt, projectsQuery.dataUpdatedAt, statsQuery.dataUpdatedAt, supportQuery.dataUpdatedAt]);
 
   const topProjects = useMemo(() => {
     const projects = projectsQuery.data?.projects ?? [];
@@ -110,6 +195,7 @@ export default function FounderOpsPage() {
     void supportQuery.refetch();
     void projectsQuery.refetch();
     void auditQuery.refetch();
+    void moneyPathQuery.refetch();
   };
 
   const resolveTicket = async (ticketId: string) => {
@@ -142,6 +228,12 @@ export default function FounderOpsPage() {
           <span className="hint">{health?.services.length ?? 0} services monitored</span>
         </div>
       </div>
+
+      <DeployedSmokePanel
+        smoke={moneyPath?.platform.last_deployed_smoke ?? null}
+        platform={moneyPath?.platform ?? null}
+        error={moneyPathError}
+      />
 
       <div className="owner-stat-grid">
         <MetricCard label="Active subscriptions" value={(billing?.total_subscriptions ?? 0).toLocaleString()} sub={`${overdue.toLocaleString()} overdue - ${canceled.toLocaleString()} canceled`} tone={overdue > 0 ? "warn" : "accent"} />

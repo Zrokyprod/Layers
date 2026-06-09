@@ -125,6 +125,10 @@ def _snapshot(sub: Subscription) -> dict[str, Any]:
     return {
         "plan_code": sub.plan_code,
         "status": sub.status,
+        "payment_provider": sub.payment_provider,
+        "payment_subscription_ref": sub.payment_subscription_ref,
+        "payment_customer_ref": sub.payment_customer_ref,
+        "payment_request_ref": sub.payment_request_ref,
         "stripe_sub_id": sub.stripe_sub_id,
         "stripe_customer_id": sub.stripe_customer_id,
         "current_period_end": (
@@ -179,6 +183,7 @@ def _select_expired_trial_subs(
         .where(Subscription.trial_end.is_not(None))
         .where(Subscription.trial_end < now)
         .where(Subscription.stripe_sub_id.is_(None))
+        .where(Subscription.payment_subscription_ref.is_(None))
         .order_by(Subscription.trial_end.asc())
         .limit(limit)
     ).scalars().all())
@@ -340,6 +345,8 @@ def _transition_to_free(
     sub.trial_end = None
     if clear_stripe_sub_id:
         sub.stripe_sub_id = None
+        sub.payment_subscription_ref = None
+        sub.payment_request_ref = None
     # Note: sla_tier is intentionally NOT reset. A customer who
     # lapses keeps their SLA-tier history for refund-eligibility
     # audits per plan §11.4. Founder Console is the only writer.

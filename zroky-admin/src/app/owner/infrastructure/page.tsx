@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
-import { useOwnerHealth, useOwnerInfra, useToggleMaintenance } from "@/lib/hooks";
-import type { ServiceStatus } from "@/lib/owner-api";
+import { useOwnerHealth, useOwnerInfra, useOwnerMoneyPathHealth, useToggleMaintenance } from "@/lib/hooks";
+import type { InfraStats, OwnerHealth, OwnerLastDeployedSmoke, ServiceStatus } from "@/lib/owner-api";
 
 const STATUS_VAR: Record<string, string> = {
   ok: "var(--status-success)",
@@ -39,17 +39,105 @@ function InfraRow({ label, value, warn }: { label: string; value: string | numbe
   );
 }
 
+function smokeTone(status: string | null | undefined): "ok" | "warn" | "danger" | "neutral" {
+  if (status === "passed" || status === "pass" || status === "ok") return "ok";
+  if (status === "failed" || status === "fail" || status === "error") return "danger";
+  if (status === "running" || status === "pending") return "warn";
+  return "neutral";
+}
+
+function OpsBadge({ tone, children }: { tone: "ok" | "warn" | "danger" | "neutral"; children: ReactNode }) {
+  return <span className={`owner-ops-badge owner-ops-badge-${tone}`}>{children}</span>;
+}
+
+function OpsHealthProof({ health, infra }: { health: OwnerHealth | null; infra: InfraStats | null }) {
+  const downServices = health?.services.filter((service) => ["down", "unknown"].includes(service.status)).length ?? null;
+  const degradedServices = health?.services.filter((service) => service.status === "degraded").length ?? null;
+  const pendingQueues = infra?.queues.reduce((sum, queue) => sum + queue.pending, 0) ?? null;
+  const failedQueueSignals = infra?.queues.reduce((sum, queue) => sum + queue.failed, 0) ?? null;
+  const tableProbeFailures = infra ? Object.values(infra.db_table_sizes).filter((count) => count < 0).length : null;
+  const tone = health?.maintenance_mode ? "warn" : health?.overall === "ok" ? "ok" : health ? "danger" : "neutral";
+
+  return (
+    <section className="panel owner-infra-proof-panel">
+      <div className="panel-header">
+        Ops Health Proof
+        <OpsBadge tone={tone}>{health?.maintenance_mode ? "maintenance" : health?.overall ?? "checking"}</OpsBadge>
+      </div>
+      <div className="owner-infra-proof-grid">
+        <div className="owner-infra-proof-card">
+          <span className="owner-stat-label">Service failures</span>
+          <strong>{downServices ?? "-"}</strong>
+          <p>{degradedServices ?? "-"} degraded service(s)</p>
+        </div>
+        <div className="owner-infra-proof-card">
+          <span className="owner-stat-label">Workers</span>
+          <strong>{infra?.worker_count ?? "-"}</strong>
+          <p>{infra?.worker_names.length ? infra.worker_names.join(", ") : "No worker names reported"}</p>
+        </div>
+        <div className="owner-infra-proof-card">
+          <span className="owner-stat-label">Queue pending</span>
+          <strong>{pendingQueues ?? "-"}</strong>
+          <p>{failedQueueSignals ?? "-"} failed queue signal(s)</p>
+        </div>
+        <div className="owner-infra-proof-card">
+          <span className="owner-stat-label">DB probes</span>
+          <strong>{tableProbeFailures ?? "-"}</strong>
+          <p>table count probes failed</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DeployedSmokeProof({ smoke, error }: { smoke: OwnerLastDeployedSmoke | null; error: string }) {
+  if (error) {
+    return (
+      <section className="panel owner-infra-proof-panel">
+        <div className="panel-header">Deployed Smoke Proof</div>
+        <div className="owner-infra-proof-body">
+          <div className="alert-strip alert-strip-error">{error}</div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel owner-infra-proof-panel">
+      <div className="panel-header">
+        Deployed Smoke Proof
+        <OpsBadge tone={smokeTone(smoke?.status)}>{smoke?.status ?? "unavailable"}</OpsBadge>
+      </div>
+      <div className="owner-infra-proof-body">
+        <p className="hint">
+          {smoke?.detail ?? "No deployed money-path smoke has been reported by backend."}
+        </p>
+        <div className="owner-ops-proof-grid">
+          <div className="owner-ops-proof-item"><span>Checked</span><code>{smoke?.checked_at ? new Date(smoke.checked_at).toLocaleString() : "-"}</code></div>
+          <div className="owner-ops-proof-item"><span>Project</span><code>{smoke?.project_id ?? "-"}</code></div>
+          <div className="owner-ops-proof-item"><span>Golden Trace</span><code>{smoke?.golden_trace_id ?? "-"}</code></div>
+          <div className="owner-ops-proof-item"><span>CI Run</span><code>{smoke?.ci_run_id ?? "-"}</code></div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function InfrastructurePage() {
   const [maintMsg, setMaintMsg] = useState("");
 
   const healthQuery = useOwnerHealth();
   const infraQuery = useOwnerInfra();
+  const moneyPathQuery = useOwnerMoneyPathHealth();
   const toggleMutation = useToggleMaintenance();
 
   const health = healthQuery.data ?? null;
   const infra = infraQuery.data ?? null;
+  const moneyPath = moneyPathQuery.data ?? null;
   const error = healthQuery.error?.message ?? infraQuery.error?.message ?? "";
-  const lastRefresh = healthQuery.dataUpdatedAt ? new Date(healthQuery.dataUpdatedAt) : null;
+  const moneyPathError = moneyPathQuery.error?.message ?? "";
+  const lastRefreshAt = Math.max(healthQuery.dataUpdatedAt || 0, infraQuery.dataUpdatedAt || 0, moneyPathQuery.dataUpdatedAt || 0);
+  const lastRefresh = lastRefreshAt ? new Date(lastRefreshAt) : null;
 
   const handleToggleMaintenance = async () => {
     if (!health) return;
@@ -69,11 +157,25 @@ export default function InfrastructurePage() {
           {lastRefresh && (
             <span className="hint">Updated {lastRefresh.toLocaleTimeString()}</span>
           )}
-          <button className="btn btn-soft" onClick={() => void healthQuery.refetch()}>Refresh</button>
+          <button
+            className="btn btn-soft"
+            onClick={() => {
+              void healthQuery.refetch();
+              void infraQuery.refetch();
+              void moneyPathQuery.refetch();
+            }}
+          >
+            Refresh
+          </button>
         </div>
       </div>
 
       {error && <div className="alert-strip alert-strip-error">{error}</div>}
+
+      <div className="owner-infra-proof-layout">
+        <OpsHealthProof health={health} infra={infra} />
+        <DeployedSmokeProof smoke={moneyPath?.platform.last_deployed_smoke ?? null} error={moneyPathError} />
+      </div>
 
       {health && (
         <div className="owner-section">

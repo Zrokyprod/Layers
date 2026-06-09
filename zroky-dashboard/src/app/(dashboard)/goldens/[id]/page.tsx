@@ -269,7 +269,7 @@ export default function GoldenDetailPage() {
 
   const health = healthForSet(set, runs);
   const ciLabel = ciBlockingLabel(set, runs);
-  const blocksCiEligible = canBlockCi(set, runs);
+  const blocksCiEligible = canBlockCi(set);
   const needsReviewCount = health === "Healthy" ? 0 : 1;
   const passRate = passRateForRuns(runs);
   const selectedReplayTrace = selectedTrace ? latestReplayTraceByGoldenId.get(selectedTrace.id) ?? null : null;
@@ -325,7 +325,7 @@ export default function GoldenDetailPage() {
           <span>Latest replay</span>
           <strong>{selectedReplaySummary.status}</strong>
         </div>
-        <div className={canBlockCi(set, runs) ? "is-ready" : "is-warn"}>
+        <div className={canBlockCi(set) ? "is-ready" : "is-warn"}>
           <span>CI gate</span>
           <strong>{ciLabel}</strong>
         </div>

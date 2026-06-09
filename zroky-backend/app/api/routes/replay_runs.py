@@ -76,6 +76,24 @@ class ReplayRunSummary(BaseModel):
     replay_cost_usd: float | None = None
 
 
+class ReplaySourceContext(BaseModel):
+    kind: str | None = None
+    id: str | None = None
+    call_id: str | None = None
+    issue_id: str | None = None
+    title: str | None = None
+    reason: str | None = None
+    failure_code: str | None = None
+    severity: str | None = None
+    affected_agent: str | None = None
+    affected_workflow: str | None = None
+    occurrence_count: int | None = None
+    last_seen_at: datetime | None = None
+    origin: str | None = None
+    confidence: float | None = None
+    discovery_signature: str | None = None
+
+
 class ReplayRunResponse(BaseModel):
     id: str
     project_id: str
@@ -102,6 +120,7 @@ class ReplayRunResponse(BaseModel):
     candidate_prompt_override: str | None = None
     candidate_model_override: str | None = None
     prevented_outcome_cost_usd: float | None = None
+    source_context: ReplaySourceContext | None = None
 
 
 class ReplayRunListResponse(BaseModel):
@@ -170,6 +189,29 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str] | None:
         return None
 
 
+def _source_context_from_summary(summary: dict) -> ReplaySourceContext | None:
+    raw = summary.get("source_context")
+    if isinstance(raw, dict):
+        return ReplaySourceContext(**raw)
+
+    source_kind = summary.get("source_kind")
+    source_id = summary.get("source_id")
+    source_call_id = summary.get("source_call_id")
+    source_issue_id = summary.get("source_issue_id")
+    if not any([source_kind, source_id, source_call_id, source_issue_id]):
+        return None
+
+    return ReplaySourceContext(
+        kind=str(source_kind or "call"),
+        id=str(source_issue_id or source_id or source_call_id),
+        call_id=str(source_call_id) if source_call_id else None,
+        issue_id=str(source_issue_id) if source_issue_id else None,
+        failure_code=str(summary.get("source_issue_failure_code")) if summary.get("source_issue_failure_code") else None,
+        severity=str(summary.get("source_issue_severity")) if summary.get("source_issue_severity") else None,
+        origin="legacy",
+    )
+
+
 def _to_run_response(run) -> ReplayRunResponse:
     summary = parse_summary(run.summary_json)
     # Default older rows (pre-Option-A) to stub mode with the same
@@ -217,6 +259,7 @@ def _to_run_response(run) -> ReplayRunResponse:
         replay_mode_warning=replay_mode_warning,
         candidate_prompt_override=summary.get("candidate_prompt_override"),
         candidate_model_override=summary.get("candidate_model_override"),
+        source_context=_source_context_from_summary(summary),
     )
 
 

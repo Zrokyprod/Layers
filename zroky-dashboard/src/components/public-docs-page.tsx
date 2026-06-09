@@ -176,7 +176,7 @@ export function PublicDocsPage() {
           <h2>Gateway option</h2>
           <p>Route provider calls through the Zroky gateway when you want capture without changing every call site.</p>
           <CodeBlock
-            code={`OPENAI_BASE_URL=https://gateway.zroky.ai/openai
+            code={`OPENAI_BASE_URL=https://gateway.zroky.com/openai
 ZROKY_API_KEY=zk_live_project_key
 ZROKY_AGENT=checkout-agent`}
           />
@@ -213,7 +213,7 @@ ZROKY_AGENT=checkout-agent`}
               Start free
               <ArrowRight aria-hidden="true" />
             </Link>
-            <Link href="mailto:sales@zroky.ai?subject=Zroky%20SDK%20access" className="z-secondary-button">
+            <Link href="mailto:sales@zroky.com?subject=Zroky%20SDK%20access" className="z-secondary-button">
               Request SDK access
               <Code2 aria-hidden="true" />
             </Link>

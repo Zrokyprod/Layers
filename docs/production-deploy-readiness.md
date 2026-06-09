@@ -43,10 +43,15 @@ Deploy these as separate production services:
    - Start command: `npm start`
    - Production backend must set `FEATURE_LEGACY_OWNER=false`.
 
-7. Admin Dashboard
+7. Owner Dashboard
    - Source: `zroky-admin`
    - Start command: `npm start`
    - Backend service serving admin APIs may set `FEATURE_LEGACY_OWNER=true`.
+   - Purpose: owner control plane for product health, tenant risk, billing,
+     support, audit, and the regression-firewall money path.
+   - Do not configure `ZROKY_PROVISIONING_TOKEN`, `ZROKY_API_KEY`, or
+     `ZROKY_PROJECT_ID` in this app. The proxy forwards only the
+     operator-supplied `x-zroky-admin-token` header.
 
 ## Required Managed Infrastructure
 
@@ -55,15 +60,31 @@ Set these before first production boot:
 ```text
 DATABASE_URL=postgresql+psycopg://...
 REDIS_URL=redis://...
-ALLOWED_ORIGINS=https://dashboard.example.com
-TRUSTED_HOSTS=api.example.com
-FRONTEND_URL=https://dashboard.example.com
+ALLOWED_ORIGINS=https://app.zroky.com
+TRUSTED_HOSTS=api.zroky.com
+FRONTEND_URL=https://app.zroky.com
 AUTH_JWT_SECRET=<secret-manager>
+OAUTH_STATE_SECRET=<secret-manager>
 PII_ENCRYPTION_KEY=<secret-manager>
+PROVIDER_KEY_VAULT_KEK=<secret-manager>
 PROVISIONING_TOKEN=<secret-manager>
 METRICS_TOKEN=<secret-manager>
+GITHUB_WEBHOOK_SECRET=<secret-manager>
 REPLAY_WORKER_TOKEN=<secret-manager>
+OPENROUTER_API_KEY=<secret-manager>
+SKYDO_WEBHOOK_SECRET=<secret-manager>
 ```
+
+Before running live smoke tests, validate the ignored launch env files without
+printing any secret values:
+
+```powershell
+python scripts/validate_launch_env.py --root . --roles backend --require backend
+python scripts/validate_launch_env.py --root .
+```
+
+Use `docs/backend-production-env-checklist.md` while filling real backend
+values into the deployment platform secret store or ignored `.env.production`.
 
 Production startup fails closed when critical settings are unsafe:
 
@@ -76,6 +97,12 @@ Production startup fails closed when critical settings are unsafe:
 - readiness DB/Redis checks disabled
 - metrics endpoint enabled without a token
 - missing dashboard session JWT secret
+- missing OAuth state secret
+- missing GitHub webhook secret
+- missing provider vault encryption KEK
+- missing replay worker token while real replay is enabled
+- missing platform LLM key for AI diagnosis/judgment
+- enabled billing without a matching webhook secret
 - missing PII encryption key
 
 ## Optional ClickHouse
@@ -97,12 +124,12 @@ Only enable it after:
 Required checks:
 
 ```text
-GET https://api.example.com/health/live
-GET https://api.example.com/health/ready
-GET https://api.example.com/metrics
-GET https://gateway.example.com/health
-GET https://replay-worker.example.com/health
-GET https://replay-worker.example.com/ready
+GET https://api.zroky.com/health/live
+GET https://api.zroky.com/health/ready
+GET https://api.zroky.com/metrics
+GET https://gateway.zroky.com/health
+GET https://replay-worker.zroky.com/health
+GET https://replay-worker.zroky.com/ready
 ```
 
 Metrics endpoint requires:

@@ -8,9 +8,9 @@ def _hardened_production_settings(**overrides: object) -> Settings:
         "APP_ENV": "production",
         "DATABASE_URL": "postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
         "REDIS_URL": "redis://redis.example.com:6379/0",
-        "ALLOWED_ORIGINS": "https://app.zroky.ai",
-        "TRUSTED_HOSTS": "api.zroky.ai",
-        "FRONTEND_URL": "https://app.zroky.ai",
+        "ALLOWED_ORIGINS": "https://app.zroky.com",
+        "TRUSTED_HOSTS": "api.zroky.com",
+        "FRONTEND_URL": "https://app.zroky.com",
         "ALLOW_PROJECT_HEADER_CONTEXT": False,
         "REQUIRE_PROVISIONING_TOKEN": True,
         "PROVISIONING_TOKEN": "super-secret",
@@ -18,8 +18,13 @@ def _hardened_production_settings(**overrides: object) -> Settings:
         "ENABLE_READY_REDIS_CHECK": True,
         "BILLING_ENFORCE_QUOTA": True,
         "REPLAY_REAL_LLM_ENABLED": True,
+        "REPLAY_WORKER_TOKEN": "replay-worker-secret",
+        "OPENROUTER_API_KEY": "openrouter-secret-with-enough-length",
         "METRICS_TOKEN": "metrics-secret",
         "AUTH_JWT_SECRET": "auth-secret-with-enough-entropy",
+        "OAUTH_STATE_SECRET": "oauth-state-secret-with-enough-entropy",
+        "GITHUB_WEBHOOK_SECRET": "github-webhook-secret",
+        "PROVIDER_KEY_VAULT_KEK": "x" * 32,
         "PII_ENCRYPTION_KEY": "x" * 32,
         "JWT_JWKS_URL": None,
         "JWT_SIGNING_KEY": None,
@@ -37,6 +42,7 @@ def test_production_config_rejects_insecure_defaults() -> None:
         ENABLE_READY_DB_CHECK=False,
         ENABLE_READY_REDIS_CHECK=False,
         AUTH_JWT_SECRET=None,
+        OAUTH_STATE_SECRET=None,
     )
 
     with pytest.raises(RuntimeError) as exc:
@@ -54,6 +60,10 @@ def test_production_config_rejects_insecure_defaults() -> None:
     assert "FRONTEND_URL" in error_text
     assert "METRICS_TOKEN" in error_text
     assert "AUTH_JWT_SECRET" in error_text
+    assert "OAUTH_STATE_SECRET" in error_text
+    assert "GITHUB_WEBHOOK_SECRET" in error_text
+    assert "PROVIDER_KEY_VAULT_KEK" in error_text
+    assert "OPENROUTER_API_KEY or OPENAI_API_KEY" in error_text
     assert "BILLING_ENFORCE_QUOTA" in error_text
     assert "REPLAY_REAL_LLM_ENABLED" in error_text
 
@@ -148,3 +158,169 @@ def test_production_config_rejects_missing_session_secret() -> None:
         validate_runtime_settings(settings)
 
     assert "AUTH_JWT_SECRET" in str(exc.value)
+
+
+def test_production_config_rejects_placeholder_secret_values() -> None:
+    settings = _hardened_production_settings(
+        AUTH_JWT_SECRET="__SET_IN_SECRET_MANAGER__",
+        PII_ENCRYPTION_KEY="replace-with-32-char-random-secret-here",
+        OPENROUTER_API_KEY="__SET_IN_SECRET_MANAGER__",
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "AUTH_JWT_SECRET" in error_text
+    assert "PII_ENCRYPTION_KEY" in error_text
+    assert "OPENROUTER_API_KEY or OPENAI_API_KEY" in error_text
+
+
+def test_production_config_rejects_missing_github_webhook_secret() -> None:
+    settings = _hardened_production_settings(
+        GITHUB_WEBHOOK_SECRET=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    assert "GITHUB_WEBHOOK_SECRET" in str(exc.value)
+
+
+def test_production_config_rejects_missing_provider_key_vault_kek() -> None:
+    settings = _hardened_production_settings(
+        PROVIDER_KEY_VAULT_KEK=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    assert "PROVIDER_KEY_VAULT_KEK" in str(exc.value)
+
+
+def test_production_config_rejects_short_provider_key_vault_kek() -> None:
+    settings = _hardened_production_settings(
+        PROVIDER_KEY_VAULT_KEK="short",
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    assert "PROVIDER_KEY_VAULT_KEK" in str(exc.value)
+
+
+def test_production_config_rejects_missing_replay_worker_token() -> None:
+    settings = _hardened_production_settings(
+        REPLAY_WORKER_TOKEN=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    assert "REPLAY_WORKER_TOKEN" in str(exc.value)
+
+
+def test_production_config_rejects_missing_platform_llm_key() -> None:
+    settings = _hardened_production_settings(
+        OPENROUTER_API_KEY=None,
+        OPENAI_API_KEY=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    assert "OPENROUTER_API_KEY or OPENAI_API_KEY" in str(exc.value)
+
+
+def test_production_config_rejects_enabled_skydo_billing_without_webhook_secret() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="skydo",
+        SKYDO_WEBHOOK_SECRET=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    assert "SKYDO_WEBHOOK_SECRET" in str(exc.value)
+
+
+def test_production_config_accepts_enabled_skydo_billing_with_webhook_secret() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="skydo",
+        SKYDO_WEBHOOK_SECRET="skydo-webhook-secret",
+    )
+
+    validate_runtime_settings(settings)
+
+
+def test_production_config_rejects_enabled_stripe_billing_without_live_secrets() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="stripe",
+        STRIPE_API_KEY=None,
+        STRIPE_WEBHOOK_SECRET=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "STRIPE_API_KEY" in error_text
+    assert "STRIPE_WEBHOOK_SECRET" in error_text
+
+
+def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="razorpay",
+        RAZORPAY_KEY_ID=None,
+        RAZORPAY_KEY_SECRET=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "RAZORPAY_KEY_ID" in error_text
+    assert "RAZORPAY_KEY_SECRET" in error_text
+
+
+def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="razorpay",
+        RAZORPAY_KEY_ID="rzp_live_real_key",
+        RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
+    )
+
+    validate_runtime_settings(settings)
+
+
+def test_production_config_rejects_partial_slack_integration_config() -> None:
+    settings = _hardened_production_settings(
+        SLACK_CLIENT_ID="slack-client-id",
+        SLACK_CLIENT_SECRET=None,
+        SLACK_TOKEN_ENCRYPTION_KEY=None,
+        SLACK_SIGNING_SECRET=None,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "SLACK_CLIENT_SECRET" in error_text
+    assert "SLACK_TOKEN_ENCRYPTION_KEY" in error_text
+    assert "SLACK_SIGNING_SECRET" in error_text
+
+
+def test_production_config_accepts_complete_slack_integration_config() -> None:
+    settings = _hardened_production_settings(
+        SLACK_CLIENT_ID="slack-client-id",
+        SLACK_CLIENT_SECRET="slack-client-secret",
+        SLACK_TOKEN_ENCRYPTION_KEY="slack-token-encryption-key",
+        SLACK_SIGNING_SECRET="slack-signing-secret",
+    )
+
+    validate_runtime_settings(settings)

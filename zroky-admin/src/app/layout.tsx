@@ -18,10 +18,10 @@ const jetBrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Zroky Admin",
-    template: "%s | Zroky Admin",
+    default: "Zroky Owner",
+    template: "%s | Zroky Owner",
   },
-  description: "Founder and platform administration for Zroky.",
+  description: "Owner control plane for the Zroky AI Agent Regression Firewall.",
 };
 
 export default function RootLayout({

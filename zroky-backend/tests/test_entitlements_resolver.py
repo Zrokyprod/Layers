@@ -64,12 +64,18 @@ def db_session(tmp_path: Path):
         invalidate_all()
 
 
-def _seed_subscription(db, *, org_id: str, plan_code: str) -> Subscription:
+def _seed_subscription(
+    db,
+    *,
+    org_id: str,
+    plan_code: str,
+    status: str = "active",
+) -> Subscription:
     sub = Subscription(
         id=f"sub-{org_id}",
         org_id=org_id,
         plan_code=plan_code,
-        status="active",
+        status=status,
         seats=1,
         stripe_customer_id=f"cus_{org_id}",
         stripe_sub_id=f"si_{org_id}",
@@ -130,6 +136,51 @@ class TestResolveFromDb:
         _seed_subscription(db_session, org_id="org-1", plan_code="pro")
         resolved = _resolve_from_db(db_session, "org-1")
         assert resolved == PLAN_ENTITLEMENTS["pro"]
+
+    @pytest.mark.parametrize("status", ["incomplete", "canceled", "unpaid"])
+    def test_inactive_subscription_status_falls_back_to_free_template(
+        self,
+        db_session,
+        status: str,
+    ) -> None:
+        _seed_subscription(
+            db_session,
+            org_id=f"org-{status}",
+            plan_code="pro",
+            status=status,
+        )
+        resolved = _resolve_from_db(db_session, f"org-{status}")
+        assert resolved == PLAN_ENTITLEMENTS["free"]
+
+    @pytest.mark.parametrize("status", ["active", "trialing", "past_due"])
+    def test_entitlement_eligible_subscription_status_returns_plan_template(
+        self,
+        db_session,
+        status: str,
+    ) -> None:
+        _seed_subscription(
+            db_session,
+            org_id=f"org-{status}",
+            plan_code="pro",
+            status=status,
+        )
+        resolved = _resolve_from_db(db_session, f"org-{status}")
+        assert resolved == PLAN_ENTITLEMENTS["pro"]
+
+    def test_plan_rows_do_not_unlock_canceled_subscription(self, db_session) -> None:
+        _seed_subscription(
+            db_session,
+            org_id="org-canceled-plan-rows",
+            plan_code="pro",
+            status="canceled",
+        )
+        seed_plan_entitlements(
+            db_session,
+            org_id="org-canceled-plan-rows",
+            plan_code="pro",
+        )
+        resolved = _resolve_from_db(db_session, "org-canceled-plan-rows")
+        assert resolved == PLAN_ENTITLEMENTS["free"]
 
     def test_plan_rows_override_template(self, db_session) -> None:
         _seed_subscription(db_session, org_id="org-1", plan_code="free")
@@ -298,6 +349,27 @@ class TestGetPlanCode:
         db_session.add(sub)
         db_session.commit()
         assert get_plan_code(db_session, "org-1") == "free"
+
+    def test_returns_free_when_plan_code_unknown(self, db_session) -> None:
+        sub = _seed_subscription(db_session, org_id="org-1", plan_code="pro")
+        sub.plan_code = "bogus_plan"
+        db_session.add(sub)
+        db_session.commit()
+        assert get_plan_code(db_session, "org-1") == "free"
+
+    @pytest.mark.parametrize("status", ["incomplete", "canceled", "unpaid"])
+    def test_returns_free_for_non_entitlement_status(
+        self,
+        db_session,
+        status: str,
+    ) -> None:
+        _seed_subscription(
+            db_session,
+            org_id=f"org-plan-{status}",
+            plan_code="pro",
+            status=status,
+        )
+        assert get_plan_code(db_session, f"org-plan-{status}") == "free"
 
 
 # ── invalidation ────────────────────────────────────────────────────────────

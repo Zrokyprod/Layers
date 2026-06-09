@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -17,10 +19,20 @@ from app.db.models import TenantSlackInstall, TenantTeamsInstall
 from app.db.session import get_db_session, get_db_session_read
 from app.services.dashboard_config import ensure_project_exists, get_or_create_dashboard_config, set_notification_settings, get_notification_settings
 from app.services.security import generate_oauth_state_with_payload, verify_oauth_state_with_payload
-from app.services.slack_integration import build_slack_status, encrypt_slack_token, ensure_slack_token_encryption_ready, get_slack_install, send_slack_message
+from app.services.slack_integration import build_slack_status, encrypt_slack_token, encrypt_slack_webhook_url, ensure_slack_token_encryption_ready, get_slack_install, send_slack_message
+from app.services.slack_judgment import (
+    answer_and_post_slack_question,
+    answer_slack_action,
+    answer_slack_question,
+    build_slack_error_payload,
+    build_slack_working_payload,
+    resolve_slack_install,
+    verify_slack_signature,
+)
 from app.services.teams_integration import build_teams_status, encrypt_teams_webhook_url, ensure_teams_webhook_encryption_ready, get_teams_install, send_teams_message
 
 router = APIRouter(prefix="/v1/integrations")
+logger = logging.getLogger(__name__)
 
 _SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2/authorize"
 _SLACK_TOKEN_URL = "https://slack.com/api/oauth.v2.access"
@@ -139,6 +151,48 @@ async def _exchange_slack_code(code: str, settings: Settings) -> dict[str, Any]:
     return payload
 
 
+def _form_value(form: dict[str, list[str]], key: str) -> str | None:
+    values = form.get(key)
+    if not values:
+        return None
+    value = values[0]
+    return value.strip() if isinstance(value, str) else None
+
+
+async def _read_verified_slack_form(request: Request) -> dict[str, list[str]]:
+    raw_body = await request.body()
+    settings = get_settings()
+    if not settings.SLACK_SIGNING_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SLACK_SIGNING_SECRET is not configured.",
+        )
+    ok = verify_slack_signature(
+        settings.SLACK_SIGNING_SECRET,
+        request.headers.get("x-slack-request-timestamp"),
+        raw_body,
+        request.headers.get("x-slack-signature"),
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Slack signature.",
+        )
+    return parse_qs(raw_body.decode("utf-8"), keep_blank_values=True)
+
+
+def _slack_resolution_error(error: str | None) -> dict[str, Any]:
+    if error == "ambiguous":
+        return build_slack_error_payload(
+            "This Slack workspace is connected to multiple Zroky projects. "
+            "Run Ask Judgment from the project-specific channel configured in Zroky."
+        )
+    return build_slack_error_payload(
+        "Slack is not connected to a Zroky project for this workspace/channel. "
+        "Connect Slack from Zroky Settings -> Integrations."
+    )
+
+
 @router.get("/slack/status", response_model=SlackInstallStatusResponse)
 def get_slack_status(
     tenant_id: str = Depends(require_tenant_role("admin")),
@@ -211,7 +265,7 @@ async def complete_slack_install(
     install.team_id = team_id
     install.team_name = team_name
     install.access_token_encrypted = encrypt_slack_token(access_token)
-    install.webhook_url = webhook_url
+    install.webhook_url = encrypt_slack_webhook_url(webhook_url)
     install.channel_id = channel_id
     install.channel_name = channel_name
     install.bot_user_id = bot_user_id
@@ -265,6 +319,100 @@ async def send_slack_test_message(
     if not ok:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Slack test message failed.")
     return SlackTestMessageResponse(ok=True, message="Slack test message sent.")
+
+
+@router.post("/slack/command")
+@limiter.limit("60/minute")
+async def handle_slack_command(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    form = await _read_verified_slack_form(request)
+    resolution = resolve_slack_install(
+        db,
+        team_id=_form_value(form, "team_id"),
+        channel_id=_form_value(form, "channel_id"),
+    )
+    if resolution.install is None:
+        return _slack_resolution_error(resolution.error)
+
+    response_url = _form_value(form, "response_url")
+    if response_url:
+        background_tasks.add_task(
+            answer_and_post_slack_question,
+            project_id=resolution.install.tenant_id,
+            slack_text=_form_value(form, "text"),
+            response_url=response_url,
+        )
+        return build_slack_working_payload()
+
+    try:
+        return answer_slack_question(
+            db,
+            project_id=resolution.install.tenant_id,
+            slack_text=_form_value(form, "text"),
+        )
+    except Exception:
+        logger.exception("slack command failed team=%s", _form_value(form, "team_id"))
+        return build_slack_error_payload("Ask Judgment failed. Retry from Slack or open Zroky dashboard.")
+
+
+@router.post("/slack/actions")
+@limiter.limit("60/minute")
+async def handle_slack_actions(
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    form = await _read_verified_slack_form(request)
+    raw_payload = _form_value(form, "payload") or "{}"
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Slack action payload.",
+        ) from None
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Slack action payload.",
+        )
+
+    team = payload.get("team") if isinstance(payload.get("team"), dict) else {}
+    channel = payload.get("channel") if isinstance(payload.get("channel"), dict) else {}
+    resolution = resolve_slack_install(
+        db,
+        team_id=str(team.get("id") or payload.get("team_id") or "").strip(),
+        channel_id=str(channel.get("id") or "").strip(),
+    )
+    if resolution.install is None:
+        return _slack_resolution_error(resolution.error)
+
+    actions = payload.get("actions")
+    if not isinstance(actions, list) or not actions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Slack action payload missing action.",
+        )
+    action = actions[0] if isinstance(actions[0], dict) else {}
+    action_id = str(action.get("action_id") or "").strip()
+    if action_id not in {"judgment_investigate", "judgment_root_cause", "judgment_similar"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unknown Slack action.",
+        )
+
+    try:
+        return answer_slack_action(
+            db,
+            project_id=resolution.install.tenant_id,
+            action_id=action_id,
+            value=str(action.get("value") or ""),
+        )
+    except Exception:
+        logger.exception("slack action failed action=%s", action_id)
+        return build_slack_error_payload("Ask Judgment failed. Retry from Slack or open Zroky dashboard.")
 
 
 @router.get("/teams/status", response_model=TeamsInstallStatusResponse)

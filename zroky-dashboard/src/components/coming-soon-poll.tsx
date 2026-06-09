@@ -113,7 +113,14 @@ export function ComingSoonPoll({
     >
       <header className="flex flex-wrap items-center gap-2">
         <h3 className="text-base font-semibold leading-none tracking-tight">{title}</h3>
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+        <span
+          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+          style={{
+            background: "var(--dashboard-accent-soft, rgba(248, 250, 252, 0.085))",
+            borderColor: "rgba(248, 250, 252, 0.28)",
+            color: "var(--dashboard-accent, #f8fafc)",
+          }}
+        >
           <LockIcon /> Coming soon
         </span>
       </header>

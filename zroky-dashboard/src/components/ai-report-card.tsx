@@ -27,14 +27,34 @@ export function AIReportCard({
   const getSeverityConfig = (level: SeverityLevel) => {
     switch (level) {
       case 'critical':
-        return { icon: ShieldAlert, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' };
+        return {
+          icon: ShieldAlert,
+          color: 'var(--dashboard-danger, #c94b5f)',
+          bg: 'var(--dashboard-danger-soft, rgba(132, 40, 55, 0.2))',
+          border: 'var(--dashboard-danger-border, rgba(201, 75, 95, 0.34))',
+        };
       case 'high':
-        return { icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' };
+        return {
+          icon: AlertTriangle,
+          color: 'var(--dashboard-accent, #f8fafc)',
+          bg: 'var(--dashboard-accent-soft, rgba(248, 250, 252, 0.085))',
+          border: 'rgba(248, 250, 252, 0.28)',
+        };
       case 'medium':
-        return { icon: Info, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' };
+        return {
+          icon: Info,
+          color: 'var(--dashboard-warning, #c49a2c)',
+          bg: 'var(--dashboard-warning-soft, rgba(124, 97, 15, 0.18))',
+          border: 'var(--dashboard-warning-border, rgba(196, 154, 44, 0.34))',
+        };
       case 'low':
       default:
-        return { icon: CheckCircle2, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
+        return {
+          icon: CheckCircle2,
+          color: 'var(--dashboard-info, #5088b7)',
+          bg: 'var(--dashboard-info-soft, rgba(42, 86, 124, 0.18))',
+          border: 'var(--dashboard-info-border, rgba(80, 136, 183, 0.34))',
+        };
     }
   };
 
@@ -42,18 +62,21 @@ export function AIReportCard({
   const Icon = config.icon;
 
   return (
-    <div className={cn("p-5 rounded-xl border shadow-sm", config.bg, config.border, className)}>
+    <div
+      className={cn("p-5 rounded-xl border shadow-sm", className)}
+      style={{ background: config.bg, borderColor: config.border }}
+    >
       <div className="flex items-center gap-3 mb-4 border-b pb-3 border-opacity-50" style={{ borderColor: 'inherit' }}>
-        <Icon className={cn("h-6 w-6", config.color)} />
+        <Icon className="h-6 w-6" style={{ color: config.color }} />
         <div className="flex-1">
-          <h3 className={cn("font-semibold text-lg", config.color)}>AI Diagnosis</h3>
+          <h3 className="font-semibold text-lg" style={{ color: config.color }}>AI Diagnosis</h3>
           <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">
             {severity} SEVERITY
           </p>
         </div>
         {confidenceScore !== undefined && (
           <div className="flex items-center gap-1 bg-white/60 px-2 py-1 rounded-md border shadow-sm">
-            <Cpu className="h-4 w-4 text-purple-600" />
+            <Cpu className="h-4 w-4" style={{ color: 'var(--dashboard-info, #5088b7)' }} />
             <span className="text-xs font-bold text-gray-700">{confidenceScore}% Confidence</span>
           </div>
         )}
@@ -71,7 +94,7 @@ export function AIReportCard({
 
         <div>
           <h4 className="text-sm font-bold text-gray-900 mb-1 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Suggested Fix
+            <CheckCircle2 className="h-4 w-4" style={{ color: 'var(--dashboard-success, #3a9663)' }} /> Suggested Fix
           </h4>
           <p className="text-sm text-gray-800 bg-white/50 p-3 rounded border border-emerald-100">
             {suggestedFix}

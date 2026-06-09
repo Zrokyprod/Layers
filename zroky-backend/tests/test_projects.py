@@ -12,8 +12,28 @@ from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 
 
+TEST_JWT_SIGNING_KEY = "jwt-secret-for-tests-minimum-32-bytes-2026"
+
+
+def _project_auth_headers(project_id: str, subject: str) -> dict[str, str]:
+    token = jwt.encode(
+        {
+            "sub": subject,
+            "project_id": project_id,
+        },
+        TEST_JWT_SIGNING_KEY,
+        algorithm="HS256",
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.fixture()
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    get_settings.cache_clear()
+    monkeypatch.setenv("REQUIRE_PROVISIONING_TOKEN", "false")
+    monkeypatch.setenv("PROVISIONING_TOKEN", "top-secret")
+    monkeypatch.setenv("JWT_SIGNING_KEY", TEST_JWT_SIGNING_KEY)
+    monkeypatch.setenv("JWT_ALGORITHMS", "HS256")
     get_settings.cache_clear()
     db_path = tmp_path / "test_projects.db"
     engine = create_engine(
@@ -62,6 +82,7 @@ def test_project_and_api_key_flow(client: TestClient) -> None:
 
     key_response = client.post(
         f"/v1/projects/{project_id}/api-keys",
+        headers=_project_auth_headers(project_id, "owner-1"),
         json={"name": "primary"},
     )
     assert key_response.status_code == 201
@@ -103,13 +124,14 @@ def test_invalid_api_key_rejected(client: TestClient) -> None:
 def test_default_api_key_name_is_zroky_api(client: TestClient) -> None:
     project_response = client.post(
         "/v1/projects",
-        json={"name": "Default Key Project"},
+        json={"name": "Default Key Project", "owner_ref": "default-key-owner"},
     )
     assert project_response.status_code == 201
     project_id = project_response.json()["project_id"]
 
     key_response = client.post(
         f"/v1/projects/{project_id}/api-keys",
+        headers=_project_auth_headers(project_id, "default-key-owner"),
         json={},
     )
     assert key_response.status_code == 201
@@ -119,13 +141,15 @@ def test_default_api_key_name_is_zroky_api(client: TestClient) -> None:
 def test_api_key_expiry_scope_and_rotation_flow(client: TestClient) -> None:
     project_response = client.post(
         "/v1/projects",
-        json={"name": "Rotating Key Project"},
+        json={"name": "Rotating Key Project", "owner_ref": "rotation-owner"},
     )
     assert project_response.status_code == 201
     project_id = project_response.json()["project_id"]
+    auth_headers = _project_auth_headers(project_id, "rotation-owner")
 
     key_response = client.post(
         f"/v1/projects/{project_id}/api-keys",
+        headers=auth_headers,
         json={"name": "rotatable", "expires_in_days": 30, "scopes": ["project:member"]},
     )
     assert key_response.status_code == 201
@@ -133,14 +157,17 @@ def test_api_key_expiry_scope_and_rotation_flow(client: TestClient) -> None:
     assert key_payload["scopes"] == ["project:member"]
     assert key_payload["expires_at"] is not None
 
-    rotate_response = client.post(f"/v1/projects/{project_id}/api-keys/{key_payload['key_id']}/rotate")
+    rotate_response = client.post(
+        f"/v1/projects/{project_id}/api-keys/{key_payload['key_id']}/rotate",
+        headers=auth_headers,
+    )
     assert rotate_response.status_code == 200
     rotated_payload = rotate_response.json()
     assert rotated_payload["api_key"].startswith("zroky_api_live_")
     assert rotated_payload["rotated_from_key_id"] == key_payload["key_id"]
     assert rotated_payload["scopes"] == ["project:member"]
 
-    keys_response = client.get(f"/v1/projects/{project_id}/api-keys")
+    keys_response = client.get(f"/v1/projects/{project_id}/api-keys", headers=auth_headers)
     assert keys_response.status_code == 200
     keys = keys_response.json()
     old_key = next(item for item in keys if item["key_id"] == key_payload["key_id"])
@@ -150,19 +177,24 @@ def test_api_key_expiry_scope_and_rotation_flow(client: TestClient) -> None:
 def test_revoked_api_key_blocked(client: TestClient) -> None:
     project_response = client.post(
         "/v1/projects",
-        json={"name": "Revocation Project"},
+        json={"name": "Revocation Project", "owner_ref": "revocation-owner"},
     )
     assert project_response.status_code == 201
     project_id = project_response.json()["project_id"]
+    auth_headers = _project_auth_headers(project_id, "revocation-owner")
 
     key_response = client.post(
         f"/v1/projects/{project_id}/api-keys",
+        headers=auth_headers,
         json={"name": "revokable"},
     )
     assert key_response.status_code == 201
     key_payload = key_response.json()
 
-    revoke_response = client.post(f"/v1/projects/{project_id}/api-keys/{key_payload['key_id']}/revoke")
+    revoke_response = client.post(
+        f"/v1/projects/{project_id}/api-keys/{key_payload['key_id']}/revoke",
+        headers=auth_headers,
+    )
     assert revoke_response.status_code == 200
     assert revoke_response.json()["revoked"] is True
 
@@ -284,6 +316,43 @@ def test_provisioning_open_mode_ignores_invalid_bearer(
         get_settings.cache_clear()
 
 
+def test_project_role_guard_requires_auth_when_global_provisioning_is_open(client: TestClient) -> None:
+    project_response = client.post(
+        "/v1/projects",
+        json={"name": "Open Provisioning Scoped Project"},
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["project_id"]
+
+    anonymous_response = client.post(
+        f"/v1/projects/{project_id}/api-keys",
+        json={"name": "anonymous-key"},
+    )
+    assert anonymous_response.status_code == 401
+
+    strict_token_response = client.post(
+        f"/v1/projects/{project_id}/api-keys",
+        headers={"X-Zroky-Admin-Token": "top-secret"},
+        json={"name": "operator-key"},
+    )
+    assert strict_token_response.status_code == 201
+
+    admin_token = jwt.encode(
+        {
+            "sub": "admin-open-mode",
+            "roles": ["zroky_admin"],
+        },
+        TEST_JWT_SIGNING_KEY,
+        algorithm="HS256",
+    )
+    strict_jwt_response = client.post(
+        f"/v1/projects/{project_id}/api-keys",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"name": "admin-jwt-key"},
+    )
+    assert strict_jwt_response.status_code == 201
+
+
 def test_project_creation_bootstraps_owner_membership(client: TestClient) -> None:
     project_response = client.post(
         "/v1/projects",
@@ -292,7 +361,10 @@ def test_project_creation_bootstraps_owner_membership(client: TestClient) -> Non
     assert project_response.status_code == 201
     project_id = project_response.json()["project_id"]
 
-    memberships_response = client.get(f"/v1/projects/{project_id}/memberships")
+    memberships_response = client.get(
+        f"/v1/projects/{project_id}/memberships",
+        headers=_project_auth_headers(project_id, "owner-sub-1"),
+    )
     assert memberships_response.status_code == 200
     memberships = memberships_response.json()
     assert len(memberships) == 1
@@ -308,9 +380,11 @@ def test_upsert_project_membership(client: TestClient) -> None:
     )
     assert project_response.status_code == 201
     project_id = project_response.json()["project_id"]
+    auth_headers = {"X-Zroky-Admin-Token": "top-secret"}
 
     first_upsert = client.post(
         f"/v1/projects/{project_id}/memberships",
+        headers=auth_headers,
         json={
             "subject": "member-sub-1",
             "email": "member@example.com",
@@ -323,6 +397,7 @@ def test_upsert_project_membership(client: TestClient) -> None:
 
     second_upsert = client.post(
         f"/v1/projects/{project_id}/memberships",
+        headers=auth_headers,
         json={
             "subject": "member-sub-1",
             "email": "member@example.com",
@@ -333,7 +408,7 @@ def test_upsert_project_membership(client: TestClient) -> None:
     assert second_upsert.status_code == 200
     assert second_upsert.json()["role"] == "admin"
 
-    list_response = client.get(f"/v1/projects/{project_id}/memberships")
+    list_response = client.get(f"/v1/projects/{project_id}/memberships", headers=auth_headers)
     assert list_response.status_code == 200
     memberships = list_response.json()
     assert len(memberships) == 1

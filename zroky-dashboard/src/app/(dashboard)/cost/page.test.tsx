@@ -432,7 +432,7 @@ function sectionByHeading(name: string): HTMLElement {
   return section as HTMLElement;
 }
 
-describe("Cost Command Center", () => {
+describe("Cost page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     data = defaultCostData();
@@ -450,7 +450,7 @@ describe("Cost Command Center", () => {
   it("renders the command-center shell, controls, KPIs, and key sections", async () => {
     const { container } = render(<CostOverviewPage />);
 
-    expect(await screen.findByRole("heading", { name: "Cost Command Center" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Cost" })).toBeInTheDocument();
     expect(container.querySelector(".cost-command")).toBeInTheDocument();
     expect(screen.getByText("See where AI failures burn money, prove which replays protected spend, and enforce live budget guardrails before repeat regressions ship.")).toBeInTheDocument();
     for (const name of ["Refresh", "Copy report", "Export JSON"]) {
@@ -467,7 +467,7 @@ describe("Cost Command Center", () => {
   it("derives executive cost KPIs from live cost, savings, replay, and budget APIs", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost Command Center" });
+    await screen.findByRole("heading", { name: "Cost" });
     expect(within(kpi("Failed runs wasted")).getByText("$1,340.00")).toBeInTheDocument();
     expect(within(kpi("AI spend")).getByText("$25.00")).toBeInTheDocument();
     expect(within(kpi("Replay spend")).getByText("$0.34")).toBeInTheDocument();
@@ -479,7 +479,7 @@ describe("Cost Command Center", () => {
   it("uses the selected window for live hooks and caps top-call hours at the backend guardrail", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost Command Center" });
+    await screen.findByRole("heading", { name: "Cost" });
     expect(hooks.useCostDailyTrend).toHaveBeenCalledWith(30);
     expect(hooks.useCostTopCalls).toHaveBeenCalledWith(12, 720);
 
@@ -495,7 +495,7 @@ describe("Cost Command Center", () => {
   it("turns KPI cards into live lenses", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost Command Center" });
+    await screen.findByRole("heading", { name: "Cost" });
     expect(screen.getByText("Cost command center")).toBeInTheDocument();
 
     fireEvent.click(kpi("Failed runs wasted"));
@@ -548,7 +548,7 @@ describe("Cost Command Center", () => {
   it("refreshes every live source and supports report copy/export", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost Command Center" });
+    await screen.findByRole("heading", { name: "Cost" });
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(refetches.issues).toHaveBeenCalledTimes(1));
     for (const refetch of Object.values(refetches)) {

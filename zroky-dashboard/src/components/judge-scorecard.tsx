@@ -168,7 +168,7 @@ function colorForScore(score: number, floor: number | null): string {
   // Below explicit floor → red. Otherwise score-band coloring.
   if (floor !== null && score < floor) return "judge-bar-red";
   if (score < 0.4) return "judge-bar-red";
-  if (score < 0.6) return "judge-bar-orange";
+  if (score < 0.6) return "judge-bar-accent";
   if (score < 0.8) return "judge-bar-yellow";
   return "judge-bar-green";
 }

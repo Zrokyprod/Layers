@@ -1,5 +1,20 @@
 from app.api.routes._internal.owner_common import *
 from app.api.routes._internal.owner_pricing_audit import _owner_audit, _resolve_actor
+from app.services.billing_plans import (
+    InvalidPlanCodeError,
+    normalize_plan_code,
+)
+from app.services.entitlements import clear_trial_entitlements, seed_plan_entitlements
+
+
+class OwnerBillingPaymentConfirmRequest(BaseModel):
+    org_id: str
+    plan_code: str
+    payment_ref: str
+    customer_ref: str | None = None
+    payment_request_ref: str | None = None
+    current_period_end: datetime | None = None
+    seats: int | None = None
 
 class OwnerSupportTicketUpdateRequest(BaseModel):
     status: str | None = None
@@ -219,6 +234,10 @@ def owner_billing_accounts(
     def stripe_subscription_url(subscription_id: str | None) -> str | None:
         return f"https://dashboard.stripe.com/subscriptions/{subscription_id}" if subscription_id else None
 
+    def skydo_dashboard_url() -> str | None:
+        url = (get_settings().SKYDO_PORTAL_URL or "").strip()
+        return url or None
+
     return {
         "total": total,
         "items": [
@@ -231,6 +250,12 @@ def owner_billing_accounts(
                 "seats": sub.seats,
                 "current_period_end": sub.current_period_end,
                 "trial_end": sub.trial_end,
+                "payment_provider": sub.payment_provider,
+                "payment_customer_ref": sub.payment_customer_ref,
+                "payment_subscription_ref": sub.payment_subscription_ref,
+                "payment_request_ref": sub.payment_request_ref,
+                "payment_dashboard_url": skydo_dashboard_url()
+                    if sub.payment_provider == "skydo" else None,
                 "stripe_customer_id": sub.stripe_customer_id,
                 "stripe_sub_id": sub.stripe_sub_id,
                 "stripe_customer_url": stripe_customer_url(sub.stripe_customer_id),
@@ -239,6 +264,98 @@ def owner_billing_accounts(
             }
             for sub, project_name in rows
         ],
+    }
+
+
+@router.post("/billing/payments/confirm")
+@limiter.limit("30/minute")
+def owner_confirm_skydo_payment(
+    request: Request,
+    body: OwnerBillingPaymentConfirmRequest,
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+) -> dict:
+    try:
+        plan_code = normalize_plan_code(body.plan_code)
+    except InvalidPlanCodeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    if plan_code == "free":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="free cannot be confirmed as a paid Skydo payment",
+        )
+
+    org_id = body.org_id.strip()
+    payment_ref = body.payment_ref.strip()
+    if not org_id:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="org_id is required")
+    if not payment_ref:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="payment_ref is required")
+
+    existing_payment = db.scalar(
+        select(Subscription).where(Subscription.payment_subscription_ref == payment_ref)
+    )
+    if existing_payment is not None and existing_payment.org_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="payment_ref is already linked to another org",
+        )
+
+    sub = db.scalar(select(Subscription).where(Subscription.org_id == org_id))
+    if sub is None and existing_payment is not None:
+        sub = existing_payment
+    if sub is None:
+        sub = Subscription(
+            org_id=org_id,
+            plan_code=plan_code,
+            status="active",
+            seats=max(1, body.seats or 1),
+            payment_provider="skydo",
+        )
+        db.add(sub)
+        db.flush()
+
+    sub.payment_provider = "skydo"
+    sub.payment_subscription_ref = payment_ref
+    if body.customer_ref:
+        sub.payment_customer_ref = body.customer_ref.strip() or None
+    if body.payment_request_ref:
+        sub.payment_request_ref = body.payment_request_ref.strip() or None
+    if body.seats is not None:
+        sub.seats = max(1, int(body.seats))
+    sub.plan_code = plan_code
+    sub.status = "active"
+    sub.trial_end = None
+    sub.current_period_end = body.current_period_end or (datetime.now(UTC) + timedelta(days=30))
+
+    seed_plan_entitlements(db, org_id=org_id, plan_code=plan_code, commit=False)
+    clear_trial_entitlements(db, org_id=org_id, commit=False)
+    _owner_audit(
+        db,
+        action="owner.billing.skydo_payment.confirm",
+        actor=_resolve_actor(request),
+        target_id=org_id,
+        metadata={
+            "plan_code": plan_code,
+            "payment_ref": payment_ref,
+            "payment_request_ref": body.payment_request_ref,
+            "current_period_end": sub.current_period_end,
+        },
+    )
+    db.commit()
+    try:
+        from app.services.entitlements_resolver import invalidate
+        invalidate(org_id)
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "org_id": org_id,
+        "plan_code": sub.plan_code,
+        "status": sub.status,
+        "payment_provider": sub.payment_provider,
+        "payment_subscription_ref": sub.payment_subscription_ref,
+        "current_period_end": sub.current_period_end,
     }
 
 

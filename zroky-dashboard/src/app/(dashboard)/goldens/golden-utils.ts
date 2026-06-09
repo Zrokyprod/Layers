@@ -92,12 +92,12 @@ export function healthBadgeClass(health: GoldenHealth): string {
   return "badge-gray";
 }
 
-export function canBlockCi(set: GoldenSetView, runs: ReplayRunItem[] = []): boolean {
-  return set.blocks_ci && healthForSet(set, runs) === "Healthy";
+export function canBlockCi(set: GoldenSetView): boolean {
+  return set.blocks_ci && set.trace_count > 0;
 }
 
 export function ciBlockingLabel(set: GoldenSetView, runs: ReplayRunItem[] = []): CiBlockingLabel {
-  if (canBlockCi(set, runs)) return "Blocks CI";
+  if (canBlockCi(set)) return "Blocks CI";
   if (set.trace_count > 0 && !set.blocks_ci && healthForSet(set, runs) === "Healthy") return "Advisory only";
   return "Not blocking";
 }

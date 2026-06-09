@@ -23,7 +23,7 @@ def test_security_txt_contains_contact():
     resp = client.get("/.well-known/security.txt")
     body = resp.text
     assert "Contact: mailto:" in body
-    assert "security@zroky.ai" in body
+    assert "security@zroky.com" in body
 
 
 def test_security_txt_contains_expires():

@@ -201,3 +201,46 @@ def test_github_webhook_rejects_invalid_signature(client_context) -> None:
         },
     )
     assert response.status_code == 401
+
+
+def test_github_webhook_requires_secret_outside_dev(
+    client_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = client_context
+    monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setenv("APP_ENV", "staging")
+    get_settings.cache_clear()
+
+    response = client.post(
+        "/v1/integrations/github/webhook",
+        content=b'{"zen":"signed webhooks"}',
+        headers={
+            "content-type": "application/json",
+            "x-github-event": "ping",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_github_webhook_allows_unsigned_in_development(
+    client_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = client_context
+    monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+    get_settings.cache_clear()
+
+    response = client.post(
+        "/v1/integrations/github/webhook",
+        content=b'{"zen":"local dev"}',
+        headers={
+            "content-type": "application/json",
+            "x-github-event": "ping",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ignored_reason"] == "unsupported_github_event"

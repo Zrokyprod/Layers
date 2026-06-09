@@ -295,8 +295,12 @@ describe("Traces list MVP", () => {
 
     expect(await screen.findByText("No traces captured yet")).toBeInTheDocument();
     expect(screen.getByText("No traces captured yet").closest(".trace-mvp-table-section")).toBeInTheDocument();
-    expect(screen.getByText("Install the SDK to capture agent calls, tools, retrieval, and memory events.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View SDK setup" }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByText(/Run one SDK or Gateway call with your project key/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to project key setup" }).getAttribute("href")).toBe("/settings/keys");
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh traces" }));
+    await waitFor(() => expect(hooks.refetchTraces).toHaveBeenCalledTimes(1));
+    expect(hooks.refetchCalls).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the loading state inside the styled trace evidence card", async () => {

@@ -34,6 +34,10 @@ function latencyLabel(value: number | null | undefined): string {
   return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(2)}s`;
 }
 
+function traceDateLabel(value: string | null | undefined): string {
+  return formatDateTime(value?.replace(/\+00:00Z$/, "Z"));
+}
+
 function avgLatencyLabel(values: Array<number | null | undefined>): string {
   const valid = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   if (valid.length === 0) return DASH;
@@ -139,20 +143,20 @@ function TraceRow({
 }) {
   return (
     <tr>
-      <td>
+      <td data-label="Trace / Call">
         <div className="trace-mvp-primary-cell">
           <Link href={`/trace/${encodeURIComponent(item.trace_id)}`}>{traceTitle(item)}</Link>
           <span>{traceMeta(item)}</span>
         </div>
       </td>
-      <td><span className={`trace-mvp-status ${statusClass(item)}`}>{statusLabel(item)}</span></td>
-      <td>{agentLabel(item, rootCall)}</td>
-      <td>{callTypeLabel(rootCall)}</td>
-      <td>{modelLabel(item, rootCall)}</td>
-      <td>{item.total_cost_usd > 0 ? formatUsd(item.total_cost_usd) : DASH}</td>
-      <td>{latencyLabel(rootCall?.latency_ms)}</td>
-      <td>{formatDateTime(item.started_at)}</td>
-      <td>
+      <td data-label="Status"><span className={`trace-mvp-status ${statusClass(item)}`}>{statusLabel(item)}</span></td>
+      <td data-label="Agent">{agentLabel(item, rootCall)}</td>
+      <td data-label="Type">{callTypeLabel(rootCall)}</td>
+      <td data-label="Model">{modelLabel(item, rootCall)}</td>
+      <td data-label="Cost">{item.total_cost_usd > 0 ? formatUsd(item.total_cost_usd) : DASH}</td>
+      <td data-label="Latency">{latencyLabel(rootCall?.latency_ms)}</td>
+      <td data-label="Created">{traceDateLabel(item.started_at)}</td>
+      <td data-label="Action">
         <div className="trace-mvp-row-actions">
           <Link href={`/trace/${encodeURIComponent(item.trace_id)}`} className="btn btn-soft btn-sm">View trace</Link>
           {item.root_call_id ? (
@@ -492,8 +496,17 @@ export default function TracePage() {
         {!tracesQuery.isLoading && !tracesQuery.error && displayRows.length === 0 ? (
           <div className="trace-mvp-empty">
             <strong>No traces captured yet</strong>
-            <p>Install the SDK to capture agent calls, tools, retrieval, and memory events.</p>
-            <Link href="/settings/keys" className="btn btn-soft btn-sm">View SDK setup</Link>
+            <p>
+              Run one SDK or Gateway call with your project key, then refresh here. Your first captured trace appears in
+              this table when capture is working.
+            </p>
+            <div className="trace-mvp-empty-actions">
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => void refreshTraces()}>
+                <RefreshCw aria-hidden="true" />
+                Refresh traces
+              </button>
+              <Link href="/settings/keys" className="btn btn-soft btn-sm">Back to project key setup</Link>
+            </div>
           </div>
         ) : null}
         {displayRows.length > 0 ? (

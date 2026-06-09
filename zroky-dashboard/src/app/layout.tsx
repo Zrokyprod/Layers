@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import "./premium-overrides.css";
 
 import { Providers } from "@/components/providers";
 

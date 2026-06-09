@@ -1,7 +1,5 @@
 import type { AuthTokenResponse } from "@/lib/types";
 
-const ACCESS_TOKEN_COOKIE = "zroky_access_token";
-const REFRESH_TOKEN_COOKIE = "zroky_refresh_token";
 const AUTH_SESSION_STORAGE_KEY = "zroky_auth_session";
 const LS_ACCESS_TOKEN_KEY = "zroky_at";
 const LS_REFRESH_TOKEN_KEY = "zroky_rt";
@@ -17,10 +15,6 @@ export type BrowserAuthSession = {
   refreshTokenExpiresAtEpochSeconds: number | null;
 };
 
-function buildCookiePrefix(name: string): string {
-  return `${name}=`;
-}
-
 function isSafeAppPath(path: string): boolean {
   if (!path.startsWith("/")) {
     return false;
@@ -31,60 +25,20 @@ function isSafeAppPath(path: string): boolean {
   return true;
 }
 
-function readCookie(name: string): string | null {
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  const prefix = buildCookiePrefix(name);
-  const parts = document.cookie.split(";");
-  for (const item of parts) {
-    const trimmed = item.trim();
-    if (trimmed.startsWith(prefix)) {
-      const encoded = trimmed.slice(prefix.length);
-      if (!encoded) {
-        return null;
-      }
-      return decodeURIComponent(encoded);
-    }
-  }
-  return null;
-}
-
 export function readAccessTokenFromBrowser(): string | null {
-  if (typeof window !== "undefined") {
-    const ls = window.localStorage.getItem(LS_ACCESS_TOKEN_KEY);
-    if (ls) return ls;
-  }
-  return readCookie(ACCESS_TOKEN_COOKIE);
+  return null;
 }
 
 export function readRefreshTokenFromBrowser(): string | null {
-  if (typeof window !== "undefined") {
-    const ls = window.localStorage.getItem(LS_REFRESH_TOKEN_KEY);
-    if (ls) return ls;
-  }
-  return readCookie(REFRESH_TOKEN_COOKIE);
+  return null;
 }
 
-function decodeJwtExpiryEpochSeconds(token: string): number | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length < 2) {
-      return null;
-    }
-
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padding = payload.length % 4 === 0 ? "" : "=".repeat(4 - (payload.length % 4));
-    const decodedPayload = atob(payload + padding);
-    const parsed = JSON.parse(decodedPayload) as { exp?: unknown };
-    if (typeof parsed.exp === "number" && Number.isFinite(parsed.exp)) {
-      return parsed.exp;
-    }
-  } catch {
-    return null;
+function clearLegacyStoredTokens(): void {
+  if (typeof window === "undefined") {
+    return;
   }
-  return null;
+  window.localStorage.removeItem(LS_ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(LS_REFRESH_TOKEN_KEY);
 }
 
 function persistSessionMetadata(session: BrowserAuthSession): void {
@@ -151,16 +105,15 @@ export async function storeAuthSession(tokens: AuthTokenResponse): Promise<void>
     Number.isFinite(tokens.refresh_expires_in_seconds) ? tokens.refresh_expires_in_seconds : DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS,
   );
 
-  // Store tokens in localStorage so client-side reads work (httpOnly cookies are invisible to JS)
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(LS_ACCESS_TOKEN_KEY, tokens.access_token);
-    window.localStorage.setItem(LS_REFRESH_TOKEN_KEY, tokens.refresh_token);
+    clearLegacyStoredTokens();
     window.localStorage.setItem(LS_EMAIL_VERIFIED_KEY, String(tokens.email_verified ?? true));
   }
 
   // Also set HttpOnly cookies via server route for middleware + proxy auth
   await fetch("/api/auth/set-session", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       access_token: tokens.access_token,
@@ -172,37 +125,20 @@ export async function storeAuthSession(tokens: AuthTokenResponse): Promise<void>
 
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
   persistSessionMetadata({
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
+    accessToken: null,
+    refreshToken: null,
     accessTokenExpiresAtEpochSeconds: nowEpochSeconds + accessMaxAgeSeconds,
     refreshTokenExpiresAtEpochSeconds: nowEpochSeconds + refreshMaxAgeSeconds,
   });
 }
 
 export function storeAccessToken(token: string, maxAgeSeconds = DEFAULT_ACCESS_TOKEN_MAX_AGE_SECONDS): void {
+  void token;
   const refreshExpiry = readSessionMetadata().refreshTokenExpiresAtEpochSeconds;
-  const refreshMaxAge = refreshExpiry ? Math.max(0, refreshExpiry - Math.floor(Date.now() / 1000)) : DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS;
-  const refreshToken = readRefreshTokenFromBrowser() ?? "";
-
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(LS_ACCESS_TOKEN_KEY, token);
-  }
-
-  void fetch("/api/auth/set-session", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      access_token: token,
-      refresh_token: refreshToken,
-      access_max_age_seconds: maxAgeSeconds,
-      refresh_max_age_seconds: refreshMaxAge,
-    }),
-  });
-
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
   persistSessionMetadata({
-    accessToken: token,
-    refreshToken: refreshToken || null,
+    accessToken: null,
+    refreshToken: null,
     accessTokenExpiresAtEpochSeconds: nowEpochSeconds + maxAgeSeconds,
     refreshTokenExpiresAtEpochSeconds: refreshExpiry,
   });
@@ -217,11 +153,10 @@ export function readEmailVerifiedFromBrowser(): boolean | null {
 
 export function clearAuthSession(): void {
   // Clear HttpOnly cookies via server route
-  void fetch("/api/auth/clear-session", { method: "POST" });
+  void fetch("/api/auth/clear-session", { method: "POST", credentials: "same-origin" });
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
-    window.localStorage.removeItem(LS_ACCESS_TOKEN_KEY);
-    window.localStorage.removeItem(LS_REFRESH_TOKEN_KEY);
+    clearLegacyStoredTokens();
     window.localStorage.removeItem(LS_EMAIL_VERIFIED_KEY);
   }
 }
@@ -231,24 +166,23 @@ export function clearAccessToken(): void {
 }
 
 export function readAuthSessionFromBrowser(): BrowserAuthSession {
-  const accessToken = readAccessTokenFromBrowser();
-  const refreshToken = readRefreshTokenFromBrowser();
   const metadata = readSessionMetadata();
 
-  const accessExpiryFromToken = accessToken ? decodeJwtExpiryEpochSeconds(accessToken) : null;
-  const refreshExpiryFromToken = refreshToken ? decodeJwtExpiryEpochSeconds(refreshToken) : null;
-
   return {
-    accessToken,
-    refreshToken,
-    accessTokenExpiresAtEpochSeconds: metadata.accessTokenExpiresAtEpochSeconds ?? accessExpiryFromToken,
-    refreshTokenExpiresAtEpochSeconds: metadata.refreshTokenExpiresAtEpochSeconds ?? refreshExpiryFromToken,
+    accessToken: null,
+    refreshToken: null,
+    accessTokenExpiresAtEpochSeconds: metadata.accessTokenExpiresAtEpochSeconds,
+    refreshTokenExpiresAtEpochSeconds: metadata.refreshTokenExpiresAtEpochSeconds,
   };
 }
 
 export function hasPersistedSession(): boolean {
   const session = readAuthSessionFromBrowser();
-  return Boolean(session.accessToken || session.refreshToken);
+  const nowEpochSeconds = Math.floor(Date.now() / 1000);
+  return Boolean(
+    (session.accessTokenExpiresAtEpochSeconds && session.accessTokenExpiresAtEpochSeconds > nowEpochSeconds)
+    || (session.refreshTokenExpiresAtEpochSeconds && session.refreshTokenExpiresAtEpochSeconds > nowEpochSeconds),
+  );
 }
 
 export function setPendingPostAuthRedirectPath(path: string): void {
@@ -261,7 +195,7 @@ export function setPendingPostAuthRedirectPath(path: string): void {
   window.sessionStorage.setItem(POST_AUTH_REDIRECT_STORAGE_KEY, path);
 }
 
-export function consumePendingPostAuthRedirectPath(fallback = "/agents"): string {
+export function consumePendingPostAuthRedirectPath(fallback = "/home"): string {
   if (typeof window === "undefined") {
     return fallback;
   }
@@ -276,7 +210,7 @@ export function consumePendingPostAuthRedirectPath(fallback = "/agents"): string
   return fallback;
 }
 
-export function getPostAuthRedirectPath(fallback = "/agents"): string {
+export function getPostAuthRedirectPath(fallback = "/home"): string {
   if (typeof window === "undefined") {
     return fallback;
   }
@@ -298,7 +232,7 @@ export function getPostAuthRedirectPath(fallback = "/agents"): string {
   return next;
 }
 
-export function resolvePostAuthRedirectPath(fallback = "/agents"): string {
+export function resolvePostAuthRedirectPath(fallback = "/home"): string {
   const fromQuery = getPostAuthRedirectPath("");
   if (fromQuery) {
     return fromQuery;

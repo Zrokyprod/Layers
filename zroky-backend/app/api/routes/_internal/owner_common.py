@@ -1,6 +1,6 @@
 """
 Owner Dashboard API — all endpoints under /v1/owner/
-Protected by require_provisioning_access (PROVISIONING_TOKEN).
+Protected by require_owner_provisioning_access (PROVISIONING_TOKEN).
 Every mutating action writes to AuditLog.
 """
 
@@ -18,7 +18,9 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.provisioning import require_provisioning_access
+from app.api.dependencies.provisioning import (
+    require_owner_provisioning_access as require_provisioning_access,
+)
 from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import (

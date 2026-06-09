@@ -3,80 +3,77 @@ import { motion } from 'framer-motion';
 import { ArrowRight, RefreshCw } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import { VerifyScene } from '../../components/auth/AuthScenes';
+import { AUTH_LINK, AUTH_PRIMARY_BUTTON, AUTH_SECONDARY_BUTTON } from './authStyles';
+
+const nextSteps = [
+  { step: '01', title: 'Create project access', desc: 'Generate a Zroky project key for capture.' },
+  { step: '02', title: 'Capture one agent flow', desc: 'Use SDK or Gateway and confirm the first trace appears.' },
+  { step: '03', title: 'Replay only when needed', desc: 'Connect a provider key when verified replay is ready.' },
+];
 
 export default function VerifyEmailPage() {
   return (
     <AuthLayout
       scene={<VerifyScene />}
       tagline="Identity confirmed. Your agent workspace is ready to capture production failures."
-      caption="You're now part of teams shipping reliable AI agents with confidence."
+      caption="Start with capture, then add replay proof and CI gates when your first incident needs protection."
     >
-      {/* Success badge */}
       <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5, type: 'spring', stiffness: 200 }}
-        className="flex items-center gap-2 rounded-full border border-success/25 bg-success/8 px-4 py-2 w-fit"
+        transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+        className="flex w-fit items-center gap-2 rounded-lg border border-verified/35 bg-verified/10 px-4 py-2"
       >
-        <span className="h-2 w-2 rounded-full bg-success" />
-        <span className="text-xs font-extrabold uppercase tracking-[0.12em] text-success">
-          Email verified
-        </span>
+        <span className="h-2 w-2 rounded-full bg-verified" />
+        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-verified">Email verified</span>
       </motion.div>
 
       <div className="mt-5">
-        <h1 className="text-2xl font-black text-primary">You're all set!</h1>
-        <p className="mt-1.5 text-sm font-bold text-secondary">
-          Your email has been verified. Your Zroky workspace is ready.
+        <h1 className="text-2xl font-semibold text-white">Workspace is ready</h1>
+        <p className="mt-1.5 text-sm font-semibold leading-6 text-white/62">
+          Your email has been verified. Follow the docs path to capture the first protected agent flow.
         </p>
       </div>
 
       <div className="mt-8 space-y-3">
-        {[
-          { step: '01', title: 'Connect your agent', desc: 'Add the SDK decorator — 30 seconds.' },
-          { step: '02', title: 'See your first capture', desc: 'Run your agent and watch issues appear.' },
-          { step: '03', title: 'Trigger a replay', desc: 'Reproduce the failure with one click.' },
-        ].map(({ step, title, desc }) => (
+        {nextSteps.map(({ step, title, desc }) => (
           <motion.div
             key={step}
-            initial={{ opacity: 0, x: -12 }}
+            initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.35, delay: Number(step) * 0.1 }}
-            className="flex items-center gap-4 rounded-2xl border border-panel-border bg-white p-4"
+            transition={{ duration: 0.32, delay: Number(step) * 0.08 }}
+            className="flex items-center gap-4 rounded-lg border border-white/[0.12] bg-white/[0.035] p-4"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-panel-border bg-canvas font-mono text-xs font-black text-accent">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.12] bg-white/[0.06] font-mono text-xs font-semibold text-white">
               {step}
             </div>
             <div>
-              <p className="text-sm font-black text-primary">{title}</p>
-              <p className="text-xs font-bold text-secondary">{desc}</p>
+              <p className="text-sm font-semibold text-white">{title}</p>
+              <p className="text-xs font-semibold leading-5 text-white/58">{desc}</p>
             </div>
           </motion.div>
         ))}
       </div>
 
       <motion.a
-        href="/docs"
+        href="/docs/quickstart"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.5 }}
-        className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-extrabold text-white shadow-sm transition duration-200 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        transition={{ duration: 0.4, delay: 0.42 }}
+        className={`mt-6 ${AUTH_PRIMARY_BUTTON}`}
       >
         Open quickstart guide
         <ArrowRight className="h-4 w-4" />
       </motion.a>
 
-      <button
-        type="button"
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-panel-border bg-white py-3 text-sm font-extrabold text-primary transition duration-200 hover:bg-canvas hover:border-accent/30"
-      >
+      <button type="button" className={`mt-3 ${AUTH_SECONDARY_BUTTON}`}>
         <RefreshCw className="h-4 w-4" />
         Resend verification email
       </button>
 
-      <p className="mt-6 text-center text-xs font-bold text-secondary">
+      <p className="mt-6 text-center text-xs font-semibold text-white/58">
         Already have an account?{' '}
-        <Link to="/auth/login" className="font-extrabold text-accent hover:underline">
+        <Link to="/auth/login" className={AUTH_LINK}>
           Sign in
         </Link>
       </p>

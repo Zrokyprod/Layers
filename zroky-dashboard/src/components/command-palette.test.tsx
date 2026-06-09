@@ -32,4 +32,26 @@ describe("CommandPalette", () => {
     fireEvent.click(screen.getByText("Account → Profile"));
     expect(routerState.push).toHaveBeenCalledWith("/account");
   });
+
+  it("hides labs, agent console, and drift from primary command discovery", async () => {
+    render(<CommandPalette />);
+
+    window.dispatchEvent(new CustomEvent("open-command-palette"));
+
+    const input = await screen.findByPlaceholderText("Search pages and actions…");
+    fireEvent.change(input, { target: { value: "agent" } });
+
+    expect(screen.queryByText("Labs → Agent Console")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Agent Console")).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "drift" } });
+
+    expect(screen.queryByText("Labs → Provider Drift")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Drift")).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "labs" } });
+
+    expect(screen.queryByText("Go to Labs")).not.toBeInTheDocument();
+    expect(routerState.push).not.toHaveBeenCalled();
+  });
 });

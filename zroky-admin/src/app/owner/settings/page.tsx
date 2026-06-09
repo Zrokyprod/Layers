@@ -20,7 +20,7 @@ export default function OwnerSettingsPage() {
 
   const token = getOwnerToken();
   const sessionLabel = tokenPresent && token
-    ? `Stored in this browser session (${token.length} chars)`
+    ? "Active HttpOnly owner session"
     : "No owner token stored";
 
   function signOut() {
@@ -47,7 +47,7 @@ export default function OwnerSettingsPage() {
         <div className="panel-header">Admin Session</div>
         <div className="owner-settings-list">
           <SettingRow label="Auth model" value="Provisioning token" />
-          <SettingRow label="Storage" value="sessionStorage only" />
+          <SettingRow label="Storage" value="HttpOnly cookie plus non-sensitive session marker" />
           <SettingRow label="Current token" value={sessionLabel} />
           <SettingRow label="Backend header" value={<code>x-zroky-admin-token</code>} />
         </div>
@@ -59,6 +59,7 @@ export default function OwnerSettingsPage() {
           <SettingRow label="Admin app mode" value={process.env.NODE_ENV} />
           <SettingRow label="API proxy" value={<code>/api/zroky/*</code>} />
           <SettingRow label="Production backend requirement" value="ZROKY_API_BASE_URL must be non-localhost in production" />
+          <SettingRow label="Proxy credential policy" value="Converts HttpOnly owner cookie to backend owner header" />
           <SettingRow label="Customer dashboard routes" value="Not present in admin build" />
         </div>
       </section>

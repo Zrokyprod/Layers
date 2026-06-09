@@ -114,6 +114,23 @@ class Settings(BaseSettings):
     # When unset, reads fall back to the primary DATABASE_URL.
     DATABASE_READ_REPLICA_URL: Optional[str] = None
 
+    # Discovery engine (Discover pillar). Default-off until offline and
+    # real-trace precision gates prove surfaced findings are quiet enough.
+    DISCOVERY_ENABLED: bool = False
+    DISCOVERY_CUSTOMER_SURFACE_ENABLED: bool = False
+    DISCOVERY_WARMUP_MIN_TRACES: int = 200
+    DISCOVERY_WARMUP_MIN_DAYS: int = 3
+    DISCOVERY_BASELINE_WINDOW_DAYS: int = 14
+    DISCOVERY_RECURRENCE_K: int = 3
+    DISCOVERY_CRITICAL_TOOL_PCT: float = 0.90
+    DISCOVERY_SURFACE_MIN_CONFIDENCE: float = 0.80
+    DISCOVERY_Z_WEAK: float = 3.0
+    DISCOVERY_SCAN_LIMIT: int = 1000
+    DISCOVERY_PROJECT_LIMIT: int = 100
+    DISCOVERY_REFRESH_CRON_HOUR: int = 1
+    DISCOVERY_REFRESH_CRON_MINUTE: int = 17
+    DISCOVERY_SCAN_INTERVAL_SECONDS: int = 300
+
     # â”€â”€ ClickHouse (W12) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # When unset, /cost and /issues fall back to Postgres with a banner warning.
     CLICKHOUSE_URL: Optional[str] = None
@@ -170,8 +187,8 @@ class Settings(BaseSettings):
     DB_STATEMENT_TIMEOUT_MS: int = 30_000
 
     # Responsible-disclosure contact (security.txt / /.well-known/security.txt)
-    SECURITY_CONTACT_EMAIL: str = "security@zroky.ai"
-    SECURITY_PGP_KEY_URL: str = "https://zroky.ai/pgp-key.txt"
+    SECURITY_CONTACT_EMAIL: str = "security@zroky.com"
+    SECURITY_PGP_KEY_URL: str = "https://zroky.com/pgp-key.txt"
 
     DEPLOY_TARGET: str = "railway"
     APP_DOMAIN: Optional[str] = None
@@ -209,26 +226,32 @@ class Settings(BaseSettings):
 
     # â”€â”€ Stripe billing (Module 5; plan Â§11.3 / migration 0054 + 0059) â”€â”€â”€â”€â”€
     # Master switch. When false the /v1/billing/{checkout,portal,webhook}
-    # endpoints all return 503 and `stripe_gateway` falls back to a stub
-    # implementation. Self-host (`ZROKY_TIER=self-host`) sets this false.
+    # endpoints all return 503. Self-host (`ZROKY_TIER=self-host`) sets this
+    # false.
     BILLING_ENABLED: bool = False
-    # Stripe live/test mode secret key (sk_live_... or sk_test_...).
-    # When unset OR BILLING_ENABLED=false, the gateway runs in stub mode.
+    BILLING_PROVIDER: str = "skydo"
+    RAZORPAY_KEY_ID: Optional[str] = None
+    RAZORPAY_KEY_SECRET: Optional[str] = None
+    ZROKY_EXCHANGE_RATE_USD_TO_INR: float = 83.00
+    SKYDO_PAYMENT_INSTRUCTIONS_URL: str = "https://dashboard.skydo.com/"
+    SKYDO_PAYMENT_LINK_TEMPLATE: Optional[str] = None
+    SKYDO_PORTAL_URL: str = "https://dashboard.skydo.com/"
+    SKYDO_WEBHOOK_SECRET: Optional[str] = None
+    SKYDO_WEBHOOK_TOLERANCE_SECONDS: int = 300
+    # Deprecated Stripe compatibility. Do not configure for hosted Skydo billing.
     STRIPE_API_KEY: Optional[str] = None
-    # Webhook signing secret (whsec_...). Required to verify inbound
-    # `customer.subscription.*` / `invoice.*` events; webhook returns
-    # 503 if BILLING_ENABLED=true and this is missing.
+    # Deprecated Stripe webhook compatibility.
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     # API base URL â€” overridable for testing against Stripe-Mock.
     STRIPE_API_BASE_URL: str = "https://api.stripe.com"
     # Tolerance window (seconds) for the webhook timestamp check;
-    # mirrors stripe-python's default of 5 minutes.
+    # Deprecated Stripe webhook timestamp tolerance.
     STRIPE_WEBHOOK_TOLERANCE_SECONDS: int = 300
     # Plan-code â†’ Stripe Price ID mapping. JSON-encoded inline. Keys must
     # match `services/billing_plans.PLAN_ENTITLEMENTS` (free/pro/plus/
-    # enterprise). 'free' has no Stripe price (no checkout).
+    # enterprise). 'free' has no legacy Stripe price (no checkout).
     STRIPE_PRICE_IDS_JSON: str = "{}"
-    # URLs returned to Stripe Checkout / Portal for redirect-back.
+    # Legacy redirect URLs retained for older clients.
     BILLING_CHECKOUT_SUCCESS_URL: str = (
         "http://localhost:3000/settings/billing?status=success"
     )
@@ -353,7 +376,7 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_USE_TLS: bool = True
-    ALERTS_FROM_EMAIL: str = "noreply@zroky.ai"
+    ALERTS_FROM_EMAIL: str = "noreply@zroky.com"
 
     # Slack Incoming Webhook for alert notifications
     SLACK_WEBHOOK_URL: Optional[str] = None
@@ -362,6 +385,7 @@ class Settings(BaseSettings):
     SLACK_OAUTH_REDIRECT_URL: str = "http://localhost:8000/v1/integrations/slack/callback"
     SLACK_OAUTH_SCOPES: str = "incoming-webhook,chat:write,commands,channels:read,groups:read"
     SLACK_TOKEN_ENCRYPTION_KEY: Optional[str] = None
+    SLACK_SIGNING_SECRET: Optional[str] = None
     MS_TEAMS_WEBHOOK_ENCRYPTION_KEY: Optional[str] = None
 
 
@@ -442,11 +466,38 @@ def _is_local_url(value: str | None) -> bool:
     return _hostname(value) in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 
 
+def _is_placeholder_secret(value: str | None) -> bool:
+    normalized = (value or "").strip().lower()
+    return any(
+        marker in normalized
+        for marker in (
+            "__set_in_secret_manager__",
+            "replace-with",
+            "change-me",
+            "changeme",
+            "dummy",
+            "fake",
+        )
+    )
+
+
 def validate_runtime_settings(settings: Settings) -> None:
     if not is_production_env(settings.APP_ENV):
         return
 
     failures: list[str] = []
+
+    def require_secret(name: str, message: str, *, min_length: int | None = None) -> str:
+        value = (getattr(settings, name, None) or "").strip()
+        if not value:
+            failures.append(message)
+            return ""
+        if _is_placeholder_secret(value):
+            failures.append(f"{name} must be set to a real production secret, not a placeholder")
+            return value
+        if min_length is not None and len(value) < min_length:
+            failures.append(f"{name} must be at least {min_length} characters in production")
+        return value
 
     if settings.DATABASE_URL.startswith("sqlite"):
         failures.append("DATABASE_URL must point to managed PostgreSQL in production")
@@ -477,8 +528,11 @@ def validate_runtime_settings(settings: Settings) -> None:
     if not settings.REQUIRE_PROVISIONING_TOKEN:
         failures.append("REQUIRE_PROVISIONING_TOKEN must be true in production")
 
-    if settings.REQUIRE_PROVISIONING_TOKEN and not settings.PROVISIONING_TOKEN:
-        failures.append("PROVISIONING_TOKEN must be configured when provisioning token is required")
+    if settings.REQUIRE_PROVISIONING_TOKEN:
+        require_secret(
+            "PROVISIONING_TOKEN",
+            "PROVISIONING_TOKEN must be configured when provisioning token is required",
+        )
 
     if not settings.ENABLE_READY_DB_CHECK:
         failures.append("ENABLE_READY_DB_CHECK must be true in production")
@@ -491,15 +545,100 @@ def validate_runtime_settings(settings: Settings) -> None:
 
     if not settings.REPLAY_REAL_LLM_ENABLED:
         failures.append("REPLAY_REAL_LLM_ENABLED must be true in production")
+    else:
+        require_secret(
+            "REPLAY_WORKER_TOKEN",
+            "REPLAY_WORKER_TOKEN must be configured when real replay is enabled in production",
+            min_length=16,
+        )
 
-    if settings.ENABLE_METRICS_ENDPOINT and not (settings.METRICS_TOKEN or "").strip():
-        failures.append("METRICS_TOKEN must be configured when metrics endpoint is enabled in production")
+    if settings.ENABLE_METRICS_ENDPOINT:
+        require_secret(
+            "METRICS_TOKEN",
+            "METRICS_TOKEN must be configured when metrics endpoint is enabled in production",
+        )
 
-    if settings.ENABLE_INTERNAL_DEBUG_ENDPOINT and not (settings.INTERNAL_DEBUG_TOKEN or "").strip():
-        failures.append("INTERNAL_DEBUG_TOKEN must be configured when internal debug endpoint is enabled")
+    if settings.ENABLE_INTERNAL_DEBUG_ENDPOINT:
+        require_secret(
+            "INTERNAL_DEBUG_TOKEN",
+            "INTERNAL_DEBUG_TOKEN must be configured when internal debug endpoint is enabled",
+        )
 
-    if not (settings.AUTH_JWT_SECRET or "").strip():
-        failures.append("AUTH_JWT_SECRET must be configured in production for dashboard session tokens")
+    require_secret("AUTH_JWT_SECRET", "AUTH_JWT_SECRET must be configured in production for dashboard session tokens")
+
+    require_secret("OAUTH_STATE_SECRET", "OAUTH_STATE_SECRET must be configured in production for OAuth CSRF protection")
+
+    require_secret(
+        "GITHUB_WEBHOOK_SECRET",
+        "GITHUB_WEBHOOK_SECRET must be configured in production for signed GitHub webhooks",
+    )
+
+    require_secret(
+        "PROVIDER_KEY_VAULT_KEK",
+        "PROVIDER_KEY_VAULT_KEK must be configured in production for provider key vault encryption",
+        min_length=32,
+    )
+
+    platform_llm_key = (settings.OPENROUTER_API_KEY or settings.OPENAI_API_KEY or "").strip()
+    if not platform_llm_key:
+        failures.append("OPENROUTER_API_KEY or OPENAI_API_KEY must be configured in production for AI diagnosis and judgment")
+    elif _is_placeholder_secret(platform_llm_key):
+        failures.append("OPENROUTER_API_KEY or OPENAI_API_KEY must be set to a real production secret, not a placeholder")
+    elif len(platform_llm_key) < 16:
+        failures.append("OPENROUTER_API_KEY or OPENAI_API_KEY must be at least 16 characters in production")
+
+    billing_provider = (settings.BILLING_PROVIDER or "").strip().lower()
+    if settings.BILLING_ENABLED:
+        if billing_provider == "skydo":
+            require_secret(
+                "SKYDO_WEBHOOK_SECRET",
+                "SKYDO_WEBHOOK_SECRET must be configured when Skydo billing is enabled in production",
+            )
+        if billing_provider == "stripe":
+            require_secret(
+                "STRIPE_API_KEY",
+                "STRIPE_API_KEY must be configured when Stripe billing is enabled in production",
+            )
+            require_secret(
+                "STRIPE_WEBHOOK_SECRET",
+                "STRIPE_WEBHOOK_SECRET must be configured when Stripe billing is enabled in production",
+            )
+        if billing_provider == "razorpay":
+            require_secret(
+                "RAZORPAY_KEY_ID",
+                "RAZORPAY_KEY_ID must be configured when Razorpay billing is enabled in production",
+            )
+            require_secret(
+                "RAZORPAY_KEY_SECRET",
+                "RAZORPAY_KEY_SECRET must be configured when Razorpay billing is enabled in production",
+            )
+
+    slack_configured = any(
+        (value or "").strip()
+        for value in (
+            settings.SLACK_CLIENT_ID,
+            settings.SLACK_CLIENT_SECRET,
+            settings.SLACK_TOKEN_ENCRYPTION_KEY,
+            settings.SLACK_SIGNING_SECRET,
+        )
+    )
+    if slack_configured:
+        require_secret(
+            "SLACK_CLIENT_ID",
+            "SLACK_CLIENT_ID must be configured with Slack integration in production",
+        )
+        require_secret(
+            "SLACK_CLIENT_SECRET",
+            "SLACK_CLIENT_SECRET must be configured with Slack integration in production",
+        )
+        require_secret(
+            "SLACK_TOKEN_ENCRYPTION_KEY",
+            "SLACK_TOKEN_ENCRYPTION_KEY must be configured with Slack integration in production",
+        )
+        require_secret(
+            "SLACK_SIGNING_SECRET",
+            "SLACK_SIGNING_SECRET must be configured with Slack integration in production",
+        )
 
     if is_jwt_configured(settings):
         if not settings.JWT_ISSUER:
@@ -512,8 +651,14 @@ def validate_runtime_settings(settings: Settings) -> None:
             )
 
     # PII encryption should be configured in production
-    if not (settings.PII_ENCRYPTION_KEY or settings.GITHUB_TOKEN_ENCRYPTION_KEY):
+    pii_encryption_key = (settings.PII_ENCRYPTION_KEY or "").strip()
+    github_token_encryption_key = (settings.GITHUB_TOKEN_ENCRYPTION_KEY or "").strip()
+    if not (pii_encryption_key or github_token_encryption_key):
         failures.append("PII_ENCRYPTION_KEY or GITHUB_TOKEN_ENCRYPTION_KEY must be configured in production for PII protection")
+    if pii_encryption_key and _is_placeholder_secret(pii_encryption_key):
+        failures.append("PII_ENCRYPTION_KEY must be set to a real production secret, not a placeholder")
+    if github_token_encryption_key and _is_placeholder_secret(github_token_encryption_key):
+        failures.append("GITHUB_TOKEN_ENCRYPTION_KEY must be set to a real production secret, not a placeholder")
 
     if failures:
         raise RuntimeError("Invalid production configuration: " + "; ".join(failures))

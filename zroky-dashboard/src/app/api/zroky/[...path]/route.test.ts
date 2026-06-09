@@ -34,6 +34,27 @@ describe("/api/zroky proxy route", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe("http://backend.test/v1/settings/project?mode=preview");
   });
 
+  it("passes OAuth redirects back to the browser", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const location =
+      "https://github.com/login/oauth/authorize?redirect_uri=https%3A%2F%2Fapp.zroky.com%2Fauth%2Fgithub%2Fcallback";
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: { location },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/auth/github/start");
+    const response = await GET(request, context(["v1", "auth", "github", "start"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.redirect).toBe("manual");
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(location);
+  });
+
   it("converts the session cookie into backend bearer auth", async () => {
     vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
     const fetchMock = vi.fn().mockResolvedValue(
@@ -53,6 +74,73 @@ describe("/api/zroky proxy route", () => {
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect((init.headers as Headers).get("authorization")).toBe("Bearer local-token");
+  });
+
+  it("does not forward caller-controlled authorization headers", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Missing bearer token." }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/auth/me", {
+      headers: {
+        authorization: "Bearer attacker-token",
+      },
+    });
+    await GET(request, context(["v1", "auth", "me"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("authorization")).toBeNull();
+  });
+
+  it("prefers the session cookie over caller-controlled authorization headers", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ email: "sanket@acme.com" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/auth/me", {
+      headers: {
+        authorization: "Bearer attacker-token",
+        cookie: "zroky_access_token=local-token",
+      },
+    });
+    await GET(request, context(["v1", "auth", "me"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("authorization")).toBe("Bearer local-token");
+  });
+
+  it("does not forward dashboard provisioning secrets to proxied backend requests", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    vi.stubEnv("ZROKY_PROVISIONING_TOKEN", "owner-provisioning-secret");
+    vi.stubEnv("ZROKY_PROVISIONING_TOKEN_HEADER", "x-owner-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/auth/me", {
+      headers: {
+        cookie: "zroky_access_token=local-token",
+      },
+    });
+    await GET(request, context(["v1", "auth", "me"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("x-owner-token")).toBeNull();
+    expect((init.headers as Headers).get("x-provisioning-token")).toBeNull();
   });
 
   it("returns clean JSON when the backend is unavailable", async () => {
@@ -99,5 +187,19 @@ describe("/api/zroky proxy route", () => {
 
     expect(response.status).toBe(401);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe("http://127.0.0.1:8000/v1/auth/me");
+  });
+
+  it("does not use public API URL variables for the server-side backend proxy", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/auth/me");
+    const response = await GET(request, context(["v1", "auth", "me"]));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: "ZROKY_API_BASE_URL is required in production." });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

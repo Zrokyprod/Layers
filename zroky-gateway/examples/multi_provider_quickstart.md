@@ -14,7 +14,7 @@ import OpenAI from "openai";
 const client = new OpenAI({
   baseURL: "http://localhost:8090/v1",
   defaultHeaders: {
-    "X-Zroky-Project-Id": "proj_xxxx",
+    "X-Zroky-Project-Id": process.env.ZROKY_PROJECT_ID!,
     "X-Zroky-Agent-Name": "refund-agent",
     "X-Zroky-Workflow-Name": "refund-review",
   },
