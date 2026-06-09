@@ -96,6 +96,9 @@ docfx_temp/
 .data/
 
 # Generated QA / Codex artifacts
+/artifacts/
+/dashboard-screenshot.png
+**/playwright-report/
 /zroky-dashboard/.codex-artifacts/
 /zroky-dashboard/artifacts/
 /zroky-landing/.codex-artifacts/

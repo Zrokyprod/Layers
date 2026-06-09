@@ -1,8 +1,0 @@
-{
-  "database_url": "sqlite:///.data/discovery_dogfood.db",
-  "project_id": "dogfood_discovery_project",
-  "rows_seeded": 454,
-  "normal_rows": 410,
-  "injected_failures": 44,
-  "dogfood_only": true
-}
