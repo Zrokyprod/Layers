@@ -19,6 +19,10 @@ def _inject_search_path(url: str) -> str:
     most reliable way to override it — it is handled by the driver's own
     connection-string parser before SQLAlchemy adds anything else.
     """
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+psycopg://", 1)
     if not url.startswith("postgresql"):
         return url
     if "search_path" in url:

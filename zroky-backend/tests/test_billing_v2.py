@@ -14,6 +14,8 @@ Coverage:
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import time
 from datetime import datetime, timedelta, timezone
@@ -87,6 +89,10 @@ def _billing_settings(monkeypatch: pytest.MonkeyPatch):
     """Default billing config for tests: enabled, with stub gateway, with
     a complete price map for the three self-serve plans."""
     monkeypatch.setenv("BILLING_ENABLED", "true")
+    monkeypatch.setenv("BILLING_PROVIDER", "razorpay")
+    monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_route")
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "razorpay-route-secret")
+    monkeypatch.setenv("ZROKY_EXCHANGE_RATE_USD_TO_INR", "80")
     monkeypatch.setenv("STRIPE_API_KEY", "")  # empty → stub gateway
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", _TEST_WEBHOOK_SECRET)
     monkeypatch.setenv(
@@ -176,6 +182,33 @@ def client(tmp_path: Path):
 def _set_tenant(client: TestClient, *, tenant_id: str, role: str = "admin") -> None:
     client._tenant_state["tenant_id"] = tenant_id  # type: ignore[attr-defined]
     client._tenant_state["role"] = role  # type: ignore[attr-defined]
+
+
+class _FakeRazorpayOrderClient:
+    def __init__(self) -> None:
+        self.last_payload: dict[str, object] | None = None
+
+    def create(self, *, data: dict[str, object]) -> dict[str, object]:
+        self.last_payload = data
+        return {
+            "id": "order_test_123",
+            "amount": data["amount"],
+            "currency": data["currency"],
+            "receipt": data["receipt"],
+        }
+
+
+class _FakeRazorpayClient:
+    def __init__(self) -> None:
+        self.order = _FakeRazorpayOrderClient()
+
+
+def _razorpay_signature(order_id: str, payment_id: str) -> str:
+    return hmac.new(
+        b"razorpay-route-secret",
+        f"{order_id}|{payment_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 # ── billing_plans ────────────────────────────────────────────────────────────
@@ -818,6 +851,117 @@ class TestCheckoutRoute:
             "/v1/billing/checkout", json={"plan_code": "pro"},
         )
         assert response.status_code == 403
+
+
+class TestRazorpayCheckoutRoute:
+    def test_create_order_computes_plan_amount_and_tracks_pending_request(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fake = _FakeRazorpayClient()
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+
+        response = client.post(
+            "/v1/billing/razorpay/order",
+            json={"plan_code": "pro", "customer_email": "billing@example.com"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["order_id"] == "order_test_123"
+        assert body["amount"] == 1_192_000
+        assert body["currency"] == "INR"
+        assert body["plan_code"] == "pro"
+        assert body["amount_usd"] == 149
+        assert fake.order.last_payload is not None
+        assert fake.order.last_payload["notes"] == {
+            "org_id": "org-alpha",
+            "plan_code": "pro",
+            "product": "zroky",
+            "customer_email": "billing@example.com",
+        }
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            sub = session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one()
+            assert sub.stripe_customer_id == "rzp:order_test_123:pro"
+            assert sub.stripe_sub_id is None
+            assert sub.plan_code == DEFAULT_PLAN_CODE
+
+    def test_verify_payment_activates_plan_after_valid_signature(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fake = _FakeRazorpayClient()
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+        create_response = client.post(
+            "/v1/billing/razorpay/order",
+            json={"plan_code": "pro"},
+        )
+        assert create_response.status_code == 200
+
+        payment_id = "pay_test_123"
+        response = client.post(
+            "/v1/billing/razorpay/verify",
+            json={
+                "razorpay_payment_id": payment_id,
+                "razorpay_order_id": "order_test_123",
+                "razorpay_signature": _razorpay_signature(
+                    "order_test_123",
+                    payment_id,
+                ),
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["plan_code"] == "pro"
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            sub = session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one()
+            assert sub.stripe_customer_id == "order_test_123"
+            assert sub.stripe_sub_id == payment_id
+            assert sub.plan_code == "pro"
+            assert sub.status == "active"
+
+    def test_verify_payment_rejects_bad_signature_without_marking_paid(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fake = _FakeRazorpayClient()
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+        create_response = client.post(
+            "/v1/billing/razorpay/order",
+            json={"plan_code": "pro"},
+        )
+        assert create_response.status_code == 200
+
+        response = client.post(
+            "/v1/billing/razorpay/verify",
+            json={
+                "razorpay_payment_id": "pay_bad",
+                "razorpay_order_id": "order_test_123",
+                "razorpay_signature": "bad-signature",
+            },
+        )
+
+        assert response.status_code == 400
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            sub = session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one()
+            assert sub.stripe_customer_id == "rzp:order_test_123:pro"
+            assert sub.stripe_sub_id is None
+            assert sub.plan_code == DEFAULT_PLAN_CODE
 
 
 class TestPortalRoute:

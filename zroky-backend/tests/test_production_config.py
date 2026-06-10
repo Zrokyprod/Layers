@@ -101,6 +101,7 @@ def test_production_config_accepts_hardened_jwt_profile() -> None:
         JWT_ISSUER="https://issuer.example.com/",
         JWT_AUDIENCE="zroky-api",
         ENFORCE_JWT_PROJECT_MEMBERSHIP=True,
+        PII_ENCRYPTION_KEY="x" * 32,
     )
 
     validate_runtime_settings(settings)
@@ -122,6 +123,41 @@ def test_production_config_accepts_internal_debug_with_token() -> None:
     settings = _hardened_production_settings(
         ENABLE_INTERNAL_DEBUG_ENDPOINT=True,
         INTERNAL_DEBUG_TOKEN="internal-debug-secret",
+        PII_ENCRYPTION_KEY="x" * 32,
+    )
+
+    validate_runtime_settings(settings)
+
+
+def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> None:
+    settings = Settings(
+        APP_ENV="production",
+        ALLOW_PROJECT_HEADER_CONTEXT=False,
+        REQUIRE_PROVISIONING_TOKEN=True,
+        PROVISIONING_TOKEN="super-secret",
+        ENABLE_READY_DB_CHECK=True,
+        ENABLE_READY_REDIS_CHECK=True,
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="razorpay",
+        RAZORPAY_KEY_ID=None,
+        RAZORPAY_KEY_SECRET=None,
+        PII_ENCRYPTION_KEY="x" * 32,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "RAZORPAY_KEY_ID" in error_text
+    assert "RAZORPAY_KEY_SECRET" in error_text
+
+
+def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="razorpay",
+        RAZORPAY_KEY_ID="rzp_live_real_key",
+        RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
     )
 
     validate_runtime_settings(settings)

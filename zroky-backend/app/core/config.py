@@ -211,6 +211,10 @@ class Settings(BaseSettings):
     # endpoints all return 503 and `stripe_gateway` falls back to a stub
     # implementation. Self-host (`ZROKY_TIER=self-host`) sets this false.
     BILLING_ENABLED: bool = False
+    BILLING_PROVIDER: str = "stripe"
+    RAZORPAY_KEY_ID: Optional[str] = None
+    RAZORPAY_KEY_SECRET: Optional[str] = None
+    ZROKY_EXCHANGE_RATE_USD_TO_INR: float = 83.00
     # Stripe live/test mode secret key (sk_live_... or sk_test_...).
     # When unset OR BILLING_ENABLED=false, the gateway runs in stub mode.
     STRIPE_API_KEY: Optional[str] = None
@@ -499,6 +503,12 @@ def validate_runtime_settings(settings: Settings) -> None:
 
     if not (settings.AUTH_JWT_SECRET or "").strip():
         failures.append("AUTH_JWT_SECRET must be configured in production for dashboard session tokens")
+
+    if settings.BILLING_ENABLED and (settings.BILLING_PROVIDER or "").strip().lower() == "razorpay":
+        if not (settings.RAZORPAY_KEY_ID or "").strip():
+            failures.append("RAZORPAY_KEY_ID must be configured when Razorpay billing is enabled in production")
+        if not (settings.RAZORPAY_KEY_SECRET or "").strip():
+            failures.append("RAZORPAY_KEY_SECRET must be configured when Razorpay billing is enabled in production")
 
     if is_jwt_configured(settings):
         if not settings.JWT_ISSUER:
