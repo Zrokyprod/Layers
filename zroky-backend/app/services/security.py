@@ -26,7 +26,7 @@ def hash_api_key(api_key: str) -> str:
 
 
 def generate_api_key_material() -> tuple[str, str, str]:
-    api_key = f"zroky_api_live_{secrets.token_urlsafe(32)}"
+    api_key = f"zk_live_{secrets.token_urlsafe(32)}"
     key_prefix = api_key[:18]
     return api_key, key_prefix, hash_api_key(api_key)
 

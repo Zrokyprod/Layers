@@ -96,6 +96,7 @@ docfx_temp/
 .data/
 
 # Generated QA / Codex artifacts
+.worktrees/
 /artifacts/
 /dashboard-screenshot.png
 **/playwright-report/

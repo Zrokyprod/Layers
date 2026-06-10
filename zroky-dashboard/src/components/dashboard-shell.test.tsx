@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +17,26 @@ const navState = vi.hoisted(() => ({
   budgetDataAvailable: true,
   projectData: { project_id: "proj_1", name: "Acme Corp" } as { project_id: string; name: string } | undefined,
   projectLoading: false,
+  myProjects: [
+    {
+      membership_id: "mem_1",
+      project_id: "proj_1",
+      project_name: "Acme Corp",
+      role: "owner",
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    },
+  ] as Array<{
+    membership_id: string;
+    project_id: string;
+    project_name: string;
+    role: string;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+  }>,
+  myProjectsLoading: false,
   meData: { email: "sanket@acme.com", display_name: "Sanket K." } as
     | { email: string | null; display_name: string | null }
     | undefined,
@@ -38,6 +58,7 @@ const queryClientState = vi.hoisted(() => ({
 }));
 
 const storeState = vi.hoisted(() => ({
+  selectedProject: "proj_1" as string | null,
   toggleSidebar: vi.fn(),
   setLastVisitedPage: vi.fn(),
   setSelectedProject: vi.fn(),
@@ -140,6 +161,10 @@ vi.mock("@/lib/hooks", () => ({
     data: navState.projectData,
     isLoading: navState.projectLoading,
   }),
+  useMyProjects: () => ({
+    data: navState.myProjects,
+    isLoading: navState.myProjectsLoading,
+  }),
 }));
 
 vi.mock("@/lib/store", () => ({
@@ -147,7 +172,7 @@ vi.mock("@/lib/store", () => ({
     sidebarOpen: true,
     toggleSidebar: storeState.toggleSidebar,
     setLastVisitedPage: storeState.setLastVisitedPage,
-    selectedProject: "proj_1",
+    selectedProject: storeState.selectedProject,
     setSelectedProject: storeState.setSelectedProject,
     dateRange: { from: null, to: null },
     setDateRange: storeState.setDateRange,
@@ -195,8 +220,21 @@ describe("DashboardShell primary navigation", () => {
     navState.budgetDataAvailable = true;
     navState.projectData = { project_id: "proj_1", name: "Acme Corp" };
     navState.projectLoading = false;
+    navState.myProjects = [
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1",
+        project_name: "Acme Corp",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ];
+    navState.myProjectsLoading = false;
     navState.meData = { email: "sanket@acme.com", display_name: "Sanket K." };
     navState.meLoading = false;
+    storeState.selectedProject = "proj_1";
     routerState.push.mockClear();
     routerState.refresh.mockClear();
     routerState.replace.mockClear();
@@ -213,14 +251,15 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     expect(primaryNavLabels()).toEqual([
-      "Failure Inbox",
-      "Issues",
+      "Command Center",
+      "Agents",
+      "Failures",
       "Replay Lab",
       "Goldens",
       "CI Gates",
       "Cost",
-      "Calls",
-      "Traces",
+      "Flight Recorder",
+      "Trace Graphs",
       "Alerts",
       "Settings",
     ]);
@@ -246,13 +285,13 @@ describe("DashboardShell primary navigation", () => {
     expect(within(ciGates as HTMLElement).queryByText("soon")).toBeNull();
   });
 
-  it("renders Calls, Traces, and Alerts as first-class evidence routes after Cost", () => {
+  it("renders Flight Recorder, Trace Graphs, and Alerts as first-class evidence routes after Cost", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const labels = primaryNavLabels();
-    expect(labels.indexOf("Calls")).toBe(labels.indexOf("Cost") + 1);
-    expect(labels.indexOf("Traces")).toBe(labels.indexOf("Calls") + 1);
-    expect(labels.indexOf("Alerts")).toBe(labels.indexOf("Traces") + 1);
+    expect(labels.indexOf("Flight Recorder")).toBe(labels.indexOf("Cost") + 1);
+    expect(labels.indexOf("Trace Graphs")).toBe(labels.indexOf("Flight Recorder") + 1);
+    expect(labels.indexOf("Alerts")).toBe(labels.indexOf("Trace Graphs") + 1);
 
     const calls = navItem("calls");
     expect(calls.getAttribute("aria-disabled")).toBeNull();
@@ -269,6 +308,8 @@ describe("DashboardShell primary navigation", () => {
 
   it("does not show fake workspace or account data while identity APIs are unavailable", () => {
     navState.projectData = undefined;
+    navState.myProjects = [];
+    storeState.selectedProject = null;
     navState.meData = undefined;
 
     render(<DashboardShell>content</DashboardShell>);
@@ -278,6 +319,109 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
     expect(screen.queryByText("sanket@acme.com")).not.toBeInTheDocument();
     expect(screen.queryByText("Sanket K.")).not.toBeInTheDocument();
+  });
+
+  it("renders project memberships and switches the selected project", () => {
+    navState.myProjects = [
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1",
+        project_name: "Acme Corp",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        membership_id: "mem_2",
+        project_id: "proj_2",
+        project_name: "Beta Lab",
+        role: "admin",
+        is_active: true,
+        created_at: "2026-01-02T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ];
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Beta Lab/ }));
+
+    expect(storeState.setSelectedProject).toHaveBeenCalledWith("proj_2");
+    expect(queryClientState.invalidateQueries).toHaveBeenCalledWith({
+      predicate: expect.any(Function),
+    });
+  });
+
+  it("shows a project selection state for multi-project users without a selected project", () => {
+    storeState.selectedProject = null;
+    navState.projectData = undefined;
+    navState.myProjects = [
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1",
+        project_name: "Acme Corp",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        membership_id: "mem_2",
+        project_id: "proj_2",
+        project_name: "Beta Lab",
+        role: "admin",
+        is_active: true,
+        created_at: "2026-01-02T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ];
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Select project")).toBeInTheDocument();
+    expect(storeState.setSelectedProject).not.toHaveBeenCalled();
+  });
+
+  it("auto-selects the only active project", async () => {
+    storeState.selectedProject = null;
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    await waitFor(() => {
+      expect(storeState.setSelectedProject).toHaveBeenCalledWith("proj_1");
+    });
+  });
+
+  it("does not overwrite an explicit selected project from project settings", () => {
+    storeState.selectedProject = "proj_2";
+    navState.projectData = { project_id: "proj_1", name: "Acme Corp" };
+    navState.myProjects = [
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1",
+        project_name: "Acme Corp",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        membership_id: "mem_2",
+        project_id: "proj_2",
+        project_name: "Beta Lab",
+        role: "admin",
+        is_active: true,
+        created_at: "2026-01-02T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+    ];
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Beta Lab")).toBeInTheDocument();
+    expect(storeState.setSelectedProject).not.toHaveBeenCalled();
   });
 
   it("disables gated nav entries when the plan template lacks entitlement", () => {
@@ -354,8 +498,8 @@ describe("DashboardShell primary navigation", () => {
 
     expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /Cost/ }).getAttribute("href")).toBe("/cost");
-    expect(screen.getByRole("menuitem", { name: /Calls/ }).getAttribute("href")).toBe("/calls");
-    expect(screen.getByRole("menuitem", { name: /Traces/ }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("menuitem", { name: /Flight Recorder/ }).getAttribute("href")).toBe("/calls");
+    expect(screen.getByRole("menuitem", { name: /Trace Graphs/ }).getAttribute("href")).toBe("/trace");
     expect(screen.getByRole("menuitem", { name: /Alerts/ }).getAttribute("href")).toBe("/alerts");
   });
 

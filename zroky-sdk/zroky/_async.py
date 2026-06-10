@@ -27,6 +27,7 @@ from zroky._internal.retry import RetryOutcome, RetryPolicy, retry_async
 from zroky._internal.timeout_manager import _timed_async_iter
 from zroky._internal.cache import CacheEntry
 from zroky._internal.metrics import notify_event as _notify_event
+from zroky._call import _version_metadata
 from zroky._telemetry import (
     _apply_loop_telemetry_from_output,
     _apply_tool_lifecycle_telemetry,
@@ -79,6 +80,11 @@ async def ainit(  # noqa: PLR0913
     workflow_name: str | None = None,
     prompt_version: str | None = None,
     environment: str | None = None,
+    code_sha: str | None = None,
+    deployment_id: str | None = None,
+    model_version: str | None = None,
+    tool_schema_version: str | None = None,
+    rag_version: str | None = None,
     validate_preflight: bool | None = None,
     validate_preflight_sample_rate: float | None = None,
     preflight_blocking_warning_types: list[str] | tuple[str, ...] | None = None,
@@ -124,7 +130,10 @@ async def ainit(  # noqa: PLR0913
             ingest_url=ingest_url, agent_framework=agent_framework,
             session_id=session_id, workflow_id=workflow_id,
             workflow_name=workflow_name, prompt_version=prompt_version,
-            environment=environment, validate_preflight=validate_preflight,
+            environment=environment, code_sha=code_sha,
+            deployment_id=deployment_id, model_version=model_version,
+            tool_schema_version=tool_schema_version, rag_version=rag_version,
+            validate_preflight=validate_preflight,
             validate_preflight_sample_rate=validate_preflight_sample_rate,
             preflight_blocking_warning_types=preflight_blocking_warning_types,
             retry_max_retries=retry_max_retries,
@@ -267,6 +276,11 @@ async def acall(  # noqa: PLR0913
         token_rules_version=token_rules_version,
         call_type=call_type,
         trace_id=trace_id, parent_call_id=parent_call_id,
+        span_type="tool_call" if call_type == CallType.TOOL_CALL else "llm_call",
+        span_name=f"{provider}/{model}",
+        span_index=step_index,
+        input={"messages": telemetry_messages} if telemetry_messages else None,
+        versions=_version_metadata(cfg, model=model),
         agent_name=_get_agent() or cfg.default_agent,
         agent_framework=agent_framework or cfg.agent_framework,
         prompt_fingerprint=prompt_fingerprint, user_id=user_id,

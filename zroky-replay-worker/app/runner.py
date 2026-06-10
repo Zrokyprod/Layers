@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 _STDOUT_TAIL_CHARS = 2000
 
 
-def run_job(job: ReplayJob, *, signing_key: str) -> ReplayResult:
+def run_job(job: ReplayJob, *, signing_key: str, signature_required: bool = True) -> ReplayResult:
     """Execute a replay job and return its result.
 
     Steps:
@@ -50,6 +50,7 @@ def run_job(job: ReplayJob, *, signing_key: str) -> ReplayResult:
             url=job.artifact_url,
             signature=job.artifact_signature,
             signing_key=signing_key,
+            signature_required=signature_required,
         ):
             return _error_result(job, started_at, "Artifact signature verification failed")
 

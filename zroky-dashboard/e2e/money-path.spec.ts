@@ -13,7 +13,7 @@ test.describe("dashboard money path", () => {
 
     await page.goto("/settings/keys");
     await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["API Keys", "Create project key", seed.api_key_prefix ?? "zroky_api_live_demo"]);
+    await expectVisibleTexts(page, ["API Keys", "Create project key", seed.api_key_prefix ?? "zk_live_demo"]);
 
     const keyName = `Money path capture ${Date.now()}`;
     await page.getByLabel("Key name").fill(keyName);
@@ -51,7 +51,7 @@ test.describe("dashboard money path", () => {
 
     await page.goto("/calls");
     await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["Calls", seed.call_id.slice(0, 12), "refund-support-agent", "TOOL_NOT_CALLED"]);
+    await expectVisibleTexts(page, ["Flight Recorder", seed.call_id.slice(0, 12), "refund-support-agent", "TOOL_NOT_CALLED"]);
 
     await page.goto(`/calls/${seed.call_id}`);
     await expectDashboardShell(page);
@@ -59,7 +59,7 @@ test.describe("dashboard money path", () => {
 
     await page.goto("/issues");
     await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["Issues", "selecting the wrong tool", "Tool Not Called"]);
+    await expectVisibleTexts(page, ["Failures", "selecting the wrong tool", "Tool Not Called"]);
 
     await page.goto(`/issues/${seed.issue_id}`);
     await expectDashboardShell(page);

@@ -53,7 +53,7 @@ def test_seed_money_path_demo_creates_deterministic_product_loop(tmp_path: Path)
             assert summary["replay_run_id"] == "demo-replay-refund-fixed"
             assert summary["ci_run_id"] == "demo-ci-refund-tool-regression"
             assert summary["trace_id"] == "trace-demo-refund-missed-tool"
-            assert summary["api_key_prefix"] == "zroky_api_live_demo"
+            assert summary["api_key_prefix"] == "zk_live_demo"
 
             seeded_key = session.execute(
                 select(ApiKey).where(ApiKey.id == summary["api_key_id"])

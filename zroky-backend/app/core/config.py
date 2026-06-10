@@ -144,6 +144,7 @@ class Settings(BaseSettings):
     # Shared secret between the control plane and the customer-hosted replay worker.
     # When unset, /v1/replay/poll and /v1/replay/result always return 401.
     REPLAY_WORKER_TOKEN: Optional[str] = None
+    REPLAY_JOB_LEASE_SECONDS: int = 600
 
     # â”€â”€ Replay execution mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # When False (default), the replay executor's default resolver re-grades

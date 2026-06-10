@@ -1032,6 +1032,16 @@ class MeResponse(BaseModel):
     created_at: str
 
 
+class CurrentUserProjectResponse(BaseModel):
+    membership_id: str
+    project_id: str
+    project_name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
@@ -1128,6 +1138,37 @@ def get_current_user_profile(
 ) -> MeResponse:
     user = _get_current_user(authorization=authorization, db=db)
     return _me_response(user)
+
+
+@router.get("/me/projects", response_model=list[CurrentUserProjectResponse])
+def list_current_user_projects(
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> list[CurrentUserProjectResponse]:
+    user = _get_current_user(authorization=authorization, db=db)
+    rows = db.execute(
+        select(ProjectMembership, Project)
+        .join(Project, Project.id == ProjectMembership.project_id)
+        .where(
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.is_active.is_(True),
+            Project.is_active.is_(True),
+        )
+        .order_by(Project.name.asc(), ProjectMembership.created_at.asc(), ProjectMembership.id.asc())
+    ).all()
+
+    return [
+        CurrentUserProjectResponse(
+            membership_id=membership.id,
+            project_id=membership.project_id,
+            project_name=project.name,
+            role=membership.role,
+            is_active=membership.is_active,
+            created_at=membership.created_at,
+            updated_at=membership.updated_at,
+        )
+        for membership, project in rows
+    ]
 
 
 @router.patch("/me", response_model=MeResponse)

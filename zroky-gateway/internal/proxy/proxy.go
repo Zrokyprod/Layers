@@ -36,6 +36,13 @@ type captureHeaders struct {
 	TraceID        string
 	ParentCallID   string
 	StepIndex      *int
+	CodeSHA        string
+	DeploymentID   string
+	ModelVersion   string
+	ToolSchemaVer  string
+	RAGVersion     string
+	SpanType       string
+	SpanName       string
 }
 
 // Provider describes an upstream LLM endpoint.
@@ -53,6 +60,11 @@ type Options struct {
 	UpstreamAPIKey       string
 	DefaultWorkflowName  string
 	DefaultPromptVersion string
+	CaptureSpool         CaptureSpooler
+}
+
+type CaptureSpooler interface {
+	Enqueue(ev *emit.IngestEventV2) error
 }
 
 var (
@@ -190,6 +202,14 @@ func HandlerWithOptions(
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			if emitErr := emitter.Emit(ctx, ev); emitErr != nil {
+				if opts.CaptureSpool != nil {
+					if spoolErr := opts.CaptureSpool.Enqueue(ev); spoolErr != nil {
+						logger.Error().Err(emitErr).Err(spoolErr).Msg("emit failed and spool enqueue failed")
+						return
+					}
+					logger.Warn().Err(emitErr).Msg("emit failed; event spooled")
+					return
+				}
 				logger.Warn().Err(emitErr).Msg("emit failed")
 			}
 		}()
@@ -339,6 +359,13 @@ func readCaptureHeaders(headers http.Header) captureHeaders {
 		TraceID:        headers.Get("X-Zroky-Trace-Id"),
 		ParentCallID:   headers.Get("X-Zroky-Parent-Call-Id"),
 		StepIndex:      stepIndex,
+		CodeSHA:        headers.Get("X-Zroky-Code-Sha"),
+		DeploymentID:   headers.Get("X-Zroky-Deployment-Id"),
+		ModelVersion:   headers.Get("X-Zroky-Model-Version"),
+		ToolSchemaVer:  headers.Get("X-Zroky-Tool-Schema-Version"),
+		RAGVersion:     headers.Get("X-Zroky-Rag-Version"),
+		SpanType:       headers.Get("X-Zroky-Span-Type"),
+		SpanName:       headers.Get("X-Zroky-Span-Name"),
 	}
 }
 
@@ -363,6 +390,20 @@ func buildEvent(
 
 	usage := extractUsage(respMap)
 	toolCalls := responseToolCalls(respMap)
+	output := outputContent(respMap)
+	versions := versionMap(capture, model)
+	spanType := strings.TrimSpace(capture.SpanType)
+	if spanType == "" {
+		spanType = "llm_call"
+	}
+	spanName := strings.TrimSpace(capture.SpanName)
+	if spanName == "" {
+		spanName = provider.Name + "/" + model
+	}
+	input := map[string]interface{}{"request": reqMap}
+	if messages, ok := reqMap["messages"]; ok {
+		input["messages"] = messages
+	}
 
 	return &emit.IngestEventV2{
 		SchemaVersion:    "v2",
@@ -388,12 +429,23 @@ func buildEvent(
 		AgentFramework:   capture.AgentFramework,
 		TraceID:          capture.TraceID,
 		ParentCallID:     capture.ParentCallID,
+		SpanType:         spanType,
+		SpanName:         spanName,
+		SpanIndex:        capture.StepIndex,
+		Input:            input,
+		SystemPrompt:     messageContent(reqMap, "system"),
+		UserInput:        messageContent(reqMap, "user"),
+		FinalAnswer:      output,
+		Versions:         versions,
+		CaptureSource:    "gateway_http_direct",
+		MaskingVersion:   "gateway-redact-v1",
+		PiiMasked:        true,
 		RequestBody:      reqMap,
 		ResponseBody:     respMap,
 		ToolDefinitions:  listOfMaps(reqMap["tools"]),
 		ToolCalls:        toolCalls,
 		ToolCallsMade:    toolCalls,
-		OutputContent:    outputContent(respMap),
+		OutputContent:    output,
 		FinishReason:     finishReason(respMap),
 		StopReason:       stopReason(respMap),
 		Metadata: map[string]interface{}{
@@ -440,6 +492,59 @@ func outputContent(resp map[string]interface{}) string {
 	}
 	content, _ := message["content"].(string)
 	return content
+}
+
+func messageContent(req map[string]interface{}, role string) string {
+	messages, ok := req["messages"].([]interface{})
+	if !ok {
+		return ""
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		message, ok := messages[i].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if messageRole, _ := message["role"].(string); messageRole != role {
+			continue
+		}
+		if content, _ := message["content"].(string); content != "" {
+			if len(content) > 12000 {
+				return content[:12000]
+			}
+			return content
+		}
+	}
+	return ""
+}
+
+func versionMap(capture captureHeaders, model string) map[string]interface{} {
+	values := map[string]interface{}{
+		"code_sha":            strings.TrimSpace(capture.CodeSHA),
+		"deployment_id":       strings.TrimSpace(capture.DeploymentID),
+		"model_version":       firstNonEmpty(strings.TrimSpace(capture.ModelVersion), model),
+		"tool_schema_version": strings.TrimSpace(capture.ToolSchemaVer),
+		"rag_version":         strings.TrimSpace(capture.RAGVersion),
+		"prompt_version":      strings.TrimSpace(capture.PromptVersion),
+	}
+	out := map[string]interface{}{}
+	for key, value := range values {
+		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+			out[key] = text
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func responseToolCalls(resp map[string]interface{}) []map[string]interface{} {

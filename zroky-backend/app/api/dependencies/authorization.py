@@ -4,9 +4,10 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.provisioning import has_strict_provisioning_access
-from app.auth.identity import build_identity_context, decode_jwt_claims, extract_bearer_token
+from app.auth.identity import extract_bearer_token
+from app.core.config import get_settings
 from app.db.session import get_db_session
-from app.services.membership import VALID_PROJECT_ROLES, get_membership
+from app.services.membership import VALID_PROJECT_ROLES
 
 ROLE_RANK: dict[str, int] = {
     "viewer": 10,
@@ -22,33 +23,53 @@ def require_project_role(min_role: str) -> Callable:
         raise ValueError(f"Unsupported role guard: {min_role}")
 
     def _dependency(
-        project_id: str,
         request: Request,
+        project_id: str | None = None,
         db: Session = Depends(get_db_session),
-    ) -> None:
+    ) -> str:
         if has_strict_provisioning_access(request):
-            return
+            return project_id or ""
 
-        token = extract_bearer_token(request)
-        if not token:
+        settings = get_settings()
+        has_api_key = bool((request.headers.get(settings.API_KEY_HEADER_NAME) or "").strip())
+        has_bearer = bool(extract_bearer_token(request))
+        if not has_api_key and not has_bearer:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing bearer token for project role authorization.",
+                detail="Missing bearer token or API key for project role authorization.",
             )
 
-        claims = decode_jwt_claims(token)
-        identity = build_identity_context(claims)
-        membership = get_membership(db, project_id=project_id, subject=identity.subject)
-        if membership is None:
+        from app.api.dependencies.tenant import (
+            resolve_tenant_context_for_request,
+            selected_project_id_from_request,
+        )
+
+        path_project_id = project_id.strip() if isinstance(project_id, str) and project_id.strip() else None
+        selected_project_id = selected_project_id_from_request(request)
+        if selected_project_id and path_project_id and selected_project_id != path_project_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Identity is not a member of the requested project.",
+                detail="Selected project does not match requested project.",
             )
 
-        if ROLE_RANK[membership.role] < ROLE_RANK[normalized_min_role]:
+        context = resolve_tenant_context_for_request(
+            request,
+            db,
+            selected_project_id=selected_project_id or path_project_id,
+            allow_header_context=False,
+        )
+        if path_project_id and context.tenant_id != path_project_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Project role '{membership.role}' does not allow this action.",
+                detail="Selected project does not match requested project.",
             )
+
+        if ROLE_RANK[context.role] < ROLE_RANK[normalized_min_role]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Project role '{context.role}' does not allow this action.",
+            )
+
+        return context.tenant_id
 
     return _dependency

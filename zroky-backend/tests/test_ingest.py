@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -119,6 +120,10 @@ def _sdk_0_1_event(call_id: str) -> dict:
         "error_message": None,
         "created_at": "2026-04-25T09:30:00+00:00",
     }
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def test_ingest_accepts_sdk_payload_on_api_v1_path(client: TestClient) -> None:
@@ -452,6 +457,169 @@ def test_ingest_idempotency_event_id_prevents_duplicate_cost_and_call(
     calls_payload = calls.json()
     assert calls_payload["total"] == 1
     assert calls_payload["items"][0]["call_id"] == "ingest-idempotent-call-1"
+
+
+def test_rich_ingest_event_creates_masked_trace_graph(client: TestClient) -> None:
+    headers = {"X-Project-Id": "proj-flight-recorder-rich"}
+    root = _event("trace-rich-root")
+    root.update(
+        {
+            "event_id": "trace-rich-root:event",
+            "created_at": _now_iso(),
+            "trace_id": "trace-rich-1",
+            "span_type": "agent_run",
+            "span_name": "Refund supervisor",
+            "span_index": 0,
+            "input": {
+                "system_prompt": "Only refund after checking policy v42.",
+                "user_input": "Refund customer alice@example.com for order 123.",
+            },
+            "system_prompt": "Only refund after checking policy v42.",
+            "user_input": "Refund customer alice@example.com for order 123.",
+            "final_answer": "Refund approved for alice@example.com.",
+            "versions": {
+                "code_sha": "abc123",
+                "deployment_id": "deploy-42",
+                "model_version": "gpt-4o-2026-06",
+                "tool_schema_version": "refund-tools-v3",
+                "rag_version": "policy-index-v9",
+            },
+            "prompt_version": "refund-supervisor-v42",
+            "capture_source": "python_sdk",
+            "masking_version": "python-sdk-pii-v1",
+            "pii_masked": True,
+            "outcome": {
+                "type": "refund_resolved",
+                "success": True,
+                "amount_usd": 25,
+                "idempotency_key": "trace-rich-root:refund_resolved",
+            },
+        }
+    )
+    tool = _event("trace-rich-tool")
+    tool.update(
+        {
+            "event_id": "trace-rich-tool:event",
+            "created_at": _now_iso(),
+            "trace_id": "trace-rich-1",
+            "parent_call_id": "trace-rich-root",
+            "call_type": "tool_call",
+            "span_type": "tool_call",
+            "span_name": "refund_tool",
+            "span_index": 1,
+            "tool": {
+                "name": "refund_tool",
+                "arguments": {
+                    "email": "alice@example.com",
+                    "api_key": "sk-proj-abcdefghijklmnopqrstuvwxyz1234567890",
+                },
+                "result": {"approved": True, "refund_id": "rf_123"},
+            },
+            "policy": {"name": "refund_policy", "decision": "allow", "rule_version": "v42"},
+            "versions": {
+                "code_sha": "abc123",
+                "tool_schema_version": "refund-tools-v3",
+            },
+            "capture_source": "python_sdk",
+            "masking_version": "python-sdk-pii-v1",
+            "pii_masked": True,
+        }
+    )
+
+    response = client.post("/api/v1/ingest", headers=headers, json={"events": [root, tool]})
+    assert response.status_code == 202
+    assert response.json()["accepted"] == 2
+
+    recent = client.get("/v1/traces/recent", headers=headers)
+    assert recent.status_code == 200
+    recent_payload = recent.json()
+    assert recent_payload["total"] == 1
+    assert recent_payload["items"][0]["trace_id"] == "trace-rich-1"
+    assert recent_payload["items"][0]["call_count"] == 2
+
+    detail = client.get("/v1/traces/trace-rich-1", headers=headers)
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["summary"]["span_count"] == 2
+    assert payload["summary"]["root_call_id"] == "trace-rich-root"
+    assert payload["root_span"]["span_type"] == "agent_run"
+    assert payload["root_span"]["children"][0]["span_type"] == "tool_call"
+    assert payload["business_outcome"]["type"] == "refund_resolved"
+    assert payload["versions"]["code_sha"] == "abc123"
+    assert payload["versions"]["tool_schema_version"] == "refund-tools-v3"
+    rendered = str(payload)
+    assert "alice@example.com" not in rendered
+    assert "sk-proj-" not in rendered
+    assert "[REDACTED_EMAIL]" in rendered
+    assert "[REDACTED_KEY]" in rendered
+
+
+def test_missing_trace_id_becomes_one_node_trace(client: TestClient) -> None:
+    headers = {"X-Project-Id": "proj-flight-recorder-fallback"}
+    event = _event("trace-fallback-call")
+    event.pop("trace_id", None)
+    event.update(
+        {
+            "event_id": "trace-fallback-call:event",
+            "created_at": _now_iso(),
+            "user_input": "hello",
+            "final_answer": "done",
+            "versions": {"code_sha": "fallback-sha"},
+        }
+    )
+
+    response = client.post("/api/v1/ingest", headers=headers, json={"events": [event]})
+    assert response.status_code == 202
+
+    detail = client.get("/v1/traces/trace-fallback-call", headers=headers)
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["summary"]["trace_id"] == "trace-fallback-call"
+    assert payload["summary"]["span_count"] == 1
+    assert payload["root_span"]["call_id"] == "trace-fallback-call"
+
+
+def test_duplicate_event_id_does_not_duplicate_trace_span_or_cost(client: TestClient) -> None:
+    headers = {"X-Project-Id": "proj-flight-recorder-idem"}
+    first = _event("trace-idem-call-1")
+    first.update(
+        {
+            "event_id": "trace-idem:event",
+            "created_at": _now_iso(),
+            "trace_id": "trace-idem-1",
+            "actual_cost_usd": 0.25,
+            "versions": {"code_sha": "idem-sha"},
+        }
+    )
+    second = _event("trace-idem-call-2")
+    second.update({"event_id": "trace-idem:event", "created_at": _now_iso(), "trace_id": "trace-idem-1", "actual_cost_usd": 10.0})
+
+    assert client.post("/api/v1/ingest", headers=headers, json={"events": [first]}).status_code == 202
+    duplicate = client.post("/api/v1/ingest", headers=headers, json={"events": [second]})
+    assert duplicate.status_code == 202
+    assert duplicate.json()["duplicates"] == 1
+
+    detail = client.get("/v1/traces/trace-idem-1", headers=headers)
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["summary"]["span_count"] == 1
+    assert payload["summary"]["total_cost_usd"] < 1
+
+
+def test_trace_graph_is_project_scoped(client: TestClient) -> None:
+    first_headers = {"X-Project-Id": "proj-flight-recorder-a"}
+    second_headers = {"X-Project-Id": "proj-flight-recorder-b"}
+    event = _event("trace-scope-call")
+    event.update({"event_id": "trace-scope:event", "created_at": _now_iso(), "trace_id": "trace-scope-1", "user_input": "project-a"})
+
+    assert client.post("/api/v1/ingest", headers=first_headers, json={"events": [event]}).status_code == 202
+
+    allowed = client.get("/v1/traces/trace-scope-1", headers=first_headers)
+    assert allowed.status_code == 200
+    assert allowed.json()["summary"]["trace_id"] == "trace-scope-1"
+
+    denied = client.get("/v1/traces/trace-scope-1", headers=second_headers)
+    assert denied.status_code == 404
 
 
 def test_idempotency_key_priority_is_explicit() -> None:

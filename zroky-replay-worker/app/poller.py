@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
+from uuid import uuid4
 from datetime import datetime, timezone
 
 import httpx
@@ -25,6 +27,11 @@ from app.models import PollResponse, ResultPayload
 from app.runner import run_job
 
 logger = logging.getLogger(__name__)
+_DEFAULT_WORKER_ID = f"{socket.gethostname()}-{uuid4().hex[:8]}"
+
+
+def _worker_id(settings) -> str:
+    return (settings.WORKER_ID or _DEFAULT_WORKER_ID).strip()
 
 
 async def poll_loop() -> None:
@@ -51,7 +58,11 @@ async def _poll_once(
 ) -> None:
     resp = await client.post(
         "/v1/replay/poll",
-        json={"worker_token": settings.WORKER_TOKEN, "capacity": settings.MAX_CONCURRENT_JOBS},
+        json={
+            "worker_token": settings.WORKER_TOKEN,
+            "worker_id": _worker_id(settings),
+            "capacity": settings.MAX_CONCURRENT_JOBS,
+        },
     )
     if resp.status_code == 204:
         return
@@ -74,13 +85,18 @@ async def _run_and_report(job, client, semaphore, settings) -> None:
         logger.info("Starting replay job %s (trace=%s)", job.replay_id, job.trace_id)
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            None, lambda: run_job(job, signing_key=settings.ARTIFACT_SIGNING_KEY)
+            None,
+            lambda: run_job(
+                job,
+                signing_key=settings.ARTIFACT_SIGNING_KEY,
+                signature_required=settings.ARTIFACT_SIGNATURE_REQUIRED,
+            ),
         )
         await _report_result(client, result, settings)
 
 
 async def _report_result(client, result, settings) -> None:
-    payload = ResultPayload(worker_token=settings.WORKER_TOKEN, result=result)
+    payload = ResultPayload(worker_token=settings.WORKER_TOKEN, worker_id=_worker_id(settings), result=result)
     try:
         resp = await client.post(
             "/v1/replay/result",

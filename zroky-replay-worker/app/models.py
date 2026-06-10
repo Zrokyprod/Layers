@@ -39,4 +39,5 @@ class PollResponse(BaseModel):
 
 class ResultPayload(BaseModel):
     worker_token: str
+    worker_id: str | None = None
     result: ReplayResult

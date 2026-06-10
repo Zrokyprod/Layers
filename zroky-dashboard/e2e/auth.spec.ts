@@ -72,7 +72,7 @@ test.describe("authenticated session", () => {
     const seed = readSeed();
     await page.goto("/home");
 
-    await expect(page.getByRole("heading", { name: "Failure Inbox" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
     await expectHealthyPage(page);
 

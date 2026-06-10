@@ -344,7 +344,7 @@ export default function IssuesPage() {
             <AlertTriangle aria-hidden="true" />
             Grouped failures
           </div>
-          <h1>Issues</h1>
+          <h1>Failures</h1>
           <p>Grouped production failures detected across your agents.</p>
         </div>
         <button

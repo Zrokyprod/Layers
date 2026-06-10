@@ -9,15 +9,12 @@ function request(url: string, token?: string): NextRequest {
 }
 
 describe("guardDashboardRoute", () => {
-  it("redirects retired labs, agent, and drift routes to the Failure Inbox", () => {
-    const agents = guardDashboardRoute(request("https://app.zroky.com/agents?window=7d", "token"));
+  it("redirects retired labs and drift routes to the Command Center", () => {
     const drift = guardDashboardRoute(request("https://app.zroky.com/drift", "token"));
     const labs = guardDashboardRoute(request("https://app.zroky.com/labs", "token"));
     const labsAgents = guardDashboardRoute(request("https://app.zroky.com/labs/agents", "token"));
     const labsDrift = guardDashboardRoute(request("https://app.zroky.com/labs/drift", "token"));
 
-    expect(agents.status).toBe(307);
-    expect(agents.headers.get("location")).toBe("https://app.zroky.com/home");
     expect(drift.status).toBe(307);
     expect(drift.headers.get("location")).toBe("https://app.zroky.com/home");
     expect(labs.status).toBe(307);
@@ -30,8 +27,11 @@ describe("guardDashboardRoute", () => {
 
   it("still protects active dashboard routes", () => {
     const response = guardDashboardRoute(request("https://app.zroky.com/home"));
+    const agents = guardDashboardRoute(request("https://app.zroky.com/agents"));
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fhome");
+    expect(agents.status).toBe(307);
+    expect(agents.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fagents");
   });
 });

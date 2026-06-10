@@ -16,7 +16,9 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any, Callable
+from uuid import uuid4
 
 from zroky._errors import ZrokyPreflightError
 from zroky._internal.budget import BudgetExceededError
@@ -75,6 +77,74 @@ import logging
 _logger = logging.getLogger("zroky")
 
 
+@dataclass
+class _TraceRunContext:
+    trace_id: str
+    root_call_id: str
+    name: str | None = None
+    agent_name: str | None = None
+    user_input: Any | None = None
+    system_prompt: str | None = None
+    metadata: dict[str, Any] | None = None
+    next_index: int = 1
+    final_answer: Any | None = None
+    children: list[str] = field(default_factory=list)
+
+    def set_final_answer(self, value: Any) -> None:
+        self.final_answer = value
+
+    def capture_tool_call(self, *args: Any, **kwargs: Any) -> str:
+        return capture_tool_call(*args, **kwargs)
+
+    def capture_policy_decision(self, *args: Any, **kwargs: Any) -> str:
+        return capture_policy_decision(*args, **kwargs)
+
+    def capture_handoff(self, *args: Any, **kwargs: Any) -> str:
+        return capture_handoff(*args, **kwargs)
+
+
+def _version_metadata(cfg: Any, *, model: str | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    versions = {
+        "code_sha": getattr(cfg, "code_sha", None),
+        "deployment_id": getattr(cfg, "deployment_id", None),
+        "model_version": getattr(cfg, "model_version", None) or model,
+        "tool_schema_version": getattr(cfg, "tool_schema_version", None),
+        "rag_version": getattr(cfg, "rag_version", None),
+        "prompt_version": getattr(cfg, "prompt_version", None),
+    }
+    if extra:
+        versions.update({k: v for k, v in extra.items() if v not in (None, "", [], {})})
+    clean = {k: v for k, v in versions.items() if v not in (None, "", [], {})}
+    return clean or None
+
+
+def _current_trace_context() -> _TraceRunContext | None:
+    ctx = getattr(_local, "trace_run", None)
+    return ctx if isinstance(ctx, _TraceRunContext) else None
+
+
+def _next_span_index(default: int | None = None) -> int | None:
+    if default is not None:
+        return default
+    ctx = _current_trace_context()
+    if ctx is None:
+        return None
+    value = ctx.next_index
+    ctx.next_index += 1
+    return value
+
+
+def _resolve_trace_link(
+    *,
+    trace_id: str | None,
+    parent_call_id: str | None,
+) -> tuple[str | None, str | None]:
+    ctx = _current_trace_context()
+    if ctx is None:
+        return trace_id, parent_call_id
+    return trace_id or ctx.trace_id, parent_call_id or ctx.root_call_id
+
+
 # ---------------------------------------------------------------------------
 # Public: call
 # ---------------------------------------------------------------------------
@@ -130,6 +200,11 @@ def call(
     model_context_limit = model_context_telemetry["model_context_limit"]
     token_estimator_version = _token_estimator_version_for_telemetry(estimated_prompt_tokens)
     token_rules_version = _token_rules_version_for_telemetry()
+    resolved_trace_id, resolved_parent_call_id = _resolve_trace_link(
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+    )
+    resolved_span_index = _next_span_index(step_index)
 
     event = CallEvent(
         provider=provider, model=model,
@@ -146,7 +221,13 @@ def call(
         token_estimator_version=token_estimator_version,
         token_rules_version=token_rules_version,
         call_type=call_type,
-        trace_id=trace_id, parent_call_id=parent_call_id,
+        trace_id=resolved_trace_id,
+        parent_call_id=resolved_parent_call_id,
+        span_type="tool_call" if call_type == CallType.TOOL_CALL else "llm_call",
+        span_name=f"{provider}/{model}",
+        span_index=resolved_span_index,
+        input={"messages": telemetry_messages} if telemetry_messages else None,
+        versions=_version_metadata(cfg, model=model),
         agent_name=_get_agent() or cfg.default_agent,
         agent_framework=agent_framework or cfg.agent_framework,
         prompt_fingerprint=prompt_fingerprint, user_id=user_id,
@@ -423,6 +504,11 @@ def record(
     model_context_telemetry = _model_context_limit_telemetry_for_model(model)
     token_estimator_version = _token_estimator_version_for_telemetry(estimated_prompt_tokens)
     token_rules_version = _token_rules_version_for_telemetry()
+    resolved_trace_id, resolved_parent_call_id = _resolve_trace_link(
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+    )
+    resolved_step_index = _next_span_index(step_index)
 
     event = CallEvent(
         provider=provider, model=model,
@@ -439,7 +525,13 @@ def record(
         token_estimator_version=token_estimator_version,
         token_rules_version=token_rules_version,
         call_type=CallType.TOOL_CALL if tools else CallType.CHAT,
-        trace_id=trace_id, parent_call_id=parent_call_id,
+        trace_id=resolved_trace_id,
+        parent_call_id=resolved_parent_call_id,
+        span_type="tool_call" if tools else "llm_call",
+        span_name=f"{provider}/{model}",
+        span_index=resolved_step_index,
+        input={"messages": telemetry_messages, "request": mask_value(request) if cfg.mask_pii else request},
+        versions=_version_metadata(cfg, model=model),
         agent_name=_get_agent() or cfg.default_agent,
         agent_framework=agent_framework or cfg.agent_framework,
         prompt_fingerprint=prompt_fingerprint, user_id=user_id,
@@ -447,7 +539,7 @@ def record(
         session_id=session_id or cfg.session_id,
         workflow_id=workflow_id or cfg.workflow_id,
         workflow_name=workflow_name or cfg.workflow_name,
-        step_index=step_index,
+        step_index=resolved_step_index,
         environment=environment or cfg.environment,
         metadata=metadata,
         latency_ms=latency_ms,
@@ -533,6 +625,18 @@ def capture_retrieval(
 
     compacted = _compact_documents(mask_value(documents))
     output = _document_summary(compacted)
+    resolved_trace_id, resolved_parent_call_id = _resolve_trace_link(
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+    )
+    resolved_step_index = _next_span_index(step_index)
+    retrieval_payload = {
+        "query": mask_text(query) if cfg.mask_pii else query,
+        "index_name": index_name,
+        "retriever_version": retriever_version,
+        "documents": compacted,
+        "result_count": len(compacted or []),
+    }
     event = CallEvent(
         provider="retrieval",
         model=index_name or "unknown",
@@ -547,15 +651,25 @@ def capture_retrieval(
             model=index_name or "unknown",
         ),
         output_content=output,
-        trace_id=trace_id,
-        parent_call_id=parent_call_id,
+        trace_id=resolved_trace_id,
+        parent_call_id=resolved_parent_call_id,
+        span_type="retrieval",
+        span_name=index_name or "retrieval",
+        span_index=resolved_step_index,
+        input={"query": mask_text(query) if cfg.mask_pii else query},
+        retrieval=retrieval_payload,
+        versions=_version_metadata(
+            cfg,
+            model=index_name or "unknown",
+            extra={"rag_version": retriever_version or getattr(cfg, "rag_version", None)},
+        ),
         agent_name=_get_agent() or cfg.default_agent,
         agent_framework=cfg.agent_framework,
         prompt_version=prompt_version or cfg.prompt_version,
         session_id=session_id or cfg.session_id,
         workflow_id=workflow_id or cfg.workflow_id,
         workflow_name=workflow_name or cfg.workflow_name,
-        step_index=step_index,
+        step_index=resolved_step_index,
         user_id=user_id,
         environment=environment or cfg.environment,
         error_code=error_code,
@@ -608,6 +722,19 @@ def capture_memory(
     resolved_namespace = namespace or "memory"
     bounded_keys = keys[:50] if keys else None
     fingerprint_text = ":".join([operation, resolved_namespace, *(sorted(bounded_keys or []))])
+    resolved_trace_id, resolved_parent_call_id = _resolve_trace_link(
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+    )
+    resolved_step_index = _next_span_index(step_index)
+    memory_payload = {
+        "operation": operation,
+        "namespace": resolved_namespace,
+        "keys": mask_value(bounded_keys),
+        "item_count": item_count,
+        "bytes": bytes_count,
+        "value_preview": mask_text(value_preview) if cfg.mask_pii and value_preview else value_preview,
+    }
 
     event = CallEvent(
         provider="memory",
@@ -623,15 +750,21 @@ def capture_memory(
             model=resolved_namespace,
         ),
         output_content=(mask_text(value_preview) if cfg.mask_pii else value_preview)[:4000] if value_preview else None,
-        trace_id=trace_id,
-        parent_call_id=parent_call_id,
+        trace_id=resolved_trace_id,
+        parent_call_id=resolved_parent_call_id,
+        span_type="memory",
+        span_name=f"{operation}:{resolved_namespace}",
+        span_index=resolved_step_index,
+        input={"operation": operation, "namespace": resolved_namespace, "keys": mask_value(bounded_keys)},
+        memory=memory_payload,
+        versions=_version_metadata(cfg),
         agent_name=_get_agent() or cfg.default_agent,
         agent_framework=cfg.agent_framework,
         prompt_version=prompt_version or cfg.prompt_version,
         session_id=session_id or cfg.session_id,
         workflow_id=workflow_id or cfg.workflow_id,
         workflow_name=workflow_name or cfg.workflow_name,
-        step_index=step_index,
+        step_index=resolved_step_index,
         user_id=user_id,
         environment=environment or cfg.environment,
         error_code=error_code,
@@ -651,6 +784,297 @@ def capture_memory(
     return event.call_id
 
 
+def capture_tool_call(
+    *,
+    name: str,
+    arguments: dict[str, Any] | None = None,
+    result: Any | None = None,
+    error: Exception | str | None = None,
+    latency_ms: float | None = None,
+    call_id: str | None = None,
+    trace_id: str | None = None,
+    parent_call_id: str | None = None,
+    span_name: str | None = None,
+    span_index: int | None = None,
+    user_id: str | None = None,
+    environment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Capture a tool invocation as a first-class trace graph span."""
+    import zroky as _z  # lazy
+
+    if _z._config is None or _z._queue is None:
+        _z.init()
+    cfg = _z._config
+    queue = _z._queue
+    resolved_trace_id, resolved_parent_call_id = _resolve_trace_link(
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+    )
+    resolved_span_index = _next_span_index(span_index)
+    error_text = str(error) if error is not None else None
+    tool_payload = {
+        "name": name,
+        "arguments": mask_value(arguments) if cfg.mask_pii else arguments,
+        "result": mask_value(result) if cfg.mask_pii else result,
+        "error": mask_error_message(error_text) if error_text else None,
+    }
+    event = CallEvent(
+        provider="tool",
+        model=name,
+        messages=[],
+        call_type=CallType.TOOL_CALL,
+        call_id=call_id or str(uuid4()),
+        status="failed" if error is not None else "success",
+        latency_ms=latency_ms,
+        trace_id=resolved_trace_id,
+        parent_call_id=resolved_parent_call_id,
+        span_type="tool_call",
+        span_name=span_name or name,
+        span_index=resolved_span_index,
+        input={"arguments": tool_payload["arguments"]},
+        tool=tool_payload,
+        versions=_version_metadata(cfg),
+        agent_name=_get_agent() or cfg.default_agent,
+        agent_framework=cfg.agent_framework,
+        prompt_version=cfg.prompt_version,
+        session_id=cfg.session_id,
+        workflow_id=cfg.workflow_id,
+        workflow_name=cfg.workflow_name,
+        step_index=resolved_span_index,
+        user_id=user_id,
+        environment=environment or cfg.environment,
+        error_code="TOOL_ERROR" if error is not None else None,
+        error_message=mask_error_message(error_text) if error_text else None,
+        metadata=metadata,
+    )
+    queue.enqueue(event)
+    _notify_event(event)
+    return event.call_id
+
+
+def capture_policy_decision(
+    *,
+    name: str,
+    decision: str,
+    reason: str | None = None,
+    inputs: dict[str, Any] | None = None,
+    evidence: dict[str, Any] | None = None,
+    latency_ms: float | None = None,
+    call_id: str | None = None,
+    trace_id: str | None = None,
+    parent_call_id: str | None = None,
+    span_index: int | None = None,
+    user_id: str | None = None,
+    environment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Capture a policy decision as evidence; this does not enforce policy."""
+    import zroky as _z  # lazy
+
+    if _z._config is None or _z._queue is None:
+        _z.init()
+    cfg = _z._config
+    queue = _z._queue
+    resolved_trace_id, resolved_parent_call_id = _resolve_trace_link(
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+    )
+    resolved_span_index = _next_span_index(span_index)
+    policy_payload = {
+        "name": name,
+        "decision": decision,
+        "reason": mask_text(reason) if cfg.mask_pii and reason else reason,
+        "inputs": mask_value(inputs) if cfg.mask_pii else inputs,
+        "evidence": mask_value(evidence) if cfg.mask_pii else evidence,
+    }
+    event = CallEvent(
+        provider="policy",
+        model=name,
+        messages=[],
+        call_type="policy_decision",
+        call_id=call_id or str(uuid4()),
+        status="success",
+        latency_ms=latency_ms,
+        trace_id=resolved_trace_id,
+        parent_call_id=resolved_parent_call_id,
+        span_type="policy",
+        span_name=name,
+        span_index=resolved_span_index,
+        input={"inputs": policy_payload["inputs"]},
+        policy=policy_payload,
+        versions=_version_metadata(cfg),
+        agent_name=_get_agent() or cfg.default_agent,
+        agent_framework=cfg.agent_framework,
+        prompt_version=cfg.prompt_version,
+        session_id=cfg.session_id,
+        workflow_id=cfg.workflow_id,
+        workflow_name=cfg.workflow_name,
+        step_index=resolved_span_index,
+        user_id=user_id,
+        environment=environment or cfg.environment,
+        metadata=metadata,
+    )
+    queue.enqueue(event)
+    _notify_event(event)
+    return event.call_id
+
+
+def capture_handoff(
+    *,
+    from_agent: str,
+    to_agent: str,
+    reason: str | None = None,
+    payload: dict[str, Any] | None = None,
+    latency_ms: float | None = None,
+    call_id: str | None = None,
+    trace_id: str | None = None,
+    parent_call_id: str | None = None,
+    span_index: int | None = None,
+    user_id: str | None = None,
+    environment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    """Capture an agent-to-agent handoff span."""
+    import zroky as _z  # lazy
+
+    if _z._config is None or _z._queue is None:
+        _z.init()
+    cfg = _z._config
+    queue = _z._queue
+    resolved_trace_id, resolved_parent_call_id = _resolve_trace_link(
+        trace_id=trace_id,
+        parent_call_id=parent_call_id,
+    )
+    resolved_span_index = _next_span_index(span_index)
+    handoff_payload = {
+        "from_agent": from_agent,
+        "to_agent": to_agent,
+        "reason": mask_text(reason) if cfg.mask_pii and reason else reason,
+        "payload": mask_value(payload) if cfg.mask_pii else payload,
+    }
+    event = CallEvent(
+        provider="handoff",
+        model=f"{from_agent}->{to_agent}",
+        messages=[],
+        call_type="handoff",
+        call_id=call_id or str(uuid4()),
+        status="success",
+        latency_ms=latency_ms,
+        trace_id=resolved_trace_id,
+        parent_call_id=resolved_parent_call_id,
+        span_type="handoff",
+        span_name=f"{from_agent} to {to_agent}",
+        span_index=resolved_span_index,
+        input={"payload": handoff_payload["payload"]},
+        handoff=handoff_payload,
+        versions=_version_metadata(cfg),
+        agent_name=from_agent,
+        agent_framework=cfg.agent_framework,
+        prompt_version=cfg.prompt_version,
+        session_id=cfg.session_id,
+        workflow_id=cfg.workflow_id,
+        workflow_name=cfg.workflow_name,
+        step_index=resolved_span_index,
+        user_id=user_id,
+        environment=environment or cfg.environment,
+        metadata=metadata,
+    )
+    queue.enqueue(event)
+    _notify_event(event)
+    return event.call_id
+
+
+@contextmanager
+def trace_run(
+    *,
+    name: str | None = None,
+    trace_id: str | None = None,
+    call_id: str | None = None,
+    user_input: Any | None = None,
+    system_prompt: str | None = None,
+    input: dict[str, Any] | None = None,
+    agent_name: str | None = None,
+    user_id: str | None = None,
+    environment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> Generator[_TraceRunContext, None, None]:
+    """Create a root agent-run span and link nested SDK captures to it."""
+    import zroky as _z  # lazy
+
+    if _z._config is None or _z._queue is None:
+        _z.init()
+    cfg = _z._config
+    queue = _z._queue
+    root_call_id = call_id or str(uuid4())
+    resolved_trace_id = trace_id or root_call_id
+    root_input = input or {}
+    if user_input is not None and "user_input" not in root_input:
+        root_input["user_input"] = user_input
+    if system_prompt is not None and "system_prompt" not in root_input:
+        root_input["system_prompt"] = system_prompt
+    ctx = _TraceRunContext(
+        trace_id=resolved_trace_id,
+        root_call_id=root_call_id,
+        name=name,
+        agent_name=agent_name or _get_agent() or cfg.default_agent,
+        user_input=user_input,
+        system_prompt=system_prompt,
+        metadata=metadata,
+    )
+    previous = getattr(_local, "trace_run", None)
+    _local.trace_run = ctx
+    start_ns = time.perf_counter_ns()
+    start_wall = time.time()
+    exc_to_raise: Exception | None = None
+    try:
+        yield ctx
+    except Exception as exc:
+        exc_to_raise = exc
+        raise
+    finally:
+        _local.trace_run = previous
+        latency_ms = (time.perf_counter_ns() - start_ns) / 1_000_000
+        event = CallEvent(
+            provider="agent",
+            model=name or ctx.agent_name or "agent_run",
+            messages=[],
+            call_type="agent_run",
+            call_id=root_call_id,
+            trace_id=resolved_trace_id,
+            span_type="agent_run",
+            span_name=name or ctx.agent_name or "Agent run",
+            span_index=0,
+            input=mask_value(root_input) if cfg.mask_pii else root_input,
+            system_prompt=mask_text(system_prompt) if cfg.mask_pii and system_prompt else system_prompt,
+            user_input=(
+                str(mask_value(user_input) if cfg.mask_pii else user_input)
+                if user_input is not None
+                else None
+            ),
+            final_answer=mask_value(ctx.final_answer) if cfg.mask_pii else ctx.final_answer,
+            versions=_version_metadata(cfg),
+            agent_name=ctx.agent_name,
+            agent_framework=cfg.agent_framework,
+            prompt_version=cfg.prompt_version,
+            session_id=cfg.session_id,
+            workflow_id=cfg.workflow_id,
+            workflow_name=cfg.workflow_name,
+            user_id=user_id,
+            environment=environment or cfg.environment,
+            metadata=metadata,
+            status="failed" if exc_to_raise is not None else "success",
+            latency_ms=latency_ms,
+            created_at=start_wall,
+        )
+        if exc_to_raise is not None:
+            event.error_code = _classify_error(exc_to_raise)
+            event.error_message = mask_error_message(exc_to_raise)
+            event.failure_reason = build_failure_reason(exc_to_raise, error_code=event.error_code)
+        queue.enqueue(event)
+        _notify_event(event)
+
+
 # ---------------------------------------------------------------------------
 # Public: trace decorator
 # ---------------------------------------------------------------------------
@@ -660,46 +1084,12 @@ def trace(_fn: Any = None, *, name: str | None = None) -> Any:
     def decorator(fn: Any) -> Any:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            import zroky as _z  # lazy
-            if _z._config is None or _z._queue is None:
-                _z.init()
-            cfg = _z._config
-            queue = _z._queue
-
             fn_name = name or fn.__name__
-            start_ns = time.perf_counter_ns()
-            exc_to_raise: Exception | None = None
-            result: Any = None
-            try:
+            input_payload = {"args": mask_value(args), "kwargs": mask_value(kwargs)}
+            with trace_run(name=fn_name, input=input_payload) as run:
                 result = fn(*args, **kwargs)
+                run.set_final_answer(result)
                 return result
-            except Exception as exc:
-                exc_to_raise = exc
-                raise
-            finally:
-                latency_ms = (time.perf_counter_ns() - start_ns) / 1_000_000
-                event = CallEvent(
-                    provider="unknown", model="unknown", messages=[],
-                    call_type=CallType.CHAT,
-                    agent_name=_get_agent() or cfg.default_agent or fn_name,
-                    agent_framework=cfg.agent_framework,
-                    prompt_version=cfg.prompt_version,
-                    session_id=cfg.session_id,
-                    workflow_id=cfg.workflow_id,
-                    workflow_name=cfg.workflow_name,
-                    environment=cfg.environment,
-                    latency_ms=latency_ms,
-                    status="failed" if exc_to_raise else "success",
-                )
-                if exc_to_raise:
-                    event.error_code = _classify_error(exc_to_raise)
-                    event.error_message = mask_error_message(exc_to_raise)
-                    event.failure_reason = build_failure_reason(
-                        exc_to_raise, error_code=event.error_code,
-                    )
-                elif result is not None:
-                    _extract_response_metadata(event, result)
-                queue.enqueue(event)
 
         return wrapper
 

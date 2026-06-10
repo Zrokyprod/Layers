@@ -143,6 +143,67 @@ describe("/api/zroky proxy route", () => {
     expect((init.headers as Headers).get("x-provisioning-token")).toBeNull();
   });
 
+  it("forwards the selected project context to the backend", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/calls", {
+      headers: {
+        "x-project-id": "proj_selected",
+      },
+    });
+    await GET(request, context(["v1", "calls"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("x-project-id")).toBe("proj_selected");
+  });
+
+  it("uses the selected project header before the env fallback project", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    vi.stubEnv("ZROKY_PROJECT_ID", "proj_env");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/calls", {
+      headers: {
+        "x-project-id": "proj_selected",
+      },
+    });
+    await GET(request, context(["v1", "calls"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("x-project-id")).toBe("proj_selected");
+  });
+
+  it("falls back to the env project when no selected project is provided", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    vi.stubEnv("ZROKY_PROJECT_ID", "proj_env");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/calls");
+    await GET(request, context(["v1", "calls"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("x-project-id")).toBe("proj_env");
+  });
+
   it("returns clean JSON when the backend is unavailable", async () => {
     vi.stubEnv("ZROKY_API_BASE_URL", "http://127.0.0.1:8999");
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("connect ECONNREFUSED")));

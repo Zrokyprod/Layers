@@ -14,7 +14,7 @@ Auth model mirrors `replay_dispatch.py`:
 Architecture notes:
 
   * The POST endpoint creates a `ReplayRun` row in `status='queued'`,
-    commits, then schedules a `BackgroundTasks` callback that calls
+    commits, then enqueues a durable Celery task that calls
     `run_regression_ci(..., run_id_override=run_id)`. The orchestrator
     transitions the row to `running` then to `pass`/`fail`/`error`.
 
@@ -23,12 +23,9 @@ Architecture notes:
     plus PR-comment markdown are returned. While the run is queued or
     running, only the status string is returned.
 
-  * The route does NOT use Celery. The orchestrator is bounded
-    (typically <60s for tool_prompt blast radius) and FastAPI's
-    BackgroundTasks gives us a thread per request. Customers can
-    swap in Celery later by replacing the BackgroundTasks shim with
-    `celery_app.send_task("...")` — the orchestrator function is
-    completely decoupled from the dispatch mechanism.
+  * The route does not execute the CI gate in the API process. The
+    orchestrator function remains decoupled from the dispatch mechanism,
+    while Celery provides durable retry/status behavior across API restarts.
 
   * Tenant isolation: every read filters by `project_id == tenant_id`.
     A run in project A is never visible to a caller in project B.
@@ -45,7 +42,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -431,13 +428,12 @@ def _run_regression_ci_background(
 @limiter.limit("30/minute")
 def post_run(
     request: Request,
-    background_tasks: BackgroundTasks,
     body: RegressionCIRunRequest = Body(...),
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
 ) -> RegressionCIRunResponse:
     """Kick off a regression-CI run. Returns 202 with the run_id; the
-    actual work proceeds in a BackgroundTask.
+    actual work proceeds in a durable Celery task.
 
     Validation:
       * `git_sha` required (4-64 chars).
@@ -472,12 +468,35 @@ def post_run(
 
     request_payload = body.model_dump(mode="json")
 
-    background_tasks.add_task(
-        _run_regression_ci_background,
-        tenant_id=tenant_id,
-        run_id=run_id,
-        request_payload=request_payload,
-    )
+    try:
+        from app.worker.tasks import process_regression_ci_run
+
+        process_regression_ci_run.apply_async(
+            args=[tenant_id, run_id, request_payload],
+            queue="diagnosis_pattern",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "regression_ci.dispatch.enqueue_failed tenant=%s run=%s",
+            tenant_id,
+            run_id,
+        )
+        error_summary = {
+            "schema_version": "v1",
+            "run_id": run_id,
+            "project_id": tenant_id,
+            "verdict": "error",
+            "notes": [f"celery_enqueue_failed:{type(exc).__name__}"],
+        }
+        queued_run.status = "error"
+        queued_run.completed_at = datetime.now(timezone.utc)
+        queued_run.summary_json = json.dumps(error_summary)
+        db.add(queued_run)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Regression CI queue unavailable. Retry after the worker broker is healthy.",
+        ) from exc
 
     logger.info(
         "regression_ci.dispatch tenant=%s run=%s sha=%s files=%d",

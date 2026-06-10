@@ -17,6 +17,15 @@ import (
 	"github.com/zroky-ai/zroky-gateway/internal/emit"
 )
 
+type recordingSpooler struct {
+	ch chan *emit.IngestEventV2
+}
+
+func (s *recordingSpooler) Enqueue(ev *emit.IngestEventV2) error {
+	s.ch <- ev
+	return nil
+}
+
 func TestReadBoundedBodyRejectsOversizedRequest(t *testing.T) {
 	body, tooLarge, err := readBoundedBody(strings.NewReader("abcdef"), 5)
 	if err != nil {
@@ -124,6 +133,53 @@ func TestHandlerRequiresGatewayAuthTokenWhenConfigured(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rr.Code)
+	}
+}
+
+func TestHandlerSpoolsEventWhenEmitFails(t *testing.T) {
+	ingestServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "ingest down", http.StatusServiceUnavailable)
+	}))
+	defer ingestServer.Close()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer upstream.Close()
+
+	emitter, err := emit.NewWithOptions(emit.Options{
+		Mode:      emit.ModeHTTP,
+		IngestURL: ingestServer.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	provider := OpenAI
+	provider.BaseURL = upstream.URL
+	spooler := &recordingSpooler{ch: make(chan *emit.IngestEventV2, 1)}
+	handler := HandlerWithOptions(provider, "chat", emitter, Options{
+		MaxBodyBytes:   1024 * 1024,
+		UpstreamAPIKey: "provider-key",
+		CaptureSpool:   spooler,
+	}, zerolog.Nop())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-4o-mini"}`))
+	req.Header.Set("X-Project-Id", "proj_spool")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	select {
+	case ev := <-spooler.ch:
+		if ev.ProjectID != "proj_spool" {
+			t.Fatalf("spooled project = %q, want proj_spool", ev.ProjectID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for spooled event")
 	}
 }
 

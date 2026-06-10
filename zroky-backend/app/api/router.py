@@ -31,6 +31,7 @@ from app.api.routes.providers import router as providers_router
 from app.api.routes.realtime_ws import router as realtime_ws_router
 from app.api.routes.security import router as security_router
 from app.api.routes.settings import router as settings_router
+from app.api.routes.traces import router as traces_router
 from app.api.routes.anomalies import router as anomalies_router
 from app.api.routes.detectors import router as detectors_router
 from app.api.routes.feature_interest import (
@@ -70,6 +71,7 @@ api_router.include_router(realtime_ws_router, tags=["realtime"])
 api_router.include_router(ingest_router, tags=["ingest"])
 api_router.include_router(capture_router, tags=["capture"])
 api_router.include_router(calls_router, tags=["calls"])
+api_router.include_router(traces_router, tags=["traces"])
 api_router.include_router(live_router, tags=["live"])
 api_router.include_router(analytics_router, tags=["analytics"])
 api_router.include_router(ask_router, tags=["ask"])  # Ask Zroky — natural-language Q&A

@@ -8,17 +8,17 @@ test.describe("dashboard modules", () => {
 
     const seed = readSeed();
     const routes = [
-      { path: "/home", labels: ["Failure Inbox", "selecting the wrong tool", "refund-support-agent"] },
-      { path: "/calls", labels: ["Calls", "refund-support-agent", "failed"] },
+      { path: "/home", labels: ["Command Center", "selecting the wrong tool", "refund-support-agent"] },
+      { path: "/calls", labels: ["Flight Recorder", "refund-support-agent", "failed"] },
       { path: `/calls/${seed.call_id}`, labels: [seed.call_id, "refund-support-agent", "Where is my refund?"] },
-      { path: "/issues", labels: ["Issues", "selecting the wrong tool", "Tool Not Called"] },
+      { path: "/issues", labels: ["Failures", "selecting the wrong tool", "Tool Not Called"] },
       { path: `/issues/${seed.issue_id}`, labels: ["selecting the wrong tool", "Tool Not Called", "get_refund_status"] },
       { path: "/goldens", labels: ["Goldens", "Refund status protected flow"] },
       { path: `/goldens/${seed.golden_set_id}`, labels: ["Refund status protected flow", "RF-1001"] },
       { path: "/ci-gates", labels: ["CI Gates", "demo-break-r"] },
       { path: `/ci-gates/${seed.ci_run_id}`, labels: ["Regression CI", "Regression CI blocked this change.", "demo-break-r"] },
       { path: "/cost", labels: ["Cost", "Budget", "refund-support-agent"] },
-      { path: "/trace", labels: ["Traces", seed.trace_id, "refund-support-agent"] },
+      { path: "/trace", labels: ["Trace Graphs", seed.trace_id, "refund-support-agent"] },
       { path: `/trace/${seed.trace_id}`, labels: [seed.call_id, "refund-support-agent", "Where is my refund?", "TOOL_NOT_CALLED"] },
       { path: "/replay", labels: ["Replay", "demo-replay-refu", "verified fix"] },
       { path: `/replay/${seed.replay_run_id}`, labels: ["verified", "Refund", "RF-1001"] },
@@ -31,7 +31,7 @@ test.describe("dashboard modules", () => {
       await expectVisibleTexts(page, route.labels);
     }
 
-    for (const retiredRoute of ["/agents", "/drift", "/labs", "/labs/agents", "/labs/drift"]) {
+    for (const retiredRoute of ["/drift", "/labs", "/labs/agents", "/labs/drift"]) {
       await page.goto(retiredRoute);
       await expect(page).toHaveURL(/\/home$/);
     }

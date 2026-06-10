@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"github.com/zroky-ai/zroky-gateway/internal/config"
 	"github.com/zroky-ai/zroky-gateway/internal/emit"
 	"github.com/zroky-ai/zroky-gateway/internal/proxy"
+	"github.com/zroky-ai/zroky-gateway/internal/spool"
 )
 
 func main() {
@@ -60,10 +62,25 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to configure emitter")
 	}
 
+	captureSpool, err := spool.New(spool.Options{
+		Dir:      cfg.SpoolDir,
+		MaxBytes: cfg.SpoolMaxBytes,
+		Logger:   log.Logger,
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to configure capture spool")
+	}
+	spoolCtx, stopSpool := context.WithCancel(context.Background())
+	defer stopSpool()
+	go captureSpool.FlushLoop(spoolCtx, emitter, cfg.SpoolFlushInterval)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "ok",
+			"spool":  captureSpool.Status(),
+		})
 	})
 
 	openAI := proxy.OpenAI
@@ -89,6 +106,7 @@ func main() {
 			UpstreamAPIKey:       route.apiKey,
 			DefaultWorkflowName:  cfg.WorkflowName,
 			DefaultPromptVersion: cfg.PromptVersion,
+			CaptureSpool:         captureSpool,
 		}, log.Logger))
 	}
 
@@ -99,6 +117,7 @@ func main() {
 		UpstreamAPIKey:       cfg.AnthropicAPIKey,
 		DefaultWorkflowName:  cfg.WorkflowName,
 		DefaultPromptVersion: cfg.PromptVersion,
+		CaptureSpool:         captureSpool,
 	}, log.Logger))
 	mux.Handle("/v1beta/models/", proxy.HandlerWithOptions(google, "chat", emitter, proxy.Options{
 		MaxBodyBytes:         cfg.MaxBodyBytes,
@@ -107,6 +126,7 @@ func main() {
 		UpstreamAPIKey:       cfg.GoogleAPIKey,
 		DefaultWorkflowName:  cfg.WorkflowName,
 		DefaultPromptVersion: cfg.PromptVersion,
+		CaptureSpool:         captureSpool,
 	}, log.Logger))
 
 	srv := &http.Server{

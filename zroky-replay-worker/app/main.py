@@ -5,7 +5,7 @@
 
 Starts the background poll loop on startup and exposes:
   GET /health    → liveness probe
-  GET /ready     → readiness (WORKER_TOKEN configured)
+  GET /ready     → readiness (worker token and artifact trust configured)
 """
 from __future__ import annotations
 
@@ -32,11 +32,26 @@ app = FastAPI(
 _poll_task: asyncio.Task | None = None
 
 
+def _readiness() -> tuple[bool, dict[str, object]]:
+    token_configured = bool(settings.WORKER_TOKEN)
+    signing_key_configured = bool(settings.ARTIFACT_SIGNING_KEY)
+    signing_ready = signing_key_configured or not settings.ARTIFACT_SIGNATURE_REQUIRED
+    ready = token_configured and signing_ready
+    return ready, {
+        "ready": ready,
+        "control_plane": settings.CONTROL_PLANE_URL,
+        "worker_token_configured": token_configured,
+        "artifact_signature_required": settings.ARTIFACT_SIGNATURE_REQUIRED,
+        "artifact_signing_key_configured": signing_key_configured,
+    }
+
+
 @app.on_event("startup")
 async def _start_poll_loop() -> None:
     global _poll_task
-    if not settings.WORKER_TOKEN:
-        logger.warning("WORKER_TOKEN not set — poll loop disabled (dev mode)")
+    ready, state = _readiness()
+    if not ready:
+        logger.warning("Replay worker not ready — poll loop disabled: %s", state)
         return
     _poll_task = asyncio.create_task(poll_loop())
     logger.info(
@@ -63,8 +78,5 @@ def health() -> JSONResponse:
 
 @app.get("/ready")
 def ready() -> JSONResponse:
-    configured = bool(settings.WORKER_TOKEN)
-    return JSONResponse(
-        {"ready": configured, "control_plane": settings.CONTROL_PLANE_URL},
-        status_code=200 if configured else 503,
-    )
+    configured, state = _readiness()
+    return JSONResponse(state, status_code=200 if configured else 503)

@@ -17,6 +17,7 @@ import { emit } from "./emitter";
 import { newCallId, newEventId } from "./ids";
 import { resolveConfig } from "./config";
 import { _setOutcomeConfig } from "./outcome";
+import { versionMetadata } from "./versions";
 
 interface OpenAILike {
   chat: {
@@ -39,6 +40,13 @@ function extractToolCalls(response: unknown): Record<string, unknown>[] | undefi
   const first = Array.isArray(choices) ? choices[0] : undefined;
   const toolCalls = (first as { message?: { tool_calls?: unknown } } | undefined)?.message?.tool_calls;
   return Array.isArray(toolCalls) ? (toolCalls as Record<string, unknown>[]) : undefined;
+}
+
+function messageText(messages: unknown[], role: string): string | undefined {
+  const match = [...messages]
+    .reverse()
+    .find((message) => (message as { role?: unknown })?.role === role) as { content?: unknown } | undefined;
+  return typeof match?.content === "string" ? match.content.slice(0, 12000) : undefined;
 }
 
 function attachCallId(response: unknown, callId: string): void {
@@ -133,6 +141,14 @@ export function wrap<T extends OpenAILike>(client: T, config: ZrokyConfig = {}):
           prompt_version: resolvedConfig.promptVersion,
           trace_id: resolvedConfig.traceId,
           parent_call_id: resolvedConfig.parentCallId,
+          span_type: "llm_call",
+          span_name: `openai/${model}`,
+          span_index: resolvedConfig.stepIndex,
+          input: { messages, request: reqBody },
+          system_prompt: messageText(messages, "system"),
+          user_input: messageText(messages, "user"),
+          final_answer: extractOutputContent(response),
+          versions: versionMetadata(resolvedConfig, model),
           user_id: resolvedConfig.userId,
           environment: resolvedConfig.environment,
           step_index: resolvedConfig.stepIndex,

@@ -11,7 +11,9 @@ class Settings(BaseSettings):
 
     CONTROL_PLANE_URL: str = "https://api.zroky.com"
     WORKER_TOKEN: str = ""
+    WORKER_ID: str = ""
     ARTIFACT_SIGNING_KEY: str = ""
+    ARTIFACT_SIGNATURE_REQUIRED: bool = True
     OPENROUTER_API_KEY: str = ""
     POLL_INTERVAL_SECONDS: int = 10
     MAX_CONCURRENT_JOBS: int = 4

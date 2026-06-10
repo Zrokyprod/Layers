@@ -42,6 +42,9 @@ INGEST_EVENT_OTEL_ATTRIBUTES: dict[str, str] = {
     "fallback_attempts": "zroky.fallback.attempts",
     "trace_id": "trace_id",
     "parent_call_id": "zroky.call.parent_id",
+    "span_type": "zroky.span.type",
+    "span_name": "zroky.span.name",
+    "span_index": "zroky.span.index",
     "agent_name": "zroky.agent.name",
     "prompt_fingerprint": "zroky.prompt.fingerprint",
     "prompt_version": "zroky.prompt.version",
@@ -57,6 +60,9 @@ INGEST_EVENT_OTEL_ATTRIBUTES: dict[str, str] = {
     "workflow_name": "zroky.workflow.name",
     "step_index": "zroky.workflow.step_index",
     "agent_framework": "zroky.agent.framework",
+    "capture_source": "zroky.capture.source",
+    "masking_version": "zroky.masking.version",
+    "pii_masked": "zroky.pii.masked",
 }
 
 # Reverse mapping: OTel attribute → IngestEvent field name

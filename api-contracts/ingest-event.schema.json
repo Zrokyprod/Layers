@@ -50,14 +50,14 @@
     "call_type": {
       "type": "string",
       "default": "chat",
-      "enum": ["chat", "completion", "embedding", "streaming", "image", "tts", "stt", "moderation", "function", "tool_call", "tool_result", "retrieval", "memory"],
+      "enum": ["chat", "completion", "embedding", "streaming", "image", "tts", "stt", "moderation", "function", "tool_call", "tool_result", "retrieval", "memory", "agent_run", "trace", "policy_decision", "handoff"],
       "description": "Type of AI call.",
       "x-otel-attribute": "zroky.call.type"
     },
     "status": {
       "type": "string",
       "default": "completed",
-      "enum": ["completed", "error", "timeout", "cancelled", "rate_limited", "budget_blocked"],
+      "enum": ["completed", "success", "error", "failed", "timeout", "cancelled", "rate_limited", "budget_blocked"],
       "description": "Outcome status of the call.",
       "x-otel-attribute": "zroky.call.status"
     },
@@ -301,6 +301,64 @@
       "description": "call_id of the parent call in a multi-agent tree.",
       "x-otel-attribute": "zroky.call.parent_id"
     },
+    "span_type": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "enum": ["agent_run", "llm_call", "tool_call", "tool_result", "retrieval", "memory", "handoff", "policy", "outcome", "other", null],
+      "description": "[v2] Normalized trace graph span type.",
+      "x-otel-attribute": "zroky.span.type"
+    },
+    "span_name": {
+      "type": ["string", "null"],
+      "maxLength": 255,
+      "description": "[v2] Human-readable trace graph span name.",
+      "x-otel-attribute": "zroky.span.name"
+    },
+    "span_index": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "[v2] Stable sibling ordering for spans emitted from the same run.",
+      "x-otel-attribute": "zroky.span.index"
+    },
+    "input": {
+      "type": ["object", "null"],
+      "description": "[v2] Masked structured input evidence for the span."
+    },
+    "system_prompt": {
+      "type": ["string", "null"],
+      "maxLength": 12000,
+      "description": "[v2] Masked system prompt or policy prompt active for this span."
+    },
+    "user_input": {
+      "type": ["string", "null"],
+      "maxLength": 12000,
+      "description": "[v2] Masked user input that triggered the span."
+    },
+    "final_answer": {
+      "type": ["string", "null"],
+      "maxLength": 12000,
+      "description": "[v2] Masked final answer or tool-visible output for this span."
+    },
+    "tool": {
+      "type": ["object", "null"],
+      "description": "[v2] Masked tool call evidence, including name, arguments, result, and error when available."
+    },
+    "memory": {
+      "type": ["object", "null"],
+      "description": "[v2] Masked memory read/write evidence for memory spans."
+    },
+    "handoff": {
+      "type": ["object", "null"],
+      "description": "[v2] Masked agent-to-agent handoff evidence."
+    },
+    "policy": {
+      "type": ["object", "null"],
+      "description": "[v2] Captured policy decision evidence. Runtime enforcement is out of scope for this schema."
+    },
+    "versions": {
+      "type": ["object", "null"],
+      "description": "[v2] Version metadata such as code_sha, deployment_id, model_version, tool_schema_version, and rag_version."
+    },
     "agent_name": {
       "type": ["string", "null"],
       "maxLength": 255,
@@ -394,6 +452,23 @@
       "enum": ["langgraph", "crewai", "autogen", "llamaindex", "langchain", "custom", null],
       "description": "[v2] Agent orchestration framework, if known.",
       "x-otel-attribute": "zroky.agent.framework"
+    },
+    "capture_source": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "[v2] Capture surface that emitted this event, such as python_sdk, js_sdk, gateway, or direct_ingest.",
+      "x-otel-attribute": "zroky.capture.source"
+    },
+    "masking_version": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "[v2] Redaction/masking rule version applied before ingest.",
+      "x-otel-attribute": "zroky.masking.version"
+    },
+    "pii_masked": {
+      "type": ["boolean", "null"],
+      "description": "[v2] True when the emitter applied PII/secrets masking before sending the event.",
+      "x-otel-attribute": "zroky.pii.masked"
     }
   }
 }

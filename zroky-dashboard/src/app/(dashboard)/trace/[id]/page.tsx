@@ -13,10 +13,11 @@ import {
   useCallTraceTree,
   useCreateReplayRunFromCall,
   useRecentTraces,
+  useTraceGraph,
   useTraceById,
 } from "@/lib/hooks";
 import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
-import type { JsonMap, TraceListItem, TraceTreeNode } from "@/lib/types";
+import type { JsonMap, TraceGraphResponse, TraceGraphSpan, TraceListItem, TraceTreeNode } from "@/lib/types";
 
 const DASH = "—";
 const TRACE_LIMIT = 100;
@@ -97,6 +98,65 @@ function flattenTree(root: TraceTreeNode | null): Array<{ node: TraceTreeNode; d
   }
   if (root) visit(root, 0);
   return rows;
+}
+
+function spanToTraceNode(span: TraceGraphSpan): TraceTreeNode {
+  return {
+    call_id: span.call_id ?? span.span_id,
+    parent_call_id: span.parent_span_id,
+    agent_name: span.agent_name,
+    provider: span.provider,
+    model: span.model,
+    cost_confidence: null,
+    status: span.status,
+    wasted_cost_usd: span.cost_usd,
+    latency_ms: span.latency_ms,
+    error_code: span.error_code,
+    created_at: span.started_at ?? "",
+    children: span.children.map(spanToTraceNode),
+  };
+}
+
+function traceItemFromGraph(graph: TraceGraphResponse | null): TraceListItem | null {
+  if (!graph) return null;
+  return {
+    trace_id: graph.summary.trace_id,
+    root_call_id: graph.summary.root_call_id ?? graph.summary.root_span_id ?? "",
+    call_count: graph.summary.span_count,
+    agent_count: graph.summary.agent_count,
+    agents: graph.summary.agents,
+    providers: graph.summary.providers,
+    started_at: graph.summary.started_at ?? "",
+    last_seen_at: graph.summary.ended_at ?? graph.summary.started_at ?? "",
+    total_cost_usd: graph.summary.total_cost_usd,
+    has_failure: graph.summary.has_failure,
+    root_failure_category: null,
+  };
+}
+
+function collectGraphValues(graph: TraceGraphResponse | null, key: keyof Pick<TraceGraphSpan, "tool" | "retrieval" | "memory" | "handoff" | "policy" | "outcome">): unknown[] {
+  if (!graph) return [];
+  const rows: unknown[] = [];
+  function visit(span: TraceGraphSpan) {
+    const value = span[key];
+    if (value != null) rows.push(value);
+    for (const child of span.children) visit(child);
+  }
+  for (const root of graph.spans) visit(root);
+  return rows;
+}
+
+function graphToolRows(graph: TraceGraphResponse | null) {
+  return collectGraphValues(graph, "tool").map((value, index) => {
+    const object = asObject(value);
+    return {
+      id: `graph-tool-${index}`,
+      name: firstPresent(object, [["name"], ["tool_name"], ["function", "name"], ["tool"]]) ?? `Tool call ${index + 1}`,
+      status: firstPresent(object, [["status"], ["result", "status"], ["error"]]) ?? "captured",
+      summary: firstPresent(object, [["summary"], ["arguments"], ["input"], ["result"], ["output"], ["error"]]) ?? "Tool call captured.",
+      failed: Boolean(firstPresent(object, [["error"]])) || /fail|error|timeout/i.test(String(firstPresent(object, [["status"]]) ?? "")),
+    };
+  });
 }
 
 function latencyLabel(value: number | null | undefined): string {
@@ -224,11 +284,14 @@ export default function TraceDetailPage() {
   const [actionState, setActionState] = useState<ActionState>(null);
 
   const tracesQuery = useRecentTraces(30, TRACE_LIMIT);
+  const traceGraphQuery = useTraceGraph(traceId);
   const traceByIdQuery = useTraceById(traceId, 30);
+  const graph = traceGraphQuery.data ?? null;
+  const graphTraceItem = useMemo(() => traceItemFromGraph(graph), [graph]);
   const traceItem = useMemo(() => {
     const fromRecent = (tracesQuery.data?.items ?? []).find((trace) => trace.trace_id === traceId) ?? null;
-    return fromRecent ?? traceByIdQuery.data ?? null;
-  }, [traceByIdQuery.data, traceId, tracesQuery.data?.items]);
+    return fromRecent ?? graphTraceItem ?? traceByIdQuery.data ?? null;
+  }, [graphTraceItem, traceByIdQuery.data, traceId, tracesQuery.data?.items]);
 
   const rootCallId = traceItem?.root_call_id ?? "";
   const traceTreeQuery = useCallTraceTree(rootCallId);
@@ -238,15 +301,41 @@ export default function TraceDetailPage() {
   });
 
   const tree = traceTreeQuery.data ?? null;
-  const rootNode = tree?.root_node ?? null;
+  const rootNode = graph?.root_span ? spanToTraceNode(graph.root_span) : tree?.root_node ?? null;
   const detail = callDetailQuery.data ?? null;
-  const payload = useMemo(() => detail?.payload ?? {}, [detail?.payload]);
+  const payload = useMemo(() => graph?.root_span?.raw_payload ?? detail?.payload ?? {}, [detail?.payload, graph?.root_span?.raw_payload]);
   const timelineRows = useMemo(() => flattenTree(rootNode), [rootNode]);
-  const promptText = useMemo(() => extractPromptText(payload), [payload]);
-  const responseText = useMemo(() => extractResponseText(payload), [payload]);
-  const tools = useMemo(() => toolRows(payload, timelineRows), [payload, timelineRows]);
-  const retrievalItems = useMemo(() => listTextValues(payload, [["retrieval"], ["retrieval_context"], ["documents"], ["payload", "retrieval"]]), [payload]);
-  const memoryItems = useMemo(() => listTextValues(payload, [["memory"], ["memory_events"], ["payload", "memory"]]), [payload]);
+  const promptText = useMemo(() => stringifyValue(graph?.user_input) ?? extractPromptText(payload), [graph?.user_input, payload]);
+  const responseText = useMemo(() => stringifyValue(graph?.final_answer) ?? extractResponseText(payload), [graph?.final_answer, payload]);
+  const tools = useMemo(() => {
+    const graphTools = graphToolRows(graph);
+    return graphTools.length > 0 ? graphTools : toolRows(payload, timelineRows);
+  }, [graph, payload, timelineRows]);
+  const retrievalItems = useMemo(() => {
+    const graphItems = collectGraphValues(graph, "retrieval").map((value, index) => stringifyValue(value) ?? `Retrieval ${index + 1}`);
+    return graphItems.length > 0 ? graphItems : listTextValues(payload, [["retrieval"], ["retrieval_context"], ["documents"], ["payload", "retrieval"]]);
+  }, [graph, payload]);
+  const memoryItems = useMemo(() => {
+    const graphItems = collectGraphValues(graph, "memory").map((value, index) => stringifyValue(value) ?? `Memory ${index + 1}`);
+    return graphItems.length > 0 ? graphItems : listTextValues(payload, [["memory"], ["memory_events"], ["payload", "memory"]]);
+  }, [graph, payload]);
+  const policyItems = useMemo(
+    () => collectGraphValues(graph, "policy").map((value, index) => stringifyValue(value) ?? `Policy decision ${index + 1}`),
+    [graph],
+  );
+  const handoffItems = useMemo(
+    () => collectGraphValues(graph, "handoff").map((value, index) => stringifyValue(value) ?? `Handoff ${index + 1}`),
+    [graph],
+  );
+  const businessOutcome = useMemo(
+    () => stringifyValue(graph?.business_outcome) ?? stringifyValue(readPath(payload, ["outcome"])),
+    [graph?.business_outcome, payload],
+  );
+  const versionEntries = useMemo(
+    () => Object.entries(graph?.versions ?? {}).filter(([, value]) => value != null && value !== ""),
+    [graph?.versions],
+  );
+  const completenessWarnings = graph?.summary.completeness_warnings ?? [];
   const diagnosis = useMemo(() => diagnosisSummary(detail?.diagnosis_result ?? null), [detail?.diagnosis_result]);
 
   function runReplay() {
@@ -266,6 +355,7 @@ export default function TraceDetailPage() {
     try {
       await Promise.all([
         tracesQuery.refetch(),
+        traceGraphQuery.refetch(),
         traceByIdQuery.refetch(),
         traceTreeQuery.refetch(),
         callDetailQuery.refetch(),
@@ -319,6 +409,7 @@ export default function TraceDetailPage() {
   const spans = traceItem.call_count || (tree ? tree.total_downstream_calls + 1 : 0);
   const rawPayload = {
     trace: traceItem,
+    trace_graph: graph,
     root_call: detail?.call ?? null,
     payload,
     trace_tree: tree,
@@ -338,7 +429,7 @@ export default function TraceDetailPage() {
     <div className="trace-detail-mvp">
       <Link href="/trace" className="trace-detail-back">
         <ArrowLeft aria-hidden="true" />
-        Back to Traces
+        Back to Trace Graphs
       </Link>
 
       <section className="trace-detail-hero">
@@ -352,9 +443,9 @@ export default function TraceDetailPage() {
           <p>{statusLabel(traceItem)} · {agentLabel(traceItem, rootNode)} · {traceItem.providers[0] ?? "Production"}</p>
         </div>
         <div className="trace-detail-hero-actions">
-          <button type="button" className="btn btn-soft" onClick={() => void refreshTraceDetail()} disabled={tracesQuery.isFetching || traceByIdQuery.isFetching || traceTreeQuery.isFetching || callDetailQuery.isFetching}>
+          <button type="button" className="btn btn-soft" onClick={() => void refreshTraceDetail()} disabled={tracesQuery.isFetching || traceGraphQuery.isFetching || traceByIdQuery.isFetching || traceTreeQuery.isFetching || callDetailQuery.isFetching}>
             <RefreshCw aria-hidden="true" />
-            {tracesQuery.isFetching || traceByIdQuery.isFetching || traceTreeQuery.isFetching || callDetailQuery.isFetching ? "Refreshing..." : "Refresh"}
+            {tracesQuery.isFetching || traceGraphQuery.isFetching || traceByIdQuery.isFetching || traceTreeQuery.isFetching || callDetailQuery.isFetching ? "Refreshing..." : "Refresh"}
           </button>
           <button type="button" className="btn btn-soft" onClick={() => void copyTraceId()}>
             <Copy aria-hidden="true" />
@@ -388,9 +479,9 @@ export default function TraceDetailPage() {
               <h2>Trace timeline</h2>
               <p>Ordered execution evidence from root call through child steps.</p>
             </header>
-            {traceTreeQuery.isLoading ? <div className="trace-detail-empty">Loading trace timeline...</div> : null}
-            {traceTreeQuery.error ? <div className="trace-detail-empty">Trace tree unavailable.</div> : null}
-            {!traceTreeQuery.isLoading && timelineRows.length === 0 ? <div className="trace-detail-empty">No structured trace steps captured yet.</div> : null}
+            {traceGraphQuery.isLoading || traceTreeQuery.isLoading ? <div className="trace-detail-empty">Loading trace timeline...</div> : null}
+            {traceGraphQuery.error && traceTreeQuery.error ? <div className="trace-detail-empty">Trace graph unavailable.</div> : null}
+            {!traceGraphQuery.isLoading && !traceTreeQuery.isLoading && timelineRows.length === 0 ? <div className="trace-detail-empty">No structured trace steps captured yet.</div> : null}
             {timelineRows.length > 0 ? (
               <div className="trace-detail-timeline">
                 {timelineRows.map(({ node, depth, index }) => (
@@ -474,6 +565,40 @@ export default function TraceDetailPage() {
 
           <article className="trace-detail-card">
             <header>
+              <h2>Policy / Handoff</h2>
+              <p>Captured guardrail decisions and agent-to-agent transfers.</p>
+            </header>
+            <div className="trace-detail-context-grid">
+              <div>
+                <strong>Policy decisions</strong>
+                {policyItems.length > 0 ? policyItems.map((item, index) => <span key={`policy-${index}`}>{item}</span>) : <span>No policy decisions captured.</span>}
+              </div>
+              <div>
+                <strong>Handoffs</strong>
+                {handoffItems.length > 0 ? handoffItems.map((item, index) => <span key={`handoff-${index}`}>{item}</span>) : <span>No handoffs captured.</span>}
+              </div>
+            </div>
+          </article>
+
+          <article className="trace-detail-card">
+            <header>
+              <h2>Outcome / Versions</h2>
+              <p>Business result and deploy/model/tool/RAG version evidence.</p>
+            </header>
+            <div className="trace-detail-context-grid">
+              <div>
+                <strong>Business outcome</strong>
+                <span>{businessOutcome ?? "No business outcome captured."}</span>
+              </div>
+              <div>
+                <strong>Versions</strong>
+                {versionEntries.length > 0 ? versionEntries.map(([key, value]) => <span key={key}>{key}: {String(value)}</span>) : <span>No version metadata captured.</span>}
+              </div>
+            </div>
+          </article>
+
+          <article className="trace-detail-card">
+            <header>
               <h2>Diagnosis result</h2>
               <p>Failure classification and root-cause evidence when available.</p>
             </header>
@@ -517,6 +642,11 @@ export default function TraceDetailPage() {
             <span>Replay readiness</span>
             <strong>{replayReadiness(traceItem)}</strong>
             <p>{rootCallId ? "Root call evidence is available for trusted replay." : "This trace is missing a root call id."}</p>
+          </div>
+          <div className="trace-detail-panel-card">
+            <span>Capture completeness</span>
+            <strong>{graph ? `${Math.round(graph.summary.capture_completeness_score * 100)}%` : DASH}</strong>
+            <p>{completenessWarnings.length > 0 ? completenessWarnings.join(", ") : "No graph completeness warnings."}</p>
           </div>
           <div className="trace-detail-panel-card">
             <span>Related evidence</span>

@@ -23,6 +23,7 @@ from app.services.loop_signals import output_signal, summarize_tool_lifecycle, n
 from app.services.outcome_attribution import ingest_outcome
 from app.services.privacy import mask_error_message, mask_metadata, mask_payload
 from app.services.redis_client import get_redis_client
+from app.services.trace_graph import upsert_trace_graph_for_call
 from app.worker.tasks import process_diagnosis
 
 # Try to import redis for idempotency cache; fall back gracefully if unavailable
@@ -150,6 +151,18 @@ def _payload_from_ingest_event(event: IngestEventV2) -> dict:
         "circuit_open_models": event.circuit_open_models,
         "trace_id": event.trace_id,
         "parent_call_id": event.parent_call_id,
+        "span_type": event.span_type,
+        "span_name": event.span_name,
+        "span_index": event.span_index,
+        "input": event.input,
+        "system_prompt": event.system_prompt,
+        "user_input": event.user_input,
+        "final_answer": event.final_answer,
+        "tool": event.tool,
+        "memory": event.memory,
+        "handoff": event.handoff,
+        "policy": event.policy,
+        "versions": event.versions,
         "agent_name": event.agent_name,
         "prompt_fingerprint": event.prompt_fingerprint,
         "prompt_version": event.prompt_version,
@@ -168,6 +181,9 @@ def _payload_from_ingest_event(event: IngestEventV2) -> dict:
         "workflow_name": event.workflow_name,
         "step_index": event.step_index,
         "agent_framework": event.agent_framework,
+        "capture_source": event.capture_source,
+        "masking_version": event.masking_version,
+        "pii_masked": event.pii_masked,
     }
 
 
@@ -343,10 +359,17 @@ def _build_call_metadata(payload: dict, *, custom_patterns: list[str] | None = N
             "call_type": payload.get("call_type"),
             "trace_id": payload.get("trace_id"),
             "parent_call_id": payload.get("parent_call_id"),
+            "span_type": payload.get("span_type"),
+            "span_name": payload.get("span_name"),
+            "span_index": payload.get("span_index"),
             "agent_name": payload.get("agent_name"),
             "prompt_fingerprint": payload.get("prompt_fingerprint"),
             "prompt_version": payload.get("prompt_version"),
             "has_outcome": bool(payload.get("outcome")),
+            "capture_source": payload.get("capture_source"),
+            "masking_version": payload.get("masking_version"),
+            "pii_masked": payload.get("pii_masked"),
+            "versions": payload.get("versions"),
             "workflow_id": payload.get("workflow_id"),
             "workflow_name": payload.get("workflow_name"),
             "user_id": payload.get("user_id"),
@@ -881,6 +904,15 @@ def process_ingest_batch_for_tenant(
         if existing_call is not None:
             duplicates += 1
             record_diagnosis_job("already_exists")
+            try:
+                upsert_trace_graph_for_call(db=db, tenant_id=tenant_id, call=existing_call)
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "Failed to backfill trace graph for duplicate ingest",
+                    extra={"tenant_id": tenant_id, "call_id": existing_call.id},
+                )
             retry_result = _retry_enqueue_for_existing_call(db=db, tenant_id=tenant_id, call=existing_call)
             if retry_result == "queued":
                 queued += 1
@@ -912,6 +944,7 @@ def process_ingest_batch_for_tenant(
         )
         db.add(call)
         db.add(job)
+        upsert_trace_graph_for_call(db=db, tenant_id=tenant_id, call=call, payload=payload)
 
         try:
             db.commit()
@@ -925,6 +958,16 @@ def process_ingest_batch_for_tenant(
                 event_id=event_id,
                 call_id=diagnosis_id,
             )
+            if existing_after_race is not None:
+                try:
+                    upsert_trace_graph_for_call(db=db, tenant_id=tenant_id, call=existing_after_race)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception(
+                        "Failed to backfill trace graph after ingest idempotency race",
+                        extra={"tenant_id": tenant_id, "call_id": existing_after_race.id},
+                    )
             retry_result = (
                 _retry_enqueue_for_existing_call(
                     db=db,

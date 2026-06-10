@@ -61,6 +61,13 @@ def _tool_calls(response_body: dict[str, Any]) -> list[dict[str, Any]] | None:
     return _as_list_of_dicts(_first_choice_message(response_body).get("tool_calls"))
 
 
+def _message_content(messages: list[dict[str, Any]], role: str) -> str | None:
+    for message in reversed(messages):
+        if message.get("role") == role and isinstance(message.get("content"), str):
+            return str(message["content"])[:12000]
+    return None
+
+
 def _canonical_tool_calls(raw: dict[str, Any], response_body: dict[str, Any]) -> list[dict[str, Any]] | None:
     return _as_list_of_dicts(raw.get("tool_calls")) or _as_list_of_dicts(raw.get("tool_calls_made")) or _tool_calls(response_body)
 
@@ -106,6 +113,8 @@ def gateway_event_to_ingest_event(raw: dict[str, Any]) -> tuple[str, IngestEvent
     tools = _as_list_of_dicts(request_body.get("tools"))
     messages = _as_list_of_dicts(request_body.get("messages")) or []
     tool_calls = _canonical_tool_calls(raw, response_body)
+    input_payload = _as_dict(raw.get("input")) or {"messages": messages, "request": request_body}
+    output_content = str(raw.get("output_content") or "").strip() or _output_content(response_body)
 
     event = IngestEventV2(
         schema_version="v2",
@@ -125,11 +134,23 @@ def gateway_event_to_ingest_event(raw: dict[str, Any]) -> tuple[str, IngestEvent
         tool_calls_made=tool_calls,
         retrieval=_as_dict(raw.get("retrieval")) or None,
         outcome=_as_dict(raw.get("outcome")) or None,
-        output_content=_output_content(response_body),
+        output_content=output_content,
         finish_reason=str(raw.get("finish_reason") or "").strip() or None,
         stop_reason=str(raw.get("stop_reason") or "").strip() or None,
         trace_id=str(raw.get("trace_id") or "").strip() or None,
         parent_call_id=str(raw.get("parent_call_id") or "").strip() or None,
+        span_type=str(raw.get("span_type") or "llm_call").strip() or "llm_call",
+        span_name=str(raw.get("span_name") or f"gateway/{model}").strip() or None,
+        span_index=raw.get("span_index") if raw.get("span_index") is not None else raw.get("step_index"),
+        input=input_payload,
+        system_prompt=str(raw.get("system_prompt") or _message_content(messages, "system") or "").strip() or None,
+        user_input=str(raw.get("user_input") or _message_content(messages, "user") or "").strip() or None,
+        final_answer=str(raw.get("final_answer") or output_content or "").strip() or None,
+        tool=_as_dict(raw.get("tool")) or ({"calls": tool_calls} if tool_calls else None),
+        memory=_as_dict(raw.get("memory")) or None,
+        handoff=_as_dict(raw.get("handoff")) or None,
+        policy=_as_dict(raw.get("policy")) or None,
+        versions=_as_dict(raw.get("versions")) or None,
         agent_name=str(raw.get("agent_name") or "").strip() or None,
         prompt_fingerprint=generate_prompt_fingerprint(messages, tools, model) if messages else None,
         prompt_version=str(raw.get("prompt_version") or "").strip() or None,
@@ -141,6 +162,9 @@ def gateway_event_to_ingest_event(raw: dict[str, Any]) -> tuple[str, IngestEvent
         workflow_name=str(raw.get("workflow_name") or "").strip() or None,
         step_index=raw.get("step_index"),
         agent_framework=str(raw.get("agent_framework") or "").strip() or "gateway",
+        capture_source=str(raw.get("capture_source") or "gateway_redis_stream").strip() or "gateway_redis_stream",
+        masking_version=str(raw.get("masking_version") or "gateway-redact-v1").strip() or None,
+        pii_masked=bool(raw.get("pii_masked", True)),
         metadata={
             "source": "gateway_redis_stream",
             "status_code": status_code or None,

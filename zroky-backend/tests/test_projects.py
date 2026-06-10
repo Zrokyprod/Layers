@@ -88,7 +88,7 @@ def test_project_and_api_key_flow(client: TestClient) -> None:
     assert key_response.status_code == 201
     key_payload = key_response.json()
     assert key_payload["project_id"] == project_id
-    assert key_payload["api_key"].startswith("zroky_api_live_")
+    assert key_payload["api_key"].startswith("zk_live_")
 
     submit_response = client.post(
         "/v1/diagnosis/submit",
@@ -112,7 +112,7 @@ def test_project_and_api_key_flow(client: TestClient) -> None:
 def test_invalid_api_key_rejected(client: TestClient) -> None:
     response = client.post(
         "/v1/diagnosis/submit",
-        headers={"X-Api-Key": "zroky_api_live_invalid"},
+        headers={"X-Api-Key": "zk_live_invalid"},
         json={
             "diagnosis_id": "diag-invalid-key",
             "payload": {"prompt": "hello"},
@@ -163,7 +163,7 @@ def test_api_key_expiry_scope_and_rotation_flow(client: TestClient) -> None:
     )
     assert rotate_response.status_code == 200
     rotated_payload = rotate_response.json()
-    assert rotated_payload["api_key"].startswith("zroky_api_live_")
+    assert rotated_payload["api_key"].startswith("zk_live_")
     assert rotated_payload["rotated_from_key_id"] == key_payload["key_id"]
     assert rotated_payload["scopes"] == ["project:member"]
 

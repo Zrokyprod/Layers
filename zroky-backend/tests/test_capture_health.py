@@ -73,6 +73,29 @@ def _event(call_id: str, call_type: str, provider: str, metadata: dict | None = 
     }
 
 
+def _phase3_ready_event(call_id: str, call_type: str = "tool_call") -> dict:
+    event = _event(call_id, call_type, "openai")
+    event.update(
+        {
+            "span_type": "tool_call" if call_type == "tool_call" else "llm_call",
+            "prompt_version": "support-v42",
+            "input": {"system_prompt": "Follow policy v42.", "user_input": "hello"},
+            "tool": {"name": "lookup", "arguments": {"id": "123"}, "result": {"ok": True}},
+            "policy": {"name": "support_policy", "decision": "allow", "rule_version": "v42"},
+            "versions": {
+                "code_sha": "abc123",
+                "model_version": "gpt-4o-mini-2026-06",
+                "tool_schema_version": "tools-v1",
+                "rag_version": "rag-v1",
+            },
+            "capture_source": "python_sdk",
+            "masking_version": "python-sdk-pii-v1",
+            "pii_masked": True,
+        }
+    )
+    return event
+
+
 def test_capture_health_reports_no_data(client: TestClient) -> None:
     response = client.get("/api/v1/capture/health", headers={"X-Project-Id": "proj_capture"})
 
@@ -121,14 +144,20 @@ def test_capture_health_reports_first_run_validation_warnings(client: TestClient
 
     assert response.status_code == 200
     codes = {warning["code"] for warning in response.json()["validation_warnings"]}
-    assert codes == {"tool_spans_missing", "outcome_missing", "prompt_version_missing"}
+    assert codes == {
+        "input_missing",
+        "version_metadata_missing",
+        "policy_decisions_missing",
+        "tool_spans_missing",
+        "outcome_missing",
+        "prompt_version_missing",
+    }
 
 
 def test_capture_health_clears_validation_warnings_when_signals_exist(client: TestClient) -> None:
     headers = {"X-Project-Id": "proj_capture_ready"}
     call_id = "call_ready_1"
-    event = _event(call_id, "tool_call", "openai")
-    event["prompt_version"] = "support-v42"
+    event = _phase3_ready_event(call_id)
 
     ingest = client.post("/api/v1/ingest", headers=headers, json={"events": [event]})
     assert ingest.status_code == 202
@@ -154,8 +183,7 @@ def test_capture_health_clears_validation_warnings_when_signals_exist(client: Te
 def test_capture_health_counts_inline_ingest_outcome(client: TestClient) -> None:
     headers = {"X-Project-Id": "proj_capture_inline_outcome"}
     call_id = "call_inline_outcome_1"
-    event = _event(call_id, "tool_call", "openai")
-    event["prompt_version"] = "support-v42"
+    event = _phase3_ready_event(call_id)
     event["outcome"] = {
         "type": "ticket_escalated",
         "amount_usd": 12.5,

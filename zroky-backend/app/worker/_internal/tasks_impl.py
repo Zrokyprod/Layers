@@ -20,6 +20,7 @@ _PARTS = (
     "tasks_digest.py",
     "tasks_integrations.py",
     "tasks_replay.py",
+    "tasks_regression_ci.py",
     "tasks_billing.py",
     "tasks_drift.py",
     "tasks_discovery.py",

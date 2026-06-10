@@ -205,6 +205,69 @@ export interface TraceListResponse {
   items: TraceListItem[];
 }
 
+export interface TraceGraphSummary {
+  trace_id: string;
+  root_span_id: string | null;
+  root_call_id: string | null;
+  status: string;
+  span_count: number;
+  agent_count: number;
+  agents: string[];
+  providers: string[];
+  started_at: string | null;
+  ended_at: string | null;
+  total_latency_ms: number | null;
+  total_cost_usd: number;
+  error_count: number;
+  has_failure: boolean;
+  has_outcome: boolean;
+  capture_completeness_score: number;
+  completeness_warnings: string[];
+  projection_error: string | null;
+}
+
+export interface TraceGraphSpan {
+  span_id: string;
+  parent_span_id: string | null;
+  call_id: string | null;
+  event_id: string | null;
+  span_type: string;
+  span_name: string | null;
+  span_index: number | null;
+  agent_name: string | null;
+  provider: string | null;
+  model: string | null;
+  status: string;
+  error_code: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  latency_ms: number | null;
+  cost_usd: number;
+  input: unknown | null;
+  output: unknown | null;
+  tool: unknown | null;
+  retrieval: unknown | null;
+  memory: unknown | null;
+  handoff: unknown | null;
+  policy: unknown | null;
+  outcome: unknown | null;
+  versions: unknown | null;
+  raw_payload: JsonMap | null;
+  children: TraceGraphSpan[];
+}
+
+export interface TraceGraphResponse {
+  summary: TraceGraphSummary;
+  spans: TraceGraphSpan[];
+  root_span: TraceGraphSpan | null;
+  user_input: unknown | null;
+  system_prompt: unknown | null;
+  final_answer: unknown | null;
+  business_outcome: unknown | null;
+  versions: JsonMap;
+  masked_raw_payloads: JsonMap[];
+}
+
 export interface FixAdoptionSummary {
   viewed_diagnoses: number;
   resolved_diagnoses: number;
@@ -253,7 +316,15 @@ export interface HealthScoreResponse {
 export type CaptureHealthStatus = "connected" | "stale" | "no_data";
 
 export interface CaptureValidationWarning {
-  code: "tool_spans_missing" | "outcome_missing" | "prompt_version_missing";
+  code:
+    | "tool_spans_missing"
+    | "outcome_missing"
+    | "prompt_version_missing"
+    | "input_missing"
+    | "version_metadata_missing"
+    | "policy_decisions_missing"
+    | "trace_graph_projection_missing"
+    | "trace_graph_projection_failed";
   label: string;
   detail: string;
 }
@@ -274,7 +345,14 @@ export interface CaptureHealthResponse {
   gateway_events_24h: number;
   retrieval_spans_24h: number;
   memory_spans_24h: number;
+  trace_runs_24h: number;
+  trace_spans_24h: number;
+  policy_spans_24h: number;
+  handoff_spans_24h: number;
+  incomplete_trace_runs_24h: number;
+  projection_failures_24h: number;
   error_events_24h: number;
+  outcome_events_24h: number;
   sampled_recent_calls: number;
   validation_warnings: CaptureValidationWarning[];
 }
@@ -716,6 +794,16 @@ export interface ProjectResponse {
   project_id: string;
   name: string;
   owner_ref: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CurrentUserProjectResponse {
+  membership_id: string;
+  project_id: string;
+  project_name: string;
+  role: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

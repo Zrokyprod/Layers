@@ -2,6 +2,7 @@
 // Copyright 2026 Zroky AI
 
 import type { CapturePayload, ZrokyConfig } from "./types";
+import { maskPayload } from "./pii";
 
 const DEFAULT_ENDPOINT = "https://api.zroky.com/v1/ingest";
 const DISABLED_VALUES = new Set(["1", "true", "yes"]);
@@ -46,13 +47,16 @@ function toBackendEvent(payload: CapturePayload): CapturePayload {
     ...rest
   } = payload;
   const toolCalls = payload.tool_calls ?? payload.tool_calls_made;
-  return {
+  return maskPayload({
     ...rest,
     schema_version: payload.schema_version ?? "v2",
     completion_tokens: payload.completion_tokens ?? payload.output_tokens ?? 0,
     event_id: payload.event_id ?? `${payload.call_id}:capture`,
     tool_calls: toolCalls,
-  };
+    capture_source: payload.capture_source ?? "js_sdk",
+    masking_version: payload.masking_version ?? "js-sdk-pii-v1",
+    pii_masked: payload.pii_masked ?? true,
+  });
 }
 
 function resolveEmitterConfig(config: ZrokyConfig): ResolvedEmitterConfig | undefined {

@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 
 from app.models import ReplayJob, ReplayResult, ResultPayload
+from app.config import Settings
+from app import main as worker_main
 from app.runner import _parse_artifact, run_job
 
 
@@ -28,6 +30,24 @@ def test_run_job_rejects_invalid_artifact_signature() -> None:
 
     assert result.status == "error"
     assert result.error_message == "Artifact signature verification failed"
+
+
+def test_run_job_requires_signing_key_by_default() -> None:
+    result = run_job(_job(artifact_signature=""), signing_key="")
+
+    assert result.status == "error"
+    assert result.error_message == "Artifact signature verification failed"
+
+
+def test_run_job_allows_unsigned_artifacts_only_when_explicitly_disabled(monkeypatch) -> None:
+    artifact = json.dumps({"prompt": "say hi", "expected_output": "hi"}).encode()
+    monkeypatch.setattr("app.runner.download_artifact", lambda _url: artifact)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    result = run_job(_job(artifact_signature=""), signing_key="", signature_required=False)
+
+    assert result.status == "fail"
+    assert "OPENROUTER_API_KEY not configured" in (result.stdout_tail or "")
 
 
 def test_parse_artifact_accepts_plain_json_and_gzip() -> None:
@@ -62,8 +82,37 @@ def test_result_payload_serializes_for_control_plane() -> None:
         completed_at=datetime.now(timezone.utc),
     )
 
-    payload = ResultPayload(worker_token="worker-token", result=result).model_dump(mode="json")
+    payload = ResultPayload(worker_token="worker-token", worker_id="worker-1", result=result).model_dump(mode="json")
 
     assert payload["worker_token"] == "worker-token"
+    assert payload["worker_id"] == "worker-1"
     assert payload["result"]["status"] == "pass"
     assert payload["result"]["replay_id"] == "replay_1"
+
+
+def test_ready_requires_signing_key_when_signatures_required(monkeypatch) -> None:
+    monkeypatch.setattr(
+        worker_main,
+        "settings",
+        Settings(WORKER_TOKEN="worker-token", ARTIFACT_SIGNING_KEY="", ARTIFACT_SIGNATURE_REQUIRED=True),
+    )
+
+    ready, state = worker_main._readiness()
+
+    assert ready is False
+    assert state["worker_token_configured"] is True
+    assert state["artifact_signature_required"] is True
+    assert state["artifact_signing_key_configured"] is False
+
+
+def test_ready_allows_unsigned_artifacts_only_when_explicitly_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(
+        worker_main,
+        "settings",
+        Settings(WORKER_TOKEN="worker-token", ARTIFACT_SIGNING_KEY="", ARTIFACT_SIGNATURE_REQUIRED=False),
+    )
+
+    ready, state = worker_main._readiness()
+
+    assert ready is True
+    assert state["artifact_signature_required"] is False

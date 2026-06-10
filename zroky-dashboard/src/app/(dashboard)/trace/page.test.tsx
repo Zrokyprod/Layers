@@ -148,7 +148,7 @@ function mockTracePage({
   });
 }
 
-describe("Traces list MVP", () => {
+describe("Trace Graphs list MVP", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.refetchCalls.mockResolvedValue({});
@@ -167,7 +167,7 @@ describe("Traces list MVP", () => {
     const { container } = render(<TracePage />);
 
     expect(container.querySelector(".traces-mvp")).toBeInTheDocument();
-    const title = await screen.findByRole("heading", { name: "Traces" });
+    const title = await screen.findByRole("heading", { name: "Trace Graphs" });
     expect(title.closest(".trace-mvp-hero")).toBeInTheDocument();
     expect(screen.getByText("Captured agent calls, tool steps, retrieval events, and replay-ready evidence.")).toBeInTheDocument();
     const overview = screen.getByLabelText("Trace overview");

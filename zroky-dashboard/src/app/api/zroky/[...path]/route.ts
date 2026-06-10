@@ -66,7 +66,8 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
     headers.set("authorization", bearer);
   }
 
-  const projectId = process.env.ZROKY_PROJECT_ID;
+  const selectedProjectId = request.headers.get("x-project-id")?.trim();
+  const projectId = selectedProjectId || process.env.ZROKY_PROJECT_ID;
   const apiKey = process.env.ZROKY_API_KEY;
 
   if (projectId) {

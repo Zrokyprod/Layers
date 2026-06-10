@@ -476,7 +476,7 @@ export default function CallDetailPage() {
     <div className="calls-detail-workspace">
       {/* ── Breadcrumb ── */}
       <nav className="detail-breadcrumb" aria-label="breadcrumb">
-        <Link href="/calls" className="breadcrumb-back">← Calls</Link>
+        <Link href="/calls" className="breadcrumb-back">← Flight Recorder</Link>
         <span className="breadcrumb-sep">/</span>
         <span className="breadcrumb-current mono">{callId.slice(0, 16)}…</span>
       </nav>

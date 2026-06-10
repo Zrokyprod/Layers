@@ -55,6 +55,21 @@ type IngestEventV2 struct {
 	AgentFramework   string                   `json:"agent_framework,omitempty"`
 	TraceID          string                   `json:"trace_id,omitempty"`
 	ParentCallID     string                   `json:"parent_call_id,omitempty"`
+	SpanType         string                   `json:"span_type,omitempty"`
+	SpanName         string                   `json:"span_name,omitempty"`
+	SpanIndex        *int                     `json:"span_index,omitempty"`
+	Input            map[string]interface{}   `json:"input,omitempty"`
+	SystemPrompt     string                   `json:"system_prompt,omitempty"`
+	UserInput        string                   `json:"user_input,omitempty"`
+	FinalAnswer      string                   `json:"final_answer,omitempty"`
+	Tool             map[string]interface{}   `json:"tool,omitempty"`
+	Memory           map[string]interface{}   `json:"memory,omitempty"`
+	Handoff          map[string]interface{}   `json:"handoff,omitempty"`
+	Policy           map[string]interface{}   `json:"policy,omitempty"`
+	Versions         map[string]interface{}   `json:"versions,omitempty"`
+	CaptureSource    string                   `json:"capture_source,omitempty"`
+	MaskingVersion   string                   `json:"masking_version,omitempty"`
+	PiiMasked        bool                     `json:"pii_masked,omitempty"`
 	RequestBody      map[string]interface{}   `json:"request_body,omitempty"`
 	ResponseBody     map[string]interface{}   `json:"response_body,omitempty"`
 	ToolDefinitions  []map[string]interface{} `json:"tool_definitions,omitempty"`

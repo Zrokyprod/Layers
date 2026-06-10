@@ -14,16 +14,17 @@ interface CommandItem {
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
   return [
-    { id: "failure-inbox", label: "Go to Failure Inbox", description: "Open issues, replay gaps, CI gates, goldens, and plan status", shortcut: "Ctrl+A", action: () => router.push("/home") },
-    { id: "issues", label: "Go to Issues", description: "Grouped production issues with root cause and action context", shortcut: "Ctrl+I", action: () => router.push("/issues") },
+    { id: "command-center", label: "Go to Command Center", description: "Open failures, replay gaps, CI gates, goldens, and plan status", shortcut: "Ctrl+A", action: () => router.push("/home") },
+    { id: "agents", label: "Go to Agents", description: "Agent safety coverage, replay proof, and open failure status", action: () => router.push("/agents") },
+    { id: "issues", label: "Go to Failures", description: "Grouped production failures with root cause and action context", shortcut: "Ctrl+I", action: () => router.push("/issues") },
     { id: "replay", label: "Go to Replay Lab", description: "Test a fix against past data before deploying", action: () => router.push("/replay") },
     { id: "goldens", label: "Go to Goldens", description: "Golden datasets for regression-safe evaluation", action: () => router.push("/goldens") },
     { id: "ci-gates", label: "Go to CI Gates", description: "Regression CI status, PR comments, and protected-flow gates", action: () => router.push("/ci-gates") },
     { id: "cost", label: "Go to Cost", description: "Spend, waste, and cost of failures", action: () => router.push("/cost") },
-    { id: "calls", label: "Go to Calls", description: "What your agent said — prompts, responses, latency", shortcut: "Ctrl+Alt+C", action: () => router.push("/calls") },
-    { id: "traces", label: "Go to Traces", description: "Trace-by-trace execution paths, span evidence, and multi-agent context", action: () => router.push("/trace") },
+    { id: "calls", label: "Go to Flight Recorder", description: "Captured calls, prompts, responses, latency, and failure evidence", shortcut: "Ctrl+Alt+C", action: () => router.push("/calls") },
+    { id: "traces", label: "Go to Trace Graphs", description: "Trace-by-trace execution paths, span evidence, and multi-agent context", action: () => router.push("/trace") },
     { id: "alerts", label: "Go to Alerts", description: "Triage open alerts — acknowledge, resolve, reopen", action: () => router.push("/alerts") },
-    { id: "home", label: "Open Failure Inbox", description: "Default dashboard home", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "home", label: "Open Command Center", description: "Default dashboard home", shortcut: "Ctrl+H", action: () => router.push("/home") },
     { id: "settings-evaluation", label: "Settings → Evaluation", description: "Calibration and judge controls live in settings", action: () => router.push("/settings/evaluation") },
     { id: "settings-evaluation-calibration", label: "Settings → Evaluation → Calibration", description: "Open calibration controls in settings", action: () => router.push("/settings/evaluation?workspace=calibration") },
     { id: "settings-evaluation-judge", label: "Settings → Evaluation → Judge", description: "Open judge controls in settings", action: () => router.push("/settings/evaluation?workspace=judge") },

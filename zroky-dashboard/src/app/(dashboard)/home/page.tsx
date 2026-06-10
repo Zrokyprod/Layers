@@ -655,7 +655,7 @@ export default function HomePage() {
       if (successCount > 0) {
         setLastUpdatedAt(Date.now());
       } else {
-        setError("Failure Inbox could not refresh. Showing the last loaded state.");
+        setError("Command Center could not refresh. Showing the last loaded state.");
       }
     } catch (loadError) {
       if (!signal?.aborted) {
@@ -840,7 +840,7 @@ export default function HomePage() {
             <AlertTriangle aria-hidden="true" />
             Production failure queue
           </div>
-          <h1>Failure Inbox</h1>
+          <h1>Command Center</h1>
           <p>{loading ? "Loading trusted replay gaps for open production issues." : headerSubtitle}</p>
         </div>
         <div className="fi-hero-actions">
@@ -976,7 +976,7 @@ export default function HomePage() {
         </section>
       </section>
 
-      <section className="fi-kpi-grid" aria-label="Failure Inbox summary">
+      <section className="fi-kpi-grid" aria-label="Command Center summary">
         <KpiCard
           icon={<AlertTriangle aria-hidden="true" />}
           label="Critical & high"
@@ -1026,7 +1026,7 @@ export default function HomePage() {
           />
 
           {loading ? (
-            <div className="fi-loading" aria-label="Loading Failure Inbox" />
+            <div className="fi-loading" aria-label="Loading Command Center" />
           ) : focusedIssues.length === 0 ? (
             <EmptyQueue>No open failures loaded.</EmptyQueue>
           ) : (

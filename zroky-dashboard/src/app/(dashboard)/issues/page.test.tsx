@@ -164,7 +164,7 @@ function rowForIssue(title: string): HTMLElement {
   return row;
 }
 
-describe("IssuesPage MVP list", () => {
+describe("FailuresPage MVP list", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     providerKeyState.active = true;
@@ -176,7 +176,7 @@ describe("IssuesPage MVP list", () => {
 
     render(<IssuesPage />);
 
-    expect(await screen.findByRole("heading", { name: "Issues" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Failures" })).toBeInTheDocument();
     expect(screen.getByText("Grouped production failures detected across your agents.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review replay gaps" })).toBeInTheDocument();
 

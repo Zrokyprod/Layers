@@ -357,6 +357,7 @@ def _extract_response_metadata(event: CallEvent, response: Any) -> None:
                 ])
                 _apply_tool_lifecycle_telemetry(event)
             event.output_content = mask_value(getattr(message, "content", None))
+            event.final_answer = event.final_answer or event.output_content
             _apply_loop_telemetry_from_output(event, event.output_content)
 
 

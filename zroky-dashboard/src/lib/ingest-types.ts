@@ -90,6 +90,30 @@ export interface IngestEventV2 {
   trace_id?: string | null;
   /** call_id of the parent call in a multi-agent tree */
   parent_call_id?: string | null;
+  /** [v2] Normalized trace graph span type */
+  span_type?: string | null;
+  /** [v2] Human-readable trace graph span name */
+  span_name?: string | null;
+  /** [v2] Stable sibling ordering for spans emitted from the same run */
+  span_index?: number | null;
+  /** [v2] Masked structured input evidence for the span */
+  input?: Record<string, unknown> | null;
+  /** [v2] Masked system prompt or policy prompt active for this span */
+  system_prompt?: string | null;
+  /** [v2] Masked user input that triggered the span */
+  user_input?: string | null;
+  /** [v2] Masked final answer or tool-visible output for this span */
+  final_answer?: string | null;
+  /** [v2] Masked tool call evidence, including name, arguments, result, and error when available */
+  tool?: Record<string, unknown> | null;
+  /** [v2] Masked memory read/write evidence for memory spans */
+  memory?: Record<string, unknown> | null;
+  /** [v2] Masked agent-to-agent handoff evidence */
+  handoff?: Record<string, unknown> | null;
+  /** [v2] Captured policy decision evidence. Runtime enforcement is out of scope for this schema */
+  policy?: Record<string, unknown> | null;
+  /** [v2] Version metadata such as code_sha, deployment_id, model_version, tool_schema_version, and rag_version */
+  versions?: Record<string, unknown> | null;
   /** Logical name of the agent making this call */
   agent_name?: string | null;
   /** Stable hash of the prompt template (excluding variable/user content) */
@@ -121,6 +145,12 @@ export interface IngestEventV2 {
   step_index?: number | null;
   /** [v2] Agent orchestration framework, if known */
   agent_framework?: string | null;
+  /** [v2] Capture surface that emitted this event, such as python_sdk, js_sdk, gateway, or direct_ingest */
+  capture_source?: string | null;
+  /** [v2] Redaction/masking rule version applied before ingest */
+  masking_version?: string | null;
+  /** [v2] True when the emitter applied PII/secrets masking before sending the event */
+  pii_masked?: boolean | null;
 }
 
 /** Alias for backward compatibility. Prefer IngestEventV2. */
@@ -140,13 +170,19 @@ export const CALL_TYPES = [
   'tool_result',
   'retrieval',
   'memory',
+  'agent_run',
+  'trace',
+  'policy_decision',
+  'handoff',
 ] as const;
 
 export type CallType = (typeof CALL_TYPES)[number];
 
 export const CALL_STATUSES = [
   'completed',
+  'success',
   'error',
+  'failed',
   'timeout',
   'cancelled',
   'rate_limited',

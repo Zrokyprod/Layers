@@ -18,10 +18,25 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-def verify_artifact_signature(*, url: str, signature: str, signing_key: str) -> bool:
+def verify_artifact_signature(
+    *,
+    url: str,
+    signature: str,
+    signing_key: str,
+    signature_required: bool = True,
+) -> bool:
     """Return True when HMAC-SHA256(key, url) matches the provided signature."""
+    if not signature:
+        if signature_required:
+            logger.error("Artifact signature missing while ARTIFACT_SIGNATURE_REQUIRED=true")
+            return False
+        logger.warning("Artifact signature missing — accepted only because signatures are explicitly disabled")
+        return True
     if not signing_key:
-        logger.warning("ARTIFACT_SIGNING_KEY is not configured — signature check skipped (dev mode)")
+        if signature_required:
+            logger.error("ARTIFACT_SIGNING_KEY missing while ARTIFACT_SIGNATURE_REQUIRED=true")
+            return False
+        logger.warning("ARTIFACT_SIGNING_KEY missing — signature check skipped only because signatures are explicitly disabled")
         return True
     expected = hmac.new(
         signing_key.encode(),

@@ -75,6 +75,7 @@ import {
   reopenAlert,
   getAlertDetail,
   getMe,
+  listMyProjects,
   getCallDetail,
   getAdjacentCalls,
   getCallTraceTree,
@@ -93,6 +94,7 @@ import {
   getLoopIncidents,
   getAuthSummary,
   getRecentTraces,
+  getTraceGraph,
   getTraceById,
   listDriftModels,
   getDriftStatus,
@@ -139,8 +141,10 @@ import type {
   ProjectResponse,
   ApiKeyResponse,
   ApiKeyCreateResponse,
+  CurrentUserProjectResponse,
   MeResponse,
   TraceListResponse,
+  TraceGraphResponse,
   DriftModelView,
   StatusResponse,
   ModelHistoryResponse,
@@ -259,6 +263,14 @@ export function useTraceById(traceId: string, days = 30) {
   return useQuery<import("./types").TraceListItem>({
     queryKey: ["traces", "by-id", traceId, days],
     queryFn: () => getTraceById(traceId, days),
+    enabled: !!traceId,
+  });
+}
+
+export function useTraceGraph(traceId: string) {
+  return useQuery<TraceGraphResponse>({
+    queryKey: ["traces", "graph", traceId],
+    queryFn: () => getTraceGraph(traceId),
     enabled: !!traceId,
   });
 }
@@ -552,6 +564,15 @@ export function useMe() {
     queryKey: ["me"],
     queryFn: () => getMe(),
     retry: false,
+  });
+}
+
+export function useMyProjects() {
+  return useQuery<CurrentUserProjectResponse[]>({
+    queryKey: ["me", "projects"],
+    queryFn: ({ signal }) => listMyProjects(signal),
+    retry: false,
+    staleTime: 60_000,
   });
 }
 

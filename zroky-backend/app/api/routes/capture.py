@@ -8,7 +8,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_role
-from app.db.models import Call, OutcomeEvent
+from app.db.models import Call, OutcomeEvent, TraceRun, TraceSpan
 from app.db.session import get_db_session
 
 router = APIRouter(prefix="/v1/capture")
@@ -17,7 +17,16 @@ CaptureStatus = Literal["connected", "stale", "no_data"]
 
 
 class CaptureValidationWarning(BaseModel):
-    code: Literal["tool_spans_missing", "outcome_missing", "prompt_version_missing"]
+    code: Literal[
+        "tool_spans_missing",
+        "outcome_missing",
+        "prompt_version_missing",
+        "input_missing",
+        "version_metadata_missing",
+        "policy_decisions_missing",
+        "trace_graph_projection_missing",
+        "trace_graph_projection_failed",
+    ]
     label: str
     detail: str
 
@@ -38,6 +47,12 @@ class CaptureHealthResponse(BaseModel):
     gateway_events_24h: int
     retrieval_spans_24h: int
     memory_spans_24h: int
+    trace_runs_24h: int = 0
+    trace_spans_24h: int = 0
+    policy_spans_24h: int = 0
+    handoff_spans_24h: int = 0
+    incomplete_trace_runs_24h: int = 0
+    projection_failures_24h: int = 0
     error_events_24h: int
     outcome_events_24h: int
     sampled_recent_calls: int
@@ -106,6 +121,25 @@ def _has_prompt_version(call: Call) -> bool:
     return bool(str(metadata.get("prompt_version") or "").strip())
 
 
+def _safe_json_any(raw: str | None) -> Any | None:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def _has_version_metadata(span: TraceSpan) -> bool:
+    parsed = _safe_json_any(span.versions_json)
+    if not isinstance(parsed, dict):
+        return False
+    return any(
+        parsed.get(key) not in (None, "", [], {})
+        for key in ("code_sha", "deployment_id", "model_version", "tool_schema_version", "rag_version")
+    )
+
+
 @router.get("/health", response_model=CaptureHealthResponse)
 def capture_health(
     tenant_id: str = Depends(require_tenant_role("member")),
@@ -147,6 +181,9 @@ def capture_health(
     error_events = 0
     has_tool_signal = False
     has_prompt_version = False
+    has_input_signal = False
+    has_version_metadata = False
+    has_policy_signal = False
 
     for call in recent_calls:
         source = _source_for_call(call)
@@ -174,8 +211,111 @@ def capture_health(
         or 0
     )
 
+    recent_spans = list(
+        db.execute(
+            select(TraceSpan)
+            .where(TraceSpan.project_id == tenant_id, TraceSpan.started_at >= since_24h)
+            .limit(2000)
+        ).scalars()
+    )
+    trace_spans_24h = len(recent_spans)
+    graph_retrieval_spans = 0
+    graph_memory_spans = 0
+    trace_runs_24h = int(
+        db.execute(
+            select(func.count())
+            .select_from(TraceRun)
+            .where(TraceRun.project_id == tenant_id, TraceRun.started_at >= since_24h)
+        ).scalar_one()
+        or 0
+    )
+    policy_spans_24h = 0
+    handoff_spans_24h = 0
+    for span in recent_spans:
+        span_type = (span.span_type or "").strip().lower()
+        has_tool_signal = has_tool_signal or bool(span.tool_json) or span_type in {"tool_call", "tool_result"}
+        has_input_signal = has_input_signal or bool(span.input_json)
+        has_version_metadata = has_version_metadata or _has_version_metadata(span)
+        has_policy_signal = has_policy_signal or bool(span.policy_json) or span_type == "policy"
+        if span_type == "retrieval" or span.retrieval_json:
+            graph_retrieval_spans += 1
+        if span_type == "memory" or span.memory_json:
+            graph_memory_spans += 1
+        if span_type == "policy" or span.policy_json:
+            policy_spans_24h += 1
+        if span_type == "handoff" or span.handoff_json:
+            handoff_spans_24h += 1
+
+    retrieval_spans = max(retrieval_spans, graph_retrieval_spans)
+    memory_spans = max(memory_spans, graph_memory_spans)
+
+    incomplete_trace_runs_24h = int(
+        db.execute(
+            select(func.count())
+            .select_from(TraceRun)
+            .where(
+                TraceRun.project_id == tenant_id,
+                TraceRun.started_at >= since_24h,
+                TraceRun.capture_completeness_score < 1,
+            )
+        ).scalar_one()
+        or 0
+    )
+    projection_failures_24h = int(
+        db.execute(
+            select(func.count())
+            .select_from(TraceRun)
+            .where(
+                TraceRun.project_id == tenant_id,
+                TraceRun.started_at >= since_24h,
+                TraceRun.projection_error.is_not(None),
+            )
+        ).scalar_one()
+        or 0
+    )
+
     validation_warnings: list[CaptureValidationWarning] = []
     if recent_calls:
+        if trace_spans_24h == 0:
+            validation_warnings.append(
+                CaptureValidationWarning(
+                    code="trace_graph_projection_missing",
+                    label="Trace graph missing",
+                    detail="Recent calls arrived, but no normalized trace graph spans were projected.",
+                )
+            )
+        if projection_failures_24h > 0:
+            validation_warnings.append(
+                CaptureValidationWarning(
+                    code="trace_graph_projection_failed",
+                    label="Trace graph projection failed",
+                    detail=f"{projection_failures_24h} trace graph projections reported errors in the last 24h.",
+                )
+            )
+        if not has_input_signal:
+            validation_warnings.append(
+                CaptureValidationWarning(
+                    code="input_missing",
+                    label="Input missing",
+                    detail="Recent trace spans did not include masked user/system input evidence.",
+                )
+            )
+        if not has_version_metadata:
+            validation_warnings.append(
+                CaptureValidationWarning(
+                    code="version_metadata_missing",
+                    label="Version metadata missing",
+                    detail="Recent trace spans did not include code/model/tool/RAG version metadata.",
+                )
+            )
+        if not has_policy_signal:
+            validation_warnings.append(
+                CaptureValidationWarning(
+                    code="policy_decisions_missing",
+                    label="Policy decisions missing",
+                    detail="No captured policy decision spans were seen in the last 24h.",
+                )
+            )
         if not has_tool_signal:
             validation_warnings.append(
                 CaptureValidationWarning(
@@ -226,6 +366,12 @@ def capture_health(
         gateway_events_24h=gateway_events,
         retrieval_spans_24h=retrieval_spans,
         memory_spans_24h=memory_spans,
+        trace_runs_24h=trace_runs_24h,
+        trace_spans_24h=trace_spans_24h,
+        policy_spans_24h=policy_spans_24h,
+        handoff_spans_24h=handoff_spans_24h,
+        incomplete_trace_runs_24h=incomplete_trace_runs_24h,
+        projection_failures_24h=projection_failures_24h,
         error_events_24h=error_events,
         outcome_events_24h=outcome_events_24h,
         sampled_recent_calls=len(recent_calls),

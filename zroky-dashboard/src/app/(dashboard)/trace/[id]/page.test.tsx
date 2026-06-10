@@ -9,6 +9,7 @@ import TraceDetailPage from "./page";
 const hooks = vi.hoisted(() => ({
   mutateReplay: vi.fn(),
   refetchCallDetail: vi.fn(),
+  refetchTraceGraph: vi.fn(),
   refetchTraceById: vi.fn(),
   refetchTraceTree: vi.fn(),
   refetchTraces: vi.fn(),
@@ -16,6 +17,7 @@ const hooks = vi.hoisted(() => ({
   useCallTraceTree: vi.fn(),
   useCreateReplayRunFromCall: vi.fn(),
   useRecentTraces: vi.fn(),
+  useTraceGraph: vi.fn(),
   useTraceById: vi.fn(),
 }));
 
@@ -53,6 +55,7 @@ vi.mock("@/lib/hooks", async () => {
     useCallTraceTree: hooks.useCallTraceTree,
     useCreateReplayRunFromCall: hooks.useCreateReplayRunFromCall,
     useRecentTraces: hooks.useRecentTraces,
+    useTraceGraph: hooks.useTraceGraph,
     useTraceById: hooks.useTraceById,
   };
 });
@@ -169,6 +172,7 @@ function mockTraceDetail({
     isLoading: false,
     refetch: hooks.refetchTraces,
   });
+  hooks.useTraceGraph.mockReturnValue({ data: null, error: null, isFetching: false, isLoading: false, refetch: hooks.refetchTraceGraph });
   hooks.useTraceById.mockReturnValue({ data: loadedTrace, error: null, isFetching: false, isLoading: false, refetch: hooks.refetchTraceById });
   hooks.useCallTraceTree.mockReturnValue({
     data: {
@@ -196,6 +200,7 @@ describe("Trace detail MVP", () => {
     vi.clearAllMocks();
     navigation.traceId = "trace_refund";
     hooks.refetchCallDetail.mockResolvedValue({});
+    hooks.refetchTraceGraph.mockResolvedValue({});
     hooks.refetchTraceById.mockResolvedValue({});
     hooks.refetchTraceTree.mockResolvedValue({});
     hooks.refetchTraces.mockResolvedValue({});
@@ -212,7 +217,7 @@ describe("Trace detail MVP", () => {
   it("renders the detail header and metadata cards", async () => {
     render(<TraceDetailPage />);
 
-    expect((await screen.findByRole("link", { name: "Back to Traces" })).getAttribute("href")).toBe("/trace");
+    expect((await screen.findByRole("link", { name: "Back to Trace Graphs" })).getAttribute("href")).toBe("/trace");
     const title = screen.getByRole("heading", { name: "Refund Agent trace" });
     expect(title.closest(".trace-detail-hero")).toBeInTheDocument();
     const hero = title.closest(".trace-detail-hero");
@@ -333,6 +338,7 @@ describe("Trace detail MVP", () => {
     if (!hero) throw new Error("Missing trace detail hero");
     fireEvent.click(within(hero).getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(hooks.refetchTraces).toHaveBeenCalledTimes(1));
+    expect(hooks.refetchTraceGraph).toHaveBeenCalledTimes(1);
     expect(hooks.refetchTraceById).toHaveBeenCalledTimes(1);
     expect(hooks.refetchTraceTree).toHaveBeenCalledTimes(1);
     expect(hooks.refetchCallDetail).toHaveBeenCalledTimes(1);

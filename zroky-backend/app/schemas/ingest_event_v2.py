@@ -98,6 +98,30 @@ class IngestEventV2(BaseModel):
     trace_id: str | None = Field(default=None, max_length=128)
     # call_id of the parent call in a multi-agent tree
     parent_call_id: str | None = Field(default=None, max_length=128)
+    # [v2] Normalized trace graph span type
+    span_type: str | None = Field(default=None, max_length=64)
+    # [v2] Human-readable trace graph span name
+    span_name: str | None = Field(default=None, max_length=255)
+    # [v2] Stable sibling ordering for spans emitted from the same run
+    span_index: int | None = Field(default=None, ge=0)
+    # [v2] Masked structured input evidence for the span
+    input: dict[str, Any] | None = Field(default=None)
+    # [v2] Masked system prompt or policy prompt active for this span
+    system_prompt: str | None = Field(default=None, max_length=12000)
+    # [v2] Masked user input that triggered the span
+    user_input: str | None = Field(default=None, max_length=12000)
+    # [v2] Masked final answer or tool-visible output for this span
+    final_answer: str | None = Field(default=None, max_length=12000)
+    # [v2] Masked tool call evidence, including name, arguments, result, and error when available
+    tool: dict[str, Any] | None = Field(default=None)
+    # [v2] Masked memory read/write evidence for memory spans
+    memory: dict[str, Any] | None = Field(default=None)
+    # [v2] Masked agent-to-agent handoff evidence
+    handoff: dict[str, Any] | None = Field(default=None)
+    # [v2] Captured policy decision evidence. Runtime enforcement is out of scope for this schema
+    policy: dict[str, Any] | None = Field(default=None)
+    # [v2] Version metadata such as code_sha, deployment_id, model_version, tool_schema_version, and rag_v
+    versions: dict[str, Any] | None = Field(default=None)
     # Logical name of the agent making this call
     agent_name: str | None = Field(default=None, max_length=255)
     # Stable hash of the prompt template (excluding variable/user content)
@@ -129,6 +153,12 @@ class IngestEventV2(BaseModel):
     step_index: int | None = Field(default=None, ge=0)
     # [v2] Agent orchestration framework, if known
     agent_framework: str | None = Field(default=None, max_length=64)
+    # [v2] Capture surface that emitted this event, such as python_sdk, js_sdk, gateway, or direct_ingest
+    capture_source: str | None = Field(default=None, max_length=64)
+    # [v2] Redaction/masking rule version applied before ingest
+    masking_version: str | None = Field(default=None, max_length=64)
+    # [v2] True when the emitter applied PII/secrets masking before sending the event
+    pii_masked: bool | None = Field(default=None)
 
     @model_validator(mode='after')
     def _normalize(self) -> 'IngestEventV2':

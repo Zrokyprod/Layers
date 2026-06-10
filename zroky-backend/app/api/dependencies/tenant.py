@@ -27,6 +27,21 @@ class TenantContext:
     subject: str | None = None
 
 
+def selected_project_id_from_request(request: Request) -> str | None:
+    settings = get_settings()
+
+    primary = request.headers.get(settings.TENANT_HEADER_NAME)
+    if primary and primary.strip():
+        return primary.strip()
+
+    if settings.ACCEPT_LEGACY_TENANT_HEADER:
+        legacy = request.headers.get(settings.LEGACY_TENANT_HEADER_NAME)
+        if legacy and legacy.strip():
+            return legacy.strip()
+
+    return None
+
+
 def _resolve_project_from_bearer(
     request: Request,
     selected_project_id: str | None,
@@ -91,8 +106,7 @@ def _resolve_project_from_bearer(
     if (jti and token_store.get(f"jwt_blacklisted:{jti}")) or token_store.get(f"jwt_blacklisted_user:{user_id}"):
         return None
 
-    # Resolve the user's project from their membership row
-    membership_row = db.execute(
+    membership_query = (
         select(ProjectMembership)
         .join(Project, Project.id == ProjectMembership.project_id)
         .where(
@@ -100,8 +114,38 @@ def _resolve_project_from_bearer(
             ProjectMembership.is_active.is_(True),
             Project.is_active.is_(True),
         )
-        .limit(1)
-    ).scalar_one_or_none()
+    )
+
+    if selected_project_id:
+        membership_row = db.execute(
+            membership_query.where(ProjectMembership.project_id == selected_project_id)
+        ).scalar_one_or_none()
+
+        if membership_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Identity is not a member of the requested project.",
+            )
+
+        set_db_tenant_context(db, membership_row.project_id)
+        return TenantContext(tenant_id=membership_row.project_id, role=membership_row.role, subject=subject)
+
+    memberships = db.execute(
+        membership_query
+        .order_by(ProjectMembership.created_at.asc(), ProjectMembership.id.asc())
+        .limit(2)
+    ).scalars().all()
+
+    if len(memberships) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "project_selection_required",
+                "message": f"Multiple active projects found. Select a project with {settings.TENANT_HEADER_NAME}.",
+            },
+        )
+
+    membership_row = memberships[0] if memberships else None
 
     if membership_row is None:
         return None
@@ -131,23 +175,19 @@ def _resolve_project_from_api_key(api_key_value: str, db: Session) -> str | None
     return api_key.project_id
 
 
-def require_tenant_context(
+def resolve_tenant_context_for_request(
     request: Request,
-    db: Session = Depends(get_db_session),
+    db: Session,
+    *,
+    selected_project_id: str | None = None,
+    allow_header_context: bool = True,
 ) -> TenantContext:
     settings = get_settings()
-    selected_project_id: str | None = None
 
-    primary = request.headers.get(settings.TENANT_HEADER_NAME)
-    if primary and primary.strip():
-        selected_project_id = primary.strip()
+    if selected_project_id is None:
+        selected_project_id = selected_project_id_from_request(request)
 
-    if settings.ACCEPT_LEGACY_TENANT_HEADER and not selected_project_id:
-        legacy = request.headers.get(settings.LEGACY_TENANT_HEADER_NAME)
-        if legacy and legacy.strip():
-            selected_project_id = legacy.strip()
-
-    if selected_project_id and settings.ALLOW_PROJECT_HEADER_CONTEXT:
+    if selected_project_id and allow_header_context and settings.ALLOW_PROJECT_HEADER_CONTEXT:
         # The ALLOW_PROJECT_HEADER_CONTEXT comment says "any caller claim
         # owner context" — the role assigned must match. This flag is
         # documented as dev-only and rejected by validate_settings_for_
@@ -182,6 +222,13 @@ def require_tenant_context(
             )
         ),
     )
+
+
+def require_tenant_context(
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> TenantContext:
+    return resolve_tenant_context_for_request(request, db)
 
 
 def require_tenant_id(

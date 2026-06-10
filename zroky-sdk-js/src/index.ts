@@ -2,11 +2,19 @@
 // Copyright 2026 Zroky AI
 
 export { wrap } from "./wrap";
-export { trace } from "./trace";
+export { trace, traceRun } from "./trace";
 export { init } from "./config";
 export { outcome } from "./outcome";
 export { promptFingerprint } from "./fingerprint";
-export { captureMemory, captureRetrieval } from "./spans";
+export { captureHandoff, captureMemory, capturePolicyDecision, captureRetrieval, captureToolCall } from "./spans";
 export type { ZrokyConfig, CapturePayload } from "./types";
 export type { OutcomeOptions } from "./outcome";
-export type { MemoryCaptureOptions, RetrievalCaptureOptions, RetrievedDocument } from "./spans";
+export type { TraceRunContext, TraceRunOptions } from "./trace";
+export type {
+  HandoffCaptureOptions,
+  MemoryCaptureOptions,
+  PolicyDecisionCaptureOptions,
+  RetrievalCaptureOptions,
+  RetrievedDocument,
+  ToolCaptureOptions,
+} from "./spans";

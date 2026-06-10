@@ -1022,7 +1022,7 @@ function ReplayPageContent() {
           <strong>No replay runs yet.</strong>
           <span>Prove a discovered failure: launch a replay from an Issue, Call, Golden Set, or CI commit above — Zroky reproduces the failure and scores how faithfully the fix holds.</span>
           <Link href="/home" className="btn btn-soft" style={{ marginTop: 6 }}>
-            Go to Failure Inbox
+            Go to Command Center
             <ArrowRight aria-hidden="true" />
           </Link>
         </section>

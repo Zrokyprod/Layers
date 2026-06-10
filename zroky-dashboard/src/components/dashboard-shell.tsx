@@ -36,7 +36,7 @@ import { clearAccessToken } from "@/lib/auth";
 import { getBillingMe, getBudgetStatus, listIssues, getReliabilityLeaderboard } from "@/lib/api";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
-import { useMe, useProjectSettings } from "@/lib/hooks";
+import { useMe, useMyProjects, useProjectSettings } from "@/lib/hooks";
 import { formatPlanLabel, hasFeatureAccess } from "./feature-gate";
 import { CommandPalette } from "./command-palette";
 import { ShortcutsHelp } from "./shortcuts-help";
@@ -57,16 +57,25 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "failure-inbox",
     href: "/home",
-    label: "Failure Inbox",
-    subtitle: "Production failure queue, agent health, replay readiness, and next actions.",
+    label: "Command Center",
+    subtitle: "Capture health, failure queue, replay proof, Goldens, CI gates, and next actions.",
     Icon: Inbox,
+    badgeKey: "agents",
+    visibleInNav: true,
+  },
+  {
+    id: "agents",
+    href: "/agents",
+    label: "Agents",
+    subtitle: "Agent safety coverage, open failures, replay proof, Golden coverage, CI coverage, and policy status.",
+    Icon: Bot,
     badgeKey: "agents",
     visibleInNav: true,
   },
   {
     id: "issues",
     href: "/issues",
-    label: "Issues",
+    label: "Failures",
     subtitle: "Clustered production failures with impact, owners, and release decisions.",
     Icon: AlertTriangle,
     badgeKey: "issues",
@@ -110,15 +119,15 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "calls",
     href: "/calls",
-    label: "Calls",
-    subtitle: "Search individual calls, diagnoses, and call-level evidence.",
+    label: "Flight Recorder",
+    subtitle: "Search captured calls, prompts, outputs, diagnoses, and call-level evidence.",
     Icon: MessageSquareText,
     visibleInNav: true,
   },
   {
     id: "traces",
     href: "/trace",
-    label: "Traces",
+    label: "Trace Graphs",
     subtitle: "Trace-by-trace execution paths, span evidence, and multi-agent context.",
     Icon: GitBranch,
     visibleInNav: true,
@@ -158,7 +167,7 @@ const DASHBOARD_ROUTES = [
   {
     id: "home",
     href: "/home",
-    label: "Failure Inbox",
+    label: "Command Center",
     subtitle: "Production failure queue, replay gaps, CI gates, and review actions.",
     Icon: Bot,
   },
@@ -354,6 +363,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
   const projectQuery = useProjectSettings();
+  const myProjectsQuery = useMyProjects();
   const meQuery = useMe();
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const routeMenuRef = useRef<HTMLDivElement>(null);
@@ -405,10 +415,26 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     };
   }, [closeSidebar, pathname]);
 
+  const myProjects = myProjectsQuery.data ?? [];
+  const myProjectIdsKey = myProjects.map((project) => project.project_id).join("|");
+
   useEffect(() => {
-    const id = projectQuery.data?.project_id ?? null;
-    if (id && id !== selectedProject) setSelectedProject(id);
-  }, [projectQuery.data?.project_id, selectedProject, setSelectedProject]);
+    if (!myProjectsQuery.data) return;
+
+    const selectedIsValid = selectedProject
+      ? myProjects.some((project) => project.project_id === selectedProject)
+      : false;
+    if (selectedIsValid) return;
+
+    if (myProjects.length === 1) {
+      setSelectedProject(myProjects[0].project_id);
+      return;
+    }
+
+    if (selectedProject) {
+      setSelectedProject(null);
+    }
+  }, [myProjects, myProjectsQuery.data, myProjectIdsKey, selectedProject, setSelectedProject]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -503,7 +529,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   if (issuesCount > 0) badges.issues = issuesCount;
   if (agentsCount > 0) badges.agents = agentsCount;
 
-  const orgName = projectQuery.data?.name?.trim() || (projectQuery.isLoading ? "Loading workspace" : "Workspace unavailable");
+  const selectedProjectMembership = selectedProject
+    ? myProjects.find((project) => project.project_id === selectedProject) ?? null
+    : null;
+  const projectSelectionRequired = myProjects.length > 1 && !selectedProject;
+  const orgName =
+    selectedProjectMembership?.project_name?.trim() ||
+    projectQuery.data?.name?.trim() ||
+    (projectSelectionRequired
+      ? "Select project"
+      : myProjectsQuery.isLoading || projectQuery.isLoading
+        ? "Loading workspace"
+        : "Workspace unavailable");
+  const orgProjectId = selectedProjectMembership?.project_id ?? projectQuery.data?.project_id ?? selectedProject ?? null;
   const envDisplay = envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
   const accountEmail = meQuery.data?.email?.trim() || null;
   const accountName =
@@ -539,6 +577,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           ["calls", "cost", "loops", "traces", "reliability", "shell-issues-count", "shell-agents-count"].includes(root)
         );
       },
+    });
+  }
+
+  function switchProject(projectId: string) {
+    if (projectId === selectedProject) {
+      setOpenMenu(null);
+      return;
+    }
+
+    setSelectedProject(projectId);
+    setOpenMenu(null);
+    void queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey[0] !== "me",
     });
   }
 
@@ -647,9 +698,41 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             {openMenu === "workspace" ? (
               <div className="shell-popover shell-popover-up org-popover" role="menu" aria-label="Workspace menu">
                 <div className="shell-popover-head">
-                  <span>Current workspace</span>
-                  <strong>{orgName}</strong>
+                  <span>Current project</span>
+                  <strong>{projectSelectionRequired ? "Select a project" : orgName}</strong>
                 </div>
+                {myProjects.length > 0 ? (
+                  myProjects.map((project) => {
+                    const isSelected = project.project_id === selectedProject;
+                    return (
+                      <button
+                        key={project.project_id}
+                        type="button"
+                        className={`shell-menu-item${isSelected ? " is-active" : ""}`}
+                        role="menuitem"
+                        aria-current={isSelected ? "true" : undefined}
+                        onClick={() => switchProject(project.project_id)}
+                      >
+                        <FolderOpen size={15} aria-hidden="true" />
+                        <span>
+                          <strong>{project.project_name}</strong>
+                          <small>
+                            {project.project_id} - {project.role}
+                          </small>
+                        </span>
+                        {isSelected ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
+                    <AlertTriangle size={15} aria-hidden="true" />
+                    <span>
+                      <strong>{myProjectsQuery.isLoading ? "Loading projects" : "No active projects"}</strong>
+                      <small>{myProjectsQuery.isLoading ? "Fetching your memberships." : "Ask an admin to add you to a project."}</small>
+                    </span>
+                  </div>
+                )}
                 <Link href="/settings" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
                   <Settings2 size={15} aria-hidden="true" />
                   <span>
@@ -668,7 +751,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   <FolderOpen size={15} aria-hidden="true" />
                   <span>
                     <strong>Project ID</strong>
-                    <small>{projectQuery.data?.project_id ?? selectedProject ?? "Unavailable"}</small>
+                    <small>{orgProjectId ?? "Unavailable"}</small>
                   </span>
                 </div>
               </div>

@@ -274,7 +274,7 @@ function CallsPageContent() {
               <Database aria-hidden="true" />
               Evidence drill-down
             </div>
-            <h1>Calls</h1>
+            <h1>Flight Recorder</h1>
             <p>Inspect captured production calls when an issue, replay, drift row, or cost spike needs raw evidence.</p>
           </div>
           <div className="calls-hero-actions">
@@ -290,7 +290,7 @@ function CallsPageContent() {
         </div>
       </section>
 
-      <section className="metric-strip" aria-label="Calls summary">
+      <section className="metric-strip" aria-label="Flight Recorder summary">
         <CallsMetric label="Total calls" value={formatCount(total)} helper={`Page ${page + 1} of ${totalPages}`} />
         <CallsMetric label="Visible failures" value={formatCount(visibleFailures)} helper="Errors on current page" />
         <CallsMetric label="Visible cost" value={formatUsd(visibleCost)} helper="Current page spend" />

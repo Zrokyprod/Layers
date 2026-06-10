@@ -337,7 +337,7 @@ export default function TracePage() {
             <GitBranch aria-hidden="true" />
             Evidence browser
           </div>
-          <h1>Traces</h1>
+          <h1>Trace Graphs</h1>
           <p>Captured agent calls, tool steps, retrieval events, and replay-ready evidence.</p>
         </div>
         <div className="trace-mvp-hero-actions">

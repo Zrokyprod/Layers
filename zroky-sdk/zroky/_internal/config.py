@@ -28,6 +28,11 @@ class SDKConfig:
     workflow_name: str | None = None
     prompt_version: str | None = None
     environment: str | None = None
+    code_sha: str | None = None
+    deployment_id: str | None = None
+    model_version: str | None = None
+    tool_schema_version: str | None = None
+    rag_version: str | None = None
     validate_preflight: bool = False
     validate_preflight_sample_rate: float = 1.0
     preflight_blocking_warning_types: tuple[str, ...] = ()
@@ -74,6 +79,11 @@ def load_config(
     workflow_name: str | None = None,
     prompt_version: str | None = None,
     environment: str | None = None,
+    code_sha: str | None = None,
+    deployment_id: str | None = None,
+    model_version: str | None = None,
+    tool_schema_version: str | None = None,
+    rag_version: str | None = None,
     validate_preflight: bool | None = None,
     validate_preflight_sample_rate: float | None = None,
     preflight_blocking_warning_types: list[str] | tuple[str, ...] | None = None,
@@ -126,6 +136,11 @@ def load_config(
     resolved_workflow_name = workflow_name or os.environ.get("ZROKY_WORKFLOW_NAME")
     resolved_prompt_version = prompt_version or os.environ.get("ZROKY_PROMPT_VERSION")
     resolved_environment = environment or os.environ.get("ZROKY_ENVIRONMENT")
+    resolved_code_sha = code_sha or os.environ.get("ZROKY_CODE_SHA")
+    resolved_deployment_id = deployment_id or os.environ.get("ZROKY_DEPLOYMENT_ID")
+    resolved_model_version = model_version or os.environ.get("ZROKY_MODEL_VERSION")
+    resolved_tool_schema_version = tool_schema_version or os.environ.get("ZROKY_TOOL_SCHEMA_VERSION")
+    resolved_rag_version = rag_version or os.environ.get("ZROKY_RAG_VERSION")
     resolved_validate_preflight = (
         validate_preflight
         if validate_preflight is not None
@@ -294,6 +309,11 @@ def load_config(
         workflow_name=resolved_workflow_name,
         prompt_version=resolved_prompt_version,
         environment=resolved_environment,
+        code_sha=resolved_code_sha,
+        deployment_id=resolved_deployment_id,
+        model_version=resolved_model_version,
+        tool_schema_version=resolved_tool_schema_version,
+        rag_version=resolved_rag_version,
         validate_preflight=resolved_validate_preflight,
         validate_preflight_sample_rate=resolved_validate_preflight_sample_rate,
         preflight_blocking_warning_types=resolved_preflight_blocking_warning_types,

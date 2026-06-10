@@ -16,6 +16,12 @@ export interface ZrokyConfig {
   userId?: string;
   environment?: string;
   stepIndex?: number;
+  codeSha?: string;
+  deploymentId?: string;
+  modelVersion?: string;
+  toolSchemaVersion?: string;
+  ragVersion?: string;
+  maskPii?: boolean;
   metadata?: Record<string, unknown>;
   disabled?: boolean;
 }
@@ -46,6 +52,21 @@ export interface CapturePayload {
   prompt_version?: string;
   trace_id?: string;
   parent_call_id?: string;
+  span_type?: string;
+  span_name?: string;
+  span_index?: number;
+  input?: Record<string, unknown>;
+  system_prompt?: string;
+  user_input?: string;
+  final_answer?: string;
+  tool?: Record<string, unknown>;
+  memory?: Record<string, unknown>;
+  handoff?: Record<string, unknown>;
+  policy?: Record<string, unknown>;
+  versions?: Record<string, unknown>;
+  capture_source?: string;
+  masking_version?: string;
+  pii_masked?: boolean;
   user_id?: string;
   environment?: string;
   step_index?: number;

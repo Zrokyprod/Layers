@@ -225,6 +225,10 @@ class ReplayJob(Base):
     artifact_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     artifact_signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("300"))
+    claimed_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     diff_metric: Mapped[float | None] = mapped_column(Float, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     stdout_tail: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -234,6 +238,7 @@ class ReplayJob(Base):
     __table_args__ = (
         Index("ix_replay_jobs_tenant_status", "tenant_id", "status"),
         Index("ix_replay_jobs_tenant_created", "tenant_id", "created_at"),
+        Index("ix_replay_jobs_status_lease", "status", "lease_expires_at"),
         Index("ix_replay_jobs_call_id", "call_id"),
         Index("ix_replay_jobs_pr_id", "pr_id"),
     )

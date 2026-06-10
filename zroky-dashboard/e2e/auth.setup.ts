@@ -54,6 +54,6 @@ setup("seed deterministic demo and save authenticated state", async ({ page }) =
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL(/\/home/, { timeout: 20_000 });
-  await expect(page.getByRole("heading", { name: "Failure Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
   await page.context().storageState({ path: authStatePath });
 });

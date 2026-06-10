@@ -337,7 +337,7 @@ describe("money-path dashboard regression proof", () => {
     seedMoneyPathDashboardState();
   });
 
-  it("renders the money-path issue in Failure Inbox with verified replay state", async () => {
+  it("renders the money-path issue in Command Center with verified replay state", async () => {
     render(<IssuesPage />);
 
     expect(await screen.findByRole("heading", { name: "Issues" })).toBeInTheDocument();

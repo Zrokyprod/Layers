@@ -247,12 +247,12 @@ function mockInbox(
   });
 }
 
-describe("Failure Inbox home", () => {
+describe("Command Center home", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders the action-first Failure Inbox command center", async () => {
+  it("renders the action-first Command Center", async () => {
     mockInbox({
       "pilot.root_cause_diagnosis": true,
       "pilot.replay_stub": true,
@@ -262,7 +262,7 @@ describe("Failure Inbox home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Failure Inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Command Center" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("1 issues need trusted replay before they can become Goldens or block CI.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Run trusted replay" }).length).toBeGreaterThan(0);
@@ -272,7 +272,7 @@ describe("Failure Inbox home", () => {
     expect(screen.queryByText("Silent failures detected")).toBeNull();
 
     const nextBestAction = screen.getByLabelText("Next best action");
-    const summary = screen.getByLabelText("Failure Inbox summary");
+    const summary = screen.getByLabelText("Command Center summary");
     expect(Boolean(nextBestAction.compareDocumentPosition(summary) & 4)).toBe(true);
 
     expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(4);

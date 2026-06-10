@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.api.routes._internal.owner_common import (
     require_provisioning_access,
     router,
 )
+from app.api.routes._internal.owner_pricing_audit import _pricing_contract_drift
 from app.db.models import (
     Anomaly,
     Call,
@@ -31,6 +32,7 @@ from app.services.entitlement_catalog import (
     UNLIMITED,
     InvalidPlanCodeError,
     get_catalog_entry,
+    load_pricing_contract,
 )
 
 
@@ -70,9 +72,13 @@ class OwnerMoneyPathPlatformSummary(BaseModel):
     golden_traces_active: int
     ci_runs_7d: int
     ci_blocks_7d: int
+    replay_jobs_pending: int = 0
+    replay_jobs_stale: int = 0
     tenants_missing_provider_key: int
     tenants_near_replay_quota: int
     tenants_without_recent_capture: int
+    pricing_contract_drift: list[str] = Field(default_factory=list)
+    launch_blockers: list[str] = Field(default_factory=list)
     last_deployed_smoke: OwnerLastDeployedSmoke
 
 
@@ -88,8 +94,11 @@ class OwnerMoneyPathTenantRow(BaseModel):
     golden_trace_count: int
     ci_run_count_7d: int
     blocking_ci_failures_7d: int
+    replay_jobs_pending: int = 0
+    replay_jobs_stale: int = 0
     provider_key_status: OwnerProviderKeyStatus
     replay_quota_status: OwnerReplayQuotaStatus
+    launch_blockers: list[str] = Field(default_factory=list)
     next_owner_action: str
 
 
@@ -226,7 +235,52 @@ def _risk_score(row: OwnerMoneyPathTenantRow) -> int:
         score += 20
     elif row.replay_quota_status.state == "near_limit":
         score += 12
+    if row.replay_jobs_stale:
+        score += 35 + min(row.replay_jobs_stale, 20)
     return score
+
+
+def _pricing_drift() -> list[str]:
+    try:
+        return _pricing_contract_drift(load_pricing_contract())
+    except Exception:  # noqa: BLE001
+        return ["pricing_contract_unreadable"]
+
+
+def _tenant_launch_blockers(
+    *,
+    last_capture_at: datetime | None,
+    since_recent_capture: datetime,
+    open_issue_count: int,
+    replay_run_count_7d: int,
+    verified_replay_count_7d: int,
+    golden_trace_count: int,
+    ci_run_count_7d: int,
+    blocking_ci_failures_7d: int,
+    replay_jobs_stale: int,
+    provider_key_status: OwnerProviderKeyStatus,
+    replay_quota_status: OwnerReplayQuotaStatus,
+) -> list[str]:
+    blockers: list[str] = []
+    if last_capture_at is None or last_capture_at < since_recent_capture:
+        blockers.append("capture_unhealthy")
+    if provider_key_status.state == "missing":
+        blockers.append("provider_key_missing")
+    if replay_quota_status.state in {"blocked", "disabled", "exceeded"}:
+        blockers.append(f"replay_quota_{replay_quota_status.state}")
+    if replay_jobs_stale > 0:
+        blockers.append("replay_worker_stale_jobs")
+    if blocking_ci_failures_7d > 0:
+        blockers.append("ci_gate_blocking_failures")
+    if open_issue_count > 0 and replay_run_count_7d == 0:
+        blockers.append("open_failures_without_replay")
+    if replay_run_count_7d > 0 and verified_replay_count_7d == 0:
+        blockers.append("verified_replay_missing")
+    if verified_replay_count_7d > 0 and golden_trace_count == 0:
+        blockers.append("golden_coverage_missing")
+    if golden_trace_count > 0 and ci_run_count_7d == 0:
+        blockers.append("ci_gate_missing")
+    return blockers
 
 
 def _last_deployed_smoke(db: Session) -> OwnerLastDeployedSmoke:
@@ -320,9 +374,13 @@ def owner_money_path_health(
                 golden_traces_active=0,
                 ci_runs_7d=0,
                 ci_blocks_7d=0,
+                replay_jobs_pending=0,
+                replay_jobs_stale=0,
                 tenants_missing_provider_key=0,
                 tenants_near_replay_quota=0,
                 tenants_without_recent_capture=0,
+                pricing_contract_drift=_pricing_drift(),
+                launch_blockers=["no_active_projects"],
                 last_deployed_smoke=_last_deployed_smoke(db),
             ),
             tenants=[],
@@ -441,6 +499,28 @@ def owner_money_path_health(
             .group_by(ReplayJob.tenant_id)
         ).all()
     )
+    replay_job_pending_counts = _count_map(
+        db.execute(
+            select(ReplayJob.tenant_id, func.count(ReplayJob.id))
+            .where(
+                ReplayJob.tenant_id.in_(project_ids),
+                ReplayJob.status == "pending",
+            )
+            .group_by(ReplayJob.tenant_id)
+        ).all()
+    )
+    replay_job_stale_counts = _count_map(
+        db.execute(
+            select(ReplayJob.tenant_id, func.count(ReplayJob.id))
+            .where(
+                ReplayJob.tenant_id.in_(project_ids),
+                ReplayJob.status == "running",
+                ReplayJob.lease_expires_at.is_not(None),
+                ReplayJob.lease_expires_at <= now,
+            )
+            .group_by(ReplayJob.tenant_id)
+        ).all()
+    )
 
     tenants: list[OwnerMoneyPathTenantRow] = []
     for project in projects:
@@ -468,6 +548,21 @@ def owner_money_path_health(
             else anomaly_open_counts.get(project.id, 0)
         )
         last_capture_at = last_capture_by_project.get(project.id)
+        replay_jobs_pending = replay_job_pending_counts.get(project.id, 0)
+        replay_jobs_stale = replay_job_stale_counts.get(project.id, 0)
+        launch_blockers = _tenant_launch_blockers(
+            last_capture_at=last_capture_at,
+            since_recent_capture=since_24h,
+            open_issue_count=issue_count,
+            replay_run_count_7d=replay_run_counts.get(project.id, 0),
+            verified_replay_count_7d=verified_replay_counts.get(project.id, 0),
+            golden_trace_count=golden_trace_counts.get(project.id, 0),
+            ci_run_count_7d=ci_run_counts.get(project.id, 0),
+            blocking_ci_failures_7d=ci_block_counts.get(project.id, 0),
+            replay_jobs_stale=replay_jobs_stale,
+            provider_key_status=provider_status,
+            replay_quota_status=quota_status,
+        )
         row = OwnerMoneyPathTenantRow(
             project_id=project.id,
             project_name=project.name,
@@ -480,8 +575,11 @@ def owner_money_path_health(
             golden_trace_count=golden_trace_counts.get(project.id, 0),
             ci_run_count_7d=ci_run_counts.get(project.id, 0),
             blocking_ci_failures_7d=ci_block_counts.get(project.id, 0),
+            replay_jobs_pending=replay_jobs_pending,
+            replay_jobs_stale=replay_jobs_stale,
             provider_key_status=provider_status,
             replay_quota_status=quota_status,
+            launch_blockers=launch_blockers,
             next_owner_action=_next_owner_action(
                 last_capture_at=last_capture_at,
                 since_recent_capture=since_24h,
@@ -499,6 +597,24 @@ def owner_money_path_health(
 
     tenants.sort(key=lambda row: (-_risk_score(row), row.project_name.lower()))
 
+    pricing_drift = _pricing_drift()
+    last_deployed_smoke = _last_deployed_smoke(db)
+    platform_launch_blockers: list[str] = []
+    if sum(row.captures_24h for row in tenants) == 0:
+        platform_launch_blockers.append("capture_unhealthy")
+    if any(row.provider_key_status.state == "missing" for row in tenants):
+        platform_launch_blockers.append("provider_key_missing")
+    if any(row.replay_quota_status.state in {"blocked", "disabled", "exceeded"} for row in tenants):
+        platform_launch_blockers.append("replay_quota_blocking")
+    if sum(row.replay_jobs_stale for row in tenants) > 0:
+        platform_launch_blockers.append("replay_worker_stale_jobs")
+    if sum(row.blocking_ci_failures_7d for row in tenants) > 0:
+        platform_launch_blockers.append("ci_gate_blocking_failures")
+    if last_deployed_smoke.status != "passed":
+        platform_launch_blockers.append("deployment_smoke_not_passing")
+    if pricing_drift:
+        platform_launch_blockers.append("pricing_contract_drift")
+
     platform = OwnerMoneyPathPlatformSummary(
         captures_24h=sum(row.captures_24h for row in tenants),
         issues_open=sum(row.open_issue_count for row in tenants),
@@ -507,6 +623,8 @@ def owner_money_path_health(
         golden_traces_active=sum(row.golden_trace_count for row in tenants),
         ci_runs_7d=sum(row.ci_run_count_7d for row in tenants),
         ci_blocks_7d=sum(row.blocking_ci_failures_7d for row in tenants),
+        replay_jobs_pending=sum(row.replay_jobs_pending for row in tenants),
+        replay_jobs_stale=sum(row.replay_jobs_stale for row in tenants),
         tenants_missing_provider_key=sum(
             1 for row in tenants if row.provider_key_status.state == "missing"
         ),
@@ -520,7 +638,9 @@ def owner_money_path_health(
             for row in tenants
             if row.last_capture_at is None or row.last_capture_at < since_24h
         ),
-        last_deployed_smoke=_last_deployed_smoke(db),
+        pricing_contract_drift=pricing_drift,
+        launch_blockers=platform_launch_blockers,
+        last_deployed_smoke=last_deployed_smoke,
     )
 
     return OwnerMoneyPathHealthResponse(

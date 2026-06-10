@@ -10,13 +10,13 @@ Routes:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_id
@@ -61,6 +61,7 @@ class ReplayJobResponse(BaseModel):
 
 class WorkerPollRequest(BaseModel):
     worker_token: str
+    worker_id: str | None = None
     capacity: int = 1
 
 
@@ -81,6 +82,7 @@ class WorkerPollResponse(BaseModel):
 
 class WorkerResultPayload(BaseModel):
     worker_token: str
+    worker_id: str | None = None
     result: dict[str, Any]
 
 
@@ -200,11 +202,27 @@ def worker_poll(body: WorkerPollRequest, db: Session = Depends(get_db_session)) 
     if not settings.REPLAY_WORKER_TOKEN or body.worker_token != settings.REPLAY_WORKER_TOKEN:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid worker token")
 
+    now = datetime.now(timezone.utc)
+    worker_id = (body.worker_id or "legacy-worker").strip() or "legacy-worker"
+    capacity = max(1, min(body.capacity, 10))
+    lease_seconds = max(60, settings.REPLAY_JOB_LEASE_SECONDS)
+    lease_expires_at = now + timedelta(seconds=lease_seconds)
+
     pending = db.execute(
         select(ReplayJob)
-        .where(ReplayJob.status == "pending")
+        .where(
+            or_(
+                ReplayJob.status == "pending",
+                (
+                    (ReplayJob.status == "running")
+                    & ReplayJob.lease_expires_at.is_not(None)
+                    & (ReplayJob.lease_expires_at <= now)
+                ),
+            )
+        )
         .order_by(ReplayJob.created_at)
-        .limit(max(1, min(body.capacity, 10)))
+        .limit(capacity)
+        .with_for_update(skip_locked=True)
     ).scalars().all()
 
     if not pending:
@@ -213,6 +231,10 @@ def worker_poll(body: WorkerPollRequest, db: Session = Depends(get_db_session)) 
     payloads: list[WorkerJobPayload] = []
     for job in pending:
         job.status = "running"
+        job.claimed_by = worker_id
+        job.claimed_at = now
+        job.lease_expires_at = lease_expires_at
+        job.attempt_count = (job.attempt_count or 0) + 1
         db.add(job)
         payloads.append(WorkerJobPayload(
             replay_id=job.id,
@@ -243,12 +265,20 @@ def worker_result(body: WorkerResultPayload, db: Session = Depends(get_db_sessio
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Replay job not found")
 
+    worker_id = (body.worker_id or "legacy-worker").strip() or "legacy-worker"
+    if job.claimed_by and job.claimed_by != worker_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Replay job is leased by a different worker.",
+        )
+
     raw_status = str(result.get("status", "error"))
     job.status = raw_status if raw_status in _VALID_STATUSES else "error"
     job.diff_metric = result.get("diff_metric")
     job.error_message = result.get("error_message")
     job.stdout_tail = result.get("stdout_tail")
     job.completed_at = datetime.now(timezone.utc)
+    job.lease_expires_at = None
     db.add(job)
 
     if job.pr_id:

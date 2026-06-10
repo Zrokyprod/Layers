@@ -147,6 +147,72 @@ class TraceListResponse(BaseModel):
     items: list[TraceListItem]
 
 
+class TraceGraphSummaryResponse(BaseModel):
+    trace_id: str
+    root_span_id: str | None = None
+    root_call_id: str | None = None
+    status: str
+    span_count: int = 0
+    agent_count: int = 0
+    agents: list[str] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
+    started_at: str | None = None
+    ended_at: str | None = None
+    total_latency_ms: float | None = None
+    total_cost_usd: float = 0.0
+    error_count: int = 0
+    has_failure: bool = False
+    has_outcome: bool = False
+    capture_completeness_score: float = 0.0
+    completeness_warnings: list[str] = Field(default_factory=list)
+    projection_error: str | None = None
+
+
+class TraceGraphSpanResponse(BaseModel):
+    span_id: str
+    parent_span_id: str | None = None
+    call_id: str | None = None
+    event_id: str | None = None
+    span_type: str
+    span_name: str | None = None
+    span_index: int | None = None
+    agent_name: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    status: str
+    error_code: str | None = None
+    started_at: str | None = None
+    ended_at: str | None = None
+    latency_ms: float | None = None
+    cost_usd: float = 0.0
+    input: Any | None = None
+    output: Any | None = None
+    tool: Any | None = None
+    retrieval: Any | None = None
+    memory: Any | None = None
+    handoff: Any | None = None
+    policy: Any | None = None
+    outcome: Any | None = None
+    versions: Any | None = None
+    raw_payload: dict[str, Any] | None = None
+    children: list["TraceGraphSpanResponse"] = Field(default_factory=list)
+
+
+class TraceGraphResponse(BaseModel):
+    summary: TraceGraphSummaryResponse
+    spans: list[TraceGraphSpanResponse]
+    root_span: TraceGraphSpanResponse | None = None
+    user_input: Any | None = None
+    system_prompt: Any | None = None
+    final_answer: Any | None = None
+    business_outcome: Any | None = None
+    versions: dict[str, Any] = Field(default_factory=dict)
+    masked_raw_payloads: list[dict[str, Any]] = Field(default_factory=list)
+
+
+TraceGraphSpanResponse.model_rebuild()
+
+
 class FixAdoptionSummary(BaseModel):
     viewed_diagnoses: int = 0
     resolved_diagnoses: int = 0

@@ -110,6 +110,108 @@ class Call(Base):
     )
 
 
+class TraceSpan(Base):
+    __tablename__ = "trace_spans"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    span_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    parent_span_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    call_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("calls.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    event_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    span_type: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'other'"))
+    span_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    span_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agent_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'completed'"))
+    error_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_total: Mapped[float] = mapped_column(Numeric(18, 8), nullable=False, server_default=text("0"))
+    input_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tool_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retrieval_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    memory_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    handoff_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    policy_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    versions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    capture_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    masking_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pii_masked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "span_id", name="ux_trace_spans_project_span"),
+        UniqueConstraint("project_id", "event_id", name="ux_trace_spans_project_event"),
+        Index("ix_trace_spans_project_trace", "project_id", "trace_id"),
+        Index("ix_trace_spans_project_trace_index", "project_id", "trace_id", "span_index"),
+        Index("ix_trace_spans_project_type_created", "project_id", "span_type", "created_at"),
+        Index("ix_trace_spans_project_call", "project_id", "call_id"),
+        Index("ix_trace_spans_project_parent", "project_id", "parent_span_id"),
+    )
+
+
+class TraceRun(Base):
+    __tablename__ = "trace_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    root_span_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    root_call_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'completed'"))
+    span_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    agent_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    agents_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    providers_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    total_latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_cost_usd: Mapped[float] = mapped_column(Numeric(18, 8), nullable=False, server_default=text("0"))
+    error_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    has_failure: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    has_outcome: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    completeness_warnings_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    capture_completeness_score: Mapped[float] = mapped_column(Float, nullable=False, server_default=text("0"))
+    projection_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "trace_id", name="ux_trace_runs_project_trace"),
+        Index("ix_trace_runs_project_started", "project_id", "started_at"),
+        Index("ix_trace_runs_project_status_started", "project_id", "status", "started_at"),
+        Index("ix_trace_runs_project_failure_started", "project_id", "has_failure", "started_at"),
+    )
+
+
 class DiagnosisFeedback(Base):
     __tablename__ = "diagnosis_feedback"
 

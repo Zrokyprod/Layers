@@ -41,6 +41,9 @@ class CallEvent:
     request_id: str | None = None
     trace_id: str | None = None
     parent_call_id: str | None = None
+    span_type: str | None = None
+    span_name: str | None = None
+    span_index: int | None = None
     agent_name: str | None = None
     agent_framework: str | None = None
     prompt_fingerprint: str | None = None
@@ -54,6 +57,18 @@ class CallEvent:
 
     # Request
     tools: list[dict] | None = None
+    input: dict | None = None
+    system_prompt: str | None = None
+    user_input: str | None = None
+    tool: dict | None = None
+    retrieval: dict | None = None
+    memory: dict | None = None
+    handoff: dict | None = None
+    policy: dict | None = None
+    versions: dict | None = None
+    capture_source: str | None = "python_sdk"
+    masking_version: str | None = "python-sdk-pii-v1"
+    pii_masked: bool | None = True
     estimated_prompt_tokens: int | None = None
     model_context_limit: int | None = None
     model_context_limit_source: str | None = None
@@ -76,6 +91,7 @@ class CallEvent:
     cache_read_tokens: int = 0
     output_content: str | None = None
     normalized_output: str | None = None
+    final_answer: str | None = None
     output_fingerprint: str | None = None
     tool_calls: list[dict] | None = None
     # Deprecated alias for tool_calls. Accepted for backward compatibility with
@@ -119,6 +135,21 @@ class CallEvent:
 
     def to_ingest_payload(self) -> dict:
         tool_calls = self.tool_calls if self.tool_calls is not None else self.tool_calls_made
+        input_payload = self.input
+        if input_payload is None and self.messages:
+            input_payload = {"messages": self.messages}
+        system_prompt = self.system_prompt
+        user_input = self.user_input
+        for message in self.messages or []:
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "").lower()
+            content = message.get("content")
+            if role == "system" and system_prompt is None and content is not None:
+                system_prompt = str(content)
+            if role == "user" and content is not None:
+                user_input = str(content)
+        final_answer = self.final_answer or self.output_content or self.normalized_output
         return mask_value({
             "schema_version": self.schema_version,
             "call_id": self.call_id,
@@ -150,9 +181,11 @@ class CallEvent:
             "cache_creation_tokens": self.cache_creation_tokens,
             "cache_read_tokens": self.cache_read_tokens,
             "normalized_output": self.normalized_output,
+            "output_content": self.output_content,
             "output_fingerprint": self.output_fingerprint,
             "tool_definitions": self.tools,
             "tool_calls": tool_calls,
+            "retrieval": self.retrieval,
             "tool_lifecycle_summary": self.tool_lifecycle_summary,
             "retry_metadata": self.retry_metadata,
             "cache_hit": self.cache_hit,
@@ -170,6 +203,18 @@ class CallEvent:
             "circuit_open_models": self.circuit_open_models,
             "trace_id": self.trace_id,
             "parent_call_id": self.parent_call_id,
+            "span_type": self.span_type,
+            "span_name": self.span_name,
+            "span_index": self.span_index,
+            "input": input_payload,
+            "system_prompt": system_prompt,
+            "user_input": user_input,
+            "final_answer": final_answer,
+            "tool": self.tool,
+            "memory": self.memory,
+            "handoff": self.handoff,
+            "policy": self.policy,
+            "versions": self.versions,
             "agent_name": self.agent_name,
             "agent_framework": self.agent_framework,
             "prompt_fingerprint": self.prompt_fingerprint,
@@ -185,4 +230,7 @@ class CallEvent:
             "error_message": mask_error_message(self.error_message) if self.error_message else None,
             "failure_reason": self.failure_reason,
             "created_at": self.created_at,
+            "capture_source": self.capture_source,
+            "masking_version": self.masking_version,
+            "pii_masked": self.pii_masked,
         })

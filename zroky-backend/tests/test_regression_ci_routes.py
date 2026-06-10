@@ -1,6 +1,6 @@
 """Tests for `app.api.routes.regression_ci`.
 
-  - POST /v1/regression-ci/run → 202, row created, background task queued.
+  - POST /v1/regression-ci/run → 202, row created, Celery task queued.
   - GET  /v1/regression-ci/runs/{id} → 200 status + report.
   - Tenant isolation → 404 on cross-project access.
   - Missing git_sha → 422.
@@ -60,11 +60,15 @@ def _grant_pilot_tier(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _stub_background_task(monkeypatch):
+def _stub_regression_ci_task(monkeypatch):
     captured: list = []
-    def _stub_add_task(self, func, *args, **kwargs):
-        captured.append((func.__name__, args, kwargs))
-    monkeypatch.setattr("fastapi.background.BackgroundTasks.add_task", _stub_add_task)
+
+    class _StubTask:
+        @staticmethod
+        def apply_async(args=None, kwargs=None, queue=None, **options):
+            captured.append({"args": args or [], "kwargs": kwargs or {}, "queue": queue, "options": options})
+
+    monkeypatch.setattr("app.worker._internal.tasks_impl.process_regression_ci_run", _StubTask)
     return captured
 
 
@@ -82,7 +86,7 @@ def _seed_project_and_calls(session, project_id: str, n: int = 5):
 
 
 class TestPostRun:
-    def test_returns_202_and_creates_run(self, client, _stub_background_task):
+    def test_returns_202_creates_run_and_enqueues_celery(self, client, _stub_regression_ci_task):
         sf = client._session_factory
         with sf() as s:
             _seed_project_and_calls(s, "proj-post")
@@ -96,7 +100,12 @@ class TestPostRun:
         assert data["status"] == "queued"
         assert data["run_id"]
         assert data["summary_url"].endswith(data["run_id"])
-        assert len(_stub_background_task) == 1
+        assert len(_stub_regression_ci_task) == 1
+        task = _stub_regression_ci_task[0]
+        assert task["queue"] == "diagnosis_pattern"
+        assert task["args"][0] == "proj-post"
+        assert task["args"][1] == data["run_id"]
+        assert task["args"][2]["git_sha"] == "abc123"
 
     def test_git_sha_required(self, client):
         resp = client.post(

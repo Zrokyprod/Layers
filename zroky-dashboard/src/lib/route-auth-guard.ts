@@ -4,6 +4,7 @@ const ACCESS_TOKEN_COOKIE = "zroky_access_token";
 
 const PROTECTED_PREFIXES = [
   "/account",
+  "/agents",
   "/alerts",
   "/calls",
   "/ci-gates",
@@ -16,7 +17,7 @@ const PROTECTED_PREFIXES = [
   "/trace",
 ];
 
-const RETIRED_DASHBOARD_PREFIXES = ["/agents", "/drift", "/labs"];
+const RETIRED_DASHBOARD_PREFIXES = ["/drift", "/labs"];
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(

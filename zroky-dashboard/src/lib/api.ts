@@ -37,11 +37,13 @@
   LoopSummaryResponse,
   TraceListItem,
   TraceListResponse,
+  TraceGraphResponse,
   DiagnosisResolveResponse,
   DiagnosisShareCreateResponse,
   DiagnosisShareReadResponse,
   ExportResponse,
   FixAnalyticsResponse,
+  CurrentUserProjectResponse,
   MeResponse,
   NotificationSettingsResponse,
   PiiDetectorTestResponse,
@@ -93,6 +95,7 @@
 import {
   clearAuthSession,
 } from "@/lib/auth";
+import { useDashboardStore } from "@/lib/store";
 
 type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
@@ -102,6 +105,11 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
   timeoutMs?: number;
+};
+
+type ParsedErrorDetail = {
+  message: string | null;
+  code: string | null;
 };
 
 const defaultClientTimeoutMs = 12_000;
@@ -143,9 +151,29 @@ async function refreshAuthSession(): Promise<boolean> {
   }
 }
 
-function buildError(method: Method, path: string, status: number, detail: string | null): Error {
-  const message = detail && detail.trim() ? detail : `${method} ${path} failed (${status})`;
-  return new Error(message);
+export class ApiError extends Error {
+  method: Method;
+  path: string;
+  status: number;
+  code: string | null;
+
+  constructor(method: Method, path: string, status: number, detail: ParsedErrorDetail) {
+    const message = detail.message && detail.message.trim() ? detail.message : `${method} ${path} failed (${status})`;
+    super(message);
+    this.name = "ApiError";
+    this.method = method;
+    this.path = path;
+    this.status = status;
+    this.code = detail.code;
+  }
+}
+
+function buildError(method: Method, path: string, status: number, detail: string | ParsedErrorDetail | null): Error {
+  const parsedDetail =
+    typeof detail === "string" || detail == null
+      ? { message: detail, code: null }
+      : detail;
+  return new ApiError(method, path, status, parsedDetail);
 }
 
 function isHtmlErrorText(text: string, contentType: string | null): boolean {
@@ -220,37 +248,50 @@ function createRequestSignal(externalSignal?: AbortSignal, timeoutOverrideMs?: n
   };
 }
 
-async function parseErrorDetail(response: Response): Promise<string | null> {
+async function parseErrorDetail(response: Response): Promise<ParsedErrorDetail> {
   let text = "";
 
   try {
     text = await response.text();
   } catch {
-    return null;
+    return { message: null, code: null };
   }
 
   const trimmedText = text.trim();
   if (!trimmedText) {
-    return null;
+    return { message: null, code: null };
   }
 
   const contentType = response.headers?.get("content-type") ?? null;
   if (isHtmlErrorText(trimmedText, contentType)) {
-    return fallbackHttpErrorMessage(response.status);
+    return { message: fallbackHttpErrorMessage(response.status), code: null };
   }
 
   try {
     const payload = JSON.parse(text) as { detail?: unknown; message?: unknown; error?: unknown };
     for (const field of [payload.detail, payload.message, payload.error]) {
       if (typeof field === "string" && field.trim()) {
-        return field;
+        return { message: field, code: null };
+      }
+      if (field && typeof field === "object") {
+        const detail = field as { code?: unknown; message?: unknown; detail?: unknown };
+        const message =
+          typeof detail.message === "string" && detail.message.trim()
+            ? detail.message
+            : typeof detail.detail === "string" && detail.detail.trim()
+              ? detail.detail
+              : null;
+        const code = typeof detail.code === "string" && detail.code.trim() ? detail.code : null;
+        if (message || code) {
+          return { message, code };
+        }
       }
     }
   } catch {
-    return trimmedText;
+    return { message: trimmedText, code: null };
   }
 
-  return trimmedText;
+  return { message: trimmedText, code: null };
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -262,6 +303,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const headers: Record<string, string> = {};
     if (options.body != null) {
       headers["content-type"] = "application/json";
+    }
+    if (typeof window !== "undefined") {
+      const selectedProject = useDashboardStore.getState().selectedProject?.trim();
+      if (selectedProject) {
+        headers["x-project-id"] = selectedProject;
+      }
     }
 
     try {
@@ -645,11 +692,15 @@ export function getCallTraceTree(callId: string, signal?: AbortSignal): Promise<
 }
 
 export function getRecentTraces(days = 7, limit = 20, signal?: AbortSignal): Promise<TraceListResponse> {
-  return request<TraceListResponse>(`/v1/analytics/traces/recent?days=${days}&limit=${limit}`, { signal });
+  return request<TraceListResponse>(`/v1/traces/recent?days=${days}&limit=${limit}`, { signal });
 }
 
 export function getTraceById(traceId: string, days = 30, signal?: AbortSignal): Promise<TraceListItem> {
   return request<TraceListItem>(`/v1/analytics/traces/${encodeURIComponent(traceId)}?days=${days}`, { signal });
+}
+
+export function getTraceGraph(traceId: string, signal?: AbortSignal): Promise<TraceGraphResponse> {
+  return request<TraceGraphResponse>(`/v1/traces/${encodeURIComponent(traceId)}`, { signal });
 }
 
 export function submitDiagnosisFeedback(
@@ -1049,6 +1100,10 @@ export function revokeProviderKey(keyId: string): Promise<ProviderKeyResponse> {
 
 export function getMe(signal?: AbortSignal): Promise<MeResponse> {
   return request<MeResponse>("/v1/auth/me", { signal });
+}
+
+export function listMyProjects(signal?: AbortSignal): Promise<CurrentUserProjectResponse[]> {
+  return request<CurrentUserProjectResponse[]>("/v1/auth/me/projects", { signal });
 }
 
 export function updateMe(body: { display_name: string | null }): Promise<MeResponse> {
