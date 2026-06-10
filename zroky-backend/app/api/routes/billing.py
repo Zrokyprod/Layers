@@ -24,9 +24,15 @@ in a follow-up cleanup once the dashboard migrates off `/plans` and
 `/usage` (tracked separately from Module 12).
 """
 import logging
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
+from uuid import uuid4
 
+import razorpay
+from razorpay.errors import BadRequestError, GatewayError, ServerError
 from fastapi import (
     APIRouter,
     Body,
@@ -70,6 +76,8 @@ from app.services.billing_plans import (
     resolve_stripe_price_id,
 )
 from app.services.billing_quota import get_usage as _quota_get_usage
+from app.services.entitlements import seed_plan_entitlements
+from app.services import entitlements_resolver
 from app.services.stripe_gateway import (
     StripeError,
     StripeGateway,
@@ -325,6 +333,104 @@ def _get_or_create_org_subscription(
 # ── schemas ──────────────────────────────────────────────────────────────────
 
 
+_RAZORPAY_MONTHLY_USD_BY_PLAN: dict[str, int] = {
+    "starter": 29,
+    "pro": 149,
+    "team": 499,
+}
+_RAZORPAY_PLAN_ALIASES: dict[str, str] = {
+    "pilot": "starter",
+    "plus": "pro",
+}
+
+
+def _razorpay_credentials() -> tuple[str, str]:
+    settings = get_settings()
+    key_id = (settings.RAZORPAY_KEY_ID or "").strip()
+    key_secret = (settings.RAZORPAY_KEY_SECRET or "").strip()
+    if not key_id or not key_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay credentials are not configured.",
+        )
+    return key_id, key_secret
+
+
+def _razorpay_client() -> razorpay.Client:
+    key_id, key_secret = _razorpay_credentials()
+    return razorpay.Client(auth=(key_id, key_secret))
+
+
+def _razorpay_auth_failure(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "auth" in message or "key" in message or "credential" in message
+
+
+def _normalize_razorpay_plan_code(plan_code: str) -> str:
+    raw = (plan_code or "").strip().lower()
+    normalized = _RAZORPAY_PLAN_ALIASES.get(raw, raw)
+    return assert_self_serve_plan(normalized)
+
+
+def _razorpay_amount_for_plan(plan_code: str) -> tuple[int, int]:
+    amount_usd = _RAZORPAY_MONTHLY_USD_BY_PLAN.get(plan_code)
+    if amount_usd is None or amount_usd <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Plan {plan_code!r} is not configured with a billable monthly amount.",
+        )
+
+    rate = Decimal(str(get_settings().ZROKY_EXCHANGE_RATE_USD_TO_INR))
+    if rate <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ZROKY_EXCHANGE_RATE_USD_TO_INR must be greater than zero.",
+        )
+    amount = (Decimal(str(amount_usd)) * rate * Decimal("100")).quantize(
+        Decimal("1"),
+        rounding=ROUND_HALF_UP,
+    )
+    return max(100, int(amount)), amount_usd
+
+
+def _razorpay_receipt(org_id: str, plan_code: str | None) -> str:
+    org_part = org_id.replace(":", "_").replace("/", "_")[:12] or "org"
+    plan_part = (plan_code or "custom")[:10]
+    return f"zroky_{org_part}_{plan_part}_{uuid4().hex[:8]}"[:40]
+
+
+def _store_pending_razorpay_order(
+    sub: Subscription, *, order_id: str, plan_code: str | None
+) -> None:
+    suffix = plan_code or "custom"
+    sub.stripe_customer_id = f"rzp:{order_id}:{suffix}"[:64]
+
+
+def _pending_razorpay_order(sub: Subscription) -> tuple[str | None, str | None]:
+    value = (sub.stripe_customer_id or "").strip()
+    if not value.startswith("rzp:"):
+        return None, None
+    parts = value.split(":", 2)
+    if len(parts) < 3:
+        return None, None
+    return parts[1] or None, parts[2] or None
+
+
+def _verify_razorpay_signature(
+    *,
+    order_id: str,
+    payment_id: str,
+    signature: str,
+) -> bool:
+    _, key_secret = _razorpay_credentials()
+    expected = hmac.new(
+        key_secret.encode("utf-8"),
+        f"{order_id}|{payment_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
 class CheckoutRequest(BaseModel):
     plan_code: str = Field(
         description=(
@@ -348,6 +454,42 @@ class CheckoutResponse(BaseModel):
     checkout_url: str
     plan_code: str
     org_id: str
+
+
+class RazorpayOrderRequest(BaseModel):
+    plan_code: str | None = Field(default=None, examples=["pro"])
+    amount: int | None = Field(
+        default=None,
+        ge=100,
+        description="Order amount in the smallest currency unit; paise for INR.",
+    )
+    currency: str = Field(default="INR", min_length=3, max_length=3)
+    receipt: str | None = Field(default=None, max_length=40)
+    customer_email: str | None = Field(default=None, max_length=320)
+
+
+class RazorpayOrderResponse(BaseModel):
+    order_id: str
+    amount: int
+    currency: str
+    receipt: str | None = None
+    plan_code: str | None = None
+    org_id: str
+    amount_usd: int | None = None
+
+
+class RazorpayVerifyRequest(BaseModel):
+    razorpay_payment_id: str = Field(min_length=1)
+    razorpay_order_id: str = Field(min_length=1)
+    razorpay_signature: str = Field(min_length=1)
+
+
+class RazorpayVerifyResponse(BaseModel):
+    success: bool
+    order_id: str
+    payment_id: str
+    org_id: str
+    plan_code: str | None = None
 
 
 class PortalResponse(BaseModel):
@@ -460,6 +602,185 @@ def create_checkout_session(
         checkout_url=result.url,
         plan_code=plan_norm,
         org_id=org_id,
+    )
+
+
+@router.post(
+    "/razorpay/order",
+    response_model=RazorpayOrderResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("12/minute")
+def create_razorpay_order(
+    request: Request,
+    body: RazorpayOrderRequest = Body(...),
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
+) -> RazorpayOrderResponse:
+    _require_billing_enabled()
+    org_id = _resolve_org_id(tenant_id)
+    currency = body.currency.strip().upper()
+    plan_norm: str | None = None
+    amount_usd: int | None = None
+    amount = body.amount
+
+    if body.plan_code:
+        try:
+            plan_norm = _normalize_razorpay_plan_code(body.plan_code)
+        except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        if currency != "INR":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Self-serve Razorpay plan checkout uses INR.",
+            )
+        amount, amount_usd = _razorpay_amount_for_plan(plan_norm)
+        if body.amount is not None and body.amount != amount:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="amount does not match the selected plan.",
+            )
+
+    if amount is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Either plan_code or amount is required.",
+        )
+    if amount < 100:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="amount must be at least 100 in the smallest currency unit.",
+        )
+
+    receipt = body.receipt or _razorpay_receipt(org_id, plan_norm)
+    payload: dict[str, Any] = {
+        "amount": amount,
+        "currency": currency,
+        "receipt": receipt,
+        "notes": {
+            "org_id": org_id,
+            "plan_code": plan_norm or "",
+            "product": "zroky",
+        },
+    }
+    if body.customer_email:
+        payload["notes"]["customer_email"] = body.customer_email
+
+    try:
+        order = _razorpay_client().order.create(data=payload)
+    except BadRequestError as exc:
+        logger.exception("billing.razorpay_order_bad_request org=%s", org_id)
+        status_code = (
+            status.HTTP_401_UNAUTHORIZED
+            if _razorpay_auth_failure(exc)
+            else status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+        detail = (
+            "Razorpay authentication failed."
+            if status_code == status.HTTP_401_UNAUTHORIZED
+            else "Razorpay order creation failed."
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    except (GatewayError, ServerError) as exc:
+        logger.exception("billing.razorpay_order_gateway_error org=%s", org_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Razorpay order creation failed.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("billing.razorpay_order_failed org=%s", org_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Razorpay order creation failed.",
+        ) from exc
+
+    order_id = str(order.get("id") or "")
+    if not order_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Razorpay order response did not include an order id.",
+        )
+
+    sub = _get_or_create_org_subscription(db, org_id=org_id)
+    _store_pending_razorpay_order(sub, order_id=order_id, plan_code=plan_norm)
+    db.add(sub)
+    db.commit()
+
+    return RazorpayOrderResponse(
+        order_id=order_id,
+        amount=int(order.get("amount") or amount),
+        currency=str(order.get("currency") or currency),
+        receipt=str(order.get("receipt") or receipt),
+        plan_code=plan_norm,
+        org_id=org_id,
+        amount_usd=amount_usd,
+    )
+
+
+@router.post(
+    "/razorpay/verify",
+    response_model=RazorpayVerifyResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("30/minute")
+def verify_razorpay_payment(
+    request: Request,
+    body: RazorpayVerifyRequest = Body(...),
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
+) -> RazorpayVerifyResponse:
+    _require_billing_enabled()
+    org_id = _resolve_org_id(tenant_id)
+
+    if not _verify_razorpay_signature(
+        order_id=body.razorpay_order_id,
+        payment_id=body.razorpay_payment_id,
+        signature=body.razorpay_signature,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay signature mismatch.",
+        )
+
+    sub = _get_or_create_org_subscription(db, org_id=org_id)
+    pending_order_id, plan_norm = _pending_razorpay_order(sub)
+    if pending_order_id != body.razorpay_order_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay order is not pending for this org.",
+        )
+
+    if plan_norm and plan_norm != "custom":
+        try:
+            plan_norm = _normalize_razorpay_plan_code(plan_norm)
+        except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stored Razorpay plan is not valid for self-serve checkout.",
+            ) from exc
+        sub.plan_code = plan_norm
+        sub.status = "active"
+        sub.trial_end = None
+        sub.current_period_end = datetime.now(timezone.utc) + timedelta(days=30)
+        seed_plan_entitlements(db, org_id=org_id, plan_code=plan_norm, commit=False)
+    else:
+        plan_norm = None
+
+    sub.stripe_customer_id = body.razorpay_order_id
+    sub.stripe_sub_id = body.razorpay_payment_id
+    db.add(sub)
+    db.commit()
+    entitlements_resolver.invalidate(org_id)
+
+    return RazorpayVerifyResponse(
+        success=True,
+        order_id=body.razorpay_order_id,
+        payment_id=body.razorpay_payment_id,
+        org_id=org_id,
+        plan_code=plan_norm,
     )
 
 
