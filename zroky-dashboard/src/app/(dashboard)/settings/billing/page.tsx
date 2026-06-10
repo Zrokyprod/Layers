@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Script from "next/script";
 import { useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,9 +8,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useBudget, useUpdateBudget } from "@/lib/hooks";
 import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
-  createBillingCheckout,
   createBillingPortal,
+  createRazorpayOrder,
   getBillingMe,
+  verifyRazorpayPayment,
 } from "@/lib/api";
 import type { BillingMeResponse } from "@/lib/types";
 
@@ -52,6 +54,48 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
   },
 ];
 
+type RazorpaySuccessResponse = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayFailureResponse = {
+  error?: {
+    code?: string;
+    description?: string;
+    reason?: string;
+  };
+};
+
+type RazorpayOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpaySuccessResponse) => void;
+  notes?: Record<string, string>;
+  theme?: {
+    color?: string;
+  };
+  modal?: {
+    ondismiss?: () => void;
+  };
+};
+
+type RazorpayInstance = {
+  open: () => void;
+  on: (event: "payment.failed", callback: (response: RazorpayFailureResponse) => void) => void;
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayOptions) => RazorpayInstance;
+  }
+}
+
 function formatEntitlement(value: unknown): string {
   if (typeof value === "number") {
     return value < 0 ? "Unlimited" : value.toLocaleString();
@@ -71,6 +115,8 @@ export default function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [checkoutPlanCode, setCheckoutPlanCode] = useState<string | null>(null);
+  const [razorpayReady, setRazorpayReady] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -134,17 +180,71 @@ export default function BillingPage() {
     try {
       const plan = PLAN_CATALOG.find((item) => item.code === planCode);
       if (planCode === "free") {
-        setActionMsg("Free is the default plan. Use Stripe portal to cancel an active paid subscription.");
+        setActionMsg("Free is the default plan. Contact support to cancel an active paid subscription.");
         return;
       }
       if (!plan?.selfServe) {
         setActionMsg(`${plan?.name ?? "This plan"} is sales-led. Contact the Zroky team to activate it.`);
         return;
       }
-      const checkout = await createBillingCheckout({ plan_code: planCode });
-      window.open(checkout.checkout_url, "_self");
+      const key = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim();
+      if (!key) {
+        setActionMsg("Razorpay checkout is not configured for this dashboard.");
+        return;
+      }
+      if (!razorpayReady || !window.Razorpay) {
+        setActionMsg("Razorpay checkout is still loading. Try again in a moment.");
+        return;
+      }
+
+      setCheckoutPlanCode(planCode);
+      const order = await createRazorpayOrder({ plan_code: planCode });
+      let paymentCompleted = false;
+      const checkout = new window.Razorpay({
+        key,
+        amount: order.amount,
+        currency: order.currency,
+        name: "Zroky",
+        description: `${plan.name} monthly plan`,
+        order_id: order.order_id,
+        notes: {
+          org_id: order.org_id,
+          plan_code: order.plan_code ?? planCode,
+        },
+        theme: {
+          color: "#111827",
+        },
+        modal: {
+          ondismiss: () => {
+            if (!paymentCompleted) {
+              setCheckoutPlanCode(null);
+              setActionMsg("Checkout cancelled before payment.");
+            }
+          },
+        },
+        handler: async (response) => {
+          paymentCompleted = true;
+          try {
+            await verifyRazorpayPayment(response);
+            setActionMsg("Payment verified successfully. Your plan is active.");
+            await load();
+          } catch (e: unknown) {
+            setActionMsg(e instanceof Error ? e.message : "Payment verification failed.");
+          } finally {
+            setCheckoutPlanCode(null);
+          }
+        },
+      });
+
+      checkout.on("payment.failed", (response) => {
+        paymentCompleted = true;
+        setCheckoutPlanCode(null);
+        setActionMsg(response.error?.description ?? "Payment failed. No plan change was applied.");
+      });
+      checkout.open();
     } catch (e: unknown) {
       setActionMsg(e instanceof Error ? e.message : "Failed to update plan.");
+      setCheckoutPlanCode(null);
     }
   }
 
@@ -160,9 +260,17 @@ export default function BillingPage() {
 
   const currentPlanCode = billingMe?.plan_code ?? "free";
   const template = billingMe?.plan_template ?? {};
+  const razorpayConfigured = Boolean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim());
 
   return (
     <div className="page-content">
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="afterInteractive"
+        onLoad={() => setRazorpayReady(true)}
+        onError={() => setActionMsg("Razorpay checkout script failed to load.")}
+      />
+
       {error && <div className="alert-strip alert-strip-error">{error}</div>}
       {actionMsg && (
         <div className={actionMsg.includes("success") ? "alert-strip" : "alert-strip alert-strip-error"}>
@@ -174,17 +282,19 @@ export default function BillingPage() {
         <header className="panel-header">
           <div>
             <h3>Plan &amp; Pricing</h3>
-            <p>Your current plan and Stripe-managed upgrades.</p>
+            <p>Your current plan and self-serve upgrades.</p>
           </div>
-          <button
-            type="button"
-            className="btn btn-soft"
-            onClick={() => void openBillingPortal()}
-            disabled={loading || !billingMe?.stripe_customer_id}
-            title={!billingMe?.stripe_customer_id ? "Start checkout first to create a Stripe customer." : undefined}
-          >
-            Manage in Stripe
-          </button>
+          {!razorpayConfigured && (
+            <button
+              type="button"
+              className="btn btn-soft"
+              onClick={() => void openBillingPortal()}
+              disabled={loading || !billingMe?.stripe_customer_id}
+              title={!billingMe?.stripe_customer_id ? "Start checkout first to create a Stripe customer." : undefined}
+            >
+              Manage in Stripe
+            </button>
+          )}
         </header>
 
         {loading && !billingMe ? (
@@ -211,9 +321,13 @@ export default function BillingPage() {
                       type="button"
                       className="btn btn-primary billing-plan-btn"
                       onClick={() => void changePlan(plan.code)}
-                      disabled={loading}
+                      disabled={loading || checkoutPlanCode != null}
                     >
-                      {plan.selfServe ? `Checkout for ${plan.name}` : `Contact us for ${plan.name}`}
+                      {checkoutPlanCode === plan.code
+                        ? "Opening Razorpay..."
+                        : plan.selfServe
+                          ? `Checkout for ${plan.name}`
+                          : `Contact us for ${plan.name}`}
                     </button>
                   )}
                 </div>
@@ -305,20 +419,30 @@ export default function BillingPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h3>Invoices</h3>
-          <p>Stripe is the source of truth for invoices, payment methods, and receipts.</p>
+          <h3>Receipts</h3>
+          <p>
+            {razorpayConfigured
+              ? "Razorpay confirms payments after checkout and Zroky verifies the payment signature before activating a plan."
+              : "Stripe is the source of truth for invoices, payment methods, and receipts."}
+          </p>
         </header>
         <div className="actions billing-invoices-empty">
-          <button
-            type="button"
-            className="btn btn-soft"
-            onClick={() => void openBillingPortal()}
-            disabled={!billingMe?.stripe_customer_id}
-          >
-            Open invoice portal
-          </button>
-          {!billingMe?.stripe_customer_id && (
-            <span className="hint">Create a paid checkout session before opening the Stripe customer portal.</span>
+          {!razorpayConfigured && (
+            <button
+              type="button"
+              className="btn btn-soft"
+              onClick={() => void openBillingPortal()}
+              disabled={!billingMe?.stripe_customer_id}
+            >
+              Open invoice portal
+            </button>
+          )}
+          {razorpayConfigured ? (
+            <span className="hint">Razorpay payment receipts are available after a successful checkout.</span>
+          ) : (
+            !billingMe?.stripe_customer_id && (
+              <span className="hint">Create a paid checkout session before opening the Stripe customer portal.</span>
+            )
           )}
         </div>
       </section>

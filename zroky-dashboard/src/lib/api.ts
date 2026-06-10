@@ -11,6 +11,8 @@
   BillingCheckoutResponse,
   BillingMeResponse,
   BillingPortalResponse,
+  RazorpayOrderResponse,
+  RazorpayVerifyResponse,
   BudgetConfigResponse,
   BudgetStatusResponse,
   CacheSavingsResponse,
@@ -1104,6 +1106,27 @@ export function createBillingCheckout(body: {
 export function createBillingPortal(): Promise<BillingPortalResponse> {
   return request<BillingPortalResponse>("/v1/billing/portal", {
     method: "POST",
+  });
+}
+
+export function createRazorpayOrder(body: {
+  plan_code: string;
+  customer_email?: string | null;
+}): Promise<RazorpayOrderResponse> {
+  return request<RazorpayOrderResponse>("/v1/billing/razorpay/order", {
+    method: "POST",
+    body,
+  });
+}
+
+export function verifyRazorpayPayment(body: {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}): Promise<RazorpayVerifyResponse> {
+  return request<RazorpayVerifyResponse>("/v1/billing/razorpay/verify", {
+    method: "POST",
+    body,
   });
 }
 

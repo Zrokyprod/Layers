@@ -1043,6 +1043,24 @@ export interface BillingPortalResponse {
   org_id: string;
 }
 
+export interface RazorpayOrderResponse {
+  order_id: string;
+  amount: number;
+  currency: string;
+  receipt: string | null;
+  plan_code: string | null;
+  org_id: string;
+  amount_usd: number | null;
+}
+
+export interface RazorpayVerifyResponse {
+  success: boolean;
+  order_id: string;
+  payment_id: string;
+  org_id: string;
+  plan_code: string | null;
+}
+
 export interface EvaluationSettingsResponse {
   judge_mode: "fast" | "standard" | "strict";
   default_judge_model: string;
