@@ -30,6 +30,10 @@ ZROKY_PROVISIONING_TOKEN_HEADER=x-provisioning-token
 # UI labels
 NEXT_PUBLIC_DASHBOARD_ENV=staging
 NEXT_PUBLIC_DASHBOARD_PROJECT_LABEL=project
+
+# Browser-safe Razorpay Standard Checkout key id only.
+# Do not put RAZORPAY_KEY_SECRET in the dashboard environment.
+NEXT_PUBLIC_RAZORPAY_KEY_ID=
 ```
 
 ## GitHub OAuth Redirect (Required)
