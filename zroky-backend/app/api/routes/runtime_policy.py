@@ -15,6 +15,7 @@ from app.db.session import get_db_session
 from app.services.pilot import PolicyValidationError, get_or_create_policy, parse_policy_json, upsert_policy
 from app.services.runtime_policy import (
     evaluate_runtime_policy,
+    list_runtime_policy_audit_events,
     list_runtime_policy_decisions,
     resolve_runtime_policy_decision,
 )
@@ -51,9 +52,29 @@ class RuntimePolicyCheckRequest(BaseModel):
     prompt_injection_detected: bool | None = None
     pii_detected: bool | None = None
     approval_id: str | None = Field(default=None, max_length=36)
+    user_id: str | None = Field(default=None, max_length=255)
+    workflow_name: str | None = Field(default=None, max_length=255)
+    environment: str | None = Field(default=None, max_length=64)
+    business_impact: dict[str, Any] | str | None = None
+    business_impact_summary: str | None = None
+    impact_usd: float | None = Field(default=None, ge=0)
+    customer_id: str | None = None
+    account_id: str | None = None
+    order_id: str | None = None
+    resource_id: str | None = None
     metadata: dict[str, Any] | None = None
 
     model_config = {"extra": "allow"}
+
+
+class RuntimePolicyAuditEventResponse(BaseModel):
+    id: str
+    event_type: str
+    actor: str | None
+    reason: str | None
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+    created_at: datetime
 
 
 class RuntimePolicyDecisionResponse(BaseModel):
@@ -72,11 +93,18 @@ class RuntimePolicyDecisionResponse(BaseModel):
     reasons: list[str]
     request: dict[str, Any]
     policy_snapshot: dict[str, Any]
+    intended_action: dict[str, Any]
+    trace_context: dict[str, Any]
+    policy_hit: dict[str, Any]
+    business_impact: dict[str, Any]
+    audit_log: list[RuntimePolicyAuditEventResponse]
     created_at: datetime
     expires_at: datetime | None
     resolved_at: datetime | None
     resolved_by: str | None
     resolution_reason: str | None
+    consumed_at: datetime | None
+    consumed_by_decision_id: str | None
 
 
 class RuntimePolicyListResponse(BaseModel):
@@ -119,7 +147,23 @@ def _parse_json(value: str | None, fallback: Any) -> Any:
         return fallback
 
 
-def _decision_to_response(row: RuntimePolicyDecision) -> RuntimePolicyDecisionResponse:
+def _audit_to_response(event) -> RuntimePolicyAuditEventResponse:
+    return RuntimePolicyAuditEventResponse(
+        id=event.id,
+        event_type=event.event_type,
+        actor=event.actor,
+        reason=event.reason,
+        before=_parse_json(event.before_json, None),
+        after=_parse_json(event.after_json, None),
+        created_at=event.created_at,
+    )
+
+
+def _decision_to_response(
+    row: RuntimePolicyDecision,
+    *,
+    audit_events: list[Any] | None = None,
+) -> RuntimePolicyDecisionResponse:
     return RuntimePolicyDecisionResponse(
         id=row.id,
         project_id=row.project_id,
@@ -136,11 +180,18 @@ def _decision_to_response(row: RuntimePolicyDecision) -> RuntimePolicyDecisionRe
         reasons=_parse_json(row.reasons_json, []),
         request=_parse_json(row.request_json, {}),
         policy_snapshot=_parse_json(row.policy_snapshot_json, {}),
+        intended_action=_parse_json(row.intended_action_json, {}),
+        trace_context=_parse_json(row.trace_context_json, {}),
+        policy_hit=_parse_json(row.policy_hit_json, {}),
+        business_impact=_parse_json(row.business_impact_json, {}),
+        audit_log=[_audit_to_response(event) for event in (audit_events or [])],
         created_at=row.created_at,
         expires_at=row.expires_at,
         resolved_at=row.resolved_at,
         resolved_by=row.resolved_by,
         resolution_reason=row.resolution_reason,
+        consumed_at=row.consumed_at,
+        consumed_by_decision_id=row.consumed_by_decision_id,
     )
 
 
@@ -156,9 +207,22 @@ def check_runtime_policy(
         project_id=context.tenant_id,
         payload=body.model_dump(exclude_none=True),
     )
-    response = RuntimePolicyCheckResponse(**_decision_to_response(result.decision).model_dump())
+    audit = list_runtime_policy_audit_events(
+        db,
+        project_id=context.tenant_id,
+        decision_ids=[result.decision.id],
+    )
+    response = RuntimePolicyCheckResponse(
+        **_decision_to_response(
+            result.decision,
+            audit_events=audit.get(result.decision.id, []),
+        ).model_dump()
+    )
     if result.requires_approval:
-        response.approval_queue_item = _decision_to_response(result.decision)
+        response.approval_queue_item = _decision_to_response(
+            result.decision,
+            audit_events=audit.get(result.decision.id, []),
+        )
     return response
 
 
@@ -182,8 +246,13 @@ def list_approvals(
         status=effective_status,
         limit=limit,
     )
+    audit = list_runtime_policy_audit_events(
+        db,
+        project_id=context.tenant_id,
+        decision_ids=[row.id for row in rows],
+    )
     return RuntimePolicyListResponse(
-        items=[_decision_to_response(row) for row in rows],
+        items=[_decision_to_response(row, audit_events=audit.get(row.id, [])) for row in rows],
         total_in_page=len(rows),
     )
 
@@ -209,7 +278,12 @@ def approve_runtime_policy_decision(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pending runtime policy approval was not found.",
         )
-    return _decision_to_response(row)
+    audit = list_runtime_policy_audit_events(
+        db,
+        project_id=context.tenant_id,
+        decision_ids=[row.id],
+    )
+    return _decision_to_response(row, audit_events=audit.get(row.id, []))
 
 
 @router.post("/approvals/{decision_id}/reject", response_model=RuntimePolicyDecisionResponse)
@@ -233,7 +307,12 @@ def reject_runtime_policy_decision(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pending runtime policy approval was not found.",
         )
-    return _decision_to_response(row)
+    audit = list_runtime_policy_audit_events(
+        db,
+        project_id=context.tenant_id,
+        decision_ids=[row.id],
+    )
+    return _decision_to_response(row, audit_events=audit.get(row.id, []))
 
 
 @router.post("/kill-switch", response_model=RuntimePolicyKillSwitchResponse)

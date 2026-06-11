@@ -41,6 +41,19 @@ function compactJson(value: Record<string, unknown>): string {
   return JSON.stringify(Object.fromEntries(entries), null, 2);
 }
 
+function field(value: unknown): string {
+  if (value == null || value === "") return "-";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function summary(value: Record<string, unknown>, fallback: string): string {
+  const candidate = value.summary;
+  return typeof candidate === "string" && candidate.trim() ? candidate : fallback;
+}
+
 function queueTone(status: string): "danger" | "warning" | "success" | "neutral" {
   if (status === "blocked" || status === "rejected") return "danger";
   if (status === "pending_approval") return "warning";
@@ -68,7 +81,7 @@ function DecisionCard({
       <div className="approval-card-header">
         <div>
           <span className="eyebrow">Runtime policy</span>
-          <h3>{item.tool_name ?? item.action_type ?? "Agent action"}</h3>
+          <h3>{summary(item.intended_action, item.tool_name ?? item.action_type ?? "Agent action")}</h3>
           <p>
             {item.agent_name ?? "unknown agent"} · {item.action_type ?? "unknown action"}
           </p>
@@ -77,6 +90,10 @@ function DecisionCard({
       </div>
 
       <dl className="approval-meta-grid">
+        <div>
+          <dt>Agent</dt>
+          <dd>{item.agent_name ?? field(item.trace_context.agent_name)}</dd>
+        </div>
         <div>
           <dt>Trace</dt>
           <dd>
@@ -88,6 +105,14 @@ function DecisionCard({
           </dd>
         </div>
         <div>
+          <dt>Policy hit</dt>
+          <dd>{field(item.policy_hit.policy)}</dd>
+        </div>
+        <div>
+          <dt>Business impact</dt>
+          <dd>{field(item.business_impact.risk_category ?? item.business_impact.summary)}</dd>
+        </div>
+        <div>
           <dt>Created</dt>
           <dd>{formatDateTime(item.created_at)}</dd>
         </div>
@@ -96,14 +121,14 @@ function DecisionCard({
           <dd>{item.expires_at ? formatDateTime(item.expires_at) : "-"}</dd>
         </div>
         <div>
-          <dt>Decision</dt>
-          <dd>{item.decision}</dd>
+          <dt>Consumed</dt>
+          <dd>{item.consumed_at ? formatDateTime(item.consumed_at) : "-"}</dd>
         </div>
       </dl>
 
       <div className="approval-evidence-grid">
         <section>
-          <h4>Reasons</h4>
+          <h4>Risk reason</h4>
           {item.reasons.length > 0 ? (
             <ul>
               {item.reasons.map((reasonItem) => (
@@ -113,6 +138,22 @@ function DecisionCard({
           ) : (
             <p>-</p>
           )}
+        </section>
+        <section>
+          <h4>Intended action</h4>
+          <pre>{compactJson(item.intended_action)}</pre>
+        </section>
+        <section>
+          <h4>Trace context</h4>
+          <pre>{compactJson(item.trace_context)}</pre>
+        </section>
+        <section>
+          <h4>Policy hit</h4>
+          <pre>{compactJson(item.policy_hit)}</pre>
+        </section>
+        <section>
+          <h4>Business impact</h4>
+          <pre>{compactJson(item.business_impact)}</pre>
         </section>
         <section>
           <h4>Masked request</h4>
@@ -127,6 +168,28 @@ function DecisionCard({
           <p>{item.resolution_reason}</p>
         </div>
       ) : null}
+
+      <section className="approval-audit">
+        <h4>Audit log</h4>
+        {item.audit_log.length === 0 ? (
+          <p>-</p>
+        ) : (
+          <ol>
+            {item.audit_log.map((event) => (
+              <li key={event.id}>
+                <div>
+                  <strong>{event.event_type}</strong>
+                  <span>{formatDateTime(event.created_at)}</span>
+                </div>
+                <p>
+                  {event.actor ? `${event.actor}: ` : ""}
+                  {event.reason ?? "-"}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
 
       {canResolve ? (
         <div className="approval-actions">

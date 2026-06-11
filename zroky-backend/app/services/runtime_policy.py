@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -10,9 +11,9 @@ from uuid import uuid4
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Call, RuntimePolicyDecision, TraceSpan
+from app.db.models import Call, RuntimePolicyAuditEvent, RuntimePolicyDecision, TraceSpan
 from app.services.pilot import get_or_create_policy, parse_policy_json
-from app.services.privacy import mask_payload, mask_text
+from app.services.privacy import mask_payload, mask_text, mask_value
 
 
 _PROMPT_INJECTION_PATTERNS = (
@@ -152,26 +153,219 @@ def _approval_expiry(policy: dict[str, Any]) -> datetime:
     return _now() + timedelta(minutes=max(1, ttl))
 
 
+def _masked_any(value: Any) -> Any:
+    return mask_value(value)
+
+
+def _business_impact_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    explicit = payload.get("business_impact")
+    if isinstance(explicit, dict):
+        impact = mask_payload(explicit)
+    elif explicit is not None:
+        impact = {"summary": mask_text(str(explicit))}
+    else:
+        impact = {}
+
+    for source_key, target_key in (
+        ("business_impact_summary", "summary"),
+        ("impact_summary", "summary"),
+        ("impact_usd", "estimated_value_usd"),
+        ("estimated_cost_usd", "estimated_cost_usd"),
+        ("customer_id", "customer_id"),
+        ("account_id", "account_id"),
+        ("order_id", "order_id"),
+        ("resource_id", "resource_id"),
+    ):
+        if source_key in payload and target_key not in impact:
+            impact[target_key] = _masked_any(payload.get(source_key))
+
+    tool_args = payload.get("tool_args")
+    if isinstance(tool_args, dict):
+        for key in ("customer_id", "account_id", "order_id", "invoice_id", "ticket_id", "resource_id", "amount", "currency"):
+            if key in tool_args and key not in impact:
+                impact[key] = _masked_any(tool_args.get(key))
+
+    action = _normalize_tool(_bounded(payload.get("action_type"), max_length=64))
+    tool = _normalize_tool(_bounded(payload.get("tool_name"), max_length=255))
+    if any(marker in action or marker in tool for marker in ("delete", "refund", "payment", "transfer", "payout")):
+        impact.setdefault("risk_category", "destructive_or_financial")
+    elif any(marker in action or marker in tool for marker in ("email", "send_email", "webhook", "http")):
+        impact.setdefault("risk_category", "external_communication")
+
+    return impact
+
+
+def _intended_action_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    action_type = _bounded(payload.get("action_type"), max_length=64)
+    tool_name = _bounded(payload.get("tool_name"), max_length=255)
+    agent = _bounded(payload.get("agent_name"), max_length=255)
+    summary_parts = []
+    if agent:
+        summary_parts.append(f"{agent} intends")
+    else:
+        summary_parts.append("agent intends")
+    summary_parts.append(f"to run {tool_name or action_type or 'action'}")
+    if action_type and tool_name and action_type != tool_name:
+        summary_parts.append(f"for {action_type}")
+    return {
+        "summary": " ".join(summary_parts),
+        "action_type": action_type,
+        "tool_name": tool_name,
+        "tool_args": _masked_any(payload.get("tool_args")),
+        "external_action": bool(payload.get("external_action")),
+        "approval_id": _bounded(payload.get("approval_id"), max_length=36),
+    }
+
+
+def _trace_context_payload(db: Session, *, project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    trace_id = _bounded(payload.get("trace_id"), max_length=128)
+    call_id = _bounded(payload.get("call_id"), max_length=64)
+    context = {
+        "trace_id": trace_id,
+        "span_id": _bounded(payload.get("span_id"), max_length=128),
+        "call_id": call_id,
+        "agent_name": _bounded(payload.get("agent_name"), max_length=255),
+        "role": _bounded(payload.get("role"), max_length=64),
+        "workflow_name": _bounded(payload.get("workflow_name") or payload.get("workflow"), max_length=255),
+        "user_id": _masked_any(payload.get("user_id")),
+        "environment": _bounded(payload.get("environment"), max_length=64),
+    }
+    if call_id:
+        call = db.execute(
+            select(Call).where(
+                Call.project_id == project_id,
+                Call.id == call_id,
+            )
+        ).scalar_one_or_none()
+        if call is not None:
+            context.update(
+                {
+                    "call_status": call.status,
+                    "call_type": call.call_type,
+                    "provider": call.provider,
+                    "model": call.model,
+                    "call_created_at": call.created_at.isoformat() if call.created_at else None,
+                    "call_user_id": _masked_any(call.user_id),
+                }
+            )
+            if not context.get("agent_name"):
+                context["agent_name"] = call.agent_name
+    return {key: value for key, value in context.items() if value not in (None, "", {})}
+
+
+def _policy_hit_payload(
+    payload: dict[str, Any],
+    policy: dict[str, Any],
+    *,
+    decision: str,
+    status: str,
+    reasons: list[str],
+) -> dict[str, Any]:
+    return {
+        "policy": "runtime_policy_gate",
+        "decision": decision,
+        "status": status,
+        "risk_reasons": [_reason(item) for item in reasons],
+        "sensitive_action": _is_sensitive_action(payload, policy),
+        "external_action": _is_external_action(payload),
+        "limits": {
+            "max_tool_calls": policy.get("runtime_max_tool_calls"),
+            "max_retries": policy.get("runtime_max_retries"),
+            "max_cost_usd": policy.get("runtime_max_cost_usd"),
+        },
+        "requires_human_approval": status == "pending_approval",
+    }
+
+
+def _approval_scope_payload(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "project_id": project_id,
+        "trace_id": _bounded(payload.get("trace_id"), max_length=128),
+        "agent_name": _bounded(payload.get("agent_name"), max_length=255),
+        "role": _bounded(payload.get("role"), max_length=64),
+        "action_type": _bounded(payload.get("action_type"), max_length=64),
+        "tool_name": _bounded(payload.get("tool_name"), max_length=255),
+        "tool_args": _masked_any(payload.get("tool_args")),
+        "external_action": bool(payload.get("external_action")),
+        "business_impact": _business_impact_payload(payload),
+    }
+
+
+def _approval_scope_hash(project_id: str, payload: dict[str, Any]) -> str:
+    rendered = _json_dumps(_approval_scope_payload(project_id, payload))
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+
+
+def _decision_snapshot(row: RuntimePolicyDecision) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "decision": row.decision,
+        "status": row.status,
+        "trace_id": row.trace_id,
+        "agent_name": row.agent_name,
+        "action_type": row.action_type,
+        "tool_name": row.tool_name,
+        "reasons": _json_loads(row.reasons_json, []),
+        "approval_scope_hash": row.approval_scope_hash,
+        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+        "resolved_by": row.resolved_by,
+        "consumed_at": row.consumed_at.isoformat() if row.consumed_at else None,
+        "consumed_by_decision_id": row.consumed_by_decision_id,
+    }
+
+
+def _audit_event_type(*, decision: str, status: str) -> str:
+    if status == "pending_approval":
+        return "approval_requested"
+    if status == "blocked":
+        return "blocked"
+    if status == "allowed":
+        return "allowed"
+    if status in {"approved", "rejected", "expired"}:
+        return status
+    return decision
+
+
+def _log_audit_event(
+    db: Session,
+    *,
+    decision: RuntimePolicyDecision,
+    event_type: str,
+    actor: str | None = None,
+    reason: str | None = None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+) -> RuntimePolicyAuditEvent:
+    event = RuntimePolicyAuditEvent(
+        id=str(uuid4()),
+        project_id=decision.project_id,
+        decision_id=decision.id,
+        event_type=event_type,
+        actor=_bounded(actor, max_length=128),
+        reason=mask_text(reason)[:1000] if reason else None,
+        before_json=_json_dumps(before) if before is not None else None,
+        after_json=_json_dumps(after if after is not None else _decision_snapshot(decision)),
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
 def _find_reusable_pending_approval(
     db: Session,
     *,
     project_id: str,
     payload: dict[str, Any],
 ) -> RuntimePolicyDecision | None:
-    trace_id = _bounded(payload.get("trace_id"), max_length=128)
-    action_type = _bounded(payload.get("action_type"), max_length=64)
-    tool_name = _bounded(payload.get("tool_name"), max_length=255)
-    if not trace_id:
-        return None
+    scope_hash = _approval_scope_hash(project_id, payload)
     now = _now()
     return db.execute(
         select(RuntimePolicyDecision)
         .where(
             RuntimePolicyDecision.project_id == project_id,
-            RuntimePolicyDecision.trace_id == trace_id,
             RuntimePolicyDecision.status == "pending_approval",
-            RuntimePolicyDecision.action_type == action_type,
-            RuntimePolicyDecision.tool_name == tool_name,
+            RuntimePolicyDecision.approval_scope_hash == scope_hash,
             RuntimePolicyDecision.expires_at > now,
         )
         .order_by(desc(RuntimePolicyDecision.created_at))
@@ -197,18 +391,29 @@ def _valid_approval(
     ).scalar_one_or_none()
     if approval is None:
         return None
+    if approval.consumed_at is not None:
+        return None
     if approval.expires_at is not None:
         expires_at = approval.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at <= _now():
+            before = _decision_snapshot(approval)
             approval.status = "expired"
             db.add(approval)
             db.flush()
+            _log_audit_event(
+                db,
+                decision=approval,
+                event_type="expired",
+                reason="approval expired before use",
+                before=before,
+                after=_decision_snapshot(approval),
+            )
+            _update_trace_policy_span(db, project_id=project_id, decision=approval)
             return None
-    action_type = _bounded(payload.get("action_type"), max_length=64)
-    tool_name = _bounded(payload.get("tool_name"), max_length=255)
-    if approval.action_type != action_type or approval.tool_name != tool_name:
+    expected_scope_hash = _approval_scope_hash(project_id, payload)
+    if approval.approval_scope_hash != expected_scope_hash:
         return None
     return approval
 
@@ -233,6 +438,10 @@ def _persist_trace_policy_span(
         "tool_name": decision.tool_name,
         "requires_approval": decision.status == "pending_approval",
         "approval_expires_at": decision.expires_at.isoformat() if decision.expires_at else None,
+        "intended_action": _json_loads(decision.intended_action_json, {}),
+        "trace_context": _json_loads(decision.trace_context_json, {}),
+        "policy_hit": _json_loads(decision.policy_hit_json, {}),
+        "business_impact": _json_loads(decision.business_impact_json, {}),
     }
     span = TraceSpan(
         id=str(uuid4()),
@@ -293,6 +502,12 @@ def _update_trace_policy_span(
         "resolved_at": decision.resolved_at.isoformat() if decision.resolved_at else None,
         "resolved_by": decision.resolved_by,
         "resolution_reason": decision.resolution_reason,
+        "consumed_at": decision.consumed_at.isoformat() if decision.consumed_at else None,
+        "consumed_by_decision_id": decision.consumed_by_decision_id,
+        "intended_action": _json_loads(decision.intended_action_json, {}),
+        "trace_context": _json_loads(decision.trace_context_json, {}),
+        "policy_hit": _json_loads(decision.policy_hit_json, {}),
+        "business_impact": _json_loads(decision.business_impact_json, {}),
     }
     span.status = "blocked" if decision.status in {"blocked", "pending_approval", "rejected"} else "completed"
     span.policy_json = _json_dumps(policy_payload)
@@ -330,6 +545,16 @@ def _create_decision(
     expires_at: datetime | None = None,
 ) -> RuntimePolicyDecision:
     masked_request = mask_payload(payload)
+    intended_action = _intended_action_payload(payload)
+    trace_context = _trace_context_payload(db, project_id=project_id, payload=payload)
+    business_impact = _business_impact_payload(payload)
+    policy_hit = _policy_hit_payload(
+        payload,
+        policy,
+        decision=decision,
+        status=status,
+        reasons=reasons,
+    )
     row = RuntimePolicyDecision(
         id=str(uuid4()),
         project_id=project_id,
@@ -348,11 +573,23 @@ def _create_decision(
         reasons_json=_json_dumps([_reason(item) for item in reasons]),
         request_json=_json_dumps(masked_request),
         policy_snapshot_json=_json_dumps(policy),
+        intended_action_json=_json_dumps(intended_action),
+        trace_context_json=_json_dumps(trace_context),
+        policy_hit_json=_json_dumps(policy_hit),
+        business_impact_json=_json_dumps(business_impact),
+        approval_scope_hash=_approval_scope_hash(project_id, payload),
         expires_at=expires_at,
     )
     db.add(row)
     db.flush()
     _persist_trace_policy_span(db, project_id=project_id, decision=row, request_payload=payload)
+    _log_audit_event(
+        db,
+        decision=row,
+        event_type=_audit_event_type(decision=decision, status=status),
+        actor=_bounded(payload.get("actor") or payload.get("agent_name"), max_length=128),
+        reason="; ".join([_reason(item) for item in reasons]),
+    )
     return row
 
 
@@ -438,6 +675,7 @@ def evaluate_runtime_policy(
             payload=payload,
         )
         if approval is not None:
+            before_approval = _decision_snapshot(approval)
             approved_reason = f"human approval {approval.id} accepted"
             row = _create_decision(
                 db,
@@ -448,6 +686,20 @@ def evaluate_runtime_policy(
                 status="allowed",
                 reasons=[approved_reason],
             )
+            approval.consumed_at = _now()
+            approval.consumed_by_decision_id = row.id
+            db.add(approval)
+            db.flush()
+            _log_audit_event(
+                db,
+                decision=approval,
+                event_type="approval_consumed",
+                actor=_bounded(payload.get("actor") or payload.get("agent_name"), max_length=128),
+                reason=approved_reason,
+                before=before_approval,
+                after=_decision_snapshot(approval),
+            )
+            _update_trace_policy_span(db, project_id=project_id, decision=approval)
             db.commit()
             db.refresh(row)
             return RuntimePolicyResult(row, allowed=True, requires_approval=False, reasons=[approved_reason])
@@ -503,6 +755,30 @@ def list_runtime_policy_decisions(
     )
 
 
+def list_runtime_policy_audit_events(
+    db: Session,
+    *,
+    project_id: str,
+    decision_ids: list[str],
+) -> dict[str, list[RuntimePolicyAuditEvent]]:
+    if not decision_ids:
+        return {}
+    rows = list(
+        db.execute(
+            select(RuntimePolicyAuditEvent)
+            .where(
+                RuntimePolicyAuditEvent.project_id == project_id,
+                RuntimePolicyAuditEvent.decision_id.in_(decision_ids),
+            )
+            .order_by(RuntimePolicyAuditEvent.created_at.asc(), RuntimePolicyAuditEvent.id.asc())
+        ).scalars()
+    )
+    grouped: dict[str, list[RuntimePolicyAuditEvent]] = {}
+    for row in rows:
+        grouped.setdefault(row.decision_id, []).append(row)
+    return grouped
+
+
 def resolve_runtime_policy_decision(
     db: Session,
     *,
@@ -521,6 +797,7 @@ def resolve_runtime_policy_decision(
     ).scalar_one_or_none()
     if row is None:
         return None
+    before = _decision_snapshot(row)
     row.status = "approved" if approved else "rejected"
     row.decision = "allow" if approved else "block"
     row.resolved_at = _now()
@@ -528,6 +805,15 @@ def resolve_runtime_policy_decision(
     row.resolution_reason = mask_text(reason.strip())[:1000]
     db.add(row)
     db.flush()
+    _log_audit_event(
+        db,
+        decision=row,
+        event_type="approved" if approved else "rejected",
+        actor=actor,
+        reason=reason,
+        before=before,
+        after=_decision_snapshot(row),
+    )
     _update_trace_policy_span(db, project_id=project_id, decision=row)
     db.commit()
     db.refresh(row)

@@ -21198,6 +21198,51 @@ body:has(.app-shell) {
   background: var(--bg-panel-soft);
 }
 
+.approval-audit {
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
+}
+
+.approval-audit h4 {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.approval-audit ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.approval-audit li {
+  padding: 8px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.approval-audit li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.approval-audit li div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.approval-audit p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+}
+
 @media (max-width: 860px) {
   .approval-meta-grid,
   .approval-evidence-grid {

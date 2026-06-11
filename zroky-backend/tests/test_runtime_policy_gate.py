@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.db.base import Base
-from app.db.models import RuntimePolicyDecision, TraceSpan
+from app.db.models import RuntimePolicyAuditEvent, RuntimePolicyDecision, TraceSpan
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.pilot import DEFAULT_POLICY, upsert_policy
@@ -77,8 +77,9 @@ def test_sensitive_action_requires_approval_and_is_visible_in_trace(client: Test
             "agent_name": "refund-agent",
             "action_type": "refund",
             "tool_name": "refund_payment",
-            "tool_args": {"order_id": "ord_123"},
+            "tool_args": {"order_id": "ord_123", "amount": 42.5, "currency": "USD"},
             "external_action": True,
+            "business_impact": {"summary": "Customer refund", "estimated_value_usd": 42.5},
         },
     )
 
@@ -88,10 +89,16 @@ def test_sensitive_action_requires_approval_and_is_visible_in_trace(client: Test
     assert body["requires_approval"] is True
     assert body["status"] == "pending_approval"
     assert body["approval_queue_item"]["id"] == body["id"]
+    assert body["intended_action"]["tool_name"] == "refund_payment"
+    assert body["trace_context"]["trace_id"] == "trace-refund-1"
+    assert body["policy_hit"]["requires_human_approval"] is True
+    assert body["business_impact"]["summary"] == "Customer refund"
+    assert body["audit_log"][0]["event_type"] == "approval_requested"
 
     listed = client.get("/v1/runtime-policy/approvals")
     assert listed.status_code == 200
     assert listed.json()["items"][0]["id"] == body["id"]
+    assert listed.json()["items"][0]["audit_log"][0]["event_type"] == "approval_requested"
     listed_all = client.get("/v1/runtime-policy/approvals?status=all")
     assert listed_all.status_code == 200
     assert listed_all.json()["items"][0]["id"] == body["id"]
@@ -106,6 +113,7 @@ def test_sensitive_action_requires_approval_and_is_visible_in_trace(client: Test
             )
         ).scalar_one()
         assert "sensitive action requires human approval" in span.policy_json
+        assert "Customer refund" in span.policy_json
 
 
 def test_approved_sensitive_action_allows_followup_check(client: TestClient) -> None:
@@ -115,8 +123,10 @@ def test_approved_sensitive_action_allows_followup_check(client: TestClient) -> 
             "trace_id": "trace-email-1",
             "action_type": "email",
             "tool_name": "send_email",
-            "tool_args": {"template": "receipt"},
+            "agent_name": "receipt-agent",
+            "tool_args": {"template": "receipt", "order_id": "ord_1"},
             "external_action": True,
+            "business_impact_summary": "Send receipt to customer",
         },
     ).json()
 
@@ -126,6 +136,27 @@ def test_approved_sensitive_action_allows_followup_check(client: TestClient) -> 
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
+    assert [event["event_type"] for event in approved.json()["audit_log"]] == [
+        "approval_requested",
+        "approved",
+    ]
+
+    wrong_scope = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-email-1",
+            "action_type": "email",
+            "tool_name": "send_email",
+            "agent_name": "receipt-agent",
+            "tool_args": {"template": "receipt", "order_id": "ord_2"},
+            "external_action": True,
+            "approval_id": pending["id"],
+            "business_impact_summary": "Send receipt to customer",
+        },
+    )
+    assert wrong_scope.status_code == 200
+    assert wrong_scope.json()["allowed"] is False
+    assert wrong_scope.json()["status"] == "pending_approval"
 
     allowed = client.post(
         "/v1/runtime-policy/check",
@@ -133,14 +164,51 @@ def test_approved_sensitive_action_allows_followup_check(client: TestClient) -> 
             "trace_id": "trace-email-1",
             "action_type": "email",
             "tool_name": "send_email",
-            "tool_args": {"template": "receipt"},
+            "agent_name": "receipt-agent",
+            "tool_args": {"template": "receipt", "order_id": "ord_1"},
             "external_action": True,
             "approval_id": pending["id"],
+            "business_impact_summary": "Send receipt to customer",
         },
     )
     assert allowed.status_code == 200
     assert allowed.json()["allowed"] is True
     assert allowed.json()["status"] == "allowed"
+    assert allowed.json()["reasons"] == [f"human approval {pending['id']} accepted"]
+
+    reused = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-email-1",
+            "action_type": "email",
+            "tool_name": "send_email",
+            "agent_name": "receipt-agent",
+            "tool_args": {"template": "receipt", "order_id": "ord_1"},
+            "external_action": True,
+            "approval_id": pending["id"],
+            "business_impact_summary": "Send receipt to customer",
+        },
+    )
+    assert reused.status_code == 200
+    assert reused.json()["allowed"] is False
+    assert reused.json()["status"] == "pending_approval"
+
+    session_factory = client._session_factory  # type: ignore[attr-defined]
+    with session_factory() as session:
+        original = session.get(RuntimePolicyDecision, pending["id"])
+        assert original is not None
+        assert original.consumed_at is not None
+        assert original.consumed_by_decision_id == allowed.json()["id"]
+        events = session.execute(
+            select(RuntimePolicyAuditEvent)
+            .where(RuntimePolicyAuditEvent.decision_id == pending["id"])
+            .order_by(RuntimePolicyAuditEvent.created_at.asc())
+        ).scalars().all()
+        assert [event.event_type for event in events] == [
+            "approval_requested",
+            "approved",
+            "approval_consumed",
+        ]
 
 
 def test_kill_switch_blocks_every_runtime_action(client: TestClient) -> None:

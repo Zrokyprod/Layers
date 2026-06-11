@@ -140,11 +140,28 @@ export interface RuntimePolicyDecisionResponse {
   reasons: string[];
   request: Record<string, unknown>;
   policy_snapshot: Record<string, unknown>;
+  intended_action: Record<string, unknown>;
+  trace_context: Record<string, unknown>;
+  policy_hit: Record<string, unknown>;
+  business_impact: Record<string, unknown>;
+  audit_log: RuntimePolicyAuditEventResponse[];
   created_at: string;
   expires_at: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
   resolution_reason: string | null;
+  consumed_at: string | null;
+  consumed_by_decision_id: string | null;
+}
+
+export interface RuntimePolicyAuditEventResponse {
+  id: string;
+  event_type: string;
+  actor: string | null;
+  reason: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface RuntimePolicyListResponse {

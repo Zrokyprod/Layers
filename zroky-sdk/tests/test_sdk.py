@@ -115,6 +115,8 @@ def test_check_runtime_policy_posts_masked_payload_and_returns_decision(monkeypa
         output_text="Send receipt to alice@example.com",
         external_action=True,
         trace_id="trace-sdk",
+        business_impact={"summary": "Receipt email", "customer_email": "alice@example.com"},
+        order_id="ord_123",
     )
 
     assert decision["allowed"] is True
@@ -122,6 +124,8 @@ def test_check_runtime_policy_posts_masked_payload_and_returns_decision(monkeypa
     assert posted["headers"]["x-api-key"] == "zk_live_test"  # type: ignore[index]
     assert posted["headers"]["x-project-id"] == "proj_runtime"  # type: ignore[index]
     assert posted["json"]["output_text"] == "Send receipt to [REDACTED_EMAIL]"  # type: ignore[index]
+    assert posted["json"]["business_impact"]["customer_email"] == "[REDACTED_EMAIL]"  # type: ignore[index]
+    assert posted["json"]["order_id"] == "ord_123"  # type: ignore[index]
     assert posted["json"]["pii_detected"] is True  # type: ignore[index]
     zroky.shutdown()
     _reset_sdk()

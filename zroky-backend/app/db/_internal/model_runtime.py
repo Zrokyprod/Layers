@@ -295,6 +295,11 @@ class RuntimePolicyDecision(Base):
     reasons_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
     request_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     policy_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    intended_action_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trace_context_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    policy_hit_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    business_impact_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approval_scope_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         nullable=False,
@@ -304,6 +309,8 @@ class RuntimePolicyDecision(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     resolved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     resolution_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    consumed_by_decision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -317,5 +324,33 @@ class RuntimePolicyDecision(Base):
         Index("ix_runtime_policy_decisions_project_status_created", "project_id", "status", "created_at"),
         Index("ix_runtime_policy_decisions_project_trace_created", "project_id", "trace_id", "created_at"),
         Index("ix_runtime_policy_decisions_project_tool_created", "project_id", "tool_name", "created_at"),
+        Index("ix_runtime_policy_decisions_project_scope", "project_id", "approval_scope_hash"),
         Index("ix_runtime_policy_decisions_project_created", "project_id", "created_at"),
+    )
+
+
+class RuntimePolicyAuditEvent(Base):
+    __tablename__ = "runtime_policy_audit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("runtime_policy_decisions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        Index("ix_runtime_policy_audit_project_decision_created", "project_id", "decision_id", "created_at"),
+        Index("ix_runtime_policy_audit_project_created", "project_id", "created_at"),
     )

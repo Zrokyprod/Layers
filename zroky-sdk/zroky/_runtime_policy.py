@@ -55,6 +55,13 @@ def check_runtime_policy(
     prompt_injection_detected: bool | None = None,
     pii_detected: bool | None = None,
     approval_id: str | None = None,
+    business_impact: dict[str, Any] | str | None = None,
+    business_impact_summary: str | None = None,
+    impact_usd: float | None = None,
+    customer_id: str | None = None,
+    account_id: str | None = None,
+    order_id: str | None = None,
+    resource_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     raise_on_block: bool = True,
 ) -> dict[str, Any]:
@@ -87,6 +94,7 @@ def check_runtime_policy(
     masked_input_text = _masked(input_text)
     masked_user_input = _masked(user_input)
     masked_output_text = _masked(output_text)
+    masked_business_impact = _masked(business_impact)
     masked_metadata = _masked(metadata)
 
     payload: dict[str, Any] = {
@@ -108,6 +116,13 @@ def check_runtime_policy(
         "prompt_injection_detected": prompt_injection_detected,
         "pii_detected": pii_detected if pii_detected is not None else (pii_hit or None),
         "approval_id": approval_id,
+        "business_impact": masked_business_impact,
+        "business_impact_summary": _masked(business_impact_summary),
+        "impact_usd": impact_usd,
+        "customer_id": _masked(customer_id),
+        "account_id": _masked(account_id),
+        "order_id": _masked(order_id),
+        "resource_id": _masked(resource_id),
         "metadata": masked_metadata,
     }
     payload = {key: value for key, value in payload.items() if value is not None}
