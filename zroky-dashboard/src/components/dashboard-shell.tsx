@@ -109,6 +109,14 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
+    id: "approvals",
+    href: "/approvals",
+    label: "Approvals",
+    subtitle: "Runtime policy hits, paused risky actions, and human approval decisions.",
+    Icon: LockKeyhole,
+    visibleInNav: true,
+  },
+  {
     id: "cost",
     href: "/cost",
     label: "Cost",

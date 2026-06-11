@@ -116,6 +116,48 @@ const defaultClientTimeoutMs = 12_000;
 const replayQuotaTimeoutMs = defaultClientTimeoutMs;
 const judgeHealthTimeoutMs = 4_000;
 
+export type RuntimePolicyDecisionStatus =
+  | "allowed"
+  | "blocked"
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "expired";
+
+export interface RuntimePolicyDecisionResponse {
+  id: string;
+  project_id: string;
+  trace_id: string | null;
+  call_id: string | null;
+  agent_name: string | null;
+  role: string | null;
+  action_type: string | null;
+  tool_name: string | null;
+  decision: "allow" | "block" | "requires_approval";
+  status: RuntimePolicyDecisionStatus;
+  allowed: boolean;
+  requires_approval: boolean;
+  reasons: string[];
+  request: Record<string, unknown>;
+  policy_snapshot: Record<string, unknown>;
+  created_at: string;
+  expires_at: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_reason: string | null;
+}
+
+export interface RuntimePolicyListResponse {
+  items: RuntimePolicyDecisionResponse[];
+  total_in_page: number;
+}
+
+export interface RuntimePolicyKillSwitchResponse {
+  project_id: string;
+  enabled: boolean;
+  policy: Record<string, unknown>;
+}
+
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(`/api/zroky${path}`, "http://local.zroky");
   if (query) {
@@ -1969,6 +2011,23 @@ export interface GoldenTraceListResponse {
   total_in_page: number;
 }
 
+export interface GoldenHistoryItem {
+  id: string;
+  project_id: string;
+  golden_set_id: string | null;
+  golden_trace_id: string | null;
+  action: string;
+  actor_user_id: string | null;
+  reason: string | null;
+  before_json: string | null;
+  after_json: string | null;
+  created_at: string;
+}
+
+export interface GoldenHistoryListResponse {
+  items: GoldenHistoryItem[];
+}
+
 export function listGoldenSets(
   params: { limit?: number; cursor?: string } = {},
   signal?: AbortSignal,
@@ -2035,6 +2094,16 @@ export function listGoldenTraces(
   return request<GoldenTraceListResponse>(
     `/v1/goldens/${encodeURIComponent(goldenSetId)}/traces`,
     { query: { limit: String(params.limit ?? 50) }, signal },
+  );
+}
+
+export function listGoldenHistory(
+  goldenSetId: string,
+  signal?: AbortSignal,
+): Promise<GoldenHistoryListResponse> {
+  return request<GoldenHistoryListResponse>(
+    `/v1/goldens/${encodeURIComponent(goldenSetId)}/history`,
+    { signal },
   );
 }
 
@@ -2127,6 +2196,7 @@ export interface ReplayRunSummary {
   trace_count_executed: number;
   pass_count: number;
   fail_count: number;
+  not_verified_count?: number;
   error_count: number;
   reproduced_original_failure: boolean | null;
   fix_passed: boolean | null;
@@ -2137,6 +2207,9 @@ export interface ReplayRunSummary {
   cost_delta_usd: number | null;
   latency_delta_ms: number | null;
   replay_cost_usd: number | null;
+  trust_level?: string | null;
+  proof_missing_reasons?: string[];
+  budget?: Record<string, unknown> | null;
 }
 
 export interface ReplaySourceContext {
@@ -2210,9 +2283,14 @@ export interface RegressionCIRunDetailResponse {
   project_id: string;
   git_sha: string | null;
   status: string;
+  effective_status?: string | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  failed_goldens?: Record<string, unknown>[];
+  warn_goldens?: Record<string, unknown>[];
+  not_verified_reasons?: string[];
+  override?: Record<string, unknown> | null;
   report: Record<string, unknown> | null;
   pr_comment_markdown: string | null;
 }
@@ -2249,7 +2327,15 @@ export interface RegressionCIRunRequest {
   sample_window_days?: number;
 }
 
-export type ReplayMode = "stub" | "real_llm" | "mocked-tool" | "live-sandbox" | "shadow";
+export type ReplayMode =
+  | "stub"
+  | "mocked_tool"
+  | "frozen_rag"
+  | "sandbox"
+  | "real_llm"
+  | "shadow"
+  | "mocked-tool"
+  | "live-sandbox";
 
 export interface ReplayCreatePayload {
   replay_mode: ReplayMode;
@@ -2338,6 +2424,51 @@ export interface ReplayQuotaResponse {
 
 export function getReplayQuota(signal?: AbortSignal): Promise<ReplayQuotaResponse> {
   return request<ReplayQuotaResponse>("/v1/replay/quota", { signal, timeoutMs: replayQuotaTimeoutMs });
+}
+
+// ── Runtime Policy Gate ─────────────────────────────────────────────────────
+
+export function listRuntimePolicyApprovals(
+  status: RuntimePolicyDecisionStatus | "all" = "pending_approval",
+  signal?: AbortSignal,
+): Promise<RuntimePolicyListResponse> {
+  return request<RuntimePolicyListResponse>("/v1/runtime-policy/approvals", {
+    query: { status },
+    signal,
+  });
+}
+
+export function approveRuntimePolicyDecision(
+  decisionId: string,
+  reason: string,
+): Promise<RuntimePolicyDecisionResponse> {
+  return request<RuntimePolicyDecisionResponse>(
+    `/v1/runtime-policy/approvals/${encodeURIComponent(decisionId)}/approve`,
+    {
+      method: "POST",
+      body: { reason },
+    },
+  );
+}
+
+export function rejectRuntimePolicyDecision(
+  decisionId: string,
+  reason: string,
+): Promise<RuntimePolicyDecisionResponse> {
+  return request<RuntimePolicyDecisionResponse>(
+    `/v1/runtime-policy/approvals/${encodeURIComponent(decisionId)}/reject`,
+    {
+      method: "POST",
+      body: { reason },
+    },
+  );
+}
+
+export function setRuntimePolicyKillSwitch(enabled: boolean): Promise<RuntimePolicyKillSwitchResponse> {
+  return request<RuntimePolicyKillSwitchResponse>("/v1/runtime-policy/kill-switch", {
+    method: "POST",
+    body: { enabled },
+  });
 }
 
 // ── Judge Health / Drift ──────────────────────────────────────────────────────

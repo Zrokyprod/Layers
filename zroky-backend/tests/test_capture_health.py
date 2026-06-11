@@ -10,10 +10,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
+from app.db.models import ApiKey, GatewayCaptureHealth, Project, ProjectAlert
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.outcome_attribution import ingest_outcome
 from app.services import gateway_stream_consumer
+from app.services.security import hash_api_key
 
 
 @pytest.fixture()
@@ -199,6 +201,104 @@ def test_capture_health_counts_inline_ingest_outcome(client: TestClient) -> None
     payload = response.json()
     assert payload["outcome_events_24h"] == 1
     assert payload["validation_warnings"] == []
+
+
+def test_gateway_heartbeat_uses_api_key_and_creates_capture_alerts(client: TestClient) -> None:
+    session_factory = client.app.state.capture_test_session_local
+    api_key = "zk_live_gateway_capture_health"
+    with session_factory() as db:
+        db.add(Project(id="proj_gateway_health", name="Gateway Health", is_active=True))
+        db.add(
+            ApiKey(
+                id="key_gateway_health",
+                project_id="proj_gateway_health",
+                name="Gateway",
+                key_prefix=api_key[:18],
+                key_hash=hash_api_key(api_key),
+                scopes_json='["ingest"]',
+            )
+        )
+        db.commit()
+
+    response = client.post(
+        "/api/v1/capture/gateway-heartbeat",
+        headers={"x-api-key": api_key},
+        json={
+            "project_id": "proj_gateway_health",
+            "gateway_id": "gw-prod-1",
+            "emit_mode": "http",
+            "durability_mode": "fail_closed",
+            "capture_status": "loss_detected",
+            "spool": {
+                "enabled": True,
+                "backlog": 2,
+                "bytes": 2048,
+                "max_bytes": 104857600,
+                "reserved_bytes": 0,
+                "oldest_age_seconds": 45,
+                "high_watermark": False,
+            },
+            "emit_failures": 3,
+            "enqueue_failures": 1,
+            "flush_failures": 2,
+            "flushed": 7,
+            "loss_count": 1,
+            "backpressure_rejections": 4,
+            "last_error": "ingest down",
+            "version": "test-gateway",
+        },
+    )
+
+    assert response.status_code == 200
+    assert set(response.json()["alert_categories"]) == {"CAPTURE_LOSS", "CAPTURE_BACKPRESSURE"}
+
+    with session_factory() as db:
+        health = db.query(GatewayCaptureHealth).filter_by(project_id="proj_gateway_health", gateway_id="gw-prod-1").one()
+        assert health.capture_status == "loss_detected"
+        assert health.spool_backlog == 2
+        alerts = db.query(ProjectAlert).filter_by(tenant_id="proj_gateway_health").all()
+        assert {alert.category for alert in alerts} == {"CAPTURE_LOSS", "CAPTURE_BACKPRESSURE"}
+
+    health_response = client.get("/api/v1/capture/health", headers={"x-project-id": "proj_gateway_health"})
+    assert health_response.status_code == 200
+    payload = health_response.json()
+    assert payload["gateway_count"] == 1
+    assert payload["gateway_worst_status"] == "loss_detected"
+    assert payload["gateway_loss_count"] == 1
+    assert payload["gateway_backpressure_rejections"] == 4
+    codes = {warning["code"] for warning in payload["validation_warnings"]}
+    assert {"gateway_capture_loss", "gateway_backpressure", "gateway_spool_backlog"}.issubset(codes)
+
+
+def test_gateway_heartbeat_rejects_project_mismatch(client: TestClient) -> None:
+    session_factory = client.app.state.capture_test_session_local
+    api_key = "zk_live_gateway_project_mismatch"
+    with session_factory() as db:
+        db.add(Project(id="proj_gateway_key", name="Gateway Key", is_active=True))
+        db.add(
+            ApiKey(
+                id="key_gateway_mismatch",
+                project_id="proj_gateway_key",
+                name="Gateway",
+                key_prefix=api_key[:18],
+                key_hash=hash_api_key(api_key),
+                scopes_json='["ingest"]',
+            )
+        )
+        db.commit()
+
+    response = client.post(
+        "/api/v1/capture/gateway-heartbeat",
+        headers={"x-api-key": api_key},
+        json={
+            "project_id": "proj_other",
+            "gateway_id": "gw-prod-1",
+            "capture_status": "ok",
+            "spool": {},
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def test_gateway_stream_to_db_to_capture_health_e2e(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,14 +1,15 @@
 import json
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_role
-from app.db.models import Call, OutcomeEvent, TraceRun, TraceSpan
+from app.db.models import Call, GatewayCaptureHealth, OutcomeEvent, ProjectAlert, TraceRun, TraceSpan
 from app.db.session import get_db_session
 
 router = APIRouter(prefix="/v1/capture")
@@ -26,6 +27,9 @@ class CaptureValidationWarning(BaseModel):
         "policy_decisions_missing",
         "trace_graph_projection_missing",
         "trace_graph_projection_failed",
+        "gateway_spool_backlog",
+        "gateway_capture_loss",
+        "gateway_backpressure",
     ]
     label: str
     detail: str
@@ -53,10 +57,54 @@ class CaptureHealthResponse(BaseModel):
     handoff_spans_24h: int = 0
     incomplete_trace_runs_24h: int = 0
     projection_failures_24h: int = 0
+    gateway_count: int = 0
+    gateway_unhealthy_count: int = 0
+    gateway_worst_status: str = "unknown"
+    gateway_spool_backlog: int = 0
+    gateway_spool_bytes: int = 0
+    gateway_spool_oldest_age_seconds: float = 0
+    gateway_loss_count: int = 0
+    gateway_backpressure_rejections: int = 0
+    gateway_last_heartbeat_at: str | None = None
     error_events_24h: int
     outcome_events_24h: int
     sampled_recent_calls: int
     validation_warnings: list[CaptureValidationWarning]
+
+
+class GatewaySpoolHeartbeat(BaseModel):
+    enabled: bool = True
+    backlog: int = Field(default=0, ge=0)
+    bytes: int = Field(default=0, ge=0)
+    max_bytes: int = Field(default=0, ge=0)
+    reserved_bytes: int = Field(default=0, ge=0)
+    oldest_age_seconds: float = Field(default=0, ge=0)
+    high_watermark: bool = False
+
+
+class GatewayCaptureHeartbeatRequest(BaseModel):
+    project_id: str | None = None
+    gateway_id: str
+    emit_mode: str | None = None
+    durability_mode: str | None = None
+    capture_status: str = "unknown"
+    spool: GatewaySpoolHeartbeat = Field(default_factory=GatewaySpoolHeartbeat)
+    emit_failures: int = Field(default=0, ge=0)
+    enqueue_failures: int = Field(default=0, ge=0)
+    flush_failures: int = Field(default=0, ge=0)
+    flushed: int = Field(default=0, ge=0)
+    loss_count: int = Field(default=0, ge=0)
+    backpressure_rejections: int = Field(default=0, ge=0)
+    last_error: str | None = None
+    version: str | None = None
+    checked_at: datetime | None = None
+
+
+class GatewayCaptureHeartbeatResponse(BaseModel):
+    project_id: str
+    gateway_id: str
+    capture_status: str
+    alert_categories: list[str]
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -137,6 +185,178 @@ def _has_version_metadata(span: TraceSpan) -> bool:
     return any(
         parsed.get(key) not in (None, "", [], {})
         for key in ("code_sha", "deployment_id", "model_version", "tool_schema_version", "rag_version")
+    )
+
+
+def _gateway_status_rank(status_value: str | None) -> int:
+    normalized = (status_value or "unknown").strip().lower()
+    return {
+        "ok": 0,
+        "unknown": 1,
+        "degraded": 2,
+        "backpressure": 3,
+        "loss_detected": 4,
+    }.get(normalized, 1)
+
+
+def _worst_gateway_status(rows: list[GatewayCaptureHealth], now: datetime) -> str:
+    if not rows:
+        return "unknown"
+    worst = "ok"
+    for row in rows:
+        status_value = row.capture_status or "unknown"
+        heartbeat_at = _as_utc(row.heartbeat_at)
+        if heartbeat_at is None or (now - heartbeat_at).total_seconds() > 120:
+            status_value = "degraded"
+        if _gateway_status_rank(status_value) > _gateway_status_rank(worst):
+            worst = status_value
+    return worst
+
+
+def _gateway_alert_id(prefix: str, gateway_id: str) -> str:
+    digest = hashlib.sha1(gateway_id.encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}-{digest}"[:64]
+
+
+def _upsert_gateway_capture_alert(
+    *,
+    db: Session,
+    tenant_id: str,
+    gateway_id: str,
+    category: str,
+    severity: str,
+    title: str,
+    evidence: dict[str, Any],
+) -> None:
+    diagnosis_prefix = "gateway-loss" if category == "CAPTURE_LOSS" else "gateway-backpressure"
+    diagnosis_id = _gateway_alert_id(diagnosis_prefix, gateway_id)
+    alert = db.execute(
+        select(ProjectAlert).where(
+            ProjectAlert.tenant_id == tenant_id,
+            ProjectAlert.diagnosis_id == diagnosis_id,
+            ProjectAlert.category == category,
+        )
+    ).scalar_one_or_none()
+    evidence_json = json.dumps(evidence, separators=(",", ":"))
+    now = datetime.now(timezone.utc)
+    if alert is None:
+        db.add(
+            ProjectAlert(
+                tenant_id=tenant_id,
+                diagnosis_id=diagnosis_id,
+                category=category,
+                severity=severity,
+                status="OPEN",
+                source="gateway_capture",
+                title=title,
+                evidence_json=evidence_json,
+            )
+        )
+        return
+    alert.status = "OPEN"
+    alert.resolved_at = None
+    alert.updated_at = now
+    alert.title = title
+    alert.evidence_json = evidence_json
+    db.add(alert)
+
+
+@router.post("/gateway-heartbeat", response_model=GatewayCaptureHeartbeatResponse)
+def gateway_capture_heartbeat(
+    body: GatewayCaptureHeartbeatRequest,
+    tenant_id: str = Depends(require_tenant_role("member")),
+    db: Session = Depends(get_db_session),
+) -> GatewayCaptureHeartbeatResponse:
+    if body.project_id is not None and body.project_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Gateway heartbeat project does not match authenticated project.",
+        )
+
+    now = datetime.now(timezone.utc)
+    heartbeat_at = _as_utc(body.checked_at) or now
+    existing = db.execute(
+        select(GatewayCaptureHealth).where(
+            GatewayCaptureHealth.project_id == tenant_id,
+            GatewayCaptureHealth.gateway_id == body.gateway_id,
+        )
+    ).scalar_one_or_none()
+
+    previous_loss = existing.loss_count if existing is not None else 0
+    previous_backpressure = existing.backpressure_rejections if existing is not None else 0
+    row = existing or GatewayCaptureHealth(project_id=tenant_id, gateway_id=body.gateway_id, heartbeat_at=heartbeat_at)
+    row.emit_mode = body.emit_mode
+    row.durability_mode = body.durability_mode
+    row.capture_status = body.capture_status
+    row.spool_enabled = body.spool.enabled
+    row.spool_backlog = body.spool.backlog
+    row.spool_bytes = body.spool.bytes
+    row.spool_max_bytes = body.spool.max_bytes
+    row.spool_reserved_bytes = body.spool.reserved_bytes
+    row.spool_oldest_age_seconds = body.spool.oldest_age_seconds
+    row.spool_high_watermark = body.spool.high_watermark
+    row.emit_failures = body.emit_failures
+    row.enqueue_failures = body.enqueue_failures
+    row.flush_failures = body.flush_failures
+    row.flushed = body.flushed
+    row.loss_count = body.loss_count
+    row.backpressure_rejections = body.backpressure_rejections
+    row.last_error = body.last_error
+    row.version = body.version
+    row.heartbeat_at = heartbeat_at
+    row.payload_json = body.model_dump_json()
+    db.add(row)
+
+    alert_categories: list[str] = []
+    if body.loss_count > previous_loss or body.capture_status == "loss_detected":
+        _upsert_gateway_capture_alert(
+            db=db,
+            tenant_id=tenant_id,
+            gateway_id=body.gateway_id,
+            category="CAPTURE_LOSS",
+            severity="critical",
+            title="Gateway capture loss detected.",
+            evidence={
+                "gateway_id": body.gateway_id,
+                "loss_count": body.loss_count,
+                "previous_loss_count": previous_loss,
+                "capture_status": body.capture_status,
+                "spool_backlog": body.spool.backlog,
+                "last_error": body.last_error,
+            },
+        )
+        alert_categories.append("CAPTURE_LOSS")
+    if (
+        body.backpressure_rejections > previous_backpressure
+        or body.capture_status == "backpressure"
+        or body.spool.high_watermark
+    ):
+        _upsert_gateway_capture_alert(
+            db=db,
+            tenant_id=tenant_id,
+            gateway_id=body.gateway_id,
+            category="CAPTURE_BACKPRESSURE",
+            severity="high",
+            title="Gateway capture backpressure is blocking or risking provider calls.",
+            evidence={
+                "gateway_id": body.gateway_id,
+                "backpressure_rejections": body.backpressure_rejections,
+                "previous_backpressure_rejections": previous_backpressure,
+                "capture_status": body.capture_status,
+                "spool_backlog": body.spool.backlog,
+                "spool_bytes": body.spool.bytes,
+                "spool_max_bytes": body.spool.max_bytes,
+                "last_error": body.last_error,
+            },
+        )
+        alert_categories.append("CAPTURE_BACKPRESSURE")
+
+    db.commit()
+    return GatewayCaptureHeartbeatResponse(
+        project_id=tenant_id,
+        gateway_id=body.gateway_id,
+        capture_status=body.capture_status,
+        alert_categories=alert_categories,
     )
 
 
@@ -274,6 +494,38 @@ def capture_health(
         or 0
     )
 
+    gateway_rows = list(
+        db.execute(
+            select(GatewayCaptureHealth).where(GatewayCaptureHealth.project_id == tenant_id)
+        ).scalars()
+    )
+    gateway_count = len(gateway_rows)
+    gateway_worst_status = _worst_gateway_status(gateway_rows, now)
+    gateway_unhealthy_count = 0
+    gateway_spool_backlog = 0
+    gateway_spool_bytes = 0
+    gateway_spool_oldest_age_seconds = 0.0
+    gateway_loss_count = 0
+    gateway_backpressure_rejections = 0
+    gateway_last_heartbeat: datetime | None = None
+    for gateway in gateway_rows:
+        heartbeat_at = _as_utc(gateway.heartbeat_at)
+        status_value = gateway.capture_status or "unknown"
+        if heartbeat_at is None or (now - heartbeat_at).total_seconds() > 120:
+            status_value = "degraded"
+        if status_value != "ok":
+            gateway_unhealthy_count += 1
+        gateway_spool_backlog += int(gateway.spool_backlog or 0)
+        gateway_spool_bytes += int(gateway.spool_bytes or 0)
+        gateway_spool_oldest_age_seconds = max(
+            gateway_spool_oldest_age_seconds,
+            float(gateway.spool_oldest_age_seconds or 0),
+        )
+        gateway_loss_count += int(gateway.loss_count or 0)
+        gateway_backpressure_rejections += int(gateway.backpressure_rejections or 0)
+        if heartbeat_at is not None and (gateway_last_heartbeat is None or heartbeat_at > gateway_last_heartbeat):
+            gateway_last_heartbeat = heartbeat_at
+
     validation_warnings: list[CaptureValidationWarning] = []
     if recent_calls:
         if trace_spans_24h == 0:
@@ -340,6 +592,30 @@ def capture_health(
                     detail="Recent calls did not include prompt_version, so deploy-to-failure diagnosis is weaker.",
                 )
             )
+    if gateway_loss_count > 0 or gateway_worst_status == "loss_detected":
+        validation_warnings.append(
+            CaptureValidationWarning(
+                code="gateway_capture_loss",
+                label="Gateway capture loss detected",
+                detail="A gateway reported dropped or unreadable capture records. Treat replay evidence as incomplete until resolved.",
+            )
+        )
+    if gateway_backpressure_rejections > 0 or gateway_worst_status == "backpressure":
+        validation_warnings.append(
+            CaptureValidationWarning(
+                code="gateway_backpressure",
+                label="Gateway capture backpressure",
+                detail="A gateway is rejecting provider calls or near spool capacity to preserve capture guarantees.",
+            )
+        )
+    if gateway_spool_backlog > 0:
+        validation_warnings.append(
+            CaptureValidationWarning(
+                code="gateway_spool_backlog",
+                label="Gateway spool backlog",
+                detail=f"{gateway_spool_backlog} capture event(s) are queued locally and waiting for delivery.",
+            )
+        )
 
     last_seen = _as_utc(last_call.created_at if last_call else None)
     seconds_since_last = int((now - last_seen).total_seconds()) if last_seen else None
@@ -372,6 +648,15 @@ def capture_health(
         handoff_spans_24h=handoff_spans_24h,
         incomplete_trace_runs_24h=incomplete_trace_runs_24h,
         projection_failures_24h=projection_failures_24h,
+        gateway_count=gateway_count,
+        gateway_unhealthy_count=gateway_unhealthy_count,
+        gateway_worst_status=gateway_worst_status,
+        gateway_spool_backlog=gateway_spool_backlog,
+        gateway_spool_bytes=gateway_spool_bytes,
+        gateway_spool_oldest_age_seconds=gateway_spool_oldest_age_seconds,
+        gateway_loss_count=gateway_loss_count,
+        gateway_backpressure_rejections=gateway_backpressure_rejections,
+        gateway_last_heartbeat_at=gateway_last_heartbeat.isoformat() if gateway_last_heartbeat else None,
         error_events_24h=error_events,
         outcome_events_24h=outcome_events_24h,
         sampled_recent_calls=len(recent_calls),

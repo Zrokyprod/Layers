@@ -6,6 +6,7 @@ const PROTECTED_PREFIXES = [
   "/account",
   "/agents",
   "/alerts",
+  "/approvals",
   "/calls",
   "/ci-gates",
   "/cost",

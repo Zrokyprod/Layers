@@ -14,6 +14,7 @@ from app.db.base import Base
 from app.db.models import (
     Anomaly,
     Call,
+    GatewayCaptureHealth,
     GoldenSet,
     GoldenTrace,
     Issue,
@@ -296,6 +297,59 @@ def test_owner_money_path_health_reports_deployment_smoke_evidence(
     assert smoke["call_id"] == "call_smoke"
     assert smoke["golden_trace_id"] == "gt_smoke"
     assert smoke["ci_run_id"] == "rr_smoke_ci"
+
+
+def test_owner_money_path_health_reports_gateway_capture_durability_blockers(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    now = datetime.now(UTC)
+
+    with session_factory() as db:
+        db.add(Project(id="proj_gateway_loss", name="Gateway Loss", owner_ref="loss", is_active=True))
+        db.add(_call("proj_gateway_loss", "call_gateway_loss", created_at=now - timedelta(minutes=5)))
+        db.add(
+            GatewayCaptureHealth(
+                id="gch_loss",
+                project_id="proj_gateway_loss",
+                gateway_id="gw-loss",
+                emit_mode="http",
+                durability_mode="fail_closed",
+                capture_status="loss_detected",
+                spool_enabled=True,
+                spool_backlog=3,
+                spool_bytes=4096,
+                spool_max_bytes=104857600,
+                spool_reserved_bytes=0,
+                spool_oldest_age_seconds=90,
+                spool_high_watermark=False,
+                emit_failures=2,
+                enqueue_failures=0,
+                flush_failures=1,
+                flushed=0,
+                loss_count=1,
+                backpressure_rejections=0,
+                heartbeat_at=now,
+                payload_json="{}",
+            )
+        )
+        db.commit()
+
+    response = test_client.get("/v1/owner/money-path-health", headers=owner_headers)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["platform"]["gateway_unhealthy_tenants"] == 1
+    assert payload["platform"]["gateway_loss_tenants"] == 1
+    assert "capture_loss_detected" in payload["platform"]["launch_blockers"]
+
+    row = payload["tenants"][0]
+    assert row["project_id"] == "proj_gateway_loss"
+    assert row["capture_durability_status"]["state"] == "loss_detected"
+    assert row["capture_durability_status"]["spool_backlog"] == 3
+    assert "capture_loss_detected" in row["launch_blockers"]
+    assert row["next_owner_action"] == "restore_capture"
 
 
 def test_owner_money_path_health_requires_owner_credentials(

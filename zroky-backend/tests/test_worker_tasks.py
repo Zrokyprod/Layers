@@ -716,6 +716,8 @@ def test_run_retention_enforcement_iterates_active_projects(
     worker_task_ctx,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("RETENTION_ENFORCEMENT_ENABLED", "true")
+    get_settings.cache_clear()
     now = datetime(2026, 4, 28, 12, 0, tzinfo=timezone.utc)
     _insert_project_with_retention(worker_task_ctx, project_id="proj-retention-a", retention_days=30)
     _insert_project_with_retention(worker_task_ctx, project_id="proj-retention-b", retention_days=7)

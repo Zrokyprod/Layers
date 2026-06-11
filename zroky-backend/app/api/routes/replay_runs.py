@@ -42,6 +42,7 @@ from app.services.replay_runs import (
     get_replay_run,
     list_replay_runs,
     list_run_traces,
+    normalize_replay_mode,
     parse_summary,
 )
 from app.services.outcome_attribution import get_replay_prevented_savings
@@ -64,6 +65,7 @@ class ReplayRunSummary(BaseModel):
     trace_count_executed: int = 0
     pass_count: int = 0
     fail_count: int = 0
+    not_verified_count: int = 0
     error_count: int = 0
     reproduced_original_failure: bool | None = None
     fix_passed: bool | None = None
@@ -74,6 +76,9 @@ class ReplayRunSummary(BaseModel):
     cost_delta_usd: float | None = None
     latency_delta_ms: int | None = None
     replay_cost_usd: float | None = None
+    trust_level: str = "untrusted"
+    proof_missing_reasons: list[str] = []
+    budget: dict | None = None
 
 
 class ReplaySourceContext(BaseModel):
@@ -217,11 +222,11 @@ def _to_run_response(run) -> ReplayRunResponse:
     # Default older rows (pre-Option-A) to stub mode with the same
     # warning text — there is no way they ran in real-LLM mode and the
     # dashboard banner should still surface the limitation.
-    replay_mode = str(
+    replay_mode = normalize_replay_mode(str(
         summary.get("requested_replay_mode")
         or summary.get("replay_mode")
         or "stub"
-    )
+    ))
     replay_mode_warning = summary.get("replay_mode_warning")
     if replay_mode == "stub" and not replay_mode_warning:
         # Backfill the warning so legacy rows still render the banner.
@@ -242,6 +247,7 @@ def _to_run_response(run) -> ReplayRunResponse:
             trace_count_executed=int(summary.get("trace_count_executed", 0) or 0),
             pass_count=int(summary.get("pass_count", 0) or 0),
             fail_count=int(summary.get("fail_count", 0) or 0),
+            not_verified_count=int(summary.get("not_verified_count", 0) or 0),
             error_count=int(summary.get("error_count", 0) or 0),
             reproduced_original_failure=summary.get("reproduced_original_failure"),
             fix_passed=summary.get("fix_passed"),
@@ -252,10 +258,19 @@ def _to_run_response(run) -> ReplayRunResponse:
             cost_delta_usd=float(summary["cost_delta_usd"]) if summary.get("cost_delta_usd") is not None else None,
             latency_delta_ms=int(summary["latency_delta_ms"]) if summary.get("latency_delta_ms") is not None else None,
             replay_cost_usd=float(summary["replay_cost_usd"]) if summary.get("replay_cost_usd") is not None else None,
+            trust_level=str(summary.get("trust_level") or ("sanity_only" if replay_mode == "stub" else "untrusted")),
+            proof_missing_reasons=[
+                str(item)
+                for item in (summary.get("proof_missing_reasons") or [])
+                if item is not None
+            ]
+            if isinstance(summary.get("proof_missing_reasons"), list)
+            else [],
+            budget=summary.get("budget") if isinstance(summary.get("budget"), dict) else None,
         ),
         created_at=run.created_at,
         replay_mode=replay_mode,
-        executor_replay_mode=str(summary.get("replay_mode") or "stub"),
+        executor_replay_mode=normalize_replay_mode(str(summary.get("replay_mode") or "stub")),
         replay_mode_warning=replay_mode_warning,
         candidate_prompt_override=summary.get("candidate_prompt_override"),
         candidate_model_override=summary.get("candidate_model_override"),
@@ -367,7 +382,8 @@ def create_from_call(
     db: Session = Depends(get_db_session),
 ) -> ReplayCreateResponse:
     payload = body or ReplayCreateRequest()
-    if payload.replay_mode not in VALID_REPLAY_MODES:
+    replay_mode = normalize_replay_mode(payload.replay_mode)
+    if payload.replay_mode not in VALID_REPLAY_MODES and replay_mode not in VALID_REPLAY_MODES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="replay_mode must be one of: " + ", ".join(sorted(VALID_REPLAY_MODES)),
@@ -378,7 +394,7 @@ def create_from_call(
             db,
             project_id=tenant_id,
             call_id=call_id,
-            replay_mode=payload.replay_mode,
+            replay_mode=replay_mode,
             candidate_prompt_override=payload.candidate_prompt_override,
             candidate_model_override=payload.candidate_model_override,
         )
@@ -395,7 +411,7 @@ def create_from_call(
         status=run.status,
         created_at=run.created_at,
         summary_url=build_summary_url(run),
-        replay_mode=payload.replay_mode,
+        replay_mode=replay_mode,
     )
 
 
@@ -413,7 +429,8 @@ def create_from_issue(
     db: Session = Depends(get_db_session),
 ) -> ReplayCreateResponse:
     payload = body or ReplayCreateRequest()
-    if payload.replay_mode not in VALID_REPLAY_MODES:
+    replay_mode = normalize_replay_mode(payload.replay_mode)
+    if payload.replay_mode not in VALID_REPLAY_MODES and replay_mode not in VALID_REPLAY_MODES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="replay_mode must be one of: " + ", ".join(sorted(VALID_REPLAY_MODES)),
@@ -424,7 +441,7 @@ def create_from_issue(
             db,
             project_id=tenant_id,
             issue_id=issue_id,
-            replay_mode=payload.replay_mode,
+            replay_mode=replay_mode,
             candidate_prompt_override=payload.candidate_prompt_override,
             candidate_model_override=payload.candidate_model_override,
         )
@@ -441,7 +458,7 @@ def create_from_issue(
         status=run.status,
         created_at=run.created_at,
         summary_url=build_summary_url(run),
-        replay_mode=payload.replay_mode,
+        replay_mode=replay_mode,
     )
 
 

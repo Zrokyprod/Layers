@@ -33,6 +33,13 @@ def _builtin_detectors() -> dict[str, Callable]:
     from app.services.detectors.empty_output import detect as detect_empty_output
     from app.services.detectors.output_truncated import detect as detect_output_truncated
     from app.services.detectors.schema_violation import detect as detect_schema_violation
+    from app.services.detectors.tool_failures import (
+        detect_tool_argument_mismatch,
+        detect_tool_call_failure,
+        detect_tool_selection_failure,
+    )
+    from app.services.detectors.unsafe_action import detect as detect_unsafe_action
+    from app.services.detectors.task_outcome_failure import detect as detect_task_outcome_failure
     from app.services.detectors.latency_anomaly import detect as detect_latency_anomaly
     from app.services.detectors.repeated_output import detect_entry as detect_repeated_output_entry
     from app.services.detectors.output_length_drift import detect_entry as detect_output_length_drift_entry
@@ -40,6 +47,7 @@ def _builtin_detectors() -> dict[str, Callable]:
     from app.services.detectors.error_rate_drift import detect_entry as detect_error_rate_drift_entry
     from app.services.detectors.token_usage_drift import detect_entry as detect_token_usage_drift_entry
     from app.services.detectors.hallucination_risk import detect_entry as detect_hallucination_risk_entry
+    from app.services.detectors.rag_grounding_failure import detect as detect_rag_grounding_failure
     from app.services.detectors.accuracy_regression import detect_entry as detect_accuracy_regression_entry
     return {
         "token_overflow": detect_token_overflow,
@@ -51,6 +59,11 @@ def _builtin_detectors() -> dict[str, Callable]:
         "empty_output": detect_empty_output,
         "output_truncated": detect_output_truncated,
         "schema_violation": detect_schema_violation,
+        "tool_selection_failure": detect_tool_selection_failure,
+        "tool_call_failure": detect_tool_call_failure,
+        "tool_argument_mismatch": detect_tool_argument_mismatch,
+        "unsafe_action": detect_unsafe_action,
+        "task_outcome_failure": detect_task_outcome_failure,
         "latency_anomaly": detect_latency_anomaly,
         "repeated_output": detect_repeated_output_entry,
         "output_length_drift": detect_output_length_drift_entry,
@@ -58,6 +71,7 @@ def _builtin_detectors() -> dict[str, Callable]:
         "error_rate_drift": detect_error_rate_drift_entry,
         "token_usage_drift": detect_token_usage_drift_entry,
         "hallucination_risk": detect_hallucination_risk_entry,
+        "rag_grounding_failure": detect_rag_grounding_failure,
         "accuracy_regression": detect_accuracy_regression_entry,
     }
 

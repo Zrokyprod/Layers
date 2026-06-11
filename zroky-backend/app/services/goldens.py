@@ -26,7 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import Call, GoldenSet, GoldenTrace
+from app.db.models import Call, GoldenHistory, GoldenSet, GoldenTrace
+from app.services.golden_contracts import validate_criteria_json
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,40 @@ VALID_GOLDEN_TRACE_STATUSES = frozenset(
 ACTIVE_GOLDEN_REQUIRES_EXPECTED_BEHAVIOR = (
     "active golden traces require expected_output_text or criteria_json"
 )
+
+
+def _model_snapshot(row: Any) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    for column in row.__table__.columns:
+        value = getattr(row, column.name, None)
+        data[column.name] = value.isoformat() if hasattr(value, "isoformat") else value
+    return data
+
+
+def _record_history(
+    db: Session,
+    *,
+    project_id: str,
+    action: str,
+    golden_set_id: str | None = None,
+    golden_trace_id: str | None = None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+    actor_user_id: str | None = None,
+    reason: str | None = None,
+) -> None:
+    db.add(GoldenHistory(
+        id=str(uuid4()),
+        project_id=project_id,
+        golden_set_id=golden_set_id,
+        golden_trace_id=golden_trace_id,
+        action=action,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        before_json=json.dumps(before, separators=(",", ":"), default=str) if before else None,
+        after_json=json.dumps(after, separators=(",", ":"), default=str) if after else None,
+        created_at=datetime.now(timezone.utc),
+    ))
 
 
 # ── exceptions ───────────────────────────────────────────────────────────────
@@ -75,6 +110,13 @@ def create_golden_set(
         updated_at=now,
     )
     db.add(golden_set)
+    _record_history(
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set.id,
+        action="golden_set.created",
+        after=_model_snapshot(golden_set),
+    )
     try:
         db.commit()
         db.refresh(golden_set)
@@ -156,6 +198,7 @@ def update_golden_set(
     )
     if golden_set is None:
         return None
+    before_snapshot = _model_snapshot(golden_set)
 
     if name is not None:
         name_norm = name.strip()
@@ -181,6 +224,14 @@ def update_golden_set(
 
     golden_set.updated_at = datetime.now(timezone.utc)
     db.add(golden_set)
+    _record_history(
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set_id,
+        action="golden_set.updated",
+        before=before_snapshot,
+        after=_model_snapshot(golden_set),
+    )
     try:
         db.commit()
         db.refresh(golden_set)
@@ -212,6 +263,14 @@ def delete_golden_set(
     )
     if golden_set is None:
         return False
+    before_snapshot = _model_snapshot(golden_set)
+    _record_history(
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set_id,
+        action="golden_set.deleted",
+        before=before_snapshot,
+    )
     db.execute(
         sa_delete(GoldenTrace).where(
             GoldenTrace.project_id == project_id,
@@ -286,6 +345,8 @@ def add_trace(
         if source_evidence_json is None:
             source_evidence_json = auto_source_evidence_json
 
+    criteria_json = validate_criteria_json(criteria_json)
+
     resolved_status = _resolve_trace_status(
         status=status,
         expected_output_text=expected_output_text,
@@ -311,6 +372,14 @@ def add_trace(
         updated_at=now,
     )
     db.add(trace)
+    _record_history(
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set_id,
+        golden_trace_id=trace.id,
+        action="golden_trace.created",
+        after=_model_snapshot(trace),
+    )
     db.commit()
     db.refresh(trace)
     return trace
@@ -453,6 +522,14 @@ def remove_trace(
     )
     if trace is None:
         return False
+    _record_history(
+        db,
+        project_id=project_id,
+        golden_set_id=golden_set_id,
+        golden_trace_id=trace_id,
+        action="golden_trace.deleted",
+        before=_model_snapshot(trace),
+    )
     db.delete(trace)
     db.commit()
     return True

@@ -33,6 +33,21 @@ describe('pollUntilTerminal', () => {
     expect(res.pollCount).toBe(1);
   });
 
+  it.each(['warn', 'not_verified'])('treats %s as terminal', async (status) => {
+    mockGetJson.mockResolvedValue({
+      statusCode: 200,
+      result: { run_id: 'r1', status, project_id: 'proj' },
+    });
+
+    const res = await pollUntilTerminal(client, 'r1', {
+      intervalSeconds: 1,
+      timeoutSeconds: 10,
+    });
+
+    expect(res.detail.status).toBe(status);
+    expect(res.pollCount).toBe(1);
+  });
+
   it('polls until terminal', async () => {
     mockGetJson
       .mockResolvedValueOnce({

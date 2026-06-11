@@ -189,6 +189,48 @@ describe("CI Gate detail MVP", () => {
     expect(screen.queryByText("Trusted replay completed under threshold.")).not.toBeInTheDocument();
   });
 
+  it("renders Golden gate evidence and active override state", async () => {
+    mockDetail(
+      replayRun({ status: "fail" }),
+      ciDetail({
+        status: "fail",
+        effective_status: "pass",
+        failed_goldens: [
+          {
+            golden_name: "Refund policy Golden",
+            golden_trace_id: "gt_1",
+            assertion: "tool_sequence",
+            replay_mode: "mocked_tool",
+            recommended_fix: "Restore policy lookup before refund.",
+          },
+        ],
+        warn_goldens: [
+          {
+            golden_name: "Support tone Golden",
+            golden_trace_id: "gt_2",
+            status: "fail",
+            replay_mode: "real_llm",
+          },
+        ],
+        not_verified_reasons: ["blocking Golden gt_3 has no replay evidence"],
+        override: {
+          original_status: "fail",
+          effective_status: "pass",
+          reason: "Hotfix approved by owner until replay worker recovers.",
+        },
+      }),
+    );
+
+    render(<CiGateDetailPage />);
+
+    expect(await screen.findByText("Golden gate evidence")).toBeInTheDocument();
+    expect(screen.getByText("Refund policy Golden")).toBeInTheDocument();
+    expect(screen.getByText(/Restore policy lookup/)).toBeInTheDocument();
+    expect(screen.getByText("Support tone Golden")).toBeInTheDocument();
+    expect(screen.getByText("blocking Golden gt_3 has no replay evidence")).toBeInTheDocument();
+    expect(screen.getByText(/Override active: effective status pass/)).toBeInTheDocument();
+  });
+
   it("renders existing action links", async () => {
     mockDetail();
 

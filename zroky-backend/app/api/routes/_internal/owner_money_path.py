@@ -19,6 +19,7 @@ from app.api.routes._internal.owner_pricing_audit import _pricing_contract_drift
 from app.db.models import (
     Anomaly,
     Call,
+    GatewayCaptureHealth,
     GoldenTrace,
     Issue,
     Project,
@@ -54,6 +55,16 @@ class OwnerProviderKeyStatus(BaseModel):
     active_provider_count: int
 
 
+class OwnerCaptureDurabilityStatus(BaseModel):
+    state: str
+    gateway_count: int
+    unhealthy_gateway_count: int
+    spool_backlog: int
+    spool_oldest_age_seconds: float
+    loss_count: int
+    backpressure_rejections: int
+
+
 class OwnerLastDeployedSmoke(BaseModel):
     status: str
     checked_at: datetime | None = None
@@ -74,6 +85,9 @@ class OwnerMoneyPathPlatformSummary(BaseModel):
     ci_blocks_7d: int
     replay_jobs_pending: int = 0
     replay_jobs_stale: int = 0
+    gateway_unhealthy_tenants: int = 0
+    gateway_loss_tenants: int = 0
+    gateway_backpressure_tenants: int = 0
     tenants_missing_provider_key: int
     tenants_near_replay_quota: int
     tenants_without_recent_capture: int
@@ -96,6 +110,7 @@ class OwnerMoneyPathTenantRow(BaseModel):
     blocking_ci_failures_7d: int
     replay_jobs_pending: int = 0
     replay_jobs_stale: int = 0
+    capture_durability_status: OwnerCaptureDurabilityStatus
     provider_key_status: OwnerProviderKeyStatus
     replay_quota_status: OwnerReplayQuotaStatus
     launch_blockers: list[str] = Field(default_factory=list)
@@ -179,6 +194,55 @@ def _quota_status(
     )
 
 
+def _capture_durability_status(rows: list[GatewayCaptureHealth], now: datetime) -> OwnerCaptureDurabilityStatus:
+    if not rows:
+        return OwnerCaptureDurabilityStatus(
+            state="unknown",
+            gateway_count=0,
+            unhealthy_gateway_count=0,
+            spool_backlog=0,
+            spool_oldest_age_seconds=0,
+            loss_count=0,
+            backpressure_rejections=0,
+        )
+
+    state_rank = {"ok": 0, "unknown": 1, "degraded": 2, "backpressure": 3, "loss_detected": 4}
+    worst = "ok"
+    unhealthy = 0
+    spool_backlog = 0
+    oldest_age = 0.0
+    loss_count = 0
+    backpressure_rejections = 0
+    for row in rows:
+        status_value = row.capture_status or "unknown"
+        heartbeat_at = _as_utc(row.heartbeat_at)
+        if heartbeat_at is None or (now - heartbeat_at).total_seconds() > 120:
+            status_value = "degraded"
+        if status_value != "ok":
+            unhealthy += 1
+        if state_rank.get(status_value, 1) > state_rank.get(worst, 1):
+            worst = status_value
+        spool_backlog += int(row.spool_backlog or 0)
+        oldest_age = max(oldest_age, float(row.spool_oldest_age_seconds or 0))
+        loss_count += int(row.loss_count or 0)
+        backpressure_rejections += int(row.backpressure_rejections or 0)
+
+    if loss_count > 0:
+        worst = "loss_detected"
+    elif backpressure_rejections > 0 and state_rank.get(worst, 0) < state_rank["backpressure"]:
+        worst = "backpressure"
+
+    return OwnerCaptureDurabilityStatus(
+        state=worst,
+        gateway_count=len(rows),
+        unhealthy_gateway_count=unhealthy,
+        spool_backlog=spool_backlog,
+        spool_oldest_age_seconds=oldest_age,
+        loss_count=loss_count,
+        backpressure_rejections=backpressure_rejections,
+    )
+
+
 def _is_verified_replay(run: ReplayRun) -> bool:
     if run.status != "pass":
         return False
@@ -199,11 +263,14 @@ def _next_owner_action(
     golden_trace_count: int,
     ci_run_count_7d: int,
     blocking_ci_failures_7d: int,
+    capture_durability_status: OwnerCaptureDurabilityStatus,
     provider_key_status: OwnerProviderKeyStatus,
     replay_quota_status: OwnerReplayQuotaStatus,
 ) -> str:
     if blocking_ci_failures_7d > 0:
         return "review_blocked_ci"
+    if capture_durability_status.state in {"loss_detected", "backpressure", "degraded"}:
+        return "restore_capture"
     if last_capture_at is None or last_capture_at < since_recent_capture:
         return "restore_capture"
     if provider_key_status.state == "missing":
@@ -230,6 +297,12 @@ def _risk_score(row: OwnerMoneyPathTenantRow) -> int:
     if row.provider_key_status.state == "missing":
         score += 30
     if row.last_capture_at is None:
+        score += 25
+    if row.capture_durability_status.state == "loss_detected":
+        score += 80
+    elif row.capture_durability_status.state == "backpressure":
+        score += 55
+    elif row.capture_durability_status.state == "degraded":
         score += 25
     if row.replay_quota_status.state == "exceeded":
         score += 20
@@ -258,12 +331,19 @@ def _tenant_launch_blockers(
     ci_run_count_7d: int,
     blocking_ci_failures_7d: int,
     replay_jobs_stale: int,
+    capture_durability_status: OwnerCaptureDurabilityStatus,
     provider_key_status: OwnerProviderKeyStatus,
     replay_quota_status: OwnerReplayQuotaStatus,
 ) -> list[str]:
     blockers: list[str] = []
     if last_capture_at is None or last_capture_at < since_recent_capture:
         blockers.append("capture_unhealthy")
+    if capture_durability_status.state == "loss_detected":
+        blockers.append("capture_loss_detected")
+    if capture_durability_status.state == "backpressure":
+        blockers.append("gateway_backpressure")
+    if capture_durability_status.state == "degraded" or capture_durability_status.spool_backlog > 0:
+        blockers.append("gateway_spool_stale")
     if provider_key_status.state == "missing":
         blockers.append("provider_key_missing")
     if replay_quota_status.state in {"blocked", "disabled", "exceeded"}:
@@ -376,6 +456,9 @@ def owner_money_path_health(
                 ci_blocks_7d=0,
                 replay_jobs_pending=0,
                 replay_jobs_stale=0,
+                gateway_unhealthy_tenants=0,
+                gateway_loss_tenants=0,
+                gateway_backpressure_tenants=0,
                 tenants_missing_provider_key=0,
                 tenants_near_replay_quota=0,
                 tenants_without_recent_capture=0,
@@ -522,6 +605,13 @@ def owner_money_path_health(
         ).all()
     )
 
+    gateway_rows = db.execute(
+        select(GatewayCaptureHealth).where(GatewayCaptureHealth.project_id.in_(project_ids))
+    ).scalars().all()
+    gateway_rows_by_project: dict[str, list[GatewayCaptureHealth]] = defaultdict(list)
+    for row in gateway_rows:
+        gateway_rows_by_project[row.project_id].append(row)
+
     tenants: list[OwnerMoneyPathTenantRow] = []
     for project in projects:
         subscription = subscriptions.get(project.id)
@@ -550,6 +640,7 @@ def owner_money_path_health(
         last_capture_at = last_capture_by_project.get(project.id)
         replay_jobs_pending = replay_job_pending_counts.get(project.id, 0)
         replay_jobs_stale = replay_job_stale_counts.get(project.id, 0)
+        capture_durability = _capture_durability_status(gateway_rows_by_project.get(project.id, []), now)
         launch_blockers = _tenant_launch_blockers(
             last_capture_at=last_capture_at,
             since_recent_capture=since_24h,
@@ -560,6 +651,7 @@ def owner_money_path_health(
             ci_run_count_7d=ci_run_counts.get(project.id, 0),
             blocking_ci_failures_7d=ci_block_counts.get(project.id, 0),
             replay_jobs_stale=replay_jobs_stale,
+            capture_durability_status=capture_durability,
             provider_key_status=provider_status,
             replay_quota_status=quota_status,
         )
@@ -577,6 +669,7 @@ def owner_money_path_health(
             blocking_ci_failures_7d=ci_block_counts.get(project.id, 0),
             replay_jobs_pending=replay_jobs_pending,
             replay_jobs_stale=replay_jobs_stale,
+            capture_durability_status=capture_durability,
             provider_key_status=provider_status,
             replay_quota_status=quota_status,
             launch_blockers=launch_blockers,
@@ -589,6 +682,7 @@ def owner_money_path_health(
                 golden_trace_count=golden_trace_counts.get(project.id, 0),
                 ci_run_count_7d=ci_run_counts.get(project.id, 0),
                 blocking_ci_failures_7d=ci_block_counts.get(project.id, 0),
+                capture_durability_status=capture_durability,
                 provider_key_status=provider_status,
                 replay_quota_status=quota_status,
             ),
@@ -608,6 +702,16 @@ def owner_money_path_health(
         platform_launch_blockers.append("replay_quota_blocking")
     if sum(row.replay_jobs_stale for row in tenants) > 0:
         platform_launch_blockers.append("replay_worker_stale_jobs")
+    if any(row.capture_durability_status.state == "loss_detected" for row in tenants):
+        platform_launch_blockers.append("capture_loss_detected")
+    if any(row.capture_durability_status.state == "backpressure" for row in tenants):
+        platform_launch_blockers.append("gateway_backpressure")
+    if any(
+        row.capture_durability_status.state == "degraded"
+        or row.capture_durability_status.spool_backlog > 0
+        for row in tenants
+    ):
+        platform_launch_blockers.append("gateway_spool_stale")
     if sum(row.blocking_ci_failures_7d for row in tenants) > 0:
         platform_launch_blockers.append("ci_gate_blocking_failures")
     if last_deployed_smoke.status != "passed":
@@ -625,6 +729,18 @@ def owner_money_path_health(
         ci_blocks_7d=sum(row.blocking_ci_failures_7d for row in tenants),
         replay_jobs_pending=sum(row.replay_jobs_pending for row in tenants),
         replay_jobs_stale=sum(row.replay_jobs_stale for row in tenants),
+        gateway_unhealthy_tenants=sum(
+            1 for row in tenants if row.capture_durability_status.unhealthy_gateway_count > 0
+        ),
+        gateway_loss_tenants=sum(
+            1 for row in tenants if row.capture_durability_status.loss_count > 0
+        ),
+        gateway_backpressure_tenants=sum(
+            1
+            for row in tenants
+            if row.capture_durability_status.backpressure_rejections > 0
+            or row.capture_durability_status.state == "backpressure"
+        ),
         tenants_missing_provider_key=sum(
             1 for row in tenants if row.provider_key_status.state == "missing"
         ),

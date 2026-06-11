@@ -119,6 +119,16 @@ export interface OwnerLastDeployedSmoke {
   detail: string | null;
 }
 
+export interface OwnerCaptureDurabilityStatus {
+  state: string;
+  gateway_count: number;
+  unhealthy_gateway_count: number;
+  spool_backlog: number;
+  spool_oldest_age_seconds: number;
+  loss_count: number;
+  backpressure_rejections: number;
+}
+
 export interface OwnerMoneyPathPlatformSummary {
   captures_24h: number;
   issues_open: number;
@@ -127,6 +137,9 @@ export interface OwnerMoneyPathPlatformSummary {
   golden_traces_active: number;
   ci_runs_7d: number;
   ci_blocks_7d: number;
+  gateway_unhealthy_tenants?: number;
+  gateway_loss_tenants?: number;
+  gateway_backpressure_tenants?: number;
   tenants_missing_provider_key: number;
   tenants_near_replay_quota: number;
   tenants_without_recent_capture: number;
@@ -145,6 +158,7 @@ export interface OwnerMoneyPathTenantRow {
   golden_trace_count: number;
   ci_run_count_7d: number;
   blocking_ci_failures_7d: number;
+  capture_durability_status?: OwnerCaptureDurabilityStatus;
   provider_key_status: OwnerProviderKeyStatus;
   replay_quota_status: OwnerReplayQuotaStatus;
   next_owner_action: string;

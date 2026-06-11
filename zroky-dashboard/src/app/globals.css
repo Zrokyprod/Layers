@@ -21081,6 +21081,136 @@ body:has(.app-shell) {
   }
 }
 
+/* Runtime approvals */
+.approvals-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.approval-list {
+  display: grid;
+  gap: 14px;
+}
+
+.approval-card {
+  display: grid;
+  gap: 16px;
+  border-left: 4px solid var(--border-subtle);
+}
+
+.approval-card.tone-warning {
+  border-left-color: var(--dashboard-warning);
+}
+
+.approval-card.tone-danger {
+  border-left-color: var(--dashboard-danger);
+}
+
+.approval-card.tone-success {
+  border-left-color: var(--dashboard-success);
+}
+
+.approval-card-header,
+.approval-actions,
+.approval-resolution {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approval-card-header h3 {
+  margin: 4px 0;
+  font-size: 1rem;
+}
+
+.approval-card-header p,
+.approval-resolution p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.approval-meta-grid,
+.approval-evidence-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.approval-meta-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.approval-meta-grid dt,
+.approval-evidence-grid h4 {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.approval-meta-grid dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.approval-evidence-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.approval-evidence-grid section {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
+}
+
+.approval-evidence-grid ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.approval-evidence-grid pre {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+}
+
+.approval-actions {
+  align-items: center;
+}
+
+.approval-actions input {
+  flex: 1;
+  min-width: 180px;
+}
+
+.approval-resolution {
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
+}
+
+@media (max-width: 860px) {
+  .approval-meta-grid,
+  .approval-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .approval-actions,
+  .approval-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* Premium reference shell polish ------------------------------------------ */
 
 .app-shell {

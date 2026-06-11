@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.entitlements import require_entitlement
 from app.api.dependencies.tenant import require_tenant_id
 from app.api.routes.issue_schemas import (
+    IssueBlastRadius,
     IssueCiGateProof,
     IssueCiGateRequest,
     IssueCiGateResponse,
@@ -36,7 +37,7 @@ from app.api.routes.issue_schemas import (
 )
 from app.core.config import get_settings
 from app.core.limiter import limiter
-from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, Project, ReplayJob, ReplayRun, ReplayRunTrace
+from app.db.models import Anomaly, Call, GoldenSet, GoldenTrace, IssueOccurrence, Project, ReplayJob, ReplayRun, ReplayRunTrace
 from app.db.session import get_db_session
 from app.services.discovery.sink import DISCOVERY_DETECTOR
 from app.services.goldens import (
@@ -45,6 +46,7 @@ from app.services.goldens import (
     create_golden_set,
     get_golden_set,
 )
+from app.services.golden_contracts import build_golden_contract, criteria_with_contract
 from app.services.issue_projection import (
     PUBLIC_ISSUE_STATUSES,
     IssueProjection,
@@ -52,12 +54,14 @@ from app.services.issue_projection import (
     issue_projection_from_anomaly,
 )
 from app.services.issues import ignore_issue, resolve_issue, update_issue_triage
+from app.services.issue_occurrences import IssueOccurrenceStats, issue_occurrence_stats
 from app.services.replay_runs import (
     VALID_REPLAY_MODES,
     build_summary_url,
     check_replay_monthly_quota,
     dispatch_replay_run,
     mark_call_as_golden,
+    normalize_replay_mode,
     parse_summary,
 )
 
@@ -259,6 +263,37 @@ def _load_evidence_calls(db: Session, issue: IssueProjection) -> list[Call]:
     calls: list[Call] = []
     seen: set[str] = set()
 
+    occurrence_call_ids = [
+        call_id
+        for call_id in db.execute(
+            select(IssueOccurrence.call_id)
+            .where(
+                IssueOccurrence.project_id == issue.project_id,
+                IssueOccurrence.issue_id == issue.id,
+                IssueOccurrence.call_id.is_not(None),
+            )
+            .order_by(IssueOccurrence.occurred_at.desc(), IssueOccurrence.id.desc())
+            .limit(_MAX_EVIDENCE_TRACES)
+        ).scalars().all()
+        if call_id
+    ]
+    if occurrence_call_ids:
+        occurrence_calls = db.execute(
+            select(Call).where(
+                Call.project_id == issue.project_id,
+                Call.id.in_(occurrence_call_ids),
+            )
+        ).scalars().all()
+        by_id = {call.id: call for call in occurrence_calls}
+        for call_id in occurrence_call_ids:
+            call = by_id.get(call_id)
+            if call is None or call.id in seen:
+                continue
+            calls.append(call)
+            seen.add(call.id)
+        if calls:
+            return calls[:_MAX_EVIDENCE_TRACES]
+
     if issue.sample_call_id:
         sample = db.execute(
             select(Call).where(
@@ -352,6 +387,72 @@ def _build_evidence_traces(
     return []
 
 
+def _issue_occurrence_stats_or_fallback(
+    db: Session,
+    issue: IssueProjection,
+) -> IssueOccurrenceStats:
+    stats = issue_occurrence_stats(db, project_id=issue.project_id, issue_id=issue.id)
+    if stats.occurrence_count > 0:
+        return stats
+    fallback = int(issue.occurrence_count or 0)
+    return IssueOccurrenceStats(
+        occurrence_count=fallback,
+        affected_trace_count=fallback,
+        affected_user_count=0,
+    )
+
+
+def _what_happened(
+    issue: IssueProjection,
+    evidence: Mapping[str, Any],
+    calls: list[Call],
+) -> str:
+    explicit = _first_text((evidence,), "what_happened", "summary", "title")
+    if explicit:
+        return explicit
+    return _issue_title(issue, evidence, calls)
+
+
+def _why_it_matters(
+    issue: IssueProjection,
+    evidence: Mapping[str, Any],
+    stats: IssueOccurrenceStats,
+) -> str:
+    explicit = _first_text((evidence,), "why_it_matters", "impact", "user_impact")
+    if explicit:
+        return explicit
+    users = f"{stats.affected_user_count} users" if stats.affected_user_count else "unknown user count"
+    return (
+        f"{stats.affected_trace_count} traces are grouped under this root cause "
+        f"with {users}; replay coverage is needed before the same failure can be blocked."
+    )
+
+
+def _suspected_introduced_version(
+    evidence: Mapping[str, Any],
+    calls: list[Call],
+) -> str | None:
+    explicit = _first_text((evidence,), "suspected_introduced_version")
+    if explicit:
+        return explicit
+    version_evidence = evidence.get("version_evidence")
+    sources: list[Mapping[str, Any]] = []
+    if isinstance(version_evidence, Mapping):
+        sources.append(version_evidence)
+    for call in calls:
+        payload, metadata = _call_context(call)
+        sources.extend([payload, metadata])
+        if isinstance(payload.get("versions"), Mapping):
+            sources.append(payload["versions"])  # type: ignore[arg-type]
+        if isinstance(metadata.get("versions"), Mapping):
+            sources.append(metadata["versions"])  # type: ignore[arg-type]
+    for key in ("deployment_id", "code_sha", "prompt_version", "model_version", "tool_schema_version", "rag_version"):
+        value = _first_text(tuple(sources), key) if sources else None
+        if value:
+            return f"{key}:{value[:16]}"
+    return None
+
+
 def _issue_title(
     issue: IssueProjection,
     evidence: Mapping[str, Any],
@@ -364,10 +465,16 @@ def _issue_title(
 
     if "TOOL" in code:
         return f"{agent} is selecting the wrong tool"
+    if code == "UNSAFE_ACTION":
+        return f"{agent} attempted an unsafe action"
+    if code == "TASK_OUTCOME_FAILURE":
+        return f"{agent} failed the business outcome"
     if "RETRIEVAL" in code or "RAG" in code:
         target = _context_value(evidence, calls, "missing_document", "missing_doc", "document_type")
         if target:
             return f"RAG retrieval is missing {target}"
+        if code == "RAG_GROUNDING_FAILURE":
+            return f"{agent} answer is not grounded"
         return "RAG retrieval is missing required context"
     if code == "SCHEMA_VIOLATION":
         if prompt_version:
@@ -430,6 +537,10 @@ def _root_cause(
 
     if "TOOL" in code:
         return "Tool choice is unstable for the affected traces; the tool description or argument schema needs tightening."
+    if code == "UNSAFE_ACTION":
+        return "A sensitive action path did not have trustworthy policy approval evidence."
+    if code == "TASK_OUTCOME_FAILURE":
+        return "The model call completed but the captured business outcome failed."
     if "RETRIEVAL" in code or "RAG" in code:
         return "The retriever did not return required context before the model answered."
     if code == "SCHEMA_VIOLATION":
@@ -516,6 +627,8 @@ def _replay_coverage_status(db: Session, issue: IssueProjection) -> str:
             return "covered_not_run"
         if run_trace.status == "pass":
             return _mode_aware_replay_pass_status(db, run_trace)
+        if run_trace.status == "not_verified":
+            return "not_verified"
         if run_trace.status in {"fail", "error"}:
             return "covered_failed"
         return "covered_not_run"
@@ -552,16 +665,18 @@ def _mode_aware_replay_pass_status(db: Session, run_trace: ReplayRunTrace) -> st
         return "covered_passed"
 
     summary = _safe_json_object(run.summary_json)
-    replay_mode = str(
+    replay_mode = normalize_replay_mode(str(
         summary.get("requested_replay_mode")
         or summary.get("replay_mode")
         or "stub"
-    )
+    ))
     verification_status = str(summary.get("verification_status") or "")
     if summary.get("verified_fix") is True:
         return "verified_fix"
     if replay_mode == "stub":
         return "sanity_replay_passed"
+    if verification_status == "not_verified":
+        return "not_verified"
     if verification_status == "real_comparison_missing_tool_proof":
         return "real_replay_missing_tool_proof"
     return "real_replay_passed"
@@ -580,6 +695,10 @@ def _recommended_next_action(issue: IssueProjection, replay_status: str) -> str:
 
     if "TOOL" in code:
         return f"{replay_prefix}tighten tool descriptions and argument schema before redeploy."
+    if code == "UNSAFE_ACTION":
+        return f"{replay_prefix}add a policy approval assertion before allowing this action path."
+    if code == "TASK_OUTCOME_FAILURE":
+        return f"{replay_prefix}assert the business outcome in replay, not just the final answer text."
     if "RETRIEVAL" in code or "RAG" in code:
         return f"{replay_prefix}verify the missing docs are retrieved in top-k before redeploy."
     if code == "SCHEMA_VIOLATION":
@@ -613,6 +732,22 @@ def _recommended_next_action(issue: IssueProjection, replay_status: str) -> str:
     if code == "ACCURACY_REGRESSION":
         return f"{replay_prefix}bisect prompt/model changes and block deploy until replay passes."
     return f"{replay_prefix}validate the grouped failure and ship the smallest targeted fix."
+
+
+def _recommended_next_action_for_issue(
+    issue: IssueProjection,
+    evidence: Mapping[str, Any],
+    replay_status: str,
+) -> str:
+    explicit = _first_text(
+        (evidence,),
+        "recommended_next_action",
+        "next_action",
+        "fix_primary",
+    )
+    if explicit:
+        return explicit
+    return _recommended_next_action(issue, replay_status)
 
 
 def _latest_replay_for_issue(
@@ -743,8 +878,12 @@ def _build_issue_response(db: Session, issue: IssueProjection | Anomaly) -> Issu
         issue = issue_projection_from_anomaly(issue)
     evidence = _safe_json_object(issue.sample_evidence_json)
     calls = _load_evidence_calls(db, issue)
+    stats = _issue_occurrence_stats_or_fallback(db, issue)
     affected_workflow = _context_value(evidence, calls, "workflow_name", "workflow")
     replay_status = _replay_coverage_status(db, issue)
+    what_happened = _what_happened(issue, evidence, calls)
+    why_it_matters = _why_it_matters(issue, evidence, stats)
+    suspected_version = _suspected_introduced_version(evidence, calls)
     return IssueResponse(
         id=issue.id,
         project_id=issue.project_id,
@@ -769,12 +908,23 @@ def _build_issue_response(db: Session, issue: IssueProjection | Anomaly) -> Issu
         title=_issue_title(issue, evidence, calls),
         affected_agent=issue.agent_name,
         affected_workflow=affected_workflow,
+        what_happened=what_happened,
+        why_it_matters=why_it_matters,
+        affected_trace_count=stats.affected_trace_count,
+        affected_user_count=stats.affected_user_count,
+        suspected_introduced_version=suspected_version,
+        blast_radius=IssueBlastRadius(
+            affected_traces=stats.affected_trace_count,
+            affected_users=stats.affected_user_count,
+            cost_usd=float(issue.blast_radius_usd or 0),
+            severity=issue.severity,
+        ),
         root_cause=_root_cause(issue, evidence, calls),
         evidence_traces=_build_evidence_traces(issue, evidence, calls),
         cost_impact_usd=float(issue.blast_radius_usd or 0),
         user_impact=_user_impact(issue),
         replay_coverage_status=replay_status,
-        recommended_next_action=_recommended_next_action(issue, replay_status),
+        recommended_next_action=_recommended_next_action_for_issue(issue, evidence, replay_status),
         priority_score=_priority_score(issue),
         proof=_issue_proof_snapshot(db, issue),
     )
@@ -937,19 +1087,34 @@ def _criteria_json_for_issue(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="criteria_json must be valid JSON",
             ) from exc
-        return provided.strip()
+        base = provided.strip()
+    else:
+        base = json.dumps(
+            {
+                "kind": "issue_regression_guard",
+                "issue_id": issue.id,
+                "failure_code": issue.failure_code,
+                "root_cause": root_cause,
+                "must_not_reproduce_failure": True,
+                "evidence_call_id": issue.sample_call_id,
+            },
+            separators=(",", ":"),
+        )
 
-    return json.dumps(
-        {
-            "kind": "issue_regression_guard",
-            "issue_id": issue.id,
-            "failure_code": issue.failure_code,
-            "root_cause": root_cause,
-            "must_not_reproduce_failure": True,
-            "evidence_call_id": issue.sample_call_id,
-        },
-        separators=(",", ":"),
+    contract = build_golden_contract(
+        final_output=None,
+        business_outcome="must_not_reproduce_failure",
+        linked_issue_id=issue.id,
+        linked_trace_id=issue.sample_call_id,
+        proof_status="verified_fix",
     )
+    try:
+        return criteria_with_contract(base, contract)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 def _extract_pr_number(url: str | None) -> int | None:
@@ -1290,7 +1455,7 @@ def run_issue_ci_gate_endpoint(
         body=IssueGoldenPromotionRequest(blocks_ci=True),
     )
 
-    replay_mode = ci_gate_request.replay_mode.strip() if ci_gate_request.replay_mode else None
+    replay_mode = normalize_replay_mode(ci_gate_request.replay_mode) if ci_gate_request.replay_mode else None
     if replay_mode is not None and replay_mode not in VALID_REPLAY_MODES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

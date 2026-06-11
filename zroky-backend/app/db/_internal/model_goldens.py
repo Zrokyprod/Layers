@@ -143,7 +143,7 @@ class ReplayRun(Base):
             name="ck_replay_runs_trigger",
         ),
         CheckConstraint(
-            "status IN ('pending', 'running', 'pass', 'fail', 'error')",
+            "status IN ('pending', 'running', 'pass', 'warn', 'fail', 'not_verified', 'error')",
             name="ck_replay_runs_status",
         ),
         Index("ix_replay_runs_project_created", "project_id", "created_at"),
@@ -192,13 +192,81 @@ class ReplayRunTrace(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pass', 'fail', 'error')",
+            "status IN ('pass', 'fail', 'not_verified', 'error')",
             name="ck_replay_run_traces_status",
         ),
         Index("ix_replay_run_traces_run_id", "replay_run_id"),
         Index("ix_replay_run_traces_golden_trace_id", "golden_trace_id"),
         Index("ix_replay_run_traces_project_created", "project_id", "created_at"),
         Index("ix_replay_run_traces_run_status", "replay_run_id", "status"),
+    )
+
+
+class GoldenHistory(Base):
+    """Audit trail for Golden set/trace contract changes."""
+
+    __tablename__ = "golden_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    golden_set_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("golden_sets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    golden_trace_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("golden_traces.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_golden_history_project_created", "project_id", "created_at"),
+        Index("ix_golden_history_set_created", "golden_set_id", "created_at"),
+        Index("ix_golden_history_trace_created", "golden_trace_id", "created_at"),
+    )
+
+
+class CiGateOverride(Base):
+    """Operator override for a regression-CI gate result."""
+
+    __tablename__ = "ci_gate_overrides"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("replay_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    original_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    effective_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "original_status IN ('pass', 'fail', 'warn', 'not_verified', 'error')",
+            name="ck_ci_gate_overrides_original_status",
+        ),
+        CheckConstraint(
+            "effective_status IN ('pass', 'warn')",
+            name="ck_ci_gate_overrides_effective_status",
+        ),
+        Index("ix_ci_gate_overrides_project_run_created", "project_id", "run_id", "created_at"),
+        Index("ix_ci_gate_overrides_run_created", "run_id", "created_at"),
     )
 
 
@@ -251,7 +319,9 @@ class Anomaly(Base):
             "'SCHEMA_VIOLATION', 'LATENCY_REGRESSION', "
             "'TOOL_SELECTION_FAILURE', 'TOOL_CALL_FAILURE', "
             "'TOOL_ARGUMENT_MISMATCH', 'RAG_RETRIEVAL_MISSING', "
-            "'RETRIEVAL_MISSING', 'TOKEN_USAGE_DRIFT', 'TOKEN_OVERFLOW', "
+            "'RAG_GROUNDING_FAILURE', 'RETRIEVAL_MISSING', "
+            "'UNSAFE_ACTION', 'TASK_OUTCOME_FAILURE', "
+            "'TOKEN_USAGE_DRIFT', 'TOKEN_OVERFLOW', "
             "'RATE_LIMIT', 'AUTH_FAILURE', 'PROVIDER_ERROR', "
             "'LATENCY_ANOMALY', 'LATENCY_DRIFT', 'ERROR_RATE_DRIFT', "
             "'EMPTY_OUTPUT', 'OUTPUT_TRUNCATED', 'OUTPUT_LENGTH_DRIFT', "

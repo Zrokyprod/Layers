@@ -133,6 +133,38 @@ class PilotPolicyPayload(BaseModel):
         default_factory=lambda: list(DEFAULT_POLICY["tier3_alert_channels"])
     )
     kill_switch: bool = Field(default=DEFAULT_POLICY["kill_switch"])
+    runtime_enabled: bool = Field(default=DEFAULT_POLICY["runtime_enabled"])
+    runtime_max_tool_calls: int = Field(
+        default=DEFAULT_POLICY["runtime_max_tool_calls"],
+        ge=0,
+    )
+    runtime_max_retries: int = Field(
+        default=DEFAULT_POLICY["runtime_max_retries"],
+        ge=0,
+    )
+    runtime_max_cost_usd: float = Field(
+        default=DEFAULT_POLICY["runtime_max_cost_usd"],
+        ge=0,
+    )
+    runtime_allowed_tools: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_POLICY["runtime_allowed_tools"])
+    )
+    runtime_sensitive_tools: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_POLICY["runtime_sensitive_tools"])
+    )
+    runtime_sensitive_actions_require_approval: bool = Field(
+        default=DEFAULT_POLICY["runtime_sensitive_actions_require_approval"]
+    )
+    runtime_block_pii_leak: bool = Field(
+        default=DEFAULT_POLICY["runtime_block_pii_leak"]
+    )
+    runtime_block_prompt_injected_external_action: bool = Field(
+        default=DEFAULT_POLICY["runtime_block_prompt_injected_external_action"]
+    )
+    runtime_approval_ttl_minutes: int = Field(
+        default=DEFAULT_POLICY["runtime_approval_ttl_minutes"],
+        gt=0,
+    )
 
 
 class PilotPolicyResponse(BaseModel):

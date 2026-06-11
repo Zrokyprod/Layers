@@ -24,6 +24,7 @@ def _finalize(
     """Apply pass/fail/error decision rule + write summary."""
     pass_n = int(counts.get("pass", 0))
     fail_n = int(counts.get("fail", 0))
+    not_verified_n = int(counts.get("not_verified", 0))
     error_n = int(counts.get("error", 0))
 
     # Decision rule (locked):
@@ -34,17 +35,19 @@ def _finalize(
         final = _RUN_FAIL
     elif error_n > 0:
         final = _RUN_ERROR
+    elif not_verified_n > 0:
+        final = _RUN_NOT_VERIFIED
     else:
         final = _RUN_PASS
 
     # Preserve any existing trace_count_at_dispatch snapshot from
     # dispatch_replay_run for dashboard progress rendering.
     existing = _safe_json_object(run.summary_json)
-    replay_mode = str(
+    replay_mode = normalize_replay_mode(str(
         existing.get("requested_replay_mode")
         or existing.get("replay_mode")
         or REPLAY_MODE_STUB
-    )
+    ))
     proof = _aggregate_trace_proof(db, run_id=run.id, project_id=run.project_id)
     tool_missing = int(
         proof.get("tool_behavior_diff", {}).get("missing_count") or 0
@@ -53,17 +56,25 @@ def _finalize(
         REPLAY_MODE_MOCKED_TOOL,
         REPLAY_MODE_LIVE_SANDBOX,
     }
+    proof_missing_reasons: list[str] = []
+    if not_verified_n:
+        proof_missing_reasons.append("one_or_more_traces_not_verified")
+    if tool_proof_required and tool_missing:
+        proof_missing_reasons.append("tool_proof_missing")
+    if replay_mode == REPLAY_MODE_FROZEN_RAG and not_verified_n:
+        proof_missing_reasons.append("rag_proof_missing")
     verified_fix = (
         replay_mode in REAL_COMPARISON_REPLAY_MODES
         and final == _RUN_PASS
+        and not proof_missing_reasons
         and not (tool_proof_required and tool_missing)
     )
     if replay_mode == REPLAY_MODE_STUB:
         verification_status = "sanity_check_only"
     elif verified_fix:
         verification_status = "verified_fix"
-    elif final == _RUN_PASS and tool_proof_required and tool_missing:
-        verification_status = "real_comparison_missing_tool_proof"
+    elif final == _RUN_NOT_VERIFIED:
+        verification_status = "not_verified"
     elif final == _RUN_ERROR:
         verification_status = "real_comparison_error"
     else:
@@ -81,17 +92,25 @@ def _finalize(
         "trace_count_executed": total,
         "pass_count": pass_n,
         "fail_count": fail_n,
+        "not_verified_count": not_verified_n,
         "error_count": error_n,
         "reproduced_original_failure": reproduced_original_failure,
         "fix_passed": final == _RUN_PASS,
         "verified_fix": verified_fix,
         "verification_status": verification_status,
+        "trust_level": "trusted" if verified_fix else "sanity_only" if replay_mode == REPLAY_MODE_STUB else "untrusted",
+        "proof_missing_reasons": proof_missing_reasons,
     }
     summary.update(proof)
     # Option B — surface cumulative replay spend so the dashboard can
     # show "This run cost $0.34 in live LLM calls".
     if budget_tracker is not None:
         summary["replay_cost_usd"] = round(budget_tracker.spent_usd, 8)
+        summary["budget"] = {
+            "spent_usd": round(budget_tracker.spent_usd, 8),
+            "limit_usd": round(budget_tracker.budget_usd, 8),
+            "exhausted": budget_tracker.budget_usd <= 0 or budget_tracker.spent_usd >= budget_tracker.budget_usd,
+        }
     # Calibration snapshot — attach accuracy + mode so the run summary also
     # carries the calibration context without a second API call.
     if calibration_meta:
@@ -106,8 +125,8 @@ def _finalize(
     db.commit()
     db.refresh(run)
     logger.info(
-        "replay_executor.finalized run=%s status=%s pass=%d fail=%d error=%d",
-        run.id, final, pass_n, fail_n, error_n,
+        "replay_executor.finalized run=%s status=%s pass=%d fail=%d not_verified=%d error=%d",
+        run.id, final, pass_n, fail_n, not_verified_n, error_n,
     )
     return run
 
@@ -117,11 +136,11 @@ def _finalize_error(
 ) -> ReplayRun:
     """Short-circuit fatal-error finalize (no traces graded)."""
     existing = _safe_json_object(run.summary_json)
-    replay_mode = str(
+    replay_mode = normalize_replay_mode(str(
         existing.get("requested_replay_mode")
         or existing.get("replay_mode")
         or REPLAY_MODE_STUB
-    )
+    ))
     reproduced_original_failure = (
         None
         if replay_mode == REPLAY_MODE_STUB
@@ -133,6 +152,7 @@ def _finalize_error(
         "trace_count_executed": 0,
         "pass_count": 0,
         "fail_count": 0,
+        "not_verified_count": 0,
         "error_count": 0,
         "error_reason": reason,
         "reproduced_original_failure": reproduced_original_failure,
@@ -141,6 +161,8 @@ def _finalize_error(
         "verification_status": "sanity_check_only"
         if replay_mode == REPLAY_MODE_STUB
         else "real_comparison_error",
+        "trust_level": "sanity_only" if replay_mode == REPLAY_MODE_STUB else "untrusted",
+        "proof_missing_reasons": [],
     }
     run.status = _RUN_ERROR
     run.completed_at = datetime.now(timezone.utc)

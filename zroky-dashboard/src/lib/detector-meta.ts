@@ -19,6 +19,11 @@ export type DetectorCategory =
   | "EMPTY_OUTPUT"
   | "OUTPUT_TRUNCATED"
   | "SCHEMA_VIOLATION"
+  | "TOOL_SELECTION_FAILURE"
+  | "TOOL_CALL_FAILURE"
+  | "TOOL_ARGUMENT_MISMATCH"
+  | "UNSAFE_ACTION"
+  | "TASK_OUTCOME_FAILURE"
   | "LATENCY_ANOMALY"
   // Layer 2 — pattern rules (statistical baseline drift)
   | "LOOP_DETECTED"
@@ -30,6 +35,7 @@ export type DetectorCategory =
   | "TOKEN_USAGE_DRIFT"
   // Layer 3 — judge-engine bridged categories
   | "HALLUCINATION_RISK"
+  | "RAG_GROUNDING_FAILURE"
   | "ACCURACY_REGRESSION";
 
 export type DetectorLayer = "fast" | "pattern" | "judge";
@@ -125,6 +131,51 @@ const CATALOG: Record<DetectorCategory, DetectorMeta> = {
     layer: "fast",
     icon: "{}",
   },
+  TOOL_SELECTION_FAILURE: {
+    code: "TOOL_SELECTION_FAILURE",
+    label: "Wrong Tool",
+    description: "Agent chose a tool outside the expected or allowed path.",
+    badgeColor: "purple",
+    defaultSeverity: "high",
+    layer: "fast",
+    icon: "T",
+  },
+  TOOL_CALL_FAILURE: {
+    code: "TOOL_CALL_FAILURE",
+    label: "Tool Error",
+    description: "A required tool failed, timed out, or returned an unusable result.",
+    badgeColor: "red",
+    defaultSeverity: "high",
+    layer: "fast",
+    icon: "!",
+  },
+  TOOL_ARGUMENT_MISMATCH: {
+    code: "TOOL_ARGUMENT_MISMATCH",
+    label: "Bad Tool Args",
+    description: "Tool arguments did not satisfy the expected argument contract.",
+    badgeColor: "purple",
+    defaultSeverity: "high",
+    layer: "fast",
+    icon: "{}",
+  },
+  UNSAFE_ACTION: {
+    code: "UNSAFE_ACTION",
+    label: "Unsafe Action",
+    description: "Sensitive action path lacked policy approval evidence.",
+    badgeColor: "red",
+    defaultSeverity: "critical",
+    layer: "fast",
+    icon: "!",
+  },
+  TASK_OUTCOME_FAILURE: {
+    code: "TASK_OUTCOME_FAILURE",
+    label: "Outcome Failure",
+    description: "The customer-facing task failed even if the model call completed.",
+    badgeColor: "red",
+    defaultSeverity: "high",
+    layer: "fast",
+    icon: "X",
+  },
   LATENCY_ANOMALY: {
     code: "LATENCY_ANOMALY",
     label: "Latency Issue",
@@ -209,6 +260,15 @@ const CATALOG: Record<DetectorCategory, DetectorMeta> = {
     defaultSeverity: "critical",
     layer: "judge",
     icon: "👻",
+  },
+  RAG_GROUNDING_FAILURE: {
+    code: "RAG_GROUNDING_FAILURE",
+    label: "RAG Grounding Failure",
+    description: "Answer was not sufficiently supported by retrieved evidence.",
+    badgeColor: "red",
+    defaultSeverity: "high",
+    layer: "judge",
+    icon: "R",
   },
   ACCURACY_REGRESSION: {
     code: "ACCURACY_REGRESSION",

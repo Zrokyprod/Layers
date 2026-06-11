@@ -471,10 +471,13 @@ class RegressionCIReport:
     #     "method": "linear_extrapolation",  # so a UI can show provenance
     #   }
     outcome_attribution: Mapping[str, Any] | None = None
+    failed_goldens: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
+    warn_goldens: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
+    not_verified_reasons: tuple[str, ...] = field(default_factory=tuple)
     notes: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        if self.verdict not in {"pass", "fail", "error"}:
+        if self.verdict not in {"pass", "warn", "fail", "not_verified", "error"}:
             raise ValueError(f"invalid run verdict: {self.verdict!r}")
         if not 0.0 <= self.regression_rate <= 1.0:
             raise ValueError(f"regression_rate out of range: {self.regression_rate}")
@@ -509,5 +512,8 @@ class RegressionCIReport:
             "outcome_attribution": (
                 dict(self.outcome_attribution) if self.outcome_attribution else None
             ),
+            "failed_goldens": [dict(item) for item in self.failed_goldens],
+            "warn_goldens": [dict(item) for item in self.warn_goldens],
+            "not_verified_reasons": list(self.not_verified_reasons),
             "notes": list(self.notes),
         }

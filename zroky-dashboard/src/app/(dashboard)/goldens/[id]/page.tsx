@@ -25,11 +25,13 @@ import {
   getBillingMe,
   getGoldenSet,
   getReplayRun,
+  listGoldenHistory,
   listGoldenTraces,
   listReplayRuns,
   runGoldenSet,
   updateGoldenSet,
   type GoldenTraceView,
+  type GoldenHistoryItem,
   type ReplayRunTraceItem,
 } from "@/lib/api";
 import { formatDateTime, formatUsd } from "@/lib/format";
@@ -108,6 +110,47 @@ function TraceResultFor({
   );
 }
 
+function ContractPreview({ trace }: { trace: GoldenTraceView | null }) {
+  const criteria = parseJsonObject(trace?.criteria_json);
+  const contract = criteria.golden_contract_v1 && typeof criteria.golden_contract_v1 === "object" && !Array.isArray(criteria.golden_contract_v1)
+    ? criteria.golden_contract_v1 as Record<string, unknown>
+    : null;
+  if (!contract) {
+    return <p className="notif-meta">No structured Golden contract captured yet. Use criteria JSON to add golden_contract_v1.</p>;
+  }
+  const linkedProof = contract.linked_proof && typeof contract.linked_proof === "object" && !Array.isArray(contract.linked_proof)
+    ? contract.linked_proof as Record<string, unknown>
+    : null;
+  const budgets = contract.budgets && typeof contract.budgets === "object" && !Array.isArray(contract.budgets)
+    ? contract.budgets as Record<string, unknown>
+    : null;
+  return (
+    <div className="gd-behavior-grid">
+      <div><span>Final output</span><p>{JSON.stringify(contract.final_output ?? "not asserted")}</p></div>
+      <div><span>Tool sequence</span><p>{JSON.stringify(contract.tool_sequence ?? "not asserted")}</p></div>
+      <div><span>Policy checks</span><p>{JSON.stringify(contract.policy_checks ?? "not asserted")}</p></div>
+      <div><span>RAG grounding</span><p>{JSON.stringify(contract.rag_grounding ?? "not asserted")}</p></div>
+      <div><span>Budgets</span><p>{budgets ? JSON.stringify(budgets) : "not set"}</p></div>
+      <div><span>Linked proof</span><p>{linkedProof ? JSON.stringify(linkedProof) : "not linked"}</p></div>
+    </div>
+  );
+}
+
+function HistoryList({ items }: { items: GoldenHistoryItem[] }) {
+  if (items.length === 0) return <p className="notif-meta">No Golden history captured yet.</p>;
+  return (
+    <div className="gd-run-list">
+      {items.slice(0, 8).map((item) => (
+        <div key={item.id}>
+          <span className="alert-cat-badge badge-gray">{item.action}</span>
+          <strong>{item.reason ?? item.golden_trace_id ?? item.golden_set_id ?? "Golden change"}</strong>
+          <span>{formatDateTime(item.created_at)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function GoldenDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -139,6 +182,10 @@ export default function GoldenDetailPage() {
   const runsQuery = useQuery({
     queryKey: ["replay-runs", { golden_set_id: id, limit: 20 }],
     queryFn: ({ signal }) => listReplayRuns({ golden_set_id: id, limit: 20 }, signal),
+  });
+  const historyQuery = useQuery({
+    queryKey: ["golden-history", id],
+    queryFn: ({ signal }) => listGoldenHistory(id, signal),
   });
 
   const set = setQuery.data ?? null;
@@ -194,6 +241,7 @@ export default function GoldenDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["golden-set", id] });
       void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
+      void queryClient.invalidateQueries({ queryKey: ["golden-history", id] });
     },
   });
   const editMutation = useMutation({
@@ -228,6 +276,7 @@ export default function GoldenDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["golden-traces", id] });
       void queryClient.invalidateQueries({ queryKey: ["golden-set", id] });
       void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
+      void queryClient.invalidateQueries({ queryKey: ["golden-history", id] });
     },
   });
   const deleteTraceMutation = useMutation({
@@ -237,6 +286,7 @@ export default function GoldenDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["golden-traces", id] });
       void queryClient.invalidateQueries({ queryKey: ["golden-set", id] });
       void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
+      void queryClient.invalidateQueries({ queryKey: ["golden-history", id] });
     },
   });
   const deleteSetMutation = useMutation({
@@ -501,6 +551,16 @@ export default function GoldenDetailPage() {
           <section className="gd-card">
             <header className="gm-section-header">
               <div>
+                <h2>Golden contract</h2>
+                <p>Structured assertions used by replay and CI gates.</p>
+              </div>
+            </header>
+            <ContractPreview trace={selectedTrace} />
+          </section>
+
+          <section className="gd-card">
+            <header className="gm-section-header">
+              <div>
                 <h2>Last replay result</h2>
                 <p>{lastRunLabel(latestRun)}</p>
               </div>
@@ -535,6 +595,16 @@ export default function GoldenDetailPage() {
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="gd-card">
+            <header className="gm-section-header">
+              <div>
+                <h2>Change history</h2>
+                <p>Audit trail for Golden contract and blocking changes.</p>
+              </div>
+            </header>
+            {historyQuery.isLoading ? <p className="notif-meta">Loading history...</p> : <HistoryList items={historyQuery.data?.items ?? []} />}
           </section>
         </main>
 

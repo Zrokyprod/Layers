@@ -63,8 +63,8 @@ function actionLabel(action: string): string {
 
 function stateTone(state: string): Tone {
   if (["passed", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
-  if (["failed", "down", "error", "exceeded", "blocked", "missing"].includes(state)) return "danger";
-  if (["partial", "running", "near_limit", "disabled", "not_configured"].includes(state)) return "warn";
+  if (["failed", "down", "error", "exceeded", "blocked", "missing", "loss_detected"].includes(state)) return "danger";
+  if (["partial", "running", "near_limit", "disabled", "not_configured", "degraded", "backpressure"].includes(state)) return "warn";
   return "neutral";
 }
 
@@ -76,7 +76,12 @@ function actionTone(action: string): Tone {
 }
 
 function loopTone(tenant: OwnerMoneyPathTenantRow, step: string): Tone {
-  if (step === "capture") return tenant.captures_24h > 0 ? "ok" : "danger";
+  if (step === "capture") {
+    const durability = tenant.capture_durability_status?.state;
+    if (durability === "loss_detected" || durability === "backpressure") return "danger";
+    if (durability === "degraded") return "warn";
+    return tenant.captures_24h > 0 ? "ok" : "danger";
+  }
   if (step === "issue") return tenant.open_issue_count > 0 ? "danger" : "ok";
   if (step === "replay") {
     if (tenant.verified_replay_count_7d > 0) return "ok";
@@ -93,6 +98,15 @@ function loopTone(tenant: OwnerMoneyPathTenantRow, step: string): Tone {
     return tenant.golden_trace_count > 0 ? "warn" : "neutral";
   }
   return "neutral";
+}
+
+function captureDurabilityLabel(tenant: OwnerMoneyPathTenantRow): string {
+  const durability = tenant.capture_durability_status;
+  if (!durability) return "unknown";
+  if (durability.loss_count > 0) return `${durability.loss_count} lost`;
+  if (durability.backpressure_rejections > 0) return `${durability.backpressure_rejections} blocked`;
+  if (durability.spool_backlog > 0) return `${durability.spool_backlog} queued`;
+  return durability.state;
 }
 
 function tenantMatchesFilter(tenant: OwnerMoneyPathTenantRow, filter: RiskFilter): boolean {
@@ -216,6 +230,7 @@ function TenantEvidencePanel({ tenant }: { tenant: OwnerMoneyPathTenantRow | nul
         <div className="owner-money-proof-grid">
           <EvidenceItem label="Project" value={tenant.project_id} />
           <EvidenceItem label="Plan" value={tenant.plan_code} />
+          <EvidenceItem label="Capture durability" value={captureDurabilityLabel(tenant)} />
           <EvidenceItem label="Provider keys" value={`${tenant.provider_key_status.state} (${tenant.provider_key_status.active_provider_count})`} />
           <EvidenceItem
             label="Replay quota"
@@ -289,6 +304,7 @@ export default function OwnerMoneyPathPage() {
           <div className="owner-money-path-summary">
             <RiskMetric label="Open issues" value={platform.issues_open} detail="Grouped failures waiting on proof or resolution." tone={platform.issues_open > 0 ? "danger" : "ok"} />
             <RiskMetric label="Blocked CI" value={platform.ci_blocks_7d} detail="GitHub-triggered gate failures in 7 days." tone={platform.ci_blocks_7d > 0 ? "danger" : "ok"} />
+            <RiskMetric label="Capture durability" value={platform.gateway_unhealthy_tenants ?? 0} detail="Tenants with unhealthy gateway capture guarantees." tone={(platform.gateway_loss_tenants ?? 0) > 0 ? "danger" : (platform.gateway_unhealthy_tenants ?? 0) > 0 ? "warn" : "ok"} />
             <RiskMetric label="Provider gaps" value={platform.tenants_missing_provider_key} detail="Tenants unable to run provider-backed replay." tone={platform.tenants_missing_provider_key > 0 ? "warn" : "ok"} />
             <RiskMetric label="Quota risk" value={platform.tenants_near_replay_quota} detail="Tenants near or above replay limits." tone={platform.tenants_near_replay_quota > 0 ? "warn" : "ok"} />
           </div>
@@ -432,6 +448,16 @@ export default function OwnerMoneyPathPage() {
               empty="Every active tenant has capture in the 24-hour window."
               tenants={tenants.filter((tenant) => tenant.captures_24h === 0)}
               getDetail={(tenant) => `Last capture: ${fmtDate(tenant.last_capture_at)}`}
+            />
+            <RiskListPanel
+              title="Capture Durability"
+              icon={<ShieldAlert size={16} aria-hidden="true" />}
+              empty="Every gateway reports protected capture."
+              tenants={tenants.filter((tenant) => {
+                const durability = tenant.capture_durability_status;
+                return Boolean(durability && durability.state !== "ok" && durability.state !== "unknown");
+              })}
+              getDetail={(tenant) => captureDurabilityLabel(tenant)}
             />
           </section>
         </>

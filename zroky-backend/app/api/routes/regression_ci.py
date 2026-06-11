@@ -48,9 +48,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.entitlements import require_entitlement
-from app.api.dependencies.tenant import require_tenant_id
+from app.api.dependencies.authorization import ROLE_RANK
+from app.api.dependencies.tenant import TenantContext, require_tenant_context, require_tenant_id
 from app.core.limiter import limiter
-from app.db.models import GoldenSet, ReplayRun
+from app.db.models import CiGateOverride, GoldenSet, ReplayRun
 from app.db.session import SessionLocal, get_db_session
 from app.services.regression_ci.blast_radius import ChangedFile
 from app.services.regression_ci.models import (
@@ -134,8 +135,27 @@ class RegressionCIRunDetailResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
+    effective_status: Optional[str] = None
+    failed_goldens: list[dict[str, Any]] = Field(default_factory=list)
+    warn_goldens: list[dict[str, Any]] = Field(default_factory=list)
+    not_verified_reasons: list[str] = Field(default_factory=list)
+    override: Optional[dict[str, Any]] = None
     report: Optional[dict[str, Any]] = None
     pr_comment_markdown: Optional[str] = None
+
+
+class RegressionCIOverrideRequest(BaseModel):
+    reason: str = Field(..., min_length=8, max_length=4096)
+    effective_status: str = Field(default="pass", pattern="^(pass|warn)$")
+    expires_at: datetime
+    actor_user_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class RegressionCIOverrideResponse(BaseModel):
+    run_id: str
+    status: str
+    effective_status: str
+    override: dict[str, Any]
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -215,6 +235,43 @@ def _coerce_changed_files(
     return [ChangedFile(path=p.path, hunks=p.hunks) for p in payloads]
 
 
+def _active_override(
+    db: Session,
+    *,
+    tenant_id: str,
+    run_id: str,
+    now: datetime | None = None,
+) -> CiGateOverride | None:
+    current = now or datetime.now(timezone.utc)
+    return db.execute(
+        select(CiGateOverride)
+        .where(
+            CiGateOverride.project_id == tenant_id,
+            CiGateOverride.run_id == run_id,
+            (
+                (CiGateOverride.expires_at.is_(None))
+                | (CiGateOverride.expires_at > current)
+            ),
+        )
+        .order_by(CiGateOverride.created_at.desc(), CiGateOverride.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _override_payload(row: CiGateOverride | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": row.id,
+        "actor_user_id": row.actor_user_id,
+        "reason": row.reason,
+        "original_status": row.original_status,
+        "effective_status": row.effective_status,
+        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
 # ── background task ─────────────────────────────────────────────────────────
 
 
@@ -242,6 +299,13 @@ def _run_regression_ci_background(
       * Judge is `judge_engine.get_evaluator()` — same path as the
         existing replay-runs worker.
     """
+    from app.services.regression_ci.durable_gate import run_regression_ci_background
+
+    return run_regression_ci_background(
+        tenant_id=tenant_id,
+        run_id=run_id,
+        request_payload=request_payload,
+    )
     session: Session = SessionLocal()
     try:
         # Lazy imports — keep this module importable without the heavy
@@ -549,6 +613,9 @@ def get_run(
 
     report_dict: Optional[dict[str, Any]] = None
     pr_comment: Optional[str] = None
+    override_row = _active_override(db, tenant_id=tenant_id, run_id=run_id)
+    override = _override_payload(override_row)
+    effective_status = override_row.effective_status if override_row else row.status
 
     if row.summary_json:
         try:
@@ -579,8 +646,76 @@ def get_run(
         created_at=row.created_at,
         started_at=row.started_at,
         completed_at=row.completed_at,
+        effective_status=effective_status,
+        failed_goldens=list(report_dict.get("failed_goldens") or []) if report_dict else [],
+        warn_goldens=list(report_dict.get("warn_goldens") or []) if report_dict else [],
+        not_verified_reasons=list(report_dict.get("not_verified_reasons") or []) if report_dict else [],
+        override=override,
         report=report_dict,
         pr_comment_markdown=pr_comment,
+    )
+
+
+@router.post(
+    "/runs/{run_id}/override",
+    response_model=RegressionCIOverrideResponse,
+)
+@limiter.limit("30/minute")
+def override_run(
+    request: Request,
+    run_id: str,
+    body: RegressionCIOverrideRequest = Body(...),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RegressionCIOverrideResponse:
+    if ROLE_RANK[context.role] < ROLE_RANK["admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant admin role is required.",
+        )
+    if body.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="expires_at must be in the future.",
+        )
+
+    row = db.execute(
+        select(ReplayRun).where(
+            ReplayRun.id == run_id,
+            ReplayRun.project_id == context.tenant_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Run not found",
+        )
+    if row.status not in {"pass", "warn", "fail", "not_verified", "error"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only terminal CI gate runs can be overridden.",
+        )
+
+    override = CiGateOverride(
+        project_id=context.tenant_id,
+        run_id=row.id,
+        actor_user_id=body.actor_user_id or context.subject,
+        reason=body.reason.strip(),
+        original_status=row.status,
+        effective_status=body.effective_status,
+        expires_at=body.expires_at,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(override)
+    db.commit()
+    db.refresh(override)
+
+    payload = _override_payload(override) or {}
+    return RegressionCIOverrideResponse(
+        run_id=row.id,
+        status=row.status,
+        effective_status=override.effective_status,
+        override=payload,
     )
 
 
@@ -652,6 +787,9 @@ def _render_pr_comment_from_dict(report_dict: dict[str, Any]) -> Optional[str]:
             duration_seconds=int(report_dict.get("duration_seconds", 0)),
             clusters=clusters,
             notes=tuple(report_dict.get("notes") or ()),
+            failed_goldens=tuple(report_dict.get("failed_goldens") or ()),
+            warn_goldens=tuple(report_dict.get("warn_goldens") or ()),
+            not_verified_reasons=tuple(report_dict.get("not_verified_reasons") or ()),
         )
     except (KeyError, TypeError, ValueError):
         return None

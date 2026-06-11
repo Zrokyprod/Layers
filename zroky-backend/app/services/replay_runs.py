@@ -55,8 +55,8 @@ logger = logging.getLogger(__name__)
 # ── vocab (must match db CHECK constraints from migration 0050) ──────────────
 
 VALID_TRIGGERS = frozenset({"manual", "github", "schedule"})
-VALID_RUN_STATUSES = frozenset({"pending", "running", "pass", "fail", "error"})
-VALID_TRACE_STATUSES = frozenset({"pass", "fail", "error"})
+VALID_RUN_STATUSES = frozenset({"pending", "running", "pass", "warn", "fail", "not_verified", "error"})
+VALID_TRACE_STATUSES = frozenset({"pass", "fail", "not_verified", "error"})
 
 # ── replay-mode vocab (Option A — honesty fix) ───────────────────────────────
 #
@@ -71,19 +71,27 @@ VALID_TRACE_STATUSES = frozenset({"pass", "fail", "error"})
 #              capping spend at REPLAY_REAL_LLM_BUDGET_USD per run.
 REPLAY_MODE_STUB = "stub"
 REPLAY_MODE_REAL_LLM = "real_llm"
-REPLAY_MODE_MOCKED_TOOL = "mocked-tool"
-REPLAY_MODE_LIVE_SANDBOX = "live-sandbox"
+REPLAY_MODE_MOCKED_TOOL = "mocked_tool"
+REPLAY_MODE_FROZEN_RAG = "frozen_rag"
+REPLAY_MODE_LIVE_SANDBOX = "sandbox"
 REPLAY_MODE_SHADOW = "shadow"
-VALID_REPLAY_MODES = frozenset({
+CANONICAL_REPLAY_MODES = frozenset({
     REPLAY_MODE_STUB,
     REPLAY_MODE_REAL_LLM,
     REPLAY_MODE_MOCKED_TOOL,
+    REPLAY_MODE_FROZEN_RAG,
     REPLAY_MODE_LIVE_SANDBOX,
     REPLAY_MODE_SHADOW,
 })
+REPLAY_MODE_ALIASES = {
+    "mocked-tool": REPLAY_MODE_MOCKED_TOOL,
+    "live-sandbox": REPLAY_MODE_LIVE_SANDBOX,
+}
+VALID_REPLAY_MODES = CANONICAL_REPLAY_MODES | frozenset(REPLAY_MODE_ALIASES)
 REAL_COMPARISON_REPLAY_MODES = frozenset({
     REPLAY_MODE_REAL_LLM,
     REPLAY_MODE_MOCKED_TOOL,
+    REPLAY_MODE_FROZEN_RAG,
     REPLAY_MODE_LIVE_SANDBOX,
     REPLAY_MODE_SHADOW,
 })
@@ -111,6 +119,11 @@ _MODE_WARNINGS = {
         "snapshots are reported in the tool behavior diff instead of being "
         "treated as verified."
     ),
+    REPLAY_MODE_FROZEN_RAG: (
+        "Frozen-RAG replay uses the captured retrieved documents as the only "
+        "grounding context. Missing retrieval evidence is reported as "
+        "not_verified instead of being treated as a pass."
+    ),
     REPLAY_MODE_LIVE_SANDBOX: (
         "Live-sandbox replay uses the live model path. Tool execution is "
         "limited to sandbox-capable captured context; unavailable tool calls "
@@ -121,6 +134,12 @@ _MODE_WARNINGS = {
         "the baseline golden trace. Stub results are never marked verified."
     ),
 }
+
+
+def normalize_replay_mode(replay_mode: str | None) -> str:
+    """Return canonical replay mode while accepting legacy wire aliases."""
+    mode = (replay_mode or "").strip() or REPLAY_MODE_STUB
+    return REPLAY_MODE_ALIASES.get(mode, mode)
 
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
@@ -146,7 +165,7 @@ _MODE_WARNINGS = {
 # button twice means they want two runs.
 IDEMPOTENCY_TERMINAL_HORIZON_MINUTES: int = 60
 
-_TERMINAL_RUN_STATUSES = frozenset({"pass", "fail", "error"})
+_TERMINAL_RUN_STATUSES = frozenset({"pass", "warn", "fail", "not_verified", "error"})
 _NON_TERMINAL_RUN_STATUSES = frozenset({"pending", "running"})
 
 
@@ -229,7 +248,7 @@ def _resolve_replay_mode(
     rather than silently dropping the override and running a stub-mode
     replay that ignores the edit, we refuse to dispatch.
     """
-    requested_mode = (replay_mode or "").strip() or None
+    requested_mode = normalize_replay_mode(replay_mode) if replay_mode is not None else None
     if requested_mode is not None and requested_mode not in VALID_REPLAY_MODES:
         raise ValueError(
             "replay_mode must be one of "
@@ -252,6 +271,8 @@ def _resolve_replay_mode(
         if not has_override:
             return REPLAY_MODE_STUB, _STUB_MODE_WARNING
         requested_mode = REPLAY_MODE_REAL_LLM
+
+    requested_mode = normalize_replay_mode(requested_mode)
 
     if requested_mode == REPLAY_MODE_STUB:
         return REPLAY_MODE_STUB, _STUB_MODE_WARNING

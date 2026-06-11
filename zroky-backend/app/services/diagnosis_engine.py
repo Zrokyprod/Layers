@@ -23,11 +23,17 @@ from app.services.detectors import (
     detect_output_length_drift,
     detect_output_truncated,
     detect_provider_error,
+    detect_rag_grounding_failure,
     detect_rate_limit,
     detect_repeated_output,
     detect_schema_violation,
+    detect_task_outcome_failure,
     detect_token_overflow,
     detect_token_usage_drift,
+    detect_tool_argument_mismatch,
+    detect_tool_call_failure,
+    detect_tool_selection_failure,
+    detect_unsafe_action,
 )
 from app.services.detectors.token_overflow import (
     TOKEN_OVERFLOW_ESTIMATE_THRESHOLD_RATIO,
@@ -43,6 +49,11 @@ RULE_CONFIDENCE: dict[str, float] = {
     "EMPTY_OUTPUT": 0.99,
     "OUTPUT_TRUNCATED": 0.98,
     "SCHEMA_VIOLATION": 0.95,
+    "TOOL_SELECTION_FAILURE": 0.88,
+    "TOOL_CALL_FAILURE": 0.93,
+    "TOOL_ARGUMENT_MISMATCH": 0.92,
+    "UNSAFE_ACTION": 0.94,
+    "TASK_OUTCOME_FAILURE": 0.91,
     "LATENCY_ANOMALY": 0.90,
     "REPEATED_OUTPUT": 0.92,
     "OUTPUT_LENGTH_DRIFT": 0.88,
@@ -50,6 +61,7 @@ RULE_CONFIDENCE: dict[str, float] = {
     "ERROR_RATE_DRIFT": 0.92,
     "TOKEN_USAGE_DRIFT": 0.88,
     "HALLUCINATION_RISK": 0.90,
+    "RAG_GROUNDING_FAILURE": 0.89,
     "ACCURACY_REGRESSION": 0.90,
 }
 
@@ -61,6 +73,11 @@ FAST_RULE_CATEGORIES = (
     "EMPTY_OUTPUT",
     "OUTPUT_TRUNCATED",
     "SCHEMA_VIOLATION",
+    "TOOL_SELECTION_FAILURE",
+    "TOOL_CALL_FAILURE",
+    "TOOL_ARGUMENT_MISMATCH",
+    "UNSAFE_ACTION",
+    "TASK_OUTCOME_FAILURE",
     "LATENCY_ANOMALY",
 )
 PATTERN_RULE_CATEGORIES = (
@@ -72,6 +89,7 @@ PATTERN_RULE_CATEGORIES = (
     "ERROR_RATE_DRIFT",
     "TOKEN_USAGE_DRIFT",
     "HALLUCINATION_RISK",
+    "RAG_GROUNDING_FAILURE",
     "ACCURACY_REGRESSION",
 )
 
@@ -115,6 +133,26 @@ def evaluate_fast_rules(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     schema_violation = detect_schema_violation(payload)
     if schema_violation is not None:
         diagnoses.append(schema_violation)
+
+    tool_selection_failure = detect_tool_selection_failure(payload)
+    if tool_selection_failure is not None:
+        diagnoses.append(tool_selection_failure)
+
+    tool_call_failure = detect_tool_call_failure(payload)
+    if tool_call_failure is not None:
+        diagnoses.append(tool_call_failure)
+
+    tool_argument_mismatch = detect_tool_argument_mismatch(payload)
+    if tool_argument_mismatch is not None:
+        diagnoses.append(tool_argument_mismatch)
+
+    unsafe_action = detect_unsafe_action(payload)
+    if unsafe_action is not None:
+        diagnoses.append(unsafe_action)
+
+    task_outcome_failure = detect_task_outcome_failure(payload)
+    if task_outcome_failure is not None:
+        diagnoses.append(task_outcome_failure)
 
     # ── Performance fast rule ─────────────────────────────────────────────
     latency_anomaly = detect_latency_anomaly(payload)
@@ -181,6 +219,10 @@ def evaluate_pattern_rules(
     hallucination_risk = detect_hallucination_risk(payload)
     if hallucination_risk is not None:
         diagnoses.append(hallucination_risk)
+
+    rag_grounding_failure = detect_rag_grounding_failure(payload)
+    if rag_grounding_failure is not None:
+        diagnoses.append(rag_grounding_failure)
 
     accuracy_regression = detect_accuracy_regression(payload)
     if accuracy_regression is not None:

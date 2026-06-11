@@ -8,9 +8,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import zroky
+from zroky._errors import ZrokyRuntimePolicyBlocked, ZrokyRuntimePolicyError
 from zroky._internal.config import load_config
 from zroky._internal.models import ErrorCode
 from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint
+from zroky._runtime_policy import _runtime_policy_url
 
 
 def _reset_sdk():
@@ -68,6 +70,107 @@ def test_load_config_defaults_to_cloud_ingest_url(monkeypatch):
     cfg = load_config()
 
     assert cfg.ingest_url == "https://api.zroky.com/v1/ingest"
+
+
+def test_runtime_policy_url_uses_control_plane_endpoint():
+    assert (
+        _runtime_policy_url("https://api.zroky.com/v1/ingest")
+        == "https://api.zroky.com/v1/runtime-policy/check"
+    )
+    assert (
+        _runtime_policy_url("http://localhost:8000/api/v1/ingest")
+        == "http://localhost:8000/v1/runtime-policy/check"
+    )
+
+
+def test_check_runtime_policy_posts_masked_payload_and_returns_decision(monkeypatch):
+    _reset_sdk()
+    posted: dict[str, object] = {}
+
+    class _Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"allowed": True, "status": "allowed", "reasons": ["ok"]}
+
+    def _fake_post(url, *, headers, json, timeout):
+        posted["url"] = url
+        posted["headers"] = headers
+        posted["json"] = json
+        posted["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr("zroky._runtime_policy.httpx.post", _fake_post)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(
+            api_key="zk_live_test",
+            project="proj_runtime",
+            ingest_url="https://api.zroky.com/v1/ingest",
+        )
+
+    decision = zroky.check_runtime_policy(
+        action_type="email",
+        tool_name="send_email",
+        output_text="Send receipt to alice@example.com",
+        external_action=True,
+        trace_id="trace-sdk",
+    )
+
+    assert decision["allowed"] is True
+    assert posted["url"] == "https://api.zroky.com/v1/runtime-policy/check"
+    assert posted["headers"]["x-api-key"] == "zk_live_test"  # type: ignore[index]
+    assert posted["headers"]["x-project-id"] == "proj_runtime"  # type: ignore[index]
+    assert posted["json"]["output_text"] == "Send receipt to [REDACTED_EMAIL]"  # type: ignore[index]
+    assert posted["json"]["pii_detected"] is True  # type: ignore[index]
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_check_runtime_policy_raises_on_block(monkeypatch):
+    _reset_sdk()
+
+    class _Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "allowed": False,
+                "status": "pending_approval",
+                "requires_approval": True,
+                "reasons": ["sensitive action requires human approval"],
+            }
+
+    monkeypatch.setattr("zroky._runtime_policy.httpx.post", lambda *args, **kwargs: _Response())
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_runtime")
+
+    with pytest.raises(ZrokyRuntimePolicyBlocked) as error:
+        zroky.check_runtime_policy(action_type="refund", tool_name="refund_payment")
+
+    assert error.value.decision["status"] == "pending_approval"
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_check_runtime_policy_fails_closed_on_transport_error(monkeypatch):
+    _reset_sdk()
+
+    def _raise(*_args, **_kwargs):
+        import httpx
+
+        raise httpx.ConnectError("backend down")
+
+    monkeypatch.setattr("zroky._runtime_policy.httpx.post", _raise)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_runtime")
+
+    with pytest.raises(ZrokyRuntimePolicyError):
+        zroky.check_runtime_policy(action_type="delete", tool_name="delete_user")
+
+    zroky.shutdown()
+    _reset_sdk()
 
 def test_agent_context_sets_agent_name(monkeypatch):
     _reset_sdk()

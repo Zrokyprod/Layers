@@ -3,7 +3,7 @@ import type { RegressionCIRunDetailResponse, ReplayRunItem } from "@/lib/api";
 export const NOT_VERIFIED_COPY =
   "This CI run did not execute trusted replay, so it cannot prove this PR is safe.";
 
-export type CiGateStatus = "pass" | "fail" | "error" | "not_verified" | "skipped" | "running" | "pending" | string;
+export type CiGateStatus = "pass" | "warn" | "fail" | "error" | "not_verified" | "skipped" | "running" | "pending" | string;
 
 export function isCiRun(run: ReplayRunItem): boolean {
   return run.trigger === "github" || run.golden_set_id.startsWith("regression-ci:");
@@ -45,6 +45,7 @@ export function normalizeStatus(run: ReplayRunItem, detail?: RegressionCIRunDeta
 export function statusLabel(status: CiGateStatus): string {
   const labels: Record<string, string> = {
     pass: "Passed",
+    warn: "Warning",
     fail: "Failed",
     error: "Error",
     not_verified: "Not verified",
@@ -58,19 +59,21 @@ export function statusLabel(status: CiGateStatus): string {
 export function statusBadgeClass(status: CiGateStatus): string {
   if (status === "pass") return "badge-green";
   if (status === "fail" || status === "error") return "badge-red";
-  if (status === "not_verified") return "badge-yellow";
+  if (status === "warn" || status === "not_verified") return "badge-yellow";
   if (status === "running" || status === "pending") return "badge-blue";
   return "badge-gray";
 }
 
 export function actionLabel(status: CiGateStatus): string {
   if (status === "pass") return "View";
+  if (status === "warn") return "Review warnings";
   if (status === "running" || status === "pending") return "View status";
   return "Review";
 }
 
 export function verdictSubtitle(status: CiGateStatus): string {
   if (status === "pass") return "Trusted replay completed under threshold.";
+  if (status === "warn") return "Only warning-only Golden evidence failed; blocking Goldens passed.";
   if (status === "fail") return "Regression CI blocked this change.";
   if (status === "error") return "The run encountered an infrastructure or provider error.";
   if (status === "not_verified") return NOT_VERIFIED_COPY;
@@ -136,7 +139,8 @@ export function replayProofLabel(run: ReplayRunItem, detail?: RegressionCIRunDet
   const mode = rawMode.trim().toLowerCase().replaceAll("-", "_");
   if (mode === "real_llm") return "Real LLM replay";
   if (mode === "mocked_tool") return "Mocked tool replay";
-  if (mode === "live_sandbox") return "Live sandbox replay";
+  if (mode === "frozen_rag") return "Frozen RAG replay";
+  if (mode === "sandbox" || mode === "live_sandbox") return "Sandbox replay";
   if (mode === "shadow") return "Shadow replay";
   return "No trusted replay";
 }

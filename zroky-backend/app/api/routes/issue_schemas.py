@@ -56,6 +56,13 @@ class IssueProofSnapshot(BaseModel):
     ci_gate: IssueCiGateProof
 
 
+class IssueBlastRadius(BaseModel):
+    affected_traces: int
+    affected_users: int
+    cost_usd: float
+    severity: str
+
+
 class IssueResponse(BaseModel):
     id: str
     project_id: str
@@ -81,6 +88,12 @@ class IssueResponse(BaseModel):
     title: str
     affected_agent: str | None
     affected_workflow: str | None
+    what_happened: str
+    why_it_matters: str
+    affected_trace_count: int
+    affected_user_count: int
+    suspected_introduced_version: str | None
+    blast_radius: IssueBlastRadius
     root_cause: str
     evidence_traces: list[IssueEvidenceTrace]
     cost_impact_usd: float

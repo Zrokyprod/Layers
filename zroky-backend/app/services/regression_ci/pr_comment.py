@@ -68,6 +68,10 @@ def format_markdown(report: RegressionCIReport, *, dashboard_base: str = "") -> 
         lines.extend(_outcome_attribution_section(report))
         lines.append("")
 
+    if report.failed_goldens or report.warn_goldens or report.not_verified_reasons:
+        lines.extend(_golden_gate_section(report))
+        lines.append("")
+
     # Clusters (top 5 only — capped at the model layer).
     if report.clusters:
         lines.extend(_clusters_section(report))
@@ -92,6 +96,28 @@ def format_markdown(report: RegressionCIReport, *, dashboard_base: str = "") -> 
 
 
 def _header(report: RegressionCIReport) -> list[str]:
+    if report.verdict == "warn":
+        emoji = "WARN"
+        headline = "Replay CI warned"
+        return [
+            f"## {emoji} {headline}",
+            "",
+            (
+                "Only non-blocking or flaky Golden evidence failed. "
+                f"Blocking gate threshold: {_pct(report.threshold)}."
+            ),
+        ]
+    if report.verdict == "not_verified":
+        emoji = "NOT VERIFIED"
+        headline = "Replay CI could not prove safety"
+        return [
+            f"## {emoji} {headline}",
+            "",
+            (
+                "No trusted blocking Golden proof was available, or required "
+                "proof was incomplete. Treat this as a blocked required check."
+            ),
+        ]
     if report.verdict == "pass":
         emoji = "✅"
         headline = "Replay CI passed"
@@ -188,6 +214,40 @@ def _outcome_attribution_section(report: RegressionCIReport) -> list[str]:
         f"- Past 30d diagnosed failed calls: **{failed_30d:,}**",
         "- Method: linear extrapolation; treat as a directional estimate, not an SLA.",
     ]
+
+
+def _golden_gate_section(report: RegressionCIReport) -> list[str]:
+    lines = ["### Golden gate evidence", ""]
+    if report.failed_goldens:
+        lines.append("**Blocking Golden failures**")
+        for item in report.failed_goldens[:10]:
+            lines.append(_golden_item_line(item))
+        lines.append("")
+    if report.warn_goldens:
+        lines.append("**Warning-only Golden failures**")
+        for item in report.warn_goldens[:10]:
+            lines.append(_golden_item_line(item))
+        lines.append("")
+    if report.not_verified_reasons:
+        lines.append("**Not verified reasons**")
+        for reason in report.not_verified_reasons[:10]:
+            lines.append(f"- {reason}")
+    return lines
+
+
+def _golden_item_line(item: dict | object) -> str:
+    if not isinstance(item, dict):
+        return f"- {item}"
+    name = str(item.get("golden_name") or item.get("name") or "Golden")
+    trace_id = str(item.get("golden_trace_id") or item.get("trace_id") or "")
+    assertion = str(item.get("assertion") or item.get("status") or "failed")
+    replay_mode = str(item.get("replay_mode") or "unknown")
+    recommendation = str(
+        item.get("recommended_fix") or item.get("recommended_next_action") or ""
+    ).strip()
+    suffix = f" Suggested fix: {recommendation}" if recommendation else ""
+    trace_part = f" trace `{trace_id}`" if trace_id else ""
+    return f"- **{name}**{trace_part}: `{assertion}` via `{replay_mode}`.{suffix}"
 
 
 def _clusters_section(report: RegressionCIReport) -> list[str]:

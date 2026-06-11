@@ -20,6 +20,7 @@ async function run(): Promise<void> {
     const timeout = parseInt(core.getInput('timeout_seconds') || '300', 10);
     const postComment = core.getBooleanInput('post_pr_comment');
     const failOnRegression = core.getBooleanInput('fail_on_regression');
+    const failOnNotVerified = core.getBooleanInput('fail_on_not_verified');
 
     // ── derive PR metadata ────────────────────────────────────────────────
     const ctx = github.context;
@@ -95,12 +96,25 @@ async function run(): Promise<void> {
       return;
     }
 
+    if (failOnNotVerified && detail.status === 'not_verified') {
+      core.setFailed(
+        'Regression CI could not prove safety with trusted Goldens. ' +
+          'See the PR comment or dashboard for missing proof.',
+      );
+      return;
+    }
+
     if (failOnRegression && detail.status === 'fail') {
       const rate = detail.report?.regression_rate ?? 'unknown';
       core.setFailed(
         `Regression CI detected regressions (rate=${rate}). ` +
           `See the PR comment or dashboard for details.`,
       );
+      return;
+    }
+
+    if (detail.status === 'warn') {
+      core.warning('Regression CI produced warning-only Golden evidence.');
       return;
     }
 

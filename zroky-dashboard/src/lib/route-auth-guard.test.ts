@@ -28,10 +28,13 @@ describe("guardDashboardRoute", () => {
   it("still protects active dashboard routes", () => {
     const response = guardDashboardRoute(request("https://app.zroky.com/home"));
     const agents = guardDashboardRoute(request("https://app.zroky.com/agents"));
+    const approvals = guardDashboardRoute(request("https://app.zroky.com/approvals"));
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fhome");
     expect(agents.status).toBe(307);
     expect(agents.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fagents");
+    expect(approvals.status).toBe(307);
+    expect(approvals.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fapprovals");
   });
 });

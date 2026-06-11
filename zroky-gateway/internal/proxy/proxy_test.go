@@ -6,6 +6,7 @@ package proxy
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,13 +19,44 @@ import (
 )
 
 type recordingSpooler struct {
-	ch chan *emit.IngestEventV2
+	ch           chan *emit.IngestEventV2
+	reserveErr   error
+	backpressure int
+	loss         int
 }
 
 func (s *recordingSpooler) Enqueue(ev *emit.IngestEventV2) error {
 	s.ch <- ev
 	return nil
 }
+
+func (s *recordingSpooler) EnqueueReserved(ev *emit.IngestEventV2, reservation CaptureReservation) error {
+	if reservation != nil {
+		reservation.Release()
+	}
+	return s.Enqueue(ev)
+}
+
+func (s *recordingSpooler) Reserve(_ int64) (CaptureReservation, error) {
+	if s.reserveErr != nil {
+		return nil, s.reserveErr
+	}
+	return noopReservation{}, nil
+}
+
+func (s *recordingSpooler) RecordEmitFailure(_ error) {}
+
+func (s *recordingSpooler) RecordBackpressure(_ error) {
+	s.backpressure++
+}
+
+func (s *recordingSpooler) RecordLoss(_ error) {
+	s.loss++
+}
+
+type noopReservation struct{}
+
+func (noopReservation) Release() {}
 
 func TestReadBoundedBodyRejectsOversizedRequest(t *testing.T) {
 	body, tooLarge, err := readBoundedBody(strings.NewReader("abcdef"), 5)
@@ -180,6 +212,49 @@ func TestHandlerSpoolsEventWhenEmitFails(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for spooled event")
+	}
+}
+
+func TestHandlerFailClosedRejectsBeforeUpstreamWhenSpoolIsFull(t *testing.T) {
+	upstreamCalled := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	emitter, err := emit.NewWithOptions(emit.Options{
+		Mode:      emit.ModeHTTP,
+		IngestURL: upstream.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewWithOptions returned error: %v", err)
+	}
+
+	provider := OpenAI
+	provider.BaseURL = upstream.URL
+	spooler := &recordingSpooler{ch: make(chan *emit.IngestEventV2, 1), reserveErr: errors.New("full")}
+	handler := HandlerWithOptions(provider, "chat", emitter, Options{
+		MaxBodyBytes:      1024 * 1024,
+		UpstreamAPIKey:    "provider-key",
+		CaptureSpool:      spooler,
+		CaptureDurability: "fail_closed",
+		SpoolReserveBytes: 1024,
+	}, zerolog.Nop())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-4o-mini"}`))
+	req.Header.Set("X-Project-Id", "proj_spool")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rr.Code)
+	}
+	if upstreamCalled {
+		t.Fatal("upstream provider must not be called when fail-closed capture reservation fails")
+	}
+	if spooler.backpressure != 1 {
+		t.Fatalf("backpressure count = %d, want 1", spooler.backpressure)
 	}
 }
 

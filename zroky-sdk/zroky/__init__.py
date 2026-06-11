@@ -40,7 +40,11 @@ from zroky._internal.timeout_manager import TimeoutManager
 from zroky._internal import validation as _validation  # noqa: F401
 
 # Re-export errors so callers can do: from zroky import ZrokyPreflightError
-from zroky._errors import ZrokyPreflightError  # noqa: F401
+from zroky._errors import (  # noqa: F401
+    ZrokyPreflightError,
+    ZrokyRuntimePolicyBlocked,
+    ZrokyRuntimePolicyError,
+)
 
 # Re-export call-surface from _call.py
 from zroky._call import (  # noqa: F401
@@ -55,6 +59,8 @@ from zroky._call import (  # noqa: F401
     trace,
     trace_run,
 )
+
+from zroky._runtime_policy import check_runtime_policy  # noqa: F401
 
 # Re-export outcome() — Cost-of-Failure Attribution
 from zroky._outcome import outcome  # noqa: F401

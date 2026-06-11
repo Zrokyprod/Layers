@@ -27,11 +27,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.entitlements import require_entitlement
 from app.api.dependencies.tenant import require_tenant_id
 from app.core.limiter import limiter
+from app.db.models import GoldenHistory
 from app.db.session import get_db_session
 from app.services.goldens import (
     GoldenSetNameConflict,
@@ -49,8 +51,13 @@ from app.services.replay_runs import (
     VALID_TRIGGERS,
     build_summary_url,
     dispatch_replay_run,
+    get_replay_run,
+    mark_call_as_golden,
+    normalize_replay_mode,
+    parse_summary,
     was_idempotent_hit,
 )
+from app.services.golden_contracts import build_golden_contract, criteria_with_contract, trusted_replay_summary
 
 router = APIRouter(
     prefix="/v1/goldens",
@@ -127,6 +134,26 @@ class GoldenTraceListResponse(BaseModel):
     total_in_page: int
 
 
+class GoldenHistoryResponse(BaseModel):
+    id: str
+    project_id: str
+    golden_set_id: str | None
+    golden_trace_id: str | None
+    action: str
+    actor_user_id: str | None
+    reason: str | None
+    before_json: str | None
+    after_json: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GoldenHistoryListResponse(BaseModel):
+    items: list[GoldenHistoryResponse]
+    total_in_page: int
+
+
 class GoldenTraceCreate(BaseModel):
     call_id: str | None = None
     status: str | None = None
@@ -137,6 +164,15 @@ class GoldenTraceCreate(BaseModel):
     expected_cost_usd: float | None = Field(default=None, ge=0)
     expected_latency_ms: int | None = Field(default=None, ge=0)
     criteria_json: str | None = None
+    weight: float = Field(default=1.0, gt=0)
+
+
+class GoldenTracePromoteRequest(BaseModel):
+    call_id: str = Field(min_length=1, max_length=64)
+    status: str = "draft"
+    expected_output_text: str | None = None
+    criteria_json: str | None = None
+    linked_replay_run_id: str | None = None
     weight: float = Field(default=1.0, gt=0)
 
 
@@ -271,6 +307,34 @@ def get_golden(
     return _to_response(db, golden_set=golden_set, project_id=tenant_id)
 
 
+@router.get("/{golden_set_id}/history", response_model=GoldenHistoryListResponse)
+@limiter.limit("60/minute")
+def list_golden_history(
+    request: Request,
+    golden_set_id: str,
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> GoldenHistoryListResponse:
+    if get_golden_set(db, project_id=tenant_id, golden_set_id=golden_set_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Golden set not found",
+        )
+    rows = db.execute(
+        select(GoldenHistory)
+        .where(
+            GoldenHistory.project_id == tenant_id,
+            GoldenHistory.golden_set_id == golden_set_id,
+        )
+        .order_by(GoldenHistory.created_at.desc(), GoldenHistory.id.desc())
+        .limit(100)
+    ).scalars().all()
+    return GoldenHistoryListResponse(
+        items=[GoldenHistoryResponse.model_validate(row) for row in rows],
+        total_in_page=len(rows),
+    )
+
+
 @router.patch("/{golden_set_id}", response_model=GoldenSetResponse)
 @limiter.limit("30/minute")
 def patch_golden(
@@ -389,6 +453,72 @@ def add_golden_trace(
     return GoldenTraceResponse.model_validate(trace)
 
 
+@router.post(
+    "/{golden_set_id}/promote-trace",
+    response_model=GoldenTraceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("30/minute")
+def promote_trace_to_golden(
+    request: Request,
+    golden_set_id: str,
+    body: GoldenTracePromoteRequest,
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> GoldenTraceResponse:
+    requested_status = (body.status or "draft").strip().lower()
+    linked_summary: dict | None = None
+    if requested_status == "active":
+        if not body.linked_replay_run_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Active Golden promotion requires linked trusted replay proof.",
+            )
+        replay_run = get_replay_run(
+            db,
+            project_id=tenant_id,
+            run_id=body.linked_replay_run_id,
+        )
+        if replay_run is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Replay run not found")
+        linked_summary = parse_summary(replay_run.summary_json)
+        if not trusted_replay_summary(linked_summary, replay_mode=linked_summary.get("requested_replay_mode")):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Active Golden promotion requires a trusted non-stub verified replay.",
+            )
+
+    contract = build_golden_contract(
+        final_output=body.expected_output_text,
+        linked_trace_id=body.call_id,
+        linked_replay_run_id=body.linked_replay_run_id,
+        proof_status=str((linked_summary or {}).get("verification_status") or "draft"),
+    )
+    try:
+        criteria_json = criteria_with_contract(body.criteria_json, contract)
+        trace = mark_call_as_golden(
+            db,
+            project_id=tenant_id,
+            call_id=body.call_id,
+            golden_set_id=golden_set_id,
+            weight=body.weight,
+            status=requested_status,
+            expected_output_text=body.expected_output_text,
+            criteria_json=criteria_json,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if trace is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call or Golden set not found",
+        )
+    return GoldenTraceResponse.model_validate(trace)
+
+
 @router.delete(
     "/{golden_set_id}/traces/{trace_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -481,6 +611,7 @@ def run_golden_set(
         )
 
     try:
+        replay_mode = normalize_replay_mode(payload.replay_mode) if payload.replay_mode else None
         run = dispatch_replay_run(
             db,
             project_id=tenant_id,
@@ -490,7 +621,7 @@ def run_golden_set(
             branch_name=payload.branch_name,
             pr_number=payload.pr_number,
             commit_message=payload.commit_message,
-            replay_mode=payload.replay_mode,
+            replay_mode=replay_mode,
             candidate_prompt_override=payload.candidate_prompt_override,
             candidate_model_override=payload.candidate_model_override,
         )

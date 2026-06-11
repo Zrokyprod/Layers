@@ -129,7 +129,7 @@ def execute_replay_run(
                 "replay_executor.calibration_meta_failed run=%s", run.id, exc_info=True
             )
 
-    counts = {"pass": 0, "fail": 0, "error": 0}
+    counts = {"pass": 0, "fail": 0, "not_verified": 0, "error": 0}
     for trace in traces:
         verdict_kind = _grade_trace(
             db,

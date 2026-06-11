@@ -106,6 +106,19 @@ function issueAgent(issue: IssueItem): string {
   return issue.affected_agent ?? issue.agent_name ?? "Agent not captured";
 }
 
+function affectedTraceCount(issue: IssueItem): number {
+  return issue.affected_trace_count ?? issue.blast_radius?.affected_traces ?? issue.occurrence_count;
+}
+
+function affectedUserCount(issue: IssueItem): number | null {
+  const count = issue.affected_user_count ?? issue.blast_radius?.affected_users;
+  return typeof count === "number" && count > 0 ? count : null;
+}
+
+function issueVersion(issue: IssueItem): string {
+  return issue.suspected_introduced_version?.trim() || "version unknown";
+}
+
 function sortIssues(items: IssueItem[]): IssueItem[] {
   return [...items].sort((a, b) => {
     const severityDelta = severityRank(b.severity) - severityRank(a.severity);
@@ -501,7 +514,10 @@ export default function IssuesPage() {
                         <div className="im-issue-cell">
                           <Link href={`/issues/${issue.id}`}>{issue.title}</Link>
                           <span>
-                            {detectorLabel(issue.failure_code)} &middot; {issueAgent(issue)} &middot; {formatCount(issue.occurrence_count)} affected calls
+                            {detectorLabel(issue.failure_code)} &middot; {issueAgent(issue)} &middot;{" "}
+                            {formatCount(affectedTraceCount(issue))} affected traces
+                            {affectedUserCount(issue) != null ? ` - ${formatCount(affectedUserCount(issue)!)} users` : ""} &middot;{" "}
+                            {issueVersion(issue)}
                           </span>
                         </div>
                       </td>

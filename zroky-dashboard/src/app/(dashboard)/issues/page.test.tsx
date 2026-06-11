@@ -89,6 +89,17 @@ function issue(overrides: Partial<import("@/lib/types").IssueItem> = {}): import
     title: "Checkout loop",
     affected_agent: "Checkout Agent",
     affected_workflow: null,
+    what_happened: "Agent repeated the same tool call.",
+    why_it_matters: "Repeat failures should become replay guards.",
+    affected_trace_count: 42,
+    affected_user_count: 9,
+    suspected_introduced_version: "deployment_id:dep-42",
+    blast_radius: {
+      affected_traces: 42,
+      affected_users: 9,
+      cost_usd: 12,
+      severity: "critical",
+    },
     root_cause: "Agent repeated the same tool call.",
     evidence_traces: [],
     cost_impact_usd: 18,
@@ -189,7 +200,9 @@ describe("FailuresPage MVP list", () => {
     expect(headers).toEqual(["Issue", "Severity", "Impact", "Replay proof", "Status", "Last seen", "Next action", "Action"]);
 
     const checkoutRow = rowForIssue("Checkout loop");
-    expect(within(checkoutRow).getByText("Loop Detected · Checkout Agent · 42 affected calls")).toBeInTheDocument();
+    expect(
+      within(checkoutRow).getByText("Loop Detected · Checkout Agent · 42 affected traces - 9 users · deployment_id:dep-42"),
+    ).toBeInTheDocument();
     expect(within(checkoutRow).getByText("$12.00")).toBeInTheDocument();
     expect(within(checkoutRow).getByText("No trusted replay")).toBeInTheDocument();
     expect(within(checkoutRow).getByRole("link", { name: "Run replay" }).getAttribute("href")).toBe("/issues/issue_1");

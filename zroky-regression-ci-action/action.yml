@@ -40,12 +40,16 @@ inputs:
     description: 'Fail the GitHub check if regressions are detected'
     required: false
     default: 'true'
+  fail_on_not_verified:
+    description: 'Fail the GitHub check if trusted Golden proof is unavailable'
+    required: false
+    default: 'true'
 
 outputs:
   run_id:
     description: 'Replay run id'
   status:
-    description: 'Terminal status (pass, fail, error)'
+    description: 'Terminal status (pass, warn, fail, not_verified, error)'
   regression_rate:
     description: 'Fraction of traces that regressed'
   pr_comment_markdown:
@@ -53,4 +57,4 @@ outputs:
 
 runs:
   using: 'node20'
-  main: 'dist/index.js'
+  main: 'lib/main.js'

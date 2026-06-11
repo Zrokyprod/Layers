@@ -65,6 +65,17 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                 job=job,
                 payload=payload,
             )
+            try:
+                from app.services.failure_intelligence import enrich_payload_with_trace_context
+
+                diagnosis_payload = enrich_payload_with_trace_context(
+                    session,
+                    tenant_id=tenant_id,
+                    call=call,
+                    payload=diagnosis_payload,
+                )
+            except Exception:
+                logger.debug("failure_intelligence_payload_enrichment_failed", exc_info=True)
 
             payload_with_db_context = mask_payload(_enrich_payload_with_db_loop_context(
                 session,
@@ -160,24 +171,32 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                 try:
                     from app.db.models import Anomaly
                     from app.services.anomalies import compute_fingerprint, map_failure_code_to_detector
+                    from app.services.failure_intelligence import issue_evidence_from_diagnosis
                     from app.services.issues import upsert_issue
                     from app.services.notification_dispatch import dispatch_new_issue_slack_alert
                     _call_cost = float(getattr(call, "cost_total", None) or 0.0) if call else 0.0
                     _occurred_at = getattr(job, "created_at", None) or datetime.now(timezone.utc)
                     _prompt_fp = _as_text(payload_with_db_context.get("prompt_fingerprint"))
                     _agent_name = _as_text(payload_with_db_context.get("agent_name"))
-                    _seen_codes: set[str] = set()
+                    _seen_groups: set[str] = set()
                     for _diag_item in result.get("diagnoses", []):
                         if not isinstance(_diag_item, dict):
                             continue
                         _code = str(_diag_item.get("category", "")).strip().upper()
-                        if not _code or _code in ("UNKNOWN", "") or _code in _seen_codes:
+                        if not _code or _code in ("UNKNOWN", ""):
                             continue
-                        _seen_codes.add(_code)
-                        _evidence = {
-                            "confidence": _diag_item.get("confidence"),
-                            "summary": _diag_item.get("summary") or _diag_item.get("title"),
-                        }
+                        _evidence = issue_evidence_from_diagnosis(
+                            diagnosis_item=_diag_item,
+                            payload=payload_with_db_context,
+                            call=call,
+                            job=job,
+                            diagnosis_id=diagnosis_id,
+                        )
+                        _grouping_signature = _as_text(_evidence.get("grouping_signature"))
+                        _seen_key = f"{_code}:{_grouping_signature or ''}"
+                        if _seen_key in _seen_groups:
+                            continue
+                        _seen_groups.add(_seen_key)
                         _detector = map_failure_code_to_detector(_code)
                         _existing_issue_id = None
                         if _detector is not None:
@@ -185,6 +204,7 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                                 detector=_detector,
                                 prompt_fingerprint=_prompt_fp,
                                 agent_name=_agent_name,
+                                extra=_grouping_signature,
                             )
                             _existing_issue_id = session.execute(
                                 select(Anomaly.id).where(
@@ -203,6 +223,9 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                             occurred_at=_occurred_at,
                             call_cost_usd=_call_cost,
                             evidence=_evidence,
+                            fingerprint_extra=_grouping_signature,
+                            trace_id=_as_text(_evidence.get("trace_id")),
+                            user_id=_as_text(_evidence.get("user_id")),
                         )
                         if _issue is not None and _existing_issue_id is None:
                             dispatch_new_issue_slack_alert(

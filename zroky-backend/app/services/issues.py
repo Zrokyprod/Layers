@@ -31,6 +31,11 @@ from app.services.issue_projection import (
     legacy_issue_payload,
     safe_json_object,
 )
+from app.services.issue_occurrences import (
+    occurrence_exists,
+    occurrence_key,
+    record_issue_occurrence,
+)
 
 VALID_STATUSES = PUBLIC_ISSUE_STATUSES
 _UNCHANGED = object()
@@ -43,11 +48,13 @@ def _existing_anomaly(
     detector: str,
     prompt_fingerprint: str | None,
     agent_name: str | None,
+    fingerprint_extra: str | None = None,
 ) -> Anomaly | None:
     fingerprint = compute_fingerprint(
         detector=detector,
         prompt_fingerprint=prompt_fingerprint,
         agent_name=agent_name,
+        extra=fingerprint_extra,
     )
     return db.execute(
         select(Anomaly).where(
@@ -70,6 +77,28 @@ def _legacy_blast_radius(anomaly: Anomaly | None) -> float:
     return 0.0
 
 
+_SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+def _normalize_severity(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    return text if text in _SEVERITY_RANK else None
+
+
+def _apply_severity_hint(db: Session, anomaly: Anomaly, evidence: dict[str, Any]) -> Anomaly:
+    hint = _normalize_severity(evidence.get("severity_hint"))
+    if not hint:
+        return anomaly
+    current = _normalize_severity(anomaly.severity) or "low"
+    if _SEVERITY_RANK[hint] <= _SEVERITY_RANK[current]:
+        return anomaly
+    anomaly.severity = hint
+    db.add(anomaly)
+    db.commit()
+    db.refresh(anomaly)
+    return anomaly
+
+
 def upsert_issue(
     db: Session,
     *,
@@ -82,6 +111,9 @@ def upsert_issue(
     occurred_at: datetime,
     call_cost_usd: float = 0.0,
     evidence: dict[str, Any] | None = None,
+    fingerprint_extra: str | None = None,
+    trace_id: str | None = None,
+    user_id: str | None = None,
 ) -> Anomaly | None:
     """Upsert a public issue into the canonical anomalies table."""
     detector = map_failure_code_to_detector(failure_code)
@@ -94,10 +126,42 @@ def upsert_issue(
         detector=detector,
         prompt_fingerprint=prompt_fingerprint,
         agent_name=agent_name,
+        fingerprint_extra=fingerprint_extra,
     )
+    key = occurrence_key(call_id=call_id or None, diagnosis_id=diagnosis_id or None)
+    if existing is not None and occurrence_exists(
+        db,
+        project_id=project_id,
+        issue_id=existing.id,
+        key=key,
+    ):
+        if evidence:
+            enriched_existing = safe_json_object(existing.evidence_json)
+            enriched_existing.update(dict(evidence))
+            existing.evidence_json = json.dumps(enriched_existing, separators=(",", ":"), default=str)
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
+        record_issue_occurrence(
+            db,
+            project_id=project_id,
+            issue_id=existing.id,
+            key=key,
+            failure_code=failure_code,
+            detector=detector,
+            occurred_at=occurred_at,
+            call_id=call_id or None,
+            diagnosis_id=diagnosis_id or None,
+            trace_id=trace_id,
+            user_id=user_id,
+            grouping_signature=fingerprint_extra,
+            evidence=evidence,
+        )
+        return _apply_severity_hint(db, existing, evidence or {})
+
     cumulative_blast = _legacy_blast_radius(existing) + float(call_cost_usd or 0.0)
     sample_evidence_json = (
-        json.dumps(evidence, separators=(",", ":")) if evidence else None
+        json.dumps(evidence, separators=(",", ":"), default=str) if evidence else None
     )
     enriched = dict(evidence or {})
     enriched.update(
@@ -107,6 +171,9 @@ def upsert_issue(
             "agent_name": agent_name,
             "call_id": call_id,
             "diagnosis_id": diagnosis_id,
+            "trace_id": trace_id,
+            "user_id": user_id,
+            "grouping_signature": fingerprint_extra,
             "blast_radius_usd": cumulative_blast,
             "legacy_issue": legacy_issue_payload(
                 failure_code=failure_code,
@@ -119,7 +186,7 @@ def upsert_issue(
             ),
         }
     )
-    return upsert_anomaly(
+    anomaly = upsert_anomaly(
         db,
         project_id=project_id,
         detector=detector,
@@ -128,7 +195,26 @@ def upsert_issue(
         call_id=call_id or None,
         occurred_at=occurred_at,
         evidence=enriched,
+        fingerprint_extra=fingerprint_extra,
     )
+    if anomaly is not None:
+        record_issue_occurrence(
+            db,
+            project_id=project_id,
+            issue_id=anomaly.id,
+            key=key,
+            failure_code=failure_code,
+            detector=detector,
+            occurred_at=occurred_at,
+            call_id=call_id or None,
+            diagnosis_id=diagnosis_id or None,
+            trace_id=trace_id,
+            user_id=user_id,
+            grouping_signature=fingerprint_extra,
+            evidence=enriched,
+        )
+        anomaly = _apply_severity_hint(db, anomaly, enriched)
+    return anomaly
 
 
 def _update_anomaly_as_issue(

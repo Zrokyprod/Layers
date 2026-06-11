@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getBillingMe } from "@/lib/api";
+import {
+  approveRuntimePolicyDecision,
+  getBillingMe,
+  listRuntimePolicyApprovals,
+  rejectRuntimePolicyDecision,
+  setRuntimePolicyKillSwitch,
+} from "@/lib/api";
 
 vi.mock("@/lib/auth", () => ({
   clearAuthSession: vi.fn(),
@@ -41,11 +47,11 @@ describe("shared API error parsing", () => {
     await expectBillingRequestToRejectWith("Backend unavailable");
   });
 
-  it("falls back to raw text for non-string JSON detail", async () => {
+  it("uses nested JSON detail message when present", async () => {
     const body = JSON.stringify({ detail: { message: "bad request" } });
     mockFetchResponse(new Response(body, { status: 400 }));
 
-    await expectBillingRequestToRejectWith(body);
+    await expectBillingRequestToRejectWith("bad request");
   });
 
   it("uses plain text error bodies", async () => {
@@ -90,5 +96,107 @@ describe("shared API error parsing", () => {
 
     expect(text).toHaveBeenCalledTimes(1);
     expect(json).not.toHaveBeenCalled();
+  });
+});
+
+describe("runtime policy API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("lists pending approvals by default", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listRuntimePolicyApprovals()).resolves.toEqual({ items: [], total_in_page: 0 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/runtime-policy/approvals?status=pending_approval",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("sends all status when all approvals are requested", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listRuntimePolicyApprovals("all");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/runtime-policy/approvals?status=all",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("posts approve and reject decisions with reasons", async () => {
+    const decision = {
+      id: "decision_1",
+      project_id: "proj_1",
+      trace_id: "trace_1",
+      call_id: null,
+      agent_name: "refund-agent",
+      role: null,
+      action_type: "refund",
+      tool_name: "refund_payment",
+      decision: "allow",
+      status: "approved",
+      allowed: true,
+      requires_approval: false,
+      reasons: ["approved"],
+      request: {},
+      policy_snapshot: {},
+      created_at: "2026-06-11T00:00:00Z",
+      expires_at: null,
+      resolved_at: "2026-06-11T00:01:00Z",
+      resolved_by: "user",
+      resolution_reason: "valid request",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(decision), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...decision, status: "rejected", decision: "block" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await approveRuntimePolicyDecision("decision_1", "valid request");
+    await rejectRuntimePolicyDecision("decision_1", "unsafe request");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/zroky/v1/runtime-policy/approvals/decision_1/approve",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "valid request" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/zroky/v1/runtime-policy/approvals/decision_1/reject",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "unsafe request" }),
+      }),
+    );
+  });
+
+  it("toggles the runtime kill switch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ project_id: "proj_1", enabled: true, policy: { kill_switch: true } }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(setRuntimePolicyKillSwitch(true)).resolves.toMatchObject({ enabled: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/runtime-policy/kill-switch",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ enabled: true }),
+      }),
+    );
   });
 });

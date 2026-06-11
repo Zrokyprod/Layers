@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   getBillingMe: vi.fn(),
   getGoldenSet: vi.fn(),
   getReplayRun: vi.fn(),
+  listGoldenHistory: vi.fn(),
   listGoldenTraces: vi.fn(),
   listReplayRuns: vi.fn(),
   runGoldenSet: vi.fn(),
@@ -31,6 +32,7 @@ const queryState = vi.hoisted(() => ({
   traces: [] as GoldenTraceView[],
   runs: [] as ReplayRunItem[],
   runDetail: null as ReplayRunDetailItem | null,
+  history: [] as import("@/lib/api").GoldenHistoryItem[],
 }));
 
 vi.mock("next/link", () => ({
@@ -96,6 +98,13 @@ vi.mock("@tanstack/react-query", () => ({
     }
     if (key === "replay-run") {
       return { data: queryState.runDetail, isLoading: false, error: null };
+    }
+    if (key === "golden-history") {
+      return {
+        data: { items: queryState.history },
+        isLoading: false,
+        error: null,
+      };
     }
     return { data: undefined, isLoading: false, error: null };
   }),
@@ -225,6 +234,20 @@ function mockDetail({
   traces = [goldenTrace()],
   runs = [replayRun()],
   runDetail = replayDetail(),
+  history = [
+    {
+      id: "hist_1",
+      project_id: "proj_1",
+      golden_set_id: "golden_1",
+      golden_trace_id: "trace_1",
+      action: "golden_trace.created",
+      actor_user_id: "user_1",
+      reason: "Created from verified replay.",
+      before_json: null,
+      after_json: "{}",
+      created_at: now,
+    },
+  ],
   planTemplate = { "pilot.goldens_basic": true, "pro.ci_gate_blocking": true },
   planCode = "pro",
 }: {
@@ -232,6 +255,7 @@ function mockDetail({
   traces?: GoldenTraceView[];
   runs?: ReplayRunItem[];
   runDetail?: ReplayRunDetailItem | null;
+  history?: import("@/lib/api").GoldenHistoryItem[];
   planTemplate?: Record<string, unknown>;
   planCode?: string;
 } = {}) {
@@ -239,6 +263,7 @@ function mockDetail({
   queryState.traces = traces;
   queryState.runs = runs;
   queryState.runDetail = runDetail;
+  queryState.history = history;
   queryState.planTemplate = planTemplate;
   queryState.planCode = planCode;
   api.runGoldenSet.mockResolvedValue({
@@ -300,6 +325,32 @@ describe("GoldenDetailPage MVP", () => {
     expect(screen.getAllByText(/get_refund_status/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Run history" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /verified_fix/i }).getAttribute("href")).toBe("/replay/run_1");
+  });
+
+  it("renders structured Golden contract and change history", () => {
+    mockDetail({
+      traces: [
+        goldenTrace({
+          criteria_json: JSON.stringify({
+            golden_contract_v1: {
+              final_output: { kind: "text", expected: "Refund status returned." },
+              tool_sequence: ["get_refund_status"],
+              policy_checks: ["refund_policy_checked"],
+              budgets: { max_latency_ms: 1500 },
+              linked_proof: { replay_run_id: "run_1", proof_status: "verified_fix" },
+            },
+          }),
+        }),
+      ],
+    });
+
+    render(<GoldenDetailPage />);
+
+    expect(screen.getByRole("heading", { name: "Golden contract" })).toBeInTheDocument();
+    expect(screen.getAllByText(/get_refund_status/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Change history" })).toBeInTheDocument();
+    expect(screen.getByText("golden_trace.created")).toBeInTheDocument();
+    expect(screen.getByText("Created from verified replay.")).toBeInTheDocument();
   });
 
   it("renders zero trace empty state", () => {

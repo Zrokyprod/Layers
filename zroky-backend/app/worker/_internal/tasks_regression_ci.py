@@ -23,9 +23,9 @@ def process_regression_ci_run(
                 "run_id": run_id,
             }
 
-        from app.api.routes.regression_ci import _run_regression_ci_background
+        from app.services.regression_ci.durable_gate import run_regression_ci_background
 
-        _run_regression_ci_background(
+        run_regression_ci_background(
             tenant_id=tenant_id,
             run_id=run_id,
             request_payload=request_payload,

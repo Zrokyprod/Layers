@@ -1,4 +1,5 @@
 from app.services._internal.replay_executor_common import *
+from app.services.replay_runs import normalize_replay_mode
 
 def make_live_llm_resolver(
     *,
@@ -93,6 +94,36 @@ def make_live_llm_resolver(
                 "candidate": tool_snapshot["data"],
                 "mode": "mocked_tool_frozen_outputs",
                 "source": tool_snapshot["source"],
+            }
+        elif resolved_replay_mode == REPLAY_MODE_FROZEN_RAG:
+            rag_snapshot = _extract_rag_snapshot(source_call)
+            if rag_snapshot is None:
+                mode_metadata["rag_grounding_diff"] = {
+                    "available": False,
+                    "changed": None,
+                    "mode": "frozen_rag",
+                    "reason": "rag_snapshot_missing",
+                }
+                return ActualOutput(
+                    text=None,
+                    reason="rag_snapshot_missing",
+                    metadata=mode_metadata,
+                )
+            _prepend_replay_context(
+                messages,
+                title=(
+                    "Replay mode: use these frozen retrieved documents as the "
+                    "only RAG grounding context. Do not cite unavailable sources."
+                ),
+                value=rag_snapshot["data"],
+            )
+            mode_metadata["rag_grounding_diff"] = {
+                "available": True,
+                "changed": False,
+                "baseline": rag_snapshot["data"],
+                "candidate": rag_snapshot["data"],
+                "mode": "frozen_rag",
+                "source": rag_snapshot["source"],
             }
         elif resolved_replay_mode == REPLAY_MODE_SHADOW:
             mode_metadata["shadow_comparison"] = {
@@ -192,7 +223,7 @@ def make_live_llm_resolver(
 
 
 def _normalize_live_replay_mode(replay_mode: str | None) -> str:
-    mode = (replay_mode or REPLAY_MODE_REAL_LLM).strip() or REPLAY_MODE_REAL_LLM
+    mode = normalize_replay_mode(replay_mode or REPLAY_MODE_REAL_LLM)
     if mode in REAL_COMPARISON_REPLAY_MODES:
         return mode
     return REPLAY_MODE_REAL_LLM
@@ -257,6 +288,26 @@ def _extract_tool_snapshot(source_call: Optional[Call]) -> dict[str, Any] | None
                 "source": f"payload.{key}",
                 "data": value,
             }
+    return None
+
+
+def _extract_rag_snapshot(source_call: Optional[Call]) -> dict[str, Any] | None:
+    if source_call is None:
+        return None
+
+    payload = _safe_json_object(source_call.payload_json)
+    metadata = _safe_json_object(source_call.metadata_json)
+    for source, data in (
+        ("payload.rag_docs", payload.get("rag_docs")),
+        ("payload.retrieved_documents", payload.get("retrieved_documents")),
+        ("payload.retrieval", payload.get("retrieval")),
+        ("payload.rag_context", payload.get("rag_context")),
+        ("metadata.rag_docs", metadata.get("rag_docs")),
+        ("metadata.retrieved_documents", metadata.get("retrieved_documents")),
+        ("metadata.retrieval", metadata.get("retrieval")),
+    ):
+        if data not in (None, "", [], {}):
+            return {"source": source, "data": data}
     return None
 
 

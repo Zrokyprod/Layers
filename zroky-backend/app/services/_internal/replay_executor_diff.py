@@ -71,6 +71,7 @@ def _aggregate_trace_proof(
     )
     output_diffs: list[dict[str, Any]] = []
     tool_diffs: list[dict[str, Any]] = []
+    rag_diffs: list[dict[str, Any]] = []
     cost_delta = 0.0
     latency_delta = 0
     for row in rows:
@@ -81,6 +82,9 @@ def _aggregate_trace_proof(
         tool = scores.get("tool_behavior_diff")
         if isinstance(tool, dict):
             tool_diffs.append(tool)
+        rag = scores.get("rag_grounding_diff")
+        if isinstance(rag, dict):
+            rag_diffs.append(rag)
         cost_delta += float(scores.get("cost_delta_usd") or 0.0)
         latency_delta += int(scores.get("latency_delta_ms") or 0)
     return {
@@ -92,6 +96,11 @@ def _aggregate_trace_proof(
             "changed_count": sum(1 for item in tool_diffs if item.get("changed") is True),
             "missing_count": sum(1 for item in tool_diffs if item.get("available") is False),
             "items": tool_diffs[:10],
+        },
+        "rag_grounding_diff": {
+            "changed_count": sum(1 for item in rag_diffs if item.get("changed") is True),
+            "missing_count": sum(1 for item in rag_diffs if item.get("available") is False),
+            "items": rag_diffs[:10],
         },
         "cost_delta_usd": round(cost_delta, 8),
         "latency_delta_ms": latency_delta,

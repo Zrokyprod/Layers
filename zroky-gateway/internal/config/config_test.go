@@ -60,3 +60,29 @@ func TestLoadReadsGatewayAuthAndProviderKeys(t *testing.T) {
 		t.Fatalf("capture context not loaded: %+v", cfg)
 	}
 }
+
+func TestLoadReadsCaptureDurabilityConfig(t *testing.T) {
+	t.Setenv("ZROKY_GATEWAY_ID", "gw-1")
+	t.Setenv("ZROKY_CAPTURE_DURABILITY_MODE", "warn_only")
+	t.Setenv("ZROKY_SPOOL_RESERVE_BYTES", "4096")
+	t.Setenv("ZROKY_SPOOL_HIGH_WATERMARK_RATIO", "0.75")
+	t.Setenv("ZROKY_GATEWAY_HEARTBEAT_INTERVAL_MS", "15000")
+
+	cfg := Load()
+
+	if cfg.GatewayID != "gw-1" {
+		t.Fatalf("gateway id = %q", cfg.GatewayID)
+	}
+	if cfg.CaptureDurability != "warn_only" {
+		t.Fatalf("durability = %q", cfg.CaptureDurability)
+	}
+	if cfg.SpoolReserveBytes != 4096 {
+		t.Fatalf("reserve bytes = %d", cfg.SpoolReserveBytes)
+	}
+	if cfg.SpoolHighWatermark != 0.75 {
+		t.Fatalf("high watermark = %f", cfg.SpoolHighWatermark)
+	}
+	if cfg.HeartbeatInterval.Milliseconds() != 15000 {
+		t.Fatalf("heartbeat interval = %s", cfg.HeartbeatInterval)
+	}
+}

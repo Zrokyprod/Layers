@@ -179,10 +179,27 @@ function costInterpretation(issue: IssueItem): string {
 
 function evidenceSummary(issue: IssueItem): string {
   return (
+    issue.what_happened?.trim() ??
     issue.evidence_traces.find((trace) => trace.evidence_summary?.trim())?.evidence_summary ??
     issue.user_impact ??
     "No evidence summary captured yet."
   );
+}
+
+function whyItMatters(issue: IssueItem): string {
+  return issue.why_it_matters?.trim() || issue.user_impact || "Business impact is not captured yet.";
+}
+
+function affectedTraceCount(issue: IssueItem): number {
+  return issue.affected_trace_count ?? issue.blast_radius?.affected_traces ?? issue.occurrence_count;
+}
+
+function affectedUserCount(issue: IssueItem): number {
+  return issue.affected_user_count ?? issue.blast_radius?.affected_users ?? 0;
+}
+
+function suspectedVersion(issue: IssueItem): string {
+  return issue.suspected_introduced_version?.trim() || "Version not captured";
 }
 
 function primaryActionForIssue(
@@ -815,10 +832,12 @@ export default function IssueDetailPage() {
 
         <div className="imd-meta-strip" aria-label="Issue metadata">
           <DetailMetric label="Occurrences" value={formatCount(issue.occurrence_count)} helper="Loaded failed calls" />
+          <DetailMetric label="Affected traces" value={formatCount(affectedTraceCount(issue))} />
+          <DetailMetric label="Affected users" value={affectedUserCount(issue) ? formatCount(affectedUserCount(issue)) : "Unknown"} />
           <DetailMetric label="Impact" value={formatIssueImpact(issue)} helper="Current exposure" />
           <DetailMetric label="First seen" value={formatDateTime(issue.first_seen_at)} />
           <DetailMetric label="Last seen" value={formatDateTime(issue.last_seen_at)} />
-          <DetailMetric label="Sample call" value={issue.sample_call_id ?? "Not captured"} />
+          <DetailMetric label="Suspected version" value={suspectedVersion(issue)} />
         </div>
       </section>
 
@@ -831,8 +850,14 @@ export default function IssueDetailPage() {
             />
             <div className="imd-diagnosis-grid">
               <DiagnosisBlock label="What happened" value={evidenceSummary(issue)} />
+              <DiagnosisBlock label="Why it matters" value={whyItMatters(issue)} />
               <DiagnosisBlock label="Root cause" value={rootCause} />
-              <DiagnosisBlock label="User impact" value={issue.user_impact || "User impact not captured."} />
+              <DiagnosisBlock
+                label="Blast radius"
+                value={`${formatCount(affectedTraceCount(issue))} traces${
+                  affectedUserCount(issue) ? ` across ${formatCount(affectedUserCount(issue))} users` : ""
+                }`}
+              />
               <DiagnosisBlock
                 label="Recommended path"
                 value={issue.recommended_next_action || primaryActionReason(primaryAction, issue, caps.canCi)}
@@ -988,7 +1013,7 @@ export default function IssueDetailPage() {
             <SectionHeader title="Cost impact" description="Business signal for prioritization. No avoided-cost claim is made without proof." />
             <div className="imd-cost-grid">
               <DetailMetric label="Estimated wasted spend" value={formatIssueImpact(issue)} />
-              <DetailMetric label="Affected failed calls" value={formatCount(issue.occurrence_count)} />
+              <DetailMetric label="Affected traces" value={formatCount(affectedTraceCount(issue))} />
               <DetailMetric label="Average failed call cost" value={averageFailedCallCost(issue)} />
             </div>
             <p className="imd-cost-note">
@@ -1038,9 +1063,13 @@ export default function IssueDetailPage() {
                 <strong>{issue.proof?.ci_gate?.run_id ? issue.proof.ci_gate.status ?? "Linked" : "Not run"}</strong>
               </div>
               <div>
+                <span>Suspected version</span>
+                <strong>{suspectedVersion(issue)}</strong>
+              </div>
+              <div>
                 <span>Cost impact</span>
                 <strong>
-                  {formatIssueImpact(issue)} from {formatCount(issue.occurrence_count)} calls
+                  {formatIssueImpact(issue)} from {formatCount(affectedTraceCount(issue))} traces
                 </strong>
               </div>
               <div>

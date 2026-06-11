@@ -4,7 +4,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.pollUntilTerminal = pollUntilTerminal;
-const TERMINAL_STATUSES = new Set(['pass', 'fail', 'error']);
+const TERMINAL_STATUSES = new Set(['pass', 'warn', 'fail', 'not_verified', 'error']);
 async function pollUntilTerminal(client, runId, options) {
     const deadline = Date.now() + options.timeoutSeconds * 1000;
     const intervalMs = options.intervalSeconds * 1000;

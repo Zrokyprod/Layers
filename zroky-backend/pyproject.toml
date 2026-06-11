@@ -20,6 +20,11 @@ cost_spike      = "app.services.detectors.cost_spike:detect_entry"
 empty_output    = "app.services.detectors.empty_output:detect"
 output_truncated = "app.services.detectors.output_truncated:detect"
 schema_violation = "app.services.detectors.schema_violation:detect"
+tool_selection_failure = "app.services.detectors.tool_failures:detect_tool_selection_failure"
+tool_call_failure = "app.services.detectors.tool_failures:detect_tool_call_failure"
+tool_argument_mismatch = "app.services.detectors.tool_failures:detect_tool_argument_mismatch"
+unsafe_action = "app.services.detectors.unsafe_action:detect"
+task_outcome_failure = "app.services.detectors.task_outcome_failure:detect"
 latency_anomaly = "app.services.detectors.latency_anomaly:detect"
 repeated_output = "app.services.detectors.repeated_output:detect_entry"
 # Layer 2 — statistical baseline drift detectors (pattern rules)
@@ -29,6 +34,7 @@ error_rate_drift = "app.services.detectors.error_rate_drift:detect_entry"
 token_usage_drift = "app.services.detectors.token_usage_drift:detect_entry"
 # Layer 3 — judge-engine output bridged into the diagnosis surface (pattern rules)
 hallucination_risk = "app.services.detectors.hallucination_risk:detect_entry"
+rag_grounding_failure = "app.services.detectors.rag_grounding_failure:detect"
 accuracy_regression = "app.services.detectors.accuracy_regression:detect_entry"
 
 # ── Fix-strategy plugins ──────────────────────────────────────────────────────

@@ -62,7 +62,10 @@ VALID_DETECTORS = frozenset({
     "TOOL_CALL_FAILURE",
     "TOOL_ARGUMENT_MISMATCH",
     "RAG_RETRIEVAL_MISSING",
+    "RAG_GROUNDING_FAILURE",
     "RETRIEVAL_MISSING",
+    "UNSAFE_ACTION",
+    "TASK_OUTCOME_FAILURE",
     "TOKEN_USAGE_DRIFT",
     "TOKEN_OVERFLOW",
     "RATE_LIMIT",
@@ -93,7 +96,12 @@ _LEGACY_FAILURE_TO_DETECTOR: dict[str, str | None] = {
     "TOOL_CALL_FAILURE": "TOOL_CALL_FAILURE",
     "TOOL_ARGUMENT_MISMATCH": "TOOL_ARGUMENT_MISMATCH",
     "RAG_RETRIEVAL_MISSING": "RAG_RETRIEVAL_MISSING",
+    "RAG_GROUNDING_FAILURE": "RAG_GROUNDING_FAILURE",
     "RETRIEVAL_MISSING": "RETRIEVAL_MISSING",
+    "UNSAFE_ACTION": "UNSAFE_ACTION",
+    "POLICY_VIOLATION": "UNSAFE_ACTION",
+    "TASK_OUTCOME_FAILURE": "TASK_OUTCOME_FAILURE",
+    "BUSINESS_OUTCOME_FAILURE": "TASK_OUTCOME_FAILURE",
     "TOKEN_USAGE_DRIFT": "TOKEN_USAGE_DRIFT",
     "TOKEN_OVERFLOW": "TOKEN_OVERFLOW",
     "RATE_LIMIT": "RATE_LIMIT",
@@ -127,6 +135,12 @@ def map_failure_code_to_detector(failure_code: str | None) -> str | None:
         return _LEGACY_FAILURE_TO_DETECTOR[code]
     if code in VALID_DETECTORS:
         return code
+    if "UNSAFE" in code or "SAFETY" in code or "POLICY" in code:
+        return "UNSAFE_ACTION"
+    if "OUTCOME" in code or "TASK" in code:
+        return "TASK_OUTCOME_FAILURE"
+    if "GROUND" in code or "CITATION" in code:
+        return "RAG_GROUNDING_FAILURE"
     if "TOOL" in code:
         return "TOOL_SELECTION_FAILURE"
     if "RAG" in code or "RETRIEVAL" in code:
@@ -170,6 +184,7 @@ def _derive_severity(detector: str, occurrence_count: int) -> str:
         "ACCURACY_REGRESSION",
         "HALLUCINATION_RISK",
         "PROVIDER_ERROR",
+        "UNSAFE_ACTION",
     }:
         if occurrence_count >= 5:
             return "critical"
@@ -177,6 +192,11 @@ def _derive_severity(detector: str, occurrence_count: int) -> str:
     if detector in {
         "LOOP_DETECTED",
         "SCHEMA_VIOLATION",
+        "TASK_OUTCOME_FAILURE",
+        "RAG_GROUNDING_FAILURE",
+        "TOOL_SELECTION_FAILURE",
+        "TOOL_CALL_FAILURE",
+        "TOOL_ARGUMENT_MISMATCH",
         "LATENCY_REGRESSION",
         "LATENCY_ANOMALY",
         "LATENCY_DRIFT",

@@ -212,6 +212,49 @@ class TraceRun(Base):
     )
 
 
+class GatewayCaptureHealth(Base):
+    __tablename__ = "gateway_capture_health"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    gateway_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    emit_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    durability_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    capture_status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'unknown'"))
+    spool_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    spool_backlog: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    spool_bytes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    spool_max_bytes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    spool_reserved_bytes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    spool_oldest_age_seconds: Mapped[float] = mapped_column(Float, nullable=False, server_default=text("0"))
+    spool_high_watermark: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    emit_failures: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    enqueue_failures: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    flush_failures: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    flushed: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    loss_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    backpressure_rejections: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    heartbeat_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "gateway_id", name="ux_gateway_capture_health_project_gateway"),
+        Index("ix_gateway_capture_health_project_status", "project_id", "capture_status"),
+        Index("ix_gateway_capture_health_project_heartbeat", "project_id", "heartbeat_at"),
+    )
+
+
 class DiagnosisFeedback(Base):
     __tablename__ = "diagnosis_feedback"
 

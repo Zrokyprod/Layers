@@ -142,6 +142,8 @@ const response = await openai.chat.completions.create({
 });`;
     const gatewayEnv = `$env:ZROKY_EMIT_MODE="http"
 $env:ZROKY_INGEST_URL="${ingestUrl}"
+$env:ZROKY_GATEWAY_HEARTBEAT_URL="${apiBaseUrl.replace(/\/$/, "")}/api/v1/capture/gateway-heartbeat"
+$env:ZROKY_CAPTURE_DURABILITY_MODE="fail_closed"
 $env:ZROKY_GATEWAY_API_KEY="zk_your_key"
 go run ./cmd/gateway`;
 const gatewayClient = `OPENAI_BASE_URL=https://gateway.your-company.com/v1
@@ -174,6 +176,9 @@ X-Zroky-Prompt-Version: support-v42`;
       ? `Last event was ${formatAge(captureHealth?.seconds_since_last_call)}; run the smoke check or restart your agent.`
       : "Run the gateway command below, then send one agent request.";
   const validationWarnings = captureHealth?.validation_warnings ?? [];
+  const gatewayStatus = captureHealth?.gateway_worst_status ?? "unknown";
+  const gatewayBacklog = captureHealth?.gateway_spool_backlog ?? 0;
+  const gatewayLoss = captureHealth?.gateway_loss_count ?? 0;
 
   function selectMethod(nextMethod: CaptureMethod) {
     setMethod(nextMethod);
@@ -223,6 +228,11 @@ X-Zroky-Prompt-Version: support-v42`;
             <span>24h calls</span>
             <strong>{captureHealth?.calls_24h ?? 0}</strong>
             <small>{captureHealth?.error_events_24h ?? 0} errors</small>
+          </div>
+          <div className="capture-health-metric">
+            <span>Durability</span>
+            <strong>{gatewayStatus.replaceAll("_", " ")}</strong>
+            <small>{gatewayLoss > 0 ? `${gatewayLoss} lost` : `${gatewayBacklog} queued`}</small>
           </div>
           <Link href={lastCallHref} className="capture-health-metric capture-health-link">
             <span>Last call</span>

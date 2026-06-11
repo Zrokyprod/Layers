@@ -107,12 +107,20 @@ import {
   getReplayQuota,
   createReplayRunFromCall,
   createReplayRunFromIssue,
+  listRuntimePolicyApprovals,
+  approveRuntimePolicyDecision,
+  rejectRuntimePolicyDecision,
+  setRuntimePolicyKillSwitch,
   getJudgeHealth,
   type ReplayRunDetailItem,
   type ReplayRunListResponse,
   type ReplayQuotaResponse,
   type ReplayCreatePayload,
   type ReplayCreateResponse,
+  type RuntimePolicyDecisionStatus,
+  type RuntimePolicyListResponse,
+  type RuntimePolicyDecisionResponse,
+  type RuntimePolicyKillSwitchResponse,
   type JudgeHealthResponse,
 } from "./api";
 import type {
@@ -955,6 +963,51 @@ export function useReplayQuota(options?: Partial<UseQueryOptions<ReplayQuotaResp
     retry: false,
     refetchOnWindowFocus: false,
     ...options,
+  });
+}
+
+// ── Runtime Policy Gate ─────────────────────────────────────────────────────
+
+export function useRuntimePolicyApprovals(
+  status: RuntimePolicyDecisionStatus | "all" = "pending_approval",
+  options?: Partial<UseQueryOptions<RuntimePolicyListResponse>>,
+) {
+  return useQuery<RuntimePolicyListResponse>({
+    queryKey: ["runtime-policy", "approvals", status],
+    queryFn: ({ signal }) => listRuntimePolicyApprovals(status, signal),
+    staleTime: 10_000,
+    refetchInterval: status === "pending_approval" ? 15_000 : false,
+    ...options,
+  });
+}
+
+export function useApproveRuntimePolicyDecision() {
+  const queryClient = useQueryClient();
+  return useMutation<RuntimePolicyDecisionResponse, Error, { decisionId: string; reason: string }>({
+    mutationFn: ({ decisionId, reason }) => approveRuntimePolicyDecision(decisionId, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
+    },
+  });
+}
+
+export function useRejectRuntimePolicyDecision() {
+  const queryClient = useQueryClient();
+  return useMutation<RuntimePolicyDecisionResponse, Error, { decisionId: string; reason: string }>({
+    mutationFn: ({ decisionId, reason }) => rejectRuntimePolicyDecision(decisionId, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
+    },
+  });
+}
+
+export function useSetRuntimePolicyKillSwitch() {
+  const queryClient = useQueryClient();
+  return useMutation<RuntimePolicyKillSwitchResponse, Error, boolean>({
+    mutationFn: (enabled) => setRuntimePolicyKillSwitch(enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
+    },
   });
 }
 

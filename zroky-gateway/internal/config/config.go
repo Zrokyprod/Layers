@@ -21,7 +21,9 @@ type Config struct {
 	EmitMode           string
 	ZrokyAPIURL        string
 	ZrokyIngestURL     string
+	ZrokyHeartbeatURL  string
 	ZrokyAPIKey        string // gateway-to-control-plane auth
+	GatewayID          string
 	GatewayAuthToken   string
 	AllowedProjectIDs  map[string]struct{}
 	OpenAIAPIKey       string
@@ -32,6 +34,10 @@ type Config struct {
 	SpoolDir           string
 	SpoolMaxBytes      int64
 	SpoolFlushInterval time.Duration
+	SpoolReserveBytes  int64
+	SpoolHighWatermark float64
+	CaptureDurability  string
+	HeartbeatInterval  time.Duration
 	OpenAIBaseURL      string
 	AnthropicBaseURL   string
 	GoogleBaseURL      string
@@ -52,7 +58,9 @@ func Load() *Config {
 		EmitMode:           strings.ToLower(getenv("ZROKY_EMIT_MODE", "redis")),
 		ZrokyAPIURL:        zrokyAPIURL,
 		ZrokyIngestURL:     getenv("ZROKY_INGEST_URL", strings.TrimRight(zrokyAPIURL, "/")+"/api/v1/ingest"),
+		ZrokyHeartbeatURL:  getenv("ZROKY_GATEWAY_HEARTBEAT_URL", strings.TrimRight(zrokyAPIURL, "/")+"/api/v1/capture/gateway-heartbeat"),
 		ZrokyAPIKey:        getenv("ZROKY_GATEWAY_API_KEY", ""),
+		GatewayID:          getenv("ZROKY_GATEWAY_ID", "gateway-local"),
 		GatewayAuthToken:   getenv("ZROKY_GATEWAY_AUTH_TOKEN", ""),
 		AllowedProjectIDs:  parseCSVSet("ZROKY_ALLOWED_PROJECT_IDS"),
 		OpenAIAPIKey:       getenv("OPENAI_API_KEY", ""),
@@ -63,6 +71,10 @@ func Load() *Config {
 		SpoolDir:           getenv("ZROKY_SPOOL_DIR", ".zroky-spool"),
 		SpoolMaxBytes:      parseInt64("ZROKY_SPOOL_MAX_BYTES", 100*1024*1024),
 		SpoolFlushInterval: parseMilliseconds("ZROKY_SPOOL_FLUSH_INTERVAL_MS", 5*time.Second),
+		SpoolReserveBytes:  parseInt64("ZROKY_SPOOL_RESERVE_BYTES", 8*1024*1024),
+		SpoolHighWatermark: parseFloat("ZROKY_SPOOL_HIGH_WATERMARK_RATIO", 0.85),
+		CaptureDurability:  strings.ToLower(getenv("ZROKY_CAPTURE_DURABILITY_MODE", "fail_closed")),
+		HeartbeatInterval:  parseMilliseconds("ZROKY_GATEWAY_HEARTBEAT_INTERVAL_MS", 30*time.Second),
 		OpenAIBaseURL:      strings.TrimRight(getenv("OPENAI_UPSTREAM_BASE_URL", "https://api.openai.com"), "/"),
 		AnthropicBaseURL:   strings.TrimRight(getenv("ANTHROPIC_UPSTREAM_BASE_URL", "https://api.anthropic.com"), "/"),
 		GoogleBaseURL:      strings.TrimRight(getenv("GOOGLE_UPSTREAM_BASE_URL", "https://generativelanguage.googleapis.com"), "/"),
@@ -98,6 +110,18 @@ func parseInt64(key string, fallback int64) int64 {
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func parseFloat(key string, fallback float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.ParseFloat(v, 64)
+	if err != nil || n <= 0 {
 		return fallback
 	}
 	return n

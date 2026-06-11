@@ -266,3 +266,56 @@ class PolicyDocument(Base):
         Index("ix_policy_documents_project_active", "project_id", "active"),
         Index("ix_policy_documents_project_created", "project_id", "created_at"),
     )
+
+
+class RuntimePolicyDecision(Base):
+    """Durable runtime policy decision and approval queue item.
+
+    Agent SDKs/gateways call the runtime policy check before risky tool
+    execution. Every decision is tenant-scoped and can be projected into the
+    trace graph as policy evidence.
+    """
+
+    __tablename__ = "runtime_policy_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    call_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("calls.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    agent_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    action_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tool_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    reasons_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    request_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    policy_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resolution_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('allow', 'block', 'requires_approval')",
+            name="ck_runtime_policy_decisions_decision",
+        ),
+        CheckConstraint(
+            "status IN ('allowed', 'blocked', 'pending_approval', 'approved', 'rejected', 'expired')",
+            name="ck_runtime_policy_decisions_status",
+        ),
+        Index("ix_runtime_policy_decisions_project_status_created", "project_id", "status", "created_at"),
+        Index("ix_runtime_policy_decisions_project_trace_created", "project_id", "trace_id", "created_at"),
+        Index("ix_runtime_policy_decisions_project_tool_created", "project_id", "tool_name", "created_at"),
+        Index("ix_runtime_policy_decisions_project_created", "project_id", "created_at"),
+    )

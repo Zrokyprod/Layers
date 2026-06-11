@@ -41,3 +41,15 @@ class ZrokyPreflightError(RuntimeError):
         if "RATE_LIMIT_RISK" in warning_types:
             return ErrorCode.RATE_LIMIT
         return ErrorCode.UNKNOWN_ERROR
+
+
+class ZrokyRuntimePolicyError(RuntimeError):
+    """Raised when the runtime policy gate cannot produce an allow decision."""
+
+    def __init__(self, message: str, *, decision: dict[str, Any] | None = None) -> None:
+        self.decision = decision or {}
+        super().__init__(message)
+
+
+class ZrokyRuntimePolicyBlocked(ZrokyRuntimePolicyError):
+    """Raised when the runtime policy gate blocks or pauses an agent action."""

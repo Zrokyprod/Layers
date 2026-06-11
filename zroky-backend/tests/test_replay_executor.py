@@ -401,7 +401,7 @@ class TestExecuteReplayRun:
         assert summary["fail_count"] == 1
         assert summary["error_count"] == 0
 
-    def test_only_inconclusive_finalizes_error(self, db_session) -> None:
+    def test_only_inconclusive_finalizes_not_verified(self, db_session) -> None:
         # Use empty expected_output_text so deterministic stub returns
         # inconclusive for every trace.
         run, _ = _seed_run_with_traces(
@@ -414,9 +414,10 @@ class TestExecuteReplayRun:
             evaluator=DeterministicStubEvaluator(),
         )
         assert updated is not None
-        assert updated.status == "error"
+        assert updated.status == "not_verified"
         summary = json.loads(updated.summary_json)
-        assert summary["error_count"] == 3
+        assert summary["not_verified_count"] == 3
+        assert summary["error_count"] == 0
         assert summary["pass_count"] == 0
         assert summary["fail_count"] == 0
 
@@ -621,7 +622,7 @@ class TestPerTraceGrading:
         scores = json.loads(traces[0].judge_scores_json)
         assert "resolver_error" in scores["reason"]
 
-    def test_resolver_returns_none_text_becomes_error(self, db_session) -> None:
+    def test_resolver_returns_none_text_becomes_not_verified(self, db_session) -> None:
         run, _ = _seed_run_with_traces(
             db_session, expected_responses=["a"]
         )
@@ -633,10 +634,11 @@ class TestPerTraceGrading:
             ),
         )
         assert out is not None
-        assert out.status == "error"
+        assert out.status == "not_verified"
         traces = db_session.execute(
             select(ReplayRunTrace).where(ReplayRunTrace.replay_run_id == run.id)
         ).scalars().all()
+        assert traces[0].status == "not_verified"
         scores = json.loads(traces[0].judge_scores_json)
         assert scores["reason"] == "custom_no_output"
 

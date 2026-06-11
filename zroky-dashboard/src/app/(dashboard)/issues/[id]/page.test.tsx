@@ -285,8 +285,8 @@ describe("IssueDetailPage MVP investigation layout", () => {
     expect(screen.getByText("critical")).toBeInTheDocument();
     expect(screen.getAllByText("No trusted replay").length).toBeGreaterThan(0);
     expect(screen.getAllByText("open").length).toBeGreaterThan(0);
-    for (const label of ["Occurrences", "Impact", "First seen", "Last seen", "Sample call"]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+    for (const label of ["Occurrences", "Affected traces", "Affected users", "Impact", "First seen", "Last seen", "Suspected version"]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
     expect(document.querySelector(".imd-layout")).toBeInTheDocument();
     expect(screen.getByLabelText("Resolution")).toBeInTheDocument();
@@ -307,7 +307,7 @@ describe("IssueDetailPage MVP investigation layout", () => {
     expect(screen.getByText("Status / owner")).toBeInTheDocument();
     expect(screen.getByText("CI gate readiness")).toBeInTheDocument();
     expect(screen.getAllByText("Cost impact").length).toBeGreaterThan(0);
-    expect(screen.getByText("$84.00 from 42 calls")).toBeInTheDocument();
+    expect(screen.getByText("$84.00 from 42 traces")).toBeInTheDocument();
   });
 
   it("renders a calm root cause fallback when missing", async () => {

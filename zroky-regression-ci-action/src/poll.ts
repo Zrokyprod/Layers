@@ -4,7 +4,7 @@
 
 import { ZrokyApiClient, RegressionCIRunDetailResponse } from './api';
 
-const TERMINAL_STATUSES = new Set(['pass', 'fail', 'error']);
+const TERMINAL_STATUSES = new Set(['pass', 'warn', 'fail', 'not_verified', 'error']);
 
 export interface PollOptions {
   intervalSeconds: number;

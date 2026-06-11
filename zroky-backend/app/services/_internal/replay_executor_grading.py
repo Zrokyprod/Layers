@@ -33,6 +33,7 @@ def _grade_trace(
         actual = ActualOutput(text=None, reason=f"resolver_error:{type(exc).__name__}")
 
     if actual.text is None:
+        trace_status = _resolver_reason_to_trace_status(actual.reason)
         return _write_trace_row(
             db,
             run=run,
@@ -45,7 +46,7 @@ def _grade_trace(
                 actual.reason or "no_actual_output",
                 model="resolver",
             ),
-            status=_TRACE_ERROR,
+            status=trace_status,
             call_id_replayed=source_call.id if source_call else None,
             calibration_meta=calibration_meta,
         )
@@ -105,7 +106,7 @@ def _grade_trace(
 
     # Determine the persisted trace status. The judge's verdict is the
     # ground truth here: pass→pass, fail→fail, inconclusive→error.
-    trace_status = _verdict_to_trace_status(verdict.verdict)
+    trace_status = _verdict_to_trace_status(verdict.verdict, reason=verdict.reason)
     return _write_trace_row(
         db,
         run=run,
@@ -119,13 +120,24 @@ def _grade_trace(
     )
 
 
-def _verdict_to_trace_status(verdict: str) -> str:
+def _verdict_to_trace_status(verdict: str, *, reason: Optional[str] = None) -> str:
     """Map judge verdict → replay_run_traces.status (CHECK = pass/fail/error)."""
     if verdict == VERDICT_PASS:
         return _TRACE_PASS
     if verdict == VERDICT_FAIL:
         return _TRACE_FAIL
-    return _TRACE_ERROR  # inconclusive collapses to error so the row gets attention
+    normalized = (reason or "").strip().lower()
+    if normalized.startswith("evaluator_error:"):
+        return _TRACE_ERROR
+    return _TRACE_NOT_VERIFIED
+
+
+def _resolver_reason_to_trace_status(reason: Optional[str]) -> str:
+    """Map resolver no-output reasons to honest replay proof status."""
+    normalized = (reason or "").strip().lower()
+    if normalized.startswith("resolver_error:") or normalized.startswith("unexpected_error:"):
+        return _TRACE_ERROR
+    return _TRACE_NOT_VERIFIED
 
 
 def _build_judge_context(
@@ -187,6 +199,8 @@ def _write_trace_row(
         "replay_input_tokens": actual.input_tokens,
         "replay_output_tokens": actual.output_tokens,
     }
+    if actual.metadata and isinstance(actual.metadata.get("rag_grounding_diff"), dict):
+        scores["rag_grounding_diff"] = actual.metadata["rag_grounding_diff"]
     if actual.reason:
         scores["resolver_reason"] = actual.reason
     if actual.metadata:

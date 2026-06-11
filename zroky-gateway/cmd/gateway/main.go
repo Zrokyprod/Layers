@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/zroky-ai/zroky-gateway/internal/config"
 	"github.com/zroky-ai/zroky-gateway/internal/emit"
+	"github.com/zroky-ai/zroky-gateway/internal/heartbeat"
 	"github.com/zroky-ai/zroky-gateway/internal/proxy"
 	"github.com/zroky-ai/zroky-gateway/internal/spool"
 )
@@ -63,9 +64,10 @@ func main() {
 	}
 
 	captureSpool, err := spool.New(spool.Options{
-		Dir:      cfg.SpoolDir,
-		MaxBytes: cfg.SpoolMaxBytes,
-		Logger:   log.Logger,
+		Dir:                cfg.SpoolDir,
+		MaxBytes:           cfg.SpoolMaxBytes,
+		HighWatermarkRatio: cfg.SpoolHighWatermark,
+		Logger:             log.Logger,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to configure capture spool")
@@ -73,6 +75,18 @@ func main() {
 	spoolCtx, stopSpool := context.WithCancel(context.Background())
 	defer stopSpool()
 	go captureSpool.FlushLoop(spoolCtx, emitter, cfg.SpoolFlushInterval)
+	go heartbeat.Loop(spoolCtx, heartbeat.Options{
+		URL:            cfg.ZrokyHeartbeatURL,
+		APIKey:         cfg.ZrokyAPIKey,
+		ProjectID:      heartbeatProjectID(cfg.AllowedProjectIDs),
+		GatewayID:      cfg.GatewayID,
+		EmitMode:       string(emitMode),
+		DurabilityMode: cfg.CaptureDurability,
+		Version:        "zroky-gateway",
+		Interval:       cfg.HeartbeatInterval,
+		StatusFunc:     captureSpool.Status,
+		Logger:         log.Logger,
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -80,6 +94,22 @@ func main() {
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 			"spool":  captureSpool.Status(),
+		})
+	})
+	mux.HandleFunc("/ready", func(w http.ResponseWriter, _ *http.Request) {
+		status := captureSpool.Status()
+		ready := true
+		if cfg.CaptureDurability == "fail_closed" {
+			ready = captureSpool.CanAccept(cfg.SpoolReserveBytes) == nil
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if !ready {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ready":  ready,
+			"status": status.CaptureStatus,
+			"spool":  status,
 		})
 	})
 
@@ -107,6 +137,8 @@ func main() {
 			DefaultWorkflowName:  cfg.WorkflowName,
 			DefaultPromptVersion: cfg.PromptVersion,
 			CaptureSpool:         captureSpool,
+			CaptureDurability:    cfg.CaptureDurability,
+			SpoolReserveBytes:    cfg.SpoolReserveBytes,
 		}, log.Logger))
 	}
 
@@ -118,6 +150,8 @@ func main() {
 		DefaultWorkflowName:  cfg.WorkflowName,
 		DefaultPromptVersion: cfg.PromptVersion,
 		CaptureSpool:         captureSpool,
+		CaptureDurability:    cfg.CaptureDurability,
+		SpoolReserveBytes:    cfg.SpoolReserveBytes,
 	}, log.Logger))
 	mux.Handle("/v1beta/models/", proxy.HandlerWithOptions(google, "chat", emitter, proxy.Options{
 		MaxBodyBytes:         cfg.MaxBodyBytes,
@@ -127,6 +161,8 @@ func main() {
 		DefaultWorkflowName:  cfg.WorkflowName,
 		DefaultPromptVersion: cfg.PromptVersion,
 		CaptureSpool:         captureSpool,
+		CaptureDurability:    cfg.CaptureDurability,
+		SpoolReserveBytes:    cfg.SpoolReserveBytes,
 	}, log.Logger))
 
 	srv := &http.Server{
@@ -156,4 +192,14 @@ func main() {
 		_ = rdb.Close()
 	}
 	log.Info().Msg("bye")
+}
+
+func heartbeatProjectID(allowed map[string]struct{}) string {
+	if len(allowed) != 1 {
+		return ""
+	}
+	for projectID := range allowed {
+		return projectID
+	}
+	return ""
 }

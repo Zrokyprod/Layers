@@ -62,6 +62,25 @@ DEFAULT_POLICY: dict[str, Any] = {
     "tier2_daily_cap": None,
     "tier3_alert_channels": ["email"],
     "kill_switch": False,
+    "runtime_enabled": True,
+    "runtime_max_tool_calls": 20,
+    "runtime_max_retries": 3,
+    "runtime_max_cost_usd": 1.0,
+    "runtime_allowed_tools": [],
+    "runtime_sensitive_tools": [
+        "payment",
+        "charge",
+        "refund",
+        "delete",
+        "email",
+        "send_email",
+        "transfer",
+        "payout",
+    ],
+    "runtime_sensitive_actions_require_approval": True,
+    "runtime_block_pii_leak": True,
+    "runtime_block_prompt_injected_external_action": True,
+    "runtime_approval_ttl_minutes": 60,
 }
 
 # Keys + their expected types (validation contract — see validate_policy_payload)
@@ -78,6 +97,16 @@ _POLICY_FIELDS: dict[str, tuple[type | tuple[type, ...], str]] = {
     "tier2_daily_cap": ((int, type(None)), "non-negative integer or null"),
     "tier3_alert_channels": (list, "list of strings"),
     "kill_switch": (bool, "boolean"),
+    "runtime_enabled": (bool, "boolean"),
+    "runtime_max_tool_calls": (int, "non-negative integer"),
+    "runtime_max_retries": (int, "non-negative integer"),
+    "runtime_max_cost_usd": ((int, float), "non-negative number"),
+    "runtime_allowed_tools": (list, "list of strings"),
+    "runtime_sensitive_tools": (list, "list of strings"),
+    "runtime_sensitive_actions_require_approval": (bool, "boolean"),
+    "runtime_block_pii_leak": (bool, "boolean"),
+    "runtime_block_prompt_injected_external_action": (bool, "boolean"),
+    "runtime_approval_ttl_minutes": (int, "positive integer"),
 }
 
 
@@ -161,7 +190,7 @@ def validate_policy_payload(payload: dict[str, Any]) -> dict[str, Any]:
             out[key] = stripped
             continue
 
-        if key in {"tier1_actions", "tier2_actions", "tier3_alert_channels"}:
+        if key in {"tier1_actions", "tier2_actions", "tier3_alert_channels", "runtime_allowed_tools", "runtime_sensitive_tools"}:
             cleaned: list[str] = []
             for item in value:
                 if not isinstance(item, str) or not item.strip():
@@ -170,6 +199,24 @@ def validate_policy_payload(payload: dict[str, Any]) -> dict[str, Any]:
                     )
                 cleaned.append(item.strip())
             out[key] = cleaned
+            continue
+
+        if key in {"runtime_max_tool_calls", "runtime_max_retries"}:
+            if int(value) < 0:
+                raise PolicyValidationError(f"{key!r} must be non-negative")
+            out[key] = int(value)
+            continue
+
+        if key == "runtime_max_cost_usd":
+            if float(value) < 0:
+                raise PolicyValidationError("'runtime_max_cost_usd' must be non-negative")
+            out[key] = float(value)
+            continue
+
+        if key == "runtime_approval_ttl_minutes":
+            if int(value) <= 0:
+                raise PolicyValidationError("'runtime_approval_ttl_minutes' must be positive")
+            out[key] = int(value)
             continue
 
         out[key] = value

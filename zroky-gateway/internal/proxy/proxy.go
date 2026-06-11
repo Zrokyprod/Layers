@@ -61,10 +61,21 @@ type Options struct {
 	DefaultWorkflowName  string
 	DefaultPromptVersion string
 	CaptureSpool         CaptureSpooler
+	CaptureDurability    string
+	SpoolReserveBytes    int64
 }
 
 type CaptureSpooler interface {
 	Enqueue(ev *emit.IngestEventV2) error
+	EnqueueReserved(ev *emit.IngestEventV2, reservation CaptureReservation) error
+	Reserve(bytes int64) (CaptureReservation, error)
+	RecordEmitFailure(err error)
+	RecordBackpressure(err error)
+	RecordLoss(err error)
+}
+
+type CaptureReservation = interface {
+	Release()
 }
 
 var (
@@ -143,6 +154,25 @@ func HandlerWithOptions(
 			return
 		}
 
+		var captureReservation CaptureReservation
+		if captureDurabilityMode(opts.CaptureDurability) == "fail_closed" {
+			if opts.CaptureSpool == nil {
+				http.Error(w, "capture_backpressure: durable capture spool is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			reserveBytes := opts.SpoolReserveBytes
+			if reserveBytes <= 0 {
+				reserveBytes = int64(len(reqBody)) + 256*1024
+			}
+			var reserveErr error
+			captureReservation, reserveErr = opts.CaptureSpool.Reserve(reserveBytes)
+			if reserveErr != nil {
+				opts.CaptureSpool.RecordBackpressure(reserveErr)
+				http.Error(w, "capture_backpressure: durable capture spool is full", http.StatusServiceUnavailable)
+				return
+			}
+		}
+
 		upstreamKey := providerAuthValue(provider, opts.UpstreamAPIKey)
 		if upstreamKey == "" {
 			upstreamKey = r.Header.Get(provider.HeaderKey)
@@ -203,7 +233,16 @@ func HandlerWithOptions(
 			defer cancel()
 			if emitErr := emitter.Emit(ctx, ev); emitErr != nil {
 				if opts.CaptureSpool != nil {
-					if spoolErr := opts.CaptureSpool.Enqueue(ev); spoolErr != nil {
+					opts.CaptureSpool.RecordEmitFailure(emitErr)
+					var spoolErr error
+					if captureReservation != nil {
+						spoolErr = opts.CaptureSpool.EnqueueReserved(ev, captureReservation)
+						captureReservation = nil
+					} else {
+						spoolErr = opts.CaptureSpool.Enqueue(ev)
+					}
+					if spoolErr != nil {
+						opts.CaptureSpool.RecordLoss(spoolErr)
 						logger.Error().Err(emitErr).Err(spoolErr).Msg("emit failed and spool enqueue failed")
 						return
 					}
@@ -211,6 +250,8 @@ func HandlerWithOptions(
 					return
 				}
 				logger.Warn().Err(emitErr).Msg("emit failed")
+			} else if captureReservation != nil {
+				captureReservation.Release()
 			}
 		}()
 
@@ -225,6 +266,17 @@ func HandlerWithOptions(
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+func captureDurabilityMode(raw string) string {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	if mode == "" {
+		return "warn_only"
+	}
+	if mode == "warn_only" {
+		return "warn_only"
+	}
+	return "fail_closed"
+}
 
 func readBoundedBody(body io.Reader, maxBytes int64) ([]byte, bool, error) {
 	if maxBytes <= 0 {

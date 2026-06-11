@@ -29,6 +29,9 @@ from app.services.detectors.cost_spike import detect as detect_cost_spike  # noq
 from app.services.detectors.empty_output import detect as detect_empty_output  # noqa: E402
 from app.services.detectors.output_truncated import detect as detect_output_truncated  # noqa: E402
 from app.services.detectors.schema_violation import detect as detect_schema_violation  # noqa: E402
+from app.services.detectors.tool_failures import detect_tool_call_failure, detect_tool_selection_failure, detect_tool_argument_mismatch  # noqa: E402
+from app.services.detectors.unsafe_action import detect as detect_unsafe_action  # noqa: E402
+from app.services.detectors.task_outcome_failure import detect as detect_task_outcome_failure  # noqa: E402
 from app.services.detectors.latency_anomaly import detect as detect_latency_anomaly  # noqa: E402
 from app.services.detectors.repeated_output import detect as detect_repeated_output  # noqa: E402
 from app.services.detectors.output_length_drift import detect as detect_output_length_drift  # noqa: E402
@@ -36,6 +39,7 @@ from app.services.detectors.latency_drift import detect as detect_latency_drift 
 from app.services.detectors.error_rate_drift import detect as detect_error_rate_drift  # noqa: E402
 from app.services.detectors.token_usage_drift import detect as detect_token_usage_drift  # noqa: E402
 from app.services.detectors.hallucination_risk import detect as detect_hallucination_risk  # noqa: E402
+from app.services.detectors.rag_grounding_failure import detect as detect_rag_grounding_failure  # noqa: E402
 from app.services.detectors.accuracy_regression import detect as detect_accuracy_regression  # noqa: E402
 from app.services.detectors.blast_radius import build as build_blast_radius  # noqa: E402
 
@@ -50,6 +54,11 @@ __all__ = [
     "detect_empty_output",
     "detect_output_truncated",
     "detect_schema_violation",
+    "detect_tool_call_failure",
+    "detect_tool_selection_failure",
+    "detect_tool_argument_mismatch",
+    "detect_unsafe_action",
+    "detect_task_outcome_failure",
     "detect_latency_anomaly",
     "detect_repeated_output",
     "detect_output_length_drift",
@@ -57,6 +66,7 @@ __all__ = [
     "detect_error_rate_drift",
     "detect_token_usage_drift",
     "detect_hallucination_risk",
+    "detect_rag_grounding_failure",
     "detect_accuracy_regression",
     "build_blast_radius",
 ]

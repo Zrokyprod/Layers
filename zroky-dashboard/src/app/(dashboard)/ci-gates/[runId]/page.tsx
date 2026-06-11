@@ -123,6 +123,50 @@ function outcomeRisk(detail: RegressionCIRunDetailResponse | null): number | nul
   return numericField(reportRecord(detail, "outcome_attribution"), "estimated_monthly_risk_usd");
 }
 
+function recordArray(detail: RegressionCIRunDetailResponse | null, key: string): Record<string, unknown>[] {
+  const direct = detail?.[key as keyof RegressionCIRunDetailResponse];
+  const fromDetail = Array.isArray(direct) ? direct.filter(isRecord) : [];
+  if (fromDetail.length > 0) return fromDetail;
+  const fromReport = detail?.report?.[key];
+  return Array.isArray(fromReport) ? fromReport.filter(isRecord) : [];
+}
+
+function stringArray(detail: RegressionCIRunDetailResponse | null, key: string): string[] {
+  const direct = detail?.[key as keyof RegressionCIRunDetailResponse];
+  const fromDetail = Array.isArray(direct) ? direct.filter((item): item is string => typeof item === "string") : [];
+  if (fromDetail.length > 0) return fromDetail;
+  const fromReport = detail?.report?.[key];
+  return Array.isArray(fromReport) ? fromReport.filter((item): item is string => typeof item === "string") : [];
+}
+
+function GoldenEvidenceList({ items, empty }: { items: Record<string, unknown>[]; empty: string }) {
+  if (items.length === 0) {
+    return (
+      <div className="ci-compact-empty">
+        <span>{empty}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="ci-flow-list">
+      {items.map((item, index) => {
+        const name = stringField(item, "golden_name") ?? stringField(item, "name") ?? "Golden";
+        const traceId = stringField(item, "golden_trace_id") ?? stringField(item, "trace_id");
+        const assertion = stringField(item, "assertion") ?? stringField(item, "status") ?? "failed";
+        const replayMode = stringField(item, "replay_mode") ?? "unknown";
+        const fix = stringField(item, "recommended_fix") ?? stringField(item, "recommended_next_action");
+        return (
+          <div key={`${traceId ?? name}-${index}`}>
+            <strong>{name}</strong>
+            <span>{[traceId, assertion, `mode ${replayMode}`].filter(Boolean).join(" - ")}</span>
+            {fix ? <span>{fix}</span> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CiGateDetailPage() {
   const params = useParams<{ runId: string }>();
   const router = useRouter();
@@ -176,6 +220,10 @@ export default function CiGateDetailPage() {
   const externalPrUrl = prUrl(detail);
   const failedCount = run ? failedFlowCount(run, detail) : null;
   const isActive = ACTIVE_STATUSES.has(status);
+  const failedGoldens = recordArray(detail, "failed_goldens");
+  const warnGoldens = recordArray(detail, "warn_goldens");
+  const notVerifiedReasons = stringArray(detail, "not_verified_reasons");
+  const override = detail?.override && isRecord(detail.override) ? detail.override : null;
 
   useEffect(() => {
     if (!autoRefresh || !isActive) return;
@@ -317,6 +365,46 @@ export default function CiGateDetailPage() {
             ) : (
               <p className="ci-body-copy">{verdictSubtitle(status)}</p>
             )}
+            {override ? (
+              <div className="ci-warning-card">
+                <ShieldAlert aria-hidden="true" />
+                <div>
+                  <strong>Override active: effective status {stringField(override, "effective_status") ?? detail?.effective_status ?? "-"}</strong>
+                  <p>
+                    Raw status remains {stringField(override, "original_status") ?? status}. Reason: {stringField(override, "reason") ?? "not captured"}.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="ci-card">
+            <header className="ci-section-header">
+              <div>
+                <h2>Golden gate evidence</h2>
+                <p>Exact Goldens and proof gaps behind this CI verdict.</p>
+              </div>
+            </header>
+            <div className="ci-evidence-stack">
+              <div>
+                <h3>Blocking failures</h3>
+                <GoldenEvidenceList items={failedGoldens} empty="No blocking Golden failures reported." />
+              </div>
+              <div>
+                <h3>Warning-only failures</h3>
+                <GoldenEvidenceList items={warnGoldens} empty="No warning-only Golden failures reported." />
+              </div>
+              <div>
+                <h3>Not verified reasons</h3>
+                {notVerifiedReasons.length ? (
+                  <ul className="ci-reason-list">
+                    {notVerifiedReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                  </ul>
+                ) : (
+                  <div className="ci-compact-empty"><span>No proof gaps reported.</span></div>
+                )}
+              </div>
+            </div>
           </section>
 
           <section className="ci-card">

@@ -324,7 +324,10 @@ export interface CaptureValidationWarning {
     | "version_metadata_missing"
     | "policy_decisions_missing"
     | "trace_graph_projection_missing"
-    | "trace_graph_projection_failed";
+    | "trace_graph_projection_failed"
+    | "gateway_spool_backlog"
+    | "gateway_capture_loss"
+    | "gateway_backpressure";
   label: string;
   detail: string;
 }
@@ -351,6 +354,15 @@ export interface CaptureHealthResponse {
   handoff_spans_24h: number;
   incomplete_trace_runs_24h: number;
   projection_failures_24h: number;
+  gateway_count: number;
+  gateway_unhealthy_count: number;
+  gateway_worst_status: string;
+  gateway_spool_backlog: number;
+  gateway_spool_bytes: number;
+  gateway_spool_oldest_age_seconds: number;
+  gateway_loss_count: number;
+  gateway_backpressure_rejections: number;
+  gateway_last_heartbeat_at: string | null;
   error_events_24h: number;
   outcome_events_24h: number;
   sampled_recent_calls: number;
@@ -1232,6 +1244,13 @@ export interface IssueProofSnapshot {
   ci_gate: IssueCiGateProof;
 }
 
+export interface IssueBlastRadius {
+  affected_traces: number;
+  affected_users: number;
+  cost_usd: number;
+  severity: string;
+}
+
 export interface IssueItem {
   id: string;
   project_id: string;
@@ -1256,6 +1275,12 @@ export interface IssueItem {
   title: string;
   affected_agent: string | null;
   affected_workflow: string | null;
+  what_happened?: string | null;
+  why_it_matters?: string | null;
+  affected_trace_count?: number;
+  affected_user_count?: number;
+  suspected_introduced_version?: string | null;
+  blast_radius?: IssueBlastRadius | null;
   root_cause: string;
   evidence_traces: IssueEvidenceTrace[];
   cost_impact_usd: number;

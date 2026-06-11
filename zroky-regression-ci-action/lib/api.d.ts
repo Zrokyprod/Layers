@@ -33,6 +33,11 @@ export interface RegressionCIRunDetailResponse {
     created_at: string;
     started_at?: string;
     completed_at?: string;
+    effective_status?: string;
+    failed_goldens?: Record<string, unknown>[];
+    warn_goldens?: Record<string, unknown>[];
+    not_verified_reasons?: string[];
+    override?: Record<string, unknown>;
     report?: Record<string, unknown>;
     pr_comment_markdown?: string;
 }

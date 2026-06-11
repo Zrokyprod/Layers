@@ -56,6 +56,7 @@ from app.api.routes.replay import router as replay_router
 from app.api.routes.regression_ci import router as regression_ci_router
 from app.api.routes.replay_dispatch import router as replay_dispatch_router
 from app.api.routes.replay_runs import router as replay_runs_router
+from app.api.routes.runtime_policy import router as runtime_policy_router
 from app.core.config import get_settings
 
 _settings = get_settings()
@@ -93,6 +94,7 @@ api_router.include_router(replay_router, tags=["replay"])  # legacy single-fix r
 api_router.include_router(replay_runs_router, tags=["replay-runs"])  # Pilot tier (Module 4.2)
 api_router.include_router(replay_dispatch_router, tags=["replay-dispatch"])  # Pilot tier (Module 9 — GitHub Action)
 api_router.include_router(regression_ci_router, tags=["regression-ci"])  # Wedge 1 — Pre-deploy Replay CI Gate
+api_router.include_router(runtime_policy_router, tags=["runtime-policy"])  # Phase 9 pre-action policy gate
 api_router.include_router(pilot_router, tags=["pilot"])  # Pilot tier (Module 4.3)
 api_router.include_router(intel_router, tags=["intel"])  # Pilot tier (Module 4.6)
 api_router.include_router(detectors_router, tags=["detectors"])

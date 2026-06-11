@@ -92,6 +92,25 @@ func TestEnqueueRejectsOversizedEvent(t *testing.T) {
 	}
 }
 
+func TestEnqueueRejectsWhenSpoolWouldExceedBound(t *testing.T) {
+	sp, err := New(Options{Dir: t.TempDir(), MaxBytes: 700, Logger: zerolog.Nop()})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	first := &emit.IngestEventV2{ProjectID: "proj_1", Provider: "openai", Model: "gpt-4o-mini", RequestBody: map[string]interface{}{"p": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
+	if err := sp.Enqueue(first); err != nil {
+		t.Fatalf("first enqueue returned error: %v", err)
+	}
+	second := &emit.IngestEventV2{ProjectID: "proj_1", Provider: "openai", Model: "gpt-4o-mini", RequestBody: map[string]interface{}{"p": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}
+	if err := sp.Enqueue(second); err == nil {
+		t.Fatal("expected full spool error")
+	}
+	if sp.Status().Backlog != 1 {
+		t.Fatal("full spool must not trim the existing event")
+	}
+}
+
 func TestFlushLoopUsesDefaultInterval(t *testing.T) {
 	sp, err := New(Options{Dir: t.TempDir(), MaxBytes: 1024 * 1024, Logger: zerolog.Nop()})
 	if err != nil {

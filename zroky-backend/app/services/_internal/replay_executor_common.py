@@ -69,11 +69,13 @@ from app.services.judge_engine import (
 )
 from app.services.replay_runs import (
     REAL_COMPARISON_REPLAY_MODES,
+    REPLAY_MODE_FROZEN_RAG,
     REPLAY_MODE_LIVE_SANDBOX,
     REPLAY_MODE_MOCKED_TOOL,
     REPLAY_MODE_REAL_LLM,
     REPLAY_MODE_SHADOW,
     REPLAY_MODE_STUB,
+    normalize_replay_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,10 +92,12 @@ _RUN_PENDING = "pending"
 _RUN_RUNNING = "running"
 _RUN_PASS = "pass"
 _RUN_FAIL = "fail"
+_RUN_NOT_VERIFIED = "not_verified"
 _RUN_ERROR = "error"
 
 _TRACE_PASS = "pass"
 _TRACE_FAIL = "fail"
+_TRACE_NOT_VERIFIED = "not_verified"
 _TRACE_ERROR = "error"
 
 
