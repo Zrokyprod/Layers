@@ -26,6 +26,7 @@ in a follow-up cleanup once the dashboard migrates off `/plans` and
 import logging
 import hashlib
 import hmac
+import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
@@ -53,13 +54,19 @@ from app.api.dependencies.tenant import require_tenant_id, require_tenant_role
 from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import (
+    BillingEvent,
     Call,
+    GoldenSet,
+    GoldenTrace,
     Subscription,
     SubscriptionPlan,
     TenantSubscription,
 )
 from app.db.session import get_db_session
 from app.schemas.billing import (
+    BillingMeteringHealthResponse,
+    BillingUsageMeter,
+    BillingUsageResponse,
     BillingUsageSummaryResponse,
     SubscriptionPlanListResponse,
     SubscriptionPlanResponse,
@@ -74,9 +81,11 @@ from app.services.billing_plans import (
     assert_self_serve_plan,
 )
 from app.services.billing_quota import get_usage as _quota_get_usage
+from app.services.billing_metering import get_metering_health
 from app.services.entitlement_catalog import load_pricing_contract
 from app.services import entitlements_resolver
 from app.services.entitlements import seed_plan_entitlements
+from app.services.replay_runs import check_replay_monthly_quota
 from app.services.skydo_gateway import (
     BillingWebhookSignatureError,
     SkydoError,
@@ -566,6 +575,59 @@ class BillingMeResponse(BaseModel):
     )
 
 
+def _usage_meter(*, used: int, limit: int | None, resets_at: str | None = None) -> BillingUsageMeter:
+    if limit is None or limit < 0:
+        return BillingUsageMeter(
+            used=used,
+            limit=None,
+            unlimited=True,
+            overage=None,
+            state="ok",
+            resets_at=resets_at,
+        )
+    overage = max(0, used - limit)
+    if limit <= 0:
+        state = "blocked" if used == 0 else "exceeded"
+    elif used >= limit:
+        state = "exceeded"
+    elif used / limit >= 0.8:
+        state = "near_limit"
+    else:
+        state = "ok"
+    return BillingUsageMeter(
+        used=used,
+        limit=limit,
+        unlimited=False,
+        overage=overage or None,
+        state=state,
+        resets_at=resets_at,
+    )
+
+
+def _month_bounds() -> tuple[datetime, datetime, str]:
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+    return start, end, start.strftime("%Y-%m")
+
+
+def _resolved_int_entitlement(
+    db: Session,
+    org_id: str,
+    key: str,
+    *,
+    default: int = 0,
+) -> int:
+    try:
+        raw = entitlements_resolver.get(db, org_id, key, default=default)
+        return int(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
 # ── routes ───────────────────────────────────────────────────────────────────
 
 
@@ -801,6 +863,35 @@ def verify_razorpay_payment(
     sub.payment_provider = "razorpay"
     sub.payment_request_ref = body.razorpay_order_id
     sub.payment_subscription_ref = body.razorpay_payment_id
+    existing_event = db.execute(
+        select(BillingEvent).where(
+            BillingEvent.provider == "razorpay",
+            BillingEvent.provider_event_id == f"razorpay_verify:{body.razorpay_payment_id}",
+        )
+    ).scalar_one_or_none()
+    if existing_event is None:
+        db.add(
+            BillingEvent(
+                provider="razorpay",
+                provider_event_id=f"razorpay_verify:{body.razorpay_payment_id}",
+                event_type="payment.succeeded",
+                provider_created_at=datetime.now(timezone.utc),
+                processed_at=datetime.now(timezone.utc),
+                result="applied",
+                affected_org_id=org_id,
+                payload_json=json.dumps(
+                    {
+                        "provider": "razorpay",
+                        "payment_id": body.razorpay_payment_id,
+                        "order_id": body.razorpay_order_id,
+                        "plan_code": plan_norm,
+                        "org_id": org_id,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            )
+        )
     db.add(sub)
     db.commit()
     entitlements_resolver.invalidate(org_id)
@@ -959,4 +1050,81 @@ def get_billing_me(
         trial_end=sub.trial_end.isoformat() if sub.trial_end else None,
         sla_tier=sub.sla_tier,
         plan_template=template,
+    )
+
+
+@router.get("/usage", response_model=BillingUsageResponse)
+@limiter.limit("60/minute")
+def get_billing_usage(
+    request: Request,
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> BillingUsageResponse:
+    """Return hosted billing usage from current org-scoped meters."""
+    org_id = _resolve_org_id(tenant_id)
+    sub = _get_or_create_org_subscription(db, org_id=org_id)
+    period_start, period_end, period_month = _month_bounds()
+    quota_usage = _quota_get_usage(db, tenant_id)
+    replay_quota = check_replay_monthly_quota(db, tenant_id)
+
+    golden_trace_used = int(
+        db.execute(
+            select(func.count(GoldenTrace.id)).where(
+                GoldenTrace.project_id == tenant_id,
+                GoldenTrace.status == "active",
+            )
+        ).scalar_one()
+        or 0
+    )
+    golden_set_used = int(
+        db.execute(
+            select(func.count(GoldenSet.id)).where(GoldenSet.project_id == tenant_id)
+        ).scalar_one()
+        or 0
+    )
+    golden_trace_limit = _resolved_int_entitlement(
+        db, org_id, "max_golden_traces", default=0
+    )
+    golden_set_limit = _resolved_int_entitlement(
+        db, org_id, "goldens.max_sets", default=0
+    )
+    metering = get_metering_health(db, tenant_id)
+
+    return BillingUsageResponse(
+        tenant_id=tenant_id,
+        org_id=org_id,
+        period_month=period_month,
+        period_start=period_start,
+        period_end=period_end,
+        plan_code=quota_usage.plan_slug or sub.plan_code,
+        plan_name=quota_usage.plan_name,
+        subscription_status=sub.status,
+        calls=_usage_meter(
+            used=quota_usage.current_count,
+            limit=quota_usage.plan_limit_calls,
+            resets_at=period_end.date().isoformat(),
+        ),
+        replay=_usage_meter(
+            used=replay_quota.used,
+            limit=replay_quota.limit,
+            resets_at=replay_quota.resets_at,
+        ),
+        goldens=_usage_meter(
+            used=golden_trace_used,
+            limit=golden_trace_limit,
+            resets_at=None,
+        ),
+        golden_sets=_usage_meter(
+            used=golden_set_used,
+            limit=golden_set_limit,
+            resets_at=None,
+        ),
+        metering_health=BillingMeteringHealthResponse(
+            state=metering.state,
+            failure_count=metering.failure_count,
+            last_failure_at=metering.last_failure_at,
+            last_failure_type=metering.last_failure_type,
+            failure_policy=metering.failure_policy,
+            detail=metering.detail,
+        ),
     )

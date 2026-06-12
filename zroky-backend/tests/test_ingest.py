@@ -270,6 +270,25 @@ def test_sdk_0_1_x_payload_is_accepted_on_api_v1_ingest_path(client: TestClient)
     assert call_payload["call"]["model"] == "gpt-4o"
 
 
+def test_ingest_metering_counts_unique_events_once(client: TestClient) -> None:
+    headers = {"X-Project-Id": "proj-ingest-metering"}
+    event = _event("ingest-metering-call-1")
+
+    first = client.post("/api/v1/ingest", headers=headers, json={"events": [event]})
+    second = client.post("/api/v1/ingest", headers=headers, json={"events": [event]})
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["accepted"] == 1
+    assert first.json()["metered"] == 1
+    assert second.json()["duplicates"] == 1
+    assert second.json()["metered"] == 0
+
+    usage = client.get("/v1/billing/usage", headers=headers)
+    assert usage.status_code == 200
+    assert usage.json()["calls"]["used"] == 1
+
+
 def test_sdk_0_1_x_payload_is_accepted_on_v1_ingest_path(client: TestClient) -> None:
     headers = {"X-Project-Id": "proj-sdk-compat-v1"}
     response = client.post(

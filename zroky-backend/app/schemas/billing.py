@@ -111,3 +111,37 @@ class BillingUsageSummaryResponse(BaseModel):
     plan_limit_tokens: int | None = None
     overage_calls: int | None = None
     overage_tokens: int | None = None
+
+
+class BillingUsageMeter(BaseModel):
+    used: int
+    limit: int | None = None
+    unlimited: bool = False
+    overage: int | None = None
+    state: str
+    resets_at: str | None = None
+
+
+class BillingMeteringHealthResponse(BaseModel):
+    state: str
+    failure_count: int = 0
+    last_failure_at: datetime | None = None
+    last_failure_type: str | None = None
+    failure_policy: str
+    detail: str | None = None
+
+
+class BillingUsageResponse(BaseModel):
+    tenant_id: str
+    org_id: str
+    period_month: str
+    period_start: datetime
+    period_end: datetime
+    plan_code: str | None = None
+    plan_name: str | None = None
+    subscription_status: str | None = None
+    calls: BillingUsageMeter
+    replay: BillingUsageMeter
+    goldens: BillingUsageMeter
+    golden_sets: BillingUsageMeter
+    metering_health: BillingMeteringHealthResponse

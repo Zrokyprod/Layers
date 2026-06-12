@@ -179,6 +179,7 @@ class Settings(BaseSettings):
     # max_calls_per_month.  Disable during trials / grace periods via this flag
     # or the per-project feature flag `billing_quota_enforcement`.
     BILLING_ENFORCE_QUOTA: bool = False
+    BILLING_QUOTA_FAILURE_POLICY: str = "strict"  # strict | alert_only
 
     # Connection pool sizing (Postgres only â€” SQLite uses default StaticPool).
     DB_POOL_SIZE: int = 10
@@ -543,6 +544,8 @@ def validate_runtime_settings(settings: Settings) -> None:
 
     if not settings.BILLING_ENFORCE_QUOTA:
         failures.append("BILLING_ENFORCE_QUOTA must be true in production")
+    if str(settings.BILLING_QUOTA_FAILURE_POLICY).strip().lower() != "strict":
+        failures.append("BILLING_QUOTA_FAILURE_POLICY must be strict in production")
 
     if not settings.REPLAY_REAL_LLM_ENABLED:
         failures.append("REPLAY_REAL_LLM_ENABLED must be true in production")

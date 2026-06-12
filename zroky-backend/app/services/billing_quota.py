@@ -21,6 +21,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import EventCount
+from app.services.billing_metering import (
+    quota_failure_policy,
+    record_metering_failure,
+)
 from app.services import entitlements_resolver
 
 logger = logging.getLogger(__name__)
@@ -55,8 +59,8 @@ class UsageSummary:
 def check_quota(db: Session, tenant_id: str) -> QuotaDecision:
     """Fast quota check — reads event_counts ledger (one index seek).
 
-    Returns QuotaDecision(allowed=True) on any error so a DB hiccup
-    never accidentally blocks ingest.
+    Resolver/check errors fail closed by default so quota bypasses cannot
+    happen silently. Local/dev may set BILLING_QUOTA_FAILURE_POLICY=alert_only.
     """
     try:
         month = datetime.now(timezone.utc).strftime("%Y-%m")
@@ -89,9 +93,24 @@ def check_quota(db: Session, tenant_id: str) -> QuotaDecision:
             reason="within_quota",
         )
     except Exception as exc:
-        logger.warning("billing_quota.check_quota failed (allowing): %s", exc)
+        logger.exception("billing_quota.check_quota failed tenant=%s", tenant_id)
+        record_metering_failure(
+            db,
+            tenant_id,
+            failure_type="quota_check_failed",
+            source="billing_quota",
+            error=exc,
+        )
+        if quota_failure_policy() == "alert_only":
+            return QuotaDecision(
+                allowed=True,
+                current_count=0,
+                plan_limit=None,
+                overage=None,
+                reason="check_error_alert_only",
+            )
         return QuotaDecision(
-            allowed=True,
+            allowed=False,
             current_count=0,
             plan_limit=None,
             overage=None,

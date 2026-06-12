@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_role
-from app.db.models import Call, DiagnosisJob, EventCount, ProjectAlert, ProjectDashboardConfig
+from app.db.models import Call, DiagnosisJob, ProjectAlert, ProjectDashboardConfig
 from app.db.session import get_db_session
 from app.observability.metrics import record_diagnosis_job
 from app.schemas.ingest import IngestBatchRequest, IngestBatchResponse
@@ -17,6 +17,7 @@ from app.services.currency import BASE_CURRENCY, TOKEN_UNIT, resolve_ingest_exch
 from app.services.cost_buckets import enrich_payload_with_cost_buckets
 from app.core.config import get_settings
 from app.core.limiter import limiter
+from app.services.billing_metering import increment_event_count
 from app.services.billing_quota import check_quota
 from app.services.ingest_protection import IngestRateLimitDecision, evaluate_ingest_rate_limit
 from app.services.loop_signals import output_signal, summarize_tool_lifecycle, normalize_retry_metadata
@@ -661,32 +662,6 @@ def _enqueue_diagnosis_job(job: DiagnosisJob) -> None:
     process_diagnosis.delay(job.tenant_id, job.diagnosis_id, None if job.call_id else {})
 
 
-def _increment_event_count(db: Session, tenant_id: str) -> None:
-    """Best-effort increment of the per-tenant monthly event counter."""
-    try:
-        month = datetime.now(timezone.utc).strftime("%Y-%m")
-        now = datetime.now(timezone.utc)
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-        from app.db.models import EventCount as _EC
-        from uuid import uuid4 as _uuid4
-        stmt = (
-            pg_insert(_EC)
-            .values(id=str(_uuid4()), tenant_id=tenant_id, month=month, event_count=1, last_event_at=now)
-            .on_conflict_do_update(
-                constraint="ux_event_counts_tenant_month",
-                set_={"event_count": _EC.event_count + 1, "last_event_at": now},
-            )
-        )
-        db.execute(stmt)
-        db.commit()
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        logger.debug("event_count_increment_failed", exc_info=True)
-
-
 def _retry_enqueue_for_existing_call(*, db: Session, tenant_id: str, call: Call) -> str:
     job = _find_job_for_call(db=db, tenant_id=tenant_id, call=call)
     if job is None:
@@ -859,6 +834,15 @@ def process_ingest_batch_for_tenant(
     if enforce_quota and settings.BILLING_ENFORCE_QUOTA:
         quota = check_quota(db, tenant_id)
         if not quota.allowed:
+            if quota.reason == "check_error":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        "Billing quota metering is unavailable, so production ingest "
+                        "is paused instead of silently bypassing paid-plan limits."
+                    ),
+                    headers={"X-Quota-Policy": "strict"},
+                )
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=(
@@ -873,6 +857,9 @@ def process_ingest_batch_for_tenant(
     queued = 0
     duplicates = 0
     enqueue_failed = 0
+    metered = 0
+    metering_failed = 0
+    metering_warnings: list[str] = []
     custom_pii_patterns = _project_pii_patterns(db, tenant_id)
 
     for event in body.events:
@@ -994,7 +981,6 @@ def process_ingest_batch_for_tenant(
             queued += 1
             record_diagnosis_job("queued")
             _set_redis_idempotency(idempotency_key)
-            _increment_event_count(db, tenant_id)
         except Exception as exc:
             logger.exception("Failed to enqueue ingest diagnosis task")
             job.error_message = mask_error_message(exc)
@@ -1007,11 +993,21 @@ def process_ingest_batch_for_tenant(
             enqueue_failed += 1
             record_diagnosis_job("enqueue_failed")
 
+        if increment_event_count(db, tenant_id):
+            metered += 1
+        else:
+            metering_failed += 1
+            if "event_counter_increment_failed" not in metering_warnings:
+                metering_warnings.append("event_counter_increment_failed")
+
     return IngestBatchResponse(
         accepted=accepted,
         queued=queued,
         duplicates=duplicates,
         enqueue_failed=enqueue_failed,
+        metered=metered,
+        metering_failed=metering_failed,
+        metering_warnings=metering_warnings,
     )
 
 

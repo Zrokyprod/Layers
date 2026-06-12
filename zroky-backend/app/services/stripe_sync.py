@@ -42,7 +42,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -64,6 +64,7 @@ from app.services.entitlements import (
 )
 
 logger = logging.getLogger(__name__)
+_STALE_EVENT_CLOCK_SKEW = timedelta(seconds=10)
 
 
 # ── handled vocab ───────────────────────────────────────────────────────────
@@ -210,9 +211,13 @@ def _is_stale_event(
     """
     if event_created_at is None or sub.updated_at is None:
         return False
+    if not sub.stripe_sub_id and sub.status == "incomplete":
+        return False
     # Only block clearly older events. Same-second is allowed (Stripe
-    # can emit two events with identical `created` for related ops).
-    return event_created_at < sub.updated_at
+    # can emit two events with identical `created` for related ops), and
+    # Stripe timestamps are second-granularity while local DB timestamps
+    # may be slightly later due to processing latency.
+    return event_created_at < (sub.updated_at - _STALE_EVENT_CLOCK_SKEW)
 
 
 # ── per-event handlers ──────────────────────────────────────────────────────

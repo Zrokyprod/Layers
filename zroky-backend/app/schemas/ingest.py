@@ -92,3 +92,6 @@ class IngestBatchResponse(BaseModel):
     queued: int
     duplicates: int
     enqueue_failed: int
+    metered: int = 0
+    metering_failed: int = 0
+    metering_warnings: list[str] = Field(default_factory=list)

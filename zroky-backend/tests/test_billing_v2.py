@@ -33,8 +33,13 @@ from app.api.dependencies.tenant import (
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import (
+    BillingEvent,
     Entitlement,
     EventCount,
+    GoldenSet,
+    GoldenTrace,
+    ProjectAlert,
+    ReplayRun,
     StripeEvent,
     Subscription,
 )
@@ -64,6 +69,7 @@ from app.services.entitlements import (
     upsert_entitlement,
 )
 from app.services.billing_quota import check_quota
+from app.services.billing_metering import increment_event_count
 from app.services.stripe_gateway import (
     LiveStripeGateway,
     StubStripeGateway,
@@ -969,6 +975,15 @@ class TestRazorpayCheckoutRoute:
             assert sub.plan_code == "pilot"
             assert sub.status == "active"
             assert sub.current_period_end is not None
+            event = session.execute(
+                select(BillingEvent).where(
+                    BillingEvent.provider == "razorpay",
+                    BillingEvent.provider_event_id == f"razorpay_verify:{payment_id}",
+                )
+            ).scalar_one()
+            assert event.event_type == "payment.succeeded"
+            assert event.result == "applied"
+            assert event.affected_org_id == "org-alpha"
 
     def test_verify_payment_rejects_bad_signature_without_marking_paid(
         self,
@@ -1072,6 +1087,135 @@ class TestBillingQuota:
         assert decision.allowed is False
         assert decision.plan_limit == PLAN_ENTITLEMENTS["free"]["events.monthly_quota"]
         assert decision.reason == "monthly_quota_exceeded"
+
+    def test_strict_quota_check_failure_denies_and_alerts(
+        self,
+        db_session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("BILLING_QUOTA_FAILURE_POLICY", "strict")
+        get_settings.cache_clear()
+        monkeypatch.setattr(
+            "app.services.billing_quota._current_month_count",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("meter down")),
+        )
+
+        decision = check_quota(db_session, "org-meter-strict")
+
+        assert decision.allowed is False
+        assert decision.reason == "check_error"
+        alert = db_session.execute(
+            select(ProjectAlert).where(
+                ProjectAlert.tenant_id == "org-meter-strict",
+                ProjectAlert.category == "BILLING_METERING_FAILURE",
+            )
+        ).scalar_one()
+        assert alert.status == "OPEN"
+        assert "quota_check_failed" in (alert.evidence_json or "")
+
+    def test_alert_only_quota_failure_allows_but_records_alert(
+        self,
+        db_session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("BILLING_QUOTA_FAILURE_POLICY", "alert_only")
+        get_settings.cache_clear()
+        monkeypatch.setattr(
+            "app.services.billing_quota._plan_call_limit",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("resolver down")),
+        )
+
+        decision = check_quota(db_session, "org-meter-alert-only")
+
+        assert decision.allowed is True
+        assert decision.reason == "check_error_alert_only"
+        alert = db_session.execute(
+            select(ProjectAlert).where(
+                ProjectAlert.tenant_id == "org-meter-alert-only",
+                ProjectAlert.category == "BILLING_METERING_FAILURE",
+            )
+        ).scalar_one()
+        assert alert.status == "OPEN"
+
+    def test_event_counter_increment_is_portable_and_accumulates_once(
+        self,
+        db_session,
+    ) -> None:
+        assert increment_event_count(db_session, "org-meter-count") is True
+        assert increment_event_count(db_session, "org-meter-count") is True
+
+        row = db_session.execute(
+            select(EventCount).where(EventCount.tenant_id == "org-meter-count")
+        ).scalar_one()
+        assert row.event_count == 2
+
+    def test_hosted_usage_endpoint_returns_calls_replay_goldens_and_metering(
+        self,
+        client: TestClient,
+    ) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        now = datetime.now(timezone.utc)
+        with factory() as session:
+            session.add(
+                Subscription(
+                    org_id="org-alpha",
+                    plan_code="pro",
+                    status="active",
+                    payment_provider="skydo",
+                    payment_subscription_ref="skydo_pay_usage",
+                )
+            )
+            seed_plan_entitlements(session, org_id="org-alpha", plan_code="pro")
+            session.add(
+                EventCount(
+                    tenant_id="org-alpha",
+                    month=now.strftime("%Y-%m"),
+                    event_count=123,
+                    last_event_at=now,
+                )
+            )
+            session.add(
+                GoldenSet(
+                    id="gs_usage",
+                    project_id="org-alpha",
+                    name="Usage Goldens",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add(
+                GoldenTrace(
+                    id="gt_usage",
+                    golden_set_id="gs_usage",
+                    project_id="org-alpha",
+                    status="active",
+                    expected_output_text="ok",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add(
+                ReplayRun(
+                    id="rr_usage",
+                    project_id="org-alpha",
+                    golden_set_id="gs_usage",
+                    trigger="manual",
+                    status="pass",
+                    created_at=now,
+                )
+            )
+            session.commit()
+
+        response = client.get("/v1/billing/usage")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["org_id"] == "org-alpha"
+        assert body["calls"]["used"] == 123
+        assert body["calls"]["limit"] == PLAN_ENTITLEMENTS["pro"]["events.monthly_quota"]
+        assert body["replay"]["used"] == 1
+        assert body["goldens"]["used"] == 1
+        assert body["metering_health"]["state"] == "ok"
 
 
 class TestWebhookRoute:
