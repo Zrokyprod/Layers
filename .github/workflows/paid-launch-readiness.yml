@@ -2,9 +2,9 @@ name: Paid Launch Readiness
 
 on:
   pull_request:
-    branches: ["main", "develop"]
+    branches: ["main", "develop", "codex/stabilize-dirty-tree"]
   push:
-    branches: ["main", "develop"]
+    branches: ["main", "develop", "codex/stabilize-dirty-tree"]
   workflow_dispatch:
 
 concurrency:

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "zroky"
 version = "0.1.0"
 description = "ZROKY Python SDK — production AI diagnosis and observability"
-readme = "README.md"
+readme = { text = "Zroky Python SDK capture client for the Agent Reliability Control Plane.", content-type = "text/markdown" }
 requires-python = ">=3.10"
 license = { text = "FSL-1.1-MIT" }
 keywords = ["ai", "observability", "diagnosis", "openai", "anthropic"]
