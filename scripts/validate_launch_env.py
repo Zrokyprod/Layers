@@ -146,6 +146,21 @@ def require_value(
             findings.append(f"INVALID {key} line={item.line}: {problem}")
 
 
+def require_prefix(
+    findings: list[str],
+    values: dict[str, list[EnvValue]],
+    key: str,
+    prefix: str,
+) -> None:
+    item = latest(values, key)
+    if item is None or not item.value:
+        return
+    if is_placeholder(item.value) and not item.value.startswith("rzp_test_"):
+        return
+    if not item.value.startswith(prefix):
+        findings.append(f"INVALID {key} line={item.line}: expected prefix {prefix}")
+
+
 def require_one_secret(
     findings: list[str],
     values: dict[str, list[EnvValue]],
@@ -201,6 +216,7 @@ def validate_backend(values: dict[str, list[EnvValue]]) -> list[str]:
     require_value(findings, values, "ENABLE_READY_DB_CHECK", bool_true=True)
     require_value(findings, values, "ENABLE_READY_REDIS_CHECK", bool_true=True)
     require_value(findings, values, "BILLING_ENFORCE_QUOTA", bool_true=True)
+    require_value(findings, values, "BILLING_QUOTA_FAILURE_POLICY", exact="strict")
     require_value(findings, values, "REPLAY_REAL_LLM_ENABLED", bool_true=True)
 
     for rule in (
@@ -230,8 +246,13 @@ def validate_backend(values: dict[str, list[EnvValue]]) -> list[str]:
         if provider != "razorpay":
             findings.append("INVALID BILLING_PROVIDER expected=razorpay")
         require_value(findings, values, "RAZORPAY_KEY_ID", min_length=8)
+        require_prefix(findings, values, "RAZORPAY_KEY_ID", "rzp_live_")
         require_value(findings, values, "RAZORPAY_KEY_SECRET", min_length=16)
         require_value(findings, values, "RAZORPAY_WEBHOOK_SECRET", min_length=16)
+        require_value(findings, values, "RAZORPAY_DASHBOARD_URL", url=True)
+        require_value(findings, values, "BILLING_CHECKOUT_SUCCESS_URL", url=True)
+        require_value(findings, values, "BILLING_CHECKOUT_CANCEL_URL", url=True)
+        require_value(findings, values, "BILLING_PORTAL_RETURN_URL", url=True)
 
     return findings
 
@@ -268,6 +289,10 @@ def validate_gateway(values: dict[str, list[EnvValue]]) -> list[str]:
     require_value(findings, values, "ZROKY_GATEWAY_API_KEY", min_length=16)
     require_value(findings, values, "ZROKY_GATEWAY_AUTH_TOKEN", min_length=16)
     require_value(findings, values, "ZROKY_ALLOWED_PROJECT_IDS")
+    require_value(findings, values, "ZROKY_SPOOL_DIR")
+    require_value(findings, values, "ZROKY_SPOOL_MAX_BYTES")
+    require_value(findings, values, "ZROKY_SPOOL_FLUSH_INTERVAL_MS")
+    require_value(findings, values, "ZROKY_CAPTURE_DURABILITY_MODE", exact="fail_closed")
     return findings
 
 
@@ -276,7 +301,7 @@ def validate_replay_worker(values: dict[str, list[EnvValue]]) -> list[str]:
     require_value(findings, values, "CONTROL_PLANE_URL", url=True)
     require_value(findings, values, "WORKER_TOKEN", min_length=16)
     require_value(findings, values, "ARTIFACT_SIGNING_KEY", min_length=16)
-    require_value(findings, values, "OPENROUTER_API_KEY", min_length=16)
+    require_value(findings, values, "ARTIFACT_SIGNATURE_REQUIRED", bool_true=True)
     return findings
 
 
@@ -383,7 +408,7 @@ def main() -> int:
     if all_findings:
         print(f"\nlaunch env validation failed: {len(all_findings)} finding(s)")
         if "backend" in selected_roles:
-            print("backend checklist: docs/backend-production-env-checklist.md")
+            print("backend checklist: README.md final paid launch gate")
         return 1
     print("\nlaunch env validation passed")
     return 0

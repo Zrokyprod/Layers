@@ -226,10 +226,8 @@ class Settings(BaseSettings):
     # re-wrap rotation can find rows still encrypted under the previous KEK.
     PROVIDER_KEY_VAULT_KEY_ID: str = "local-dev-kek-v1"
 
-    # â”€â”€ Stripe billing (Module 5; plan Â§11.3 / migration 0054 + 0059) â”€â”€â”€â”€â”€
-    # Master switch. When false the /v1/billing/{checkout,portal,webhook}
-    # endpoints all return 503. Self-host (`ZROKY_TIER=self-host`) sets this
-    # false.
+    # Hosted billing uses Razorpay. When disabled, paid checkout/verification
+    # endpoints return 503; self-host profiles keep billing disabled by default.
     BILLING_ENABLED: bool = False
     BILLING_PROVIDER: str = "razorpay"
     RAZORPAY_KEY_ID: Optional[str] = None
@@ -591,10 +589,12 @@ def validate_runtime_settings(settings: Settings) -> None:
     if settings.BILLING_ENABLED:
         if (settings.BILLING_PROVIDER or "").strip().lower() != "razorpay":
             failures.append("BILLING_PROVIDER must be razorpay in production")
-        require_secret(
+        razorpay_key_id = require_secret(
             "RAZORPAY_KEY_ID",
             "RAZORPAY_KEY_ID must be configured when Razorpay billing is enabled in production",
         )
+        if razorpay_key_id and not razorpay_key_id.startswith("rzp_live_"):
+            failures.append("RAZORPAY_KEY_ID must use a live Razorpay key prefix rzp_live_ in production")
         require_secret(
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_KEY_SECRET must be configured when Razorpay billing is enabled in production",
@@ -603,6 +603,17 @@ def validate_runtime_settings(settings: Settings) -> None:
             "RAZORPAY_WEBHOOK_SECRET",
             "RAZORPAY_WEBHOOK_SECRET must be configured when Razorpay billing is enabled in production",
         )
+        for name in (
+            "RAZORPAY_DASHBOARD_URL",
+            "BILLING_CHECKOUT_SUCCESS_URL",
+            "BILLING_CHECKOUT_CANCEL_URL",
+            "BILLING_PORTAL_RETURN_URL",
+        ):
+            value = (getattr(settings, name, "") or "").strip()
+            if not value:
+                failures.append(f"{name} must be configured when Razorpay billing is enabled in production")
+            elif _is_local_url(value):
+                failures.append(f"{name} must point to a production URL when Razorpay billing is enabled")
 
     slack_configured = any(
         (value or "").strip()

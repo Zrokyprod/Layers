@@ -107,7 +107,9 @@ jobs:
             tests: tests/test_owner_money_path_health.py
           - id: production-config
             name: production config
-            tests: tests/test_production_config.py
+            tests: >-
+              tests/test_production_config.py
+              tests/test_launch_env_validator.py
 
     steps:
       - uses: actions/checkout@v4

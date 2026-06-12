@@ -424,6 +424,12 @@ Run the deterministic release-candidate evidence pack:
 python scripts/run_money_path_demo.py --json
 ```
 
+Validate filled production environment files before real launch:
+
+```bash
+python scripts/validate_launch_env.py --roles backend,dashboard,admin,gateway,replay-worker --require backend,dashboard,admin,gateway,replay-worker
+```
+
 GitHub paid-launch readiness is checked by:
 
 ```text

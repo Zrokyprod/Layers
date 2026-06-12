@@ -98,7 +98,10 @@ Invoke-BackendPytestStep -Name "billing and quota" -TestPaths @(
   "tests/test_billing_v2.py::TestInvariants::test_plan_codes_match_tier_matrix"
 )
 Invoke-BackendPytestStep -Name "owner launch health" -TestPaths @("tests/test_owner_money_path_health.py")
-Invoke-BackendPytestStep -Name "production config" -TestPaths @("tests/test_production_config.py")
+Invoke-BackendPytestStep -Name "production config" -TestPaths @(
+  "tests/test_production_config.py",
+  "tests/test_launch_env_validator.py"
+)
 
 Invoke-ReadinessStep `
   -Name "Release-candidate money-path evidence" `

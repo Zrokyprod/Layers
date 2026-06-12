@@ -30,6 +30,9 @@ def _hardened_production_settings(**overrides: object) -> Settings:
         "RAZORPAY_KEY_ID": "rzp_live_real_key",
         "RAZORPAY_KEY_SECRET": "razorpay-live-secret-with-enough-length",
         "RAZORPAY_WEBHOOK_SECRET": "razorpay-webhook-secret-with-enough-length",
+        "BILLING_CHECKOUT_SUCCESS_URL": "https://app.zroky.com/settings/billing?checkout=success",
+        "BILLING_CHECKOUT_CANCEL_URL": "https://app.zroky.com/settings/billing?checkout=cancel",
+        "BILLING_PORTAL_RETURN_URL": "https://app.zroky.com/settings/billing",
         "JWT_JWKS_URL": None,
         "JWT_SIGNING_KEY": None,
     }
@@ -178,6 +181,22 @@ def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
     )
 
     validate_runtime_settings(settings)
+
+
+def test_production_config_rejects_razorpay_test_key_and_local_checkout_urls() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="razorpay",
+        RAZORPAY_KEY_ID="rzp_test_not_for_paid_launch",
+        BILLING_CHECKOUT_SUCCESS_URL="http://localhost:3000/settings/billing?checkout=success",
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "RAZORPAY_KEY_ID must use a live Razorpay key prefix rzp_live_" in error_text
+    assert "BILLING_CHECKOUT_SUCCESS_URL" in error_text
 
 
 def test_production_config_rejects_enabled_metrics_without_token() -> None:
