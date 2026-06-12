@@ -132,7 +132,7 @@ def test_owner_billing_accounts_include_stripe_links(client, monkeypatch: pytest
     assert row["stripe_subscription_url"].endswith("/subscriptions/sub_123")
 
 
-def test_owner_confirms_skydo_payment_and_seeds_entitlements(client, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_owner_confirms_razorpay_payment_and_seeds_entitlements(client, monkeypatch: pytest.MonkeyPatch) -> None:
     test_client, session_factory = client
     owner_headers = _set_owner_auth(monkeypatch)
     period_end = datetime.now(UTC) + timedelta(days=30)
@@ -141,11 +141,11 @@ def test_owner_confirms_skydo_payment_and_seeds_entitlements(client, monkeypatch
         "/v1/owner/billing/payments/confirm",
         headers=owner_headers,
         json={
-            "org_id": "org_skydo",
+            "org_id": "org_razorpay",
             "plan_code": "pro",
-            "payment_ref": "skydo_pay_123",
+            "payment_ref": "rzp_pay_123",
             "customer_ref": "billing@example.com",
-            "payment_request_ref": "skydo_req_123",
+            "payment_request_ref": "rzp_order_123",
             "current_period_end": period_end.isoformat(),
             "seats": 10,
         },
@@ -154,20 +154,20 @@ def test_owner_confirms_skydo_payment_and_seeds_entitlements(client, monkeypatch
     assert res.status_code == 200
     payload = res.json()
     assert payload["ok"] is True
-    assert payload["org_id"] == "org_skydo"
+    assert payload["org_id"] == "org_razorpay"
     assert payload["plan_code"] == "pro"
-    assert payload["payment_provider"] == "skydo"
-    assert payload["payment_subscription_ref"] == "skydo_pay_123"
+    assert payload["payment_provider"] == "razorpay"
+    assert payload["payment_subscription_ref"] == "rzp_pay_123"
 
     with session_factory() as db:
-        sub = db.scalar(select(Subscription).where(Subscription.org_id == "org_skydo"))
+        sub = db.scalar(select(Subscription).where(Subscription.org_id == "org_razorpay"))
         assert sub is not None
         assert sub.status == "active"
         assert sub.seats == 10
         assert sub.payment_customer_ref == "billing@example.com"
         rows = db.execute(
             select(Entitlement).where(
-                Entitlement.org_id == "org_skydo",
+                Entitlement.org_id == "org_razorpay",
                 Entitlement.source == "plan",
             )
         ).scalars().all()
@@ -177,9 +177,9 @@ def test_owner_confirms_skydo_payment_and_seeds_entitlements(client, monkeypatch
         "/v1/owner/billing/payments/confirm",
         headers=owner_headers,
         json={
-            "org_id": "org_skydo",
+            "org_id": "org_razorpay",
             "plan_code": "pro",
-            "payment_ref": "skydo_pay_123",
+            "payment_ref": "rzp_pay_123",
         },
     )
     assert replay.status_code == 200

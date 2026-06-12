@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -251,7 +251,9 @@ def worker_poll(body: WorkerPollRequest, db: Session = Depends(get_db_session)) 
 
 
 @router.post("/result", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def worker_result(body: WorkerResultPayload, db: Session = Depends(get_db_session)) -> None:
+def worker_result(
+    body: WorkerResultPayload, db: Session = Depends(get_db_session)
+) -> Response:
     settings = get_settings()
     if not settings.REPLAY_WORKER_TOKEN or body.worker_token != settings.REPLAY_WORKER_TOKEN:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid worker token")
@@ -293,3 +295,4 @@ def worker_result(body: WorkerResultPayload, db: Session = Depends(get_db_sessio
 
     db.commit()
     logger.info("replay_result tenant=%s job=%s status=%s", job.tenant_id, replay_id, job.status)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+﻿import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BillingPage from "./page";
@@ -58,7 +58,7 @@ describe("BillingPage", () => {
       plan_code: "free",
       status: "active",
       seats: 1,
-      payment_provider: "skydo",
+      payment_provider: "razorpay",
       payment_customer_ref: null,
       payment_subscription_ref: null,
       payment_request_ref: null,
@@ -120,10 +120,10 @@ describe("BillingPage", () => {
       plan_code: "plus",
       status: "active",
       seats: 3,
-      payment_provider: "skydo",
+      payment_provider: "razorpay",
       payment_customer_ref: "billing@example.com",
-      payment_subscription_ref: "skydo_pay_123",
-      payment_request_ref: "skydo_req_123",
+      payment_subscription_ref: "rzp_pay_123",
+      payment_request_ref: "rzp_order_123",
       stripe_customer_id: "cus_123",
       stripe_sub_id: "sub_123",
       current_period_end: null,

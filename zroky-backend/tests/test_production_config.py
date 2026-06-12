@@ -26,6 +26,10 @@ def _hardened_production_settings(**overrides: object) -> Settings:
         "GITHUB_WEBHOOK_SECRET": "github-webhook-secret",
         "PROVIDER_KEY_VAULT_KEK": "x" * 32,
         "PII_ENCRYPTION_KEY": "x" * 32,
+        "BILLING_PROVIDER": "razorpay",
+        "RAZORPAY_KEY_ID": "rzp_live_real_key",
+        "RAZORPAY_KEY_SECRET": "razorpay-live-secret-with-enough-length",
+        "RAZORPAY_WEBHOOK_SECRET": "razorpay-webhook-secret-with-enough-length",
         "JWT_JWKS_URL": None,
         "JWT_SIGNING_KEY": None,
     }
@@ -111,6 +115,7 @@ def test_production_config_accepts_hardened_jwt_profile() -> None:
         JWT_ISSUER="https://issuer.example.com/",
         JWT_AUDIENCE="zroky-api",
         ENFORCE_JWT_PROJECT_MEMBERSHIP=True,
+        PII_ENCRYPTION_KEY="x" * 32,
     )
 
     validate_runtime_settings(settings)
@@ -132,6 +137,44 @@ def test_production_config_accepts_internal_debug_with_token() -> None:
     settings = _hardened_production_settings(
         ENABLE_INTERNAL_DEBUG_ENDPOINT=True,
         INTERNAL_DEBUG_TOKEN="internal-debug-secret",
+        PII_ENCRYPTION_KEY="x" * 32,
+    )
+
+    validate_runtime_settings(settings)
+
+
+def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> None:
+    settings = Settings(
+        APP_ENV="production",
+        ALLOW_PROJECT_HEADER_CONTEXT=False,
+        REQUIRE_PROVISIONING_TOKEN=True,
+        PROVISIONING_TOKEN="super-secret",
+        ENABLE_READY_DB_CHECK=True,
+        ENABLE_READY_REDIS_CHECK=True,
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="razorpay",
+        RAZORPAY_KEY_ID=None,
+        RAZORPAY_KEY_SECRET=None,
+        RAZORPAY_WEBHOOK_SECRET=None,
+        PII_ENCRYPTION_KEY="x" * 32,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "RAZORPAY_KEY_ID" in error_text
+    assert "RAZORPAY_KEY_SECRET" in error_text
+    assert "RAZORPAY_WEBHOOK_SECRET" in error_text
+
+
+def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
+    settings = _hardened_production_settings(
+        BILLING_ENABLED=True,
+        BILLING_PROVIDER="razorpay",
+        RAZORPAY_KEY_ID="rzp_live_real_key",
+        RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
+        RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-with-enough-length",
     )
 
     validate_runtime_settings(settings)
@@ -232,43 +275,19 @@ def test_production_config_rejects_missing_platform_llm_key() -> None:
     assert "OPENROUTER_API_KEY or OPENAI_API_KEY" in str(exc.value)
 
 
-def test_production_config_rejects_enabled_skydo_billing_without_webhook_secret() -> None:
-    settings = _hardened_production_settings(
-        BILLING_ENABLED=True,
-        BILLING_PROVIDER="skydo",
-        SKYDO_WEBHOOK_SECRET=None,
-    )
-
-    with pytest.raises(RuntimeError) as exc:
-        validate_runtime_settings(settings)
-
-    assert "SKYDO_WEBHOOK_SECRET" in str(exc.value)
-
-
-def test_production_config_accepts_enabled_skydo_billing_with_webhook_secret() -> None:
-    settings = _hardened_production_settings(
-        BILLING_ENABLED=True,
-        BILLING_PROVIDER="skydo",
-        SKYDO_WEBHOOK_SECRET="skydo-webhook-secret",
-    )
-
-    validate_runtime_settings(settings)
-
-
-def test_production_config_rejects_enabled_stripe_billing_without_live_secrets() -> None:
+def test_production_config_rejects_non_razorpay_billing_provider() -> None:
     settings = _hardened_production_settings(
         BILLING_ENABLED=True,
         BILLING_PROVIDER="stripe",
-        STRIPE_API_KEY=None,
-        STRIPE_WEBHOOK_SECRET=None,
+        RAZORPAY_KEY_ID="rzp_live_real_key",
+        RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
+        RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-with-enough-length",
     )
 
     with pytest.raises(RuntimeError) as exc:
         validate_runtime_settings(settings)
 
-    error_text = str(exc.value)
-    assert "STRIPE_API_KEY" in error_text
-    assert "STRIPE_WEBHOOK_SECRET" in error_text
+    assert "BILLING_PROVIDER must be razorpay" in str(exc.value)
 
 
 def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> None:
@@ -277,6 +296,7 @@ def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> No
         BILLING_PROVIDER="razorpay",
         RAZORPAY_KEY_ID=None,
         RAZORPAY_KEY_SECRET=None,
+        RAZORPAY_WEBHOOK_SECRET=None,
     )
 
     with pytest.raises(RuntimeError) as exc:
@@ -285,6 +305,7 @@ def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> No
     error_text = str(exc.value)
     assert "RAZORPAY_KEY_ID" in error_text
     assert "RAZORPAY_KEY_SECRET" in error_text
+    assert "RAZORPAY_WEBHOOK_SECRET" in error_text
 
 
 def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
@@ -293,6 +314,7 @@ def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
         BILLING_PROVIDER="razorpay",
         RAZORPAY_KEY_ID="rzp_live_real_key",
         RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
+        RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-with-enough-length",
     )
 
     validate_runtime_settings(settings)

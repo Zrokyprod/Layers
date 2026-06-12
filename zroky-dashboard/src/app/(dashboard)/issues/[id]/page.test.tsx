@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+﻿import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -174,7 +174,7 @@ function mockDetail(
     plan_code: Object.keys(planTemplate).length === 0 ? "free" : "pilot",
     status: "active",
     seats: 1,
-    payment_provider: "skydo",
+    payment_provider: "razorpay",
     payment_customer_ref: null,
     payment_subscription_ref: null,
     payment_request_ref: null,

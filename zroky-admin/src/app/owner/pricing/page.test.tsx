@@ -18,7 +18,7 @@ vi.mock("@/lib/hooks", () => ({
   useOwnerBillingAccounts: vi.fn(),
   useOwnerMoneyPathHealth: vi.fn(),
   useUpdateOwnerPricing: vi.fn(),
-  useConfirmOwnerSkydoPayment: vi.fn(),
+  useConfirmOwnerRazorpayPayment: vi.fn(),
 }));
 
 const pricingConfig: PricingConfigResponse = {
@@ -100,11 +100,11 @@ const billingAccounts: OwnerBillingAccountsResponse = {
       seats: 5,
       current_period_end: "2026-07-01T00:00:00Z",
       trial_end: null,
-      payment_provider: "skydo",
+      payment_provider: "razorpay",
       payment_customer_ref: "billing@example.com",
-      payment_subscription_ref: "skydo_pay_123",
-      payment_request_ref: "skydo_req_123",
-      payment_dashboard_url: "https://dashboard.skydo.com/",
+      payment_subscription_ref: "rzp_pay_123",
+      payment_request_ref: "rzp_order_123",
+      payment_dashboard_url: "https://dashboard.razorpay.com/",
       stripe_customer_id: "cus_123",
       stripe_sub_id: "sub_123",
       stripe_customer_url: "https://dashboard.stripe.com/customers/cus_123",
@@ -120,11 +120,11 @@ const billingAccounts: OwnerBillingAccountsResponse = {
       seats: 5,
       current_period_end: null,
       trial_end: null,
-      payment_provider: "skydo",
+      payment_provider: "razorpay",
       payment_customer_ref: null,
       payment_subscription_ref: null,
       payment_request_ref: null,
-      payment_dashboard_url: "https://dashboard.skydo.com/",
+      payment_dashboard_url: "https://dashboard.razorpay.com/",
       stripe_customer_id: null,
       stripe_sub_id: null,
       stripe_customer_url: null,
@@ -210,10 +210,10 @@ function mockHooks(moneyPathError: Error | null = null) {
     isPending: false,
     mutateAsync: vi.fn(),
   } as unknown as ReturnType<typeof hooks.useUpdateOwnerPricing>);
-  vi.mocked(hooks.useConfirmOwnerSkydoPayment).mockReturnValue({
+  vi.mocked(hooks.useConfirmOwnerRazorpayPayment).mockReturnValue({
     isPending: false,
     mutateAsync: vi.fn(),
-  } as unknown as ReturnType<typeof hooks.useConfirmOwnerSkydoPayment>);
+  } as unknown as ReturnType<typeof hooks.useConfirmOwnerRazorpayPayment>);
 }
 
 describe("PricingPage", () => {
@@ -228,8 +228,8 @@ describe("PricingPage", () => {
 
     expect(screen.getByText("Revenue & Entitlements")).toBeInTheDocument();
     expect(screen.getByText("Plan Entitlement Matrix")).toBeInTheDocument();
-    expect(screen.getByText("Confirm Skydo Payment")).toBeInTheDocument();
-    expect(screen.getByText("Skydo Billing Accounts")).toBeInTheDocument();
+    expect(screen.getByText("Confirm Razorpay Payment")).toBeInTheDocument();
+    expect(screen.getByText("Razorpay Billing Accounts")).toBeInTheDocument();
     expect(screen.getByText("In sync")).toBeInTheDocument();
     expect(screen.getByText("api-contracts/pricing-plans.json")).toBeInTheDocument();
     expect(screen.getByText("Replay quota")).toBeInTheDocument();

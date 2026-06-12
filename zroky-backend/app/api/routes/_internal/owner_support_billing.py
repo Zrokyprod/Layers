@@ -234,8 +234,8 @@ def owner_billing_accounts(
     def stripe_subscription_url(subscription_id: str | None) -> str | None:
         return f"https://dashboard.stripe.com/subscriptions/{subscription_id}" if subscription_id else None
 
-    def skydo_dashboard_url() -> str | None:
-        url = (get_settings().SKYDO_PORTAL_URL or "").strip()
+    def razorpay_dashboard_url() -> str | None:
+        url = (get_settings().RAZORPAY_DASHBOARD_URL or "").strip()
         return url or None
 
     return {
@@ -254,8 +254,8 @@ def owner_billing_accounts(
                 "payment_customer_ref": sub.payment_customer_ref,
                 "payment_subscription_ref": sub.payment_subscription_ref,
                 "payment_request_ref": sub.payment_request_ref,
-                "payment_dashboard_url": skydo_dashboard_url()
-                    if sub.payment_provider == "skydo" else None,
+                "payment_dashboard_url": razorpay_dashboard_url()
+                    if sub.payment_provider == "razorpay" else None,
                 "stripe_customer_id": sub.stripe_customer_id,
                 "stripe_sub_id": sub.stripe_sub_id,
                 "stripe_customer_url": stripe_customer_url(sub.stripe_customer_id),
@@ -269,7 +269,7 @@ def owner_billing_accounts(
 
 @router.post("/billing/payments/confirm")
 @limiter.limit("30/minute")
-def owner_confirm_skydo_payment(
+def owner_confirm_razorpay_payment(
     request: Request,
     body: OwnerBillingPaymentConfirmRequest,
     _: None = Depends(require_provisioning_access),
@@ -282,7 +282,7 @@ def owner_confirm_skydo_payment(
     if plan_code == "free":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="free cannot be confirmed as a paid Skydo payment",
+            detail="free cannot be confirmed as a paid Razorpay payment",
         )
 
     org_id = body.org_id.strip()
@@ -310,12 +310,12 @@ def owner_confirm_skydo_payment(
             plan_code=plan_code,
             status="active",
             seats=max(1, body.seats or 1),
-            payment_provider="skydo",
+            payment_provider="razorpay",
         )
         db.add(sub)
         db.flush()
 
-    sub.payment_provider = "skydo"
+    sub.payment_provider = "razorpay"
     sub.payment_subscription_ref = payment_ref
     if body.customer_ref:
         sub.payment_customer_ref = body.customer_ref.strip() or None
@@ -332,7 +332,7 @@ def owner_confirm_skydo_payment(
     clear_trial_entitlements(db, org_id=org_id, commit=False)
     _owner_audit(
         db,
-        action="owner.billing.skydo_payment.confirm",
+        action="owner.billing.razorpay_payment.confirm",
         actor=_resolve_actor(request),
         target_id=org_id,
         metadata={

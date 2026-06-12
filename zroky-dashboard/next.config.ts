@@ -10,11 +10,12 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self'",
-      "connect-src 'self' https://api.zroky.com",
+      "connect-src 'self' https://api.zroky.com https://api.razorpay.com https://checkout.razorpay.com",
+      "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
       "frame-ancestors 'none'",
     ].join("; "),
   },
@@ -23,7 +24,6 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactCompiler: true,
   devIndicators: false,
-  outputFileTracingRoot: process.cwd(),
   async headers() {
     return [
       {
@@ -40,13 +40,13 @@ const nextConfig: NextConfig = {
         permanent: false,
       },
       {
-        source: "/agents",
-        destination: "/labs/agents",
+        source: "/labs",
+        destination: "/home",
         permanent: false,
       },
       {
         source: "/drift",
-        destination: "/labs/drift",
+        destination: "/home",
         permanent: false,
       },
       {
@@ -66,7 +66,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/reliability",
-        destination: "/labs/agents",
+        destination: "/agents",
         permanent: true,
       },
       {

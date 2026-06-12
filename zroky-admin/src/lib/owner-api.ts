@@ -751,7 +751,7 @@ export function fetchOwnerBillingAccounts(
   return ownerRequest<OwnerBillingAccountsResponse>(`/v1/owner/billing/accounts${qs ? `?${qs}` : ""}`);
 }
 
-export function confirmOwnerSkydoPayment(
+export function confirmOwnerRazorpayPayment(
   body: OwnerBillingPaymentConfirmRequest,
 ): Promise<OwnerBillingPaymentConfirmResponse> {
   return ownerRequest<OwnerBillingPaymentConfirmResponse>("/v1/owner/billing/payments/confirm", {

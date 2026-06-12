@@ -32,7 +32,7 @@ class Subscription(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     org_id: Mapped[str] = mapped_column(String(64), nullable=False)
     payment_provider: Mapped[str] = mapped_column(
-        String(32), nullable=False, server_default=text("'skydo'")
+        String(32), nullable=False, server_default=text("'razorpay'")
     )
     payment_customer_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     payment_subscription_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -441,8 +441,7 @@ class StripeEvent(Base):
 class BillingEvent(Base):
     """Provider-neutral billing event audit log.
 
-    Skydo currently fits a payment-link/manual-confirmation flow, so this
-    table records each internal payment event before applying it to
+    The table records each billing provider event before applying it to
     subscriptions and entitlements.
     """
 

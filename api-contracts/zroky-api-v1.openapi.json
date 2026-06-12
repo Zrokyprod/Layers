@@ -64,7 +64,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerStatsResponse"
+                  "$ref": "#/components/schemas/app__api__routes__internal__OwnerStatsResponse"
                 }
               }
             }
@@ -891,6 +891,59 @@
         }
       }
     },
+    "/v1/auth/me/projects": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List Current User Projects",
+        "operationId": "list_current_user_projects_v1_auth_me_projects_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CurrentUserProjectResponse"
+                  },
+                  "title": "Response List Current User Projects V1 Auth Me Projects Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/me/password": {
       "patch": {
         "tags": [
@@ -1151,6 +1204,47 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IngestBatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/capture/gateway-heartbeat": {
+      "post": {
+        "tags": [
+          "capture"
+        ],
+        "summary": "Gateway Capture Heartbeat",
+        "operationId": "gateway_capture_heartbeat_v1_capture_gateway_heartbeat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatewayCaptureHeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayCaptureHeartbeatResponse"
                 }
               }
             }
@@ -1757,6 +1851,105 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CallDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/traces/recent": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "List Recent Traces",
+        "operationId": "list_recent_traces_v1_traces_recent_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 1,
+              "default": 7,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/traces/{trace_id}": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "Get Trace Graph",
+        "operationId": "get_trace_graph_v1_traces__trace_id__get",
+        "parameters": [
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceGraphResponse"
                 }
               }
             }
@@ -5646,7 +5839,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -5696,7 +5896,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -5742,7 +5949,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -5793,7 +6007,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -5844,7 +6065,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -5894,7 +6122,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -5940,7 +6175,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -5998,7 +6240,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -6050,7 +6299,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -6751,6 +7007,48 @@
         }
       }
     },
+    "/v1/goldens/{golden_set_id}/history": {
+      "get": {
+        "tags": [
+          "goldens"
+        ],
+        "summary": "List Golden History",
+        "operationId": "list_golden_history_v1_goldens__golden_set_id__history_get",
+        "parameters": [
+          {
+            "name": "golden_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Golden Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoldenHistoryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/goldens/{golden_set_id}/traces": {
       "get": {
         "tags": [
@@ -6815,6 +7113,58 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/GoldenTraceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoldenTraceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/goldens/{golden_set_id}/promote-trace": {
+      "post": {
+        "tags": [
+          "goldens"
+        ],
+        "summary": "Promote Trace To Golden",
+        "operationId": "promote_trace_to_golden_v1_goldens__golden_set_id__promote_trace_post",
+        "parameters": [
+          {
+            "name": "golden_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Golden Set Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoldenTracePromoteRequest"
               }
             }
           }
@@ -7419,7 +7769,7 @@
           "regression-ci"
         ],
         "summary": "Post Run",
-        "description": "Kick off a regression-CI run. Returns 202 with the run_id; the\nactual work proceeds in a BackgroundTask.\n\nValidation:\n  * `git_sha` required (4-64 chars).\n  * `threshold` in [0, 1].\n  * `operator_override.category` must be a known blast-radius.\n\nThe synthetic GoldenSet is upserted on first call per project so\nthe FK-bound ReplayRun row is creatable without a separate\nonboarding step.",
+        "description": "Kick off a regression-CI run. Returns 202 with the run_id; the\nactual work proceeds in a durable Celery task.\n\nValidation:\n  * `git_sha` required (4-64 chars).\n  * `threshold` in [0, 1].\n  * `operator_override.category` must be a known blast-radius.\n\nThe synthetic GoldenSet is upserted on first call per project so\nthe FK-bound ReplayRun row is creatable without a separate\nonboarding step.",
         "operationId": "post_run_v1_regression_ci_run_post",
         "requestBody": {
           "content": {
@@ -7481,6 +7831,306 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegressionCIRunDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/regression-ci/runs/{run_id}/override": {
+      "post": {
+        "tags": [
+          "regression-ci"
+        ],
+        "summary": "Override Run",
+        "operationId": "override_run_v1_regression_ci_runs__run_id__override_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegressionCIOverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegressionCIOverrideResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/runtime-policy/check": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Check Runtime Policy",
+        "operationId": "check_runtime_policy_v1_runtime_policy_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyCheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/runtime-policy/approvals": {
+      "get": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "List Approvals",
+        "operationId": "list_approvals_v1_runtime_policy_approvals_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "pending_approval",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/runtime-policy/approvals/{decision_id}/approve": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Approve Runtime Policy Decision",
+        "operationId": "approve_runtime_policy_decision_v1_runtime_policy_approvals__decision_id__approve_post",
+        "parameters": [
+          {
+            "name": "decision_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Decision Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/runtime-policy/approvals/{decision_id}/reject": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Reject Runtime Policy Decision",
+        "operationId": "reject_runtime_policy_decision_v1_runtime_policy_approvals__decision_id__reject_post",
+        "parameters": [
+          {
+            "name": "decision_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Decision Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/runtime-policy/kill-switch": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Set Runtime Kill Switch",
+        "operationId": "set_runtime_kill_switch_v1_runtime_policy_kill_switch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyKillSwitchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyKillSwitchResponse"
                 }
               }
             }
@@ -10037,7 +10687,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerStatsResponse"
+                  "$ref": "#/components/schemas/OwnerStatsResponse"
                 }
               }
             }
@@ -10438,7 +11088,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerProjectItem"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectItem"
                 }
               }
             }
@@ -11156,8 +11806,8 @@
         "tags": [
           "owner"
         ],
-        "summary": "Owner Confirm Skydo Payment",
-        "operationId": "owner_confirm_skydo_payment_v1_owner_billing_payments_confirm_post",
+        "summary": "Owner Confirm Razorpay Payment",
+        "operationId": "owner_confirm_razorpay_payment_v1_owner_billing_payments_confirm_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -11176,7 +11826,7 @@
                 "schema": {
                   "additionalProperties": true,
                   "type": "object",
-                  "title": "Response Owner Confirm Skydo Payment V1 Owner Billing Payments Confirm Post"
+                  "title": "Response Owner Confirm Razorpay Payment V1 Owner Billing Payments Confirm Post"
                 }
               }
             }
@@ -11561,13 +12211,34 @@
         }
       }
     },
+    "/v1/owner/launch-readiness": {
+      "get": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Launch Readiness",
+        "operationId": "owner_launch_readiness_v1_owner_launch_readiness_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerLaunchReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/billing/checkout": {
       "post": {
         "tags": [
           "billing"
         ],
         "summary": "Create Checkout Session",
-        "description": "Start a Skydo payment request for a self-serve plan.\n\nErrors:\n  422 — bad plan_code (out-of-vocab OR not self-serve, e.g. 'free' or 'enterprise')\n  503 — BILLING_ENABLED=false\n  502 — Skydo payment request configuration error",
+        "description": "Legacy compatibility endpoint.\n\nRazorpay Standard Checkout needs an order id, so new clients must call\n`/v1/billing/razorpay/order` and then open Razorpay Checkout in-browser.",
         "operationId": "create_checkout_session_v1_billing_checkout_post",
         "requestBody": {
           "content": {
@@ -11693,7 +12364,7 @@
           "billing"
         ],
         "summary": "Create Portal Session",
-        "description": "Return a Skydo billing dashboard URL.\n\nErrors:\n  503 — BILLING_ENABLED=false\n  502 — Skydo portal configuration error",
+        "description": "Return the configured Razorpay dashboard URL for billing operations.",
         "operationId": "create_portal_session_v1_billing_portal_post",
         "responses": {
           "200": {
@@ -11715,11 +12386,11 @@
           "billing"
         ],
         "summary": "Receive Billing Webhook",
-        "description": "Signed Skydo/manual billing webhook receiver.\n\nAuth: HMAC-SHA256 via `X-Zroky-Billing-Signature` or\n`X-Skydo-Signature`. A legacy `Stripe-Signature` header is still accepted\nfor old internal tooling during migration.\n\nBehaviour:\n  - Verifies signature against SKYDO_WEBHOOK_SECRET.\n  - Idempotent claim via `billing_events(provider, provider_event_id)`.\n  - Dispatches to `services.skydo_sync.dispatch_event`.\n  - Records every event (handled or skipped) in `billing_events`.",
+        "description": "Signed Razorpay webhook receiver.",
         "operationId": "receive_billing_webhook_v1_billing_webhook_post",
         "parameters": [
           {
-            "name": "X-Zroky-Billing-Signature",
+            "name": "X-Razorpay-Signature",
             "in": "header",
             "required": false,
             "schema": {
@@ -11731,39 +12402,7 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Zroky-Billing-Signature"
-            }
-          },
-          {
-            "name": "X-Skydo-Signature",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Skydo-Signature"
-            }
-          },
-          {
-            "name": "Stripe-Signature",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Stripe-Signature"
+              "title": "X-Razorpay-Signature"
             }
           }
         ],
@@ -11813,6 +12452,55 @@
         }
       }
     },
+    "/v1/billing/usage": {
+      "get": {
+        "tags": [
+          "billing-legacy"
+        ],
+        "summary": "Get Usage Summary",
+        "operationId": "get_usage_summary_v1_billing_usage_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUsageSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/billing/plans": {
       "get": {
         "tags": [
@@ -11845,9 +12533,16 @@
           {
             "name": "project_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -11885,9 +12580,16 @@
           {
             "name": "project_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -11926,48 +12628,6 @@
         }
       }
     },
-    "/v1/billing/usage": {
-      "get": {
-        "tags": [
-          "billing-legacy"
-        ],
-        "summary": "Get Usage Summary",
-        "operationId": "get_usage_summary_v1_billing_usage_get",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BillingUsageSummaryResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/invitations/projects/{project_id}/invitations": {
       "post": {
         "tags": [
@@ -11982,7 +12642,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -12033,7 +12700,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -12080,7 +12754,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -12985,7 +13666,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerStatsResponse"
+                  "$ref": "#/components/schemas/app__api__routes__internal__OwnerStatsResponse"
                 }
               }
             }
@@ -13812,6 +14493,59 @@
         }
       }
     },
+    "/api/v1/auth/me/projects": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List Current User Projects",
+        "operationId": "list_current_user_projects_api_v1_auth_me_projects_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CurrentUserProjectResponse"
+                  },
+                  "title": "Response List Current User Projects Api V1 Auth Me Projects Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/me/password": {
       "patch": {
         "tags": [
@@ -14072,6 +14806,47 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/IngestBatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/capture/gateway-heartbeat": {
+      "post": {
+        "tags": [
+          "capture"
+        ],
+        "summary": "Gateway Capture Heartbeat",
+        "operationId": "gateway_capture_heartbeat_api_v1_capture_gateway_heartbeat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatewayCaptureHeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayCaptureHeartbeatResponse"
                 }
               }
             }
@@ -14678,6 +15453,105 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CallDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/traces/recent": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "List Recent Traces",
+        "operationId": "list_recent_traces_api_v1_traces_recent_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 1,
+              "default": 7,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/traces/{trace_id}": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "Get Trace Graph",
+        "operationId": "get_trace_graph_api_v1_traces__trace_id__get",
+        "parameters": [
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trace Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceGraphResponse"
                 }
               }
             }
@@ -18567,7 +19441,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -18617,7 +19498,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -18663,7 +19551,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -18714,7 +19609,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -18765,7 +19667,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -18815,7 +19724,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -18861,7 +19777,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -18919,7 +19842,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -18971,7 +19901,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -19672,6 +20609,48 @@
         }
       }
     },
+    "/api/v1/goldens/{golden_set_id}/history": {
+      "get": {
+        "tags": [
+          "goldens"
+        ],
+        "summary": "List Golden History",
+        "operationId": "list_golden_history_api_v1_goldens__golden_set_id__history_get",
+        "parameters": [
+          {
+            "name": "golden_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Golden Set Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoldenHistoryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/goldens/{golden_set_id}/traces": {
       "get": {
         "tags": [
@@ -19736,6 +20715,58 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/GoldenTraceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoldenTraceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/goldens/{golden_set_id}/promote-trace": {
+      "post": {
+        "tags": [
+          "goldens"
+        ],
+        "summary": "Promote Trace To Golden",
+        "operationId": "promote_trace_to_golden_api_v1_goldens__golden_set_id__promote_trace_post",
+        "parameters": [
+          {
+            "name": "golden_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Golden Set Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoldenTracePromoteRequest"
               }
             }
           }
@@ -20340,7 +21371,7 @@
           "regression-ci"
         ],
         "summary": "Post Run",
-        "description": "Kick off a regression-CI run. Returns 202 with the run_id; the\nactual work proceeds in a BackgroundTask.\n\nValidation:\n  * `git_sha` required (4-64 chars).\n  * `threshold` in [0, 1].\n  * `operator_override.category` must be a known blast-radius.\n\nThe synthetic GoldenSet is upserted on first call per project so\nthe FK-bound ReplayRun row is creatable without a separate\nonboarding step.",
+        "description": "Kick off a regression-CI run. Returns 202 with the run_id; the\nactual work proceeds in a durable Celery task.\n\nValidation:\n  * `git_sha` required (4-64 chars).\n  * `threshold` in [0, 1].\n  * `operator_override.category` must be a known blast-radius.\n\nThe synthetic GoldenSet is upserted on first call per project so\nthe FK-bound ReplayRun row is creatable without a separate\nonboarding step.",
         "operationId": "post_run_api_v1_regression_ci_run_post",
         "requestBody": {
           "content": {
@@ -20402,6 +21433,306 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RegressionCIRunDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/regression-ci/runs/{run_id}/override": {
+      "post": {
+        "tags": [
+          "regression-ci"
+        ],
+        "summary": "Override Run",
+        "operationId": "override_run_api_v1_regression_ci_runs__run_id__override_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegressionCIOverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegressionCIOverrideResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runtime-policy/check": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Check Runtime Policy",
+        "operationId": "check_runtime_policy_api_v1_runtime_policy_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyCheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runtime-policy/approvals": {
+      "get": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "List Approvals",
+        "operationId": "list_approvals_api_v1_runtime_policy_approvals_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "pending_approval",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runtime-policy/approvals/{decision_id}/approve": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Approve Runtime Policy Decision",
+        "operationId": "approve_runtime_policy_decision_api_v1_runtime_policy_approvals__decision_id__approve_post",
+        "parameters": [
+          {
+            "name": "decision_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Decision Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runtime-policy/approvals/{decision_id}/reject": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Reject Runtime Policy Decision",
+        "operationId": "reject_runtime_policy_decision_api_v1_runtime_policy_approvals__decision_id__reject_post",
+        "parameters": [
+          {
+            "name": "decision_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Decision Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runtime-policy/kill-switch": {
+      "post": {
+        "tags": [
+          "runtime-policy"
+        ],
+        "summary": "Set Runtime Kill Switch",
+        "operationId": "set_runtime_kill_switch_api_v1_runtime_policy_kill_switch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimePolicyKillSwitchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimePolicyKillSwitchResponse"
                 }
               }
             }
@@ -22958,7 +24289,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerStatsResponse"
+                  "$ref": "#/components/schemas/OwnerStatsResponse"
                 }
               }
             }
@@ -23359,7 +24690,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerProjectItem"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectItem"
                 }
               }
             }
@@ -24077,8 +25408,8 @@
         "tags": [
           "owner"
         ],
-        "summary": "Owner Confirm Skydo Payment",
-        "operationId": "owner_confirm_skydo_payment_api_v1_owner_billing_payments_confirm_post",
+        "summary": "Owner Confirm Razorpay Payment",
+        "operationId": "owner_confirm_razorpay_payment_api_v1_owner_billing_payments_confirm_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -24097,7 +25428,7 @@
                 "schema": {
                   "additionalProperties": true,
                   "type": "object",
-                  "title": "Response Owner Confirm Skydo Payment Api V1 Owner Billing Payments Confirm Post"
+                  "title": "Response Owner Confirm Razorpay Payment Api V1 Owner Billing Payments Confirm Post"
                 }
               }
             }
@@ -24482,13 +25813,34 @@
         }
       }
     },
+    "/api/v1/owner/launch-readiness": {
+      "get": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Launch Readiness",
+        "operationId": "owner_launch_readiness_api_v1_owner_launch_readiness_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerLaunchReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/billing/checkout": {
       "post": {
         "tags": [
           "billing"
         ],
         "summary": "Create Checkout Session",
-        "description": "Start a Skydo payment request for a self-serve plan.\n\nErrors:\n  422 — bad plan_code (out-of-vocab OR not self-serve, e.g. 'free' or 'enterprise')\n  503 — BILLING_ENABLED=false\n  502 — Skydo payment request configuration error",
+        "description": "Legacy compatibility endpoint.\n\nRazorpay Standard Checkout needs an order id, so new clients must call\n`/v1/billing/razorpay/order` and then open Razorpay Checkout in-browser.",
         "operationId": "create_checkout_session_api_v1_billing_checkout_post",
         "requestBody": {
           "content": {
@@ -24614,7 +25966,7 @@
           "billing"
         ],
         "summary": "Create Portal Session",
-        "description": "Return a Skydo billing dashboard URL.\n\nErrors:\n  503 — BILLING_ENABLED=false\n  502 — Skydo portal configuration error",
+        "description": "Return the configured Razorpay dashboard URL for billing operations.",
         "operationId": "create_portal_session_api_v1_billing_portal_post",
         "responses": {
           "200": {
@@ -24636,11 +25988,11 @@
           "billing"
         ],
         "summary": "Receive Billing Webhook",
-        "description": "Signed Skydo/manual billing webhook receiver.\n\nAuth: HMAC-SHA256 via `X-Zroky-Billing-Signature` or\n`X-Skydo-Signature`. A legacy `Stripe-Signature` header is still accepted\nfor old internal tooling during migration.\n\nBehaviour:\n  - Verifies signature against SKYDO_WEBHOOK_SECRET.\n  - Idempotent claim via `billing_events(provider, provider_event_id)`.\n  - Dispatches to `services.skydo_sync.dispatch_event`.\n  - Records every event (handled or skipped) in `billing_events`.",
+        "description": "Signed Razorpay webhook receiver.",
         "operationId": "receive_billing_webhook_api_v1_billing_webhook_post",
         "parameters": [
           {
-            "name": "X-Zroky-Billing-Signature",
+            "name": "X-Razorpay-Signature",
             "in": "header",
             "required": false,
             "schema": {
@@ -24652,39 +26004,7 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Zroky-Billing-Signature"
-            }
-          },
-          {
-            "name": "X-Skydo-Signature",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Skydo-Signature"
-            }
-          },
-          {
-            "name": "Stripe-Signature",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Stripe-Signature"
+              "title": "X-Razorpay-Signature"
             }
           }
         ],
@@ -24734,6 +26054,55 @@
         }
       }
     },
+    "/api/v1/billing/usage": {
+      "get": {
+        "tags": [
+          "billing-legacy"
+        ],
+        "summary": "Get Usage Summary",
+        "operationId": "get_usage_summary_api_v1_billing_usage_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingUsageSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/billing/plans": {
       "get": {
         "tags": [
@@ -24766,9 +26135,16 @@
           {
             "name": "project_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -24806,9 +26182,16 @@
           {
             "name": "project_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -24847,48 +26230,6 @@
         }
       }
     },
-    "/api/v1/billing/usage": {
-      "get": {
-        "tags": [
-          "billing-legacy"
-        ],
-        "summary": "Get Usage Summary",
-        "operationId": "get_usage_summary_api_v1_billing_usage_get",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Project Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BillingUsageSummaryResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/invitations/projects/{project_id}/invitations": {
       "post": {
         "tags": [
@@ -24903,7 +26244,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -24954,7 +26302,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           }
@@ -25001,7 +26356,14 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Project Id"
             }
           },
@@ -27686,7 +29048,7 @@
           "payment_provider": {
             "type": "string",
             "title": "Payment Provider",
-            "default": "skydo"
+            "default": "razorpay"
           },
           "payment_customer_ref": {
             "anyOf": [
@@ -27786,6 +29148,207 @@
           "seats"
         ],
         "title": "BillingMeResponse"
+      },
+      "BillingMeteringHealthResponse": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "failure_count": {
+            "type": "integer",
+            "title": "Failure Count",
+            "default": 0
+          },
+          "last_failure_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure At"
+          },
+          "last_failure_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure Type"
+          },
+          "failure_policy": {
+            "type": "string",
+            "title": "Failure Policy"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "failure_policy"
+        ],
+        "title": "BillingMeteringHealthResponse"
+      },
+      "BillingUsageMeter": {
+        "properties": {
+          "used": {
+            "type": "integer",
+            "title": "Used"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "unlimited": {
+            "type": "boolean",
+            "title": "Unlimited",
+            "default": false
+          },
+          "overage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overage"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "resets_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resets At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "used",
+          "state"
+        ],
+        "title": "BillingUsageMeter"
+      },
+      "BillingUsageResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "period_month": {
+            "type": "string",
+            "title": "Period Month"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period End"
+          },
+          "plan_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Code"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "subscription_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Status"
+          },
+          "calls": {
+            "$ref": "#/components/schemas/BillingUsageMeter"
+          },
+          "replay": {
+            "$ref": "#/components/schemas/BillingUsageMeter"
+          },
+          "goldens": {
+            "$ref": "#/components/schemas/BillingUsageMeter"
+          },
+          "golden_sets": {
+            "$ref": "#/components/schemas/BillingUsageMeter"
+          },
+          "metering_health": {
+            "$ref": "#/components/schemas/BillingMeteringHealthResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "org_id",
+          "period_month",
+          "period_start",
+          "period_end",
+          "calls",
+          "replay",
+          "goldens",
+          "golden_sets",
+          "metering_health"
+        ],
+        "title": "BillingUsageResponse"
       },
       "BillingUsageSummaryResponse": {
         "properties": {
@@ -28933,6 +30496,87 @@
             "type": "integer",
             "title": "Memory Spans 24H"
           },
+          "trace_runs_24h": {
+            "type": "integer",
+            "title": "Trace Runs 24H",
+            "default": 0
+          },
+          "trace_spans_24h": {
+            "type": "integer",
+            "title": "Trace Spans 24H",
+            "default": 0
+          },
+          "policy_spans_24h": {
+            "type": "integer",
+            "title": "Policy Spans 24H",
+            "default": 0
+          },
+          "handoff_spans_24h": {
+            "type": "integer",
+            "title": "Handoff Spans 24H",
+            "default": 0
+          },
+          "incomplete_trace_runs_24h": {
+            "type": "integer",
+            "title": "Incomplete Trace Runs 24H",
+            "default": 0
+          },
+          "projection_failures_24h": {
+            "type": "integer",
+            "title": "Projection Failures 24H",
+            "default": 0
+          },
+          "gateway_count": {
+            "type": "integer",
+            "title": "Gateway Count",
+            "default": 0
+          },
+          "gateway_unhealthy_count": {
+            "type": "integer",
+            "title": "Gateway Unhealthy Count",
+            "default": 0
+          },
+          "gateway_worst_status": {
+            "type": "string",
+            "title": "Gateway Worst Status",
+            "default": "unknown"
+          },
+          "gateway_spool_backlog": {
+            "type": "integer",
+            "title": "Gateway Spool Backlog",
+            "default": 0
+          },
+          "gateway_spool_bytes": {
+            "type": "integer",
+            "title": "Gateway Spool Bytes",
+            "default": 0
+          },
+          "gateway_spool_oldest_age_seconds": {
+            "type": "number",
+            "title": "Gateway Spool Oldest Age Seconds",
+            "default": 0
+          },
+          "gateway_loss_count": {
+            "type": "integer",
+            "title": "Gateway Loss Count",
+            "default": 0
+          },
+          "gateway_backpressure_rejections": {
+            "type": "integer",
+            "title": "Gateway Backpressure Rejections",
+            "default": 0
+          },
+          "gateway_last_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway Last Heartbeat At"
+          },
           "error_events_24h": {
             "type": "integer",
             "title": "Error Events 24H"
@@ -28984,7 +30628,15 @@
             "enum": [
               "tool_spans_missing",
               "outcome_missing",
-              "prompt_version_missing"
+              "prompt_version_missing",
+              "input_missing",
+              "version_metadata_missing",
+              "policy_decisions_missing",
+              "trace_graph_projection_missing",
+              "trace_graph_projection_failed",
+              "gateway_spool_backlog",
+              "gateway_capture_loss",
+              "gateway_backpressure"
             ],
             "title": "Code"
           },
@@ -29065,7 +30717,7 @@
               }
             ],
             "title": "Customer Email",
-            "description": "Optional billing contact email for Skydo reconciliation."
+            "description": "Optional billing contact email for Razorpay reconciliation."
           }
         },
         "type": "object",
@@ -29095,7 +30747,7 @@
           "payment_provider": {
             "type": "string",
             "title": "Payment Provider",
-            "default": "skydo"
+            "default": "razorpay"
           },
           "payment_request_id": {
             "type": "string",
@@ -29104,7 +30756,7 @@
           "manual_confirmation_required": {
             "type": "boolean",
             "title": "Manual Confirmation Required",
-            "default": true
+            "default": false
           },
           "instructions": {
             "type": "string",
@@ -29124,7 +30776,7 @@
           "currency": {
             "type": "string",
             "title": "Currency",
-            "default": "USD"
+            "default": "INR"
           }
         },
         "type": "object",
@@ -30153,6 +31805,51 @@
           "call_id"
         ],
         "title": "CreateReplayJobRequest"
+      },
+      "CurrentUserProjectResponse": {
+        "properties": {
+          "membership_id": {
+            "type": "string",
+            "title": "Membership Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "project_name": {
+            "type": "string",
+            "title": "Project Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "membership_id",
+          "project_id",
+          "project_name",
+          "role",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CurrentUserProjectResponse"
       },
       "DeleteAccountRequest": {
         "properties": {
@@ -32825,6 +34522,207 @@
         ],
         "title": "ForgotPasswordRequest"
       },
+      "GatewayCaptureHeartbeatRequest": {
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "gateway_id": {
+            "type": "string",
+            "title": "Gateway Id"
+          },
+          "emit_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emit Mode"
+          },
+          "durability_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Durability Mode"
+          },
+          "capture_status": {
+            "type": "string",
+            "title": "Capture Status",
+            "default": "unknown"
+          },
+          "spool": {
+            "$ref": "#/components/schemas/GatewaySpoolHeartbeat"
+          },
+          "emit_failures": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Emit Failures",
+            "default": 0
+          },
+          "enqueue_failures": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Enqueue Failures",
+            "default": 0
+          },
+          "flush_failures": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Flush Failures",
+            "default": 0
+          },
+          "flushed": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Flushed",
+            "default": 0
+          },
+          "loss_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Loss Count",
+            "default": 0
+          },
+          "backpressure_rejections": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Backpressure Rejections",
+            "default": 0
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gateway_id"
+        ],
+        "title": "GatewayCaptureHeartbeatRequest"
+      },
+      "GatewayCaptureHeartbeatResponse": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "gateway_id": {
+            "type": "string",
+            "title": "Gateway Id"
+          },
+          "capture_status": {
+            "type": "string",
+            "title": "Capture Status"
+          },
+          "alert_categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Alert Categories"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "gateway_id",
+          "capture_status",
+          "alert_categories"
+        ],
+        "title": "GatewayCaptureHeartbeatResponse"
+      },
+      "GatewaySpoolHeartbeat": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "backlog": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Backlog",
+            "default": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Bytes",
+            "default": 0
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Max Bytes",
+            "default": 0
+          },
+          "reserved_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reserved Bytes",
+            "default": 0
+          },
+          "oldest_age_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Oldest Age Seconds",
+            "default": 0
+          },
+          "high_watermark": {
+            "type": "boolean",
+            "title": "High Watermark",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "GatewaySpoolHeartbeat"
+      },
       "GenerateResponse": {
         "properties": {
           "generated": {
@@ -32930,6 +34828,128 @@
           "connected"
         ],
         "title": "GithubConnectionStatusResponse"
+      },
+      "GoldenHistoryListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GoldenHistoryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_in_page": {
+            "type": "integer",
+            "title": "Total In Page"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_in_page"
+        ],
+        "title": "GoldenHistoryListResponse"
+      },
+      "GoldenHistoryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "golden_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Golden Set Id"
+          },
+          "golden_trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Golden Trace Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "before_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Json"
+          },
+          "after_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Json"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "golden_set_id",
+          "golden_trace_id",
+          "action",
+          "actor_user_id",
+          "reason",
+          "before_json",
+          "after_json",
+          "created_at"
+        ],
+        "title": "GoldenHistoryResponse"
       },
       "GoldenRunDispatchResponse": {
         "properties": {
@@ -33432,6 +35452,65 @@
         ],
         "title": "GoldenTraceListResponse"
       },
+      "GoldenTracePromoteRequest": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Call Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "draft"
+          },
+          "expected_output_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Output Text"
+          },
+          "criteria_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criteria Json"
+          },
+          "linked_replay_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Replay Run Id"
+          },
+          "weight": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Weight",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "call_id"
+        ],
+        "title": "GoldenTracePromoteRequest"
+      },
       "GoldenTraceResponse": {
         "properties": {
           "id": {
@@ -33928,6 +36007,23 @@
           "enqueue_failed": {
             "type": "integer",
             "title": "Enqueue Failed"
+          },
+          "metered": {
+            "type": "integer",
+            "title": "Metered",
+            "default": 0
+          },
+          "metering_failed": {
+            "type": "integer",
+            "title": "Metering Failed",
+            "default": 0
+          },
+          "metering_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Metering Warnings"
           }
         },
         "type": "object",
@@ -34526,6 +36622,150 @@
             ],
             "title": "Parent Call Id"
           },
+          "span_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Type"
+          },
+          "span_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Name"
+          },
+          "span_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Index"
+          },
+          "input": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "user_input": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Input"
+          },
+          "final_answer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Answer"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory"
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy"
+          },
+          "versions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versions"
+          },
           "agent_name": {
             "anyOf": [
               {
@@ -34723,6 +36963,41 @@
               }
             ],
             "title": "Agent Framework"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "masking_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Masking Version"
+          },
+          "pii_masked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pii Masked"
           }
         },
         "type": "object",
@@ -34858,6 +37133,34 @@
           "confidence"
         ],
         "title": "IntelSignalResponse"
+      },
+      "IssueBlastRadius": {
+        "properties": {
+          "affected_traces": {
+            "type": "integer",
+            "title": "Affected Traces"
+          },
+          "affected_users": {
+            "type": "integer",
+            "title": "Affected Users"
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "affected_traces",
+          "affected_users",
+          "cost_usd",
+          "severity"
+        ],
+        "title": "IssueBlastRadius"
       },
       "IssueCiGateProof": {
         "properties": {
@@ -35501,6 +37804,36 @@
             ],
             "title": "Affected Workflow"
           },
+          "what_happened": {
+            "type": "string",
+            "title": "What Happened"
+          },
+          "why_it_matters": {
+            "type": "string",
+            "title": "Why It Matters"
+          },
+          "affected_trace_count": {
+            "type": "integer",
+            "title": "Affected Trace Count"
+          },
+          "affected_user_count": {
+            "type": "integer",
+            "title": "Affected User Count"
+          },
+          "suspected_introduced_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suspected Introduced Version"
+          },
+          "blast_radius": {
+            "$ref": "#/components/schemas/IssueBlastRadius"
+          },
           "root_cause": {
             "type": "string",
             "title": "Root Cause"
@@ -35561,6 +37894,12 @@
           "title",
           "affected_agent",
           "affected_workflow",
+          "what_happened",
+          "why_it_matters",
+          "affected_trace_count",
+          "affected_user_count",
+          "suspected_introduced_version",
+          "blast_radius",
           "root_cause",
           "evidence_traces",
           "cost_impact_usd",
@@ -36904,6 +39243,210 @@
         ],
         "title": "OwnerBillingPaymentConfirmRequest"
       },
+      "OwnerBillingProviderVerification": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "provider_event"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "provider_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Event Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "OwnerBillingProviderVerification"
+      },
+      "OwnerBillingStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "plan_code": {
+            "type": "string",
+            "title": "Plan Code"
+          },
+          "subscription_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Status"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "plan_code"
+        ],
+        "title": "OwnerBillingStatus"
+      },
+      "OwnerCaptureDurabilityStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "gateway_count": {
+            "type": "integer",
+            "title": "Gateway Count"
+          },
+          "unhealthy_gateway_count": {
+            "type": "integer",
+            "title": "Unhealthy Gateway Count"
+          },
+          "spool_backlog": {
+            "type": "integer",
+            "title": "Spool Backlog"
+          },
+          "spool_oldest_age_seconds": {
+            "type": "number",
+            "title": "Spool Oldest Age Seconds"
+          },
+          "loss_count": {
+            "type": "integer",
+            "title": "Loss Count"
+          },
+          "backpressure_rejections": {
+            "type": "integer",
+            "title": "Backpressure Rejections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "gateway_count",
+          "unhealthy_gateway_count",
+          "spool_backlog",
+          "spool_oldest_age_seconds",
+          "loss_count",
+          "backpressure_rejections"
+        ],
+        "title": "OwnerCaptureDurabilityStatus"
+      },
+      "OwnerEventMeteringStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "used": {
+            "type": "integer",
+            "title": "Used"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "overage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overage"
+          },
+          "failure_count": {
+            "type": "integer",
+            "title": "Failure Count",
+            "default": 0
+          },
+          "last_failure_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "used"
+        ],
+        "title": "OwnerEventMeteringStatus"
+      },
       "OwnerLastDeployedSmoke": {
         "properties": {
           "status": {
@@ -36984,6 +39527,162 @@
         ],
         "title": "OwnerLastDeployedSmoke"
       },
+      "OwnerLaunchGateEvidence": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "OwnerLaunchGateEvidence"
+      },
+      "OwnerLaunchReadinessGate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blockers"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerLaunchGateEvidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "verification_commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Verification Commands"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "title",
+          "status",
+          "summary"
+        ],
+        "title": "OwnerLaunchReadinessGate"
+      },
+      "OwnerLaunchReadinessResponse": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "product_standard": {
+            "type": "string",
+            "title": "Product Standard"
+          },
+          "overall_status": {
+            "type": "string",
+            "title": "Overall Status"
+          },
+          "paid_launch_allowed": {
+            "type": "boolean",
+            "title": "Paid Launch Allowed"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerLaunchReadinessGate"
+            },
+            "type": "array",
+            "title": "Gates"
+          },
+          "hard_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hard Blockers"
+          },
+          "verification_commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Verification Commands"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "product_standard",
+          "overall_status",
+          "paid_launch_allowed",
+          "gates"
+        ],
+        "title": "OwnerLaunchReadinessResponse"
+      },
       "OwnerMoneyPathHealthResponse": {
         "properties": {
           "generated_at": {
@@ -37048,6 +39747,31 @@
             "type": "integer",
             "title": "Ci Blocks 7D"
           },
+          "replay_jobs_pending": {
+            "type": "integer",
+            "title": "Replay Jobs Pending",
+            "default": 0
+          },
+          "replay_jobs_stale": {
+            "type": "integer",
+            "title": "Replay Jobs Stale",
+            "default": 0
+          },
+          "gateway_unhealthy_tenants": {
+            "type": "integer",
+            "title": "Gateway Unhealthy Tenants",
+            "default": 0
+          },
+          "gateway_loss_tenants": {
+            "type": "integer",
+            "title": "Gateway Loss Tenants",
+            "default": 0
+          },
+          "gateway_backpressure_tenants": {
+            "type": "integer",
+            "title": "Gateway Backpressure Tenants",
+            "default": 0
+          },
           "tenants_missing_provider_key": {
             "type": "integer",
             "title": "Tenants Missing Provider Key"
@@ -37059,6 +39783,90 @@
           "tenants_without_recent_capture": {
             "type": "integer",
             "title": "Tenants Without Recent Capture"
+          },
+          "tenants_without_goldens": {
+            "type": "integer",
+            "title": "Tenants Without Goldens",
+            "default": 0
+          },
+          "tenants_with_failed_ci": {
+            "type": "integer",
+            "title": "Tenants With Failed Ci",
+            "default": 0
+          },
+          "tenants_with_stale_replay_workers": {
+            "type": "integer",
+            "title": "Tenants With Stale Replay Workers",
+            "default": 0
+          },
+          "tenants_with_stale_pricing": {
+            "type": "integer",
+            "title": "Tenants With Stale Pricing",
+            "default": 0
+          },
+          "tenants_with_quota_risk": {
+            "type": "integer",
+            "title": "Tenants With Quota Risk",
+            "default": 0
+          },
+          "tenants_with_billing_risk": {
+            "type": "integer",
+            "title": "Tenants With Billing Risk",
+            "default": 0
+          },
+          "metering_failure_tenants": {
+            "type": "integer",
+            "title": "Metering Failure Tenants",
+            "default": 0
+          },
+          "event_counter_failure_count": {
+            "type": "integer",
+            "title": "Event Counter Failure Count",
+            "default": 0
+          },
+          "billing_launch_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Billing Launch Blockers"
+          },
+          "billing_provider_verification": {
+            "$ref": "#/components/schemas/OwnerBillingProviderVerification"
+          },
+          "support_tickets_open": {
+            "type": "integer",
+            "title": "Support Tickets Open",
+            "default": 0
+          },
+          "support_tickets_urgent": {
+            "type": "integer",
+            "title": "Support Tickets Urgent",
+            "default": 0
+          },
+          "blocked_regressions_7d": {
+            "type": "integer",
+            "title": "Blocked Regressions 7D",
+            "default": 0
+          },
+          "verified_fixes_7d": {
+            "type": "integer",
+            "title": "Verified Fixes 7D",
+            "default": 0
+          },
+          "pricing_contract_drift": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pricing Contract Drift"
+          },
+          "launch_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Launch Blockers"
           },
           "last_deployed_smoke": {
             "$ref": "#/components/schemas/OwnerLastDeployedSmoke"
@@ -37134,11 +39942,69 @@
             "type": "integer",
             "title": "Blocking Ci Failures 7D"
           },
+          "replay_jobs_pending": {
+            "type": "integer",
+            "title": "Replay Jobs Pending",
+            "default": 0
+          },
+          "replay_jobs_stale": {
+            "type": "integer",
+            "title": "Replay Jobs Stale",
+            "default": 0
+          },
+          "capture_durability_status": {
+            "$ref": "#/components/schemas/OwnerCaptureDurabilityStatus"
+          },
           "provider_key_status": {
             "$ref": "#/components/schemas/OwnerProviderKeyStatus"
           },
           "replay_quota_status": {
             "$ref": "#/components/schemas/OwnerReplayQuotaStatus"
+          },
+          "event_metering_status": {
+            "$ref": "#/components/schemas/OwnerEventMeteringStatus"
+          },
+          "pricing_cost_status": {
+            "$ref": "#/components/schemas/OwnerPricingCostStatus"
+          },
+          "billing_status": {
+            "$ref": "#/components/schemas/OwnerBillingStatus"
+          },
+          "support_status": {
+            "$ref": "#/components/schemas/OwnerSupportStatus"
+          },
+          "blocked_regressions_7d": {
+            "type": "integer",
+            "title": "Blocked Regressions 7D",
+            "default": 0
+          },
+          "verified_fixes_7d": {
+            "type": "integer",
+            "title": "Verified Fixes 7D",
+            "default": 0
+          },
+          "value_status": {
+            "type": "string",
+            "title": "Value Status"
+          },
+          "money_path_breaks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Money Path Breaks"
+          },
+          "tenant_priority_score": {
+            "type": "integer",
+            "title": "Tenant Priority Score",
+            "default": 0
+          },
+          "launch_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Launch Blockers"
           },
           "next_owner_action": {
             "type": "string",
@@ -37158,11 +40024,85 @@
           "golden_trace_count",
           "ci_run_count_7d",
           "blocking_ci_failures_7d",
+          "capture_durability_status",
           "provider_key_status",
           "replay_quota_status",
+          "event_metering_status",
+          "pricing_cost_status",
+          "billing_status",
+          "support_status",
+          "value_status",
           "next_owner_action"
         ],
         "title": "OwnerMoneyPathTenantRow"
+      },
+      "OwnerPricingCostStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "pricing_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Version"
+          },
+          "pricing_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Source"
+          },
+          "pricing_age_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Age Days"
+          },
+          "cost_confidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Confidence"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "OwnerPricingCostStatus"
       },
       "OwnerProjectItem": {
         "properties": {
@@ -37201,10 +40141,6 @@
           "total_cost_usd": {
             "type": "number",
             "title": "Total Cost Usd"
-          },
-          "member_count": {
-            "type": "integer",
-            "title": "Member Count"
           }
         },
         "type": "object",
@@ -37215,8 +40151,7 @@
           "is_active",
           "created_at",
           "call_count",
-          "total_cost_usd",
-          "member_count"
+          "total_cost_usd"
         ],
         "title": "OwnerProjectItem"
       },
@@ -37224,7 +40159,7 @@
         "properties": {
           "projects": {
             "items": {
-              "$ref": "#/components/schemas/app__api__routes__internal__OwnerProjectItem"
+              "$ref": "#/components/schemas/OwnerProjectItem"
             },
             "type": "array",
             "title": "Projects"
@@ -37321,6 +40256,10 @@
           "new_users_last_7d": {
             "type": "integer",
             "title": "New Users Last 7D"
+          },
+          "active_users_last_7d": {
+            "type": "integer",
+            "title": "Active Users Last 7D"
           }
         },
         "type": "object",
@@ -37331,7 +40270,8 @@
           "calls_last_7d",
           "total_cost_usd",
           "cost_last_7d_usd",
-          "new_users_last_7d"
+          "new_users_last_7d",
+          "active_users_last_7d"
         ],
         "title": "OwnerStatsResponse"
       },
@@ -37352,6 +40292,29 @@
           "body"
         ],
         "title": "OwnerSupportReplyRequest"
+      },
+      "OwnerSupportStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "open_count": {
+            "type": "integer",
+            "title": "Open Count"
+          },
+          "urgent_count": {
+            "type": "integer",
+            "title": "Urgent Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "open_count",
+          "urgent_count"
+        ],
+        "title": "OwnerSupportStatus"
       },
       "OwnerSupportTicketUpdateRequest": {
         "properties": {
@@ -37934,6 +40897,64 @@
             "type": "boolean",
             "title": "Kill Switch",
             "default": false
+          },
+          "runtime_enabled": {
+            "type": "boolean",
+            "title": "Runtime Enabled",
+            "default": true
+          },
+          "runtime_max_tool_calls": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Runtime Max Tool Calls",
+            "default": 20
+          },
+          "runtime_max_retries": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Runtime Max Retries",
+            "default": 3
+          },
+          "runtime_max_cost_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Runtime Max Cost Usd",
+            "default": 1.0
+          },
+          "runtime_allowed_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Runtime Allowed Tools"
+          },
+          "runtime_sensitive_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Runtime Sensitive Tools"
+          },
+          "runtime_sensitive_actions_require_approval": {
+            "type": "boolean",
+            "title": "Runtime Sensitive Actions Require Approval",
+            "default": true
+          },
+          "runtime_block_pii_leak": {
+            "type": "boolean",
+            "title": "Runtime Block Pii Leak",
+            "default": true
+          },
+          "runtime_block_prompt_injected_external_action": {
+            "type": "boolean",
+            "title": "Runtime Block Prompt Injected External Action",
+            "default": true
+          },
+          "runtime_approval_ttl_minutes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Runtime Approval Ttl Minutes",
+            "default": 60
           }
         },
         "type": "object",
@@ -38147,7 +41168,7 @@
           "payment_provider": {
             "type": "string",
             "title": "Payment Provider",
-            "default": "skydo"
+            "default": "razorpay"
           }
         },
         "type": "object",
@@ -40016,6 +43037,74 @@
         ],
         "title": "RegisterRequest"
       },
+      "RegressionCIOverrideRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Reason"
+          },
+          "effective_status": {
+            "type": "string",
+            "pattern": "^(pass|warn)$",
+            "title": "Effective Status",
+            "default": "pass"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "expires_at"
+        ],
+        "title": "RegressionCIOverrideRequest"
+      },
+      "RegressionCIOverrideResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "effective_status": {
+            "type": "string",
+            "title": "Effective Status"
+          },
+          "override": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "effective_status",
+          "override"
+        ],
+        "title": "RegressionCIOverrideResponse"
+      },
       "RegressionCIRunDetailResponse": {
         "properties": {
           "run_id": {
@@ -40069,6 +43158,52 @@
               }
             ],
             "title": "Completed At"
+          },
+          "effective_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Status"
+          },
+          "failed_goldens": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Failed Goldens"
+          },
+          "warn_goldens": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warn Goldens"
+          },
+          "not_verified_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Verified Reasons"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override"
           },
           "report": {
             "anyOf": [
@@ -40955,6 +44090,11 @@
             "title": "Fail Count",
             "default": 0
           },
+          "not_verified_count": {
+            "type": "integer",
+            "title": "Not Verified Count",
+            "default": 0
+          },
           "error_count": {
             "type": "integer",
             "title": "Error Count",
@@ -41048,6 +44188,31 @@
               }
             ],
             "title": "Replay Cost Usd"
+          },
+          "trust_level": {
+            "type": "string",
+            "title": "Trust Level",
+            "default": "untrusted"
+          },
+          "proof_missing_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Proof Missing Reasons",
+            "default": []
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget"
           }
         },
         "type": "object",
@@ -41844,6 +45009,1003 @@
           "message"
         ],
         "title": "RunNowResponse"
+      },
+      "RuntimePolicyAuditEventResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "actor",
+          "reason",
+          "before",
+          "after",
+          "created_at"
+        ],
+        "title": "RuntimePolicyAuditEventResponse"
+      },
+      "RuntimePolicyCheckRequest": {
+        "properties": {
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "span_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "action_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Type"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "tool_args": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Args"
+          },
+          "tool_call_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Count"
+          },
+          "retry_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Count"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "input_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Text"
+          },
+          "user_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Input"
+          },
+          "output_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Text"
+          },
+          "external_action": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Action"
+          },
+          "prompt_injection_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Injection Detected"
+          },
+          "pii_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pii Detected"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "workflow_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Name"
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
+          "business_impact": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Impact"
+          },
+          "business_impact_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Impact Summary"
+          },
+          "impact_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impact Usd"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "RuntimePolicyCheckRequest"
+      },
+      "RuntimePolicyCheckResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "action_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Type"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "title": "Requires Approval"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "request": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Request"
+          },
+          "policy_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy Snapshot"
+          },
+          "intended_action": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Intended Action"
+          },
+          "trace_context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Trace Context"
+          },
+          "policy_hit": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy Hit"
+          },
+          "business_impact": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Business Impact"
+          },
+          "audit_log": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimePolicyAuditEventResponse"
+            },
+            "type": "array",
+            "title": "Audit Log"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolution_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Reason"
+          },
+          "consumed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed At"
+          },
+          "consumed_by_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed By Decision Id"
+          },
+          "approval_queue_item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuntimePolicyDecisionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "trace_id",
+          "call_id",
+          "agent_name",
+          "role",
+          "action_type",
+          "tool_name",
+          "decision",
+          "status",
+          "allowed",
+          "requires_approval",
+          "reasons",
+          "request",
+          "policy_snapshot",
+          "intended_action",
+          "trace_context",
+          "policy_hit",
+          "business_impact",
+          "audit_log",
+          "created_at",
+          "expires_at",
+          "resolved_at",
+          "resolved_by",
+          "resolution_reason",
+          "consumed_at",
+          "consumed_by_decision_id"
+        ],
+        "title": "RuntimePolicyCheckResponse"
+      },
+      "RuntimePolicyDecisionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "action_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Type"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "title": "Requires Approval"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "request": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Request"
+          },
+          "policy_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy Snapshot"
+          },
+          "intended_action": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Intended Action"
+          },
+          "trace_context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Trace Context"
+          },
+          "policy_hit": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy Hit"
+          },
+          "business_impact": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Business Impact"
+          },
+          "audit_log": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimePolicyAuditEventResponse"
+            },
+            "type": "array",
+            "title": "Audit Log"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolution_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Reason"
+          },
+          "consumed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed At"
+          },
+          "consumed_by_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumed By Decision Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "trace_id",
+          "call_id",
+          "agent_name",
+          "role",
+          "action_type",
+          "tool_name",
+          "decision",
+          "status",
+          "allowed",
+          "requires_approval",
+          "reasons",
+          "request",
+          "policy_snapshot",
+          "intended_action",
+          "trace_context",
+          "policy_hit",
+          "business_impact",
+          "audit_log",
+          "created_at",
+          "expires_at",
+          "resolved_at",
+          "resolved_by",
+          "resolution_reason",
+          "consumed_at",
+          "consumed_by_decision_id"
+        ],
+        "title": "RuntimePolicyDecisionResponse"
+      },
+      "RuntimePolicyKillSwitchRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "RuntimePolicyKillSwitchRequest"
+      },
+      "RuntimePolicyKillSwitchResponse": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "policy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "enabled",
+          "policy"
+        ],
+        "title": "RuntimePolicyKillSwitchResponse"
+      },
+      "RuntimePolicyListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimePolicyDecisionResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_in_page": {
+            "type": "integer",
+            "title": "Total In Page"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_in_page"
+        ],
+        "title": "RuntimePolicyListResponse"
+      },
+      "RuntimePolicyResolveRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "RuntimePolicyResolveRequest"
       },
       "SavingsSummaryResponse": {
         "properties": {
@@ -42793,6 +46955,485 @@
         "type": "object",
         "title": "TenantSubscriptionUpdateRequest"
       },
+      "TraceGraphResponse": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/TraceGraphSummaryResponse"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/TraceGraphSpanResponse"
+            },
+            "type": "array",
+            "title": "Spans"
+          },
+          "root_span": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TraceGraphSpanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_input": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Input"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "final_answer": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Answer"
+          },
+          "business_outcome": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Outcome"
+          },
+          "versions": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Versions"
+          },
+          "masked_raw_payloads": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Masked Raw Payloads"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "spans"
+        ],
+        "title": "TraceGraphResponse"
+      },
+      "TraceGraphSpanResponse": {
+        "properties": {
+          "span_id": {
+            "type": "string",
+            "title": "Span Id"
+          },
+          "parent_span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Span Id"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "span_type": {
+            "type": "string",
+            "title": "Span Type"
+          },
+          "span_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Name"
+          },
+          "span_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Index"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd",
+            "default": 0.0
+          },
+          "input": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input"
+          },
+          "output": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "tool": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "retrieval": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
+          },
+          "memory": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory"
+          },
+          "handoff": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff"
+          },
+          "policy": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy"
+          },
+          "outcome": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "versions": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versions"
+          },
+          "raw_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Payload"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/TraceGraphSpanResponse"
+            },
+            "type": "array",
+            "title": "Children"
+          }
+        },
+        "type": "object",
+        "required": [
+          "span_id",
+          "span_type",
+          "status"
+        ],
+        "title": "TraceGraphSpanResponse"
+      },
+      "TraceGraphSummaryResponse": {
+        "properties": {
+          "trace_id": {
+            "type": "string",
+            "title": "Trace Id"
+          },
+          "root_span_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Span Id"
+          },
+          "root_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Call Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "span_count": {
+            "type": "integer",
+            "title": "Span Count",
+            "default": 0
+          },
+          "agent_count": {
+            "type": "integer",
+            "title": "Agent Count",
+            "default": 0
+          },
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agents"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "total_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Latency Ms"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "title": "Total Cost Usd",
+            "default": 0.0
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count",
+            "default": 0
+          },
+          "has_failure": {
+            "type": "boolean",
+            "title": "Has Failure",
+            "default": false
+          },
+          "has_outcome": {
+            "type": "boolean",
+            "title": "Has Outcome",
+            "default": false
+          },
+          "capture_completeness_score": {
+            "type": "number",
+            "title": "Capture Completeness Score",
+            "default": 0.0
+          },
+          "completeness_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Completeness Warnings"
+          },
+          "projection_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projection Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trace_id",
+          "status"
+        ],
+        "title": "TraceGraphSummaryResponse"
+      },
       "TraceListItem": {
         "properties": {
           "trace_id": {
@@ -43356,6 +47997,17 @@
             "type": "string",
             "title": "Worker Token"
           },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          },
           "capacity": {
             "type": "integer",
             "title": "Capacity",
@@ -43388,6 +48040,17 @@
             "type": "string",
             "title": "Worker Token"
           },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          },
           "result": {
             "additionalProperties": true,
             "type": "object",
@@ -43401,11 +48064,67 @@
         ],
         "title": "WorkerResultPayload"
       },
+      "app__api__routes___internal__owner_common__OwnerProjectItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "owner_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Ref"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "call_count": {
+            "type": "integer",
+            "title": "Call Count"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "title": "Total Cost Usd"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "owner_ref",
+          "is_active",
+          "created_at",
+          "call_count",
+          "total_cost_usd",
+          "member_count"
+        ],
+        "title": "OwnerProjectItem"
+      },
       "app__api__routes___internal__owner_common__OwnerProjectsResponse": {
         "properties": {
           "projects": {
             "items": {
-              "$ref": "#/components/schemas/OwnerProjectItem"
+              "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerProjectItem"
             },
             "type": "array",
             "title": "Projects"
@@ -43421,54 +48140,6 @@
           "total"
         ],
         "title": "OwnerProjectsResponse"
-      },
-      "app__api__routes___internal__owner_common__OwnerStatsResponse": {
-        "properties": {
-          "total_users": {
-            "type": "integer",
-            "title": "Total Users"
-          },
-          "total_projects": {
-            "type": "integer",
-            "title": "Total Projects"
-          },
-          "total_calls": {
-            "type": "integer",
-            "title": "Total Calls"
-          },
-          "calls_last_7d": {
-            "type": "integer",
-            "title": "Calls Last 7D"
-          },
-          "total_cost_usd": {
-            "type": "number",
-            "title": "Total Cost Usd"
-          },
-          "cost_last_7d_usd": {
-            "type": "number",
-            "title": "Cost Last 7D Usd"
-          },
-          "new_users_last_7d": {
-            "type": "integer",
-            "title": "New Users Last 7D"
-          },
-          "active_users_last_7d": {
-            "type": "integer",
-            "title": "Active Users Last 7D"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total_users",
-          "total_projects",
-          "total_calls",
-          "calls_last_7d",
-          "total_cost_usd",
-          "cost_last_7d_usd",
-          "new_users_last_7d",
-          "active_users_last_7d"
-        ],
-        "title": "OwnerStatsResponse"
       },
       "app__api__routes___internal__owner_common__OwnerUserItem": {
         "properties": {
@@ -43535,56 +48206,48 @@
         ],
         "title": "OwnerUserItem"
       },
-      "app__api__routes__internal__OwnerProjectItem": {
+      "app__api__routes__internal__OwnerStatsResponse": {
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "owner_ref": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Ref"
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "call_count": {
+          "total_users": {
             "type": "integer",
-            "title": "Call Count"
+            "title": "Total Users"
+          },
+          "total_projects": {
+            "type": "integer",
+            "title": "Total Projects"
+          },
+          "total_calls": {
+            "type": "integer",
+            "title": "Total Calls"
+          },
+          "calls_last_7d": {
+            "type": "integer",
+            "title": "Calls Last 7D"
           },
           "total_cost_usd": {
             "type": "number",
             "title": "Total Cost Usd"
+          },
+          "cost_last_7d_usd": {
+            "type": "number",
+            "title": "Cost Last 7D Usd"
+          },
+          "new_users_last_7d": {
+            "type": "integer",
+            "title": "New Users Last 7D"
           }
         },
         "type": "object",
         "required": [
-          "id",
-          "name",
-          "owner_ref",
-          "is_active",
-          "created_at",
-          "call_count",
-          "total_cost_usd"
+          "total_users",
+          "total_projects",
+          "total_calls",
+          "calls_last_7d",
+          "total_cost_usd",
+          "cost_last_7d_usd",
+          "new_users_last_7d"
         ],
-        "title": "OwnerProjectItem"
+        "title": "OwnerStatsResponse"
       },
       "app__api__routes__internal__OwnerUsersResponse": {
         "properties": {

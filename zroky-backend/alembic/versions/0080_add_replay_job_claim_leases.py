@@ -1,7 +1,7 @@
 """add replay job claim leases
 
 Revision ID: 0080_add_replay_job_claim_leases
-Revises: 0079_skydo_billing_provider
+Revises: 0079_billing_provider_fields
 Create Date: 2026-06-10 00:00:00.000000
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision = "0080_add_replay_job_claim_leases"
-down_revision = "0079_skydo_billing_provider"
+down_revision = "0079_billing_provider_fields"
 branch_labels = None
 depends_on = None
 

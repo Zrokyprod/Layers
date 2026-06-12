@@ -6,9 +6,9 @@ separate feature flags so the legacy surface can be retired without
 disturbing the §11.3 contract.
 
   Hosted billing (Module 5 / 12; plan section 11.3) always mounted:
-    POST /v1/billing/checkout         Skydo payment request URL
-    POST /v1/billing/portal           Skydo dashboard URL
-    POST /v1/billing/webhook          signed billing webhook receiver
+    POST /v1/billing/razorpay/order   Razorpay Standard Checkout order
+    POST /v1/billing/razorpay/verify  Razorpay client callback verification
+    POST /v1/billing/webhook          signed Razorpay webhook receiver
     GET  /v1/billing/me               current org plan + SLA tier + entitlements baseline
 
   Legacy (Module 12 default-off; gated by FEATURE_LEGACY_BILLING):
@@ -41,7 +41,6 @@ from fastapi import (
     HTTPException,
     Header,
     Request,
-    Response,
     status,
 )
 from pydantic import BaseModel, Field, model_validator
@@ -86,14 +85,6 @@ from app.services.entitlement_catalog import load_pricing_contract
 from app.services import entitlements_resolver
 from app.services.entitlements import seed_plan_entitlements
 from app.services.replay_runs import check_replay_monthly_quota
-from app.services.skydo_gateway import (
-    BillingWebhookSignatureError,
-    SkydoError,
-    SkydoGateway,
-    get_skydo_gateway,
-    verify_webhook_signature,
-)
-from app.services.skydo_sync import dispatch_event
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +274,7 @@ def get_usage_summary(
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Module 5 - hosted Skydo billing surface
+# Module 5 - hosted Razorpay billing surface
 # ════════════════════════════════════════════════════════════════════════════
 
 
@@ -322,7 +313,7 @@ def _get_or_create_org_subscription(
 
     row = Subscription(
         org_id=org_id,
-        payment_provider="skydo",
+        payment_provider="razorpay",
         plan_code=DEFAULT_PLAN_CODE,
         status="active",
         seats=1,
@@ -434,6 +425,51 @@ def _parse_stored_razorpay_request(value: str | None) -> tuple[str | None, str |
     return order_id.strip() or None, plan_code.strip().lower() or None
 
 
+_RAZORPAY_PLAN_ALIASES: dict[str, str] = {
+    "plus": "pro",
+}
+
+
+def _normalize_razorpay_plan_code(plan_code: str) -> str:
+    raw = (plan_code or "").strip().lower()
+    return assert_self_serve_plan(_RAZORPAY_PLAN_ALIASES.get(raw, raw))
+
+
+def _razorpay_webhook_event_id(event: dict[str, Any], raw_body: bytes) -> str:
+    explicit = event.get("id") or event.get("event_id")
+    if explicit:
+        return str(explicit)
+    payment = (
+        event.get("payload", {})
+        .get("payment", {})
+        .get("entity", {})
+    )
+    if isinstance(payment, dict) and payment.get("id"):
+        return f"{event.get('event') or 'razorpay'}:{payment['id']}"
+    digest = hashlib.sha256(raw_body).hexdigest()[:32]
+    return f"razorpay:{digest}"
+
+
+def _verify_razorpay_webhook_signature(*, payload: bytes, signature: str | None) -> None:
+    secret = (get_settings().RAZORPAY_WEBHOOK_SECRET or "").strip()
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAZORPAY_WEBHOOK_SECRET is not configured.",
+        )
+    if not signature:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing Razorpay webhook signature.",
+        )
+    expected = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay webhook signature mismatch.",
+        )
+
+
 # ── schemas ──────────────────────────────────────────────────────────────────
 
 
@@ -448,7 +484,7 @@ class CheckoutRequest(BaseModel):
     customer_email: str | None = Field(
         default=None,
         max_length=320,
-        description="Optional billing contact email for Skydo reconciliation.",
+        description="Optional billing contact email for Razorpay reconciliation.",
     )
 
 
@@ -457,12 +493,12 @@ class CheckoutResponse(BaseModel):
     checkout_url: str
     plan_code: str
     org_id: str
-    payment_provider: str = "skydo"
+    payment_provider: str = "razorpay"
     payment_request_id: str
-    manual_confirmation_required: bool = True
+    manual_confirmation_required: bool = False
     instructions: str
     amount_usd: int | None = None
-    currency: str = "USD"
+    currency: str = "INR"
 
 
 class RazorpayOrderRequest(BaseModel):
@@ -528,7 +564,7 @@ class PortalResponse(BaseModel):
     session_id: str
     portal_url: str
     org_id: str
-    payment_provider: str = "skydo"
+    payment_provider: str = "razorpay"
 
 
 class WebhookResponse(BaseModel):
@@ -544,7 +580,7 @@ class BillingMeResponse(BaseModel):
     plan_code: str
     status: str
     seats: int
-    payment_provider: str = "skydo"
+    payment_provider: str = "razorpay"
     payment_customer_ref: str | None = None
     payment_subscription_ref: str | None = None
     payment_request_ref: str | None = None
@@ -642,59 +678,22 @@ def create_checkout_session(
     body: CheckoutRequest = Body(...),
     tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
-    gateway: SkydoGateway = Depends(get_skydo_gateway),
 ) -> CheckoutResponse:
-    """Start a Skydo payment request for a self-serve plan.
+    """Legacy compatibility endpoint.
 
-    Errors:
-      422 — bad plan_code (out-of-vocab OR not self-serve, e.g. 'free' or 'enterprise')
-      503 — BILLING_ENABLED=false
-      502 — Skydo payment request configuration error
+    Razorpay Standard Checkout needs an order id, so new clients must call
+    `/v1/billing/razorpay/order` and then open Razorpay Checkout in-browser.
     """
     _require_billing_enabled()
-    org_id = _resolve_org_id(tenant_id)
-
     try:
-        plan_norm = assert_self_serve_plan(body.plan_code)
+        _normalize_razorpay_plan_code(body.plan_code)
     except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
-
-    sub = _get_or_create_org_subscription(db, org_id=org_id)
-    amount_usd = _monthly_plan_amount_usd(plan_norm)
-    try:
-        result = gateway.create_payment_request(
-            org_id=org_id,
-            plan_code=plan_norm,
-            amount_usd=amount_usd,
-            customer_email=body.customer_email,
-        )
-    except SkydoError as exc:
-        logger.exception("billing.checkout_failed org=%s plan=%s", org_id, plan_norm)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Skydo payment request failed: {exc}",
-        ) from exc
-
-    sub.payment_provider = "skydo"
-    sub.payment_request_ref = result.id
-    if body.customer_email:
-        sub.payment_customer_ref = body.customer_email
-    db.add(sub)
-    db.commit()
-
-    return CheckoutResponse(
-        session_id=result.id,
-        checkout_url=result.url,
-        plan_code=plan_norm,
-        org_id=org_id,
-        payment_provider=result.provider,
-        payment_request_id=result.id,
-        manual_confirmation_required=result.manual_confirmation_required,
-        instructions=result.instructions,
-        amount_usd=amount_usd,
-        currency="USD",
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Use /v1/billing/razorpay/order for Razorpay Standard Checkout.",
     )
 
 
@@ -720,7 +719,7 @@ def create_razorpay_order(
 
     if body.plan_code:
         try:
-            plan_norm = assert_self_serve_plan(body.plan_code)
+            plan_norm = _normalize_razorpay_plan_code(body.plan_code)
         except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -755,6 +754,8 @@ def create_razorpay_order(
             "product": "zroky",
         },
     }
+    if body.customer_email:
+        payload["notes"]["customer_email"] = body.customer_email
 
     try:
         order = _razorpay_client().order.create(data=payload)
@@ -848,7 +849,7 @@ def verify_razorpay_payment(
 
     if plan_norm:
         try:
-            plan_norm = assert_self_serve_plan(plan_norm)
+            plan_norm = _normalize_razorpay_plan_code(plan_norm)
         except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -915,31 +916,22 @@ def create_portal_session(
     request: Request,
     tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
-    gateway: SkydoGateway = Depends(get_skydo_gateway),
 ) -> PortalResponse:
-    """Return a Skydo billing dashboard URL.
-
-    Errors:
-      503 — BILLING_ENABLED=false
-      502 — Skydo portal configuration error
-    """
+    """Return the configured Razorpay dashboard URL for billing operations."""
     _require_billing_enabled()
     org_id = _resolve_org_id(tenant_id)
-
-    try:
-        result = gateway.create_portal_session(org_id=org_id)
-    except SkydoError as exc:
-        logger.exception("billing.portal_failed org=%s", org_id)
+    portal_url = (get_settings().RAZORPAY_DASHBOARD_URL or "").strip()
+    if not portal_url:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Skydo portal failed: {exc}",
-        ) from exc
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAZORPAY_DASHBOARD_URL is not configured.",
+        )
 
     return PortalResponse(
-        session_id=result.id,
-        portal_url=result.url,
+        session_id="razorpay_dashboard",
+        portal_url=portal_url,
         org_id=org_id,
-        payment_provider=result.provider,
+        payment_provider="razorpay",
     )
 
 
@@ -947,72 +939,110 @@ def create_portal_session(
 @limiter.limit("600/minute")
 async def receive_billing_webhook(
     request: Request,
-    response: Response,
-    billing_signature: str | None = Header(
-        default=None, alias="X-Zroky-Billing-Signature"
-    ),
-    skydo_signature: str | None = Header(default=None, alias="X-Skydo-Signature"),
-    legacy_stripe_signature: str | None = Header(
-        default=None, alias="Stripe-Signature"
-    ),
+    razorpay_signature: str | None = Header(default=None, alias="X-Razorpay-Signature"),
     db: Session = Depends(get_db_session),
 ) -> WebhookResponse:
-    """Signed Skydo/manual billing webhook receiver.
-
-    Auth: HMAC-SHA256 via `X-Zroky-Billing-Signature` or
-    `X-Skydo-Signature`. A legacy `Stripe-Signature` header is still accepted
-    for old internal tooling during migration.
-
-    Behaviour:
-      - Verifies signature against SKYDO_WEBHOOK_SECRET.
-      - Idempotent claim via `billing_events(provider, provider_event_id)`.
-      - Dispatches to `services.skydo_sync.dispatch_event`.
-      - Records every event (handled or skipped) in `billing_events`.
-    """
+    """Signed Razorpay webhook receiver."""
     settings = get_settings()
     if not settings.BILLING_ENABLED:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Billing is disabled.",
         )
-    webhook_secret = (
-        settings.SKYDO_WEBHOOK_SECRET or settings.STRIPE_WEBHOOK_SECRET or ""
-    ).strip()
-    if not webhook_secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SKYDO_WEBHOOK_SECRET is not configured.",
-        )
 
     raw_body = await request.body()
-    signature = billing_signature or skydo_signature or legacy_stripe_signature
+    _verify_razorpay_webhook_signature(
+        payload=raw_body,
+        signature=razorpay_signature,
+    )
     try:
-        event = verify_webhook_signature(
-            payload=raw_body,
-            header=signature,
-            secret=webhook_secret,
-            tolerance=settings.SKYDO_WEBHOOK_TOLERANCE_SECONDS,
+        event = json.loads(raw_body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Razorpay webhook JSON.",
+        ) from exc
+    if not isinstance(event, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Razorpay webhook payload.",
         )
-    except BillingWebhookSignatureError as exc:
-        # Signature failures are deterministic; retries would fail too.
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
 
-    try:
-        result = dispatch_event(db, event)
-    except ValueError as exc:
-        # Malformed event envelope (missing id/type) — 400.
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
+    event_type = str(event.get("event") or event.get("type") or "unknown").strip()
+    event_id = _razorpay_webhook_event_id(event, raw_body)
+    existing_event = db.execute(
+        select(BillingEvent).where(
+            BillingEvent.provider == "razorpay",
+            BillingEvent.provider_event_id == event_id,
+        )
+    ).scalar_one_or_none()
+    if existing_event is not None:
+        return WebhookResponse(
+            received=True,
+            duplicate=True,
+            event_type=event_type,
+            result=existing_event.result or "skipped",
+            affected_org_id=existing_event.affected_org_id,
+        )
 
+    payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+    payment = payload.get("payment", {}).get("entity", {}) if isinstance(payload, dict) else {}
+    order = payload.get("order", {}).get("entity", {}) if isinstance(payload, dict) else {}
+    data_object = event.get("data", {}).get("object", {}) if isinstance(event.get("data"), dict) else {}
+    if not isinstance(payment, dict):
+        payment = {}
+    if not isinstance(order, dict):
+        order = {}
+    if not isinstance(data_object, dict):
+        data_object = {}
+    notes = payment.get("notes") or order.get("notes") or data_object.get("notes") or data_object or {}
+    if not isinstance(notes, dict):
+        notes = {}
+
+    org_id = str(event.get("org_id") or notes.get("org_id") or "").strip() or None
+    plan_code = str(event.get("plan_code") or notes.get("plan_code") or "").strip().lower() or None
+    payment_id = str(payment.get("id") or data_object.get("payment_ref") or event.get("payment_id") or "").strip() or None
+    order_id = str(order.get("id") or payment.get("order_id") or data_object.get("payment_request_id") or event.get("order_id") or "").strip() or None
+    result = "skipped"
+    if org_id and event_type in {"payment.captured", "payment.succeeded", "order.paid", "payment.authorized"}:
+        sub = _get_or_create_org_subscription(db, org_id=org_id)
+        sub.payment_provider = "razorpay"
+        sub.payment_request_ref = order_id or sub.payment_request_ref
+        sub.payment_subscription_ref = payment_id or sub.payment_subscription_ref
+        if plan_code:
+            try:
+                normalized_plan = _normalize_razorpay_plan_code(plan_code)
+            except (InvalidPlanCodeError, PlanNotSelfServeError):
+                normalized_plan = None
+            if normalized_plan:
+                sub.plan_code = normalized_plan
+                sub.status = "active"
+                sub.trial_end = None
+                sub.current_period_end = datetime.now(timezone.utc) + timedelta(days=30)
+                seed_plan_entitlements(db, org_id=org_id, plan_code=normalized_plan, commit=False)
+                entitlements_resolver.invalidate(org_id)
+        db.add(sub)
+        result = "applied"
+
+    db.add(
+        BillingEvent(
+            provider="razorpay",
+            provider_event_id=event_id,
+            event_type=event_type,
+            provider_created_at=datetime.now(timezone.utc),
+            processed_at=datetime.now(timezone.utc),
+            result=result,
+            affected_org_id=org_id,
+            payload_json=json.dumps(event, separators=(",", ":"), sort_keys=True),
+        )
+    )
+    db.commit()
     return WebhookResponse(
         received=True,
-        duplicate=result.duplicate,
-        event_type=result.event_type,
-        result=result.result,
-        affected_org_id=result.affected_org_id,
+        duplicate=False,
+        event_type=event_type,
+        result=result,
+        affected_org_id=org_id,
     )
 
 

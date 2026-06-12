@@ -83,14 +83,6 @@ from app.services.stripe_sync import (
     EventDispatchResult,
     dispatch_event,
 )
-from app.services.skydo_gateway import (
-    sign_webhook_payload as sign_skydo_webhook_payload,
-)
-from app.services.skydo_sync import (
-    HANDLED_EVENT_TYPES as SKYDO_HANDLED_EVENT_TYPES,
-)
-
-
 _TEST_WEBHOOK_SECRET = "whsec_test_module_5"
 _TEST_STRIPE_KEY = "sk_test_module_5"
 
@@ -103,13 +95,12 @@ def _billing_settings(monkeypatch: pytest.MonkeyPatch):
     """Default billing config for tests: enabled, with stub gateway, with
     a complete price map for the three self-serve plans."""
     monkeypatch.setenv("BILLING_ENABLED", "true")
-    monkeypatch.setenv("BILLING_PROVIDER", "skydo")
+    monkeypatch.setenv("BILLING_PROVIDER", "razorpay")
     monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_route")
     monkeypatch.setenv("RAZORPAY_KEY_SECRET", "razorpay-route-secret")
+    monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", _TEST_WEBHOOK_SECRET)
+    monkeypatch.setenv("RAZORPAY_DASHBOARD_URL", "https://dashboard.razorpay.test")
     monkeypatch.setenv("ZROKY_EXCHANGE_RATE_USD_TO_INR", "80")
-    monkeypatch.setenv("SKYDO_PAYMENT_INSTRUCTIONS_URL", "https://pay.skydo.test/zroky")
-    monkeypatch.setenv("SKYDO_PORTAL_URL", "https://dashboard.skydo.test")
-    monkeypatch.setenv("SKYDO_WEBHOOK_SECRET", _TEST_WEBHOOK_SECRET)
     monkeypatch.setenv("STRIPE_API_KEY", "")  # empty → stub gateway
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", _TEST_WEBHOOK_SECRET)
     monkeypatch.setenv(
@@ -227,6 +218,10 @@ def _razorpay_signature(order_id: str, payment_id: str) -> str:
         f"{order_id}|{payment_id}".encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
+
+
+def sign_razorpay_webhook_payload(*, payload: bytes, secret: str = _TEST_WEBHOOK_SECRET) -> str:
+    return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
 
 
 # ── billing_plans ────────────────────────────────────────────────────────────
@@ -806,29 +801,19 @@ class TestStripeSyncDispatch:
 
 
 class TestCheckoutRoute:
-    def test_happy_path_uses_stub_gateway(self, client: TestClient) -> None:
+    def test_checkout_endpoint_is_razorpay_order_compatibility_error(self, client: TestClient) -> None:
         response = client.post(
             "/v1/billing/checkout",
             json={"plan_code": "pro", "customer_email": "billing@example.com"},
         )
-        assert response.status_code == 200
-        body = response.json()
-        assert body["plan_code"] == "pro"
-        assert body["org_id"] == "org-alpha"
-        assert body["payment_provider"] == "skydo"
-        assert body["session_id"].startswith("skydo_req_")
-        assert body["payment_request_id"] == body["session_id"]
-        assert body["amount_usd"] == 149
-        assert body["manual_confirmation_required"] is True
-        assert "pay.skydo.test" in body["checkout_url"]
-        assert "zroky_payment_request_id=" in body["checkout_url"]
+        assert response.status_code == 410
+        assert "razorpay/order" in response.json()["detail"]
 
-    def test_plan_normalisation(self, client: TestClient) -> None:
+    def test_valid_plan_reaches_compatibility_error(self, client: TestClient) -> None:
         response = client.post(
             "/v1/billing/checkout", json={"plan_code": "  PRO "},
         )
-        assert response.status_code == 200
-        assert response.json()["plan_code"] == "pro"
+        assert response.status_code == 410
 
     def test_422_invalid_plan(self, client: TestClient) -> None:
         response = client.post(
@@ -858,16 +843,15 @@ class TestCheckoutRoute:
         )
         assert response.status_code == 503
 
-    def test_502_missing_skydo_payment_url(
+    def test_missing_razorpay_key_does_not_affect_deprecated_checkout(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("SKYDO_PAYMENT_INSTRUCTIONS_URL", "")
-        monkeypatch.setenv("SKYDO_PAYMENT_LINK_TEMPLATE", "")
+        monkeypatch.setenv("RAZORPAY_KEY_ID", "")
         get_settings.cache_clear()
         response = client.post(
             "/v1/billing/checkout", json={"plan_code": "pro"},
         )
-        assert response.status_code == 502
+        assert response.status_code == 410
 
     def test_403_when_role_below_admin(self, client: TestClient) -> None:
         _set_tenant(client, tenant_id="org-alpha", role="member")
@@ -905,6 +889,7 @@ class TestRazorpayCheckoutRoute:
             "org_id": "org-alpha",
             "plan_code": "pro",
             "product": "zroky",
+            "customer_email": "billing@example.com",
         }
 
         factory = client._session_factory  # type: ignore[attr-defined]
@@ -1024,9 +1009,9 @@ class TestPortalRoute:
         assert response.status_code == 200
         body = response.json()
         assert body["org_id"] == "org-alpha"
-        assert body["payment_provider"] == "skydo"
-        assert body["session_id"].startswith("skydo_portal_")
-        assert "dashboard.skydo.test" in body["portal_url"]
+        assert body["payment_provider"] == "razorpay"
+        assert body["session_id"] == "razorpay_dashboard"
+        assert "dashboard.razorpay.test" in body["portal_url"]
 
     def test_happy_path_after_checkout(self, client: TestClient) -> None:
         # Seed a Subscription to ensure existing billing rows do not block portal creation.
@@ -1037,9 +1022,9 @@ class TestPortalRoute:
                 plan_code="pro",
                 status="active",
                 seats=10,
-                payment_provider="skydo",
+                payment_provider="razorpay",
                 payment_customer_ref="billing@example.com",
-                payment_subscription_ref="skydo_pay_existing",
+                payment_subscription_ref="rzp_pay_existing",
             ))
             session.commit()
 
@@ -1047,8 +1032,8 @@ class TestPortalRoute:
         assert response.status_code == 200
         body = response.json()
         assert body["org_id"] == "org-alpha"
-        assert body["session_id"].startswith("skydo_portal_")
-        assert "dashboard.skydo.test" in body["portal_url"]
+        assert body["session_id"] == "razorpay_dashboard"
+        assert "dashboard.razorpay.test" in body["portal_url"]
 
     def test_503_billing_disabled(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -1071,8 +1056,8 @@ class TestBillingQuota:
             plan_code="pro",
             status="incomplete",
             seats=1,
-            payment_provider="skydo",
-            payment_request_ref="skydo_req_quota",
+            payment_provider="razorpay",
+            payment_request_ref="rzp_order_quota",
         ))
         db_session.add(EventCount(
             tenant_id="org-quota-incomplete",
@@ -1161,8 +1146,8 @@ class TestBillingQuota:
                     org_id="org-alpha",
                     plan_code="pro",
                     status="active",
-                    payment_provider="skydo",
-                    payment_subscription_ref="skydo_pay_usage",
+                    payment_provider="razorpay",
+                    payment_subscription_ref="rzp_pay_usage",
                 )
             )
             seed_plan_entitlements(session, org_id="org-alpha", plan_code="pro")
@@ -1223,12 +1208,12 @@ class TestWebhookRoute:
         self, client: TestClient, event: dict, *, secret: str = _TEST_WEBHOOK_SECRET
     ):
         body = json.dumps(event).encode("utf-8")
-        header = sign_skydo_webhook_payload(payload=body, secret=secret)
+        header = sign_razorpay_webhook_payload(payload=body, secret=secret)
         return client.post(
             "/v1/billing/webhook",
             content=body,
             headers={
-                "X-Zroky-Billing-Signature": header,
+                "X-Razorpay-Signature": header,
                 "Content-Type": "application/json",
             },
         )
@@ -1241,8 +1226,8 @@ class TestWebhookRoute:
                 "org_id": "org-webhook",
                 "plan_code": "pro",
                 "customer_ref": "billing@example.com",
-                "payment_ref": "skydo_pay_hook",
-                "payment_request_id": "skydo_req_hook",
+                "payment_ref": "rzp_pay_hook",
+                "payment_request_id": "rzp_order_hook",
             },
         )
         response = self._post_event(client, event)
@@ -1260,7 +1245,7 @@ class TestWebhookRoute:
             obj={
                 "org_id": "org-replay",
                 "plan_code": "pro",
-                "payment_ref": "skydo_pay_replay",
+                "payment_ref": "rzp_pay_replay",
             },
         )
         first = self._post_event(client, event)
@@ -1287,7 +1272,7 @@ class TestWebhookRoute:
     def test_400_tampered_body(self, client: TestClient) -> None:
         event = _make_event(event_id="evt_tamper", event_type="payment.succeeded")
         body = json.dumps(event).encode("utf-8")
-        header = sign_skydo_webhook_payload(
+        header = sign_razorpay_webhook_payload(
             payload=body, secret=_TEST_WEBHOOK_SECRET,
         )
         # Send a different body with the signature for the original
@@ -1295,7 +1280,7 @@ class TestWebhookRoute:
             "/v1/billing/webhook",
             content=b'{"id":"evt_other","type":"payment.succeeded","created":1,"data":{}}',
             headers={
-                "X-Zroky-Billing-Signature": header,
+                "X-Razorpay-Signature": header,
                 "Content-Type": "application/json",
             },
         )
@@ -1313,7 +1298,7 @@ class TestWebhookRoute:
     def test_503_secret_unset(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("SKYDO_WEBHOOK_SECRET", "")
+        monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", "")
         monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "")
         get_settings.cache_clear()
         event = _make_event(event_id="evt_no_secret", event_type="payment.succeeded")
@@ -1341,7 +1326,7 @@ class TestBillingMeRoute:
         assert body["plan_code"] == DEFAULT_PLAN_CODE
         assert body["status"] == "active"
         assert body["seats"] == 1
-        assert body["payment_provider"] == "skydo"
+        assert body["payment_provider"] == "razorpay"
         assert body["payment_customer_ref"] is None
         assert body["payment_subscription_ref"] is None
         assert body["payment_request_ref"] is None
@@ -1358,10 +1343,10 @@ class TestBillingMeRoute:
                 plan_code="pro",
                 status="active",
                 seats=10,
-                payment_provider="skydo",
+                payment_provider="razorpay",
                 payment_customer_ref="billing@example.com",
-                payment_subscription_ref="skydo_pay_x",
-                payment_request_ref="skydo_req_x",
+                payment_subscription_ref="rzp_pay_x",
+                payment_request_ref="rzp_order_x",
                 stripe_customer_id="cus_x",
                 stripe_sub_id="sub_x",
                 current_period_end=cpe,
@@ -1373,8 +1358,8 @@ class TestBillingMeRoute:
         body = response.json()
         assert body["plan_code"] == "pro"
         assert body["seats"] == 10
-        assert body["payment_provider"] == "skydo"
-        assert body["payment_subscription_ref"] == "skydo_pay_x"
+        assert body["payment_provider"] == "razorpay"
+        assert body["payment_subscription_ref"] == "rzp_pay_x"
         assert body["stripe_customer_id"] == "cus_x"
         assert body["plan_template"]["pilot.autopilot_enabled"] is True
 
@@ -1391,9 +1376,9 @@ class TestBillingMeRoute:
                 plan_code="pro",
                 status=billing_status,
                 seats=10,
-                payment_provider="skydo",
+                payment_provider="razorpay",
                 payment_customer_ref="billing@example.com",
-                payment_request_ref="skydo_req_pending",
+                payment_request_ref="rzp_order_pending",
             ))
             session.commit()
             seed_plan_entitlements(session, org_id="org-alpha", plan_code="pro")
@@ -1433,14 +1418,3 @@ class TestInvariants:
             "invoice.payment_failed",
         }
         assert required.issubset(HANDLED_EVENT_TYPES)
-
-    def test_skydo_handled_event_types_cover_payment_lifecycle(self) -> None:
-        required = {
-            "payment_request.created",
-            "payment.succeeded",
-            "payment.failed",
-            "payment.canceled",
-            "payment.refunded",
-            "subscription.canceled",
-        }
-        assert required.issubset(SKYDO_HANDLED_EVENT_TYPES)

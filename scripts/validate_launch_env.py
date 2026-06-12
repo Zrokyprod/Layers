@@ -226,14 +226,12 @@ def validate_backend(values: dict[str, list[EnvValue]]) -> list[str]:
 
     billing_enabled = latest(values, "BILLING_ENABLED")
     if billing_enabled is None or is_true(billing_enabled.value):
-        provider = normalized(latest(values, "BILLING_PROVIDER").value if latest(values, "BILLING_PROVIDER") else "skydo")
-        if provider == "skydo":
-            require_value(findings, values, "SKYDO_WEBHOOK_SECRET", min_length=16)
-        elif provider == "stripe":
-            require_value(findings, values, "STRIPE_API_KEY", min_length=16)
-            require_value(findings, values, "STRIPE_WEBHOOK_SECRET", min_length=16)
-        else:
-            findings.append("INVALID BILLING_PROVIDER expected=skydo|stripe")
+        provider = normalized(latest(values, "BILLING_PROVIDER").value if latest(values, "BILLING_PROVIDER") else "razorpay")
+        if provider != "razorpay":
+            findings.append("INVALID BILLING_PROVIDER expected=razorpay")
+        require_value(findings, values, "RAZORPAY_KEY_ID", min_length=8)
+        require_value(findings, values, "RAZORPAY_KEY_SECRET", min_length=16)
+        require_value(findings, values, "RAZORPAY_WEBHOOK_SECRET", min_length=16)
 
     return findings
 

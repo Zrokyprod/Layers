@@ -101,6 +101,30 @@ if not _allowed_origins and not _is_production:
     _allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
+def _normalize_host(host: str) -> str:
+    host = host.strip().lower().rstrip(".")
+    if host.startswith("[") and "]" in host:
+        return host.split("]", 1)[0].lstrip("[")
+    return host.split(":", 1)[0]
+
+
+def _is_trusted_host(host: str, allowed_hosts: list[str]) -> bool:
+    normalized = _normalize_host(host)
+    if not normalized:
+        return False
+    for allowed in allowed_hosts:
+        candidate = _normalize_host(allowed)
+        if candidate == "*":
+            return True
+        if candidate.startswith("*."):
+            suffix = candidate[1:]
+            if normalized.endswith(suffix) and normalized != candidate[2:]:
+                return True
+        elif normalized == candidate:
+            return True
+    return False
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     if settings.DATABASE_URL.startswith("sqlite"):

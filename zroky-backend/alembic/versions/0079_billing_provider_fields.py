@@ -1,6 +1,6 @@
-"""add Skydo billing provider fields and event log
+"""add billing provider fields and event log
 
-Revision ID: 0079_skydo_billing_provider
+Revision ID: 0079_billing_provider_fields
 Revises: 0078_create_discovery_scan_state
 Create Date: 2026-06-07 00:00:00.000000
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0079_skydo_billing_provider"
+revision = "0079_billing_provider_fields"
 down_revision = "0078_create_discovery_scan_state"
 branch_labels = None
 depends_on = None
@@ -23,7 +23,7 @@ def upgrade() -> None:
             "payment_provider",
             sa.String(length=32),
             nullable=False,
-            server_default=sa.text("'skydo'"),
+            server_default=sa.text("'razorpay'"),
         ),
     )
     op.add_column(

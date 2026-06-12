@@ -25,7 +25,8 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import Body
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -377,7 +378,7 @@ def delete_golden(
     golden_set_id: str,
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
-) -> None:
+) -> Response:
     deleted = delete_golden_set(
         db, project_id=tenant_id, golden_set_id=golden_set_id
     )
@@ -385,6 +386,7 @@ def delete_golden(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Golden set not found"
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ── golden trace routes ──────────────────────────────────────────────────────
@@ -531,7 +533,7 @@ def remove_golden_trace(
     trace_id: str,
     tenant_id: str = Depends(require_tenant_id),
     db: Session = Depends(get_db_session),
-) -> None:
+) -> Response:
     deleted = remove_trace(
         db,
         project_id=tenant_id,
@@ -542,6 +544,7 @@ def remove_golden_trace(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Golden trace not found"
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ── replay run dispatch (Module 4.2) ─────────────────────────────────────────

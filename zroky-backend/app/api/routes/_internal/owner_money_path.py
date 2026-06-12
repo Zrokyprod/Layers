@@ -364,7 +364,7 @@ def _billing_provider_verification(db: Session) -> OwnerBillingProviderVerificat
     latest = db.scalar(
         select(BillingEvent)
         .where(
-            BillingEvent.provider.in_(("skydo", "razorpay")),
+            BillingEvent.provider == "razorpay",
             BillingEvent.event_type.in_(("payment.succeeded", "payment_request.created")),
         )
         .order_by(func.coalesce(BillingEvent.processed_at, BillingEvent.received_at).desc())
@@ -373,7 +373,7 @@ def _billing_provider_verification(db: Session) -> OwnerBillingProviderVerificat
     if latest is None:
         return OwnerBillingProviderVerification(
             state="unverified",
-            detail="No Skydo or Razorpay billing event has been recorded.",
+            detail="No Razorpay billing event has been recorded.",
         )
     checked_at = _as_utc(latest.processed_at) or _as_utc(latest.received_at)
     if latest.result == "applied":

@@ -231,16 +231,13 @@ class Settings(BaseSettings):
     # endpoints all return 503. Self-host (`ZROKY_TIER=self-host`) sets this
     # false.
     BILLING_ENABLED: bool = False
-    BILLING_PROVIDER: str = "skydo"
+    BILLING_PROVIDER: str = "razorpay"
     RAZORPAY_KEY_ID: Optional[str] = None
     RAZORPAY_KEY_SECRET: Optional[str] = None
+    RAZORPAY_WEBHOOK_SECRET: Optional[str] = None
+    RAZORPAY_DASHBOARD_URL: str = "https://dashboard.razorpay.com/"
     ZROKY_EXCHANGE_RATE_USD_TO_INR: float = 83.00
-    SKYDO_PAYMENT_INSTRUCTIONS_URL: str = "https://dashboard.skydo.com/"
-    SKYDO_PAYMENT_LINK_TEMPLATE: Optional[str] = None
-    SKYDO_PORTAL_URL: str = "https://dashboard.skydo.com/"
-    SKYDO_WEBHOOK_SECRET: Optional[str] = None
-    SKYDO_WEBHOOK_TOLERANCE_SECONDS: int = 300
-    # Deprecated Stripe compatibility. Do not configure for hosted Skydo billing.
+    # Deprecated Stripe compatibility fields retained only for old env files.
     STRIPE_API_KEY: Optional[str] = None
     # Deprecated Stripe webhook compatibility.
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
@@ -411,7 +408,7 @@ class Settings(BaseSettings):
     # FEATURE_LEGACY_ONBOARDING, FEATURE_LEGACY_FEATURE_FLAGS:
     # source files deleted in Module 1; flags removed.
     FEATURE_LEGACY_OWNER: bool = True              # Customer production env sets False. Admin-only deployments may enable for zroky-admin.
-    FEATURE_LEGACY_BILLING: bool = False           # M12 disabled. Replacement: Â§11.3 Stripe-Checkout-only routes (POST /checkout, /portal, /webhook + GET /me); legacy /plans, GET/PUT /subscription, /usage gated off.
+    FEATURE_LEGACY_BILLING: bool = False           # M12 disabled. Replacement: Razorpay-only billing routes plus GET /me and GET /usage; legacy /plans and GET/PUT /subscription gated off.
     FEATURE_LEGACY_INVITATIONS: bool = True        # M8 will reduce. Replacement: /v1/invitations/accept only.
     FEATURE_LEGACY_DIAGNOSIS_ALIAS: bool = True    # M7 will disable. Merges into /v1/diagnoses.
 
@@ -591,31 +588,21 @@ def validate_runtime_settings(settings: Settings) -> None:
     elif len(platform_llm_key) < 16:
         failures.append("OPENROUTER_API_KEY or OPENAI_API_KEY must be at least 16 characters in production")
 
-    billing_provider = (settings.BILLING_PROVIDER or "").strip().lower()
     if settings.BILLING_ENABLED:
-        if billing_provider == "skydo":
-            require_secret(
-                "SKYDO_WEBHOOK_SECRET",
-                "SKYDO_WEBHOOK_SECRET must be configured when Skydo billing is enabled in production",
-            )
-        if billing_provider == "stripe":
-            require_secret(
-                "STRIPE_API_KEY",
-                "STRIPE_API_KEY must be configured when Stripe billing is enabled in production",
-            )
-            require_secret(
-                "STRIPE_WEBHOOK_SECRET",
-                "STRIPE_WEBHOOK_SECRET must be configured when Stripe billing is enabled in production",
-            )
-        if billing_provider == "razorpay":
-            require_secret(
-                "RAZORPAY_KEY_ID",
-                "RAZORPAY_KEY_ID must be configured when Razorpay billing is enabled in production",
-            )
-            require_secret(
-                "RAZORPAY_KEY_SECRET",
-                "RAZORPAY_KEY_SECRET must be configured when Razorpay billing is enabled in production",
-            )
+        if (settings.BILLING_PROVIDER or "").strip().lower() != "razorpay":
+            failures.append("BILLING_PROVIDER must be razorpay in production")
+        require_secret(
+            "RAZORPAY_KEY_ID",
+            "RAZORPAY_KEY_ID must be configured when Razorpay billing is enabled in production",
+        )
+        require_secret(
+            "RAZORPAY_KEY_SECRET",
+            "RAZORPAY_KEY_SECRET must be configured when Razorpay billing is enabled in production",
+        )
+        require_secret(
+            "RAZORPAY_WEBHOOK_SECRET",
+            "RAZORPAY_WEBHOOK_SECRET must be configured when Razorpay billing is enabled in production",
+        )
 
     slack_configured = any(
         (value or "").strip()

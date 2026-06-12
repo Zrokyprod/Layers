@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  useConfirmOwnerSkydoPayment,
+  useConfirmOwnerRazorpayPayment,
   useOwnerBillingAccounts,
   useOwnerBillingSummary,
   useOwnerMoneyPathHealth,
@@ -197,7 +197,7 @@ function BillingAccountRow({
         <div className="owner-billing-links">
           {account.payment_dashboard_url ? (
             <a className="owner-row-link" href={account.payment_dashboard_url} target="_blank" rel="noopener noreferrer">
-              Skydo
+              Razorpay
             </a>
           ) : null}
           {account.stripe_customer_url ? (
@@ -232,7 +232,7 @@ export default function PricingPage() {
     limit: 100,
   });
   const updateMutation = useUpdateOwnerPricing();
-  const confirmPaymentMutation = useConfirmOwnerSkydoPayment();
+  const confirmPaymentMutation = useConfirmOwnerRazorpayPayment();
 
   const [config, setConfig] = useState<PricingConfig | null>(null);
   const [saveMsg, setSaveMsg] = useState("");
@@ -304,7 +304,7 @@ export default function PricingPage() {
         current_period_end: confirmPeriodEnd.trim() ? new Date(confirmPeriodEnd).toISOString() : null,
         seats: parsedSeats !== null && Number.isFinite(parsedSeats) ? parsedSeats : null,
       });
-      setConfirmMsg("Skydo payment confirmed and entitlements activated.");
+      setConfirmMsg("Razorpay payment confirmed and entitlements activated.");
       setConfirmPaymentRef("");
       setConfirmPaymentRequestRef("");
     } catch (e: unknown) {
@@ -498,7 +498,7 @@ export default function PricingPage() {
         <div className="owner-stat-card">
           <span className="owner-stat-label">Billing accounts</span>
           <span className="owner-stat-value">{accountsQuery.data?.total.toLocaleString() ?? "-"}</span>
-          <span className="owner-stat-sub">Skydo and legacy billing rows</span>
+          <span className="owner-stat-sub">Razorpay and legacy billing rows</span>
         </div>
       </section>
 
@@ -574,8 +574,8 @@ export default function PricingPage() {
 
       <section className="panel">
         <div className="panel-header">
-          Confirm Skydo Payment
-          <span className="panel-header-note">Marks a received Skydo payment as active and seeds plan entitlements.</span>
+          Confirm Razorpay Payment
+          <span className="panel-header-note">Marks a received Razorpay payment as active and seeds plan entitlements.</span>
         </div>
         {confirmMsg && (
           <div className={`alert-strip${confirmMsg.startsWith("Error") ? " alert-strip-error" : ""}`}>
@@ -598,11 +598,11 @@ export default function PricingPage() {
             </label>
             <label className="owner-filter-group">
               <span className="owner-filter-label">Payment ref</span>
-              <input className="input" value={confirmPaymentRef} onChange={(event) => setConfirmPaymentRef(event.target.value)} placeholder="Skydo payment/invoice id" />
+              <input className="input" value={confirmPaymentRef} onChange={(event) => setConfirmPaymentRef(event.target.value)} placeholder="Razorpay payment id" />
             </label>
             <label className="owner-filter-group">
               <span className="owner-filter-label">Request ref</span>
-              <input className="input" value={confirmPaymentRequestRef} onChange={(event) => setConfirmPaymentRequestRef(event.target.value)} placeholder="skydo_req_..." />
+              <input className="input" value={confirmPaymentRequestRef} onChange={(event) => setConfirmPaymentRequestRef(event.target.value)} placeholder="order_..." />
             </label>
             <label className="owner-filter-group">
               <span className="owner-filter-label">Customer ref</span>
@@ -629,8 +629,8 @@ export default function PricingPage() {
 
       <section className="panel">
         <div className="panel-header">
-          Skydo Billing Accounts
-          <span className="panel-header-note">Shows subscription rows with Skydo payment references and legacy fallback links.</span>
+          Razorpay Billing Accounts
+          <span className="panel-header-note">Shows subscription rows with Razorpay payment references and legacy fallback links.</span>
         </div>
         <div className="owner-panel-filter owner-panel-filter-embedded">
           <div className="owner-filter-row">

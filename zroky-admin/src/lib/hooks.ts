@@ -4,7 +4,7 @@ import {
   anonymizeOwnerUser,
   clearRateLimitOverrides,
   clearProjectRateLimit,
-  confirmOwnerSkydoPayment,
+  confirmOwnerRazorpayPayment,
   deleteOwnerUser,
   fetchOwnerLaunchReadiness,
   fetchAuditLog,
@@ -330,10 +330,10 @@ export function useUpdateOwnerPricing() {
   });
 }
 
-export function useConfirmOwnerSkydoPayment() {
+export function useConfirmOwnerRazorpayPayment() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: OwnerBillingPaymentConfirmRequest) => confirmOwnerSkydoPayment(body),
+    mutationFn: (body: OwnerBillingPaymentConfirmRequest) => confirmOwnerRazorpayPayment(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["owner", "billing"] });
       queryClient.invalidateQueries({ queryKey: ["owner", "money-path-health"] });

@@ -9,7 +9,6 @@ import { AlertTriangle, CreditCard, Gauge, ReceiptText, ShieldCheck } from "luci
 import { useBudget, useBudgetStatus, useUpdateBudget } from "@/lib/hooks";
 import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
-  createBillingPortal,
   createRazorpayOrder,
   getBillingMe,
   getBillingUsage,
@@ -208,12 +207,11 @@ function isProblemMessage(value: string): boolean {
 }
 
 function paymentStatusLabel(billing: BillingMeResponse | null): { label: string; detail: string } {
-  const provider = billing?.payment_provider === "razorpay" ? "Razorpay" : "Skydo";
   if (billing?.payment_subscription_ref) {
-    return { label: "Confirmed", detail: `${provider} payment is active for this billing period.` };
+    return { label: "Confirmed", detail: "Razorpay payment is active for this billing period." };
   }
   if (billing?.payment_request_ref) {
-    return { label: "Pending", detail: `${provider} payment request is waiting for confirmation.` };
+    return { label: "Pending", detail: "Razorpay payment request is waiting for confirmation." };
   }
   return { label: "Not requested", detail: "Start a paid plan to create a Razorpay checkout order." };
 }
@@ -359,16 +357,6 @@ function BillingSettingsContent() {
     }
   }
 
-  async function openBillingPortal() {
-    setActionMsg("");
-    try {
-      const portal = await createBillingPortal();
-      window.open(portal.portal_url, "_self");
-    } catch (e: unknown) {
-      setActionMsg(e instanceof Error ? e.message : "Failed to open billing portal.");
-    }
-  }
-
   const currentPlanCode = billingMe?.plan_code ?? "free";
   const currentCatalogCode = catalogPlanCode(currentPlanCode);
   const legacyPlanAliasNote = currentPlanCode.trim().toLowerCase() === "plus" ? "Legacy Plus maps to Pro entitlements." : null;
@@ -419,16 +407,6 @@ function BillingSettingsContent() {
             <h3>Plan &amp; Pricing</h3>
             <p>Your current plan and Razorpay checkout upgrades.</p>
           </div>
-          {billingMe?.payment_provider === "skydo" && (
-            <button
-              type="button"
-              className="btn btn-soft"
-              onClick={() => void openBillingPortal()}
-              disabled={loading}
-            >
-              Open Skydo
-            </button>
-          )}
         </header>
 
         {isProblemMessage(actionMsg) ? (
@@ -586,17 +564,7 @@ function BillingSettingsContent() {
           <p>Razorpay is the self-serve payment surface; Zroky verifies paid plans into entitlements.</p>
         </header>
         <div className="actions billing-invoices-empty">
-          {billingMe?.payment_provider === "skydo" ? (
-            <button
-              type="button"
-              className="btn btn-soft"
-              onClick={() => void openBillingPortal()}
-            >
-              Open Skydo dashboard
-            </button>
-          ) : (
-            <span className="hint">Razorpay payment receipts are confirmed immediately after checkout verification.</span>
-          )}
+          <span className="hint">Razorpay payment receipts are confirmed immediately after checkout verification.</span>
           {!billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref && (
             <span className="hint">Start a paid plan to create a Razorpay payment reference.</span>
           )}

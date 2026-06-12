@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   GoldenSetView,
   GoldenTraceView,
   RegressionCIRunDetailResponse,
@@ -466,7 +466,7 @@ export const moneyPathBilling = {
   plan_code: "pro",
   status: "active",
   seats: 1,
-  payment_provider: "skydo",
+  payment_provider: "razorpay",
   payment_customer_ref: null,
   payment_subscription_ref: null,
   payment_request_ref: null,
