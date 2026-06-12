@@ -15,6 +15,49 @@ from app.db.session import get_db_session
 from app.main import app
 
 
+class _FakeRazorpayPaymentClient:
+    def __init__(self, owner: "_FakeRazorpayClient") -> None:
+        self._owner = owner
+
+    def fetch(self, payment_ref: str) -> dict:
+        return {
+            "id": payment_ref,
+            "order_id": self._owner.order_id,
+            "status": self._owner.payment_status,
+            "captured": self._owner.payment_status == "captured",
+            "amount": 1_000,
+            "currency": "INR",
+            "notes": dict(self._owner.notes),
+            "email": "billing@example.com",
+        }
+
+
+class _FakeRazorpayOrderClient:
+    def __init__(self, owner: "_FakeRazorpayClient") -> None:
+        self._owner = owner
+        self.fetched_refs: list[str] = []
+
+    def fetch(self, order_ref: str) -> dict:
+        self.fetched_refs.append(order_ref)
+        return {
+            "id": order_ref,
+            "status": self._owner.order_status,
+            "amount": 1_000,
+            "currency": "INR",
+            "notes": dict(self._owner.notes),
+        }
+
+
+class _FakeRazorpayClient:
+    def __init__(self) -> None:
+        self.order_id = "rzp_order_123"
+        self.payment_status = "captured"
+        self.order_status = "paid"
+        self.notes = {"org_id": "org_razorpay", "plan_code": "pro"}
+        self.payment = _FakeRazorpayPaymentClient(self)
+        self.order = _FakeRazorpayOrderClient(self)
+
+
 @pytest.fixture()
 def client(tmp_path: Path):
     db_path = tmp_path / "owner_support_billing.db"
@@ -100,7 +143,7 @@ def test_owner_support_ticket_detail_and_reply(client, monkeypatch: pytest.Monke
     assert messages[1]["is_internal"] is True
 
 
-def test_owner_billing_accounts_include_stripe_links(client, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_owner_billing_accounts_include_razorpay_dashboard(client, monkeypatch: pytest.MonkeyPatch) -> None:
     test_client, session_factory = client
     owner_headers = _set_owner_auth(monkeypatch)
     now = datetime.now(UTC)
@@ -110,8 +153,10 @@ def test_owner_billing_accounts_include_stripe_links(client, monkeypatch: pytest
             Subscription(
                 id="sub_row_1",
                 org_id="org_1",
-                stripe_customer_id="cus_123",
-                stripe_sub_id="sub_123",
+                payment_provider="razorpay",
+                payment_customer_ref="billing@example.com",
+                payment_subscription_ref="pay_123",
+                payment_request_ref="order_123",
                 plan_code="pro",
                 status="active",
                 sla_tier="team",
@@ -128,13 +173,19 @@ def test_owner_billing_accounts_include_stripe_links(client, monkeypatch: pytest
     row = payload["items"][0]
     assert row["org_id"] == "org_1"
     assert row["project_name"] == "Acme AI"
-    assert row["stripe_customer_url"].endswith("/customers/cus_123")
-    assert row["stripe_subscription_url"].endswith("/subscriptions/sub_123")
+    assert row["payment_provider"] == "razorpay"
+    assert row["payment_subscription_ref"] == "pay_123"
+    assert row["payment_dashboard_url"]
 
 
 def test_owner_confirms_razorpay_payment_and_seeds_entitlements(client, monkeypatch: pytest.MonkeyPatch) -> None:
     test_client, session_factory = client
     owner_headers = _set_owner_auth(monkeypatch)
+    fake_razorpay = _FakeRazorpayClient()
+    monkeypatch.setattr(
+        "app.api.routes._internal.owner_support_billing._razorpay_client",
+        lambda: fake_razorpay,
+    )
     period_end = datetime.now(UTC) + timedelta(days=30)
 
     res = test_client.post(
@@ -158,6 +209,7 @@ def test_owner_confirms_razorpay_payment_and_seeds_entitlements(client, monkeypa
     assert payload["plan_code"] == "pro"
     assert payload["payment_provider"] == "razorpay"
     assert payload["payment_subscription_ref"] == "rzp_pay_123"
+    assert payload["provider_verified"] is True
 
     with session_factory() as db:
         sub = db.scalar(select(Subscription).where(Subscription.org_id == "org_razorpay"))
@@ -183,6 +235,78 @@ def test_owner_confirms_razorpay_payment_and_seeds_entitlements(client, monkeypa
         },
     )
     assert replay.status_code == 200
+
+
+def test_owner_confirm_rejects_uncaptured_razorpay_payment_without_entitlements(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    fake_razorpay = _FakeRazorpayClient()
+    fake_razorpay.payment_status = "authorized"
+    fake_razorpay.order_status = "attempted"
+    monkeypatch.setattr(
+        "app.api.routes._internal.owner_support_billing._razorpay_client",
+        lambda: fake_razorpay,
+    )
+
+    res = test_client.post(
+        "/v1/owner/billing/payments/confirm",
+        headers=owner_headers,
+        json={
+            "org_id": "org_razorpay",
+            "plan_code": "pro",
+            "payment_ref": "rzp_pay_authorized",
+            "payment_request_ref": "rzp_order_123",
+        },
+    )
+
+    assert res.status_code == 409
+    with session_factory() as db:
+        assert db.scalar(select(Subscription).where(Subscription.org_id == "org_razorpay")) is None
+        rows = db.execute(
+            select(Entitlement).where(Entitlement.org_id == "org_razorpay")
+        ).scalars().all()
+        assert rows == []
+
+
+def test_owner_confirm_normalizes_stored_checkout_order_ref(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    fake_razorpay = _FakeRazorpayClient()
+    monkeypatch.setattr(
+        "app.api.routes._internal.owner_support_billing._razorpay_client",
+        lambda: fake_razorpay,
+    )
+    with session_factory() as db:
+        db.add(
+            Subscription(
+                org_id="org_razorpay",
+                plan_code="pro",
+                status="incomplete",
+                seats=1,
+                payment_provider="razorpay",
+                payment_request_ref="rzp_order_123:pro",
+            )
+        )
+        db.commit()
+
+    res = test_client.post(
+        "/v1/owner/billing/payments/confirm",
+        headers=owner_headers,
+        json={
+            "org_id": "org_razorpay",
+            "plan_code": "pro",
+            "payment_ref": "rzp_pay_123",
+        },
+    )
+
+    assert res.status_code == 200
+    assert fake_razorpay.order.fetched_refs == ["rzp_order_123"]
 
 
 def test_owner_pricing_plans_exposes_backend_entitlement_contract(client, monkeypatch: pytest.MonkeyPatch) -> None:

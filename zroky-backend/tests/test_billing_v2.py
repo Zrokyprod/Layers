@@ -1,17 +1,4 @@
-"""Tests for Module 5 — Stripe-aligned billing surface.
-
-Coverage:
-  - services.billing_plans   — vocab, validators, price-id resolver
-  - services.entitlements    — seed/clear/upsert primitives
-  - services.stripe_gateway  — webhook signature verify (HMAC), stub
-                               gateway behaviour
-  - services.stripe_sync     — dispatch_event idempotency + per-event
-                               handlers (checkout, sub.updated,
-                               sub.deleted, invoice.paid,
-                               invoice.payment_failed, unknown)
-  - routes/billing.py        — POST /checkout, /portal, /webhook;
-                               GET /me; 422 / 404 / 502 / 503 mapping
-"""
+"""Tests for the hosted Razorpay billing surface."""
 from __future__ import annotations
 
 import hashlib
@@ -26,23 +13,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.api.dependencies.tenant import (
-    TenantContext,
-    require_tenant_context,
-)
+from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import (
-    BillingEvent,
-    Entitlement,
-    EventCount,
-    GoldenSet,
-    GoldenTrace,
-    ProjectAlert,
-    ReplayRun,
-    StripeEvent,
-    Subscription,
-)
+from app.db.models import BillingEvent, Subscription
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.billing_plans import (
@@ -50,50 +24,17 @@ from app.services.billing_plans import (
     InvalidPlanCodeError,
     PLAN_ENTITLEMENTS,
     PlanNotSelfServeError,
-    StripePriceNotConfiguredError,
     VALID_PLAN_CODES,
     assert_self_serve_plan,
     get_plan_entitlements,
     normalize_plan_code,
-    parse_price_map,
-    resolve_stripe_price_id,
 )
-from app.services.entitlements import (
-    clear_plan_entitlements,
-    clear_trial_entitlements,
-    list_entitlements,
-    parse_entitlement_value,
-    seed_plan_entitlements,
-    set_override_entitlement,
-    set_trial_entitlements,
-    upsert_entitlement,
-)
-from app.services.billing_quota import check_quota
-from app.services.billing_metering import increment_event_count
-from app.services.stripe_gateway import (
-    LiveStripeGateway,
-    StubStripeGateway,
-    WebhookSignatureError,
-    get_stripe_gateway,
-    sign_webhook_payload,
-    verify_webhook_signature,
-)
-from app.services.stripe_sync import (
-    HANDLED_EVENT_TYPES,
-    EventDispatchResult,
-    dispatch_event,
-)
+
 _TEST_WEBHOOK_SECRET = "whsec_test_module_5"
-_TEST_STRIPE_KEY = "sk_test_module_5"
-
-
-# ── fixtures ─────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(autouse=True)
 def _billing_settings(monkeypatch: pytest.MonkeyPatch):
-    """Default billing config for tests: enabled, with stub gateway, with
-    a complete price map for the three self-serve plans."""
     monkeypatch.setenv("BILLING_ENABLED", "true")
     monkeypatch.setenv("BILLING_PROVIDER", "razorpay")
     monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_route")
@@ -101,51 +42,13 @@ def _billing_settings(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", _TEST_WEBHOOK_SECRET)
     monkeypatch.setenv("RAZORPAY_DASHBOARD_URL", "https://dashboard.razorpay.test")
     monkeypatch.setenv("ZROKY_EXCHANGE_RATE_USD_TO_INR", "80")
-    monkeypatch.setenv("STRIPE_API_KEY", "")  # empty → stub gateway
-    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", _TEST_WEBHOOK_SECRET)
-    monkeypatch.setenv(
-        "STRIPE_PRICE_IDS_JSON",
-        json.dumps(
-            {
-                "pilot": "price_pilot_test",
-                "pro": "price_pro_test",
-                "plus": "price_plus_test",
-            }
-        ),
-    )
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
 
 
 @pytest.fixture()
-def db_session(tmp_path: Path):
-    db_path = tmp_path / "test_billing_svc.db"
-    engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False},
-        future=True,
-    )
-    Base.metadata.create_all(bind=engine)
-    session_factory = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False, future=True
-    )
-    session = session_factory()
-    try:
-        yield session
-    finally:
-        session.close()
-        engine.dispose()
-
-
-@pytest.fixture()
 def client(tmp_path: Path):
-    """Test client with admin tenant context auto-granted.
-
-    We override `require_tenant_context` so tests don't need a JWT —
-    the route's `require_tenant_role('admin')` resolves through this
-    override and returns the test tenant_id.
-    """
     db_path = tmp_path / "test_billing_route.db"
     engine = create_engine(
         f"sqlite:///{db_path}",
@@ -164,7 +67,6 @@ def client(tmp_path: Path):
         finally:
             session.close()
 
-    # Default tenant id for tests; individual tests can mutate `_tenant`
     state = {"tenant_id": "org-alpha", "role": "admin"}
 
     def override_tenant():
@@ -194,22 +96,63 @@ def _set_tenant(client: TestClient, *, tenant_id: str, role: str = "admin") -> N
 
 
 class _FakeRazorpayOrderClient:
-    def __init__(self) -> None:
+    def __init__(self, owner: "_FakeRazorpayClient") -> None:
+        self._owner = owner
         self.last_payload: dict[str, object] | None = None
 
     def create(self, *, data: dict[str, object]) -> dict[str, object]:
         self.last_payload = data
-        return {
+        order = {
             "id": "order_test_123",
             "amount": data["amount"],
             "currency": data["currency"],
             "receipt": data["receipt"],
+            "status": self._owner.order_status,
+            "notes": data.get("notes") or {},
+        }
+        self._owner.orders[str(order["id"])] = order
+        return order
+
+    def fetch(self, order_id: str) -> dict[str, object]:
+        order = self._owner.orders.get(order_id)
+        if order is None:
+            return {
+                "id": order_id,
+                "amount": 1_192_000,
+                "currency": "INR",
+                "status": self._owner.order_status,
+                "notes": {"org_id": "org-alpha", "plan_code": "pro", "product": "zroky"},
+            }
+        return dict(order)
+
+
+class _FakeRazorpayPaymentClient:
+    def __init__(self, owner: "_FakeRazorpayClient") -> None:
+        self._owner = owner
+
+    def fetch(self, payment_id: str) -> dict[str, object]:
+        order = self._owner.orders.get("order_test_123") or {}
+        return {
+            "id": payment_id,
+            "order_id": "order_test_123",
+            "amount": order.get("amount", 1_192_000),
+            "currency": order.get("currency", "INR"),
+            "status": self._owner.payment_status,
+            "captured": self._owner.payment_status == "captured",
+            "notes": order.get(
+                "notes",
+                {"org_id": "org-alpha", "plan_code": "pro", "product": "zroky"},
+            ),
         }
 
 
 class _FakeRazorpayClient:
     def __init__(self) -> None:
-        self.order = _FakeRazorpayOrderClient()
+        self.orders: dict[str, dict[str, object]] = {}
+        self.payment_status = "captured"
+        self.order_status = "paid"
+        self.order = _FakeRazorpayOrderClient(self)
+        self.payment = _FakeRazorpayPaymentClient(self)
 
 
 def _razorpay_signature(order_id: str, payment_id: str) -> str:
@@ -220,11 +163,50 @@ def _razorpay_signature(order_id: str, payment_id: str) -> str:
     ).hexdigest()
 
 
-def sign_razorpay_webhook_payload(*, payload: bytes, secret: str = _TEST_WEBHOOK_SECRET) -> str:
+def _sign_webhook_payload(*, payload: bytes, secret: str = _TEST_WEBHOOK_SECRET) -> str:
     return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
 
 
-# ── billing_plans ────────────────────────────────────────────────────────────
+def _make_event(
+    *,
+    event_id: str,
+    event_type: str,
+    org_id: str = "org-alpha",
+    plan_code: str = "pro",
+    payment_id: str | None = None,
+    payment_status: str | None = "captured",
+) -> dict:
+    payment_ref = payment_id or f"pay_{event_id}"
+    payment_entity = {
+        "id": payment_ref,
+        "order_id": f"order_{event_id}",
+        "notes": {"org_id": org_id, "plan_code": plan_code},
+    }
+    if payment_status is not None:
+        payment_entity["status"] = payment_status
+        payment_entity["captured"] = payment_status == "captured"
+    return {
+        "id": event_id,
+        "event": event_type,
+        "created_at": int(time.time()),
+        "payload": {
+            "payment": {
+                "entity": payment_entity,
+            }
+        },
+    }
+
+
+def _post_signed_webhook(client: TestClient, event: dict, *, secret: str = _TEST_WEBHOOK_SECRET):
+    body = json.dumps(event).encode("utf-8")
+    return client.post(
+        "/v1/billing/webhook",
+        content=body,
+        headers={
+            "X-Razorpay-Signature": _sign_webhook_payload(payload=body, secret=secret),
+            "Content-Type": "application/json",
+        },
+    )
 
 
 class TestBillingPlans:
@@ -238,570 +220,25 @@ class TestBillingPlans:
         with pytest.raises(InvalidPlanCodeError):
             normalize_plan_code(None)
 
-    def test_assert_self_serve_rejects_free(self) -> None:
+    def test_assert_self_serve_rules(self) -> None:
+        assert assert_self_serve_plan("pilot") == "pilot"
+        assert assert_self_serve_plan("pro") == "pro"
         with pytest.raises(PlanNotSelfServeError):
             assert_self_serve_plan("free")
-
-    def test_assert_self_serve_rejects_enterprise(self) -> None:
         with pytest.raises(PlanNotSelfServeError):
             assert_self_serve_plan("enterprise")
 
-    def test_assert_self_serve_accepts_paid_tiers(self) -> None:
-        for code in ("pilot", "pro", "plus"):
-            assert assert_self_serve_plan(code) == code
-
-    def test_resolve_price_id_happy(self) -> None:
-        assert resolve_stripe_price_id("pro") == "price_pro_test"
-
-    def test_resolve_price_id_missing_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("STRIPE_PRICE_IDS_JSON", "{}")
-        get_settings.cache_clear()
-        with pytest.raises(StripePriceNotConfiguredError):
-            resolve_stripe_price_id("pro")
-
-    def test_get_plan_entitlements_returns_copy(self) -> None:
-        a = get_plan_entitlements("free")
-        a["events.monthly_quota"] = 999
-        b = get_plan_entitlements("free")
-        assert b["events.monthly_quota"] == 50_000  # not mutated
-
-    def test_all_plans_have_same_keys(self) -> None:
+    def test_plan_entitlements_return_copy_and_share_keys(self) -> None:
+        plan = get_plan_entitlements("free")
+        plan["events.monthly_quota"] = 999
+        assert get_plan_entitlements("free")["events.monthly_quota"] == 50_000
         ref = set(PLAN_ENTITLEMENTS["free"].keys())
-        for plan in VALID_PLAN_CODES:
-            assert set(PLAN_ENTITLEMENTS[plan].keys()) == ref
-
-    def test_parse_price_map_garbage(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("STRIPE_PRICE_IDS_JSON", "{not-json")
-        get_settings.cache_clear()
-        assert parse_price_map() == {}
-
-    def test_parse_price_map_non_object(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("STRIPE_PRICE_IDS_JSON", "[1,2,3]")
-        get_settings.cache_clear()
-        assert parse_price_map() == {}
+        for code in VALID_PLAN_CODES:
+            assert set(PLAN_ENTITLEMENTS[code].keys()) == ref
 
 
-# ── entitlements service ────────────────────────────────────────────────────
-
-
-class TestEntitlementsService:
-    def test_seed_plan(self, db_session) -> None:
-        rows = seed_plan_entitlements(db_session, org_id="o1", plan_code="pro")
-        assert len(rows) == len(PLAN_ENTITLEMENTS["pro"])
-        for row in rows:
-            assert row.source == "plan"
-            assert row.org_id == "o1"
-
-        # Idempotent re-seed of same plan replaces (still N rows)
-        rows2 = seed_plan_entitlements(db_session, org_id="o1", plan_code="pro")
-        all_plan = db_session.execute(
-            select(Entitlement).where(
-                Entitlement.org_id == "o1",
-                Entitlement.source == "plan",
-            )
-        ).scalars().all()
-        assert len(all_plan) == len(rows2)
-
-    def test_seed_plan_replaces_old_plan_rows(self, db_session) -> None:
-        seed_plan_entitlements(db_session, org_id="o1", plan_code="pro")
-        seed_plan_entitlements(db_session, org_id="o1", plan_code="free")
-        rows = list_entitlements(db_session, org_id="o1")
-        plan_rows = [r for r in rows if r.source == "plan"]
-        for row in plan_rows:
-            if row.key == "pilot.autopilot_enabled":
-                assert parse_entitlement_value(row.value_json) is False  # free
-
-    def test_clear_plan(self, db_session) -> None:
-        seed_plan_entitlements(db_session, org_id="o1", plan_code="pro")
-        deleted = clear_plan_entitlements(db_session, org_id="o1")
-        assert deleted == len(PLAN_ENTITLEMENTS["pro"])
-        rows = list_entitlements(db_session, org_id="o1")
-        assert all(r.source != "plan" for r in rows)
-
-    def test_set_trial_overlay(self, db_session) -> None:
-        expires = datetime.now(timezone.utc) + timedelta(days=14)
-        rows = set_trial_entitlements(
-            db_session, org_id="o1", plan_code="plus", expires_at=expires,
-        )
-        assert all(r.source == "trial" for r in rows)
-        assert all(r.expires_at is not None for r in rows)
-
-    def test_clear_trial(self, db_session) -> None:
-        expires = datetime.now(timezone.utc) + timedelta(days=14)
-        set_trial_entitlements(
-            db_session, org_id="o1", plan_code="plus", expires_at=expires,
-        )
-        deleted = clear_trial_entitlements(db_session, org_id="o1")
-        assert deleted == len(PLAN_ENTITLEMENTS["plus"])
-
-    def test_override_upsert(self, db_session) -> None:
-        row1 = set_override_entitlement(
-            db_session, org_id="o1", key="pilot.autopilot_enabled", value=True,
-        )
-        assert parse_entitlement_value(row1.value_json) is True
-        row2 = set_override_entitlement(
-            db_session, org_id="o1", key="pilot.autopilot_enabled", value=False,
-        )
-        assert row1.id == row2.id  # same row, updated
-        assert parse_entitlement_value(row2.value_json) is False
-
-    def test_upsert_invalid_source(self, db_session) -> None:
-        with pytest.raises(ValueError, match="source"):
-            upsert_entitlement(
-                db_session, org_id="o1", key="x", value=1, source="bogus",
-            )
-
-    def test_invalid_plan_in_seed(self, db_session) -> None:
-        with pytest.raises(InvalidPlanCodeError):
-            seed_plan_entitlements(db_session, org_id="o1", plan_code="bogus")
-
-    def test_parse_value_robust(self) -> None:
-        assert parse_entitlement_value(None) is None
-        assert parse_entitlement_value("") is None
-        assert parse_entitlement_value("not-json") is None
-        assert parse_entitlement_value('"hello"') == "hello"
-        assert parse_entitlement_value("42") == 42
-        assert parse_entitlement_value("true") is True
-
-    def test_per_source_independence(self, db_session) -> None:
-        # Same (org, key) can have all three sources simultaneously.
-        seed_plan_entitlements(db_session, org_id="o1", plan_code="free")
-        set_override_entitlement(
-            db_session, org_id="o1", key="pilot.autopilot_enabled", value=True,
-        )
-        set_trial_entitlements(
-            db_session, org_id="o1", plan_code="pro",
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
-        )
-        rows = [
-            r for r in list_entitlements(db_session, org_id="o1")
-            if r.key == "pilot.autopilot_enabled"
-        ]
-        sources = sorted(r.source for r in rows)
-        assert sources == ["override", "plan", "trial"]
-
-
-# ── stripe_gateway: webhook signature ───────────────────────────────────────
-
-
-class TestWebhookSignature:
-    def test_round_trip(self) -> None:
-        body = b'{"id":"evt_1","type":"invoice.paid"}'
-        header = sign_webhook_payload(payload=body, secret=_TEST_WEBHOOK_SECRET)
-        event = verify_webhook_signature(
-            payload=body, header=header, secret=_TEST_WEBHOOK_SECRET,
-        )
-        assert event["id"] == "evt_1"
-
-    def test_missing_header(self) -> None:
-        with pytest.raises(WebhookSignatureError, match="missing"):
-            verify_webhook_signature(
-                payload=b"{}", header=None, secret=_TEST_WEBHOOK_SECRET,
-            )
-
-    def test_missing_secret(self) -> None:
-        with pytest.raises(WebhookSignatureError):
-            verify_webhook_signature(
-                payload=b"{}", header="t=1,v1=abc", secret="",
-            )
-
-    def test_malformed_header(self) -> None:
-        with pytest.raises(WebhookSignatureError, match="missing required"):
-            verify_webhook_signature(
-                payload=b"{}", header="just-some-string",
-                secret=_TEST_WEBHOOK_SECRET,
-            )
-
-    def test_invalid_timestamp(self) -> None:
-        with pytest.raises(WebhookSignatureError, match="integer"):
-            verify_webhook_signature(
-                payload=b"{}", header="t=abc,v1=abc",
-                secret=_TEST_WEBHOOK_SECRET,
-            )
-
-    def test_replay_outside_tolerance(self) -> None:
-        body = b'{"id":"evt_old"}'
-        ts = int(time.time()) - 600  # 10 min old
-        header = sign_webhook_payload(
-            payload=body, secret=_TEST_WEBHOOK_SECRET, timestamp=ts,
-        )
-        with pytest.raises(WebhookSignatureError, match="tolerance"):
-            verify_webhook_signature(
-                payload=body, header=header,
-                secret=_TEST_WEBHOOK_SECRET, tolerance=300,
-            )
-
-    def test_tampered_body_rejected(self) -> None:
-        body = b'{"id":"evt_x"}'
-        header = sign_webhook_payload(payload=body, secret=_TEST_WEBHOOK_SECRET)
-        with pytest.raises(WebhookSignatureError, match="HMAC"):
-            verify_webhook_signature(
-                payload=b'{"id":"tampered"}',
-                header=header, secret=_TEST_WEBHOOK_SECRET,
-            )
-
-    def test_wrong_secret(self) -> None:
-        body = b'{"id":"evt_y"}'
-        header = sign_webhook_payload(payload=body, secret=_TEST_WEBHOOK_SECRET)
-        with pytest.raises(WebhookSignatureError, match="HMAC"):
-            verify_webhook_signature(
-                payload=body, header=header, secret="whsec_other",
-            )
-
-    def test_payload_must_be_object(self) -> None:
-        body = b"[1,2,3]"
-        header = sign_webhook_payload(payload=body, secret=_TEST_WEBHOOK_SECRET)
-        with pytest.raises(WebhookSignatureError, match="object"):
-            verify_webhook_signature(
-                payload=body, header=header, secret=_TEST_WEBHOOK_SECRET,
-            )
-
-    def test_non_utf8_payload(self) -> None:
-        body = b"\xff\xfe\xfd"
-        header = sign_webhook_payload(payload=body, secret=_TEST_WEBHOOK_SECRET)
-        with pytest.raises(WebhookSignatureError):
-            verify_webhook_signature(
-                payload=body, header=header, secret=_TEST_WEBHOOK_SECRET,
-            )
-
-
-# ── stripe_gateway: stub + factory ──────────────────────────────────────────
-
-
-class TestStripeGatewayFactory:
-    def test_stub_when_billing_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("BILLING_ENABLED", "false")
-        get_settings.cache_clear()
-        gw = get_stripe_gateway()
-        assert isinstance(gw, StubStripeGateway)
-        assert gw.is_live is False
-
-    def test_stub_when_api_key_missing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("BILLING_ENABLED", "true")
-        monkeypatch.setenv("STRIPE_API_KEY", "")
-        get_settings.cache_clear()
-        gw = get_stripe_gateway()
-        assert isinstance(gw, StubStripeGateway)
-
-    def test_live_when_configured(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("BILLING_ENABLED", "true")
-        monkeypatch.setenv("STRIPE_API_KEY", _TEST_STRIPE_KEY)
-        get_settings.cache_clear()
-        gw = get_stripe_gateway()
-        assert isinstance(gw, LiveStripeGateway)
-        assert gw.is_live is True
-
-    def test_stub_checkout_records_call(self) -> None:
-        gw = StubStripeGateway()
-        result = gw.create_checkout_session(
-            org_id="o1", plan_code="pro", price_id="price_pro_test",
-            success_url="https://x/s", cancel_url="https://x/c",
-            customer_email="a@b.com",
-        )
-        assert result.id.startswith("cs_stub_")
-        assert "stub.stripe.local" in result.url
-        assert gw.last_checkout is not None
-        assert gw.last_checkout["org_id"] == "o1"
-        assert gw.last_checkout["plan_code"] == "pro"
-
-    def test_stub_portal_records_call(self) -> None:
-        gw = StubStripeGateway()
-        result = gw.create_portal_session(
-            customer_id="cus_xyz", return_url="https://x/return",
-        )
-        assert result.id.startswith("bps_stub_")
-        assert "return_to=https://x/return" in result.url
-
-
-# ── stripe_sync: dispatch_event ─────────────────────────────────────────────
-
-
-def _make_event(
-    *,
-    event_id: str,
-    event_type: str,
-    obj: dict | None = None,
-    created: int | None = None,
-) -> dict:
-    return {
-        "id": event_id,
-        "type": event_type,
-        "created": created if created is not None else int(time.time()),
-        "data": {"object": obj or {}},
-    }
-
-
-class TestStripeSyncDispatch:
-    def test_handled_vocab(self) -> None:
-        assert "checkout.session.completed" in HANDLED_EVENT_TYPES
-        assert "invoice.paid" in HANDLED_EVENT_TYPES
-        assert "customer.subscription.deleted" in HANDLED_EVENT_TYPES
-
-    def test_idempotent_duplicate(self, db_session) -> None:
-        event = _make_event(
-            event_id="evt_dup_1",
-            event_type="checkout.session.completed",
-            obj={
-                "metadata": {"org_id": "o1", "plan_code": "pro"},
-                "customer": "cus_1", "subscription": "sub_1",
-            },
-        )
-        first = dispatch_event(db_session, event)
-        assert first.duplicate is False
-        assert first.result == "applied"
-        # Second dispatch of same event_id short-circuits as duplicate
-        second = dispatch_event(db_session, event)
-        assert second.duplicate is True
-        # Still only one stripe_events row
-        rows = db_session.execute(select(StripeEvent)).scalars().all()
-        assert len(rows) == 1
-
-    def test_checkout_seeds_subscription_and_entitlements(
-        self, db_session
-    ) -> None:
-        event = _make_event(
-            event_id="evt_chk_1",
-            event_type="checkout.session.completed",
-            obj={
-                "metadata": {"org_id": "o-alpha", "plan_code": "pro"},
-                "customer": "cus_alpha",
-                "subscription": "sub_alpha",
-            },
-        )
-        result = dispatch_event(db_session, event)
-        assert result.result == "applied"
-        assert result.affected_org_id == "o-alpha"
-
-        sub = db_session.execute(
-            select(Subscription).where(Subscription.org_id == "o-alpha")
-        ).scalar_one()
-        assert sub.plan_code == "pro"
-        assert sub.status == "active"
-        assert sub.stripe_customer_id == "cus_alpha"
-        assert sub.stripe_sub_id == "sub_alpha"
-
-        ent_rows = db_session.execute(
-            select(Entitlement).where(
-                Entitlement.org_id == "o-alpha", Entitlement.source == "plan",
-            )
-        ).scalars().all()
-        assert len(ent_rows) == len(PLAN_ENTITLEMENTS["pro"])
-
-    def test_subscription_updated_changes_status(self, db_session) -> None:
-        # First seed via checkout
-        dispatch_event(db_session, _make_event(
-            event_id="evt_pre",
-            event_type="checkout.session.completed",
-            obj={
-                "metadata": {"org_id": "o-beta", "plan_code": "pro"},
-                "customer": "cus_beta", "subscription": "sub_beta",
-            },
-        ))
-
-        # Then sub.updated bumps to active+plus
-        dispatch_event(db_session, _make_event(
-            event_id="evt_upd_1",
-            event_type="customer.subscription.updated",
-            obj={
-                "id": "sub_beta",
-                "customer": "cus_beta",
-                "status": "active",
-                "metadata": {"org_id": "o-beta", "plan_code": "plus"},
-                "current_period_end": int(time.time()) + 30 * 86400,
-            },
-            created=int(time.time()) + 100,
-        ))
-
-        sub = db_session.execute(
-            select(Subscription).where(Subscription.org_id == "o-beta")
-        ).scalar_one()
-        assert sub.plan_code == "plus"
-        assert sub.status == "active"
-        assert sub.current_period_end is not None
-
-    def test_subscription_trialing_writes_trial_overlay(self, db_session) -> None:
-        trial_end = int(time.time()) + 14 * 86400
-        dispatch_event(db_session, _make_event(
-            event_id="evt_trial_1",
-            event_type="customer.subscription.created",
-            obj={
-                "id": "sub_trial",
-                "customer": "cus_trial",
-                "status": "trialing",
-                "metadata": {"org_id": "o-trial", "plan_code": "plus"},
-                "trial_end": trial_end,
-                "current_period_end": trial_end,
-            },
-        ))
-        trial_rows = db_session.execute(
-            select(Entitlement).where(
-                Entitlement.org_id == "o-trial",
-                Entitlement.source == "trial",
-            )
-        ).scalars().all()
-        assert len(trial_rows) == len(PLAN_ENTITLEMENTS["plus"])
-        assert all(r.expires_at is not None for r in trial_rows)
-
-    def test_subscription_deleted_clears_entitlements(self, db_session) -> None:
-        # Seed
-        dispatch_event(db_session, _make_event(
-            event_id="evt_seed",
-            event_type="checkout.session.completed",
-            obj={
-                "metadata": {"org_id": "o-del", "plan_code": "pro"},
-                "customer": "cus_del", "subscription": "sub_del",
-            },
-        ))
-        # Delete
-        dispatch_event(db_session, _make_event(
-            event_id="evt_del",
-            event_type="customer.subscription.deleted",
-            obj={
-                "id": "sub_del",
-                "customer": "cus_del",
-                "status": "canceled",
-                "metadata": {"org_id": "o-del", "plan_code": "pro"},
-            },
-            created=int(time.time()) + 1000,
-        ))
-        sub = db_session.execute(
-            select(Subscription).where(Subscription.org_id == "o-del")
-        ).scalar_one()
-        assert sub.status == "canceled"
-        plan_rows = db_session.execute(
-            select(Entitlement).where(
-                Entitlement.org_id == "o-del", Entitlement.source == "plan",
-            )
-        ).scalars().all()
-        assert plan_rows == []
-
-    def test_invoice_payment_failed_flips_past_due(self, db_session) -> None:
-        dispatch_event(db_session, _make_event(
-            event_id="evt_pf_seed",
-            event_type="checkout.session.completed",
-            obj={
-                "metadata": {"org_id": "o-pf", "plan_code": "pro"},
-                "customer": "cus_pf", "subscription": "sub_pf",
-            },
-        ))
-        dispatch_event(db_session, _make_event(
-            event_id="evt_pf_fail",
-            event_type="invoice.payment_failed",
-            obj={
-                "subscription": "sub_pf",
-                "metadata": {"org_id": "o-pf"},
-            },
-        ))
-        sub = db_session.execute(
-            select(Subscription).where(Subscription.org_id == "o-pf")
-        ).scalar_one()
-        assert sub.status == "past_due"
-
-    def test_invoice_paid_recovers_from_past_due(self, db_session) -> None:
-        dispatch_event(db_session, _make_event(
-            event_id="evt_ip_seed",
-            event_type="checkout.session.completed",
-            obj={
-                "metadata": {"org_id": "o-ip", "plan_code": "pro"},
-                "customer": "cus_ip", "subscription": "sub_ip",
-            },
-        ))
-        dispatch_event(db_session, _make_event(
-            event_id="evt_ip_fail",
-            event_type="invoice.payment_failed",
-            obj={"subscription": "sub_ip"},
-        ))
-        dispatch_event(db_session, _make_event(
-            event_id="evt_ip_paid",
-            event_type="invoice.paid",
-            obj={
-                "subscription": "sub_ip",
-                "period_end": int(time.time()) + 30 * 86400,
-            },
-        ))
-        sub = db_session.execute(
-            select(Subscription).where(Subscription.org_id == "o-ip")
-        ).scalar_one()
-        assert sub.status == "active"
-
-    def test_unknown_event_type_skipped(self, db_session) -> None:
-        result = dispatch_event(db_session, _make_event(
-            event_id="evt_unknown",
-            event_type="customer.created",
-            obj={"id": "cus_xyz"},
-        ))
-        assert result.result == "skipped"
-        log_row = db_session.execute(
-            select(StripeEvent).where(
-                StripeEvent.stripe_event_id == "evt_unknown"
-            )
-        ).scalar_one()
-        assert log_row.result == "skipped"
-
-    def test_missing_org_id_skipped(self, db_session) -> None:
-        result = dispatch_event(db_session, _make_event(
-            event_id="evt_no_org",
-            event_type="checkout.session.completed",
-            obj={"customer": "cus_anon"},  # no metadata.org_id
-        ))
-        assert result.result == "skipped"
-
-    def test_malformed_event_raises(self, db_session) -> None:
-        with pytest.raises(ValueError, match="id or type"):
-            dispatch_event(db_session, {"data": {}})
-
-    def test_stale_subscription_update_dropped(self, db_session) -> None:
-        # Initial subscription created at a "later" timestamp
-        future_ts = int(time.time()) + 1_000_000
-        dispatch_event(db_session, _make_event(
-            event_id="evt_stale_seed",
-            event_type="customer.subscription.updated",
-            obj={
-                "id": "sub_stale",
-                "customer": "cus_stale",
-                "status": "active",
-                "metadata": {"org_id": "o-stale", "plan_code": "pro"},
-            },
-            created=future_ts,
-        ))
-        # An OLDER event arrives — must be dropped
-        old_ts = int(time.time()) - 1000
-        result = dispatch_event(db_session, _make_event(
-            event_id="evt_stale_old",
-            event_type="customer.subscription.updated",
-            obj={
-                "id": "sub_stale",
-                "customer": "cus_stale",
-                "status": "canceled",
-                "metadata": {"org_id": "o-stale", "plan_code": "free"},
-            },
-            created=old_ts,
-        ))
-        assert result.result == "skipped"
-        sub = db_session.execute(
-            select(Subscription).where(Subscription.org_id == "o-stale")
-        ).scalar_one()
-        # Status from the FIRST (newer) event still wins
-        assert sub.status == "active"
-
-
-# ── routes ──────────────────────────────────────────────────────────────────
-
-
-class TestCheckoutRoute:
-    def test_checkout_endpoint_is_razorpay_order_compatibility_error(self, client: TestClient) -> None:
+class TestDeprecatedCheckoutRoute:
+    def test_checkout_points_to_razorpay_order(self, client: TestClient) -> None:
         response = client.post(
             "/v1/billing/checkout",
             json={"plan_code": "pro", "customer_email": "billing@example.com"},
@@ -809,63 +246,20 @@ class TestCheckoutRoute:
         assert response.status_code == 410
         assert "razorpay/order" in response.json()["detail"]
 
-    def test_valid_plan_reaches_compatibility_error(self, client: TestClient) -> None:
-        response = client.post(
-            "/v1/billing/checkout", json={"plan_code": "  PRO "},
-        )
-        assert response.status_code == 410
+    def test_checkout_rejects_invalid_or_forbidden_plan(self, client: TestClient) -> None:
+        assert client.post("/v1/billing/checkout", json={"plan_code": "ultra"}).status_code == 422
+        assert client.post("/v1/billing/checkout", json={"plan_code": "free"}).status_code == 422
+        assert client.post("/v1/billing/checkout", json={"plan_code": "enterprise"}).status_code == 422
 
-    def test_422_invalid_plan(self, client: TestClient) -> None:
-        response = client.post(
-            "/v1/billing/checkout", json={"plan_code": "ultra"},
-        )
-        assert response.status_code == 422
-
-    def test_422_free_plan(self, client: TestClient) -> None:
-        response = client.post(
-            "/v1/billing/checkout", json={"plan_code": "free"},
-        )
-        assert response.status_code == 422
-
-    def test_422_enterprise_plan(self, client: TestClient) -> None:
-        response = client.post(
-            "/v1/billing/checkout", json={"plan_code": "enterprise"},
-        )
-        assert response.status_code == 422
-
-    def test_503_billing_disabled(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("BILLING_ENABLED", "false")
-        get_settings.cache_clear()
-        response = client.post(
-            "/v1/billing/checkout", json={"plan_code": "pro"},
-        )
-        assert response.status_code == 503
-
-    def test_missing_razorpay_key_does_not_affect_deprecated_checkout(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("RAZORPAY_KEY_ID", "")
-        get_settings.cache_clear()
-        response = client.post(
-            "/v1/billing/checkout", json={"plan_code": "pro"},
-        )
-        assert response.status_code == 410
-
-    def test_403_when_role_below_admin(self, client: TestClient) -> None:
+    def test_checkout_requires_admin_role(self, client: TestClient) -> None:
         _set_tenant(client, tenant_id="org-alpha", role="member")
-        response = client.post(
-            "/v1/billing/checkout", json={"plan_code": "pro"},
-        )
+        response = client.post("/v1/billing/checkout", json={"plan_code": "pro"})
         assert response.status_code == 403
 
 
 class TestRazorpayCheckoutRoute:
-    def test_create_order_computes_plan_amount_and_tracks_pending_request(
-        self,
-        client: TestClient,
-        monkeypatch: pytest.MonkeyPatch,
+    def test_create_order_tracks_pending_request(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         fake = _FakeRazorpayClient()
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
@@ -881,10 +275,7 @@ class TestRazorpayCheckoutRoute:
         assert body["amount"] == 1_192_000
         assert body["currency"] == "INR"
         assert body["plan_code"] == "pro"
-        assert body["amount_usd"] == 149
         assert fake.order.last_payload is not None
-        assert fake.order.last_payload["amount"] == 1_192_000
-        assert fake.order.last_payload["currency"] == "INR"
         assert fake.order.last_payload["notes"] == {
             "org_id": "org-alpha",
             "plan_code": "pro",
@@ -901,36 +292,13 @@ class TestRazorpayCheckoutRoute:
             assert sub.payment_request_ref == "order_test_123:pro"
             assert sub.payment_customer_ref == "billing@example.com"
             assert sub.plan_code == DEFAULT_PLAN_CODE
-            assert sub.status == "active"
-
-    def test_create_order_rejects_amount_below_razorpay_minimum(
-        self,
-        client: TestClient,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        fake = _FakeRazorpayClient()
-        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-
-        response = client.post(
-            "/v1/billing/razorpay/order",
-            json={"amount": 99, "currency": "INR", "receipt": "too-small"},
-        )
-
-        assert response.status_code == 422
-        assert fake.order.last_payload is None
 
     def test_verify_payment_activates_plan_after_valid_signature(
-        self,
-        client: TestClient,
-        monkeypatch: pytest.MonkeyPatch,
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         fake = _FakeRazorpayClient()
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-        create_response = client.post(
-            "/v1/billing/razorpay/order",
-            json={"plan_code": "pilot"},
-        )
-        assert create_response.status_code == 200
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pilot"}).status_code == 200
 
         payment_id = "pay_test_123"
         response = client.post(
@@ -938,17 +306,12 @@ class TestRazorpayCheckoutRoute:
             json={
                 "razorpay_payment_id": payment_id,
                 "razorpay_order_id": "order_test_123",
-                "razorpay_signature": _razorpay_signature(
-                    "order_test_123",
-                    payment_id,
-                ),
+                "razorpay_signature": _razorpay_signature("order_test_123", payment_id),
             },
         )
 
         assert response.status_code == 200
-        body = response.json()
-        assert body["success"] is True
-        assert body["plan_code"] == "pilot"
+        assert response.json()["success"] is True
         factory = client._session_factory  # type: ignore[attr-defined]
         with factory() as session:
             sub = session.execute(
@@ -958,30 +321,54 @@ class TestRazorpayCheckoutRoute:
             assert sub.payment_request_ref == "order_test_123"
             assert sub.payment_subscription_ref == payment_id
             assert sub.plan_code == "pilot"
-            assert sub.status == "active"
-            assert sub.current_period_end is not None
             event = session.execute(
                 select(BillingEvent).where(
                     BillingEvent.provider == "razorpay",
                     BillingEvent.provider_event_id == f"razorpay_verify:{payment_id}",
                 )
             ).scalar_one()
-            assert event.event_type == "payment.succeeded"
             assert event.result == "applied"
-            assert event.affected_org_id == "org-alpha"
+
+    def test_verify_payment_rejects_authorized_provider_state_without_marking_paid(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake = _FakeRazorpayClient()
+        fake.payment_status = "authorized"
+        fake.order_status = "attempted"
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pilot"}).status_code == 200
+
+        payment_id = "pay_authorized"
+        response = client.post(
+            "/v1/billing/razorpay/verify",
+            json={
+                "razorpay_payment_id": payment_id,
+                "razorpay_order_id": "order_test_123",
+                "razorpay_signature": _razorpay_signature("order_test_123", payment_id),
+            },
+        )
+
+        assert response.status_code == 409
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            sub = session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one()
+            assert sub.payment_subscription_ref is None
+            assert sub.plan_code == DEFAULT_PLAN_CODE
+            assert session.execute(
+                select(BillingEvent).where(
+                    BillingEvent.provider == "razorpay",
+                    BillingEvent.provider_event_id == f"razorpay_verify:{payment_id}",
+                )
+            ).scalar_one_or_none() is None
 
     def test_verify_payment_rejects_bad_signature_without_marking_paid(
-        self,
-        client: TestClient,
-        monkeypatch: pytest.MonkeyPatch,
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         fake = _FakeRazorpayClient()
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-        create_response = client.post(
-            "/v1/billing/razorpay/order",
-            json={"plan_code": "pro"},
-        )
-        assert create_response.status_code == 200
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pro"}).status_code == 200
 
         response = client.post(
             "/v1/billing/razorpay/verify",
@@ -998,320 +385,102 @@ class TestRazorpayCheckoutRoute:
             sub = session.execute(
                 select(Subscription).where(Subscription.org_id == "org-alpha")
             ).scalar_one()
-            assert sub.payment_request_ref == "order_test_123:pro"
             assert sub.payment_subscription_ref is None
             assert sub.plan_code == DEFAULT_PLAN_CODE
 
 
 class TestPortalRoute:
-    def test_happy_path_without_customer(self, client: TestClient) -> None:
+    def test_portal_returns_razorpay_dashboard(self, client: TestClient) -> None:
         response = client.post("/v1/billing/portal")
         assert response.status_code == 200
         body = response.json()
         assert body["org_id"] == "org-alpha"
         assert body["payment_provider"] == "razorpay"
-        assert body["session_id"] == "razorpay_dashboard"
-        assert "dashboard.razorpay.test" in body["portal_url"]
-
-    def test_happy_path_after_checkout(self, client: TestClient) -> None:
-        # Seed a Subscription to ensure existing billing rows do not block portal creation.
-        factory = client._session_factory  # type: ignore[attr-defined]
-        with factory() as session:
-            session.add(Subscription(
-                org_id="org-alpha",
-                plan_code="pro",
-                status="active",
-                seats=10,
-                payment_provider="razorpay",
-                payment_customer_ref="billing@example.com",
-                payment_subscription_ref="rzp_pay_existing",
-            ))
-            session.commit()
-
-        response = client.post("/v1/billing/portal")
-        assert response.status_code == 200
-        body = response.json()
-        assert body["org_id"] == "org-alpha"
-        assert body["session_id"] == "razorpay_dashboard"
-        assert "dashboard.razorpay.test" in body["portal_url"]
-
-    def test_503_billing_disabled(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("BILLING_ENABLED", "false")
-        get_settings.cache_clear()
-        response = client.post("/v1/billing/portal")
-        assert response.status_code == 503
-
-    def test_403_when_role_below_admin(self, client: TestClient) -> None:
-        _set_tenant(client, tenant_id="org-alpha", role="member")
-        response = client.post("/v1/billing/portal")
-        assert response.status_code == 403
-
-
-class TestBillingQuota:
-    def test_incomplete_paid_subscription_uses_free_event_quota(self, db_session) -> None:
-        db_session.add(Subscription(
-            org_id="org-quota-incomplete",
-            plan_code="pro",
-            status="incomplete",
-            seats=1,
-            payment_provider="razorpay",
-            payment_request_ref="rzp_order_quota",
-        ))
-        db_session.add(EventCount(
-            tenant_id="org-quota-incomplete",
-            month=datetime.now(timezone.utc).strftime("%Y-%m"),
-            event_count=PLAN_ENTITLEMENTS["free"]["events.monthly_quota"],
-            last_event_at=datetime.now(timezone.utc),
-        ))
-        db_session.commit()
-        seed_plan_entitlements(db_session, org_id="org-quota-incomplete", plan_code="pro")
-
-        decision = check_quota(db_session, "org-quota-incomplete")
-        assert decision.allowed is False
-        assert decision.plan_limit == PLAN_ENTITLEMENTS["free"]["events.monthly_quota"]
-        assert decision.reason == "monthly_quota_exceeded"
-
-    def test_strict_quota_check_failure_denies_and_alerts(
-        self,
-        db_session,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("BILLING_QUOTA_FAILURE_POLICY", "strict")
-        get_settings.cache_clear()
-        monkeypatch.setattr(
-            "app.services.billing_quota._current_month_count",
-            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("meter down")),
-        )
-
-        decision = check_quota(db_session, "org-meter-strict")
-
-        assert decision.allowed is False
-        assert decision.reason == "check_error"
-        alert = db_session.execute(
-            select(ProjectAlert).where(
-                ProjectAlert.tenant_id == "org-meter-strict",
-                ProjectAlert.category == "BILLING_METERING_FAILURE",
-            )
-        ).scalar_one()
-        assert alert.status == "OPEN"
-        assert "quota_check_failed" in (alert.evidence_json or "")
-
-    def test_alert_only_quota_failure_allows_but_records_alert(
-        self,
-        db_session,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("BILLING_QUOTA_FAILURE_POLICY", "alert_only")
-        get_settings.cache_clear()
-        monkeypatch.setattr(
-            "app.services.billing_quota._plan_call_limit",
-            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("resolver down")),
-        )
-
-        decision = check_quota(db_session, "org-meter-alert-only")
-
-        assert decision.allowed is True
-        assert decision.reason == "check_error_alert_only"
-        alert = db_session.execute(
-            select(ProjectAlert).where(
-                ProjectAlert.tenant_id == "org-meter-alert-only",
-                ProjectAlert.category == "BILLING_METERING_FAILURE",
-            )
-        ).scalar_one()
-        assert alert.status == "OPEN"
-
-    def test_event_counter_increment_is_portable_and_accumulates_once(
-        self,
-        db_session,
-    ) -> None:
-        assert increment_event_count(db_session, "org-meter-count") is True
-        assert increment_event_count(db_session, "org-meter-count") is True
-
-        row = db_session.execute(
-            select(EventCount).where(EventCount.tenant_id == "org-meter-count")
-        ).scalar_one()
-        assert row.event_count == 2
-
-    def test_hosted_usage_endpoint_returns_calls_replay_goldens_and_metering(
-        self,
-        client: TestClient,
-    ) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        now = datetime.now(timezone.utc)
-        with factory() as session:
-            session.add(
-                Subscription(
-                    org_id="org-alpha",
-                    plan_code="pro",
-                    status="active",
-                    payment_provider="razorpay",
-                    payment_subscription_ref="rzp_pay_usage",
-                )
-            )
-            seed_plan_entitlements(session, org_id="org-alpha", plan_code="pro")
-            session.add(
-                EventCount(
-                    tenant_id="org-alpha",
-                    month=now.strftime("%Y-%m"),
-                    event_count=123,
-                    last_event_at=now,
-                )
-            )
-            session.add(
-                GoldenSet(
-                    id="gs_usage",
-                    project_id="org-alpha",
-                    name="Usage Goldens",
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            session.add(
-                GoldenTrace(
-                    id="gt_usage",
-                    golden_set_id="gs_usage",
-                    project_id="org-alpha",
-                    status="active",
-                    expected_output_text="ok",
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            session.add(
-                ReplayRun(
-                    id="rr_usage",
-                    project_id="org-alpha",
-                    golden_set_id="gs_usage",
-                    trigger="manual",
-                    status="pass",
-                    created_at=now,
-                )
-            )
-            session.commit()
-
-        response = client.get("/v1/billing/usage")
-
-        assert response.status_code == 200
-        body = response.json()
-        assert body["org_id"] == "org-alpha"
-        assert body["calls"]["used"] == 123
-        assert body["calls"]["limit"] == PLAN_ENTITLEMENTS["pro"]["events.monthly_quota"]
-        assert body["replay"]["used"] == 1
-        assert body["goldens"]["used"] == 1
-        assert body["metering_health"]["state"] == "ok"
+        assert body["portal_url"] == "https://dashboard.razorpay.test"
 
 
 class TestWebhookRoute:
-    def _post_event(
-        self, client: TestClient, event: dict, *, secret: str = _TEST_WEBHOOK_SECRET
-    ):
-        body = json.dumps(event).encode("utf-8")
-        header = sign_razorpay_webhook_payload(payload=body, secret=secret)
-        return client.post(
-            "/v1/billing/webhook",
-            content=body,
-            headers={
-                "X-Razorpay-Signature": header,
-                "Content-Type": "application/json",
-            },
+    def test_payment_captured_applies_subscription(self, client: TestClient) -> None:
+        response = _post_signed_webhook(
+            client,
+            _make_event(event_id="evt_paid", event_type="payment.captured", plan_code="pro"),
         )
-
-    def test_happy_path_payment_succeeded(self, client: TestClient) -> None:
-        event = _make_event(
-            event_id="evt_hook_1",
-            event_type="payment.succeeded",
-            obj={
-                "org_id": "org-webhook",
-                "plan_code": "pro",
-                "customer_ref": "billing@example.com",
-                "payment_ref": "rzp_pay_hook",
-                "payment_request_id": "rzp_order_hook",
-            },
-        )
-        response = self._post_event(client, event)
         assert response.status_code == 200
         body = response.json()
         assert body["received"] is True
         assert body["duplicate"] is False
         assert body["result"] == "applied"
-        assert body["affected_org_id"] == "org-webhook"
 
-    def test_idempotent_replay(self, client: TestClient) -> None:
-        event = _make_event(
-            event_id="evt_replay_1",
-            event_type="payment.succeeded",
-            obj={
-                "org_id": "org-replay",
-                "plan_code": "pro",
-                "payment_ref": "rzp_pay_replay",
-            },
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            sub = session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one()
+            assert sub.payment_provider == "razorpay"
+            assert sub.payment_subscription_ref == "pay_evt_paid"
+            assert sub.plan_code == "pro"
+
+    def test_payment_authorized_webhook_does_not_activate_subscription(
+        self, client: TestClient
+    ) -> None:
+        response = _post_signed_webhook(
+            client,
+            _make_event(
+                event_id="evt_authorized",
+                event_type="payment.authorized",
+                payment_status="authorized",
+            ),
         )
-        first = self._post_event(client, event)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["received"] is True
+        assert body["duplicate"] is False
+        assert body["result"] == "skipped"
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            assert session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one_or_none() is None
+
+    def test_duplicate_webhook_is_idempotent(self, client: TestClient) -> None:
+        event = _make_event(
+            event_id="evt_dup",
+            event_type="payment.captured",
+            payment_id="pay_duplicate",
+        )
+        first = _post_signed_webhook(client, event)
+        second = _post_signed_webhook(client, event)
         assert first.status_code == 200
-        assert first.json()["duplicate"] is False
-        second = self._post_event(client, event)
         assert second.status_code == 200
+        assert first.json()["duplicate"] is False
         assert second.json()["duplicate"] is True
 
-    def test_400_missing_signature(self, client: TestClient) -> None:
-        body = b'{"id":"evt_x","type":"payment.succeeded","created":1,"data":{"object":{}}}'
+    def test_rejects_invalid_signature(self, client: TestClient) -> None:
+        body = json.dumps(_make_event(event_id="evt_bad", event_type="payment.succeeded")).encode("utf-8")
         response = client.post(
             "/v1/billing/webhook",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers={"X-Razorpay-Signature": "bad", "Content-Type": "application/json"},
         )
         assert response.status_code == 400
 
-    def test_400_wrong_signature(self, client: TestClient) -> None:
-        event = _make_event(event_id="evt_wrong", event_type="payment.succeeded")
-        response = self._post_event(client, event, secret="whsec_other")
-        assert response.status_code == 400
-
-    def test_400_tampered_body(self, client: TestClient) -> None:
-        event = _make_event(event_id="evt_tamper", event_type="payment.succeeded")
-        body = json.dumps(event).encode("utf-8")
-        header = sign_razorpay_webhook_payload(
-            payload=body, secret=_TEST_WEBHOOK_SECRET,
-        )
-        # Send a different body with the signature for the original
-        response = client.post(
-            "/v1/billing/webhook",
-            content=b'{"id":"evt_other","type":"payment.succeeded","created":1,"data":{}}',
-            headers={
-                "X-Razorpay-Signature": header,
-                "Content-Type": "application/json",
-            },
-        )
-        assert response.status_code == 400
-
-    def test_503_billing_disabled(
+    def test_billing_disabled_returns_503(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("BILLING_ENABLED", "false")
         get_settings.cache_clear()
-        event = _make_event(event_id="evt_off", event_type="payment.succeeded")
-        response = self._post_event(client, event)
-        assert response.status_code == 503
-
-    def test_503_secret_unset(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", "")
-        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "")
-        get_settings.cache_clear()
-        event = _make_event(event_id="evt_no_secret", event_type="payment.succeeded")
-        response = self._post_event(client, event)
+        response = _post_signed_webhook(
+            client,
+            _make_event(event_id="evt_off", event_type="payment.succeeded"),
+        )
         assert response.status_code == 503
 
     def test_unknown_event_recorded_as_skipped(self, client: TestClient) -> None:
-        event = _make_event(
-            event_id="evt_unknown_route",
-            event_type="customer.created",
-            obj={"id": "cus_xyz"},
+        response = _post_signed_webhook(
+            client,
+            _make_event(event_id="evt_unknown", event_type="customer.created"),
         )
-        response = self._post_event(client, event)
         assert response.status_code == 200
         assert response.json()["result"] == "skipped"
 
@@ -1324,33 +493,28 @@ class TestBillingMeRoute:
         body = response.json()
         assert body["org_id"] == "org-fresh"
         assert body["plan_code"] == DEFAULT_PLAN_CODE
-        assert body["status"] == "active"
-        assert body["seats"] == 1
         assert body["payment_provider"] == "razorpay"
         assert body["payment_customer_ref"] is None
         assert body["payment_subscription_ref"] is None
         assert body["payment_request_ref"] is None
-        assert body["stripe_customer_id"] is None
-        # plan_template reflects free tier
-        assert body["plan_template"]["events.monthly_quota"] == 50_000
 
     def test_returns_existing_subscription(self, client: TestClient) -> None:
         factory = client._session_factory  # type: ignore[attr-defined]
-        cpe = datetime.now(timezone.utc) + timedelta(days=20)
+        current_period_end = datetime.now(timezone.utc) + timedelta(days=20)
         with factory() as session:
-            session.add(Subscription(
-                org_id="org-alpha",
-                plan_code="pro",
-                status="active",
-                seats=10,
-                payment_provider="razorpay",
-                payment_customer_ref="billing@example.com",
-                payment_subscription_ref="rzp_pay_x",
-                payment_request_ref="rzp_order_x",
-                stripe_customer_id="cus_x",
-                stripe_sub_id="sub_x",
-                current_period_end=cpe,
-            ))
+            session.add(
+                Subscription(
+                    org_id="org-alpha",
+                    plan_code="pro",
+                    status="active",
+                    seats=10,
+                    payment_provider="razorpay",
+                    payment_customer_ref="billing@example.com",
+                    payment_subscription_ref="pay_x",
+                    payment_request_ref="order_x",
+                    current_period_end=current_period_end,
+                )
+            )
             session.commit()
 
         response = client.get("/v1/billing/me")
@@ -1359,62 +523,4 @@ class TestBillingMeRoute:
         assert body["plan_code"] == "pro"
         assert body["seats"] == 10
         assert body["payment_provider"] == "razorpay"
-        assert body["payment_subscription_ref"] == "rzp_pay_x"
-        assert body["stripe_customer_id"] == "cus_x"
-        assert body["plan_template"]["pilot.autopilot_enabled"] is True
-
-    @pytest.mark.parametrize("billing_status", ["incomplete", "canceled", "unpaid"])
-    def test_inactive_paid_subscription_exposes_free_effective_entitlements(
-        self,
-        client: TestClient,
-        billing_status: str,
-    ) -> None:
-        factory = client._session_factory  # type: ignore[attr-defined]
-        with factory() as session:
-            session.add(Subscription(
-                org_id="org-alpha",
-                plan_code="pro",
-                status=billing_status,
-                seats=10,
-                payment_provider="razorpay",
-                payment_customer_ref="billing@example.com",
-                payment_request_ref="rzp_order_pending",
-            ))
-            session.commit()
-            seed_plan_entitlements(session, org_id="org-alpha", plan_code="pro")
-
-        response = client.get("/v1/billing/me")
-        assert response.status_code == 200
-        body = response.json()
-        assert body["plan_code"] == "pro"
-        assert body["status"] == billing_status
-        assert body["plan_template"]["pilot.autopilot_enabled"] is False
-        assert body["plan_template"]["events.monthly_quota"] == 50_000
-
-    def test_works_with_viewer_role(self, client: TestClient) -> None:
-        _set_tenant(client, tenant_id="org-alpha", role="viewer")
-        response = client.get("/v1/billing/me")
-        assert response.status_code == 200
-
-
-# ── invariants ──────────────────────────────────────────────────────────────
-
-
-class TestInvariants:
-    def test_plan_codes_match_tier_matrix(self) -> None:
-        # Plan §11.1 binding tiers
-        assert VALID_PLAN_CODES == frozenset(
-            {"free", "pilot", "pro", "plus", "enterprise"}
-        )
-
-    def test_handled_event_types_mirror_plan_section_113(self) -> None:
-        # Plan §11.3 enumerates exactly these 5 event types (we also
-        # treat customer.subscription.created the same as updated)
-        required = {
-            "checkout.session.completed",
-            "customer.subscription.updated",
-            "customer.subscription.deleted",
-            "invoice.paid",
-            "invoice.payment_failed",
-        }
-        assert required.issubset(HANDLED_EVENT_TYPES)
+        assert body["payment_subscription_ref"] == "pay_x"

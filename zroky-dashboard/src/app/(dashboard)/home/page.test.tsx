@@ -1,4 +1,4 @@
-﻿import { render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -209,8 +209,6 @@ function mockInbox(
     payment_customer_ref: null,
     payment_subscription_ref: null,
     payment_request_ref: null,
-    stripe_customer_id: null,
-    stripe_sub_id: null,
     current_period_end: null,
     trial_end: null,
     sla_tier: "standard",

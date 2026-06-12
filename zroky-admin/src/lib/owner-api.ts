@@ -474,10 +474,6 @@ export interface OwnerBillingAccountItem {
   payment_subscription_ref: string | null;
   payment_request_ref: string | null;
   payment_dashboard_url: string | null;
-  stripe_customer_id: string | null;
-  stripe_sub_id: string | null;
-  stripe_customer_url: string | null;
-  stripe_subscription_url: string | null;
   updated_at: string;
 }
 

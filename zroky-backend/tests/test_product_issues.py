@@ -108,8 +108,8 @@ def _seed_org(session, *, project_id: str, plan_code: str = "pro") -> None:
             plan_code=plan_code,
             status="active",
             seats=1,
-            stripe_customer_id=f"cus_{project_id}",
-            stripe_sub_id=f"si_{project_id}",
+            payment_customer_ref=f"cus_{project_id}",
+            payment_subscription_ref=f"si_{project_id}",
             current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
         )
     )

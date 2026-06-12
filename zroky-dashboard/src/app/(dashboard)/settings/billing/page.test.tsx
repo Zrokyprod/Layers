@@ -1,4 +1,4 @@
-﻿import { render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BillingPage from "./page";
@@ -62,8 +62,6 @@ describe("BillingPage", () => {
       payment_customer_ref: null,
       payment_subscription_ref: null,
       payment_request_ref: null,
-      stripe_customer_id: null,
-      stripe_sub_id: null,
       current_period_end: null,
       trial_end: null,
       sla_tier: "standard",
@@ -124,8 +122,6 @@ describe("BillingPage", () => {
       payment_customer_ref: "billing@example.com",
       payment_subscription_ref: "rzp_pay_123",
       payment_request_ref: "rzp_order_123",
-      stripe_customer_id: "cus_123",
-      stripe_sub_id: "sub_123",
       current_period_end: null,
       trial_end: null,
       sla_tier: "standard",

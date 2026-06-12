@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     GATEWAY_INGEST_STREAM_BATCH_SIZE: int = 100
     GATEWAY_INGEST_STREAM_BLOCK_MS: int = 1000
     GATEWAY_INGEST_POLL_INTERVAL_SECONDS: int = 5
+    GATEWAY_INGEST_STREAM_MAX_ATTEMPTS: int = 3
+    GATEWAY_INGEST_DEAD_LETTER_STREAM_NAME: str = "zroky:ingest:v2:dead"
 
     PROVIDER_STATUS_FETCH_TIMEOUT_MS: int = 800
     PROVIDER_STATUS_CACHE_TTL_SECONDS: int = 300
@@ -235,19 +237,6 @@ class Settings(BaseSettings):
     RAZORPAY_WEBHOOK_SECRET: Optional[str] = None
     RAZORPAY_DASHBOARD_URL: str = "https://dashboard.razorpay.com/"
     ZROKY_EXCHANGE_RATE_USD_TO_INR: float = 83.00
-    # Deprecated Stripe compatibility fields retained only for old env files.
-    STRIPE_API_KEY: Optional[str] = None
-    # Deprecated Stripe webhook compatibility.
-    STRIPE_WEBHOOK_SECRET: Optional[str] = None
-    # API base URL â€” overridable for testing against Stripe-Mock.
-    STRIPE_API_BASE_URL: str = "https://api.stripe.com"
-    # Tolerance window (seconds) for the webhook timestamp check;
-    # Deprecated Stripe webhook timestamp tolerance.
-    STRIPE_WEBHOOK_TOLERANCE_SECONDS: int = 300
-    # Plan-code â†’ Stripe Price ID mapping. JSON-encoded inline. Keys must
-    # match `services/billing_plans.PLAN_ENTITLEMENTS` (free/pro/plus/
-    # enterprise). 'free' has no legacy Stripe price (no checkout).
-    STRIPE_PRICE_IDS_JSON: str = "{}"
     # Legacy redirect URLs retained for older clients.
     BILLING_CHECKOUT_SUCCESS_URL: str = (
         "http://localhost:3000/settings/billing?status=success"

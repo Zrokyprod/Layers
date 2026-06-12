@@ -418,6 +418,173 @@ def _verify_razorpay_signature(
     return hmac.compare_digest(expected, signature)
 
 
+def _razorpay_status(entity: dict[str, Any]) -> str:
+    return str(entity.get("status") or "").strip().lower()
+
+
+def _razorpay_payment_is_captured(payment: dict[str, Any]) -> bool:
+    return _razorpay_status(payment) == "captured" or payment.get("captured") is True
+
+
+def _razorpay_order_is_paid(order: dict[str, Any]) -> bool:
+    return _razorpay_status(order) == "paid"
+
+
+def _razorpay_webhook_confirms_paid(
+    *, event_type: str, payment: dict[str, Any], order: dict[str, Any]
+) -> bool:
+    if event_type in {"payment.captured", "payment.succeeded"}:
+        return _razorpay_payment_is_captured(payment)
+    if event_type == "order.paid":
+        return _razorpay_order_is_paid(order)
+    return False
+
+
+def _razorpay_notes(*entities: dict[str, Any]) -> dict[str, Any]:
+    for entity in entities:
+        raw = entity.get("notes")
+        if isinstance(raw, dict):
+            return raw
+    return {}
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fetch_razorpay_payment_and_order(
+    *, payment_id: str, order_id: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    client = _razorpay_client()
+    try:
+        payment = client.payment.fetch(payment_id)
+        order = client.order.fetch(order_id)
+    except BadRequestError as exc:
+        logger.exception("billing.razorpay_payment_verify_bad_request")
+        status_code = (
+            status.HTTP_401_UNAUTHORIZED
+            if _razorpay_auth_failure(exc)
+            else status.HTTP_400_BAD_REQUEST
+        )
+        detail = (
+            "Razorpay authentication failed."
+            if status_code == status.HTTP_401_UNAUTHORIZED
+            else "Razorpay payment or order could not be verified."
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    except (GatewayError, ServerError) as exc:
+        logger.exception("billing.razorpay_payment_verify_gateway_error")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay payment verification is temporarily unavailable.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("billing.razorpay_payment_verify_failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay payment verification failed.",
+        ) from exc
+
+    if not isinstance(payment, dict) or not isinstance(order, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Razorpay payment verification returned an invalid response.",
+        )
+    return payment, order
+
+
+def _require_razorpay_paid_checkout(
+    *,
+    payment_id: str,
+    order_id: str,
+    org_id: str,
+    plan_code: str | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    payment, order = _fetch_razorpay_payment_and_order(
+        payment_id=payment_id,
+        order_id=order_id,
+    )
+
+    payment_order_id = str(payment.get("order_id") or "").strip()
+    fetched_order_id = str(order.get("id") or "").strip()
+    if payment_order_id and payment_order_id != order_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay payment does not belong to the verified order.",
+        )
+    if fetched_order_id and fetched_order_id != order_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay order response does not match the verified order.",
+        )
+    if not (
+        _razorpay_payment_is_captured(payment)
+        or _razorpay_order_is_paid(order)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Razorpay payment is not captured or order is not paid yet.",
+        )
+
+    notes = _razorpay_notes(payment, order)
+    note_org_id = str(notes.get("org_id") or "").strip()
+    if note_org_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay order metadata does not match this org.",
+        )
+
+    provider_currency = str(
+        payment.get("currency") or order.get("currency") or ""
+    ).strip().upper()
+    if provider_currency and provider_currency != "INR":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay payment currency does not match checkout currency.",
+        )
+
+    if plan_code:
+        try:
+            expected_plan = _normalize_razorpay_plan_code(plan_code)
+        except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stored Razorpay plan is not valid for self-serve checkout.",
+            ) from exc
+
+        note_plan_code = str(notes.get("plan_code") or "").strip().lower()
+        try:
+            note_plan_code = _normalize_razorpay_plan_code(note_plan_code)
+        except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Razorpay order metadata does not match the selected plan.",
+            ) from exc
+        if note_plan_code != expected_plan:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Razorpay order metadata does not match the selected plan.",
+            )
+
+        expected_amount, _ = _razorpay_amount_for_plan(expected_plan)
+        for provider_amount in (
+            _int_or_none(payment.get("amount")),
+            _int_or_none(order.get("amount")),
+        ):
+            if provider_amount is not None and provider_amount != expected_amount:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Razorpay payment amount does not match the selected plan.",
+                )
+
+    return payment, order
+
+
 def _parse_stored_razorpay_request(value: str | None) -> tuple[str | None, str | None]:
     if not value:
         return None, None
@@ -584,8 +751,6 @@ class BillingMeResponse(BaseModel):
     payment_customer_ref: str | None = None
     payment_subscription_ref: str | None = None
     payment_request_ref: str | None = None
-    stripe_customer_id: str | None = None
-    stripe_sub_id: str | None = None
     current_period_end: str | None = None
     trial_end: str | None = None
     # Module 12 — Reliability SLA tier (plan §11.4). 'none' for
@@ -855,6 +1020,15 @@ def verify_razorpay_payment(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Stored Razorpay plan is not valid for self-serve checkout.",
             ) from exc
+
+    _require_razorpay_paid_checkout(
+        payment_id=body.razorpay_payment_id,
+        order_id=body.razorpay_order_id,
+        org_id=org_id,
+        plan_code=plan_norm,
+    )
+
+    if plan_norm:
         sub.plan_code = plan_norm
         sub.status = "active"
         sub.trial_end = None
@@ -864,17 +1038,18 @@ def verify_razorpay_payment(
     sub.payment_provider = "razorpay"
     sub.payment_request_ref = body.razorpay_order_id
     sub.payment_subscription_ref = body.razorpay_payment_id
+    provider_event_id = f"razorpay_verify:{body.razorpay_payment_id}"
     existing_event = db.execute(
         select(BillingEvent).where(
             BillingEvent.provider == "razorpay",
-            BillingEvent.provider_event_id == f"razorpay_verify:{body.razorpay_payment_id}",
+            BillingEvent.provider_event_id == provider_event_id,
         )
     ).scalar_one_or_none()
     if existing_event is None:
         db.add(
             BillingEvent(
                 provider="razorpay",
-                provider_event_id=f"razorpay_verify:{body.razorpay_payment_id}",
+                provider_event_id=provider_event_id,
                 event_type="payment.succeeded",
                 provider_created_at=datetime.now(timezone.utc),
                 processed_at=datetime.now(timezone.utc),
@@ -894,7 +1069,18 @@ def verify_razorpay_payment(
             )
         )
     db.add(sub)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing_event = db.execute(
+            select(BillingEvent).where(
+                BillingEvent.provider == "razorpay",
+                BillingEvent.provider_event_id == provider_event_id,
+            )
+        ).scalar_one_or_none()
+        if existing_event is None:
+            raise
     entitlements_resolver.invalidate(org_id)
 
     return RazorpayVerifyResponse(
@@ -1004,7 +1190,12 @@ async def receive_billing_webhook(
     payment_id = str(payment.get("id") or data_object.get("payment_ref") or event.get("payment_id") or "").strip() or None
     order_id = str(order.get("id") or payment.get("order_id") or data_object.get("payment_request_id") or event.get("order_id") or "").strip() or None
     result = "skipped"
-    if org_id and event_type in {"payment.captured", "payment.succeeded", "order.paid", "payment.authorized"}:
+    invalidate_org_id: str | None = None
+    if org_id and _razorpay_webhook_confirms_paid(
+        event_type=event_type,
+        payment=payment,
+        order=order,
+    ):
         sub = _get_or_create_org_subscription(db, org_id=org_id)
         sub.payment_provider = "razorpay"
         sub.payment_request_ref = order_id or sub.payment_request_ref
@@ -1020,7 +1211,7 @@ async def receive_billing_webhook(
                 sub.trial_end = None
                 sub.current_period_end = datetime.now(timezone.utc) + timedelta(days=30)
                 seed_plan_entitlements(db, org_id=org_id, plan_code=normalized_plan, commit=False)
-                entitlements_resolver.invalidate(org_id)
+                invalidate_org_id = org_id
         db.add(sub)
         result = "applied"
 
@@ -1036,7 +1227,27 @@ async def receive_billing_webhook(
             payload_json=json.dumps(event, separators=(",", ":"), sort_keys=True),
         )
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        duplicate_event = db.execute(
+            select(BillingEvent).where(
+                BillingEvent.provider == "razorpay",
+                BillingEvent.provider_event_id == event_id,
+            )
+        ).scalar_one_or_none()
+        if duplicate_event is not None:
+            return WebhookResponse(
+                received=True,
+                duplicate=True,
+                event_type=event_type,
+                result=duplicate_event.result or "skipped",
+                affected_org_id=duplicate_event.affected_org_id,
+            )
+        raise
+    if invalidate_org_id:
+        entitlements_resolver.invalidate(invalidate_org_id)
     return WebhookResponse(
         received=True,
         duplicate=False,
@@ -1072,8 +1283,6 @@ def get_billing_me(
         payment_customer_ref=sub.payment_customer_ref,
         payment_subscription_ref=sub.payment_subscription_ref,
         payment_request_ref=sub.payment_request_ref,
-        stripe_customer_id=sub.stripe_customer_id,
-        stripe_sub_id=sub.stripe_sub_id,
         current_period_end=(
             sub.current_period_end.isoformat() if sub.current_period_end else None
         ),

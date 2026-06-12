@@ -6,7 +6,7 @@ from app.worker._internal.tasks_utils import *
 )
 def expire_trials(limit: int | None = None) -> dict:
     """Beat task: downgrade `trialing` subscriptions whose `trial_end`
-    has passed AND that have no Stripe subscription. See
+    has passed AND that have no provider subscription. See
     `services.subscription_lifecycle.sweep_expired_trials` for the
     eligibility contract.
 
@@ -61,7 +61,7 @@ def expire_past_due_grace(
 
     grace_days defaults to BILLING_PAST_DUE_GRACE_DAYS (locked at 7
     per plan Â§11.4 binding); the kwarg exists so an operator can run
-    a one-off sweep with a longer window during a Stripe outage.
+    a one-off sweep with a longer window during a provider incident.
     """
     from app.services.subscription_lifecycle import sweep_expired_past_due_grace
 

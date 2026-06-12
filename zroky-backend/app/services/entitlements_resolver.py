@@ -14,7 +14,7 @@ Resolution algorithm (per plan §11.2):
   4. For keys NOT present in any source row, fall back to the canonical
      template `PLAN_ENTITLEMENTS[subscription.plan_code]`.
   5. If no `subscriptions` row exists for `org_id` (brand new org with
-     no Stripe handshake yet), fall back to `PLAN_ENTITLEMENTS["free"]`.
+     no billing row yet), fall back to `PLAN_ENTITLEMENTS["free"]`.
      This is the safe default — every endpoint's plan-gate evaluates
      against free-tier entitlements until billing infrastructure has
      written rows.

@@ -9,7 +9,7 @@ class OutcomeEvent(Base):
     Customers emit these via:
       SDK:    zroky.outcome(call_id=..., type="refund_issued", amount_usd=49)
       API:    POST /v1/outcomes
-      Webhooks: /v1/outcomes/webhooks/{stripe|zendesk|salesforce}
+      Webhooks: /v1/outcomes/webhooks/{zendesk|salesforce}
 
     ``call_id`` is nullable — some outcomes arrive before the SDK call_id
     is known or are attached post-facto.  Attribution queries LEFT JOIN to
@@ -47,7 +47,7 @@ class OutcomeEvent(Base):
     __table_args__ = (
         CheckConstraint("amount_usd >= 0", name="ck_outcome_events_amount_positive"),
         CheckConstraint(
-            "source IN ('sdk','api','stripe','zendesk','salesforce','csv')",
+            "source IN ('sdk','api','zendesk','salesforce','csv')",
             name="ck_outcome_events_source",
         ),
         Index("ix_outcome_events_project_occurred", "project_id", "occurred_at"),

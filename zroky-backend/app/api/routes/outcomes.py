@@ -5,25 +5,20 @@ Surface:
   GET  /v1/outcomes/summary              — KPI strip: total cost, by-type, by-cluster
   GET  /v1/outcomes/by-call/{call_id}    — outcome events for a specific call
   GET  /v1/outcomes/replay/{run_id}      — prevented savings for a replay run
-  POST /v1/outcomes/webhooks/stripe      — Stripe charge.refund.created
   POST /v1/outcomes/webhooks/zendesk     — Zendesk ticket.created / ticket.updated
   POST /v1/outcomes/webhooks/salesforce  — Salesforce Opportunity stage-change
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_id
-from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.session import get_db_session
 from app.services.outcome_attribution import (
@@ -37,7 +32,6 @@ from app.services.outcome_attribution import (
     get_replay_prevented_savings,
     ingest_outcome,
     normalise_salesforce_event,
-    normalise_stripe_refund,
     normalise_zendesk_ticket,
 )
 
@@ -248,60 +242,6 @@ def get_replay_savings(
 
 
 # ── Webhooks ──────────────────────────────────────────────────────────────────
-
-
-def _verify_stripe_signature(
-    payload: bytes,
-    sig_header: str | None,
-    secret: str | None,
-) -> bool:
-    """Stripe webhook signature verification (v1 scheme)."""
-    if not secret or not sig_header:
-        return False
-    try:
-        parts = dict(p.split("=", 1) for p in sig_header.split(","))
-        timestamp = parts.get("t", "")
-        signatures = [v for k, v in parts.items() if k == "v1"]
-        signed = f"{timestamp}.{payload.decode()}"
-        expected = hmac.new(secret.encode(), signed.encode(), hashlib.sha256).hexdigest()
-        return any(hmac.compare_digest(expected, s) for s in signatures)
-    except Exception:
-        return False
-
-
-@router.post("/webhooks/stripe", status_code=200)
-@limiter.limit("30/minute")
-async def stripe_webhook(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db_session),
-    tenant_id: str = Depends(require_tenant_id),
-    stripe_signature: str | None = Header(None, alias="stripe-signature"),
-) -> dict[str, str]:
-    """Receive Stripe charge.refund.created events and ingest as outcome_events."""
-    raw = await request.body()
-    settings = get_settings()
-    secret = getattr(settings, "STRIPE_WEBHOOK_SECRET", None)
-
-    if secret and not _verify_stripe_signature(raw, stripe_signature, secret):
-        raise HTTPException(status_code=400, detail="Invalid Stripe signature")
-
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
-
-    event_type = payload.get("type", "")
-    if event_type not in (
-        "charge.refund.created",
-        "refund.created",
-        "charge.refunded",
-    ):
-        return {"status": "ignored", "event_type": event_type}
-
-    fields = normalise_stripe_refund(payload)
-    ingest_outcome(db, project_id=tenant_id, **fields)
-    return {"status": "ok"}
 
 
 @router.post("/webhooks/zendesk", status_code=200)

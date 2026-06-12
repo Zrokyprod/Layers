@@ -18,6 +18,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.db.models import (  # noqa: E402
     Anomaly,
     ApiKey,
+    BillingEvent,
     Call,
     DiagnosisJob,
     Entitlement,
@@ -43,6 +44,12 @@ from app.services.issue_projection import legacy_issue_payload  # noqa: E402
 from app.services.security import hash_api_key, hash_password  # noqa: E402
 
 FIXTURE_PATH = REPO_ROOT / "demos" / "mvp-money-path" / "refund_money_path_fixture.json"
+OWNER_VALUE_PROJECT_ID = "demo-owner-value-proof"
+OWNER_VALUE_CALL_ID = "demo-call-owner-value-proof"
+OWNER_VALUE_GOLDEN_SET_ID = "demo-golden-owner-value-proof"
+OWNER_VALUE_GOLDEN_TRACE_ID = "demo-golden-trace-owner-value-proof"
+OWNER_VALUE_REPLAY_RUN_ID = "demo-replay-owner-value-proof"
+OWNER_VALUE_REPLAY_TRACE_ID = "demo-replay-trace-owner-value-proof"
 
 
 def _compact_json(value: Any) -> str:
@@ -68,28 +75,266 @@ def _delete_existing_demo_rows(
     user_id: str,
     user_subject: str,
 ) -> None:
+    project_ids = [project_id, OWNER_VALUE_PROJECT_ID]
     db.execute(
-        delete(ReplayRunTrace).where(ReplayRunTrace.project_id == project_id)
+        delete(ReplayRunTrace).where(ReplayRunTrace.project_id.in_(project_ids))
     )
-    db.execute(delete(ReplayRun).where(ReplayRun.project_id == project_id))
-    db.execute(delete(GoldenTrace).where(GoldenTrace.project_id == project_id))
-    db.execute(delete(GoldenSet).where(GoldenSet.project_id == project_id))
-    db.execute(delete(ProjectAlert).where(ProjectAlert.tenant_id == project_id))
-    db.execute(delete(Anomaly).where(Anomaly.project_id == project_id))
-    db.execute(delete(DiagnosisJob).where(DiagnosisJob.tenant_id == project_id))
-    db.execute(delete(Call).where(Call.project_id == project_id))
-    db.execute(delete(ProviderKeyVault).where(ProviderKeyVault.project_id == project_id))
-    db.execute(delete(ApiKey).where(ApiKey.project_id == project_id))
-    db.execute(delete(ProjectInvitation).where(ProjectInvitation.project_id == project_id))
-    db.execute(delete(ProjectDashboardConfig).where(ProjectDashboardConfig.tenant_id == project_id))
-    db.execute(delete(Notification).where(Notification.project_id == project_id))
+    db.execute(delete(ReplayRun).where(ReplayRun.project_id.in_(project_ids)))
+    db.execute(delete(GoldenTrace).where(GoldenTrace.project_id.in_(project_ids)))
+    db.execute(delete(GoldenSet).where(GoldenSet.project_id.in_(project_ids)))
+    db.execute(delete(ProjectAlert).where(ProjectAlert.tenant_id.in_(project_ids)))
+    db.execute(delete(Anomaly).where(Anomaly.project_id.in_(project_ids)))
+    db.execute(delete(DiagnosisJob).where(DiagnosisJob.tenant_id.in_(project_ids)))
+    db.execute(delete(Call).where(Call.project_id.in_(project_ids)))
+    db.execute(delete(ProviderKeyVault).where(ProviderKeyVault.project_id.in_(project_ids)))
+    db.execute(delete(ApiKey).where(ApiKey.project_id.in_(project_ids)))
+    db.execute(delete(ProjectInvitation).where(ProjectInvitation.project_id.in_(project_ids)))
+    db.execute(delete(ProjectDashboardConfig).where(ProjectDashboardConfig.tenant_id.in_(project_ids)))
+    db.execute(delete(Notification).where(Notification.project_id.in_(project_ids)))
     db.execute(delete(Notification).where(Notification.user_id == user_id))
-    db.execute(delete(Entitlement).where(Entitlement.org_id == project_id))
-    db.execute(delete(Subscription).where(Subscription.org_id == project_id))
-    db.execute(delete(ProjectMembership).where(ProjectMembership.project_id == project_id))
-    db.execute(delete(Project).where(Project.id == project_id))
+    db.execute(delete(Entitlement).where(Entitlement.org_id.in_(project_ids)))
+    db.execute(delete(Subscription).where(Subscription.org_id.in_(project_ids)))
+    db.execute(delete(BillingEvent).where(BillingEvent.affected_org_id.in_(project_ids)))
+    db.execute(delete(ProjectMembership).where(ProjectMembership.project_id.in_(project_ids)))
+    db.execute(delete(Project).where(Project.id.in_(project_ids)))
     db.execute(delete(User).where(or_(User.id == user_id, User.subject == user_subject)))
     db.flush()
+
+
+def _add_owner_value_proof_rows(
+    db: Session,
+    *,
+    base_time: datetime,
+    user_id: str,
+    user_subject: str,
+    fixed_output: str,
+    expected_tool: str,
+) -> None:
+    value_time = base_time + timedelta(minutes=21)
+    db.add_all(
+        [
+            Project(
+                id=OWNER_VALUE_PROJECT_ID,
+                name="Owner Value Proof Demo",
+                owner_ref=user_subject,
+                is_active=True,
+                default_golden_set_id=OWNER_VALUE_GOLDEN_SET_ID,
+                created_at=base_time,
+                updated_at=value_time,
+            ),
+            ProjectMembership(
+                id="demo-membership-owner-value-proof",
+                project_id=OWNER_VALUE_PROJECT_ID,
+                user_id=user_id,
+                role="owner",
+                is_active=True,
+                created_at=base_time,
+                updated_at=value_time,
+            ),
+            Subscription(
+                id=f"sub-{OWNER_VALUE_PROJECT_ID}",
+                org_id=OWNER_VALUE_PROJECT_ID,
+                payment_provider="razorpay",
+                payment_customer_ref=f"cus_{OWNER_VALUE_PROJECT_ID}",
+                payment_subscription_ref="pay_demo_owner_value",
+                payment_request_ref="order_demo_owner_value",
+                plan_code="pro",
+                status="active",
+                seats=2,
+                current_period_end=base_time + timedelta(days=30),
+                sla_tier="none",
+                created_at=base_time,
+                updated_at=value_time,
+            ),
+            BillingEvent(
+                id="demo-billing-event-owner-value-proof",
+                provider="razorpay",
+                provider_event_id="razorpay_verify:pay_demo_owner_value",
+                event_type="payment.succeeded",
+                provider_created_at=value_time,
+                received_at=value_time,
+                processed_at=value_time,
+                result="applied",
+                affected_org_id=OWNER_VALUE_PROJECT_ID,
+                payload_json=_compact_json(
+                    {
+                        "payment": {
+                            "id": "pay_demo_owner_value",
+                            "order_id": "order_demo_owner_value",
+                            "status": "captured",
+                            "currency": "INR",
+                            "amount": 249900,
+                            "notes": {
+                                "org_id": OWNER_VALUE_PROJECT_ID,
+                                "plan_code": "pro",
+                            },
+                        },
+                        "order": {
+                            "id": "order_demo_owner_value",
+                            "status": "paid",
+                            "notes": {
+                                "org_id": OWNER_VALUE_PROJECT_ID,
+                                "plan_code": "pro",
+                            },
+                        },
+                    }
+                ),
+            ),
+            ProviderKeyVault(
+                id="demo-provider-key-owner-value-proof",
+                project_id=OWNER_VALUE_PROJECT_ID,
+                provider="openai",
+                ciphertext=b"encrypted-demo-provider-key",
+                key_fingerprint="demo-owner-value-provider-fp",
+                key_last4="7890",
+                kms_key_id="money-path-local-kek-v1",
+                is_active=True,
+                label="owner-value-demo",
+                created_at=base_time,
+                updated_at=value_time,
+            ),
+            Call(
+                id=OWNER_VALUE_CALL_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                event_id="evt-demo-owner-value-proof",
+                created_at=value_time,
+                agent_name="deployment-smoke-agent",
+                user_id="customer-owner-value",
+                call_type="chat",
+                provider="fake-provider",
+                model="refund-agent-fixed-v1",
+                status="completed",
+                latency_ms=340,
+                input_tokens=92,
+                output_tokens=44,
+                reasoning_tokens=0,
+                total_tokens=136,
+                cost_total=0.0031,
+                reasoning_cost_total=0.0,
+                cache_savings_total=0.0,
+                pricing_version="demo-fixed",
+                pricing_source="fixture",
+                pricing_last_updated_at=value_time,
+                cost_confidence="high",
+                output_fingerprint="demo-owner-value-proof",
+                is_production=True,
+                tool_lifecycle_summary_json=_compact_json(
+                    {
+                        "tools_available": [expected_tool],
+                        "expected_tool": expected_tool,
+                        "tool_calls": [
+                            {
+                                "name": expected_tool,
+                                "args": {"customer_id": "cus_1001", "order_id": "ORD-1001"},
+                            }
+                        ],
+                        "tool_not_called": False,
+                    }
+                ),
+                payload_json=_compact_json(
+                    {
+                        "input": "Where is my refund?",
+                        "output": fixed_output,
+                        "tool_calls": [
+                            {
+                                "name": expected_tool,
+                                "args": {"customer_id": "cus_1001", "order_id": "ORD-1001"},
+                            }
+                        ],
+                    }
+                ),
+                metadata_json=_compact_json(
+                    {
+                        "source": "phase_8_deployment_smoke",
+                        "demo": "owner_value_proof",
+                    }
+                ),
+            ),
+            GoldenSet(
+                id=OWNER_VALUE_GOLDEN_SET_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                name="Owner value deployment smoke",
+                description="Passing deploy-smoke evidence for owner launch readiness.",
+                judge_config_json=_compact_json({"owner": "support-platform"}),
+                is_flaky=False,
+                blocks_ci=True,
+                created_at=value_time,
+                updated_at=value_time,
+            ),
+            GoldenTrace(
+                id=OWNER_VALUE_GOLDEN_TRACE_ID,
+                golden_set_id=OWNER_VALUE_GOLDEN_SET_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                call_id=OWNER_VALUE_CALL_ID,
+                status="active",
+                expected_output_text=fixed_output,
+                source_output_text=fixed_output,
+                source_evidence_json=_compact_json(
+                    {"source": "deployment-smoke", "call_id": OWNER_VALUE_CALL_ID}
+                ),
+                criteria_json=_compact_json(
+                    {
+                        "golden_contract_v1": {
+                            "tool_sequence": [expected_tool],
+                            "tool_args": {
+                                expected_tool: {"requires": ["customer_id", "order_id"]}
+                            },
+                            "final_output_assertion": {"contains": "RF-1001"},
+                            "business_outcome": {
+                                "status": "refund_status_answered_with_transaction_evidence"
+                            },
+                        }
+                    }
+                ),
+                expected_tokens=44,
+                expected_cost_usd=0.0031,
+                expected_latency_ms=340,
+                weight=1.0,
+                created_at=value_time,
+                updated_at=value_time,
+            ),
+            ReplayRun(
+                id=OWNER_VALUE_REPLAY_RUN_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                golden_set_id=OWNER_VALUE_GOLDEN_SET_ID,
+                trigger="github",
+                git_sha="deploy-smoke-owner-value-proof",
+                status="pass",
+                started_at=value_time,
+                completed_at=value_time,
+                summary_json=_compact_json(
+                    {
+                        "verified_fix": True,
+                        "verification_status": "verified_fix",
+                        "requested_replay_mode": "real_llm",
+                        "replay_mode": "real_llm",
+                        "trace_count_executed": 1,
+                        "pass_count": 1,
+                        "fail_count": 0,
+                        "error_count": 0,
+                        "verdict": "pass",
+                    }
+                ),
+                created_at=value_time,
+            ),
+            ReplayRunTrace(
+                id=OWNER_VALUE_REPLAY_TRACE_ID,
+                replay_run_id=OWNER_VALUE_REPLAY_RUN_ID,
+                golden_trace_id=OWNER_VALUE_GOLDEN_TRACE_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                call_id_replayed=OWNER_VALUE_CALL_ID,
+                judge_scores_json=_compact_json(
+                    {"confidence": 0.99, "required_tool_called": True}
+                ),
+                status="pass",
+                diff_metric=0.0,
+                output_text=fixed_output,
+                completed_at=value_time,
+                created_at=value_time,
+            ),
+        ]
+    )
+    seed_plan_entitlements(db, org_id=OWNER_VALUE_PROJECT_ID, plan_code="pro", commit=False)
 
 
 def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> dict[str, str]:
@@ -154,8 +399,10 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
     subscription = Subscription(
         id=str(ids["subscription"]),
         org_id=project_id,
-        stripe_customer_id=None,
-        stripe_sub_id=None,
+        payment_provider="razorpay",
+        payment_customer_ref="cus_demo_refund_money_path",
+        payment_subscription_ref="pay_demo_refund_money_path",
+        payment_request_ref="order_demo_refund_money_path",
         plan_code="pro",
         status="active",
         seats=3,
@@ -164,6 +411,34 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         sla_tier="none",
         created_at=base_time,
         updated_at=base_time,
+    )
+    billing_event = BillingEvent(
+        id="demo-billing-event-refund-money-path",
+        provider="razorpay",
+        provider_event_id="razorpay_verify:pay_demo_refund_money_path",
+        event_type="payment.succeeded",
+        provider_created_at=base_time,
+        received_at=base_time,
+        processed_at=base_time,
+        result="applied",
+        affected_org_id=project_id,
+        payload_json=_compact_json(
+            {
+                "payment": {
+                    "id": "pay_demo_refund_money_path",
+                    "order_id": "order_demo_refund_money_path",
+                    "status": "captured",
+                    "currency": "INR",
+                    "amount": 249900,
+                    "notes": {"org_id": project_id, "plan_code": "pro"},
+                },
+                "order": {
+                    "id": "order_demo_refund_money_path",
+                    "status": "paid",
+                    "notes": {"org_id": project_id, "plan_code": "pro"},
+                },
+            }
+        ),
     )
     api_key = ApiKey(
         id=str(ids.get("api_key", "demo-api-key-refund-money-path")),
@@ -225,7 +500,9 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         created_at=base_time,
         updated_at=base_time,
     )
-    db.add_all([user, project, membership, subscription, api_key, invitation, dashboard_config])
+    db.add_all(
+        [user, project, membership, subscription, billing_event, api_key, invitation, dashboard_config]
+    )
     db.flush()
     seed_plan_entitlements(db, org_id=project_id, plan_code="pro", commit=False)
 
@@ -680,6 +957,14 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         created_at=base_time + timedelta(minutes=18),
     )
     db.add_all([ci_run, ci_trace])
+    _add_owner_value_proof_rows(
+        db,
+        base_time=base_time,
+        user_id=user_id,
+        user_subject=user_subject,
+        fixed_output=fixed_output,
+        expected_tool=expected_tool,
+    )
 
     db.commit()
 

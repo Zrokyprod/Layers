@@ -297,7 +297,7 @@ def test_production_config_rejects_missing_platform_llm_key() -> None:
 def test_production_config_rejects_non_razorpay_billing_provider() -> None:
     settings = _hardened_production_settings(
         BILLING_ENABLED=True,
-        BILLING_PROVIDER="stripe",
+        BILLING_PROVIDER="paypal",
         RAZORPAY_KEY_ID="rzp_live_real_key",
         RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
         RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-with-enough-length",

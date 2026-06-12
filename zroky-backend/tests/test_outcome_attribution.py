@@ -3,7 +3,7 @@
 Covers:
   - ingest_outcome: basic + idempotency
   - get_attribution_summary: empty / by-type / by-cluster
-  - normalise_stripe_refund / normalise_zendesk_ticket / normalise_salesforce_event
+  - normalise_zendesk_ticket / normalise_salesforce_event
   - get_replay_prevented_savings
 """
 from __future__ import annotations
@@ -22,7 +22,6 @@ from app.services.outcome_attribution import (
     get_replay_prevented_savings,
     ingest_outcome,
     normalise_salesforce_event,
-    normalise_stripe_refund,
     normalise_zendesk_ticket,
 )
 
@@ -196,38 +195,6 @@ class TestAttributionSummary:
 
 
 # ── Webhook normalisation ──────────────────────────────────────────────────────
-
-
-class TestNormaliseStripe:
-    def test_basic_refund(self):
-        payload = {
-            "type": "charge.refund.created",
-            "data": {
-                "object": {
-                    "id": "re_abc",
-                    "amount": 4900,
-                    "currency": "usd",
-                    "reason": "fraudulent",
-                    "metadata": {"zroky_call_id": "call-xyz"},
-                }
-            },
-        }
-        fields = normalise_stripe_refund(payload)
-        assert fields["outcome_type"] == "refund_issued"
-        assert fields["amount_usd"] == pytest.approx(49.0)
-        assert fields["call_id"] == "call-xyz"
-        assert fields["source"] == "stripe"
-        assert fields["idempotency_key"] == "stripe:re_abc"
-
-    def test_no_call_id_metadata(self):
-        payload = {"data": {"object": {"id": "re_def", "amount": 1000, "currency": "usd"}}}
-        fields = normalise_stripe_refund(payload)
-        assert fields["call_id"] is None
-
-    def test_non_usd_amount_passthrough(self):
-        payload = {"data": {"object": {"id": "re_eur", "amount": 2000, "currency": "EUR"}}}
-        fields = normalise_stripe_refund(payload)
-        assert fields["amount_usd"] == pytest.approx(20.0)
 
 
 class TestNormaliseZendesk:

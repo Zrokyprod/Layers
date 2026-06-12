@@ -242,8 +242,8 @@ with SessionLocal() as db:
         sub = Subscription(
             id=str(uuid4()),
             org_id=project_id,
-            stripe_customer_id=None,
-            stripe_sub_id=None,
+            payment_customer_ref=None,
+            payment_subscription_ref=None,
             plan_code="pro",
             status="active",
             seats=3,

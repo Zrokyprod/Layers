@@ -1928,7 +1928,7 @@ body:has(.app-shell) {
   border-color: var(--dashboard-info-border) !important;
 }
 
-.app-shell .alert-card-stripe,
+.app-shell .alert-card-accent,
 .app-shell .priority-queue-severity,
 .app-shell .cost-stale-warning,
 .app-shell .cost-forecast-warning,
@@ -6394,9 +6394,9 @@ body:has(.app-shell) {
   white-space: normal !important;
 }
 
-.app-shell .alert-card-stripe {
+.app-shell .alert-card-accent {
   border: 0 !important;
-  background: var(--alert-stripe, var(--dashboard-muted)) !important;
+  background: var(--alert-accent, var(--dashboard-muted)) !important;
   color: inherit !important;
 }
 

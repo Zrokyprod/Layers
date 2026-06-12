@@ -12,7 +12,7 @@ Schema notes (Cost-of-Failure Attribution — CFO Wedge):
 
         1. SDK:    zroky.outcome(call_id=..., type="refund_issued", amount_usd=49)
         2. Direct: POST /v1/outcomes
-        3. Webhook receivers: /v1/outcomes/webhooks/{stripe|zendesk|salesforce}
+        3. Webhook receivers: /v1/outcomes/webhooks/{zendesk|salesforce}
            These normalise provider-specific payloads into a canonical row.
 
       call_id is nullable because some outcomes arrive post-facto or are
@@ -23,7 +23,7 @@ Schema notes (Cost-of-Failure Attribution — CFO Wedge):
 
       Idempotency:
         UNIQUE(project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
-        Stripe/Zendesk webhook re-delivers never double-count.
+        Webhook re-delivers never double-count.
         SDK retries pass idempotency_key=call_id+":"+outcome_type.
 
       Attribution join (all in application code, no materialised views):
@@ -101,13 +101,13 @@ def upgrade() -> None:
             sa.String(length=32),
             nullable=False,
             server_default=sa.text("'api'"),
-            comment="Ingest path: sdk | api | stripe | zendesk | salesforce | csv.",
+            comment="Ingest path: sdk | api | zendesk | salesforce | csv.",
         ),
         sa.Column(
             "external_ref",
             sa.String(length=255),
             nullable=True,
-            comment="Provider-native ID (Stripe refund ID, Zendesk ticket ID, Salesforce opportunity ID, …).",
+            comment="Provider-native ID (Zendesk ticket ID, Salesforce opportunity ID, …).",
         ),
         sa.Column(
             "idempotency_key",
@@ -140,7 +140,7 @@ def upgrade() -> None:
             name="ck_outcome_events_amount_positive",
         ),
         sa.CheckConstraint(
-            "source IN ('sdk','api','stripe','zendesk','salesforce','csv')",
+            "source IN ('sdk','api','zendesk','salesforce','csv')",
             name="ck_outcome_events_source",
         ),
     )

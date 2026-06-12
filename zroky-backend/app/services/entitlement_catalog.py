@@ -2,7 +2,7 @@
 
 ``api-contracts/pricing-plans.json`` is the source of truth for Zroky plan
 capabilities and numeric limits. This module validates that contract and keeps
-the legacy export surface used by billing, Stripe sync, and resolver code.
+the legacy export surface used by billing and resolver code.
 """
 from __future__ import annotations
 

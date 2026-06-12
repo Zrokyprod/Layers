@@ -200,17 +200,7 @@ function BillingAccountRow({
               Razorpay
             </a>
           ) : null}
-          {account.stripe_customer_url ? (
-            <a className="owner-row-link" href={account.stripe_customer_url} target="_blank" rel="noopener noreferrer">
-              Legacy customer
-            </a>
-          ) : null}
-          {account.stripe_subscription_url ? (
-            <a className="owner-row-link" href={account.stripe_subscription_url} target="_blank" rel="noopener noreferrer">
-              Legacy subscription
-            </a>
-          ) : null}
-          {!account.payment_dashboard_url && !account.stripe_customer_url && !account.stripe_subscription_url ? (
+          {!account.payment_dashboard_url ? (
             <span className="hint">No payment link</span>
           ) : null}
         </div>

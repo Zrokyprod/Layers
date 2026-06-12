@@ -27,6 +27,9 @@ class GatewayStreamResult:
     duplicates: int = 0
     enqueue_failed: int = 0
     invalid: int = 0
+    failed: int = 0
+    dead_lettered: int = 0
+    dead_letter_failed: int = 0
     acked: int = 0
 
 
@@ -183,6 +186,106 @@ def _ensure_group(client: Any, *, stream: str, group: str) -> None:
             raise
 
 
+def _read_gateway_stream_batches(
+    client: Any,
+    *,
+    stream: str,
+    group: str,
+    consumer: str,
+    count: int,
+    block_ms: int,
+) -> list[Any]:
+    pending = client.xreadgroup(
+        group,
+        consumer,
+        {stream: "0"},
+        count=count,
+        block=0,
+    )
+    if pending:
+        return pending
+    return client.xreadgroup(
+        group,
+        consumer,
+        {stream: ">"},
+        count=count,
+        block=block_ms,
+    )
+
+
+def _delivery_count(
+    client: Any,
+    *,
+    stream: str,
+    group: str,
+    message_id: str,
+) -> int:
+    try:
+        rows = client.xpending_range(stream, group, message_id, message_id, 1)
+    except AttributeError:
+        return 1
+    except Exception:
+        logger.exception(
+            "gateway stream pending metadata lookup failed",
+            extra={"redis_message_id": message_id},
+        )
+        return 1
+    if not rows:
+        return 1
+
+    row = rows[0]
+    raw_count: Any
+    if isinstance(row, dict):
+        raw_count = (
+            row.get("times_delivered")
+            or row.get("delivery_count")
+            or row.get("deliveries")
+        )
+    elif isinstance(row, (list, tuple)) and len(row) >= 4:
+        raw_count = row[3]
+    else:
+        raw_count = None
+    try:
+        return max(1, int(raw_count or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _field_text(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _dead_letter_gateway_event(
+    client: Any,
+    *,
+    dead_letter_stream: str,
+    source_stream: str,
+    source_group: str,
+    source_consumer: str,
+    message_id: str,
+    fields: dict[str, Any],
+    attempts: int,
+    exc: Exception,
+) -> None:
+    client.xadd(
+        dead_letter_stream,
+        {
+            "event": _field_text(fields.get("event")),
+            "source_stream": source_stream,
+            "source_group": source_group,
+            "source_consumer": source_consumer,
+            "source_message_id": str(message_id),
+            "attempts": str(attempts),
+            "error_type": type(exc).__name__,
+            "error_message": str(exc)[:1000],
+        },
+    )
+
+
 def consume_gateway_stream_once() -> GatewayStreamResult:
     settings = get_settings()
     result = GatewayStreamResult()
@@ -190,19 +293,37 @@ def consume_gateway_stream_once() -> GatewayStreamResult:
     stream = settings.GATEWAY_INGEST_STREAM_NAME
     group = settings.GATEWAY_INGEST_CONSUMER_GROUP
     consumer = settings.GATEWAY_INGEST_CONSUMER_NAME
+    count = max(1, int(settings.GATEWAY_INGEST_STREAM_BATCH_SIZE))
+    block_ms = max(0, int(settings.GATEWAY_INGEST_STREAM_BLOCK_MS))
+    max_attempts = max(
+        1,
+        int(getattr(settings, "GATEWAY_INGEST_STREAM_MAX_ATTEMPTS", 3)),
+    )
+    dead_letter_stream = (
+        str(
+            getattr(
+                settings,
+                "GATEWAY_INGEST_DEAD_LETTER_STREAM_NAME",
+                f"{stream}:dead",
+            )
+        ).strip()
+        or f"{stream}:dead"
+    )
 
     _ensure_group(client, stream=stream, group=group)
-    batches = client.xreadgroup(
-        group,
-        consumer,
-        {stream: ">"},
-        count=max(1, int(settings.GATEWAY_INGEST_STREAM_BATCH_SIZE)),
-        block=max(0, int(settings.GATEWAY_INGEST_STREAM_BLOCK_MS)),
+    batches = _read_gateway_stream_batches(
+        client,
+        stream=stream,
+        group=group,
+        consumer=consumer,
+        count=count,
+        block_ms=block_ms,
     )
 
     for _stream_name, messages in batches or []:
         for message_id, fields in messages:
             result.read += 1
+            message_id_text = _field_text(message_id)
             try:
                 raw_event = json.loads(fields.get("event") or "{}")
                 project_id, event = gateway_event_to_ingest_event(raw_event)
@@ -212,7 +333,7 @@ def consume_gateway_stream_once() -> GatewayStreamResult:
                         body=body,
                         tenant_id=project_id,
                         db=db,
-                        idempotency_header=str(message_id),
+                        idempotency_header=message_id_text,
                         enforce_rate_limit=False,
                         enforce_quota=True,
                     )
@@ -222,10 +343,45 @@ def consume_gateway_stream_once() -> GatewayStreamResult:
                 result.enqueue_failed += response.enqueue_failed
                 client.xack(stream, group, message_id)
                 result.acked += 1
-            except Exception:
-                logger.exception("gateway stream event failed", extra={"redis_message_id": message_id})
+            except Exception as exc:
+                logger.exception(
+                    "gateway stream event failed",
+                    extra={"redis_message_id": message_id_text},
+                )
                 result.invalid += 1
+                attempts = _delivery_count(
+                    client,
+                    stream=stream,
+                    group=group,
+                    message_id=message_id_text,
+                )
+                if attempts < max_attempts:
+                    result.failed += 1
+                    continue
+
+                try:
+                    _dead_letter_gateway_event(
+                        client,
+                        dead_letter_stream=dead_letter_stream,
+                        source_stream=stream,
+                        source_group=group,
+                        source_consumer=consumer,
+                        message_id=message_id_text,
+                        fields=fields,
+                        attempts=attempts,
+                        exc=exc,
+                    )
+                except Exception:
+                    logger.exception(
+                        "gateway stream dead-letter write failed",
+                        extra={"redis_message_id": message_id_text},
+                    )
+                    result.failed += 1
+                    result.dead_letter_failed += 1
+                    continue
+
                 client.xack(stream, group, message_id)
                 result.acked += 1
+                result.dead_lettered += 1
 
     return result

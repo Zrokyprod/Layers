@@ -77,8 +77,8 @@ def _seed_subscription(
         plan_code=plan_code,
         status=status,
         seats=1,
-        stripe_customer_id=f"cus_{org_id}",
-        stripe_sub_id=f"si_{org_id}",
+        payment_customer_ref=f"cus_{org_id}",
+        payment_subscription_ref=f"si_{org_id}",
         current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
     )
     db.add(sub)

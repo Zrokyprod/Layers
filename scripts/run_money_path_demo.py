@@ -21,9 +21,15 @@ SDK_DIR = ROOT / "zroky-sdk"
 
 PROJECT_HEADER = "X-Project-Id"
 PROJECT_ID = "demo-refund-money-path"
+OWNER_VALUE_PROJECT_ID = "demo-owner-value-proof"
 AUTH_SECRET = "money-path-secret-key-for-local-demo"
 OWNER_PROVISIONING_TOKEN = "money-path-owner-provisioning-token"
 CALL_ID = "demo-call-refund-missed-tool"
+OWNER_VALUE_CALL_ID = "demo-call-owner-value-proof"
+OWNER_VALUE_GOLDEN_SET_ID = "demo-golden-owner-value-proof"
+OWNER_VALUE_GOLDEN_TRACE_ID = "demo-golden-trace-owner-value-proof"
+OWNER_VALUE_REPLAY_RUN_ID = "demo-replay-owner-value-proof"
+OWNER_VALUE_REPLAY_TRACE_ID = "demo-replay-trace-owner-value-proof"
 TRACE_ID = "trace-demo-refund-missed-tool"
 PROMPT_FINGERPRINT = "fp-demo-refund-v1"
 PROVIDER_KEY_PLAINTEXT = "sk-demo-money-path-1234567890"
@@ -81,12 +87,14 @@ def _assert(condition: bool, message: str) -> None:
 
 
 def _seed_project_and_plan(session_local: Any) -> str:
-    from app.db.models import Project, ProjectMembership, Subscription, User
+    from app.db.models import BillingEvent, Project, ProjectMembership, Subscription, User
     from app.services.entitlements import seed_plan_entitlements
     from app.services.entitlements_resolver import invalidate_all
     from app.services.security import issue_access_token
 
     now = datetime.now(timezone.utc)
+    razorpay_order_id = "order_demo_refund_money_path"
+    razorpay_payment_id = "pay_demo_refund_money_path"
     with session_local() as session:
         user = User(
             subject="user:money-path-owner",
@@ -123,14 +131,48 @@ def _seed_project_and_plan(session_local: Any) -> str:
             Subscription(
                 id=f"sub-{PROJECT_ID}",
                 org_id=PROJECT_ID,
+                payment_provider="razorpay",
                 plan_code="pro",
                 status="active",
                 seats=1,
-                stripe_customer_id=f"cus_{PROJECT_ID}",
-                stripe_sub_id=f"si_{PROJECT_ID}",
+                payment_customer_ref=f"cus_{PROJECT_ID}",
+                payment_subscription_ref=razorpay_payment_id,
+                payment_request_ref=razorpay_order_id,
                 current_period_end=now + timedelta(days=30),
                 created_at=now,
                 updated_at=now,
+            )
+        )
+        session.add(
+            BillingEvent(
+                id=f"be-{PROJECT_ID}",
+                provider="razorpay",
+                provider_event_id=f"razorpay_verify:{razorpay_payment_id}",
+                event_type="payment.succeeded",
+                provider_created_at=now,
+                received_at=now,
+                processed_at=now,
+                result="applied",
+                affected_org_id=PROJECT_ID,
+                payload_json=json.dumps(
+                    {
+                        "payment": {
+                            "id": razorpay_payment_id,
+                            "order_id": razorpay_order_id,
+                            "status": "captured",
+                            "currency": "INR",
+                            "amount": 249900,
+                            "notes": {"org_id": PROJECT_ID, "plan_code": "pro"},
+                        },
+                        "order": {
+                            "id": razorpay_order_id,
+                            "status": "paid",
+                            "notes": {"org_id": PROJECT_ID, "plan_code": "pro"},
+                        },
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
             )
         )
         session.commit()
@@ -142,8 +184,283 @@ def _seed_project_and_plan(session_local: Any) -> str:
             expire_hours=1,
             secret=AUTH_SECRET,
         )
-    invalidate_all()
-    return token
+        invalidate_all()
+        return token
+
+
+def _seed_owner_value_tenant(session_local: Any) -> None:
+    from app.db.models import (
+        BillingEvent,
+        Call,
+        GoldenSet,
+        GoldenTrace,
+        Project,
+        ProviderKeyVault,
+        ReplayRun,
+        ReplayRunTrace,
+        Subscription,
+    )
+    from app.services.entitlements import seed_plan_entitlements
+
+    now = datetime.now(timezone.utc)
+    razorpay_order_id = "order_demo_owner_value"
+    razorpay_payment_id = "pay_demo_owner_value"
+    with session_local() as session:
+        session.add(
+            Project(
+                id=OWNER_VALUE_PROJECT_ID,
+                name="Owner Value Proof Demo",
+                owner_ref="user:money-path-owner",
+                is_active=True,
+                default_golden_set_id=OWNER_VALUE_GOLDEN_SET_ID,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            Subscription(
+                id=f"sub-{OWNER_VALUE_PROJECT_ID}",
+                org_id=OWNER_VALUE_PROJECT_ID,
+                payment_provider="razorpay",
+                payment_customer_ref=f"cus_{OWNER_VALUE_PROJECT_ID}",
+                payment_subscription_ref=razorpay_payment_id,
+                payment_request_ref=razorpay_order_id,
+                plan_code="pro",
+                status="active",
+                seats=2,
+                current_period_end=now + timedelta(days=30),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            BillingEvent(
+                id=f"be-{OWNER_VALUE_PROJECT_ID}",
+                provider="razorpay",
+                provider_event_id=f"razorpay_verify:{razorpay_payment_id}",
+                event_type="payment.succeeded",
+                provider_created_at=now,
+                received_at=now,
+                processed_at=now,
+                result="applied",
+                affected_org_id=OWNER_VALUE_PROJECT_ID,
+                payload_json=json.dumps(
+                    {
+                        "payment": {
+                            "id": razorpay_payment_id,
+                            "order_id": razorpay_order_id,
+                            "status": "captured",
+                            "currency": "INR",
+                            "amount": 249900,
+                            "notes": {
+                                "org_id": OWNER_VALUE_PROJECT_ID,
+                                "plan_code": "pro",
+                            },
+                        },
+                        "order": {
+                            "id": razorpay_order_id,
+                            "status": "paid",
+                            "notes": {
+                                "org_id": OWNER_VALUE_PROJECT_ID,
+                                "plan_code": "pro",
+                            },
+                        },
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            )
+        )
+        session.add(
+            ProviderKeyVault(
+                id=f"pk-{OWNER_VALUE_PROJECT_ID}",
+                project_id=OWNER_VALUE_PROJECT_ID,
+                provider="openai",
+                ciphertext=b"encrypted-demo-provider-key",
+                key_fingerprint="demo-owner-value-provider-fp",
+                key_last4="7890",
+                kms_key_id="money-path-local-kek-v1",
+                is_active=True,
+                label="owner-value-demo",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            Call(
+                id=OWNER_VALUE_CALL_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                event_id="evt-demo-owner-value-proof",
+                created_at=now - timedelta(minutes=2),
+                agent_name="deployment-smoke-agent",
+                user_id="customer-owner-value",
+                call_type="chat",
+                provider="fake-provider",
+                model="refund-agent-fixed-v1",
+                status="completed",
+                latency_ms=340,
+                input_tokens=92,
+                output_tokens=44,
+                reasoning_tokens=0,
+                total_tokens=136,
+                cost_total=0.0031,
+                reasoning_cost_total=0.0,
+                cache_savings_total=0.0,
+                pricing_version="demo-fixed",
+                pricing_source="fixture",
+                pricing_last_updated_at=now,
+                cost_confidence="high",
+                output_fingerprint="demo-owner-value-proof",
+                is_production=True,
+                tool_lifecycle_summary_json=json.dumps(
+                    {
+                        "tools_available": [EXPECTED_TOOL],
+                        "expected_tool": EXPECTED_TOOL,
+                        "tool_calls": [
+                            {
+                                "name": EXPECTED_TOOL,
+                                "args": {"customer_id": "cus_1001", "order_id": "ORD-1001"},
+                            }
+                        ],
+                        "tool_not_called": False,
+                    },
+                    separators=(",", ":"),
+                ),
+                payload_json=json.dumps(
+                    {
+                        "input": "Where is my refund?",
+                        "output": FIXED_OUTPUT,
+                        "tool_calls": [
+                            {
+                                "name": EXPECTED_TOOL,
+                                "args": {"customer_id": "cus_1001", "order_id": "ORD-1001"},
+                            }
+                        ],
+                    },
+                    separators=(",", ":"),
+                ),
+                metadata_json=json.dumps(
+                    {
+                        "source": "phase_8_deployment_smoke",
+                        "demo": "owner_value_proof",
+                    },
+                    separators=(",", ":"),
+                ),
+            )
+        )
+        session.add(
+            GoldenSet(
+                id=OWNER_VALUE_GOLDEN_SET_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                name="Owner value deployment smoke",
+                description="Passing deploy-smoke evidence for owner launch readiness.",
+                judge_config_json=json.dumps({"owner": "support-platform"}, separators=(",", ":")),
+                is_flaky=False,
+                blocks_ci=True,
+                created_at=now - timedelta(minutes=1),
+                updated_at=now - timedelta(minutes=1),
+            )
+        )
+        session.add(
+            GoldenTrace(
+                id=OWNER_VALUE_GOLDEN_TRACE_ID,
+                golden_set_id=OWNER_VALUE_GOLDEN_SET_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                call_id=OWNER_VALUE_CALL_ID,
+                status="active",
+                expected_output_text=FIXED_OUTPUT,
+                source_output_text=FIXED_OUTPUT,
+                source_evidence_json=json.dumps(
+                    {"source": "deployment-smoke", "call_id": OWNER_VALUE_CALL_ID},
+                    separators=(",", ":"),
+                ),
+                criteria_json=json.dumps(
+                    {
+                        "golden_contract_v1": {
+                            "tool_sequence": [EXPECTED_TOOL],
+                            "tool_args": {
+                                EXPECTED_TOOL: {
+                                    "requires": ["customer_id", "order_id"],
+                                }
+                            },
+                            "final_output_assertion": {"contains": "RF-1001"},
+                            "business_outcome": {
+                                "status": "refund_status_answered_with_transaction_evidence"
+                            },
+                        }
+                    },
+                    separators=(",", ":"),
+                ),
+                expected_tokens=44,
+                expected_cost_usd=0.0031,
+                expected_latency_ms=340,
+                weight=1.0,
+                created_at=now - timedelta(minutes=1),
+                updated_at=now - timedelta(minutes=1),
+            )
+        )
+        session.add(
+            ReplayRun(
+                id=OWNER_VALUE_REPLAY_RUN_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                golden_set_id=OWNER_VALUE_GOLDEN_SET_ID,
+                trigger="github",
+                git_sha="deploy-smoke-owner-value-proof",
+                status="pass",
+                started_at=now,
+                completed_at=now,
+                summary_json=json.dumps(
+                    {
+                        "verified_fix": True,
+                        "verification_status": "verified_fix",
+                        "requested_replay_mode": "real_llm",
+                        "replay_mode": "real_llm",
+                        "trace_count_executed": 1,
+                        "pass_count": 1,
+                        "fail_count": 0,
+                        "error_count": 0,
+                        "verdict": "pass",
+                    },
+                    separators=(",", ":"),
+                ),
+                created_at=now,
+            )
+        )
+        session.add(
+            ReplayRunTrace(
+                id=OWNER_VALUE_REPLAY_TRACE_ID,
+                replay_run_id=OWNER_VALUE_REPLAY_RUN_ID,
+                golden_trace_id=OWNER_VALUE_GOLDEN_TRACE_ID,
+                project_id=OWNER_VALUE_PROJECT_ID,
+                call_id_replayed=OWNER_VALUE_CALL_ID,
+                judge_scores_json=json.dumps(
+                    {"confidence": 0.99, "required_tool_called": True},
+                    separators=(",", ":"),
+                ),
+                status="pass",
+                diff_metric=0.0,
+                output_text=FIXED_OUTPUT,
+                completed_at=now,
+                created_at=now,
+            )
+        )
+        session.commit()
+        seed_plan_entitlements(session, org_id=OWNER_VALUE_PROJECT_ID, plan_code="pro")
+
+
+def _stamp_demo_call_pricing(session_local: Any) -> None:
+    from app.db.models import Call
+
+    now = datetime.now(timezone.utc)
+    with session_local() as session:
+        call = session.get(Call, CALL_ID)
+        _assert(call is not None, "Captured demo call was not persisted for pricing evidence.")
+        call.pricing_version = "demo-fixed"
+        call.pricing_source = "fixture"
+        call.pricing_last_updated_at = now
+        call.cost_confidence = "high"
+        call.confidence_reason = None
+        session.commit()
 
 
 def _install_background_task_stubs() -> list[tuple[str, str]]:
@@ -900,6 +1217,22 @@ def _collect_release_evidence(
     _assert(tenant["provider_key_status"]["state"] != "missing", "Owner money-path did not show provider key evidence.")
     _assert(tenant["blocked_regressions_7d"] >= 1, "Owner money-path did not show blocked regression evidence.")
     _assert(tenant["verified_fixes_7d"] >= 1, "Owner money-path did not show verified fix evidence.")
+    _assert(
+        tenant["pricing_cost_status"]["state"] == "ok",
+        f"Owner money-path did not show current pricing evidence: {tenant['pricing_cost_status']}",
+    )
+    _assert(
+        money_path["platform"]["billing_provider_verification"]["state"] == "verified",
+        f"Owner money-path did not show verified Razorpay evidence: {money_path['platform']['billing_provider_verification']}",
+    )
+    _assert(
+        money_path["platform"]["last_deployed_smoke"]["status"] == "passed",
+        f"Owner money-path did not show a passing deployment smoke: {money_path['platform']['last_deployed_smoke']}",
+    )
+    _assert(
+        any(row.get("value_status") == "getting_value" for row in money_path.get("tenants", [])),
+        "Owner money-path did not include any tenant getting value.",
+    )
 
     launch = _assert_response(
         client.get(
@@ -919,8 +1252,20 @@ def _collect_release_evidence(
         f"Launch readiness did not flag the failed CI gate: {gate_statuses}",
     )
     _assert(
+        gate_statuses.get("billing_quota") == "pass",
+        f"Launch readiness billing/quota gate was not green: {gate_statuses}",
+    )
+    _assert(
+        gate_statuses.get("owner_value_proof") == "pass",
+        f"Launch readiness owner value proof was not green: {gate_statuses}",
+    )
+    _assert(
         gate_statuses.get("runtime_risk_stop") in {"pass", "fail", "not_verified"},
         "Launch readiness did not include runtime risk stop gate.",
+    )
+    _assert(
+        launch["hard_blockers"] == ["durable_ci_gate:blocking_ci_failures"],
+        f"Unexpected owner launch blockers remained: {launch['hard_blockers']}",
     )
 
     return {
@@ -936,6 +1281,11 @@ def _collect_release_evidence(
         "owner_money_path_breaks": tenant["money_path_breaks"],
         "owner_blocked_regressions_7d": tenant["blocked_regressions_7d"],
         "owner_verified_fixes_7d": tenant["verified_fixes_7d"],
+        "owner_billing_provider_verification": money_path["platform"]["billing_provider_verification"]["state"],
+        "owner_deployment_smoke_status": money_path["platform"]["last_deployed_smoke"]["status"],
+        "owner_getting_value_tenants": sum(
+            1 for row in money_path.get("tenants", []) if row.get("value_status") == "getting_value"
+        ),
         "owner_launch_status": launch["overall_status"],
         "owner_paid_launch_allowed": launch["paid_launch_allowed"],
         "owner_launch_hard_blockers": launch["hard_blockers"],
@@ -945,10 +1295,12 @@ def _collect_release_evidence(
 
 def _run_flow(client: Any, session_local: Any, enqueued: list[tuple[str, str]]) -> dict[str, Any]:
     owner_token = _seed_project_and_plan(session_local)
+    _seed_owner_value_tenant(session_local)
     api_key, api_key_id, api_key_prefix = _create_api_key(client, owner_token)
     api_headers = {"x-api-key": api_key}
     provider_key_id = _seed_provider_key(session_local)
     _ingest_sdk_call(client, api_headers)
+    _stamp_demo_call_pricing(session_local)
     issue_state = _prove_issue_workflow(client, session_local, api_headers, enqueued)
     runtime_policy = _prove_runtime_policy_stop(client, api_headers)
     release_evidence = _collect_release_evidence(

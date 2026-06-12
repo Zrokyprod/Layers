@@ -41,15 +41,15 @@ type AlertAction = "ack" | "resolve" | "reopen";
 const channelOptions: AlertChannel[] = ["email", "slack", "browser", "terminal"];
 const QUICK_CATEGORIES = QUICK_FILTER_CATEGORIES;
 
-const SEVERITY_STRIPE: Record<string, string> = {
+const SEVERITY_ACCENT: Record<string, string> = {
   critical: "var(--dashboard-danger)",
   high: "var(--dashboard-accent)",
   medium: "var(--dashboard-warning)",
   low: "var(--dashboard-success)",
 };
 
-function severityStripe(severity: string): string {
-  return SEVERITY_STRIPE[severity.toLowerCase()] ?? "var(--dashboard-muted)";
+function severityAccent(severity: string): string {
+  return SEVERITY_ACCENT[severity.toLowerCase()] ?? "var(--dashboard-muted)";
 }
 
 function EvidenceDisplay({ evidence }: { evidence: AlertItemResponse["evidence"] }) {
@@ -316,9 +316,9 @@ export default function AlertsPage() {
                   key={alert.alert_id}
                   className={`alert-card-row${selectedAlertId === alert.alert_id ? " active" : ""}`}
                   onClick={() => setSelectedAlertId(alert.alert_id)}
-                  style={{ "--alert-stripe": severityStripe(alert.severity) } as CSSProperties}
+                  style={{ "--alert-accent": severityAccent(alert.severity) } as CSSProperties}
                 >
-                  <span className="alert-card-stripe" aria-hidden="true" />
+                  <span className="alert-card-accent" aria-hidden="true" />
                   <span className="alert-card-main">
                     <span className="alert-card-title">{alert.title}</span>
                     <span className="alert-card-meta">
