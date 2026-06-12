@@ -23,6 +23,16 @@ const moneyPath: OwnerMoneyPathHealth = {
     tenants_missing_provider_key: 1,
     tenants_near_replay_quota: 1,
     tenants_without_recent_capture: 1,
+    tenants_without_goldens: 1,
+    tenants_with_failed_ci: 1,
+    tenants_with_stale_replay_workers: 1,
+    tenants_with_stale_pricing: 1,
+    tenants_with_quota_risk: 1,
+    tenants_with_billing_risk: 1,
+    support_tickets_open: 1,
+    support_tickets_urgent: 1,
+    blocked_regressions_7d: 1,
+    verified_fixes_7d: 2,
     last_deployed_smoke: {
       status: "passed",
       checked_at: "2026-06-05T11:55:00Z",
@@ -46,8 +56,18 @@ const moneyPath: OwnerMoneyPathHealth = {
       golden_trace_count: 5,
       ci_run_count_7d: 4,
       blocking_ci_failures_7d: 1,
+      replay_jobs_pending: 0,
+      replay_jobs_stale: 0,
       provider_key_status: { state: "configured", active_provider_count: 1 },
       replay_quota_status: { state: "ok", enabled: true, used: 12, limit: 1000, resets_at: "2026-07-01" },
+      pricing_cost_status: { state: "ok", pricing_version: "v1", pricing_source: "test", pricing_age_days: 1, cost_confidence: "high", detail: "fresh" },
+      billing_status: { state: "ok", plan_code: "pro", subscription_status: "active", current_period_end: "2026-07-01T00:00:00Z" },
+      support_status: { state: "none", open_count: 0, urgent_count: 0 },
+      blocked_regressions_7d: 1,
+      verified_fixes_7d: 2,
+      value_status: "blocked",
+      money_path_breaks: ["failed_ci"],
+      tenant_priority_score: 100,
       next_owner_action: "review_blocked_ci",
     },
     {
@@ -62,8 +82,18 @@ const moneyPath: OwnerMoneyPathHealth = {
       golden_trace_count: 0,
       ci_run_count_7d: 0,
       blocking_ci_failures_7d: 0,
+      replay_jobs_pending: 2,
+      replay_jobs_stale: 1,
       provider_key_status: { state: "missing", active_provider_count: 0 },
       replay_quota_status: { state: "near_limit", enabled: true, used: 95, limit: 100, resets_at: "2026-07-01" },
+      pricing_cost_status: { state: "stale", pricing_version: "old", pricing_source: "fallback_default", pricing_age_days: 45, cost_confidence: "stale", detail: "old pricing" },
+      billing_status: { state: "risk", plan_code: "pilot", subscription_status: "past_due", current_period_end: "2026-07-01T00:00:00Z" },
+      support_status: { state: "urgent", open_count: 1, urgent_count: 1 },
+      blocked_regressions_7d: 0,
+      verified_fixes_7d: 0,
+      value_status: "blocked",
+      money_path_breaks: ["capture_unhealthy", "provider_key_missing", "replay_worker_stale", "billing_risk"],
+      tenant_priority_score: 90,
       next_owner_action: "restore_capture",
     },
     {
@@ -78,8 +108,18 @@ const moneyPath: OwnerMoneyPathHealth = {
       golden_trace_count: 1,
       ci_run_count_7d: 1,
       blocking_ci_failures_7d: 0,
+      replay_jobs_pending: 0,
+      replay_jobs_stale: 0,
       provider_key_status: { state: "configured", active_provider_count: 2 },
       replay_quota_status: { state: "unlimited", enabled: true, used: 20, limit: -1, resets_at: "2026-07-01" },
+      pricing_cost_status: { state: "ok", pricing_version: "v1", pricing_source: "test", pricing_age_days: 1, cost_confidence: "high", detail: "fresh" },
+      billing_status: { state: "ok", plan_code: "enterprise", subscription_status: "active", current_period_end: "2026-07-01T00:00:00Z" },
+      support_status: { state: "none", open_count: 0, urgent_count: 0 },
+      blocked_regressions_7d: 0,
+      verified_fixes_7d: 1,
+      value_status: "getting_value",
+      money_path_breaks: [],
+      tenant_priority_score: 0,
       next_owner_action: "monitor",
     },
   ],
@@ -127,12 +167,12 @@ describe("OwnerMoneyPathPage", () => {
     expect(within(table).getByText("Provider Gap Tenant")).toBeInTheDocument();
     expect(within(table).queryByText("Blocked Tenant")).toBe(null);
 
-    fireEvent.change(screen.getByLabelText("Search tenants"), { target: { value: "healthy" } });
+    fireEvent.change(screen.getByLabelText("Search tenants"), { target: { value: "enterprise" } });
     table = screen.getByRole("table");
     expect(within(table).queryByText("Provider Gap Tenant")).toBe(null);
     expect(within(table).getByText("No tenants match the current money-path filter.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Monitor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Getting value" }));
     table = screen.getByRole("table");
     expect(within(table).getByText("Healthy Tenant")).toBeInTheDocument();
   });

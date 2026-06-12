@@ -22,6 +22,7 @@ vi.mock("@/lib/owner-api", () => ({
 const EXPECTED_NAV = [
   { href: "/owner", label: "Overview" },
   { href: "/owner/money-path", label: "Money Path" },
+  { href: "/owner/launch-readiness", label: "Launch Gate" },
   { href: "/owner/ops", label: "Ops" },
   { href: "/owner/infrastructure", label: "Infrastructure" },
   { href: "/owner/support", label: "Support" },

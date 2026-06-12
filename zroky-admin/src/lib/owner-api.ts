@@ -129,6 +129,46 @@ export interface OwnerCaptureDurabilityStatus {
   backpressure_rejections: number;
 }
 
+export interface OwnerPricingCostStatus {
+  state: string;
+  pricing_version: string | null;
+  pricing_source: string | null;
+  pricing_age_days: number | null;
+  cost_confidence: string | null;
+  detail: string | null;
+}
+
+export interface OwnerBillingStatus {
+  state: string;
+  plan_code: string;
+  subscription_status: string | null;
+  current_period_end: string | null;
+}
+
+export interface OwnerEventMeteringStatus {
+  state: string;
+  used: number;
+  limit?: number | null;
+  overage?: number | null;
+  failure_count?: number;
+  last_failure_at?: string | null;
+}
+
+export interface OwnerBillingProviderVerification {
+  state: string;
+  provider?: string | null;
+  mode?: string;
+  checked_at?: string | null;
+  provider_event_id?: string | null;
+  detail?: string | null;
+}
+
+export interface OwnerSupportStatus {
+  state: string;
+  open_count: number;
+  urgent_count: number;
+}
+
 export interface OwnerMoneyPathPlatformSummary {
   captures_24h: number;
   issues_open: number;
@@ -137,12 +177,30 @@ export interface OwnerMoneyPathPlatformSummary {
   golden_traces_active: number;
   ci_runs_7d: number;
   ci_blocks_7d: number;
+  replay_jobs_pending?: number;
+  replay_jobs_stale?: number;
   gateway_unhealthy_tenants?: number;
   gateway_loss_tenants?: number;
   gateway_backpressure_tenants?: number;
   tenants_missing_provider_key: number;
   tenants_near_replay_quota: number;
   tenants_without_recent_capture: number;
+  tenants_without_goldens?: number;
+  tenants_with_failed_ci?: number;
+  tenants_with_stale_replay_workers?: number;
+  tenants_with_stale_pricing?: number;
+  tenants_with_quota_risk?: number;
+  tenants_with_billing_risk?: number;
+  metering_failure_tenants?: number;
+  event_counter_failure_count?: number;
+  billing_launch_blockers?: string[];
+  billing_provider_verification?: OwnerBillingProviderVerification;
+  support_tickets_open?: number;
+  support_tickets_urgent?: number;
+  blocked_regressions_7d?: number;
+  verified_fixes_7d?: number;
+  pricing_contract_drift?: string[];
+  launch_blockers?: string[];
   last_deployed_smoke: OwnerLastDeployedSmoke;
 }
 
@@ -158,9 +216,21 @@ export interface OwnerMoneyPathTenantRow {
   golden_trace_count: number;
   ci_run_count_7d: number;
   blocking_ci_failures_7d: number;
+  replay_jobs_pending?: number;
+  replay_jobs_stale?: number;
   capture_durability_status?: OwnerCaptureDurabilityStatus;
   provider_key_status: OwnerProviderKeyStatus;
   replay_quota_status: OwnerReplayQuotaStatus;
+  event_metering_status?: OwnerEventMeteringStatus;
+  pricing_cost_status?: OwnerPricingCostStatus;
+  billing_status?: OwnerBillingStatus;
+  support_status?: OwnerSupportStatus;
+  blocked_regressions_7d?: number;
+  verified_fixes_7d?: number;
+  value_status?: string;
+  money_path_breaks?: string[];
+  tenant_priority_score?: number;
+  launch_blockers?: string[];
   next_owner_action: string;
 }
 
@@ -169,6 +239,33 @@ export interface OwnerMoneyPathHealth {
   windows: Record<string, number>;
   platform: OwnerMoneyPathPlatformSummary;
   tenants: OwnerMoneyPathTenantRow[];
+}
+
+export interface OwnerLaunchGateEvidence {
+  label: string;
+  value: string | number | boolean | null;
+  status?: string | null;
+  detail?: string | null;
+}
+
+export interface OwnerLaunchReadinessGate {
+  code: string;
+  title: string;
+  status: "pass" | "fail" | "not_verified" | string;
+  summary: string;
+  blockers: string[];
+  evidence: OwnerLaunchGateEvidence[];
+  verification_commands: string[];
+}
+
+export interface OwnerLaunchReadiness {
+  generated_at: string;
+  product_standard: string;
+  overall_status: "pass" | "blocked" | "not_verified" | string;
+  paid_launch_allowed: boolean;
+  gates: OwnerLaunchReadinessGate[];
+  hard_blockers: string[];
+  verification_commands: string[];
 }
 
 export interface OwnerUserItem {
@@ -470,6 +567,10 @@ export function fetchOwnerInfra(signal?: AbortSignal): Promise<InfraStats> {
 
 export function fetchOwnerMoneyPathHealth(signal?: AbortSignal): Promise<OwnerMoneyPathHealth> {
   return ownerRequest<OwnerMoneyPathHealth>("/v1/owner/money-path-health", { signal });
+}
+
+export function fetchOwnerLaunchReadiness(signal?: AbortSignal): Promise<OwnerLaunchReadiness> {
+  return ownerRequest<OwnerLaunchReadiness>("/v1/owner/launch-readiness", { signal });
 }
 
 export function fetchOwnerUsers(limit = 100, offset = 0): Promise<OwnerUsersResponse> {

@@ -19,6 +19,10 @@ const ACTION_LABELS: Record<string, string> = {
   restore_capture: "Restore capture",
   connect_provider_key: "Connect provider key",
   review_replay_quota: "Review replay quota",
+  restore_replay_worker: "Restore replay worker",
+  refresh_pricing: "Refresh pricing",
+  fix_billing: "Fix billing",
+  review_support: "Review support",
   run_replay: "Run replay",
   promote_golden: "Promote Golden",
   run_ci_gate: "Run CI gate",
@@ -54,9 +58,9 @@ function actionLabel(action: string): string {
 }
 
 function evidenceTone(tenant: OwnerMoneyPathTenantRow): "ok" | "warn" | "danger" | "neutral" {
-  if (tenant.blocking_ci_failures_7d > 0 || tenant.provider_key_status.state === "missing") return "danger";
-  if (tenant.open_issue_count > 0 || ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)) return "warn";
-  if (tenant.next_owner_action === "monitor") return "ok";
+  if (tenant.value_status === "blocked" || tenant.blocking_ci_failures_7d > 0 || tenant.provider_key_status.state === "missing") return "danger";
+  if (tenant.value_status === "at_risk" || tenant.value_status === "setup_missing" || tenant.open_issue_count > 0 || ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)) return "warn";
+  if (tenant.value_status === "getting_value" || tenant.next_owner_action === "monitor") return "ok";
   return "neutral";
 }
 
@@ -119,7 +123,11 @@ function SupportProductEvidencePanel({
         <div><span>CI blocks</span><strong>{fmtCount(tenant.blocking_ci_failures_7d)}</strong></div>
       </div>
       <div className="owner-product-evidence-meta">
+        <span>Value: {(tenant.value_status ?? "unknown").replaceAll("_", " ")}</span>
+        <span>Breaks: {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).slice(0, 3).join(", ") || "none"}</span>
         <span>Provider: {tenant.provider_key_status.state} ({tenant.provider_key_status.active_provider_count})</span>
+        <span>Pricing: {tenant.pricing_cost_status?.state ?? "unknown"}</span>
+        <span>Billing: {tenant.billing_status?.state ?? "unknown"}</span>
         <span>
           Replay quota: {tenant.replay_quota_status.limit === -1
             ? `${fmtCount(tenant.replay_quota_status.used)} used`

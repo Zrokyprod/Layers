@@ -1534,6 +1534,117 @@ code,
   font-weight: 750;
 }
 
+.owner-launch-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.owner-launch-hero-ok {
+  border-color: #bbf7d0;
+}
+
+.owner-launch-hero-warn {
+  border-color: #fde68a;
+}
+
+.owner-launch-hero-danger {
+  border-color: #fecaca;
+}
+
+.owner-launch-hero-main,
+.owner-launch-gate-title {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.owner-launch-hero-main h3,
+.owner-launch-gate-title h3 {
+  margin: 0;
+}
+
+.owner-launch-hero-main p,
+.owner-launch-gate-title p {
+  margin: 0.25rem 0 0;
+  color: var(--owner-muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.owner-launch-hero-icon,
+.owner-launch-gate-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--owner-accent-soft);
+  color: #1d4ed8;
+}
+
+.owner-launch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.owner-launch-gate {
+  overflow: hidden;
+}
+
+.owner-launch-gate-ok {
+  border-color: #bbf7d0;
+}
+
+.owner-launch-gate-warn {
+  border-color: #fde68a;
+}
+
+.owner-launch-gate-danger {
+  border-color: #fecaca;
+}
+
+.owner-launch-gate-body {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.owner-launch-blockers {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.owner-launch-blocker-panel {
+  overflow: hidden;
+}
+
+.owner-launch-commands {
+  overflow: hidden;
+}
+
+.owner-launch-command-list {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.owner-launch-command-list code {
+  overflow-x: auto;
+  border: 1px solid var(--owner-border);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 0.72rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
 .owner-ops-hero {
   display: flex;
   align-items: center;
@@ -2465,6 +2576,7 @@ code,
   .owner-ops-grid-wide-left,
   .owner-support-layout,
   .owner-llm-panels,
+  .owner-launch-grid,
   .owner-money-grid,
   .owner-money-path-layout,
   .owner-project-intel-proof,
@@ -2530,6 +2642,7 @@ code,
   .owner-page-header,
   .owner-topbar,
   .owner-ops-hero,
+  .owner-launch-hero,
   .owner-flag-item,
   .owner-ops-ticket-main,
     .owner-ops-ticket-foot,
@@ -2549,6 +2662,7 @@ code,
   .owner-money-funnel-row,
   .owner-money-path-loop-grid,
   .owner-money-proof-grid,
+  .owner-launch-grid,
   .owner-ops-proof-grid,
   .owner-ops-release-grid,
   .owner-infra-proof-grid,

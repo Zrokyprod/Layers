@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { useOwnerHealth, useOwnerInfra, useOwnerMoneyPathHealth, useToggleMaintenance } from "@/lib/hooks";
-import type { InfraStats, OwnerHealth, OwnerLastDeployedSmoke, ServiceStatus } from "@/lib/owner-api";
+import type { InfraStats, OwnerHealth, OwnerLastDeployedSmoke, OwnerMoneyPathHealth, ServiceStatus } from "@/lib/owner-api";
 
 const STATUS_VAR: Record<string, string> = {
   ok: "var(--status-success)",
@@ -123,6 +123,42 @@ function DeployedSmokeProof({ smoke, error }: { smoke: OwnerLastDeployedSmoke | 
   );
 }
 
+function ReplayWorkerFreshness({ moneyPath }: { moneyPath: OwnerMoneyPathHealth | null }) {
+  const staleTenants = (moneyPath?.tenants ?? []).filter((tenant) => (tenant.replay_jobs_stale ?? 0) > 0);
+  const pendingJobs = moneyPath?.platform.replay_jobs_pending ?? 0;
+  const staleJobs = moneyPath?.platform.replay_jobs_stale ?? 0;
+  const tone = staleJobs > 0 ? "danger" : pendingJobs > 0 ? "warn" : "ok";
+
+  return (
+    <section className="panel owner-infra-proof-panel">
+      <div className="panel-header">
+        Replay Worker Freshness
+        <OpsBadge tone={tone}>{staleJobs > 0 ? "stale leases" : pendingJobs > 0 ? "backlog" : "ok"}</OpsBadge>
+      </div>
+      <div className="owner-infra-proof-body">
+        <div className="owner-ops-proof-grid">
+          <div className="owner-ops-proof-item"><span>Pending replay jobs</span><code>{pendingJobs.toLocaleString()}</code></div>
+          <div className="owner-ops-proof-item"><span>Stale replay jobs</span><code>{staleJobs.toLocaleString()}</code></div>
+          <div className="owner-ops-proof-item"><span>Tenants affected</span><code>{(moneyPath?.platform.tenants_with_stale_replay_workers ?? staleTenants.length).toLocaleString()}</code></div>
+          <div className="owner-ops-proof-item"><span>Generated</span><code>{moneyPath?.generated_at ? new Date(moneyPath.generated_at).toLocaleTimeString() : "-"}</code></div>
+        </div>
+        {staleTenants.length ? (
+          <div className="owner-ops-list">
+            {staleTenants.slice(0, 5).map((tenant) => (
+              <div key={tenant.project_id} className="owner-billing-breakdown-row">
+                <span>{tenant.project_name}</span>
+                <strong>{tenant.replay_jobs_stale ?? 0} stale</strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">No stale replay worker leases reported by owner money-path health.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function InfrastructurePage() {
   const [maintMsg, setMaintMsg] = useState("");
 
@@ -175,6 +211,7 @@ export default function InfrastructurePage() {
       <div className="owner-infra-proof-layout">
         <OpsHealthProof health={health} infra={infra} />
         <DeployedSmokeProof smoke={moneyPath?.platform.last_deployed_smoke ?? null} error={moneyPathError} />
+        <ReplayWorkerFreshness moneyPath={moneyPath} />
       </div>
 
       {health && (

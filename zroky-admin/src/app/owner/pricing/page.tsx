@@ -108,6 +108,12 @@ function accountRisk({
   if (tenant.replay_quota_status.state === "near_limit") {
     return { label: "Replay quota", detail: "Tenant is near replay entitlement.", tone: "warn" };
   }
+  if (["risk", "missing_paid", "unknown"].includes(tenant.billing_status?.state ?? "")) {
+    return { label: "Billing risk", detail: `Money-path billing status is ${tenant.billing_status?.state}.`, tone: "danger" };
+  }
+  if (["drift", "missing", "fallback", "stale"].includes(tenant.pricing_cost_status?.state ?? "")) {
+    return { label: "Cost metadata", detail: tenant.pricing_cost_status?.detail ?? "Tenant has stale or missing cost metadata.", tone: "warn" };
+  }
   if (tenant.provider_key_status.state === "missing" && plan.pricing.replay_credits !== 0) {
     return { label: "Provider missing", detail: "Replay-capable plan has no provider key.", tone: "warn" };
   }
@@ -331,6 +337,13 @@ export default function PricingPage() {
   const driftCount = planCatalog?.drift.length ?? null;
   const providerGaps = moneyPathQuery.data?.platform.tenants_missing_provider_key ?? null;
   const quotaRisk = moneyPathQuery.data?.platform.tenants_near_replay_quota ?? null;
+  const costMetadataRisk = moneyPathQuery.data?.platform.tenants_with_stale_pricing ?? null;
+  const billingRisk = moneyPathQuery.data?.platform.tenants_with_billing_risk ?? null;
+  const meteringRisk = moneyPathQuery.data?.platform.metering_failure_tenants ?? null;
+  const providerVerification = moneyPathQuery.data?.platform.billing_provider_verification ?? null;
+  const pricingRiskTenants = (moneyPathQuery.data?.tenants ?? []).filter((tenant) =>
+    ["drift", "missing", "fallback", "stale", "degraded"].includes(tenant.pricing_cost_status?.state ?? ""),
+  );
   const moneyPathReady = Boolean(moneyPathQuery.data && !moneyPathQuery.error);
 
   return (
@@ -381,6 +394,26 @@ export default function PricingPage() {
           <span className="owner-stat-label">Provider Gaps</span>
           <span className="owner-stat-value">{fmtCount(providerGaps)}</span>
           <span className="owner-stat-sub">tenants blocked from provider-backed replay</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Cost Metadata Risk</span>
+          <span className="owner-stat-value">{fmtCount(costMetadataRisk)}</span>
+          <span className="owner-stat-sub">stale, fallback, drifted, or missing pricing evidence</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Billing Risk</span>
+          <span className="owner-stat-value">{fmtCount(billingRisk)}</span>
+          <span className="owner-stat-sub">subscription rows breaking the paid path</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Metering Failures</span>
+          <span className="owner-stat-value">{fmtCount(meteringRisk)}</span>
+          <span className="owner-stat-sub">{fmtCount(moneyPathQuery.data?.platform.event_counter_failure_count ?? null)} counter failure(s)</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Provider Verification</span>
+          <span className="owner-stat-value">{providerVerification?.state ?? "-"}</span>
+          <span className="owner-stat-sub">{providerVerification?.detail ?? "No billing provider proof reported"}</span>
         </div>
       </section>
 
@@ -467,6 +500,48 @@ export default function PricingPage() {
           <span className="owner-stat-value">{accountsQuery.data?.total.toLocaleString() ?? "-"}</span>
           <span className="owner-stat-sub">Skydo and legacy billing rows</span>
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          Stale Pricing &amp; Cost Metadata
+          <span className="panel-header-note">From tenant money-path health and latest captured call pricing evidence.</span>
+        </div>
+        {!moneyPathReady ? (
+          <div className="alert-strip">Money-path health is unavailable, so stale tenant cost evidence cannot be evaluated.</div>
+        ) : pricingRiskTenants.length === 0 ? (
+          <p className="hint owner-panel-padding">No tenants have stale, fallback, missing, or drifted pricing metadata.</p>
+        ) : (
+          <div className="owner-table-wrap owner-table-wrap-embedded">
+            <table className="owner-table">
+              <thead>
+                <tr>
+                  {["Tenant", "Pricing status", "Version", "Source", "Age", "Next action"].map((header) => (
+                    <th key={header} className="owner-th">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pricingRiskTenants.map((tenant) => (
+                  <tr key={tenant.project_id} className="owner-tr">
+                    <td className="owner-td">
+                      <strong>{tenant.project_name}</strong>
+                      <div className="hint"><code>{tenant.project_id}</code></div>
+                    </td>
+                    <td className="owner-td">
+                      <StatusBadge value={tenant.pricing_cost_status?.state ?? "unknown"} tone={["drift", "missing", "fallback", "stale"].includes(tenant.pricing_cost_status?.state ?? "") ? "warn" : "neutral"} />
+                      <div className="owner-user-id">{tenant.pricing_cost_status?.detail ?? "No detail"}</div>
+                    </td>
+                    <td className="owner-td">{tenant.pricing_cost_status?.pricing_version ?? "-"}</td>
+                    <td className="owner-td">{tenant.pricing_cost_status?.pricing_source ?? "-"}</td>
+                    <td className="owner-td">{tenant.pricing_cost_status?.pricing_age_days ?? "-"} days</td>
+                    <td className="owner-td">{tenant.next_owner_action.replaceAll("_", " ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <div className="owner-ops-grid">

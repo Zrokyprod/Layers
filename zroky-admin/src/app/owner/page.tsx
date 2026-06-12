@@ -3,10 +3,13 @@
 import Link from "next/link";
 import {
   AlertTriangle,
+  BadgeDollarSign,
   CheckCircle2,
   CircleSlash,
+  Clock3,
   GitBranch,
   KeyRound,
+  MessageSquare,
   RefreshCw,
   ShieldAlert,
   type LucideIcon,
@@ -32,6 +35,12 @@ const ACTION_LABELS: Record<string, string> = {
   restore_capture: "Restore capture",
   connect_provider_key: "Connect provider key",
   review_replay_quota: "Review replay quota",
+  review_event_quota: "Review event quota",
+  restore_replay_worker: "Restore replay worker",
+  fix_metering: "Fix metering",
+  refresh_pricing: "Refresh pricing",
+  fix_billing: "Fix billing",
+  review_support: "Review support",
   run_replay: "Run replay",
   promote_golden: "Promote Golden",
   run_ci_gate: "Run CI gate",
@@ -61,16 +70,20 @@ function actionLabel(action: string): string {
 
 function stateTone(state: string): "ok" | "warn" | "danger" | "neutral" {
   if (["passed", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
-  if (["failed", "down", "error", "exceeded", "blocked", "missing"].includes(state)) return "danger";
-  if (["partial", "running", "near_limit", "disabled", "not_configured"].includes(state)) return "warn";
+  if (["failed", "down", "error", "exceeded", "blocked", "missing", "risk", "urgent", "failure", "unverified"].includes(state)) return "danger";
+  if (["partial", "running", "near_limit", "disabled", "not_configured", "stale", "fallback", "degraded", "open", "missing_paid"].includes(state)) return "warn";
   return "neutral";
 }
 
 function actionTone(action: string): "ok" | "warn" | "danger" | "neutral" {
-  if (["review_blocked_ci", "restore_capture"].includes(action)) return "danger";
-  if (["connect_provider_key", "review_replay_quota", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
+  if (["review_blocked_ci", "restore_capture", "restore_replay_worker", "fix_billing", "fix_metering"].includes(action)) return "danger";
+  if (["connect_provider_key", "review_replay_quota", "review_event_quota", "review_support", "refresh_pricing", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
   if (action === "monitor") return "ok";
   return "neutral";
+}
+
+function valueLabel(value: string | undefined): string {
+  return (value ?? "unknown").replaceAll("_", " ");
 }
 
 function StatusBadge({ value }: { value: string }) {
@@ -231,7 +244,7 @@ function TenantQueue({ tenants }: { tenants: OwnerMoneyPathTenantRow[] }) {
         <table className="owner-table">
           <thead>
             <tr>
-              {["Project", "Plan", "Capture", "Issues", "Replay / Golden / CI", "Provider", "Quota", "Next"].map((header) => (
+              {["Project", "Value", "Breaks", "Capture", "Issues", "Replay / Golden / CI", "Provider", "Metering", "Pricing", "Billing", "Support", "Quota", "Next"].map((header) => (
                 <th key={header} className="owner-th">{header}</th>
               ))}
             </tr>
@@ -239,7 +252,7 @@ function TenantQueue({ tenants }: { tenants: OwnerMoneyPathTenantRow[] }) {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="owner-td owner-td-empty">No active tenants were returned by the backend.</td>
+                <td colSpan={13} className="owner-td owner-td-empty">No active tenants were returned by the backend.</td>
               </tr>
             ) : (
               rows.map((tenant) => (
@@ -250,7 +263,16 @@ function TenantQueue({ tenants }: { tenants: OwnerMoneyPathTenantRow[] }) {
                     </Link>
                     <div className="owner-user-id">{tenant.project_id}</div>
                   </td>
-                  <td className="owner-td">{tenant.plan_code}</td>
+                  <td className="owner-td">
+                    <StatusBadge value={valueLabel(tenant.value_status)} />
+                    <div className="owner-user-id">{tenant.plan_code}</div>
+                  </td>
+                  <td className="owner-td owner-money-proof-stack">
+                    {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).slice(0, 3).map((code) => (
+                      <span key={code} className="owner-td-secondary">{code.replaceAll("_", " ")}</span>
+                    ))}
+                    {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).length === 0 ? <span className="owner-td-secondary">No breaks</span> : null}
+                  </td>
                   <td className="owner-td">
                     <div>{fmtCount(tenant.captures_24h)} in 24h</div>
                     <span className="owner-td-secondary">{fmtDate(tenant.last_capture_at)}</span>
@@ -268,6 +290,26 @@ function TenantQueue({ tenants }: { tenants: OwnerMoneyPathTenantRow[] }) {
                   </td>
                   <td className="owner-td">
                     <StatusBadge value={tenant.provider_key_status.state} />
+                  </td>
+                  <td className="owner-td">
+                    <StatusBadge value={tenant.event_metering_status?.state ?? "unknown"} />
+                    <div className="owner-user-id">
+                      {tenant.event_metering_status?.limit == null
+                        ? `${fmtCount(tenant.event_metering_status?.used ?? 0)} used`
+                        : `${fmtCount(tenant.event_metering_status?.used ?? 0)} / ${fmtCount(tenant.event_metering_status.limit)}`}
+                    </div>
+                  </td>
+                  <td className="owner-td">
+                    <StatusBadge value={tenant.pricing_cost_status?.state ?? "unknown"} />
+                    <div className="owner-user-id">{tenant.pricing_cost_status?.pricing_age_days ?? "-"}d age</div>
+                  </td>
+                  <td className="owner-td">
+                    <StatusBadge value={tenant.billing_status?.state ?? "unknown"} />
+                    <div className="owner-user-id">{tenant.billing_status?.subscription_status ?? tenant.billing_status?.plan_code ?? tenant.plan_code}</div>
+                  </td>
+                  <td className="owner-td">
+                    <StatusBadge value={tenant.support_status?.state ?? "none"} />
+                    <div className="owner-user-id">{fmtCount(tenant.support_status?.open_count ?? 0)} open</div>
                   </td>
                   <td className="owner-td">
                     <StatusBadge value={tenant.replay_quota_status.state} />
@@ -341,16 +383,23 @@ export default function OwnerOverviewPage() {
         <>
           <div className="owner-money-risk-grid">
             <RiskCard
-              label="Open issues"
-              value={fmtCount(platform.issues_open)}
-              detail="Needs replay, Golden proof, or resolution."
+              label="No capture"
+              value={fmtCount(platform.tenants_without_recent_capture)}
+              detail="Tenants without production capture in 24h."
               icon={ShieldAlert}
-              tone={platform.issues_open > 0 ? "danger" : "ok"}
+              tone={platform.tenants_without_recent_capture > 0 ? "danger" : "ok"}
             />
             <RiskCard
-              label="Blocked CI"
-              value={fmtCount(platform.ci_blocks_7d)}
-              detail="GitHub-triggered gates failing in the last 7 days."
+              label="No Goldens"
+              value={fmtCount(platform.tenants_without_goldens ?? 0)}
+              detail="Tenants missing permanent regression contracts."
+              icon={CircleSlash}
+              tone={(platform.tenants_without_goldens ?? 0) > 0 ? "warn" : "ok"}
+            />
+            <RiskCard
+              label="Failed CI"
+              value={fmtCount(platform.tenants_with_failed_ci ?? platform.ci_blocks_7d)}
+              detail="Tenants with failing blocking CI gates."
               icon={GitBranch}
               tone={platform.ci_blocks_7d > 0 ? "danger" : "ok"}
             />
@@ -362,25 +411,67 @@ export default function OwnerOverviewPage() {
               tone={platform.tenants_missing_provider_key > 0 ? "warn" : "ok"}
             />
             <RiskCard
-              label="Replay quota risk"
-              value={fmtCount(platform.tenants_near_replay_quota)}
-              detail="Tenants near or over replay allocation."
+              label="Stale replay workers"
+              value={fmtCount(platform.tenants_with_stale_replay_workers ?? 0)}
+              detail={`${fmtCount(platform.replay_jobs_stale ?? 0)} stale leased replay job(s).`}
+              icon={Clock3}
+              tone={(platform.tenants_with_stale_replay_workers ?? 0) > 0 ? "danger" : "ok"}
+            />
+            <RiskCard
+              label="Stale pricing"
+              value={fmtCount(platform.tenants_with_stale_pricing ?? 0)}
+              detail="Tenants with stale, fallback, missing, or drifted cost metadata."
               icon={AlertTriangle}
-              tone={platform.tenants_near_replay_quota > 0 ? "warn" : "ok"}
+              tone={(platform.tenants_with_stale_pricing ?? 0) > 0 ? "warn" : "ok"}
             />
             <RiskCard
-              label="Stale capture"
-              value={fmtCount(platform.tenants_without_recent_capture)}
-              detail="Tenants with no capture in the last 24 hours."
-              icon={CircleSlash}
-              tone={platform.tenants_without_recent_capture > 0 ? "warn" : "ok"}
+              label="Quota risk"
+              value={fmtCount(platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota)}
+              detail="Tenants near, over, or blocked by replay allocation."
+              icon={AlertTriangle}
+              tone={(platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota) > 0 ? "warn" : "ok"}
             />
             <RiskCard
-              label="Verified replay"
-              value={fmtCount(platform.verified_replay_runs_7d)}
+              label="Billing risk"
+              value={fmtCount(platform.tenants_with_billing_risk ?? 0)}
+              detail="Tenants with unpaid, canceled, incomplete, or mismatched billing."
+              icon={BadgeDollarSign}
+              tone={(platform.tenants_with_billing_risk ?? 0) > 0 ? "danger" : "ok"}
+            />
+            <RiskCard
+              label="Metering failures"
+              value={fmtCount(platform.metering_failure_tenants ?? 0)}
+              detail={`${fmtCount(platform.event_counter_failure_count ?? 0)} event counter failure(s).`}
+              icon={AlertTriangle}
+              tone={(platform.metering_failure_tenants ?? 0) > 0 ? "danger" : "ok"}
+            />
+            <RiskCard
+              label="Billing provider"
+              value={platform.billing_provider_verification?.state ?? "unverified"}
+              detail={platform.billing_provider_verification?.detail ?? "No applied billing provider event recorded."}
+              icon={BadgeDollarSign}
+              tone={platform.billing_provider_verification?.state === "verified" ? "ok" : "danger"}
+            />
+            <RiskCard
+              label="Support tickets"
+              value={fmtCount(platform.support_tickets_open ?? 0)}
+              detail={`${fmtCount(platform.support_tickets_urgent ?? 0)} urgent ticket(s).`}
+              icon={MessageSquare}
+              tone={(platform.support_tickets_urgent ?? 0) > 0 ? "danger" : (platform.support_tickets_open ?? 0) > 0 ? "warn" : "ok"}
+            />
+            <RiskCard
+              label="Blocked regressions"
+              value={fmtCount(platform.blocked_regressions_7d ?? platform.ci_blocks_7d)}
+              detail="Old production failures stopped by CI in 7 days."
+              icon={ShieldAlert}
+              tone={(platform.blocked_regressions_7d ?? platform.ci_blocks_7d) > 0 ? "ok" : "neutral"}
+            />
+            <RiskCard
+              label="Verified fixes"
+              value={fmtCount(platform.verified_fixes_7d ?? platform.verified_replay_runs_7d)}
               detail={`${fmtCount(platform.replay_runs_7d)} total replay runs in 7 days.`}
               icon={CheckCircle2}
-              tone={platform.verified_replay_runs_7d > 0 ? "ok" : "neutral"}
+              tone={(platform.verified_fixes_7d ?? platform.verified_replay_runs_7d) > 0 ? "ok" : "neutral"}
             />
           </div>
 

@@ -16,7 +16,18 @@ import {
 import { useOwnerMoneyPathHealth } from "@/lib/hooks";
 import type { OwnerMoneyPathPlatformSummary, OwnerMoneyPathTenantRow } from "@/lib/owner-api";
 
-type RiskFilter = "all" | "blocked-ci" | "open-issues" | "provider-missing" | "quota-risk" | "stale-capture" | "healthy";
+type RiskFilter =
+  | "all"
+  | "no-capture"
+  | "no-goldens"
+  | "failed-ci"
+  | "provider-missing"
+  | "stale-worker"
+  | "stale-pricing"
+  | "quota-risk"
+  | "billing-risk"
+  | "support"
+  | "getting-value";
 type Tone = "ok" | "warn" | "danger" | "neutral";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -24,6 +35,12 @@ const ACTION_LABELS: Record<string, string> = {
   restore_capture: "Restore capture",
   connect_provider_key: "Connect provider key",
   review_replay_quota: "Review replay quota",
+  review_event_quota: "Review event quota",
+  restore_replay_worker: "Restore replay worker",
+  fix_metering: "Fix metering",
+  refresh_pricing: "Refresh pricing",
+  fix_billing: "Fix billing",
+  review_support: "Review support",
   run_replay: "Run replay",
   promote_golden: "Promote Golden",
   run_ci_gate: "Run CI gate",
@@ -33,12 +50,16 @@ const ACTION_LABELS: Record<string, string> = {
 
 const FILTERS: Array<{ id: RiskFilter; label: string }> = [
   { id: "all", label: "All" },
-  { id: "blocked-ci", label: "Blocked CI" },
-  { id: "open-issues", label: "Open issues" },
+  { id: "no-capture", label: "No capture" },
+  { id: "no-goldens", label: "No Goldens" },
+  { id: "failed-ci", label: "Failed CI" },
   { id: "provider-missing", label: "Provider missing" },
+  { id: "stale-worker", label: "Stale worker" },
+  { id: "stale-pricing", label: "Stale pricing" },
   { id: "quota-risk", label: "Quota risk" },
-  { id: "stale-capture", label: "Stale capture" },
-  { id: "healthy", label: "Monitor" },
+  { id: "billing-risk", label: "Billing risk" },
+  { id: "support", label: "Support" },
+  { id: "getting-value", label: "Getting value" },
 ];
 
 function fmtCount(value: number): string {
@@ -62,15 +83,15 @@ function actionLabel(action: string): string {
 }
 
 function stateTone(state: string): Tone {
-  if (["passed", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
-  if (["failed", "down", "error", "exceeded", "blocked", "missing", "loss_detected"].includes(state)) return "danger";
-  if (["partial", "running", "near_limit", "disabled", "not_configured", "degraded", "backpressure"].includes(state)) return "warn";
+  if (["passed", "configured", "ok", "unlimited", "monitor", "getting_value", "none", "free_default"].includes(state)) return "ok";
+  if (["failed", "down", "error", "exceeded", "blocked", "missing", "loss_detected", "risk", "urgent", "failure", "unverified"].includes(state)) return "danger";
+  if (["partial", "running", "near_limit", "disabled", "not_configured", "degraded", "backpressure", "setup_missing", "at_risk", "stale", "fallback", "missing_paid", "open"].includes(state)) return "warn";
   return "neutral";
 }
 
 function actionTone(action: string): Tone {
-  if (["review_blocked_ci", "restore_capture"].includes(action)) return "danger";
-  if (["connect_provider_key", "review_replay_quota", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
+  if (["review_blocked_ci", "restore_capture", "restore_replay_worker", "fix_billing", "fix_metering"].includes(action)) return "danger";
+  if (["connect_provider_key", "review_replay_quota", "review_event_quota", "review_support", "refresh_pricing", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
   if (action === "monitor") return "ok";
   return "neutral";
 }
@@ -111,12 +132,16 @@ function captureDurabilityLabel(tenant: OwnerMoneyPathTenantRow): string {
 
 function tenantMatchesFilter(tenant: OwnerMoneyPathTenantRow, filter: RiskFilter): boolean {
   if (filter === "all") return true;
-  if (filter === "blocked-ci") return tenant.blocking_ci_failures_7d > 0;
-  if (filter === "open-issues") return tenant.open_issue_count > 0;
+  if (filter === "no-capture") return tenant.captures_24h === 0;
+  if (filter === "no-goldens") return tenant.golden_trace_count === 0;
+  if (filter === "failed-ci") return tenant.blocking_ci_failures_7d > 0;
   if (filter === "provider-missing") return tenant.provider_key_status.state === "missing";
+  if (filter === "stale-worker") return (tenant.replay_jobs_stale ?? 0) > 0;
+  if (filter === "stale-pricing") return ["drift", "missing", "fallback", "stale", "degraded"].includes(tenant.pricing_cost_status?.state ?? "");
   if (filter === "quota-risk") return ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state);
-  if (filter === "stale-capture") return tenant.captures_24h === 0;
-  return tenant.next_owner_action === "monitor";
+  if (filter === "billing-risk") return ["risk", "missing_paid", "unknown"].includes(tenant.billing_status?.state ?? "");
+  if (filter === "support") return ["urgent", "open"].includes(tenant.support_status?.state ?? "");
+  return tenant.value_status === "getting_value";
 }
 
 function tenantSearchMatch(tenant: OwnerMoneyPathTenantRow, query: string): boolean {
@@ -127,6 +152,8 @@ function tenantSearchMatch(tenant: OwnerMoneyPathTenantRow, query: string): bool
     tenant.project_id.toLowerCase().includes(q) ||
     tenant.plan_code.toLowerCase().includes(q) ||
     tenant.next_owner_action.toLowerCase().includes(q)
+    || (tenant.value_status ?? "").toLowerCase().includes(q)
+    || (tenant.money_path_breaks ?? []).some((code) => code.toLowerCase().includes(q))
   );
 }
 
@@ -232,6 +259,19 @@ function TenantEvidencePanel({ tenant }: { tenant: OwnerMoneyPathTenantRow | nul
           <EvidenceItem label="Plan" value={tenant.plan_code} />
           <EvidenceItem label="Capture durability" value={captureDurabilityLabel(tenant)} />
           <EvidenceItem label="Provider keys" value={`${tenant.provider_key_status.state} (${tenant.provider_key_status.active_provider_count})`} />
+          <EvidenceItem label="Value status" value={(tenant.value_status ?? "unknown").replaceAll("_", " ")} />
+          <EvidenceItem
+            label="Event metering"
+            value={
+              tenant.event_metering_status?.limit == null
+                ? `${tenant.event_metering_status?.state ?? "unknown"} / ${fmtCount(tenant.event_metering_status?.used ?? 0)} used`
+                : `${tenant.event_metering_status?.state ?? "unknown"} / ${fmtCount(tenant.event_metering_status?.used ?? 0)} of ${fmtCount(tenant.event_metering_status.limit)}`
+            }
+          />
+          <EvidenceItem label="Replay worker" value={`${tenant.replay_jobs_pending ?? 0} pending, ${tenant.replay_jobs_stale ?? 0} stale`} />
+          <EvidenceItem label="Pricing" value={`${tenant.pricing_cost_status?.state ?? "unknown"} (${tenant.pricing_cost_status?.pricing_age_days ?? "-"}d)`} />
+          <EvidenceItem label="Billing" value={`${tenant.billing_status?.state ?? "unknown"} / ${tenant.billing_status?.subscription_status ?? tenant.billing_status?.plan_code ?? tenant.plan_code}`} />
+          <EvidenceItem label="Support" value={`${tenant.support_status?.state ?? "none"} (${tenant.support_status?.open_count ?? 0} open)`} />
           <EvidenceItem
             label="Replay quota"
             value={
@@ -240,6 +280,13 @@ function TenantEvidencePanel({ tenant }: { tenant: OwnerMoneyPathTenantRow | nul
                 : `${fmtCount(tenant.replay_quota_status.used)} / ${fmtCount(tenant.replay_quota_status.limit)}`
             }
           />
+        </div>
+        <div className="owner-money-proof-grid">
+          <EvidenceItem
+            label="Broken steps"
+            value={(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).length ? (tenant.money_path_breaks ?? tenant.launch_blockers ?? []).join(", ") : "none"}
+          />
+          <EvidenceItem label="Priority score" value={String(tenant.tenant_priority_score ?? 0)} />
         </div>
         <TenantLoopEvidence tenant={tenant} />
         <div className="owner-money-tenant-actions">
@@ -302,11 +349,17 @@ export default function OwnerMoneyPathPage() {
       {platform ? (
         <>
           <div className="owner-money-path-summary">
-            <RiskMetric label="Open issues" value={platform.issues_open} detail="Grouped failures waiting on proof or resolution." tone={platform.issues_open > 0 ? "danger" : "ok"} />
-            <RiskMetric label="Blocked CI" value={platform.ci_blocks_7d} detail="GitHub-triggered gate failures in 7 days." tone={platform.ci_blocks_7d > 0 ? "danger" : "ok"} />
+            <RiskMetric label="No capture" value={platform.tenants_without_recent_capture} detail="Tenants without production capture in 24h." tone={platform.tenants_without_recent_capture > 0 ? "danger" : "ok"} />
+            <RiskMetric label="No Goldens" value={platform.tenants_without_goldens ?? 0} detail="Tenants missing active regression contracts." tone={(platform.tenants_without_goldens ?? 0) > 0 ? "warn" : "ok"} />
+            <RiskMetric label="Failed CI" value={platform.tenants_with_failed_ci ?? platform.ci_blocks_7d} detail="Tenants with blocking gate failures." tone={platform.ci_blocks_7d > 0 ? "danger" : "ok"} />
             <RiskMetric label="Capture durability" value={platform.gateway_unhealthy_tenants ?? 0} detail="Tenants with unhealthy gateway capture guarantees." tone={(platform.gateway_loss_tenants ?? 0) > 0 ? "danger" : (platform.gateway_unhealthy_tenants ?? 0) > 0 ? "warn" : "ok"} />
             <RiskMetric label="Provider gaps" value={platform.tenants_missing_provider_key} detail="Tenants unable to run provider-backed replay." tone={platform.tenants_missing_provider_key > 0 ? "warn" : "ok"} />
-            <RiskMetric label="Quota risk" value={platform.tenants_near_replay_quota} detail="Tenants near or above replay limits." tone={platform.tenants_near_replay_quota > 0 ? "warn" : "ok"} />
+            <RiskMetric label="Stale workers" value={platform.tenants_with_stale_replay_workers ?? 0} detail="Tenants with stale replay leases." tone={(platform.tenants_with_stale_replay_workers ?? 0) > 0 ? "danger" : "ok"} />
+            <RiskMetric label="Stale pricing" value={platform.tenants_with_stale_pricing ?? 0} detail="Tenants with weak cost evidence." tone={(platform.tenants_with_stale_pricing ?? 0) > 0 ? "warn" : "ok"} />
+            <RiskMetric label="Quota risk" value={platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota} detail="Tenants near or above replay limits." tone={(platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota) > 0 ? "warn" : "ok"} />
+            <RiskMetric label="Billing risk" value={platform.tenants_with_billing_risk ?? 0} detail="Tenants with broken subscription state." tone={(platform.tenants_with_billing_risk ?? 0) > 0 ? "danger" : "ok"} />
+            <RiskMetric label="Metering failures" value={platform.metering_failure_tenants ?? 0} detail={`${fmtCount(platform.event_counter_failure_count ?? 0)} event counter failure(s).`} tone={(platform.metering_failure_tenants ?? 0) > 0 ? "danger" : "ok"} />
+            <RiskMetric label="Support" value={platform.support_tickets_open ?? 0} detail={`${fmtCount(platform.support_tickets_urgent ?? 0)} urgent ticket(s).`} tone={(platform.support_tickets_urgent ?? 0) > 0 ? "danger" : (platform.support_tickets_open ?? 0) > 0 ? "warn" : "ok"} />
           </div>
 
           <PlatformLoop platform={platform} />
@@ -342,7 +395,7 @@ export default function OwnerMoneyPathPage() {
                 <table className="owner-table">
                   <thead>
                     <tr>
-                      {["Tenant", "Capture", "Issue", "Replay", "Golden", "CI", "Provider", "Quota", "Next", ""].map((header) => (
+                      {["Tenant", "Value", "Breaks", "Capture", "Replay", "Golden", "CI", "Provider", "Worker", "Metering", "Pricing", "Billing", "Support", "Quota", "Next", ""].map((header) => (
                         <th key={header || "action"} className="owner-th">{header}</th>
                       ))}
                     </tr>
@@ -350,7 +403,7 @@ export default function OwnerMoneyPathPage() {
                   <tbody>
                     {filteredTenants.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="owner-td owner-td-empty">No tenants match the current money-path filter.</td>
+                        <td colSpan={16} className="owner-td owner-td-empty">No tenants match the current money-path filter.</td>
                       </tr>
                     ) : (
                       filteredTenants.map((tenant) => (
@@ -365,11 +418,18 @@ export default function OwnerMoneyPathPage() {
                             <div className="owner-user-id">{tenant.project_id} - {tenant.plan_code}</div>
                           </td>
                           <td className="owner-td">
-                            <strong>{fmtCount(tenant.captures_24h)}</strong>
-                            <div className="owner-user-id">{fmtDate(tenant.last_capture_at)}</div>
+                            <StatusBadge value={tenant.value_status ?? "unknown"} />
+                            <div className="owner-user-id">score {tenant.tenant_priority_score ?? 0}</div>
+                          </td>
+                          <td className="owner-td owner-money-proof-stack">
+                            {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).slice(0, 2).map((code) => (
+                              <span key={code} className="owner-td-secondary">{code.replaceAll("_", " ")}</span>
+                            ))}
+                            {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).length === 0 ? <span className="owner-td-secondary">No breaks</span> : null}
                           </td>
                           <td className="owner-td">
-                            <StatusBadge value={`${fmtCount(tenant.open_issue_count)} open`} tone={tenant.open_issue_count > 0 ? "danger" : "ok"} />
+                            <strong>{fmtCount(tenant.captures_24h)}</strong>
+                            <div className="owner-user-id">{fmtDate(tenant.last_capture_at)}</div>
                           </td>
                           <td className="owner-td">
                             <div>{fmtCount(tenant.replay_run_count_7d)} runs</div>
@@ -384,6 +444,30 @@ export default function OwnerMoneyPathPage() {
                           </td>
                           <td className="owner-td">
                             <StatusBadge value={tenant.provider_key_status.state} />
+                          </td>
+                          <td className="owner-td">
+                            <StatusBadge value={(tenant.replay_jobs_stale ?? 0) > 0 ? "stale" : (tenant.replay_jobs_pending ?? 0) > 0 ? "running" : "ok"} />
+                            <div className="owner-user-id">{tenant.replay_jobs_pending ?? 0} pending</div>
+                          </td>
+                          <td className="owner-td">
+                            <StatusBadge value={tenant.event_metering_status?.state ?? "unknown"} />
+                            <div className="owner-user-id">
+                              {tenant.event_metering_status?.limit == null
+                                ? `${fmtCount(tenant.event_metering_status?.used ?? 0)} used`
+                                : `${fmtCount(tenant.event_metering_status?.used ?? 0)} / ${fmtCount(tenant.event_metering_status.limit)}`}
+                            </div>
+                          </td>
+                          <td className="owner-td">
+                            <StatusBadge value={tenant.pricing_cost_status?.state ?? "unknown"} />
+                            <div className="owner-user-id">{tenant.pricing_cost_status?.pricing_age_days ?? "-"}d age</div>
+                          </td>
+                          <td className="owner-td">
+                            <StatusBadge value={tenant.billing_status?.state ?? "unknown"} />
+                            <div className="owner-user-id">{tenant.billing_status?.subscription_status ?? tenant.billing_status?.plan_code ?? tenant.plan_code}</div>
+                          </td>
+                          <td className="owner-td">
+                            <StatusBadge value={tenant.support_status?.state ?? "none"} />
+                            <div className="owner-user-id">{fmtCount(tenant.support_status?.open_count ?? 0)} open</div>
                           </td>
                           <td className="owner-td">
                             <StatusBadge value={tenant.replay_quota_status.state} />

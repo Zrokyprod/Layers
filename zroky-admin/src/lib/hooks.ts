@@ -6,6 +6,7 @@ import {
   clearProjectRateLimit,
   confirmOwnerSkydoPayment,
   deleteOwnerUser,
+  fetchOwnerLaunchReadiness,
   fetchAuditLog,
   fetchOwnerBillingSummary,
   fetchOwnerBillingAccounts,
@@ -62,6 +63,13 @@ export function useOwnerMoneyPathHealth() {
   return useQuery({
     queryKey: ["owner", "money-path-health"],
     queryFn: () => fetchOwnerMoneyPathHealth(),
+  });
+}
+
+export function useOwnerLaunchReadiness() {
+  return useQuery({
+    queryKey: ["owner", "launch-readiness"],
+    queryFn: ({ signal }) => fetchOwnerLaunchReadiness(signal),
   });
 }
 

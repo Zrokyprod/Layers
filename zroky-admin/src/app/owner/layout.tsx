@@ -14,6 +14,7 @@ import {
   KeyRound,
   LogOut,
   MessageSquare,
+  Rocket,
   ServerCog,
   Settings,
   ShieldCheck,
@@ -42,6 +43,7 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<OwnerNavIt
     items: [
       { href: "/owner", label: "Overview", icon: Home, description: "Regression firewall health" },
       { href: "/owner/money-path", label: "Money Path", icon: GitBranch, description: "Capture to CI proof" },
+      { href: "/owner/launch-readiness", label: "Launch Gate", icon: Rocket, description: "Final paid launch decision" },
       { href: "/owner/ops", label: "Ops", icon: Gauge, description: "Founder operating queue" },
       { href: "/owner/infrastructure", label: "Infrastructure", icon: ServerCog, description: "Workers and queues" },
       { href: "/owner/support", label: "Support", icon: MessageSquare, description: "Tickets and replies" },
