@@ -257,7 +257,7 @@ def test_capture_to_issue_replay_and_golden_product_loop(
     assert len(traces) == 1
     assert traces[0].call_id == call_id
     assert len(runs) == 1
-    assert runs[0].status in {"pass", "fail", "error"}
+    assert runs[0].status in {"pass", "fail", "not_verified", "error"}
     run_summary = json.loads(runs[0].summary_json or "{}")
     assert run_summary["source_kind"] == "issue"
     assert run_summary["source_call_id"] == call_id

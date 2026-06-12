@@ -634,11 +634,13 @@ def create_replay_from_call(
         name=_one_click_set_name(source_kind="call", source_id=call_id),
         description=f"Auto-created from call {call_id}.",
     )
+    source_output_text, _ = source_evidence_from_call(call)
     trace = mark_call_as_golden(
         db,
         project_id=project_id,
         call_id=call_id,
         golden_set_id=golden_set.id,
+        expected_output_text=source_output_text,
     )
     if trace is None:
         return None

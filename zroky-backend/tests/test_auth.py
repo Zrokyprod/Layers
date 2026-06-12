@@ -16,6 +16,7 @@ os.environ.setdefault("REQUIRE_PROVISIONING_TOKEN", "false")
 from app.db.models import User, compute_email_hash
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
+from app.core.config import get_settings
 from app.main import app
 from app.api.routes.auth import AuthTokenResponse, _store_email_verification_token, _store_oauth_handoff
 
@@ -380,7 +381,7 @@ def test_token_is_decodable_with_secret(client):
         "confirm_password": "password123",
     })
     token = resp.json()["access_token"]
-    claims = pyjwt.decode(token, "test-secret-key-for-auth-tests", algorithms=["HS256"])
+    claims = pyjwt.decode(token, get_settings().AUTH_JWT_SECRET, algorithms=["HS256"])
     assert claims["email"] == "jwtcheck@example.com"
     assert "sub" in claims
     assert "exp" in claims
