@@ -28967,6 +28967,67 @@ button.gm-kpi-card {
   align-items: start;
 }
 
+.app-shell .policies-page .settings-integration-grid,
+.app-shell .policies-page .settings-form-grid {
+  align-items: start;
+}
+
+.app-shell .policies-page .settings-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.app-shell .policies-page .settings-form-grid label,
+.app-shell .policies-page .settings-toggle-row {
+  display: grid;
+  gap: 7px;
+}
+
+.app-shell .policies-page .settings-form-grid label span,
+.app-shell .policies-page .settings-toggle-row strong {
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
+.app-shell .policies-page .settings-toggle-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.app-shell .policies-page .settings-toggle-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.app-shell .policies-page .settings-toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand-orange);
+}
+
+.app-shell .policies-page input,
+.app-shell .policies-page textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  background: rgba(6, 9, 15, 0.64);
+  color: var(--text-primary);
+  padding: 10px 11px;
+}
+
+.app-shell .policies-page textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
 .app-shell .settings-inline-form {
   display: flex;
   flex-wrap: wrap;

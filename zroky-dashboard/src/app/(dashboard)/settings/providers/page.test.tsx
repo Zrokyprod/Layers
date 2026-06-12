@@ -95,7 +95,7 @@ describe("ProvidersPage", () => {
     expect(screen.getByText("CI gate")).toBeInTheDocument();
     expect(screen.getByText("Do not add provider keys for capture.")).toBeInTheDocument();
     expect(await screen.findByText("No provider keys saved yet. Capture still works; connect a key when verified replay is needed.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open Replay Lab/ }).getAttribute("href")).toBe("/replay");
+    expect(screen.getByRole("link", { name: /Open Replay/ }).getAttribute("href")).toBe("/replay");
   });
 
   it("saves a provider key with the expected payload and clears plaintext input", async () => {

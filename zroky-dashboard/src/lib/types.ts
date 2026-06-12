@@ -1137,6 +1137,40 @@ export interface BillingMeResponse {
   plan_template: Record<string, unknown>;
 }
 
+export interface BillingUsageMeter {
+  used: number;
+  limit: number | null;
+  unlimited: boolean;
+  overage: number | null;
+  state: string;
+  resets_at: string | null;
+}
+
+export interface BillingMeteringHealthResponse {
+  state: string;
+  failure_count: number;
+  last_failure_at: string | null;
+  last_failure_type: string | null;
+  failure_policy: string;
+  detail: string | null;
+}
+
+export interface BillingUsageResponse {
+  tenant_id: string;
+  org_id: string;
+  period_month: string;
+  period_start: string;
+  period_end: string;
+  plan_code: string | null;
+  plan_name: string | null;
+  subscription_status: string | null;
+  calls: BillingUsageMeter;
+  replay: BillingUsageMeter;
+  goldens: BillingUsageMeter;
+  golden_sets: BillingUsageMeter;
+  metering_health: BillingMeteringHealthResponse;
+}
+
 export interface BillingCheckoutResponse {
   session_id: string;
   checkout_url: string;

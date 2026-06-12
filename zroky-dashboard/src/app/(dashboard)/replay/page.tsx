@@ -689,7 +689,7 @@ function ReplayPageContent() {
                 <ShieldCheck aria-hidden="true" />
                 Replay proof engine
               </div>
-              <h1>Replay Lab</h1>
+              <h1>Replay</h1>
               <p>Replay needs Pro or higher so fixes can be tested against pinned production traces before release.</p>
             </div>
             <Link href="/settings/billing?upgrade_hint=replay.monthly_runs" className="btn btn-primary">
@@ -716,7 +716,7 @@ function ReplayPageContent() {
               <PlayCircle aria-hidden="true" />
               Replay proof engine
             </div>
-            <h1>Prove the fix before it ships.</h1>
+            <h1>Replay</h1>
             <p>
               Launch trusted replay from an Issue, Call, Golden Set, or commit SHA. Zroky reproduces the failure, compares the
               candidate behavior, and tells you if the fix is safe enough for Golden memory or CI.

@@ -32,14 +32,6 @@ export function useKeyboardShortcuts() {
         },
       },
       {
-        key: "j",
-        ctrl: true,
-        description: "Open Ask Zroky",
-        action: () => {
-          window.dispatchEvent(new CustomEvent("open-ask-zroky"));
-        },
-      },
-      {
         key: "b",
         ctrl: true,
         description: "Toggle sidebar",
@@ -56,13 +48,6 @@ export function useKeyboardShortcuts() {
         ctrl: true,
         description: "Open Command Center",
         action: () => router.push("/home"),
-      },
-      {
-        key: "c",
-        ctrl: true,
-        alt: true,
-        description: "Go to Flight Recorder",
-        action: () => router.push("/calls"),
       },
       {
         key: "i",
@@ -134,12 +119,10 @@ export function useKeyboardShortcuts() {
 }
 
 export const KEYBOARD_SHORTCUTS_HELP = [
-  { keys: ["Ctrl", "J"], description: "Ask Zroky (natural-language Q&A)" },
   { keys: ["Ctrl", "K"], description: "Open command palette" },
   { keys: ["Ctrl", "B"], description: "Toggle sidebar" },
   { keys: ["Ctrl", "A"], description: "Go to Command Center" },
   { keys: ["Ctrl", "H"], description: "Open Command Center" },
-  { keys: ["Ctrl", "Alt", "C"], description: "Go to Flight Recorder" },
   { keys: ["Ctrl", "I"], description: "Go to Failures" },
   { keys: ["Ctrl", "S"], description: "Go to settings" },
   { keys: ["Ctrl", "Shift", "R"], description: "Refresh data" },

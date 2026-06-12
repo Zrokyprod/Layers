@@ -12,9 +12,10 @@ import {
   createBillingPortal,
   createRazorpayOrder,
   getBillingMe,
+  getBillingUsage,
   verifyRazorpayPayment,
 } from "@/lib/api";
-import type { BillingMeResponse } from "@/lib/types";
+import type { BillingMeResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
 
 type PlanCatalogItem = {
   code: string;
@@ -172,6 +173,22 @@ function formatEntitlement(value: unknown): string {
   return value == null ? "Not configured" : String(value);
 }
 
+function formatUsageMeter(meter: BillingUsageMeter | null | undefined): string {
+  if (!meter) return "Loading";
+  const used = meter.used.toLocaleString();
+  if (meter.unlimited || meter.limit == null) return `${used} used`;
+  return `${used} / ${meter.limit.toLocaleString()}`;
+}
+
+function usageDetail(label: string, meter: BillingUsageMeter | null | undefined): string {
+  if (!meter) return `${label} usage is loading.`;
+  if (meter.state === "exceeded") return `${label} limit exceeded by ${(meter.overage ?? 0).toLocaleString()}.`;
+  if (meter.state === "near_limit") return `${label} is near its plan limit.`;
+  if (meter.state === "blocked") return `${label} is blocked on this plan.`;
+  if (meter.unlimited) return `${label} is unlimited on this plan.`;
+  return meter.resets_at ? `Resets ${meter.resets_at}.` : "Current plan allocation.";
+}
+
 function upgradeHintMessage(value: string | null): string | null {
   if (value === "replay.monthly_runs") {
     return "Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity.";
@@ -208,6 +225,7 @@ function BillingSettingsContent() {
   const updateBudget = useUpdateBudget();
 
   const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
+  const [billingUsage, setBillingUsage] = useState<BillingUsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,7 +236,9 @@ function BillingSettingsContent() {
     setLoading(true);
     setError(null);
     try {
-      setBillingMe(await getBillingMe());
+      const [me, usage] = await Promise.all([getBillingMe(), getBillingUsage()]);
+      setBillingMe(me);
+      setBillingUsage(usage);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load billing data.");
     } finally {
@@ -381,9 +401,9 @@ function BillingSettingsContent() {
         </article>
         <article className="panel settings-summary-card">
           <Gauge aria-hidden="true" />
-          <span>Budget status</span>
-          <strong>{budgetStatus.data?.status ?? "Unknown"}</strong>
-          <small>{budgetStatus.data?.limit_usd == null ? "No hard monthly limit saved." : `$${budgetStatus.data.spent_usd.toFixed(2)} spent this period.`}</small>
+          <span>Event usage</span>
+          <strong>{formatUsageMeter(billingUsage?.calls)}</strong>
+          <small>{usageDetail("Capture", billingUsage?.calls)}</small>
         </article>
         <article className="panel settings-summary-card">
           <ShieldCheck aria-hidden="true" />
@@ -460,7 +480,7 @@ function BillingSettingsContent() {
       {billingMe && (
         <section className="panel">
           <header className="panel-header">
-            <h3>Current Plan Entitlements</h3>
+            <h3>Usage &amp; Entitlements</h3>
             <p>
               {billingMe.status} plan for org {billingMe.org_id}
             </p>
@@ -468,12 +488,35 @@ function BillingSettingsContent() {
 
           <div className="kpi-grid billing-usage-kpis">
             <div className="kpi-card">
+              <div className="kpi-value">{formatUsageMeter(billingUsage?.calls)}</div>
+              <div className="kpi-label">Capture events</div>
+              <small>{usageDetail("Capture", billingUsage?.calls)}</small>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-value">{formatUsageMeter(billingUsage?.replay)}</div>
+              <div className="kpi-label">Replay runs</div>
+              <small>{usageDetail("Replay", billingUsage?.replay)}</small>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-value">{formatUsageMeter(billingUsage?.goldens)}</div>
+              <div className="kpi-label">Golden traces</div>
+              <small>{usageDetail("Goldens", billingUsage?.goldens)}</small>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-value">{billingUsage?.metering_health.state ?? "loading"}</div>
+              <div className="kpi-label">Metering health</div>
+              <small>{billingUsage?.metering_health.detail ?? `Policy: ${billingUsage?.metering_health.failure_policy ?? "unknown"}`}</small>
+            </div>
+          </div>
+
+          <div className="kpi-grid billing-usage-kpis">
+            <div className="kpi-card">
               <div className="kpi-value">{formatEntitlement(template["events.monthly_quota"])}</div>
-              <div className="kpi-label">Events / month</div>
+              <div className="kpi-label">Plan event limit</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-value">{formatEntitlement(template["replay.monthly_runs"])}</div>
-              <div className="kpi-label">Replay runs / month</div>
+              <div className="kpi-label">Plan replay limit</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-value">{formatEntitlement(template["seats.included"])}</div>

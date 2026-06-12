@@ -450,7 +450,7 @@ export default function CostOverviewPage() {
     if (activeLens === "replay") return { title: "Replay ROI focus", body: "Replay spend is compared against projected repeat impact so verification cost has business context." };
     if (activeLens === "protected") return { title: "Protected impact focus", body: "Projected prevented impact stays separate from booked savings and visible spend." };
     if (activeLens === "budget") return { title: "Budget focus", body: "Budget status and inline guardrails stay tied to the live budget API." };
-    return { title: "Cost command center", body: "Use the cards as live lenses, then drill into the exact issue, call, replay run, or guardrail." };
+    return { title: "Cost-risk evidence", body: "Use the cards as supporting lenses, then drill into the exact issue, call, replay run, or guardrail." };
   }, [activeLens]);
 
   const reportPayload = {
@@ -495,7 +495,7 @@ export default function CostOverviewPage() {
     const failed = results.filter((result) => result.status === "rejected").length;
     setActionState(failed > 0
       ? { kind: "error", message: `Refresh completed with ${failed} failed source${failed === 1 ? "" : "s"}.` }
-      : { kind: "success", message: "Cost command center refreshed." });
+      : { kind: "success", message: "Cost-risk evidence refreshed." });
   }
 
   async function copyReport() {
@@ -586,7 +586,7 @@ export default function CostOverviewPage() {
             <CircleDollarSign aria-hidden="true" />
             Cost of failure
           </div>
-          <h1>Cost</h1>
+          <h1>Cost Risk</h1>
           <p>See where AI failures burn money, prove which replays protected spend, and enforce live budget guardrails before repeat regressions ship.</p>
         </div>
         <div className="cost-command-hero-actions">

@@ -429,7 +429,7 @@ export default function TraceDetailPage() {
     <div className="trace-detail-mvp">
       <Link href="/trace" className="trace-detail-back">
         <ArrowLeft aria-hidden="true" />
-        Back to Trace Graphs
+        Back to Traces
       </Link>
 
       <section className="trace-detail-hero">

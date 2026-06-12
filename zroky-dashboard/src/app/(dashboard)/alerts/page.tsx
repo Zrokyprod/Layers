@@ -183,10 +183,10 @@ export default function AlertsPage() {
               <Bell aria-hidden="true" />
               Attention queue
             </span>
-            <h1>Alerts</h1>
+            <h1>Alert Evidence</h1>
             <p>
-              Triage production signals from capture, drift, replay, and budget checks.
-              Keep the queue small, explicit, and tied to evidence.
+              Supporting operational signals from capture, replay, policy, CI, and budget checks.
+              Keep primary action in Command Center, Failures, Policies, and Approvals.
             </p>
           </div>
           <div className="alert-hero-actions">

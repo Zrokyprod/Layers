@@ -54,4 +54,29 @@ describe("CommandPalette", () => {
     expect(screen.queryByText("Go to Labs")).not.toBeInTheDocument();
     expect(routerState.push).not.toHaveBeenCalled();
   });
+
+  it("promotes final reliability routes and hides deprecated customer surfaces", async () => {
+    render(<CommandPalette />);
+
+    window.dispatchEvent(new CustomEvent("open-command-palette"));
+
+    expect(await screen.findByText("Go to Command Center")).toBeInTheDocument();
+    expect(screen.getByText("Go to Agents")).toBeInTheDocument();
+    expect(screen.getByText("Go to Traces")).toBeInTheDocument();
+    expect(screen.getByText("Go to Failures")).toBeInTheDocument();
+    expect(screen.getByText("Go to Replay")).toBeInTheDocument();
+    expect(screen.getByText("Go to Goldens")).toBeInTheDocument();
+    expect(screen.getByText("Go to CI Gates")).toBeInTheDocument();
+    expect(screen.getByText("Go to Policies")).toBeInTheDocument();
+    expect(screen.getByText("Go to Approvals")).toBeInTheDocument();
+    expect(screen.getByText("Go to Integrations")).toBeInTheDocument();
+    expect(screen.getByText("Go to Settings")).toBeInTheDocument();
+
+    expect(screen.queryByText("Ask Zroky")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Cost")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Alerts")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Flight Recorder")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Trace Graphs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Replay Lab")).not.toBeInTheDocument();
+  });
 });

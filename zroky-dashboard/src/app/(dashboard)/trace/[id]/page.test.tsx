@@ -217,7 +217,7 @@ describe("Trace detail MVP", () => {
   it("renders the detail header and metadata cards", async () => {
     render(<TraceDetailPage />);
 
-    expect((await screen.findByRole("link", { name: "Back to Trace Graphs" })).getAttribute("href")).toBe("/trace");
+    expect((await screen.findByRole("link", { name: "Back to Traces" })).getAttribute("href")).toBe("/trace");
     const title = screen.getByRole("heading", { name: "Refund Agent trace" });
     expect(title.closest(".trace-detail-hero")).toBeInTheDocument();
     const hero = title.closest(".trace-detail-hero");

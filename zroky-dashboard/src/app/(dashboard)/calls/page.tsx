@@ -274,8 +274,8 @@ function CallsPageContent() {
               <Database aria-hidden="true" />
               Evidence drill-down
             </div>
-            <h1>Flight Recorder</h1>
-            <p>Inspect captured production calls when an issue, replay, drift row, or cost spike needs raw evidence.</p>
+            <h1>Call Evidence</h1>
+            <p>Supporting call-level evidence for traces, failures, replay proof, Goldens, CI gates, and cost-risk investigations.</p>
           </div>
           <div className="calls-hero-actions">
             <button type="button" className="btn btn-soft" onClick={handleExport} title="Download current filter as CSV">
@@ -290,7 +290,7 @@ function CallsPageContent() {
         </div>
       </section>
 
-      <section className="metric-strip" aria-label="Flight Recorder summary">
+      <section className="metric-strip" aria-label="Call evidence summary">
         <CallsMetric label="Total calls" value={formatCount(total)} helper={`Page ${page + 1} of ${totalPages}`} />
         <CallsMetric label="Visible failures" value={formatCount(visibleFailures)} helper="Errors on current page" />
         <CallsMetric label="Visible cost" value={formatUsd(visibleCost)} helper="Current page spend" />

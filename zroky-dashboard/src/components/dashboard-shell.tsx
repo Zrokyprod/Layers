@@ -8,13 +8,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
-  Bell,
   Bot,
   Calendar,
   Check,
   ChevronDown,
   Clock3,
-  DollarSign,
   FolderOpen,
   GitBranch,
   GitPullRequest,
@@ -23,11 +21,12 @@ import {
   LockKeyhole,
   LogOut,
   Menu,
-  MessageSquareText,
+  Plug,
   RotateCcw,
   Search,
   Settings2,
   Shield,
+  ShieldAlert,
   UserRound,
   X,
 } from "lucide-react";
@@ -73,6 +72,14 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
+    id: "traces",
+    href: "/trace",
+    label: "Traces",
+    subtitle: "Execution evidence for agent inputs, tools, RAG, memory, policies, outcomes, and versions.",
+    Icon: GitBranch,
+    visibleInNav: true,
+  },
+  {
     id: "issues",
     href: "/issues",
     label: "Failures",
@@ -82,10 +89,10 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
-    id: "replay-lab",
+    id: "replay",
     href: "/replay",
-    label: "Replay Lab",
-    subtitle: "Run incident replays, compare outcomes, and verify candidate fixes.",
+    label: "Replay",
+    subtitle: "Replay production failures and verify whether a fix is trusted, failed, or not verified.",
     Icon: RotateCcw,
     requiredEntitlement: "pilot.replay_stub",
     visibleInNav: true,
@@ -109,6 +116,14 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
+    id: "policies",
+    href: "/policies",
+    label: "Policies",
+    subtitle: "Runtime limits, approval-required actions, allowed tools, and kill switch state.",
+    Icon: ShieldAlert,
+    visibleInNav: true,
+  },
+  {
     id: "approvals",
     href: "/approvals",
     label: "Approvals",
@@ -117,35 +132,11 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
-    id: "cost",
-    href: "/cost",
-    label: "Cost",
-    subtitle: "Failure cost, model mix, budget risk, and spend controls.",
-    Icon: DollarSign,
-    visibleInNav: true,
-  },
-  {
-    id: "calls",
-    href: "/calls",
-    label: "Flight Recorder",
-    subtitle: "Search captured calls, prompts, outputs, diagnoses, and call-level evidence.",
-    Icon: MessageSquareText,
-    visibleInNav: true,
-  },
-  {
-    id: "traces",
-    href: "/trace",
-    label: "Trace Graphs",
-    subtitle: "Trace-by-trace execution paths, span evidence, and multi-agent context.",
-    Icon: GitBranch,
-    visibleInNav: true,
-  },
-  {
-    id: "alerts",
-    href: "/alerts",
-    label: "Alerts",
-    subtitle: "Production attention queue, routing tests, and alert lifecycle controls.",
-    Icon: Bell,
+    id: "integrations",
+    href: "/integrations",
+    label: "Integrations",
+    subtitle: "Provider, GitHub, Slack, Teams, and capture connection health.",
+    Icon: Plug,
     visibleInNav: true,
   },
   {
@@ -180,10 +171,24 @@ const DASHBOARD_ROUTES = [
     Icon: Bot,
   },
   {
+    id: "calls",
+    href: "/calls",
+    label: "Call Evidence",
+    subtitle: "Supporting call-level evidence for trace, failure, replay, and cost investigations.",
+    Icon: GitBranch,
+  },
+  {
+    id: "cost",
+    href: "/cost",
+    label: "Cost Risk",
+    subtitle: "Supporting cost-risk evidence for failures, replay spend, and budget guardrails.",
+    Icon: ShieldAlert,
+  },
+  {
     id: "alerts",
     href: "/alerts",
-    label: "Alerts",
-    subtitle: "Alert routing, triage, acknowledgement, and resolution.",
+    label: "Alert Evidence",
+    subtitle: "Supporting operational alert evidence and routing checks.",
     Icon: AlertTriangle,
   },
   {
@@ -833,7 +838,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             aria-label="Search (Command Palette)"
           >
             <Search className="topbar-search-icon" size={14} aria-hidden="true" />
-            <span className="topbar-search-hint">Search traces, issues, failures...</span>
+            <span className="topbar-search-hint">Search agents, traces, failures...</span>
             <kbd className="topbar-search-kbd">⌘K</kbd>
           </button>
 

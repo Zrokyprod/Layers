@@ -851,7 +851,7 @@ export default function ReplayRunDetailPage() {
               {confidence}
             </span>
           </div>
-          <h1>Replay Lab</h1>
+          <h1>Replay</h1>
           <p>Replay failed agent calls, compare candidate behavior, and verify fixes before creating Goldens.</p>
           <div className="detail-meta-row">
             <span className="mono">{run.id}</span>

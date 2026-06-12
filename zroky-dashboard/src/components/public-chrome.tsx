@@ -22,7 +22,7 @@ const footerGroups = [
     title: "Reliability",
     links: [
       { label: "Capture", href: "/#proof-loop" },
-      { label: "Replay Lab", href: "/#proof-loop" },
+      { label: "Replay", href: "/#proof-loop" },
       { label: "Golden traces", href: "/#proof-loop" },
       { label: "CI gates", href: "/#proof-loop" },
     ],

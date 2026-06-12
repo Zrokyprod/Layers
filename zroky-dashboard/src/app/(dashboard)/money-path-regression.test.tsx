@@ -370,7 +370,7 @@ describe("money-path dashboard regression proof", () => {
     expect(screen.getByText("fail")).toBeInTheDocument();
   });
 
-  it("renders Replay Lab queue with the verified replay and failed CI replay run", () => {
+  it("renders Replay queue with the verified replay and failed CI replay run", () => {
     render(<ReplayPage />);
 
     expect(screen.getByRole("heading", { name: "Prove the fix before it ships." })).toBeInTheDocument();

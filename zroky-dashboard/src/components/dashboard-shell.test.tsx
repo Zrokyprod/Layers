@@ -253,14 +253,14 @@ describe("DashboardShell primary navigation", () => {
     expect(primaryNavLabels()).toEqual([
       "Command Center",
       "Agents",
+      "Traces",
       "Failures",
-      "Replay Lab",
+      "Replay",
       "Goldens",
       "CI Gates",
-      "Cost",
-      "Flight Recorder",
-      "Trace Graphs",
-      "Alerts",
+      "Policies",
+      "Approvals",
+      "Integrations",
       "Settings",
     ]);
     expect(screen.queryByText("Provider Drift")).toBeNull();
@@ -285,25 +285,25 @@ describe("DashboardShell primary navigation", () => {
     expect(within(ciGates as HTMLElement).queryByText("soon")).toBeNull();
   });
 
-  it("renders Flight Recorder, Trace Graphs, and Alerts as first-class evidence routes after Cost", () => {
+  it("renders the reliability control-plane routes instead of deprecated analytics surfaces", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const labels = primaryNavLabels();
-    expect(labels.indexOf("Flight Recorder")).toBe(labels.indexOf("Cost") + 1);
-    expect(labels.indexOf("Trace Graphs")).toBe(labels.indexOf("Flight Recorder") + 1);
-    expect(labels.indexOf("Alerts")).toBe(labels.indexOf("Trace Graphs") + 1);
-
-    const calls = navItem("calls");
-    expect(calls.getAttribute("aria-disabled")).toBeNull();
-    expect(calls.getAttribute("href")).toBe("/calls");
+    expect(labels).toContain("Policies");
+    expect(labels).toContain("Approvals");
+    expect(labels).toContain("Integrations");
+    expect(labels).not.toContain("Cost");
+    expect(labels).not.toContain("Flight Recorder");
+    expect(labels).not.toContain("Trace Graphs");
+    expect(labels).not.toContain("Alerts");
 
     const traces = navItem("traces");
     expect(traces.getAttribute("aria-disabled")).toBeNull();
     expect(traces.getAttribute("href")).toBe("/trace");
 
-    const alerts = navItem("alerts");
-    expect(alerts.getAttribute("aria-disabled")).toBeNull();
-    expect(alerts.getAttribute("href")).toBe("/alerts");
+    const policies = navItem("policies");
+    expect(policies.getAttribute("aria-disabled")).toBeNull();
+    expect(policies.getAttribute("href")).toBe("/policies");
   });
 
   it("does not show fake workspace or account data while identity APIs are unavailable", () => {
@@ -430,9 +430,9 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(navItem("replay-lab").getAttribute("aria-disabled")).toBe("true");
+    expect(navItem("replay").getAttribute("aria-disabled")).toBe("true");
     expect(navItem("goldens").getAttribute("aria-disabled")).toBe("true");
-    expect(within(navItem("replay-lab") as HTMLElement).getByText("locked")).toBeInTheDocument();
+    expect(within(navItem("replay") as HTMLElement).getByText("locked")).toBeInTheDocument();
     expect(within(navItem("goldens") as HTMLElement).getByText("locked")).toBeInTheDocument();
   });
 
@@ -497,10 +497,11 @@ describe("DashboardShell primary navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open dashboard navigation menu" }));
 
     expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Cost/ }).getAttribute("href")).toBe("/cost");
-    expect(screen.getByRole("menuitem", { name: /Flight Recorder/ }).getAttribute("href")).toBe("/calls");
-    expect(screen.getByRole("menuitem", { name: /Trace Graphs/ }).getAttribute("href")).toBe("/trace");
-    expect(screen.getByRole("menuitem", { name: /Alerts/ }).getAttribute("href")).toBe("/alerts");
+    expect(screen.getByRole("menuitem", { name: /Traces/ }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("menuitem", { name: /Policies/ }).getAttribute("href")).toBe("/policies");
+    expect(screen.getByRole("menuitem", { name: /Integrations/ }).getAttribute("href")).toBe("/integrations");
+    expect(screen.queryByRole("menuitem", { name: /Cost/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Alerts/ })).not.toBeInTheDocument();
   });
 
   it("applies a dashboard date preset and invalidates dashboard queries", () => {

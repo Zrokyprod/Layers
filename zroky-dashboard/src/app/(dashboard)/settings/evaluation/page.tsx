@@ -382,7 +382,7 @@ function EvaluationSettingsContent() {
         <div className="settings-gate-map">
           <div className="settings-gate-map-item">
             <PlayCircle aria-hidden="true" />
-            <strong>Replay Lab</strong>
+            <strong>Replay</strong>
             <span>Judge mode and confidence threshold score replay candidate outputs.</span>
           </div>
           <div className="settings-gate-map-item">

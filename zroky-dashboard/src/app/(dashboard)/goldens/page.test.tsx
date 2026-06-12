@@ -224,14 +224,14 @@ describe("GoldensPage MVP list", () => {
     expect(screen.getAllByRole("link", { name: "View" }).length).toBeGreaterThan(0);
   });
 
-  it("renders empty state with Replay Lab CTA", () => {
+  it("renders empty state with Replay CTA", () => {
     mockGoldens({ sets: [], runs: [] });
 
     render(<GoldensPage />);
 
     expect(screen.getByText("No Goldens yet")).toBeInTheDocument();
     expect(screen.getByText("Create a Golden from a verified replay to protect that flow in future CI runs.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go to Replay Lab" }).getAttribute("href")).toBe("/replay");
+    expect(screen.getByRole("link", { name: "Go to Replay" }).getAttribute("href")).toBe("/replay");
   });
 
   it("shows Upgrade to Pilot only for Free and Watch plans", () => {
@@ -281,13 +281,13 @@ describe("GoldensPage MVP list", () => {
     expect(createButton.getAttribute("title")).toBe("Plan entitlement unavailable. Refresh workspace plan or contact admin.");
   });
 
-  it("replaces Replay Lab CTA with entitlement copy when entitlement data is unavailable", () => {
+  it("replaces Replay CTA with entitlement copy when entitlement data is unavailable", () => {
     mockGoldens({ sets: [], runs: [], planTemplate: {}, planCode: "pro" });
 
     render(<GoldensPage />);
 
-    expect(screen.queryByRole("link", { name: "Go to Replay Lab" })).not.toBeInTheDocument();
-    expect(screen.getByText("Replay Lab and Golden creation require an active Pilot, Pro, or Enterprise entitlement.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Go to Replay" })).not.toBeInTheDocument();
+    expect(screen.getByText("Replay and Golden creation require an active Pilot, Pro, or Enterprise entitlement.")).toBeInTheDocument();
   });
 
   it("keeps normal CTAs for Pro with valid Goldens entitlement", () => {

@@ -337,8 +337,8 @@ export default function TracePage() {
             <GitBranch aria-hidden="true" />
             Evidence browser
           </div>
-          <h1>Trace Graphs</h1>
-          <p>Captured agent calls, tool steps, retrieval events, and replay-ready evidence.</p>
+          <h1>Traces</h1>
+          <p>Captured agent inputs, tool steps, retrieval events, policy decisions, outcomes, and replay-ready evidence.</p>
         </div>
         <div className="trace-mvp-hero-actions">
           <button type="button" className="btn btn-soft" onClick={() => void refreshTraces()} disabled={tracesQuery.isFetching || callsQuery.isFetching}>

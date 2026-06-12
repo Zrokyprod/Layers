@@ -450,7 +450,7 @@ describe("Cost page", () => {
   it("renders the command-center shell, controls, KPIs, and key sections", async () => {
     const { container } = render(<CostOverviewPage />);
 
-    expect(await screen.findByRole("heading", { name: "Cost" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Cost Risk" })).toBeInTheDocument();
     expect(container.querySelector(".cost-command")).toBeInTheDocument();
     expect(screen.getByText("See where AI failures burn money, prove which replays protected spend, and enforce live budget guardrails before repeat regressions ship.")).toBeInTheDocument();
     for (const name of ["Refresh", "Copy report", "Export JSON"]) {
@@ -467,7 +467,7 @@ describe("Cost page", () => {
   it("derives executive cost KPIs from live cost, savings, replay, and budget APIs", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost" });
+    await screen.findByRole("heading", { name: "Cost Risk" });
     expect(within(kpi("Failed runs wasted")).getByText("$1,340.00")).toBeInTheDocument();
     expect(within(kpi("AI spend")).getByText("$25.00")).toBeInTheDocument();
     expect(within(kpi("Replay spend")).getByText("$0.34")).toBeInTheDocument();
@@ -479,7 +479,7 @@ describe("Cost page", () => {
   it("uses the selected window for live hooks and caps top-call hours at the backend guardrail", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost" });
+    await screen.findByRole("heading", { name: "Cost Risk" });
     expect(hooks.useCostDailyTrend).toHaveBeenCalledWith(30);
     expect(hooks.useCostTopCalls).toHaveBeenCalledWith(12, 720);
 
@@ -495,8 +495,8 @@ describe("Cost page", () => {
   it("turns KPI cards into live lenses", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost" });
-    expect(screen.getByText("Cost command center")).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Cost Risk" });
+    expect(screen.getByText("Cost-risk evidence")).toBeInTheDocument();
 
     fireEvent.click(kpi("Failed runs wasted"));
     expect(screen.getByText("Failure cost focus")).toBeInTheDocument();
@@ -548,13 +548,13 @@ describe("Cost page", () => {
   it("refreshes every live source and supports report copy/export", async () => {
     render(<CostOverviewPage />);
 
-    await screen.findByRole("heading", { name: "Cost" });
+    await screen.findByRole("heading", { name: "Cost Risk" });
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(refetches.issues).toHaveBeenCalledTimes(1));
     for (const refetch of Object.values(refetches)) {
       expect(refetch).toHaveBeenCalledTimes(1);
     }
-    expect(screen.getByRole("status").textContent).toBe("Cost command center refreshed.");
+    expect(screen.getByRole("status").textContent).toBe("Cost-risk evidence refreshed.");
 
     fireEvent.click(screen.getByRole("button", { name: "Copy report" }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("Failed runs wasted: $1,340.00")));

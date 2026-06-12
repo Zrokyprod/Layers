@@ -11,6 +11,7 @@
   BillingCheckoutResponse,
   BillingMeResponse,
   BillingPortalResponse,
+  BillingUsageResponse,
   RazorpayOrderResponse,
   RazorpayVerifyPaymentRequest,
   RazorpayVerifyPaymentResponse,
@@ -173,6 +174,39 @@ export interface RuntimePolicyKillSwitchResponse {
   project_id: string;
   enabled: boolean;
   policy: Record<string, unknown>;
+}
+
+export interface PilotPolicyPayload {
+  tier1_enabled: boolean;
+  tier1_actions: string[];
+  tier1_min_confidence: number;
+  tier1_max_blast_radius: string;
+  tier1_daily_cap: number;
+  tier2_enabled: boolean;
+  tier2_actions: string[];
+  tier2_require_replay_pass: boolean;
+  tier2_daily_cap: number | null;
+  tier3_alert_channels: string[];
+  kill_switch: boolean;
+  runtime_enabled: boolean;
+  runtime_max_tool_calls: number;
+  runtime_max_retries: number;
+  runtime_max_cost_usd: number;
+  runtime_allowed_tools: string[];
+  runtime_sensitive_tools: string[];
+  runtime_sensitive_actions_require_approval: boolean;
+  runtime_block_pii_leak: boolean;
+  runtime_block_prompt_injected_external_action: boolean;
+  runtime_approval_ttl_minutes: number;
+}
+
+export interface PilotPolicyResponse {
+  id: string;
+  project_id: string;
+  policy: PilotPolicyPayload;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -1312,6 +1346,10 @@ export function getBillingMe(signal?: AbortSignal): Promise<BillingMeResponse> {
   return request<BillingMeResponse>("/v1/billing/me", { signal });
 }
 
+export function getBillingUsage(signal?: AbortSignal): Promise<BillingUsageResponse> {
+  return request<BillingUsageResponse>("/v1/billing/usage", { signal });
+}
+
 export function createBillingCheckout(body: {
   plan_code: string;
   customer_email?: string | null;
@@ -2441,6 +2479,19 @@ export interface ReplayQuotaResponse {
 
 export function getReplayQuota(signal?: AbortSignal): Promise<ReplayQuotaResponse> {
   return request<ReplayQuotaResponse>("/v1/replay/quota", { signal, timeoutMs: replayQuotaTimeoutMs });
+}
+
+// ── Runtime Policy Configuration ────────────────────────────────────────────
+
+export function getPilotPolicy(signal?: AbortSignal): Promise<PilotPolicyResponse> {
+  return request<PilotPolicyResponse>("/v1/pilot/policy", { signal });
+}
+
+export function updatePilotPolicy(policy: PilotPolicyPayload): Promise<PilotPolicyResponse> {
+  return request<PilotPolicyResponse>("/v1/pilot/policy", {
+    method: "PUT",
+    body: policy,
+  });
 }
 
 // ── Runtime Policy Gate ─────────────────────────────────────────────────────

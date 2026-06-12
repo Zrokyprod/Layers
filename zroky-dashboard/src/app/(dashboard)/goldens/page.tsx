@@ -367,9 +367,9 @@ export default function GoldensPage() {
             <strong>No Goldens yet</strong>
             <p>Create a Golden from a verified replay to protect that flow in future CI runs.</p>
             {showEntitlementWarning ? (
-              <p>Replay Lab and Golden creation require an active Pilot, Pro, or Enterprise entitlement.</p>
+              <p>Replay and Golden creation require an active Pilot, Pro, or Enterprise entitlement.</p>
             ) : canUseGoldens ? (
-              <Link href="/replay" className="btn btn-primary">Go to Replay Lab</Link>
+              <Link href="/replay" className="btn btn-primary">Go to Replay</Link>
             ) : null}
           </div>
         ) : filteredSets.length === 0 ? (

@@ -287,7 +287,7 @@ export default function ProvidersPage() {
         </div>
         <div className="providers-hero-actions">
           <Link href="/replay" className="btn btn-primary">
-            Open Replay Lab
+            Open Replay
             <ArrowRight aria-hidden="true" />
           </Link>
           <Link href="/settings/keys" className="btn btn-soft">

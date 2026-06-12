@@ -234,7 +234,7 @@ function renderRun(run: ReplayRunDetailItem) {
   render(<ReplayRunDetailPage />);
 }
 
-describe("ReplayRunDetailPage Replay Lab MVP", () => {
+describe("ReplayRunDetailPage MVP", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hooks.run = baseRun();
@@ -291,7 +291,7 @@ describe("ReplayRunDetailPage Replay Lab MVP", () => {
   it("renders the three required panels and before-after content", () => {
     renderRun(baseRun());
 
-    expect(screen.getByRole("heading", { name: "Replay Lab" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Replay" })).toBeInTheDocument();
     expect(screen.getByText("Replay failed agent calls, compare candidate behavior, and verify fixes before creating Goldens.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Replay setup" })).toBeInTheDocument();
     expect(screen.getByText("What this replay is proving")).toBeInTheDocument();

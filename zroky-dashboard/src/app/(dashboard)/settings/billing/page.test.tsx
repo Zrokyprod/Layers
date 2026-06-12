@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   createBillingPortal: vi.fn(),
   createRazorpayOrder: vi.fn(),
   getBillingMe: vi.fn(),
+  getBillingUsage: vi.fn(),
   verifyRazorpayPayment: vi.fn(),
 }));
 
@@ -72,6 +73,21 @@ describe("BillingPage", () => {
         "seats.included": 2,
       },
     });
+    api.getBillingUsage.mockResolvedValue({
+      tenant_id: "org_1",
+      org_id: "org_1",
+      period_month: "2026-06",
+      period_start: "2026-06-01T00:00:00Z",
+      period_end: "2026-07-01T00:00:00Z",
+      plan_code: "free",
+      plan_name: "Free",
+      subscription_status: "active",
+      calls: { used: 42, limit: 50000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
+      replay: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: "2026-07-01" },
+      goldens: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: null },
+      golden_sets: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: null },
+      metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
+    });
   });
 
   it("renders targeted upgrade_hint banners from module links", async () => {
@@ -81,6 +97,7 @@ describe("BillingPage", () => {
       screen.getByText("Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity."),
     ).toBeInTheDocument();
     expect(await screen.findByText("Plan & Pricing")).toBeInTheDocument();
+    expect(screen.getAllByText("42 / 50,000").length).toBeGreaterThan(0);
   });
 
   it("renders the backend-aligned self-serve plan catalog", async () => {
@@ -117,6 +134,21 @@ describe("BillingPage", () => {
         "replay.monthly_runs": 1000,
         "seats.included": 10,
       },
+    });
+    api.getBillingUsage.mockResolvedValue({
+      tenant_id: "org_1",
+      org_id: "org_1",
+      period_month: "2026-06",
+      period_start: "2026-06-01T00:00:00Z",
+      period_end: "2026-07-01T00:00:00Z",
+      plan_code: "pro",
+      plan_name: "Pro",
+      subscription_status: "active",
+      calls: { used: 1000, limit: 3000000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
+      replay: { used: 10, limit: 1000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
+      goldens: { used: 20, limit: 1000, unlimited: false, overage: null, state: "ok", resets_at: null },
+      golden_sets: { used: 2, limit: 50, unlimited: false, overage: null, state: "ok", resets_at: null },
+      metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
 
     render(<BillingPage />);

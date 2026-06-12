@@ -1215,7 +1215,7 @@ export default function HomePage() {
             action={
               caps.canReplay ? (
                 <Link href="/replay" className="btn btn-soft btn-sm fi-btn-secondary">
-                  Replay Lab
+                  Replay
                 </Link>
               ) : (
                 <LockedUpgradeLink label="Upgrade to unlock replay" />

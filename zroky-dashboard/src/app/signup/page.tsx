@@ -102,7 +102,7 @@ export default function SignupPage() {
           items={[
             "Email verification protects the workspace",
             "Capture failed runs after setup",
-            "Replay Lab, Goldens, and CI gates are ready",
+            "Replay, Goldens, and CI gates are ready",
           ]}
         />
       </AuthCard>
