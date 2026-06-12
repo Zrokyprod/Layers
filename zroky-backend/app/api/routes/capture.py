@@ -214,7 +214,7 @@ def _worst_gateway_status(rows: list[GatewayCaptureHealth], now: datetime) -> st
 
 
 def _gateway_alert_id(prefix: str, gateway_id: str) -> str:
-    digest = hashlib.sha1(gateway_id.encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha1(gateway_id.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
     return f"{prefix}-{digest}"[:64]
 
 
