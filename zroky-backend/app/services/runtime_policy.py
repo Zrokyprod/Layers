@@ -36,6 +36,15 @@ _DEFAULT_SENSITIVE_KEYWORDS = (
 )
 
 _MAX_REASON_LENGTH = 240
+_AUDIT_EVENT_ORDER = {
+    "allowed": 0,
+    "blocked": 0,
+    "approval_requested": 0,
+    "approved": 1,
+    "rejected": 1,
+    "expired": 1,
+    "approval_consumed": 2,
+}
 
 
 @dataclass(frozen=True)
@@ -776,6 +785,14 @@ def list_runtime_policy_audit_events(
     grouped: dict[str, list[RuntimePolicyAuditEvent]] = {}
     for row in rows:
         grouped.setdefault(row.decision_id, []).append(row)
+    for events in grouped.values():
+        events.sort(
+            key=lambda event: (
+                event.created_at,
+                _AUDIT_EVENT_ORDER.get(event.event_type, 99),
+                event.id,
+            )
+        )
     return grouped
 
 

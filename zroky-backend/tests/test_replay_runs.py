@@ -1307,5 +1307,5 @@ class TestInvariants:
 
     def test_valid_run_statuses_match_db_check(self) -> None:
         assert VALID_RUN_STATUSES == frozenset(
-            {"pending", "running", "pass", "fail", "error"}
+            {"pending", "running", "pass", "warn", "fail", "not_verified", "error"}
         )
