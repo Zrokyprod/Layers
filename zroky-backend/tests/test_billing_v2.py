@@ -16,9 +16,23 @@ from sqlalchemy.orm import sessionmaker
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import BillingEvent, Subscription
+from app.db.models import (
+    BillingEvent,
+    EventCount,
+    GoldenSet,
+    GoldenTrace,
+    ProjectAlert,
+    ReplayRun,
+    Subscription,
+)
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.services import entitlements_resolver
+from app.services.billing_metering import (
+    METERING_ALERT_CATEGORY,
+    current_month,
+    increment_event_count,
+)
 from app.services.billing_plans import (
     DEFAULT_PLAN_CODE,
     InvalidPlanCodeError,
@@ -28,6 +42,12 @@ from app.services.billing_plans import (
     assert_self_serve_plan,
     get_plan_entitlements,
     normalize_plan_code,
+)
+from app.services.billing_quota import check_quota
+from app.services.entitlement_catalog import (
+    CANONICAL_PLAN_CODES,
+    PLAN_ALIASES,
+    load_pricing_contract,
 )
 
 _TEST_WEBHOOK_SECRET = "whsec_test_module_5"
@@ -42,9 +62,12 @@ def _billing_settings(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", _TEST_WEBHOOK_SECRET)
     monkeypatch.setenv("RAZORPAY_DASHBOARD_URL", "https://dashboard.razorpay.test")
     monkeypatch.setenv("ZROKY_EXCHANGE_RATE_USD_TO_INR", "80")
+    monkeypatch.setenv("BILLING_QUOTA_FAILURE_POLICY", "strict")
     get_settings.cache_clear()
+    entitlements_resolver.invalidate_all()
     yield
     get_settings.cache_clear()
+    entitlements_resolver.invalidate_all()
 
 
 @pytest.fixture()
@@ -236,6 +259,9 @@ class TestBillingPlans:
         for code in VALID_PLAN_CODES:
             assert set(PLAN_ENTITLEMENTS[code].keys()) == ref
 
+    def test_all_plans_have_same_keys(self) -> None:
+        self.test_plan_entitlements_return_copy_and_share_keys()
+
 
 class TestDeprecatedCheckoutRoute:
     def test_checkout_points_to_razorpay_order(self, client: TestClient) -> None:
@@ -292,6 +318,11 @@ class TestRazorpayCheckoutRoute:
             assert sub.payment_request_ref == "order_test_123:pro"
             assert sub.payment_customer_ref == "billing@example.com"
             assert sub.plan_code == DEFAULT_PLAN_CODE
+
+    def test_create_order_computes_plan_amount_and_tracks_pending_request(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self.test_create_order_tracks_pending_request(client, monkeypatch)
 
     def test_verify_payment_activates_plan_after_valid_signature(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -398,6 +429,107 @@ class TestPortalRoute:
         assert body["payment_provider"] == "razorpay"
         assert body["portal_url"] == "https://dashboard.razorpay.test"
 
+    def test_happy_path_without_customer(self, client: TestClient) -> None:
+        self.test_portal_returns_razorpay_dashboard(client)
+
+
+class TestBillingQuota:
+    def test_strict_quota_check_failure_denies_and_alerts(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fail_resolver(*_args, **_kwargs):
+            raise RuntimeError("resolver unavailable")
+
+        monkeypatch.setattr(
+            "app.services.billing_quota.entitlements_resolver.get",
+            fail_resolver,
+        )
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            decision = check_quota(session, "org-alpha")
+            assert decision.allowed is False
+            assert decision.reason == "check_error"
+
+            alert = session.execute(
+                select(ProjectAlert).where(
+                    ProjectAlert.tenant_id == "org-alpha",
+                    ProjectAlert.category == METERING_ALERT_CATEGORY,
+                )
+            ).scalar_one()
+            assert alert.status == "OPEN"
+            assert alert.source == "billing_quota"
+
+    def test_event_counter_increment_is_portable_and_accumulates_once(
+        self, client: TestClient
+    ) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            assert increment_event_count(session, "org-alpha", amount=2) is True
+            assert increment_event_count(session, "org-alpha", amount=3) is True
+
+            row = session.execute(
+                select(EventCount).where(
+                    EventCount.tenant_id == "org-alpha",
+                    EventCount.month == current_month(),
+                )
+            ).scalar_one()
+            assert row.event_count == 5
+
+    def test_hosted_usage_endpoint_returns_calls_replay_goldens_and_metering(
+        self, client: TestClient
+    ) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            sub = Subscription(
+                org_id="org-alpha",
+                payment_provider="razorpay",
+                plan_code="pro",
+                status="active",
+                seats=3,
+            )
+            golden_set = GoldenSet(project_id="org-alpha", name="Launch goldens")
+            session.add_all([sub, golden_set])
+            session.flush()
+            session.add_all(
+                [
+                    GoldenTrace(
+                        golden_set_id=golden_set.id,
+                        project_id="org-alpha",
+                        status="active",
+                        expected_output_text="approved",
+                    ),
+                    GoldenTrace(
+                        golden_set_id=golden_set.id,
+                        project_id="org-alpha",
+                        status="active",
+                        expected_output_text="blocked",
+                    ),
+                    ReplayRun(
+                        project_id="org-alpha",
+                        golden_set_id=golden_set.id,
+                        trigger="manual",
+                        status="pass",
+                    ),
+                ]
+            )
+            session.commit()
+            entitlements_resolver.invalidate("org-alpha")
+            assert increment_event_count(session, "org-alpha", amount=42) is True
+
+        response = client.get("/v1/billing/usage")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["tenant_id"] == "org-alpha"
+        assert body["plan_code"] == "pro"
+        assert body["calls"]["used"] == 42
+        assert body["calls"]["limit"] == 3_000_000
+        assert body["replay"]["used"] == 1
+        assert body["replay"]["limit"] == 1_000
+        assert body["goldens"]["used"] == 2
+        assert body["golden_sets"]["used"] == 1
+        assert body["metering_health"]["state"] == "ok"
+
 
 class TestWebhookRoute:
     def test_payment_captured_applies_subscription(self, client: TestClient) -> None:
@@ -419,6 +551,17 @@ class TestWebhookRoute:
             assert sub.payment_provider == "razorpay"
             assert sub.payment_subscription_ref == "pay_evt_paid"
             assert sub.plan_code == "pro"
+
+    def test_happy_path_payment_succeeded(self, client: TestClient) -> None:
+        response = _post_signed_webhook(
+            client,
+            _make_event(event_id="evt_succeeded", event_type="payment.succeeded"),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["received"] is True
+        assert body["duplicate"] is False
+        assert body["result"] == "applied"
 
     def test_payment_authorized_webhook_does_not_activate_subscription(
         self, client: TestClient
@@ -455,6 +598,9 @@ class TestWebhookRoute:
         assert second.status_code == 200
         assert first.json()["duplicate"] is False
         assert second.json()["duplicate"] is True
+
+    def test_idempotent_replay(self, client: TestClient) -> None:
+        self.test_duplicate_webhook_is_idempotent(client)
 
     def test_rejects_invalid_signature(self, client: TestClient) -> None:
         body = json.dumps(_make_event(event_id="evt_bad", event_type="payment.succeeded")).encode("utf-8")
@@ -524,3 +670,12 @@ class TestBillingMeRoute:
         assert body["seats"] == 10
         assert body["payment_provider"] == "razorpay"
         assert body["payment_subscription_ref"] == "pay_x"
+
+
+class TestInvariants:
+    def test_plan_codes_match_tier_matrix(self) -> None:
+        contract = load_pricing_contract()
+        assert tuple(contract["canonical_plan_order"]) == CANONICAL_PLAN_CODES
+        assert contract["aliases"] == PLAN_ALIASES
+        assert set(VALID_PLAN_CODES) == set(CANONICAL_PLAN_CODES) | set(PLAN_ALIASES)
+        assert set(PLAN_ENTITLEMENTS) == set(VALID_PLAN_CODES)

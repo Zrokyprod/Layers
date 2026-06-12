@@ -146,7 +146,7 @@ def test_production_config_accepts_internal_debug_with_token() -> None:
     validate_runtime_settings(settings)
 
 
-def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> None:
+def test_production_config_rejects_enabled_razorpay_billing_without_keys_direct_settings() -> None:
     settings = Settings(
         APP_ENV="production",
         ALLOW_PROJECT_HEADER_CONTEXT=False,
@@ -171,7 +171,7 @@ def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> No
     assert "RAZORPAY_WEBHOOK_SECRET" in error_text
 
 
-def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
+def test_production_config_accepts_enabled_razorpay_billing_with_keys_direct_settings() -> None:
     settings = _hardened_production_settings(
         BILLING_ENABLED=True,
         BILLING_PROVIDER="razorpay",

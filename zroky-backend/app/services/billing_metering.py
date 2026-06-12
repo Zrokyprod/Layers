@@ -129,7 +129,7 @@ def increment_event_count(db: Session, tenant_id: str, *, amount: int = 1) -> bo
         bind = db.get_bind()
         dialect = bind.dialect.name if bind is not None else ""
         if dialect == "postgresql":
-            stmt = (
+            pg_stmt = (
                 pg_insert(EventCount)
                 .values(
                     id=str(uuid4()),
@@ -146,9 +146,9 @@ def increment_event_count(db: Session, tenant_id: str, *, amount: int = 1) -> bo
                     },
                 )
             )
-            db.execute(stmt)
+            db.execute(pg_stmt)
         elif dialect == "sqlite":
-            stmt = (
+            sqlite_stmt = (
                 sqlite_insert(EventCount)
                 .values(
                     id=str(uuid4()),
@@ -165,7 +165,7 @@ def increment_event_count(db: Session, tenant_id: str, *, amount: int = 1) -> bo
                     },
                 )
             )
-            db.execute(stmt)
+            db.execute(sqlite_stmt)
         else:
             _increment_event_count_generic(db, tenant_id=tenant_id, month=month, amount=amount, now=now)
         db.commit()
