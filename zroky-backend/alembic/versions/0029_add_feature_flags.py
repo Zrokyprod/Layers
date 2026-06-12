@@ -25,8 +25,14 @@ def upgrade() -> None:
         sa.Column("enabled_globally", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("enabled_tenants_json", sa.Text(), nullable=False, server_default=sa.text("'[]'")),
         sa.Column("disabled_tenants_json", sa.Text(), nullable=False, server_default=sa.text("'[]'")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()"), onupdate=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            onupdate=sa.text("CURRENT_TIMESTAMP"),
+        ),
     )
     op.create_index("ix_feature_flags_key", "feature_flags", ["key"], unique=True)
 

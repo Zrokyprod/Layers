@@ -17,47 +17,40 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "subscriptions",
-        sa.Column(
-            "payment_provider",
-            sa.String(length=32),
-            nullable=False,
-            server_default=sa.text("'razorpay'"),
-        ),
-    )
-    op.add_column(
-        "subscriptions",
-        sa.Column("payment_customer_ref", sa.String(length=128), nullable=True),
-    )
-    op.add_column(
-        "subscriptions",
-        sa.Column("payment_subscription_ref", sa.String(length=128), nullable=True),
-    )
-    op.add_column(
-        "subscriptions",
-        sa.Column("payment_request_ref", sa.String(length=128), nullable=True),
-    )
-    op.create_unique_constraint(
-        "ux_subscriptions_payment_subscription_ref",
-        "subscriptions",
-        ["payment_subscription_ref"],
-    )
-    op.create_index(
-        "ix_subscriptions_payment_provider",
-        "subscriptions",
-        ["payment_provider"],
-    )
-    op.create_index(
-        "ix_subscriptions_payment_customer_ref",
-        "subscriptions",
-        ["payment_customer_ref"],
-    )
-    op.create_index(
-        "ix_subscriptions_payment_request_ref",
-        "subscriptions",
-        ["payment_request_ref"],
-    )
+    with op.batch_alter_table("subscriptions") as batch_op:
+        batch_op.add_column(
+            sa.Column(
+                "payment_provider",
+                sa.String(length=32),
+                nullable=False,
+                server_default=sa.text("'razorpay'"),
+            )
+        )
+        batch_op.add_column(
+            sa.Column("payment_customer_ref", sa.String(length=128), nullable=True)
+        )
+        batch_op.add_column(
+            sa.Column("payment_subscription_ref", sa.String(length=128), nullable=True)
+        )
+        batch_op.add_column(
+            sa.Column("payment_request_ref", sa.String(length=128), nullable=True)
+        )
+        batch_op.create_unique_constraint(
+            "ux_subscriptions_payment_subscription_ref",
+            ["payment_subscription_ref"],
+        )
+        batch_op.create_index(
+            "ix_subscriptions_payment_provider",
+            ["payment_provider"],
+        )
+        batch_op.create_index(
+            "ix_subscriptions_payment_customer_ref",
+            ["payment_customer_ref"],
+        )
+        batch_op.create_index(
+            "ix_subscriptions_payment_request_ref",
+            ["payment_request_ref"],
+        )
 
     op.create_table(
         "billing_events",
@@ -109,15 +102,15 @@ def downgrade() -> None:
     op.drop_index("ix_billing_events_provider", table_name="billing_events")
     op.drop_table("billing_events")
 
-    op.drop_index("ix_subscriptions_payment_request_ref", table_name="subscriptions")
-    op.drop_index("ix_subscriptions_payment_customer_ref", table_name="subscriptions")
-    op.drop_index("ix_subscriptions_payment_provider", table_name="subscriptions")
-    op.drop_constraint(
-        "ux_subscriptions_payment_subscription_ref",
-        "subscriptions",
-        type_="unique",
-    )
-    op.drop_column("subscriptions", "payment_request_ref")
-    op.drop_column("subscriptions", "payment_subscription_ref")
-    op.drop_column("subscriptions", "payment_customer_ref")
-    op.drop_column("subscriptions", "payment_provider")
+    with op.batch_alter_table("subscriptions") as batch_op:
+        batch_op.drop_index("ix_subscriptions_payment_request_ref")
+        batch_op.drop_index("ix_subscriptions_payment_customer_ref")
+        batch_op.drop_index("ix_subscriptions_payment_provider")
+        batch_op.drop_constraint(
+            "ux_subscriptions_payment_subscription_ref",
+            type_="unique",
+        )
+        batch_op.drop_column("payment_request_ref")
+        batch_op.drop_column("payment_subscription_ref")
+        batch_op.drop_column("payment_customer_ref")
+        batch_op.drop_column("payment_provider")

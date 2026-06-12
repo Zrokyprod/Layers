@@ -31,8 +31,14 @@ def upgrade() -> None:
         sa.Column("status", sa.String(32), nullable=False, server_default=sa.text("'open'")),
         sa.Column("assigned_to", sa.String(255), nullable=True),
         sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()"), onupdate=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            onupdate=sa.text("CURRENT_TIMESTAMP"),
+        ),
     )
     op.create_index("ix_support_tickets_tenant", "support_tickets", ["tenant_id"])
     op.create_index("ix_support_tickets_user", "support_tickets", ["user_id"])
@@ -47,7 +53,7 @@ def upgrade() -> None:
         sa.Column("sender_subject", sa.String(255), nullable=True),
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column("is_internal", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
     )
     op.create_index("ix_support_messages_ticket", "support_messages", ["ticket_id"])
     op.create_index("ix_support_messages_created_at", "support_messages", ["created_at"])
