@@ -11,7 +11,7 @@ from app.api.dependencies.tenant import _resolve_project_from_bearer
 from app.api.routes.auth import list_current_user_projects
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Project, ProjectMembership, User
+from app.db.models import ApiKey, Project, ProjectMembership, User
 from app.services.security import issue_access_token
 
 
@@ -31,14 +31,15 @@ def db_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         connect_args={"check_same_thread": False},
         future=True,
     )
-    Base.metadata.create_all(bind=engine)
+    tenant_auth_tables = [User.__table__, Project.__table__, ProjectMembership.__table__, ApiKey.__table__]
+    Base.metadata.create_all(bind=engine, tables=tenant_auth_tables)
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     session = session_factory()
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine)
+        Base.metadata.drop_all(bind=engine, tables=tenant_auth_tables)
         engine.dispose()
         get_settings.cache_clear()
 

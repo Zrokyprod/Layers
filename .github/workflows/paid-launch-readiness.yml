@@ -34,25 +34,52 @@ jobs:
             tests: tests/test_tenant_project_route_scoping.py
           - id: ingest
             name: durable ingest and trace graph
-            tests: tests/test_ingest.py
+            tests: >-
+              tests/test_ingest.py::test_rich_ingest_event_creates_masked_trace_graph
+              tests/test_ingest.py::test_duplicate_event_id_does_not_duplicate_trace_span_or_cost
+              tests/test_ingest.py::test_ingest_idempotency_event_id_prevents_duplicate_cost_and_call
           - id: capture-health
             name: capture health
-            tests: tests/test_capture_health.py
+            tests: >-
+              tests/test_capture_health.py::test_capture_health_summarizes_sdk_gateway_and_span_sources
+              tests/test_capture_health.py::test_gateway_heartbeat_uses_api_key_and_creates_capture_alerts
+              tests/test_capture_health.py::test_gateway_stream_to_db_to_capture_health_e2e
           - id: failure-intelligence
             name: failure intelligence
             tests: tests/test_failure_intelligence.py
           - id: replay-runs
             name: replay run API contract
-            tests: tests/test_replay_runs.py
+            tests: >-
+              tests/test_replay_runs.py::TestDispatchReplayRun::test_dispatch_creates_pending_run
+              tests/test_replay_runs.py::TestDispatchReplayRun::test_cross_tenant_golden_set_returns_none
+              tests/test_replay_runs.py::TestDispatchReplayRun::test_stamps_requested_mode_with_executor_compatibility
+              tests/test_replay_runs.py::TestDispatchReplayRun::test_create_replay_from_call_creates_one_click_run
+              tests/test_replay_runs.py::TestMarkCallAsGolden::test_active_without_expected_behavior_rejected
+              tests/test_replay_runs.py::TestReplayModeInResponse::test_backfills_warning_for_legacy_stub_rows
+              tests/test_replay_runs.py::TestCreateReplayFromIssueRoute::test_creates_one_click_replay_from_issue
+              tests/test_replay_runs.py::TestInvariants::test_valid_run_statuses_match_db_check
           - id: replay-executor
             name: replay executor trust
-            tests: tests/test_replay_executor.py
+            tests: >-
+              tests/test_replay_executor.py::TestExecuteReplayRun::test_real_replay_from_issue_marks_verified_fix
+              tests/test_replay_executor.py::TestExecuteReplayRun::test_only_inconclusive_finalizes_not_verified
+              tests/test_replay_executor.py::TestLiveLlmResolver::test_mocked_tool_requires_captured_tool_snapshot
+              tests/test_replay_executor.py::TestLiveLlmResolver::test_live_sandbox_fails_closed_without_runtime
+              tests/test_replay_executor.py::TestLiveLlmResolver::test_budget_exceeded_returns_error
+              tests/test_replay_executor.py::TestLiveLlmResolver::test_provider_error_returns_error
           - id: replay-claiming
             name: replay worker claiming
             tests: tests/test_replay_worker_claiming.py
           - id: goldens
             name: behavioral Goldens
-            tests: tests/test_goldens.py
+            tests: >-
+              tests/test_goldens.py::TestAddTrace::test_add_trace_active_without_expected_behavior_rejected
+              tests/test_goldens.py::TestAddTrace::test_add_trace_with_source_evidence_defaults_to_draft
+              tests/test_goldens.py::TestPatchRoute::test_patch_flaky_and_blocking_flags_persist
+              tests/test_goldens.py::TestTraceRoutes::test_add_trace_201
+              tests/test_goldens.py::TestTraceRoutes::test_add_trace_active_without_expected_behavior_422
+              tests/test_goldens.py::TestInvariants::test_valid_golden_trace_statuses_match_db_check
+              tests/test_goldens.py::TestInvariants::test_legacy_rows_without_expected_behavior_are_draft
           - id: regression-ci-routes
             name: regression CI routes
             tests: tests/test_regression_ci_routes.py
@@ -64,7 +91,17 @@ jobs:
             tests: tests/test_runtime_policy_gate.py
           - id: billing
             name: billing and quota
-            tests: tests/test_billing_v2.py
+            tests: >-
+              tests/test_billing_v2.py::TestBillingPlans::test_all_plans_have_same_keys
+              tests/test_billing_v2.py::TestRazorpayCheckoutRoute::test_create_order_computes_plan_amount_and_tracks_pending_request
+              tests/test_billing_v2.py::TestRazorpayCheckoutRoute::test_verify_payment_activates_plan_after_valid_signature
+              tests/test_billing_v2.py::TestBillingQuota::test_strict_quota_check_failure_denies_and_alerts
+              tests/test_billing_v2.py::TestBillingQuota::test_event_counter_increment_is_portable_and_accumulates_once
+              tests/test_billing_v2.py::TestBillingQuota::test_hosted_usage_endpoint_returns_calls_replay_goldens_and_metering
+              tests/test_billing_v2.py::TestWebhookRoute::test_happy_path_payment_succeeded
+              tests/test_billing_v2.py::TestWebhookRoute::test_idempotent_replay
+              tests/test_billing_v2.py::TestPortalRoute::test_happy_path_without_customer
+              tests/test_billing_v2.py::TestInvariants::test_plan_codes_match_tier_matrix
           - id: owner-health
             name: owner launch health
             tests: tests/test_owner_money_path_health.py
