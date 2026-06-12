@@ -1,0 +1,364 @@
+name: Paid Launch Readiness
+
+on:
+  pull_request:
+    branches: ["main", "develop"]
+  push:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+concurrency:
+  group: paid-launch-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  backend:
+    name: Backend / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: zroky-backend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: tenant-session
+            name: tenant session selection
+            tests: tests/test_tenant_session_project_selection.py
+          - id: tenant-scoping
+            name: tenant path scoping
+            tests: tests/test_tenant_project_route_scoping.py
+          - id: ingest
+            name: durable ingest and trace graph
+            tests: tests/test_ingest.py
+          - id: capture-health
+            name: capture health
+            tests: tests/test_capture_health.py
+          - id: failure-intelligence
+            name: failure intelligence
+            tests: tests/test_failure_intelligence.py
+          - id: replay-runs
+            name: replay run API contract
+            tests: tests/test_replay_runs.py
+          - id: replay-executor
+            name: replay executor trust
+            tests: tests/test_replay_executor.py
+          - id: replay-claiming
+            name: replay worker claiming
+            tests: tests/test_replay_worker_claiming.py
+          - id: goldens
+            name: behavioral Goldens
+            tests: tests/test_goldens.py
+          - id: regression-ci-routes
+            name: regression CI routes
+            tests: tests/test_regression_ci_routes.py
+          - id: regression-ci-orchestrator
+            name: regression CI orchestrator
+            tests: tests/test_regression_ci_orchestrator.py
+          - id: runtime-policy
+            name: runtime policy gate
+            tests: tests/test_runtime_policy_gate.py
+          - id: billing
+            name: billing and quota
+            tests: tests/test_billing_v2.py
+          - id: owner-health
+            name: owner launch health
+            tests: tests/test_owner_money_path_health.py
+          - id: production-config
+            name: production config
+            tests: tests/test_production_config.py
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            zroky-backend/requirements.txt
+            zroky-backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run backend readiness suite
+        env:
+          TESTING: "true"
+          DATABASE_URL: sqlite:///./.data/paid_launch_${{ matrix.id }}.db
+          DATABASE_READ_REPLICA_URL: ""
+          AUTH_JWT_SECRET: paid-launch-ci-secret-key-32-characters
+          ALLOW_PROJECT_HEADER_CONTEXT: "true"
+          REQUIRE_PROVISIONING_TOKEN: "false"
+          ENABLE_READY_REDIS_CHECK: "false"
+          INGEST_ENFORCE_RATE_LIMIT: "false"
+          BILLING_QUOTA_FAILURE_POLICY: strict
+          TMPDIR: ${{ runner.temp }}/zroky-paid-launch
+        run: |
+          mkdir -p .data "$TMPDIR"
+          python -m pytest ${{ matrix.tests }} -q --tb=short
+
+  money-path-evidence:
+    name: Release-candidate money-path evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            zroky-backend/requirements.txt
+            zroky-backend/requirements-dev.txt
+            zroky-sdk/pyproject.toml
+
+      - name: Install release evidence dependencies
+        run: |
+          python -m pip install -r zroky-backend/requirements.txt -r zroky-backend/requirements-dev.txt
+          python -m pip install -e zroky-sdk
+
+      - name: Prove failure to CI block loop
+        env:
+          TMPDIR: ${{ runner.temp }}/zroky-money-path
+        run: |
+          mkdir -p "$TMPDIR"
+          python scripts/run_money_path_demo.py --json
+
+  dashboard:
+    name: Dashboard reliability surfaces
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: zroky-dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: zroky-dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run reliability surface tests
+        run: |
+          npm test -- \
+            "src/components/dashboard-shell.test.tsx" \
+            "src/components/command-palette.test.tsx" \
+            "src/lib/route-auth-guard.test.ts" \
+            "src/lib/replay-mode.test.ts" \
+            "src/app/(dashboard)/settings/billing/page.test.tsx" \
+            "src/app/(dashboard)/goldens/page.test.tsx" \
+            "src/app/(dashboard)/ci-gates/page.test.tsx" \
+            "src/app/(dashboard)/ci-gates/[runId]/page.test.tsx"
+
+      - name: Build dashboard
+        env:
+          NEXT_PUBLIC_API_URL: https://api.zroky.ai
+        run: npm run build
+
+  admin:
+    name: Owner/admin launch surfaces
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: zroky-admin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: zroky-admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run owner launch tests
+        run: |
+          npm test -- \
+            "src/app/owner/layout.test.tsx" \
+            "src/app/owner/launch-readiness/page.test.tsx" \
+            "src/app/owner/page.test.tsx" \
+            "src/app/owner/money-path/page.test.tsx" \
+            "src/app/owner/pricing/page.test.tsx" \
+            "src/app/owner/infrastructure/page.test.tsx" \
+            "src/app/owner/support/page.test.tsx"
+
+      - name: Build admin
+        env:
+          NEXT_PUBLIC_OWNER_API_URL: https://api.zroky.ai
+        run: npm run build
+
+  gateway:
+    name: Gateway durable capture
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zroky-gateway
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go 1.22
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: zroky-gateway/go.sum
+
+      - name: Run gateway tests
+        run: go test ./...
+
+  replay-worker:
+    name: Replay worker trust
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zroky-replay-worker
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zroky-replay-worker/pyproject.toml
+
+      - name: Install replay worker dependencies
+        run: python -m pip install -e . pytest pytest-asyncio respx
+
+      - name: Run replay worker tests
+        run: python -m pytest
+
+  python-sdk:
+    name: Python SDK capture
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: zroky-sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zroky-sdk/pyproject.toml
+
+      - name: Install Python SDK dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run Python SDK tests
+        env:
+          TMPDIR: ${{ runner.temp }}/zroky-sdk
+        run: |
+          mkdir -p "$TMPDIR"
+          python -m pytest
+
+  js-sdk:
+    name: JavaScript SDK capture
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zroky-sdk-js
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: zroky-sdk-js/package-lock.json
+
+      - name: Install JS SDK dependencies
+        run: npm ci
+
+      - name: Run JS SDK tests
+        run: npm test
+
+  regression-ci-action:
+    name: Regression CI action
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zroky-regression-ci-action
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: zroky-regression-ci-action/package-lock.json
+
+      - name: Install action dependencies
+        run: npm ci
+
+      - name: Run action tests
+        run: npm test
+
+  docs-source-truth:
+    name: Docs drift and source of truth
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run docs drift check
+        run: python scripts/check_docs_drift.py
+
+      - name: Enforce README-only planning source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked_markdown="$(git ls-files '*.md' | grep -v '^README.md$' || true)"
+          existing_markdown=""
+          while IFS= read -r path; do
+            if [[ -n "$path" && -e "$path" ]]; then
+              existing_markdown="${existing_markdown}${path}"$'\n'
+            fi
+          done <<< "$tracked_markdown"
+          if [[ -n "$existing_markdown" ]]; then
+            echo "::error::Root README.md must be the only tracked product-planning Markdown file."
+            printf '%s' "$existing_markdown"
+            exit 1
+          fi
+          grep -q "single product and implementation source of truth" README.md

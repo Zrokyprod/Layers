@@ -394,3 +394,47 @@ Zroky should be judged by this question:
 If yes, the product is working.
 
 If no, the work is probably not core.
+
+## Final Paid Launch Gate
+
+Paid launch is blocked unless every required gate is `pass`:
+
+- durable capture
+- tenant isolation
+- failure intelligence
+- honest replay proof
+- behavioral Goldens
+- durable CI gate
+- runtime risk stop
+- billing and quota reliability
+- owner value proof
+- single source of truth
+
+Owner/admin exposes this as `/owner/launch-readiness`.
+
+Run the final local verification before marking paid launch ready:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1
+```
+
+Run the deterministic release-candidate evidence pack:
+
+```bash
+python scripts/run_money_path_demo.py --json
+```
+
+GitHub paid-launch readiness is checked by:
+
+```text
+.github/workflows/paid-launch-readiness.yml
+```
+
+Any `fail` or `not_verified` gate blocks paid launch.
+
+Real environment proof is still required before production launch:
+
+- billing provider sandbox/live webhook verification
+- replay worker signing key and private worker readiness
+- gateway capture spool recovery with backend down/up
+- production secrets and provisioning-token validation
