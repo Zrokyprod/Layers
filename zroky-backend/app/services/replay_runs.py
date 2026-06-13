@@ -902,6 +902,7 @@ class ReplayQuotaResult:
     limit: int       # replay.monthly_runs; -1 = unlimited
     resets_at: str   # ISO date of first day of next calendar month
     plan_code: str   # e.g. "pro", "plus", "enterprise"
+    real_comparison_enabled: bool
 
 
 def check_replay_monthly_quota(db: Session, tenant_id: str) -> ReplayQuotaResult:
@@ -965,7 +966,10 @@ def check_replay_monthly_quota(db: Session, tenant_id: str) -> ReplayQuotaResult
             limit=0,
             resets_at=resets_at,
             plan_code="unknown",
+            real_comparison_enabled=False,
         )
+
+    from app.core.config import get_settings
 
     return ReplayQuotaResult(
         enabled=enabled,
@@ -973,4 +977,5 @@ def check_replay_monthly_quota(db: Session, tenant_id: str) -> ReplayQuotaResult
         limit=limit,
         resets_at=resets_at,
         plan_code=plan_code,
+        real_comparison_enabled=bool(get_settings().REPLAY_REAL_LLM_ENABLED),
     )

@@ -382,10 +382,13 @@ export function useReopenAlert() {
 
 // ─── Settings / API Keys ────────────────────────────────────────────────────
 
-export function useProjectSettings() {
+export function useProjectSettings(projectId?: string | null) {
+  const hasExplicitProject = arguments.length > 0;
+
   return useQuery<ProjectResponse>({
-    queryKey: ["project-settings"],
+    queryKey: ["project-settings", hasExplicitProject ? projectId : "current"],
     queryFn: () => getProjectSettings(),
+    enabled: hasExplicitProject ? Boolean(projectId) : true,
     retry: false,
   });
 }

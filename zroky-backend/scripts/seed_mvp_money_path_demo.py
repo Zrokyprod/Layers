@@ -34,14 +34,17 @@ from app.db.models import (  # noqa: E402
     ReplayRun,
     ReplayRunTrace,
     Subscription,
+    TraceRun,
+    TraceSpan,
     User,
 )
 from app.db.base import Base  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.services.anomalies import compute_fingerprint  # noqa: E402
-from app.services.entitlements import seed_plan_entitlements  # noqa: E402
+from app.services.entitlements import seed_plan_entitlements, set_override_entitlement  # noqa: E402
 from app.services.issue_projection import legacy_issue_payload  # noqa: E402
 from app.services.security import hash_api_key, hash_password  # noqa: E402
+from app.services.trace_graph import upsert_trace_graph_for_call  # noqa: E402
 
 FIXTURE_PATH = REPO_ROOT / "demos" / "mvp-money-path" / "refund_money_path_fixture.json"
 OWNER_VALUE_PROJECT_ID = "demo-owner-value-proof"
@@ -85,6 +88,8 @@ def _delete_existing_demo_rows(
     db.execute(delete(ProjectAlert).where(ProjectAlert.tenant_id.in_(project_ids)))
     db.execute(delete(Anomaly).where(Anomaly.project_id.in_(project_ids)))
     db.execute(delete(DiagnosisJob).where(DiagnosisJob.tenant_id.in_(project_ids)))
+    db.execute(delete(TraceSpan).where(TraceSpan.project_id.in_(project_ids)))
+    db.execute(delete(TraceRun).where(TraceRun.project_id.in_(project_ids)))
     db.execute(delete(Call).where(Call.project_id.in_(project_ids)))
     db.execute(delete(ProviderKeyVault).where(ProviderKeyVault.project_id.in_(project_ids)))
     db.execute(delete(ApiKey).where(ApiKey.project_id.in_(project_ids)))
@@ -505,14 +510,33 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
     )
     db.flush()
     seed_plan_entitlements(db, org_id=project_id, plan_code="pro", commit=False)
+    set_override_entitlement(
+        db,
+        org_id=project_id,
+        key="enterprise.provider_key_vault",
+        value=True,
+        commit=False,
+    )
 
     call_payload = {
         "trace_id": scenario["trace_id"],
+        "span_id": ids["bad_call"],
+        "span_index": 0,
+        "span_type": "llm_call",
+        "span_name": "Refund status response",
+        "created_at": base_time.isoformat(),
+        "latency_ms": float(timing["bad_call_latency_ms"]),
+        "status": "failed",
+        "error_code": str(scenario["failure_code"]),
+        "total_cost_usd": float(costs["bad_call_usd"]),
         "provider": str(bad["provider"]),
+        "model": str(bad["model"]),
         "agent_name": scenario["agent_name"],
         "workflow_name": scenario["workflow_name"],
         "prompt_fingerprint": scenario["prompt_fingerprint"],
         "prompt_version": scenario["prompt_version"],
+        "user_input": scenario["user_input"],
+        "final_answer": bad_output,
         "messages": [{"role": "user", "content": scenario["user_input"]}],
         "input": scenario["user_input"],
         "output": bad_output,
@@ -529,6 +553,23 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         ],
         "customer_id": scenario["customer_id"],
         "order_id": scenario["order_id"],
+        "policy": {
+            "decision": "tool_required_before_answering",
+            "required_tool": expected_tool,
+            "failure_code": scenario["failure_code"],
+        },
+        "outcome": {
+            "status": "failed",
+            "business_result": "refund_status_answered_without_account_evidence",
+            "customer_id": scenario["customer_id"],
+            "order_id": scenario["order_id"],
+        },
+        "versions": {
+            "prompt_version": scenario["prompt_version"],
+            "model_version": str(bad["model"]),
+            "tool_schema_version": "demo-refund-tools-v1",
+        },
+        "capture_source": "money_path_seed",
     }
     tool_summary = {
         "tools_available": [expected_tool],
@@ -568,6 +609,8 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         metadata_json=_compact_json(call_payload),
     )
     db.add(bad_call)
+    db.flush()
+    upsert_trace_graph_for_call(db=db, tenant_id=project_id, call=bad_call, payload=call_payload)
 
     diagnosis_result = {
         "failure_code": scenario["failure_code"],

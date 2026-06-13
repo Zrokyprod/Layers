@@ -46,7 +46,7 @@ test.describe("settings and account", () => {
     await page.getByLabel("Expires in days").fill("30");
     await page.getByRole("button", { name: "Create project key" }).click();
     await expect(page.getByRole("heading", { name: "Copy this project key now." })).toBeVisible();
-    await expect(page.locator(".settings-key-reveal")).toContainText("zroky_api_");
+    await expect(page.locator(".settings-key-reveal")).toContainText("zk_live_");
     await page.getByRole("button", { name: "Done" }).click();
 
     await page.getByRole("button", { name: "Rotate" }).first().click();

@@ -92,6 +92,7 @@ class ReplayQuotaResponse(BaseModel):
     limit: int    # -1 = unlimited (Enterprise)
     resets_at: str  # ISO date — first day of next calendar month
     plan_code: str
+    real_comparison_enabled: bool
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -115,6 +116,7 @@ def get_replay_quota(
         limit=result.limit,
         resets_at=result.resets_at,
         plan_code=result.plan_code,
+        real_comparison_enabled=result.real_comparison_enabled,
     )
 
 

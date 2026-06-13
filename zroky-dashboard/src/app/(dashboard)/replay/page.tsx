@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -449,8 +449,15 @@ function ReplayPageContent() {
   const providerKeysQuery = useActiveProviderKeys();
   const quota = quotaQuery.data;
   const isPlanEnabled = quota?.enabled ?? null;
+  const realComparisonEnabled = quota?.real_comparison_enabled !== false;
   const quotaIsPending = quotaQuery.isLoading || quotaQuery.isFetching;
   const quotaErrorMessage = quotaQuery.error instanceof Error ? quotaQuery.error.message : "Replay quota check failed.";
+
+  useEffect(() => {
+    if (!realComparisonEnabled && replayMode !== STUB_REPLAY_MODE) {
+      setReplayMode(STUB_REPLAY_MODE);
+    }
+  }, [realComparisonEnabled, replayMode]);
 
   const issuesQuery = useQuery({
     queryKey: ["issues", "replay-launcher"],
@@ -610,6 +617,7 @@ function ReplayPageContent() {
   const launchDisabled =
     isLaunching ||
     isPlanEnabled !== true ||
+    (!realComparisonEnabled && replayMode !== STUB_REPLAY_MODE) ||
     (launchSource === "issue" && !selectedIssueId) ||
     (launchSource === "call" && !selectedCallId) ||
     (launchSource === "golden" && !selectedGoldenId) ||
@@ -861,17 +869,22 @@ function ReplayPageContent() {
             ) : null}
 
             <div className="replay-mode-grid" aria-label="Replay mode">
-              {REPLAY_MODE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={replayMode === option.value ? "is-active" : ""}
-                  onClick={() => setReplayMode(option.value)}
-                >
-                  <strong>{option.label}</strong>
-                  <span>{option.proof}</span>
-                </button>
-              ))}
+              {REPLAY_MODE_OPTIONS.map((option) => {
+                const disabled = !realComparisonEnabled && option.value !== STUB_REPLAY_MODE;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={replayMode === option.value ? "is-active" : ""}
+                    disabled={disabled}
+                    title={disabled ? "Real comparison replay is disabled on this control plane." : undefined}
+                    onClick={() => setReplayMode(option.value)}
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.proof}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="replay-launch-row">

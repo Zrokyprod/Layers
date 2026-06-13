@@ -27,8 +27,8 @@ const providerKeyState = vi.hoisted(() => ({
 }));
 
 const quotaState = vi.hoisted(() => ({
-  data: { enabled: true, limit: 100, used: 8, resets_at: "2026-06-30" } as
-    | { enabled: boolean; limit: number; used: number; resets_at: string }
+  data: { enabled: true, limit: 100, used: 8, resets_at: "2026-06-30", plan_code: "pro", real_comparison_enabled: true } as
+    | { enabled: boolean; limit: number; used: number; resets_at: string; plan_code: string; real_comparison_enabled?: boolean }
     | undefined,
   error: null as Error | null,
   isError: false,
@@ -328,7 +328,7 @@ describe("ReplayPage command center", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     providerKeyState.active = true;
-    quotaState.data = { enabled: true, limit: 100, used: 8, resets_at: "2026-06-30" };
+    quotaState.data = { enabled: true, limit: 100, used: 8, resets_at: "2026-06-30", plan_code: "pro", real_comparison_enabled: true };
     quotaState.error = null;
     quotaState.isError = false;
     quotaState.isFetching = false;
@@ -360,7 +360,7 @@ describe("ReplayPage command center", () => {
   it("renders the live command center controls and proof queue", () => {
     render(<ReplayPage />);
 
-    expect(screen.getByRole("heading", { name: "Prove the fix before it ships." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Replay" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Start replay" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Issue/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Call/ })).toBeInTheDocument();
@@ -380,7 +380,7 @@ describe("ReplayPage command center", () => {
 
     render(<ReplayPage />);
 
-    expect(screen.getByRole("heading", { name: "Prove the fix before it ships." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Replay" })).toBeInTheDocument();
     expect(screen.getByText("Checking replay quota")).toBeInTheDocument();
     expect((screen.getByRole("button", { name: "Start replay" }) as HTMLButtonElement).disabled).toBe(true);
   });
@@ -412,6 +412,30 @@ describe("ReplayPage command center", () => {
       issueId: "issue_1",
       payload: { replay_mode: "stub" },
     });
+  });
+
+  it("falls back to stub when real comparison is disabled", async () => {
+    quotaState.data = {
+      enabled: true,
+      limit: 100,
+      used: 8,
+      resets_at: "2026-06-30",
+      plan_code: "pro",
+      real_comparison_enabled: false,
+    };
+    render(<ReplayPage />);
+
+    await waitFor(() => {
+      expect((screen.getByRole("button", { name: /stubsanity only/ }) as HTMLButtonElement).className).toContain("is-active");
+    });
+    expect((screen.getByRole("button", { name: /real_llmreal comparison/ }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
+
+    await waitFor(() => expect(hooks.issueMutate).toHaveBeenCalledWith({
+      issueId: "issue_1",
+      payload: { replay_mode: "stub" },
+    }));
   });
 
   it("starts a replay from a failed call with candidate overrides", async () => {

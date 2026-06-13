@@ -2475,6 +2475,7 @@ export interface ReplayQuotaResponse {
   used: number;
   resets_at: string;
   plan_code: string;
+  real_comparison_enabled?: boolean;
 }
 
 export function getReplayQuota(signal?: AbortSignal): Promise<ReplayQuotaResponse> {

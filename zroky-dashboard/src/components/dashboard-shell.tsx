@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -370,14 +370,69 @@ function initials(name: string): string {
   );
 }
 
+function ProjectContextGate({
+  isLoading,
+  noProjects,
+  requiresSelection,
+  projects,
+  onSelectProject,
+}: {
+  isLoading: boolean;
+  noProjects: boolean;
+  requiresSelection: boolean;
+  projects: { project_id: string; project_name: string; role: string }[];
+  onSelectProject: (projectId: string) => void;
+}) {
+  const title = noProjects
+    ? "No active project found"
+    : requiresSelection
+      ? "Select a project to load this workspace"
+      : "Loading workspace context";
+  const body = noProjects
+    ? "Ask an owner to add your account to a project before dashboard modules can load data."
+    : requiresSelection
+      ? "Dashboard data is scoped by project. Choose the workspace you want to inspect."
+      : "Preparing project-scoped data before loading dashboard modules.";
+
+  return (
+    <section className="panel project-context-gate" aria-live="polite">
+      <div className="panel-header">
+        <div>
+          <h3>{title}</h3>
+          <p>{body}</p>
+        </div>
+        {isLoading ? <span className="pill">Loading</span> : null}
+      </div>
+
+      {requiresSelection ? (
+        <div className="project-context-actions">
+          {projects.map((project) => (
+            <button
+              key={project.project_id}
+              type="button"
+              className="shell-menu-item"
+              onClick={() => onSelectProject(project.project_id)}
+            >
+              <FolderOpen size={15} aria-hidden="true" />
+              <span>
+                <strong>{project.project_name}</strong>
+                <small>
+                  {project.project_id} - {project.role}
+                </small>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
-  const projectQuery = useProjectSettings();
-  const myProjectsQuery = useMyProjects();
-  const meQuery = useMe();
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const routeMenuRef = useRef<HTMLDivElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
@@ -399,6 +454,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     realTimeEnabled,
     toggleRealTime,
   } = useDashboardStore();
+
+  const projectQuery = useProjectSettings(selectedProject);
+  const myProjectsQuery = useMyProjects();
+  const meQuery = useMe();
 
   useKeyboardShortcuts();
 
@@ -428,8 +487,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     };
   }, [closeSidebar, pathname]);
 
-  const myProjects = myProjectsQuery.data ?? [];
+  const myProjects = useMemo(() => myProjectsQuery.data ?? [], [myProjectsQuery.data]);
   const myProjectIdsKey = myProjects.map((project) => project.project_id).join("|");
+  const selectedProjectMembership = selectedProject
+    ? myProjects.find((project) => project.project_id === selectedProject) ?? null
+    : null;
+  const projectSelectionRequired = myProjects.length > 1 && !selectedProject;
+  const noActiveProjects = Boolean(myProjectsQuery.data && myProjects.length === 0);
+  const projectContextLoading = myProjectsQuery.isLoading || (myProjects.length === 1 && !selectedProject);
+  const projectContextReady = Boolean(selectedProject)
+    && !projectSelectionRequired
+    && !noActiveProjects
+    && (!myProjectsQuery.data || selectedProjectMembership != null);
 
   useEffect(() => {
     if (!myProjectsQuery.data) return;
@@ -481,6 +550,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const issuesQuery = useQuery({
     queryKey: ["shell-issues-count"],
     queryFn: () => listIssues({ status: "open", limit: 50 }),
+    enabled: projectContextReady,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
@@ -488,6 +558,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const agentsQuery = useQuery({
     queryKey: ["shell-agents-count"],
     queryFn: () => getReliabilityLeaderboard(200),
+    enabled: projectContextReady,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
@@ -495,12 +566,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const billingQuery = useQuery({
     queryKey: ["billing", "me"],
     queryFn: ({ signal }) => getBillingMe(signal),
+    enabled: projectContextReady,
     staleTime: 60_000,
   });
 
   const budgetQuery = useQuery({
     queryKey: ["shell-budget-status"],
     queryFn: ({ signal }) => getBudgetStatus(signal),
+    enabled: projectContextReady,
     staleTime: 60_000,
     retry: false,
   });
@@ -542,10 +615,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   if (issuesCount > 0) badges.issues = issuesCount;
   if (agentsCount > 0) badges.agents = agentsCount;
 
-  const selectedProjectMembership = selectedProject
-    ? myProjects.find((project) => project.project_id === selectedProject) ?? null
-    : null;
-  const projectSelectionRequired = myProjects.length > 1 && !selectedProject;
   const orgName =
     selectedProjectMembership?.project_name?.trim() ||
     projectQuery.data?.name?.trim() ||
@@ -968,7 +1037,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="content-inner page-enter">{children}</main>
+        <main className="content-inner page-enter">
+          {projectContextReady ? (
+            children
+          ) : (
+            <ProjectContextGate
+              isLoading={projectContextLoading}
+              noProjects={noActiveProjects}
+              requiresSelection={projectSelectionRequired}
+              projects={myProjects}
+              onSelectProject={switchProject}
+            />
+          )}
+        </main>
       </section>
 
       <CommandPalette />
