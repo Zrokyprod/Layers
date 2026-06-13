@@ -14,6 +14,7 @@ import {
   Terminal,
   Workflow,
 } from 'lucide-react';
+import { SIGN_UP_URL } from '../lib/links';
 
 const releases = [
   {
@@ -98,7 +99,7 @@ const releases = [
       'Verification sends users to the real quickstart path.',
     ],
     proof: 'Auth no longer feels like a separate older product.',
-    href: '/auth/register',
+    href: SIGN_UP_URL,
     cta: 'Create workspace',
   },
 ];
@@ -289,10 +290,10 @@ export default function ChangelogPage() {
                           <h3 className="mt-4 text-2xl font-semibold leading-tight text-primary">{release.title}</h3>
                           <p className="mt-3 max-w-4xl text-sm leading-7 text-secondary">{release.summary}</p>
                         </div>
-                        <Link to={release.href} className="btn-ghost shrink-0">
+                        <a href={release.href} className="btn-ghost shrink-0">
                           {release.cta}
                           <ArrowRight className="h-4 w-4" />
-                        </Link>
+                        </a>
                       </div>
                     </div>
 
@@ -337,10 +338,10 @@ export default function ChangelogPage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Link to="/auth/register" className="btn-primary">
+              <a href={SIGN_UP_URL} className="btn-primary">
                 Protect an agent
                 <ArrowRight className="h-4 w-4" />
-              </Link>
+              </a>
               <Link to="/docs/ci-gates" className="btn-ghost">
                 CI gate docs
                 <GitBranch className="h-4 w-4" />

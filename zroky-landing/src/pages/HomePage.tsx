@@ -6,8 +6,8 @@ import {
   Search, FlaskConical, ShieldCheck, Check, Copy, Sparkles,
   Activity, GitBranch, Languages, FileSearch,
 } from 'lucide-react';
+import { SIGN_UP_URL } from '../lib/links';
 
-const DASHBOARD_URL = 'https://app.zroky.com';
 const GITHUB_URL = 'https://github.com/zroky/zroky-watch';
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -73,7 +73,7 @@ function Hero() {
           </Reveal>
           <Reveal delay={0.18}>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href={`${DASHBOARD_URL}/auth/register`} className="btn-primary !px-6 !py-3">Start free <ArrowUpRight size={16} /></a>
+              <a href={SIGN_UP_URL} className="btn-primary !px-6 !py-3">Start free <ArrowUpRight size={16} /></a>
               <a href={GITHUB_URL} className="btn-ghost !px-6 !py-3"><Star size={15} /> zroky-watch — open source</a>
             </div>
           </Reveal>
@@ -572,7 +572,7 @@ function FinalCTA() {
             Discover what your tests miss. Prove the fix. Guard against the repeat.
           </p>
           <div className="relative z-10 mt-8 flex flex-wrap items-center justify-center gap-3">
-            <a href={`${DASHBOARD_URL}/auth/register`} className="btn-primary !px-6 !py-3">Start free <ArrowUpRight size={16} /></a>
+            <a href={SIGN_UP_URL} className="btn-primary !px-6 !py-3">Start free <ArrowUpRight size={16} /></a>
             <a href={GITHUB_URL} className="btn-ghost !px-6 !py-3"><Star size={15} /> Star zroky-watch</a>
           </div>
         </div>

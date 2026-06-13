@@ -694,10 +694,14 @@ def _check_landing(landing_url: str, dashboard_url: str, timeout: float) -> None
 
     register = _request("GET", _url(landing_url, "/auth/register"), timeout=timeout)
     _expect_status(register, 200, "landing register CTA")
+    if not register.final_url.rstrip("/").startswith(_url(dashboard_url, "/signup").rstrip("/")):
+        _fail("landing register CTA", f"expected redirect to dashboard signup, got {register.final_url}")
     _pass("landing register CTA", register.final_url)
 
     login = _request("GET", _url(landing_url, "/auth/login"), timeout=timeout)
     _expect_status(login, 200, "landing login link")
+    if not login.final_url.rstrip("/").startswith(_url(dashboard_url, "/login").rstrip("/")):
+        _fail("landing login link", f"expected redirect to dashboard login, got {login.final_url}")
     _pass("landing login link", login.final_url)
 
     dashboard_login = _request("GET", _url(dashboard_url, "/login"), timeout=timeout)

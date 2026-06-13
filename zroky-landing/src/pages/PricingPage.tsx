@@ -14,6 +14,7 @@ import {
   Zap,
 } from 'lucide-react';
 import pricingContract from '../data/pricing-plans.json';
+import { SIGN_UP_URL } from '../lib/links';
 
 type PlanCode = 'free' | 'pilot' | 'pro' | 'enterprise';
 
@@ -144,7 +145,7 @@ const plans = (pricingContract.plans as PricingPlan[]).map((plan) => ({
   desc: plan.description,
   icon: planIcons[plan.code],
   cta: plan.cta.label,
-  href: plan.cta.href,
+  href: plan.cta.href === '/auth/register' ? SIGN_UP_URL : plan.cta.href,
   featured: plan.featured,
   bullets: buildPlanBullets(plan),
   note: plan.note,

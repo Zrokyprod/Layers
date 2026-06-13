@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Star, ArrowUpRight } from 'lucide-react';
+import { SIGN_IN_URL, SIGN_UP_URL } from '../lib/links';
 
 const LINKS = [
   { label: 'Product', to: '/#product' },
@@ -10,7 +11,6 @@ const LINKS = [
   { label: 'Changelog', to: '/changelog' },
 ];
 
-const DASHBOARD_URL = 'https://app.zroky.com';
 const GITHUB_URL = 'https://github.com/zroky/zroky-watch';
 
 export default function Nav() {
@@ -60,10 +60,10 @@ export default function Nav() {
           <a href={GITHUB_URL} className="btn-ghost !px-3 !py-2" aria-label="Star zroky-watch on GitHub">
             <Star size={14} /> <span className="text-xs">zroky-watch</span>
           </a>
-          <a href={`${DASHBOARD_URL}/auth/login`} className="rounded-full px-3 py-2 text-sm font-semibold text-secondary transition hover:text-primary">
+          <a href={SIGN_IN_URL} className="rounded-full px-3 py-2 text-sm font-semibold text-secondary transition hover:text-primary">
             Sign in
           </a>
-          <a href={`${DASHBOARD_URL}/auth/register`} className="btn-primary">
+          <a href={SIGN_UP_URL} className="btn-primary">
             Start free <ArrowUpRight size={15} />
           </a>
         </div>
@@ -90,7 +90,7 @@ export default function Nav() {
             </div>
             <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
               <a href={GITHUB_URL} className="btn-ghost w-full"><Star size={14} /> Star zroky-watch</a>
-              <a href={`${DASHBOARD_URL}/auth/register`} className="btn-primary w-full">Start free <ArrowUpRight size={15} /></a>
+              <a href={SIGN_UP_URL} className="btn-primary w-full">Start free <ArrowUpRight size={15} /></a>
             </div>
           </motion.div>
         )}
