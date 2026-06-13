@@ -236,10 +236,17 @@ from app.services import entitlements_resolver
 
 project_id = os.environ["PROJECT_ID"]
 now = datetime.now(timezone.utc)
+subscription_columns = set(Subscription.__mapper__.attrs.keys())
+
+
+def subscription_values(**values):
+    return {key: value for key, value in values.items() if key in subscription_columns}
+
+
 with SessionLocal() as db:
     sub = db.execute(select(Subscription).where(Subscription.org_id == project_id)).scalar_one_or_none()
     if sub is None:
-        sub = Subscription(
+        sub = Subscription(**subscription_values(
             id=str(uuid4()),
             org_id=project_id,
             payment_customer_ref=None,
@@ -252,13 +259,16 @@ with SessionLocal() as db:
             sla_tier="none",
             created_at=now,
             updated_at=now,
-        )
+        ))
         db.add(sub)
     else:
-        sub.plan_code = "pro"
-        sub.status = "active"
-        sub.current_period_end = now + timedelta(days=30)
-        sub.updated_at = now
+        for key, value in subscription_values(
+            plan_code="pro",
+            status="active",
+            current_period_end=now + timedelta(days=30),
+            updated_at=now,
+        ).items():
+            setattr(sub, key, value)
         db.add(sub)
     seed_plan_entitlements(db, org_id=project_id, plan_code="pro", commit=False)
     db.commit()
