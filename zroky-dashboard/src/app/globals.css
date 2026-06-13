@@ -31214,6 +31214,10 @@ button.gm-kpi-card {
   color: var(--zl-text);
 }
 
+.zl-public [id] {
+  scroll-margin-top: 112px;
+}
+
 .zl-public .z-nav {
   position: fixed;
   top: 0;
