@@ -13,14 +13,28 @@ const SECRET_KEYS = new Set([
 ]);
 
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const PHONE_RE = /\b(?:\+?\d[\s-]?){9,14}\d\b/g;
+const PHONE_RE = /(^|[^\w-])((?:\+?\d[\s-]?){9,14}\d)(?![\w-])/g;
 const KEY_RE = /\b(?:sk|rk|pk|zk)[-_](?:live|test|proj)?[-_]?[A-Za-z0-9_-]{16,}\b/g;
 const BEARER_RE = /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}\b/gi;
+
+const SYSTEM_IDENTIFIER_KEYS = new Set([
+  "callid",
+  "eventid",
+  "traceid",
+  "parentcallid",
+  "workflowid",
+  "sessionid",
+  "requestid",
+  "spanid",
+  "projectid",
+  "promptfingerprint",
+  "promptversion",
+]);
 
 function maskString(value: string): string {
   return value
     .replace(EMAIL_RE, "[REDACTED_EMAIL]")
-    .replace(PHONE_RE, "[REDACTED_PHONE]")
+    .replace(PHONE_RE, "$1[REDACTED_PHONE]")
     .replace(KEY_RE, "[REDACTED_KEY]")
     .replace(BEARER_RE, "Bearer [REDACTED_KEY]");
 }
@@ -32,7 +46,13 @@ export function maskPayload<T>(value: T): T {
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-      out[key] = SECRET_KEYS.has(normalizedKey) ? "[REDACTED_KEY]" : maskPayload(item);
+      if (SECRET_KEYS.has(normalizedKey)) {
+        out[key] = "[REDACTED_KEY]";
+      } else if (SYSTEM_IDENTIFIER_KEYS.has(normalizedKey)) {
+        out[key] = item;
+      } else {
+        out[key] = maskPayload(item);
+      }
     }
     return out as T;
   }

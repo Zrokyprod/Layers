@@ -126,6 +126,38 @@ describe("capture contract", () => {
     assert.equal("project_id" in body.events[0], false);
   });
 
+  it("preserves system IDs while masking phone-like content", async () => {
+    const calls = recordFetches();
+    const phoneLikeCallId = "16081e8b-1b21-4cb9-ac8c-610877734263";
+
+    await emit(
+      {
+        call_id: phoneLikeCallId,
+        trace_id: "trace_16081e8b-1b21-4cb9-ac8c-610877734263",
+        provider: "openai",
+        model: "gpt-4o-mini",
+        call_type: "chat",
+        latency_ms: 42,
+        prompt_tokens: 7,
+        completion_tokens: 11,
+        total_tokens: 18,
+        status: "success",
+        output_content: "Customer phone 610877734263 should be masked.",
+      },
+      {
+        projectId: "proj_123",
+        apiKey: "zk_test",
+        endpoint: "https://capture.example/v1/ingest",
+      },
+    );
+
+    const event = parseBody(calls[0]).events[0];
+    assert.equal(event.call_id, phoneLikeCallId);
+    assert.equal(event.event_id, `${phoneLikeCallId}:capture`);
+    assert.equal(event.trace_id, "trace_16081e8b-1b21-4cb9-ac8c-610877734263");
+    assert.equal(event.output_content, "Customer phone [REDACTED_PHONE] should be masked.");
+  });
+
   it("buffers retry-exhausted events and flushes them with the next successful emit", async () => {
     const calls: FetchCall[] = [];
     let attempt = 0;
