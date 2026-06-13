@@ -6,10 +6,18 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.api.routes.replay import WorkerPollRequest, WorkerResultPayload, worker_poll, worker_result
+from app.api.routes.replay import (
+    WorkerJudgeRequest,
+    WorkerPollRequest,
+    WorkerResultPayload,
+    worker_judge,
+    worker_poll,
+    worker_result,
+)
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import ReplayJob
+from app.services import judge_engine
 
 
 @pytest.fixture()
@@ -105,3 +113,62 @@ def test_worker_result_rejects_different_claimed_worker(db_session) -> None:
         worker_result(payload, db_session)
 
     assert error.value.status_code == 409
+
+
+def test_worker_judge_requires_bearer_token(db_session) -> None:
+    body = WorkerJudgeRequest(
+        trace_id="trace_1",
+        expected_output="approved",
+        actual_output="approved",
+        diff_metric=0.0,
+    )
+
+    with pytest.raises(HTTPException) as error:
+        worker_judge(body, authorization=None)
+
+    assert error.value.status_code == 401
+
+
+def test_worker_judge_returns_existing_judge_engine_verdict(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_judge(actual: str, expected: str, *, context: dict[str, object] | None = None, **_: object):
+        captured["actual"] = actual
+        captured["expected"] = expected
+        captured["context"] = context
+        return judge_engine.Verdict.normalize(
+            "pass",
+            0.93,
+            "worker_judge_ok",
+            model="deterministic_test",
+            latency_ms=7,
+        )
+
+    monkeypatch.setattr(judge_engine, "judge", fake_judge)
+
+    response = worker_judge(
+        WorkerJudgeRequest(
+            trace_id="trace_1",
+            expected_output="approved",
+            actual_output="approved",
+            diff_metric=0.0,
+            model="openai/gpt-test",
+            agent_name="refund-agent",
+        ),
+        authorization="Bearer worker-secret",
+    )
+
+    assert response.verdict == "pass"
+    assert response.confidence == 0.93
+    assert response.reason == "worker_judge_ok"
+    assert response.model == "deterministic_test"
+    assert response.latency_ms == 7
+    assert captured["actual"] == "approved"
+    assert captured["expected"] == "approved"
+    assert captured["context"] == {
+        "trace_id": "trace_1",
+        "diff_metric": 0.0,
+        "model": "openai/gpt-test",
+        "agent_name": "refund-agent",
+        "source": "external_replay_worker",
+    }

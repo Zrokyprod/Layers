@@ -2,7 +2,7 @@ from app.api.routes._internal.owner_common import *
 from app.api.routes._internal.owner_pricing_audit import _owner_audit, _resolve_actor
 from razorpay.errors import BadRequestError, GatewayError, ServerError
 
-from app.api.routes.billing import (
+from app.api.routes._internal.billing_razorpay import (
     _razorpay_auth_failure,
     _razorpay_client,
     _razorpay_notes,

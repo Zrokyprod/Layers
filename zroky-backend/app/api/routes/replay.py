@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from hmac import compare_digest
 from typing import Any
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ from app.core.limiter import limiter
 from fastapi import Request
 from app.db.models import Call, DiagnosisPullRequest, ReplayJob
 from app.db.session import get_db_session
+from app.services import judge_engine
 from app.services.replay_runs import check_replay_monthly_quota
 
 router = APIRouter(prefix="/v1/replay")
@@ -86,6 +88,23 @@ class WorkerResultPayload(BaseModel):
     result: dict[str, Any]
 
 
+class WorkerJudgeRequest(BaseModel):
+    trace_id: str
+    expected_output: str
+    actual_output: str
+    diff_metric: float | None = None
+    model: str | None = None
+    agent_name: str | None = None
+
+
+class WorkerJudgeResponse(BaseModel):
+    verdict: str
+    confidence: float
+    reason: str = ""
+    model: str = ""
+    latency_ms: int = 0
+
+
 class ReplayQuotaResponse(BaseModel):
     enabled: bool
     used: int
@@ -96,6 +115,16 @@ class ReplayQuotaResponse(BaseModel):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+def _require_worker_bearer(authorization: str | None) -> None:
+    settings = get_settings()
+    token = settings.REPLAY_WORKER_TOKEN
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Worker token not configured")
+    scheme, _, presented = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not compare_digest(presented, token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid worker token")
+
 
 @router.get("/quota", response_model=ReplayQuotaResponse)
 @limiter.limit("120/minute")
@@ -117,6 +146,32 @@ def get_replay_quota(
         resets_at=result.resets_at,
         plan_code=result.plan_code,
         real_comparison_enabled=result.real_comparison_enabled,
+    )
+
+
+@router.post("/judge", response_model=WorkerJudgeResponse, include_in_schema=False)
+def worker_judge(
+    body: WorkerJudgeRequest,
+    authorization: str | None = Header(default=None),
+) -> WorkerJudgeResponse:
+    _require_worker_bearer(authorization)
+    verdict = judge_engine.judge(
+        body.actual_output,
+        body.expected_output,
+        context={
+            "trace_id": body.trace_id,
+            "diff_metric": body.diff_metric,
+            "model": body.model,
+            "agent_name": body.agent_name,
+            "source": "external_replay_worker",
+        },
+    )
+    return WorkerJudgeResponse(
+        verdict=verdict.verdict,
+        confidence=verdict.confidence,
+        reason=verdict.reason,
+        model=verdict.model,
+        latency_ms=verdict.latency_ms,
     )
 
 

@@ -23,16 +23,11 @@ via `services.entitlements_resolver`. The legacy file will be deleted
 in a follow-up cleanup once the dashboard migrates off `/plans` and
 `/usage` (tracked separately from Module 12).
 """
-import logging
-import hashlib
-import hmac
 import json
+import logging
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
-from uuid import uuid4
 
-import razorpay
 from razorpay.errors import BadRequestError, GatewayError, ServerError
 from fastapi import (
     APIRouter,
@@ -43,48 +38,61 @@ from fastapi import (
     Request,
     status,
 )
-from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.authorization import require_project_role
 from app.api.dependencies.tenant import require_tenant_id, require_tenant_role
+from app.api.routes._internal.billing_schemas import (
+    BillingMeResponse,
+    CheckoutRequest,
+    CheckoutResponse,
+    PortalResponse,
+    RazorpayOrderRequest,
+    RazorpayOrderResponse,
+    RazorpayVerifyRequest,
+    RazorpayVerifyResponse,
+    WebhookResponse,
+)
 from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import (
     BillingEvent,
-    Call,
     GoldenSet,
     GoldenTrace,
     Subscription,
-    SubscriptionPlan,
-    TenantSubscription,
 )
 from app.db.session import get_db_session
 from app.schemas.billing import (
     BillingMeteringHealthResponse,
     BillingUsageMeter,
     BillingUsageResponse,
-    BillingUsageSummaryResponse,
-    SubscriptionPlanListResponse,
-    SubscriptionPlanResponse,
-    TenantSubscriptionResponse,
-    TenantSubscriptionUpdateRequest,
 )
 from app.services.billing_plans import (
     DEFAULT_PLAN_CODE,
     InvalidPlanCodeError,
     PLAN_ENTITLEMENTS,
     PlanNotSelfServeError,
-    assert_self_serve_plan,
 )
 from app.services.billing_quota import get_usage as _quota_get_usage
 from app.services.billing_metering import get_metering_health
-from app.services.entitlement_catalog import load_pricing_contract
 from app.services import entitlements_resolver
 from app.services.entitlements import seed_plan_entitlements
 from app.services.replay_runs import check_replay_monthly_quota
+from app.api.routes.billing_legacy import router as _legacy_router
+from app.api.routes._internal.billing_razorpay import (
+    _normalize_razorpay_plan_code,
+    _parse_stored_razorpay_request,
+    _razorpay_amount_for_plan,
+    _razorpay_auth_failure,
+    _razorpay_client,
+    _razorpay_receipt,
+    _razorpay_webhook_confirms_paid,
+    _razorpay_webhook_event_id,
+    _require_razorpay_paid_checkout as _internal_require_razorpay_paid_checkout,
+    _verify_razorpay_signature,
+    _verify_razorpay_webhook_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,182 +102,22 @@ router = APIRouter(prefix="/v1/billing")
 # Legacy surface (gated by FEATURE_LEGACY_BILLING; default-off as of
 # Module 12). Mounted under the same /v1/billing prefix so existing
 # clients see no path change while the flag is on.
-legacy_router = APIRouter(prefix="/v1/billing")
+legacy_router = _legacy_router
 
 
-def _get_or_create_subscription(
-    db: Session, tenant_id: str
-) -> TenantSubscription:
-    """Return existing tenant subscription or create a free-tier one."""
-    existing = db.execute(
-        select(TenantSubscription).where(TenantSubscription.tenant_id == tenant_id)
-    ).scalar_one_or_none()
-    if existing:
-        return existing
-
-    free_plan = db.execute(
-        select(SubscriptionPlan).where(SubscriptionPlan.slug == "free").where(SubscriptionPlan.is_active.is_(True))
-    ).scalar_one_or_none()
-    if free_plan is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Default free plan is not configured.",
-        )
-
-    now = datetime.now(timezone.utc)
-    sub = TenantSubscription(
-        tenant_id=tenant_id,
-        plan_id=free_plan.id,
-        billing_interval="monthly",
-        status="active",
-        current_period_start=now,
-        current_period_end=now + timedelta(days=30),
-        seats=1,
-    )
-    db.add(sub)
-    try:
-        db.commit()
-        db.refresh(sub)
-    except IntegrityError:
-        db.rollback()
-        sub = db.execute(
-            select(TenantSubscription).where(TenantSubscription.tenant_id == tenant_id)
-        ).scalar_one()
-    return sub
-
-
-@legacy_router.get("/plans", response_model=SubscriptionPlanListResponse)
-def list_plans(
-    db: Session = Depends(get_db_session),
-) -> SubscriptionPlanListResponse:
-    rows = db.execute(
-        select(SubscriptionPlan)
-        .where(SubscriptionPlan.is_active.is_(True))
-        .order_by(SubscriptionPlan.sort_order.asc())
-    ).scalars().all()
-    return SubscriptionPlanListResponse(
-        plans=[SubscriptionPlanResponse.model_validate(r) for r in rows]
-    )
-
-
-@legacy_router.get("/subscription", response_model=TenantSubscriptionResponse)
-def get_subscription(
-    tenant_id: str = Depends(require_project_role("viewer")),
-    db: Session = Depends(get_db_session),
-) -> TenantSubscriptionResponse:
-    sub = _get_or_create_subscription(db, tenant_id)
-    return TenantSubscriptionResponse.model_validate(sub)
-
-
-@legacy_router.put("/subscription", response_model=TenantSubscriptionResponse)
-def update_subscription(
-    body: TenantSubscriptionUpdateRequest,
-    tenant_id: str = Depends(require_project_role("admin")),
-    db: Session = Depends(get_db_session),
-) -> TenantSubscriptionResponse:
-    sub = _get_or_create_subscription(db, tenant_id)
-
-    if body.plan_id is not None:
-        plan = db.execute(
-            select(SubscriptionPlan).where(SubscriptionPlan.id == body.plan_id).where(SubscriptionPlan.is_active.is_(True))
-        ).scalar_one_or_none()
-        if plan is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or inactive plan selected.",
-            )
-        sub.plan_id = plan.id
-
-    if body.billing_interval is not None:
-        if body.billing_interval not in {"monthly", "annual"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="billing_interval must be 'monthly' or 'annual'.",
-            )
-        sub.billing_interval = body.billing_interval
-
-    if body.status is not None:
-        if body.status not in {"active", "canceled", "past_due", "trialing"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid status value.",
-            )
-        sub.status = body.status
-        if body.status == "canceled" and sub.canceled_at is None:
-            sub.canceled_at = datetime.now(timezone.utc)
-
-    if body.seats is not None:
-        if body.seats < 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="seats must be at least 1.",
-            )
-        sub.seats = body.seats
-
-    db.commit()
-    db.refresh(sub)
-    return TenantSubscriptionResponse.model_validate(sub)
-
-
-@legacy_router.get("/usage", response_model=BillingUsageSummaryResponse)
-def get_usage_summary(
-    tenant_id: str = Depends(require_project_role("viewer")),
-    db: Session = Depends(get_db_session),
-) -> BillingUsageSummaryResponse:
-    sub = _get_or_create_subscription(db, tenant_id)
-    period_start = sub.current_period_start
-    period_end = sub.current_period_end
-    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-
-    # Use event_counts ledger for current-month call count (O(1) index seek).
-    # Fall back to calls table query for historical billing periods.
-    usage = _quota_get_usage(db, tenant_id)
-    if usage.month == current_month:
-        total_calls = usage.current_count
-    else:
-        total_calls = int(
-            db.execute(
-                select(func.count(Call.id))
-                .where(Call.project_id == tenant_id)
-                .where(Call.created_at >= period_start)
-                .where(Call.created_at < period_end)
-            ).scalar() or 0
-        )
-
-    result = db.execute(
-        select(
-            func.coalesce(func.sum(Call.total_tokens), 0).label("total_tokens"),
-            func.coalesce(func.sum(Call.cost_total), 0).label("total_cost"),
-        )
-        .where(Call.project_id == tenant_id)
-        .where(Call.created_at >= period_start)
-        .where(Call.created_at < period_end)
-    ).one()
-
-    total_tokens = int(result.total_tokens or 0)
-    total_cost = float(result.total_cost or 0)
-
-    plan_limit_calls = sub.plan.max_calls_per_month
-    plan_limit_tokens = sub.plan.max_tokens_per_month
-
-    overage_calls = None
-    overage_tokens = None
-    if plan_limit_calls is not None and total_calls > plan_limit_calls:
-        overage_calls = total_calls - plan_limit_calls
-    if plan_limit_tokens is not None and total_tokens > plan_limit_tokens:
-        overage_tokens = total_tokens - plan_limit_tokens
-
-    return BillingUsageSummaryResponse(
-        tenant_id=tenant_id,
-        period_start=period_start,
-        period_end=period_end,
-        total_calls=total_calls,
-        total_tokens=total_tokens,
-        total_cost_usd=total_cost,
-        plan_limit_calls=plan_limit_calls,
-        plan_limit_tokens=plan_limit_tokens,
-        overage_calls=overage_calls,
-        overage_tokens=overage_tokens,
+def _require_razorpay_paid_checkout(
+    *,
+    payment_id: str,
+    order_id: str,
+    org_id: str,
+    plan_code: str | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    return _internal_require_razorpay_paid_checkout(
+        payment_id=payment_id,
+        order_id=order_id,
+        org_id=org_id,
+        plan_code=plan_code,
+        client_factory=_razorpay_client,
     )
 
 
@@ -330,450 +178,7 @@ def _get_or_create_org_subscription(
     return row
 
 
-def _monthly_plan_amount_usd(plan_code: str) -> int | None:
-    """Return the public monthly USD price from the shared pricing contract."""
-    try:
-        contract = load_pricing_contract()
-    except Exception:
-        logger.exception("billing.pricing_contract_load_failed")
-        return None
-    canonical = "pro" if plan_code == "plus" else plan_code
-    for raw_plan in contract.get("plans", []):
-        if not isinstance(raw_plan, dict):
-            continue
-        if str(raw_plan.get("code") or "").strip().lower() != canonical:
-            continue
-        price = raw_plan.get("price")
-        if not isinstance(price, dict):
-            return None
-        amount = price.get("monthly_usd")
-        return int(amount) if isinstance(amount, (int, float)) else None
-    return None
-
-
-def _razorpay_credentials() -> tuple[str, str]:
-    settings = get_settings()
-    key_id = (settings.RAZORPAY_KEY_ID or "").strip()
-    key_secret = (settings.RAZORPAY_KEY_SECRET or "").strip()
-    if not key_id or not key_secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Razorpay credentials are not configured.",
-        )
-    return key_id, key_secret
-
-
-def _razorpay_client() -> razorpay.Client:
-    key_id, key_secret = _razorpay_credentials()
-    return razorpay.Client(auth=(key_id, key_secret))
-
-
-def _razorpay_auth_failure(exc: Exception) -> bool:
-    message = str(exc).lower()
-    return "auth" in message or "key" in message or "credential" in message
-
-
-def _razorpay_receipt(org_id: str, plan_code: str | None) -> str:
-    plan_part = (plan_code or "custom").strip().lower()[:10] or "custom"
-    org_part = org_id.replace(":", "_").replace("/", "_")[:12] or "org"
-    return f"zroky_{org_part}_{plan_part}_{uuid4().hex[:8]}"[:40]
-
-
-def _razorpay_amount_for_plan(plan_code: str) -> tuple[int, int]:
-    """Return (amount_paise, monthly_amount_usd) for a self-serve plan."""
-    amount_usd = _monthly_plan_amount_usd(plan_code)
-    if amount_usd is None or amount_usd <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Plan {plan_code!r} is not configured with a billable monthly amount.",
-        )
-
-    settings = get_settings()
-    rate = Decimal(str(settings.ZROKY_EXCHANGE_RATE_USD_TO_INR))
-    if rate <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="ZROKY_EXCHANGE_RATE_USD_TO_INR must be greater than zero.",
-        )
-    amount = (Decimal(str(amount_usd)) * rate * Decimal("100")).quantize(
-        Decimal("1"),
-        rounding=ROUND_HALF_UP,
-    )
-    return max(100, int(amount)), amount_usd
-
-
-def _verify_razorpay_signature(
-    *,
-    order_id: str,
-    payment_id: str,
-    signature: str,
-) -> bool:
-    _, key_secret = _razorpay_credentials()
-    payload = f"{order_id}|{payment_id}".encode("utf-8")
-    expected = hmac.new(
-        key_secret.encode("utf-8"),
-        payload,
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature)
-
-
-def _razorpay_status(entity: dict[str, Any]) -> str:
-    return str(entity.get("status") or "").strip().lower()
-
-
-def _razorpay_payment_is_captured(payment: dict[str, Any]) -> bool:
-    return _razorpay_status(payment) == "captured" or payment.get("captured") is True
-
-
-def _razorpay_order_is_paid(order: dict[str, Any]) -> bool:
-    return _razorpay_status(order) == "paid"
-
-
-def _razorpay_webhook_confirms_paid(
-    *, event_type: str, payment: dict[str, Any], order: dict[str, Any]
-) -> bool:
-    if event_type in {"payment.captured", "payment.succeeded"}:
-        return _razorpay_payment_is_captured(payment)
-    if event_type == "order.paid":
-        return _razorpay_order_is_paid(order)
-    return False
-
-
-def _razorpay_notes(*entities: dict[str, Any]) -> dict[str, Any]:
-    for entity in entities:
-        raw = entity.get("notes")
-        if isinstance(raw, dict):
-            return raw
-    return {}
-
-
-def _int_or_none(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _fetch_razorpay_payment_and_order(
-    *, payment_id: str, order_id: str
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    client = _razorpay_client()
-    try:
-        payment = client.payment.fetch(payment_id)
-        order = client.order.fetch(order_id)
-    except BadRequestError as exc:
-        logger.exception("billing.razorpay_payment_verify_bad_request")
-        status_code = (
-            status.HTTP_401_UNAUTHORIZED
-            if _razorpay_auth_failure(exc)
-            else status.HTTP_400_BAD_REQUEST
-        )
-        detail = (
-            "Razorpay authentication failed."
-            if status_code == status.HTTP_401_UNAUTHORIZED
-            else "Razorpay payment or order could not be verified."
-        )
-        raise HTTPException(status_code=status_code, detail=detail) from exc
-    except (GatewayError, ServerError) as exc:
-        logger.exception("billing.razorpay_payment_verify_gateway_error")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Razorpay payment verification is temporarily unavailable.",
-        ) from exc
-    except Exception as exc:
-        logger.exception("billing.razorpay_payment_verify_failed")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Razorpay payment verification failed.",
-        ) from exc
-
-    if not isinstance(payment, dict) or not isinstance(order, dict):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Razorpay payment verification returned an invalid response.",
-        )
-    return payment, order
-
-
-def _require_razorpay_paid_checkout(
-    *,
-    payment_id: str,
-    order_id: str,
-    org_id: str,
-    plan_code: str | None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    payment, order = _fetch_razorpay_payment_and_order(
-        payment_id=payment_id,
-        order_id=order_id,
-    )
-
-    payment_order_id = str(payment.get("order_id") or "").strip()
-    fetched_order_id = str(order.get("id") or "").strip()
-    if payment_order_id and payment_order_id != order_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Razorpay payment does not belong to the verified order.",
-        )
-    if fetched_order_id and fetched_order_id != order_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Razorpay order response does not match the verified order.",
-        )
-    if not (
-        _razorpay_payment_is_captured(payment)
-        or _razorpay_order_is_paid(order)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Razorpay payment is not captured or order is not paid yet.",
-        )
-
-    notes = _razorpay_notes(payment, order)
-    note_org_id = str(notes.get("org_id") or "").strip()
-    if note_org_id != org_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Razorpay order metadata does not match this org.",
-        )
-
-    provider_currency = str(
-        payment.get("currency") or order.get("currency") or ""
-    ).strip().upper()
-    if provider_currency and provider_currency != "INR":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Razorpay payment currency does not match checkout currency.",
-        )
-
-    if plan_code:
-        try:
-            expected_plan = _normalize_razorpay_plan_code(plan_code)
-        except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Stored Razorpay plan is not valid for self-serve checkout.",
-            ) from exc
-
-        note_plan_code = str(notes.get("plan_code") or "").strip().lower()
-        try:
-            note_plan_code = _normalize_razorpay_plan_code(note_plan_code)
-        except (InvalidPlanCodeError, PlanNotSelfServeError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Razorpay order metadata does not match the selected plan.",
-            ) from exc
-        if note_plan_code != expected_plan:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Razorpay order metadata does not match the selected plan.",
-            )
-
-        expected_amount, _ = _razorpay_amount_for_plan(expected_plan)
-        for provider_amount in (
-            _int_or_none(payment.get("amount")),
-            _int_or_none(order.get("amount")),
-        ):
-            if provider_amount is not None and provider_amount != expected_amount:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Razorpay payment amount does not match the selected plan.",
-                )
-
-    return payment, order
-
-
-def _parse_stored_razorpay_request(value: str | None) -> tuple[str | None, str | None]:
-    if not value:
-        return None, None
-    order_id, _, plan_code = value.partition(":")
-    return order_id.strip() or None, plan_code.strip().lower() or None
-
-
-_RAZORPAY_PLAN_ALIASES: dict[str, str] = {
-    "plus": "pro",
-}
-
-
-def _normalize_razorpay_plan_code(plan_code: str) -> str:
-    raw = (plan_code or "").strip().lower()
-    return assert_self_serve_plan(_RAZORPAY_PLAN_ALIASES.get(raw, raw))
-
-
-def _razorpay_webhook_event_id(event: dict[str, Any], raw_body: bytes) -> str:
-    explicit = event.get("id") or event.get("event_id")
-    if explicit:
-        return str(explicit)
-    payment = (
-        event.get("payload", {})
-        .get("payment", {})
-        .get("entity", {})
-    )
-    if isinstance(payment, dict) and payment.get("id"):
-        return f"{event.get('event') or 'razorpay'}:{payment['id']}"
-    digest = hashlib.sha256(raw_body).hexdigest()[:32]
-    return f"razorpay:{digest}"
-
-
-def _verify_razorpay_webhook_signature(*, payload: bytes, signature: str | None) -> None:
-    secret = (get_settings().RAZORPAY_WEBHOOK_SECRET or "").strip()
-    if not secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="RAZORPAY_WEBHOOK_SECRET is not configured.",
-        )
-    if not signature:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing Razorpay webhook signature.",
-        )
-    expected = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, signature):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Razorpay webhook signature mismatch.",
-        )
-
-
 # ── schemas ──────────────────────────────────────────────────────────────────
-
-
-class CheckoutRequest(BaseModel):
-    plan_code: str = Field(
-        description=(
-            "Self-serve plan code: 'pilot' | 'pro' | 'plus'. "
-            "'enterprise' is sales-led; 'free' has no checkout."
-        ),
-        examples=["pro"],
-    )
-    customer_email: str | None = Field(
-        default=None,
-        max_length=320,
-        description="Optional billing contact email for Razorpay reconciliation.",
-    )
-
-
-class CheckoutResponse(BaseModel):
-    session_id: str
-    checkout_url: str
-    plan_code: str
-    org_id: str
-    payment_provider: str = "razorpay"
-    payment_request_id: str
-    manual_confirmation_required: bool = False
-    instructions: str
-    amount_usd: int | None = None
-    currency: str = "INR"
-
-
-class RazorpayOrderRequest(BaseModel):
-    plan_code: str | None = Field(
-        default=None,
-        description=(
-            "Optional self-serve plan code. When present, the backend computes "
-            "the INR paise amount from the pricing contract."
-        ),
-        examples=["pro"],
-    )
-    amount: int | None = Field(
-        default=None,
-        ge=100,
-        description="Custom order amount in the smallest currency unit; paise for INR.",
-    )
-    currency: str = Field(
-        default="INR",
-        min_length=3,
-        max_length=3,
-        description="ISO currency code. Plan checkout currently uses INR.",
-    )
-    receipt: str | None = Field(
-        default=None,
-        max_length=40,
-        description="Optional Razorpay receipt id for reconciliation.",
-    )
-    customer_email: str | None = Field(default=None, max_length=320)
-
-    @model_validator(mode="after")
-    def require_plan_or_amount(self) -> "RazorpayOrderRequest":
-        if not self.plan_code and self.amount is None:
-            raise ValueError("Either plan_code or amount is required.")
-        return self
-
-
-class RazorpayOrderResponse(BaseModel):
-    order_id: str
-    amount: int
-    currency: str
-    receipt: str | None = None
-    plan_code: str | None = None
-    org_id: str
-    payment_provider: str = "razorpay"
-    amount_usd: int | None = None
-
-
-class RazorpayVerifyRequest(BaseModel):
-    razorpay_payment_id: str = Field(min_length=1)
-    razorpay_order_id: str = Field(min_length=1)
-    razorpay_signature: str = Field(min_length=1)
-
-
-class RazorpayVerifyResponse(BaseModel):
-    success: bool
-    order_id: str
-    payment_id: str
-    org_id: str
-    plan_code: str | None = None
-
-
-class PortalResponse(BaseModel):
-    session_id: str
-    portal_url: str
-    org_id: str
-    payment_provider: str = "razorpay"
-
-
-class WebhookResponse(BaseModel):
-    received: bool
-    duplicate: bool
-    event_type: str
-    result: str  # 'applied' | 'skipped' | 'failed'
-    affected_org_id: str | None = None
-
-
-class BillingMeResponse(BaseModel):
-    org_id: str
-    plan_code: str
-    status: str
-    seats: int
-    payment_provider: str = "razorpay"
-    payment_customer_ref: str | None = None
-    payment_subscription_ref: str | None = None
-    payment_request_ref: str | None = None
-    current_period_end: str | None = None
-    trial_end: str | None = None
-    # Module 12 — Reliability SLA tier (plan §11.4). 'none' for
-    # Free/Pro/Plus; 'team'/'enterprise' for tiers carrying the
-    # refund-on-miss SLA contract. Read-only here; mutations happen
-    # exclusively in the Founder Console (Module 13).
-    sla_tier: str = Field(
-        default="none",
-        description=(
-            "Reliability SLA tier: 'none' | 'team' | 'enterprise'. "
-            "Mutated only by the Founder Console — the lifecycle "
-            "sweep does NOT reset this on auto-downgrade so refund "
-            "eligibility audits remain reconstructable."
-        ),
-    )
-    plan_template: dict[str, Any] = Field(
-        default_factory=dict,
-        description=(
-            "Effective resolved entitlement template for the current org. "
-            "Falls back to free when billing is incomplete, canceled, or "
-            "unpaid, and includes active trial or override rows."
-        ),
-    )
 
 
 def _usage_meter(*, used: int, limit: int | None, resets_at: str | None = None) -> BillingUsageMeter:

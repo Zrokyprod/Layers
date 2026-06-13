@@ -165,12 +165,19 @@ jobs:
           python -m pip install -r zroky-backend/requirements.txt -r zroky-backend/requirements-dev.txt
           python -m pip install -e zroky-sdk
 
-      - name: Prove failure to CI block loop
+      - name: Prove launch-ready money path
         env:
           TMPDIR: ${{ runner.temp }}/zroky-money-path
         run: |
           mkdir -p "$TMPDIR"
           python scripts/run_money_path_demo.py --json
+
+      - name: Prove blocking Golden stops regression
+        env:
+          TMPDIR: ${{ runner.temp }}/zroky-money-path-blocked
+        run: |
+          mkdir -p "$TMPDIR"
+          python scripts/run_money_path_demo.py --json --blocked-ci-demo
 
   dashboard:
     name: Dashboard reliability surfaces

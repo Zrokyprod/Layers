@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.models import ReplayJob, ReplayResult, ResultPayload
 from app.config import Settings
 from app import main as worker_main
-from app.runner import _parse_artifact, run_job
+from app.runner import _parse_artifact, _request_judge_verdict, run_job
 
 
 def _job(**overrides: object) -> ReplayJob:
@@ -70,6 +70,58 @@ def test_run_job_without_openrouter_key_returns_controlled_failure(monkeypatch) 
     assert result.diff_metric is not None
     assert result.stdout_tail is not None
     assert "OPENROUTER_API_KEY not configured" in result.stdout_tail
+
+
+def test_request_judge_verdict_uses_control_plane_replay_judge_contract(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, str]:
+            return {"verdict": "pass"}
+
+    class FakeClient:
+        def __init__(self, *, timeout: int):
+            captured["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> FakeResponse:
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setenv("CONTROL_PLANE_URL", "https://control.example")
+    monkeypatch.setenv("WORKER_TOKEN", "worker-token")
+    monkeypatch.setattr("app.runner.httpx.Client", FakeClient)
+
+    verdict = _request_judge_verdict(
+        trace_id="trace_1",
+        expected_output="approved",
+        actual_output="approved",
+        diff_metric=0.0,
+        context={"model": "openai/gpt-test", "agent_name": "refund-agent"},
+    )
+
+    assert verdict == "pass"
+    assert captured["timeout"] == 20
+    assert captured["url"] == "https://control.example/v1/replay/judge"
+    assert captured["headers"] == {"Authorization": "Bearer worker-token"}
+    assert captured["json"] == {
+        "trace_id": "trace_1",
+        "expected_output": "approved",
+        "actual_output": "approved",
+        "diff_metric": 0.0,
+        "model": "openai/gpt-test",
+        "agent_name": "refund-agent",
+    }
 
 
 def test_result_payload_serializes_for_control_plane() -> None:

@@ -993,11 +993,100 @@ def _mark_ci_gate_failed(
         session.commit()
 
 
+def _mark_ci_gate_passed(
+    session_local: Any,
+    *,
+    ci_run_id: str,
+    golden_trace_id: str,
+    issue_id: str,
+) -> None:
+    from app.db.models import GoldenTrace, ReplayRun, ReplayRunTrace
+    from app.services.replay_runs import parse_summary
+
+    now = datetime.now(timezone.utc)
+    with session_local() as session:
+        run = session.get(ReplayRun, ci_run_id)
+        trace = session.get(GoldenTrace, golden_trace_id)
+        _assert(run is not None, "CI gate replay run was not found.")
+        _assert(trace is not None, "CI gate Golden trace was not found.")
+
+        summary = parse_summary(run.summary_json)
+        summary.update(
+            {
+                "source_kind": "issue_ci_gate",
+                "source_issue_id": issue_id,
+                "source_call_id": CALL_ID,
+                "source_issue_failure_code": "TOOL_NOT_CALLED",
+                "source_issue_severity": "critical",
+                "source_context": {
+                    "kind": "issue_ci_gate",
+                    "id": issue_id,
+                    "issue_id": issue_id,
+                    "call_id": CALL_ID,
+                    "title": "Refund status tool skipped",
+                    "reason": f"Verified: {EXPECTED_TOOL} was called before answering.",
+                    "failure_code": "TOOL_NOT_CALLED",
+                    "severity": "critical",
+                    "affected_agent": "refund-support-agent",
+                    "affected_workflow": "refund-status",
+                    "occurrence_count": 1,
+                    "last_seen_at": now.isoformat(),
+                    "origin": "ci_gate",
+                },
+                "golden_trace_id": golden_trace_id,
+                "requested_replay_mode": "mocked-tool",
+                "replay_mode": "mocked-tool",
+                "verified_fix": True,
+                "verification_status": "verified_fix",
+                "trace_count_executed": 1,
+                "pass_count": 1,
+                "fail_count": 0,
+                "error_count": 0,
+                "blocked": False,
+                "tool_behavior_diff": {
+                    "expected_tool": EXPECTED_TOOL,
+                    "candidate_tool_calls": [EXPECTED_TOOL],
+                    "required_tool_called": True,
+                },
+            }
+        )
+        run.status = "pass"
+        run.started_at = run.started_at or now
+        run.completed_at = now
+        run.summary_json = json.dumps(summary, separators=(",", ":"), default=str)
+        session.add(run)
+        session.add(
+            ReplayRunTrace(
+                id=str(uuid4()),
+                replay_run_id=run.id,
+                golden_trace_id=trace.id,
+                project_id=PROJECT_ID,
+                call_id_replayed=CALL_ID,
+                status="pass",
+                output_text=FIXED_OUTPUT,
+                judge_scores_json=json.dumps(
+                    {
+                        "tool_behavior": 1.0,
+                        "required_tool_called": True,
+                        "blocks_ci": True,
+                    },
+                    separators=(",", ":"),
+                ),
+                diff_metric=0.0,
+                created_at=now,
+                completed_at=now,
+            )
+        )
+        session.commit()
+
+
 def _prove_issue_workflow(
     client: Any,
     session_local: Any,
     api_headers: dict[str, str],
     enqueued: list[tuple[str, str]],
+    *,
+    blocked_ci_demo: bool,
 ) -> dict[str, str]:
     issue_id = _create_issue(session_local)
     _assert_failure_inbox_contains_issue(client, api_headers, issue_id)
@@ -1096,29 +1185,38 @@ def _prove_issue_workflow(
     ci_run_id = str(ci["ci_gate"]["run_id"])
     _assert(ci["ci_gate"]["status"] == "pending", "CI gate run did not dispatch as pending.")
     _assert(enqueued == [(ci_run_id, PROJECT_ID)], f"Replay worker enqueue mismatch: {enqueued!r}")
-    _mark_ci_gate_failed(
-        session_local,
-        ci_run_id=ci_run_id,
-        golden_trace_id=golden_trace_id,
-        issue_id=issue_id,
-    )
+    if blocked_ci_demo:
+        _mark_ci_gate_failed(
+            session_local,
+            ci_run_id=ci_run_id,
+            golden_trace_id=golden_trace_id,
+            issue_id=issue_id,
+        )
+    else:
+        _mark_ci_gate_passed(
+            session_local,
+            ci_run_id=ci_run_id,
+            golden_trace_id=golden_trace_id,
+            issue_id=issue_id,
+        )
 
-    blocked_issue = _assert_response(
+    gated_issue = _assert_response(
         client.get(f"/v1/issues/{issue_id}", headers=api_headers),
         200,
-        "get issue after failed CI gate",
+        "get issue after CI gate",
     )
     _assert(
-        blocked_issue["proof"]["golden"]["blocks_ci"] is True,
+        gated_issue["proof"]["golden"]["blocks_ci"] is True,
         "Promoted Golden is not marked as CI-blocking.",
     )
     _assert(
-        blocked_issue["proof"]["ci_gate"]["run_id"] == ci_run_id,
+        gated_issue["proof"]["ci_gate"]["run_id"] == ci_run_id,
         "Issue proof did not point at the CI gate run.",
     )
+    expected_ci_status = "fail" if blocked_ci_demo else "pass"
     _assert(
-        blocked_issue["proof"]["ci_gate"]["status"] == "fail",
-        "Failed blocking Golden did not mark the CI gate as failed.",
+        gated_issue["proof"]["ci_gate"]["status"] == expected_ci_status,
+        f"CI gate status was not {expected_ci_status}.",
     )
 
     return {
@@ -1186,6 +1284,7 @@ def _collect_release_evidence(
     api_headers: dict[str, str],
     *,
     runtime_policy: dict[str, Any],
+    blocked_ci_demo: bool,
 ) -> dict[str, Any]:
     usage = _assert_response(
         client.get("/v1/billing/usage", headers=api_headers),
@@ -1215,7 +1314,16 @@ def _collect_release_evidence(
     _assert(tenant["captures_24h"] >= 1, "Owner money-path did not show recent capture.")
     _assert(tenant["golden_trace_count"] >= 1, "Owner money-path did not show active Goldens.")
     _assert(tenant["provider_key_status"]["state"] != "missing", "Owner money-path did not show provider key evidence.")
-    _assert(tenant["blocked_regressions_7d"] >= 1, "Owner money-path did not show blocked regression evidence.")
+    if blocked_ci_demo:
+        _assert(
+            tenant["blocked_regressions_7d"] >= 1,
+            "Owner money-path did not show blocked regression evidence.",
+        )
+    else:
+        _assert(
+            tenant["blocked_regressions_7d"] == 0,
+            f"Launch-ready demo still has blocked regressions: {tenant['blocked_regressions_7d']}",
+        )
     _assert(tenant["verified_fixes_7d"] >= 1, "Owner money-path did not show verified fix evidence.")
     _assert(
         tenant["pricing_cost_status"]["state"] == "ok",
@@ -1243,13 +1351,15 @@ def _collect_release_evidence(
         "owner launch readiness",
     )
     gate_statuses = {gate["code"]: gate["status"] for gate in launch.get("gates", [])}
+    expected_launch_allowed = not blocked_ci_demo
+    expected_ci_gate = "fail" if blocked_ci_demo else "pass"
     _assert(
-        launch["paid_launch_allowed"] is False,
-        "The local demo intentionally includes a failed CI gate and must not mark paid launch allowed.",
+        launch["paid_launch_allowed"] is expected_launch_allowed,
+        f"Unexpected paid launch decision: {launch['paid_launch_allowed']}",
     )
     _assert(
-        gate_statuses.get("durable_ci_gate") == "fail",
-        f"Launch readiness did not flag the failed CI gate: {gate_statuses}",
+        gate_statuses.get("durable_ci_gate") == expected_ci_gate,
+        f"Launch readiness CI gate status mismatch: {gate_statuses}",
     )
     _assert(
         gate_statuses.get("billing_quota") == "pass",
@@ -1263,8 +1373,11 @@ def _collect_release_evidence(
         gate_statuses.get("runtime_risk_stop") in {"pass", "fail", "not_verified"},
         "Launch readiness did not include runtime risk stop gate.",
     )
+    expected_blockers = (
+        ["durable_ci_gate:blocking_ci_failures"] if blocked_ci_demo else []
+    )
     _assert(
-        launch["hard_blockers"] == ["durable_ci_gate:blocking_ci_failures"],
+        launch["hard_blockers"] == expected_blockers,
         f"Unexpected owner launch blockers remained: {launch['hard_blockers']}",
     )
 
@@ -1293,7 +1406,13 @@ def _collect_release_evidence(
     }
 
 
-def _run_flow(client: Any, session_local: Any, enqueued: list[tuple[str, str]]) -> dict[str, Any]:
+def _run_flow(
+    client: Any,
+    session_local: Any,
+    enqueued: list[tuple[str, str]],
+    *,
+    blocked_ci_demo: bool,
+) -> dict[str, Any]:
     owner_token = _seed_project_and_plan(session_local)
     _seed_owner_value_tenant(session_local)
     api_key, api_key_id, api_key_prefix = _create_api_key(client, owner_token)
@@ -1301,14 +1420,22 @@ def _run_flow(client: Any, session_local: Any, enqueued: list[tuple[str, str]]) 
     provider_key_id = _seed_provider_key(session_local)
     _ingest_sdk_call(client, api_headers)
     _stamp_demo_call_pricing(session_local)
-    issue_state = _prove_issue_workflow(client, session_local, api_headers, enqueued)
+    issue_state = _prove_issue_workflow(
+        client,
+        session_local,
+        api_headers,
+        enqueued,
+        blocked_ci_demo=blocked_ci_demo,
+    )
     runtime_policy = _prove_runtime_policy_stop(client, api_headers)
     release_evidence = _collect_release_evidence(
         client,
         api_headers,
         runtime_policy=runtime_policy,
+        blocked_ci_demo=blocked_ci_demo,
     )
     return {
+        "demo_mode": "blocked_ci" if blocked_ci_demo else "launch_ready",
         "project_id": PROJECT_ID,
         "api_key_id": api_key_id,
         "api_key_prefix": api_key_prefix,
@@ -1328,6 +1455,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Print one machine-readable JSON summary instead of key=value lines.",
     )
+    parser.add_argument(
+        "--blocked-ci-demo",
+        action="store_true",
+        help="Run the negative scenario that proves a blocking Golden fails launch readiness.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1337,6 +1469,7 @@ def _print_result(result: dict[str, Any], *, as_json: bool) -> None:
         return
     scalar_keys = [
         "project_id",
+        "demo_mode",
         "api_key_id",
         "api_key_prefix",
         "provider_key_id",
@@ -1414,7 +1547,12 @@ def main(argv: list[str] | None = None) -> int:
         try:
             client = TestClient(app)
             try:
-                result = _run_flow(client, session_local, enqueued)
+                result = _run_flow(
+                    client,
+                    session_local,
+                    enqueued,
+                    blocked_ci_demo=args.blocked_ci_demo,
+                )
             finally:
                 client.close()
         finally:
