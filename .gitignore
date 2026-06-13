@@ -77,6 +77,10 @@ lint_output.txt
 .vscode/
 .idea/
 .codex/
+.windsurf/
+.claude/
+.devin/
+.kiro/
 *.swp
 *.swo
 *~
