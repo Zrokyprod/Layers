@@ -54,7 +54,7 @@ function LoginForm() {
     <AuthCard
       eyebrow="Existing workspace"
       title="Sign in to Zroky"
-      subtitle="Resume incident triage, replay verification, golden traces, and CI regression gates."
+      subtitle="Review failed runs, replay proof, golden contracts, CI gates, and owner evidence."
       footer={<Link href="/signup" className="auth-link">Don&apos;t have an account? Sign up</Link>}
     >
       {error && <div className="auth-banner auth-banner-error">{error}</div>}
@@ -89,8 +89,8 @@ function LoginForm() {
       <AuthAssuranceList
         items={[
           "OAuth and password sign-in stay available",
-          "Returns to the workspace route you requested",
-          "Protected session for dashboard access",
+          "Returns to the reliability route you requested",
+          "Protected session for the workspace",
         ]}
       />
     </AuthCard>

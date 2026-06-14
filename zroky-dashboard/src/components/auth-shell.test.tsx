@@ -20,13 +20,13 @@ describe("AuthShell", () => {
     const logo = screen.getByRole("img", { name: "Zroky" });
     expect(logo.getAttribute("src")).toBe("/zroky-auth-logo.png");
     expect(screen.queryByText("ZROKY RELIABILITY")).not.toBeInTheDocument();
-    expect(screen.getByText("Catch. Replay. Guard.")).toBeInTheDocument();
+    expect(screen.getByText("From failure to release gate.")).toBeInTheDocument();
     expect(screen.queryByText("Protected access")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Zroky reliability loop")).toBeInTheDocument();
     expect(screen.getByLabelText("Reliability proof preview")).toBeInTheDocument();
-    expect(screen.getAllByText("Trace").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Incidents").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Replay").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Guard").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Goldens").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe("/signup");

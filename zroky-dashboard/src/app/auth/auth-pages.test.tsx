@@ -80,7 +80,7 @@ describe("auth pages", () => {
     render(<LoginPage />);
 
     expect(screen.getByRole("heading", { name: "Sign in to Zroky" })).toBeInTheDocument();
-    expect(screen.getByText("Resume incident triage, replay verification, golden traces, and CI regression gates.")).toBeInTheDocument();
+    expect(screen.getByText("Review failed runs, replay proof, golden contracts, CI gates, and owner evidence.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Zroky" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
@@ -89,7 +89,7 @@ describe("auth pages", () => {
     render(<SignupPage />);
 
     expect(screen.getByRole("heading", { name: "Create your Zroky workspace" })).toBeInTheDocument();
-    expect(screen.getByText("Start capturing failed agent runs and turn replay proof into regression gates.")).toBeInTheDocument();
+    expect(screen.getByText("Create the workspace where failed agent runs become replay proof and release gates.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
   });
 
@@ -97,7 +97,7 @@ describe("auth pages", () => {
     render(<ForgotPasswordPage />);
 
     expect(screen.getByRole("heading", { name: "Recover workspace access" })).toBeInTheDocument();
-    expect(screen.getByText("Send a private reset link without exposing whether an email exists.")).toBeInTheDocument();
+    expect(screen.getByText("Send a reset link while keeping account discovery private.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send reset link" })).toBeInTheDocument();
   });
 
@@ -107,7 +107,7 @@ describe("auth pages", () => {
     render(<ResetPasswordPage />);
 
     expect(screen.getByRole("heading", { name: "Set a new password" })).toBeInTheDocument();
-    expect(screen.getByText("Choose a new key for your Zroky workspace session.")).toBeInTheDocument();
+    expect(screen.getByText("Set a new key for your reliability workspace session.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update password" })).toBeInTheDocument();
   });
 
@@ -115,6 +115,6 @@ describe("auth pages", () => {
     render(<VerifyEmailPage />);
 
     expect(screen.getByRole("heading", { name: "Verify your email" })).toBeInTheDocument();
-    expect(screen.getByText("One confirmation unlocks the reliability workspace.")).toBeInTheDocument();
+    expect(screen.getByText("Confirm your email to unlock trace capture, replay, and golden gates.")).toBeInTheDocument();
   });
 });

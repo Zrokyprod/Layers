@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
+import { motion, useReducedMotion, type Variants } from "motion/react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { useState } from "react";
 
@@ -41,61 +42,82 @@ type AuthButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 type AuthProvider = "google" | "github";
 
-const reliabilityLoop = ["Failure", "Evidence", "Replay", "Gate"];
+const authFade: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.42, ease: "easeOut" },
+  },
+};
+
+const authStagger: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
+  },
+};
+
+const reliabilityLoop = ["Capture", "Diagnose", "Replay", "Gate"];
 
 const proofCards = [
   {
     icon: ScanLine,
-    title: "Trace",
-    copy: "Every failed run keeps its evidence.",
+    title: "Incidents",
+    copy: "Every failed run keeps the trace.",
   },
   {
     icon: GitBranch,
     title: "Replay",
-    copy: "Fixes run against the exact scenario.",
+    copy: "Fixes run against real evidence.",
   },
   {
     icon: ShieldCheck,
-    title: "Guard",
+    title: "Goldens",
     copy: "CI blocks repeat regressions.",
   },
 ] satisfies Array<{ icon: LucideIcon; title: string; copy: string }>;
 
 const consoleRows = [
-  { label: "Failed run", value: "Captured", tone: "accent" },
+  { label: "Trace evidence", value: "Captured", tone: "accent" },
   { label: "Root cause", value: "Diagnosed", tone: "neutral" },
   { label: "Replay proof", value: "Verified", tone: "green" },
-  { label: "Regression gate", value: "Ready", tone: "neutral" },
+  { label: "CI release gate", value: "Armed", tone: "neutral" },
 ] as const;
 
 export function AuthBrandPanel() {
+  const shouldReduceMotion = useReducedMotion();
+  const motionProps = shouldReduceMotion
+    ? { initial: false as const }
+    : { initial: "hidden", animate: "visible", variants: authStagger };
+
   return (
-    <section className="auth-brand-panel" aria-label="Zroky reliability platform">
-      <div className="auth-mark-row">
+    <motion.section className="auth-brand-panel" aria-label="Zroky reliability platform" {...motionProps}>
+      <motion.div className="auth-mark-row" variants={authFade}>
         <div className="auth-logo-wrap">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/zroky-auth-logo.png" alt="Zroky" className="auth-logo" />
         </div>
-      </div>
-      <div className="auth-brand-copy">
-        <p className="auth-kicker">AI reliability control plane</p>
-        <h1>Catch. Replay. Guard.</h1>
+      </motion.div>
+      <motion.div className="auth-brand-copy" variants={authFade}>
+        <p className="auth-kicker">AI agent reliability control plane</p>
+        <h1>From failure to release gate.</h1>
         <p className="auth-brand-subtitle">
-          Enter the workspace where failed AI-agent runs become diagnosis, replay proof, golden traces, and CI gates.
+          Enter the workspace where failed AI-agent runs become trace evidence, replay proof, golden contracts, and CI gates.
         </p>
-      </div>
-      <ol className="auth-loop" aria-label="Zroky reliability loop">
+      </motion.div>
+      <motion.ol className="auth-loop" aria-label="Zroky reliability loop" variants={authFade}>
         {reliabilityLoop.map((step, index) => (
           <li key={step}>
             <span>{step}</span>
             {index < reliabilityLoop.length - 1 && <b aria-hidden="true">-&gt;</b>}
           </li>
         ))}
-      </ol>
-      <div className="auth-signal-console" aria-label="Reliability proof preview">
+      </motion.ol>
+      <motion.div className="auth-signal-console" aria-label="Reliability proof preview" variants={authFade}>
         <div className="auth-console-header">
           <span className="auth-console-dot" aria-hidden="true" />
-          <span>Failure path preview</span>
+          <span>Reliability path preview</span>
         </div>
         <div className="auth-console-flow">
           {consoleRows.map((row) => (
@@ -105,8 +127,8 @@ export function AuthBrandPanel() {
             </div>
           ))}
         </div>
-      </div>
-      <div className="auth-proof-grid">
+      </motion.div>
+      <motion.div className="auth-proof-grid" variants={authFade}>
         {proofCards.map((card) => (
           <article key={card.title} className="auth-proof-card">
             <card.icon size={16} aria-hidden="true" />
@@ -114,18 +136,26 @@ export function AuthBrandPanel() {
             <span>{card.copy}</span>
           </article>
         ))}
-      </div>
-    </section>
+      </motion.div>
+    </motion.section>
   );
 }
 
 export function AuthShell({ children }: AuthShellProps) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <main className="auth-shell">
       <AuthBrandPanel />
-      <section className="auth-form-panel" aria-label="Authentication form">
+      <motion.section
+        className="auth-form-panel"
+        aria-label="Authentication form"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 18 }}
+        animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.44, ease: "easeOut" as const, delay: 0.08 }}
+      >
         {children}
-      </section>
+      </motion.section>
     </main>
   );
 }

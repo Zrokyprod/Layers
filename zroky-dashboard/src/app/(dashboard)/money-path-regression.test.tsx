@@ -340,11 +340,11 @@ describe("money-path dashboard regression proof", () => {
   it("renders the money-path issue in Command Center with verified replay state", async () => {
     render(<IssuesPage />);
 
-    expect(await screen.findByRole("heading", { name: "Issues" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Failures" })).toBeInTheDocument();
     const row = screen.getByText("Refund status tool skipped").closest("tr");
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText("Verified fix")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText(/refund-support-agent.*17 affected calls/)).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText(/refund-support-agent.*17 affected traces/)).toBeInTheDocument();
     expect(within(row as HTMLElement).getByRole("link", { name: /View issue/i }).getAttribute("href")).toBe(
       `/issues/${moneyPathIds.issueId}`,
     );
@@ -373,7 +373,7 @@ describe("money-path dashboard regression proof", () => {
   it("renders Replay queue with the verified replay and failed CI replay run", () => {
     render(<ReplayPage />);
 
-    expect(screen.getByRole("heading", { name: "Prove the fix before it ships." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Replay" })).toBeInTheDocument();
     expect(screen.getAllByText(moneyPathIds.issueId).length).toBeGreaterThan(0);
     expect(screen.getByText(`Run ${moneyPathIds.replayRunId.slice(0, 16)}`)).toBeInTheDocument();
     expect(screen.getByText(`Run ${moneyPathIds.ciRunId.slice(0, 16)}`)).toBeInTheDocument();

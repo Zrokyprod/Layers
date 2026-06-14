@@ -96,7 +96,7 @@ export default function ResetPasswordPage() {
       <AuthCard
         eyebrow="Secure reset"
         title="Set a new password"
-        subtitle="Choose a new key for your Zroky workspace session."
+        subtitle="Set a new key for your reliability workspace session."
         footer={<Link href="/login" className="auth-link">Back to login</Link>}
       >
         <Suspense fallback={<p className="hint">Loading...</p>}>

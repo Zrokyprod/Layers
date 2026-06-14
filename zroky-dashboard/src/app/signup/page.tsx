@@ -59,7 +59,7 @@ export default function SignupPage() {
       <AuthCard
         eyebrow="New reliability workspace"
         title="Create your Zroky workspace"
-        subtitle="Start capturing failed agent runs and turn replay proof into regression gates."
+        subtitle="Create the workspace where failed agent runs become replay proof and release gates."
         footer={<Link href="/login" className="auth-link">Already have an account? Sign in</Link>}
       >
         <div className="auth-oauth-stack">
@@ -100,9 +100,9 @@ export default function SignupPage() {
         </form>
         <AuthAssuranceList
           items={[
-            "Email verification protects the workspace",
+            "Email verification protects workspace access",
             "Capture failed runs after setup",
-            "Replay, Goldens, and CI gates are ready",
+            "Replay, Goldens, and CI gates stay connected",
           ]}
         />
       </AuthCard>

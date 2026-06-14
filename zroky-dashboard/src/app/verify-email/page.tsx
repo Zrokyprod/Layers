@@ -48,7 +48,7 @@ function VerifyEmailContent() {
     return (
       <>
         <AuthEmailNotice>
-          We sent a verification link to {email ? <strong>{email}</strong> : "your email address"}. Open it to unlock your reliability workspace.
+          We sent a verification link to {email ? <strong>{email}</strong> : "your email address"}. Open it to unlock trace capture, replay, and golden gates.
         </AuthEmailNotice>
         {message && (
           <div className={`auth-banner ${resendStatus === "error" ? "auth-banner-error" : "auth-banner-success"}`}>
@@ -106,7 +106,7 @@ export default function VerifyEmailPage() {
       <AuthCard
         eyebrow="Workspace verification"
         title="Verify your email"
-        subtitle="One confirmation unlocks the reliability workspace."
+        subtitle="Confirm your email to unlock trace capture, replay, and golden gates."
       >
         <Suspense fallback={<p className="hint">Loading...</p>}>
           <VerifyEmailContent />
