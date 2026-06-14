@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request, status
@@ -135,6 +136,8 @@ def _check_redis_idempotency(key: str) -> bool:
     Failure to reach Redis is treated as a cache miss (allow through) so
     the database remains the authoritative idempotency guard.
     """
+    if _redis_idempotency_disabled_for_tests():
+        return False
     rc = get_redis_client()
     if rc is None:
         return False
@@ -147,6 +150,8 @@ def _check_redis_idempotency(key: str) -> bool:
 
 def _set_redis_idempotency(key: str) -> None:
     """Record *key* in the Redis idempotency cache with a 24-hour TTL."""
+    if _redis_idempotency_disabled_for_tests():
+        return
     rc = get_redis_client()
     if rc is None:
         return
@@ -154,6 +159,10 @@ def _set_redis_idempotency(key: str) -> None:
         rc.set(f"{_REDIS_IDEM_PREFIX}{key}", "1", ex=_REDIS_IDEM_TTL)
     except Exception:
         logger.debug("Redis idempotency set failed; continuing", exc_info=True)
+
+
+def _redis_idempotency_disabled_for_tests() -> bool:
+    return os.getenv("TESTING", "").strip().lower() == "true"
 
 
 def _upsert_backpressure_alert(

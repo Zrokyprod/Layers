@@ -295,6 +295,22 @@ class TestResolveAll:
         assert first["pilot.autopilot_enabled"] is True
         assert second["pilot.autopilot_enabled"] is False
 
+    def test_testing_mode_uses_memory_cache_without_redis(
+        self,
+        db_session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TESTING", "true")
+        monkeypatch.setattr(
+            entitlements_resolver,
+            "get_redis_client",
+            lambda: pytest.fail("Redis should not be used in test mode."),
+        )
+        _seed_subscription(db_session, org_id="org-1", plan_code="pro")
+
+        assert resolve_all(db_session, "org-1") == PLAN_ENTITLEMENTS["pro"]
+        invalidate("org-1")
+
 
 class TestHasGet:
     def test_has_bool_true(self, db_session) -> None:

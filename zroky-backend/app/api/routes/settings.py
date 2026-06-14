@@ -79,6 +79,7 @@ _GITHUB_USER_URL = "https://api.github.com/user"
 _MIN_REQUIRED_PRICING_INTERVIEWS = 5
 
 
+from app.api.routes._internal import settings_helpers as _settings_helpers
 from app.api.routes._internal.settings_helpers import (
     _build_pricing_validation_response,
     _build_rollback_drill_response,
@@ -86,6 +87,7 @@ from app.api.routes._internal.settings_helpers import (
     _exchange_github_code,
     _fetch_github_user,
     _github_connection_status,
+    _normalize_developer_ref,
     _oauth_state_secret,
     _parse_iso_utc,
     _require_project,
@@ -568,6 +570,8 @@ def verify_rollback_drill_settings(
                 detail="rollback_revision is required for rollback verification.",
             )
 
+    _settings_helpers.db_healthcheck = db_healthcheck
+    _settings_helpers.redis_healthcheck = redis_healthcheck
     checks, passed = _run_rollback_verification_checks(get_settings())
 
     payload = dict(existing)

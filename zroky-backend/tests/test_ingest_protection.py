@@ -47,6 +47,7 @@ class CaptureRedis:
 
 def test_owner_override_can_disable_ingest_rate_limit(monkeypatch) -> None:
     get_settings.cache_clear()
+    monkeypatch.setenv("ZROKY_TEST_USE_REDIS_INGEST_PROTECTION", "1")
     monkeypatch.setattr(ingest_protection, "get_redis_client", lambda: CaptureRedis())
 
     decision = evaluate_ingest_rate_limit("tenant-disable")
@@ -58,6 +59,7 @@ def test_owner_override_can_disable_ingest_rate_limit(monkeypatch) -> None:
 
 def test_owner_numeric_overrides_are_used_for_ingest_limits(monkeypatch) -> None:
     get_settings.cache_clear()
+    monkeypatch.setenv("ZROKY_TEST_USE_REDIS_INGEST_PROTECTION", "1")
     fake_redis = FakeRedis(
         json.dumps(
             {
@@ -88,6 +90,7 @@ def test_owner_numeric_overrides_are_used_for_ingest_limits(monkeypatch) -> None
 
 def test_invalid_or_unavailable_override_store_falls_back_to_env(monkeypatch) -> None:
     get_settings.cache_clear()
+    monkeypatch.setenv("ZROKY_TEST_USE_REDIS_INGEST_PROTECTION", "1")
     monkeypatch.setattr(ingest_protection, "get_redis_client", lambda: BrokenRedis())
     monkeypatch.setattr(ingest_protection, "_evaluate_with_memory", lambda **kwargs: kwargs)
 
