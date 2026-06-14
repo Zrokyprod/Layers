@@ -49,13 +49,8 @@ export function KpiCard({
   active?: boolean;
   onClick?: () => void;
 }) {
-  return (
-    <button
-      type="button"
-      className={`fi-kpi-card${active ? " is-active" : ""}`}
-      onClick={onClick}
-      aria-pressed={active}
-    >
+  const body = (
+    <>
       <div className="fi-kpi-topline">
         <span>{label}</span>
         <div className="fi-kpi-card-mark" aria-hidden="true">
@@ -70,6 +65,21 @@ export function KpiCard({
       </div>
       <strong>{value}</strong>
       <p>{helper}</p>
+    </>
+  );
+
+  if (!onClick) {
+    return <div className={`fi-kpi-card${active ? " is-active" : ""}`}>{body}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      className={`fi-kpi-card${active ? " is-active" : ""}`}
+      onClick={onClick}
+      aria-pressed={active}
+    >
+      {body}
     </button>
   );
 }

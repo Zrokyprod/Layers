@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  DollarSign,
   Filter,
   GitPullRequest,
   RotateCcw,
@@ -13,6 +14,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { EmptyQueue, KpiCard, SectionHeader } from "@/components/command-center-primitives";
 import {
   createReplayRunFromIssue,
   listIssues,
@@ -258,6 +260,18 @@ export default function IssuesPage() {
   }, [filters.replayProof, filters.search, items]);
 
   const replayGapCount = visibleIssues.filter((issue) => !hasVerifiedFix(issue)).length;
+  const verifiedFixCount = visibleIssues.filter(hasVerifiedFix).length;
+  const goldenCandidateCount = visibleIssues.filter(
+    (issue) => hasVerifiedFix(issue) && issue.sample_call_id && !hasActiveGolden(issue),
+  ).length;
+  const loadedIssueImpactUsd = visibleIssues.reduce((sum, issue) => sum + (issueImpactUsd(issue) ?? 0), 0);
+  const defaultFailureSummaryActive =
+    filters.status === INITIAL_FILTERS.status &&
+    !filters.severity &&
+    !filters.failureCode &&
+    !filters.agentName &&
+    !filters.replayProof &&
+    !filters.search;
 
   function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -395,6 +409,39 @@ export default function IssuesPage() {
         />
       ) : null}
 
+      <section className="fi-kpi-grid im-kpi-grid" aria-label="Failure summary">
+        <KpiCard
+          icon={<AlertTriangle aria-hidden="true" />}
+          label="Loaded failures"
+          value={formatCount(visibleIssues.length)}
+          helper="Grouped failures visible under current filters."
+          active={defaultFailureSummaryActive}
+          onClick={() => setFilters(INITIAL_FILTERS)}
+        />
+        <KpiCard
+          icon={<RotateCcw aria-hidden="true" />}
+          label="Replay gaps"
+          value={formatCount(replayGapCount)}
+          helper="Need trusted replay before Golden or CI protection."
+          active={filters.replayProof === "no_trusted_replay"}
+          onClick={() => setFilters((prev) => ({ ...prev, replayProof: "no_trusted_replay" }))}
+        />
+        <KpiCard
+          icon={<ShieldCheck aria-hidden="true" />}
+          label="Verified fixes"
+          value={formatCount(verifiedFixCount)}
+          helper="Replay proof exists; promote eligible traces."
+          active={filters.replayProof === "verified_fix"}
+          onClick={() => setFilters((prev) => ({ ...prev, replayProof: "verified_fix" }))}
+        />
+        <KpiCard
+          icon={<DollarSign aria-hidden="true" />}
+          label="Loaded impact"
+          value={formatUsd(loadedIssueImpactUsd)}
+          helper={`${formatCount(goldenCandidateCount)} verified fixes can become Goldens.`}
+        />
+      </section>
+
       <section className="im-filter-panel" aria-label="Issue filters">
         <label>
           <span>Status</span>
@@ -469,17 +516,15 @@ export default function IssuesPage() {
       </section>
 
       <section className="im-table-section">
-        <header className="im-section-header">
-          <div>
-            <h2>Issue queue</h2>
-            <p>{formatCount(visibleIssues.length)} grouped failures loaded. {formatCount(replayGapCount)} need trusted replay.</p>
-          </div>
-        </header>
+        <SectionHeader
+          title="Issue queue"
+          description={`${formatCount(visibleIssues.length)} grouped failures loaded. ${formatCount(replayGapCount)} need trusted replay.`}
+        />
 
         {loading && items.length === 0 ? (
           <div className="im-loading" aria-label="Loading issues" />
         ) : visibleIssues.length === 0 ? (
-          <div className="im-empty">No issues match these filters.</div>
+          <EmptyQueue>No issues match these filters.</EmptyQueue>
         ) : (
           <div className="im-table-wrap">
             <table className="im-issues-table">
