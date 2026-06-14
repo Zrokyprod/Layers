@@ -28,6 +28,30 @@ function Invoke-ReadinessStep {
   }
 }
 
+function Clear-NextBuildArtifacts {
+  param(
+    [Parameter(Mandatory = $true)][string]$ProjectDirectory
+  )
+
+  $ResolvedProjectDirectory = (Resolve-Path -LiteralPath $ProjectDirectory).Path
+  $NextDirectory = Join-Path $ResolvedProjectDirectory ".next"
+  if (-not (Test-Path -LiteralPath $NextDirectory)) {
+    return
+  }
+
+  $ResolvedNextDirectory = (Resolve-Path -LiteralPath $NextDirectory).Path
+  $ProjectPrefix = $ResolvedProjectDirectory.TrimEnd(
+    [System.IO.Path]::DirectorySeparatorChar,
+    [System.IO.Path]::AltDirectorySeparatorChar
+  ) + [System.IO.Path]::DirectorySeparatorChar
+
+  if (-not $ResolvedNextDirectory.StartsWith($ProjectPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to remove Next build artifacts outside project directory: $ResolvedNextDirectory"
+  }
+
+  Remove-Item -LiteralPath $ResolvedNextDirectory -Recurse -Force
+}
+
 function Invoke-BackendPytestStep {
   param(
     [Parameter(Mandatory = $true)][string]$Name,
@@ -128,6 +152,7 @@ Invoke-ReadinessStep `
 $PreviousDashboardApiUrl = $env:NEXT_PUBLIC_API_URL
 try {
   $env:NEXT_PUBLIC_API_URL = "https://api.zroky.ai"
+  Clear-NextBuildArtifacts -ProjectDirectory (Join-Path $RootDir "zroky-dashboard")
   Invoke-ReadinessStep `
     -Name "Dashboard production build" `
     -WorkingDirectory (Join-Path $RootDir "zroky-dashboard") `
@@ -159,6 +184,7 @@ Invoke-ReadinessStep `
 $PreviousOwnerApiUrl = $env:NEXT_PUBLIC_OWNER_API_URL
 try {
   $env:NEXT_PUBLIC_OWNER_API_URL = "https://api.zroky.ai"
+  Clear-NextBuildArtifacts -ProjectDirectory (Join-Path $RootDir "zroky-admin")
   Invoke-ReadinessStep `
     -Name "Owner/admin production build" `
     -WorkingDirectory (Join-Path $RootDir "zroky-admin") `

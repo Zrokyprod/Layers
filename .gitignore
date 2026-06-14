@@ -100,6 +100,7 @@ docfx_temp/
 .data/
 
 # Generated QA / Codex artifacts
+.tmp/
 .worktrees/
 /artifacts/
 /dashboard-screenshot.png
