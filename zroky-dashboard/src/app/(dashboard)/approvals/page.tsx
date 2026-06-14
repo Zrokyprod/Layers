@@ -231,7 +231,7 @@ export default function RuntimeApprovalsPage() {
   const rejectMutation = useRejectRuntimePolicyDecision();
   const killSwitchMutation = useSetRuntimePolicyKillSwitch();
 
-  const items = approvalsQuery.data?.items ?? [];
+  const items = useMemo(() => approvalsQuery.data?.items ?? [], [approvalsQuery.data?.items]);
   const pendingCount = useMemo(
     () => items.filter((item) => item.status === "pending_approval").length,
     [items],
@@ -254,7 +254,7 @@ export default function RuntimeApprovalsPage() {
   };
 
   return (
-    <main className="dashboard-page approvals-page">
+    <div className="dashboard-page approvals-page">
       <section className="page-header">
         <div>
           <span className="eyebrow">Runtime gate</span>
@@ -343,6 +343,6 @@ export default function RuntimeApprovalsPage() {
           ))}
         </section>
       )}
-    </main>
+    </div>
   );
 }

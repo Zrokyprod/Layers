@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { expectDashboardShell, expectVisibleTexts } from "./helpers";
+import { expectDashboardShell, expectVisibleTexts, readSeed } from "./helpers";
 
 type ReliabilityRoute = {
   path: string;
@@ -43,6 +43,45 @@ const RELIABILITY_ROUTES: ReliabilityRoute[] = [
   },
 ];
 
+function reliabilityDetailRoutes(): ReliabilityRoute[] {
+  const seed = readSeed();
+  return [
+    {
+      path: `/issues/${seed.issue_id}`,
+      heading: "Refund support agent is selecting the wrong tool",
+      labels: [
+        "Recommended next action",
+        "Executive diagnosis",
+        "Evidence workbench",
+        "Replay, Golden, and CI readiness",
+        "Active Golden linked",
+        "Gate linked",
+      ],
+    },
+    {
+      path: `/replay/${seed.replay_run_id}`,
+      heading: "Replay",
+      labels: ["Replay setup", "Original Failure", "Candidate Replay", "Verification Result", "RF-1001"],
+    },
+    {
+      path: `/goldens/${seed.golden_set_id}`,
+      heading: "Refund status protected flow",
+      labels: ["Trace count", "Last pass rate", "Expected behavior", "Golden contract", "Golden health"],
+    },
+    {
+      path: `/ci-gates/${seed.ci_run_id}`,
+      heading: `Run ${seed.ci_run_id}`,
+      labels: [
+        "Regression rate",
+        "Golden gate evidence",
+        "Regression CI blocked this change.",
+        "Replay evidence",
+        "View Golden set",
+      ],
+    },
+  ];
+}
+
 async function expectSinglePageHeading(page: Page, heading: string): Promise<void> {
   await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
   await expect(page.locator("h1")).toHaveCount(1);
@@ -69,6 +108,30 @@ test.describe("reliability loop UX", () => {
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
     for (const route of RELIABILITY_ROUTES) {
+      await test.step(route.path, async () => {
+        await page.goto(route.path);
+        await expectDashboardShell(page);
+        await expectMainContentFitsViewport(page);
+        await expectSinglePageHeading(page, route.heading);
+        await expectVisibleTexts(page, route.labels);
+      });
+    }
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test("renders primary workflow detail pages with stable proof sections", async ({ page }) => {
+    test.setTimeout(180_000);
+
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+
+    for (const route of reliabilityDetailRoutes()) {
       await test.step(route.path, async () => {
         await page.goto(route.path);
         await expectDashboardShell(page);

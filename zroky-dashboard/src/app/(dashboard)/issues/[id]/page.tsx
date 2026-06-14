@@ -842,7 +842,7 @@ export default function IssueDetailPage() {
       </section>
 
       <section className="imd-layout">
-        <main className="imd-main">
+        <div className="imd-main">
           <section className="imd-card imd-diagnosis-card">
             <SectionHeader
               title="Executive diagnosis"
@@ -1021,7 +1021,7 @@ export default function IssueDetailPage() {
               {costInterpretation(issue)}
             </p>
           </section>
-        </main>
+        </div>
 
         <aside className="imd-side" aria-label="Resolution">
           <section className="imd-card imd-sticky-card imd-action-panel">

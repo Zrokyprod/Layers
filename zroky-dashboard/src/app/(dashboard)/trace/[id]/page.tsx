@@ -473,7 +473,7 @@ export default function TraceDetailPage() {
       </section>
 
       <section className="trace-detail-layout" aria-label="Trace investigation">
-        <main className="trace-detail-main">
+        <div className="trace-detail-main">
           <article className="trace-detail-card">
             <header>
               <h2>Trace timeline</h2>
@@ -635,7 +635,7 @@ export default function TraceDetailPage() {
               <pre>{rawPayloadJson}</pre>
             </details>
           </article>
-        </main>
+        </div>
 
         <aside className="trace-detail-panel" aria-label="Trace action panel">
           <div className="trace-detail-panel-card">

@@ -182,7 +182,7 @@ export default function PoliciesPage() {
   }
 
   return (
-    <main className="dashboard-page policies-page">
+    <div className="dashboard-page policies-page">
       <section className="page-header">
         <div>
           <span className="eyebrow">Runtime gate</span>
@@ -422,6 +422,6 @@ export default function PoliciesPage() {
           </article>
         </section>
       ) : null}
-    </main>
+    </div>
   );
 }

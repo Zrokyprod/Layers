@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, CreditCard, Gauge, ReceiptText, ShieldCheck } from "lucide-react";
 
-import { useBudget, useBudgetStatus, useUpdateBudget } from "@/lib/hooks";
+import { useBudget, useUpdateBudget } from "@/lib/hooks";
 import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
   createRazorpayOrder,
@@ -219,7 +219,6 @@ function paymentStatusLabel(billing: BillingMeResponse | null): { label: string;
 function BillingSettingsContent() {
   const searchParams = useSearchParams();
   const budget = useBudget();
-  const budgetStatus = useBudgetStatus();
   const updateBudget = useUpdateBudget();
 
   const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
