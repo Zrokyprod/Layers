@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { hasGoldensAccess, hasPlanEntitlement, isPaidGoldensPlan, normalizePlanCode } from "@/components/feature-gate";
+import { KpiCard, SectionHeader } from "@/components/command-center-primitives";
 import {
   createGoldenSet,
   getBillingMe,
@@ -306,55 +307,65 @@ export default function GoldensPage() {
 
       {showCreate && !showEntitlementWarning ? <CreateSetPanel enabled={canUseGoldens} onCreated={() => setShowCreate(false)} /> : null}
 
-      <section className="gm-kpi-grid" aria-label="Golden KPI summary">
-        <button type="button" className={`gm-kpi-card${filter === "all" ? " is-active" : ""}`} onClick={() => setFilter("all")}>
-          <span>Active Goldens</span>
-          <strong>{activeGoldens}</strong>
-          <p>Loaded protected traces</p>
-        </button>
-        <button type="button" className={`gm-kpi-card${filter === "blocking" ? " is-active" : ""}`} onClick={() => setFilter("blocking")}>
-          <span>Blocking CI</span>
-          <strong>{blockingCi}</strong>
-          <p>Healthy blocking sets</p>
-        </button>
-        <button type="button" className={`gm-kpi-card${filter === "review" ? " is-active" : ""}`} onClick={() => setFilter("review")}>
-          <span>Need review</span>
-          <strong>{needReview}</strong>
-          <p>Empty, flaky, drift, or failed</p>
-        </button>
-        <button type="button" className="gm-kpi-card" onClick={() => setFilter("all")}>
-          <span>Last pass rate</span>
-          <strong>{lastPassRate}</strong>
-          <p>Recent Golden runs</p>
-        </button>
+      <section className="fi-kpi-grid gm-kpi-grid" aria-label="Golden KPI summary">
+        <KpiCard
+          icon={<BookOpen aria-hidden="true" />}
+          label="Active Goldens"
+          value={String(activeGoldens)}
+          helper="Loaded protected traces"
+          active={filter === "all"}
+          onClick={() => setFilter("all")}
+        />
+        <KpiCard
+          icon={<ShieldCheck aria-hidden="true" />}
+          label="Blocking CI"
+          value={String(blockingCi)}
+          helper="Healthy blocking sets"
+          active={filter === "blocking"}
+          onClick={() => setFilter("blocking")}
+        />
+        <KpiCard
+          icon={<AlertTriangle aria-hidden="true" />}
+          label="Need review"
+          value={String(needReview)}
+          helper="Empty, flaky, drift, or failed"
+          active={filter === "review"}
+          onClick={() => setFilter("review")}
+        />
+        <KpiCard
+          icon={<Sparkles aria-hidden="true" />}
+          label="Last pass rate"
+          value={lastPassRate}
+          helper="Recent Golden runs"
+        />
       </section>
 
       <section className="gm-table-section">
-        <header className="gm-section-header">
-          <div>
-            <h2>Golden sets</h2>
-            <p>Protected flows, run status, and CI blocking visibility.</p>
-          </div>
-          <div className="gm-table-tools">
-            <label>
-              <Search aria-hidden="true" />
-              <input
-                className="input"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search Golden sets..."
-              />
-            </label>
-            <span className="gm-trust-copy">
-              <Filter aria-hidden="true" />
-              {filter === "all" ? "All sets" : filter}
-            </span>
-            <span className="gm-trust-copy">
-              <Sparkles aria-hidden="true" />
-              Only verified replay fixes can become active Goldens.
-            </span>
-          </div>
-        </header>
+        <SectionHeader
+          title="Golden sets"
+          description="Protected flows, run status, and CI blocking visibility."
+          action={
+            <div className="gm-table-tools">
+              <label>
+                <Search aria-hidden="true" />
+                <input
+                  className="input"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search Golden sets..."
+                />
+              </label>
+              <span className="gm-trust-copy">
+                <Filter aria-hidden="true" />
+                {filter === "all" ? "All sets" : filter}
+              </span>
+              <span className="gm-trust-copy">
+                <Sparkles aria-hidden="true" />
+                Only verified replay fixes can become active Goldens.
+              </span>
+            </div>
+          }
+        />
 
         {setsQuery.isLoading ? (
           <div className="gm-empty">

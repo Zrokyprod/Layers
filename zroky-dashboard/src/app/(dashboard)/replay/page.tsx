@@ -18,6 +18,7 @@ import {
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { KpiCard } from "@/components/command-center-primitives";
 import {
   listGoldenSets,
   listIssues,
@@ -237,29 +238,6 @@ function SourcePicker<T>({
           })
         )}
       </div>
-    </div>
-  );
-}
-
-function ReplayMetric({
-  icon,
-  label,
-  value,
-  helper,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  helper: string;
-}) {
-  return (
-    <div className="metric-card replay-metric-card">
-      <div className="replay-metric-top">
-        {icon}
-        <span className="notif-meta">{label}</span>
-      </div>
-      <strong>{value}</strong>
-      <span>{helper}</span>
     </div>
   );
 }
@@ -749,11 +727,31 @@ function ReplayPageContent() {
         </div>
       </section>
 
-      <section className="metric-strip replay-command-metrics" aria-label="Replay summary">
-        <ReplayMetric icon={<History aria-hidden="true" />} label="Visible runs" value={runs.length.toLocaleString()} helper="Current filtered queue" />
-        <ReplayMetric icon={<CheckCircle2 aria-hidden="true" />} label="Verified fixes" value={runStats.verified.toLocaleString()} helper="Non-stub runs with proof" />
-        <ReplayMetric icon={<Clock3 aria-hidden="true" />} label="Live queue" value={runStats.running.toLocaleString()} helper="Pending or running now" />
-        <ReplayMetric icon={<DollarSign aria-hidden="true" />} label="Protected spend" value={moneyLabel(runStats.preventedCost)} helper={`${moneyLabel(runStats.replayCost)} replay cost visible`} />
+      <section className="fi-kpi-grid replay-command-metrics" aria-label="Replay summary">
+        <KpiCard
+          icon={<History aria-hidden="true" />}
+          label="Visible runs"
+          value={runs.length.toLocaleString()}
+          helper="Current filtered queue"
+        />
+        <KpiCard
+          icon={<CheckCircle2 aria-hidden="true" />}
+          label="Verified fixes"
+          value={runStats.verified.toLocaleString()}
+          helper="Non-stub runs with proof"
+        />
+        <KpiCard
+          icon={<Clock3 aria-hidden="true" />}
+          label="Live queue"
+          value={runStats.running.toLocaleString()}
+          helper="Pending or running now"
+        />
+        <KpiCard
+          icon={<DollarSign aria-hidden="true" />}
+          label="Protected spend"
+          value={moneyLabel(runStats.preventedCost)}
+          helper={`${moneyLabel(runStats.replayCost)} replay cost visible`}
+        />
       </section>
 
       {isPlanEnabled !== true ? (
