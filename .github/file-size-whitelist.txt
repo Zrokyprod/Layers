@@ -1,7 +1,7 @@
-# ZROKY file-size lint whitelist (Rule 3 — ZROKY-Q1-90DAY-PLAN.md)
+# ZROKY file-size lint whitelist (Rule 3 - ZROKY-Q1-90DAY-PLAN.md)
 #
 # Files listed here exceed the 30 KB limit but are accepted until their
-# split ticket ships. When the split lands, DELETE the entry — that's the
+# split ticket ships. When the split lands, DELETE the entry; that is the
 # proof the ticket is done.
 #
 # Format: one POSIX-relative path per line (from repo root). Comments on same
@@ -9,16 +9,6 @@
 #
 # Adding a NEW entry requires a ticket reference comment.
 # Entries with no matching file produce a stale-whitelist warning (non-failing).
-
-# ── Q1 Sprint 1–2 splits (deadline: Week 6) ──────────────────────────────────
-
-# ── Q2 split queue (pre-existing tech debt; DO NOT add new siblings) ─────────
-zroky-backend/app/api/routes/settings.py      # ZROKY-Q2-206 — split by sub-route
-zroky-backend/app/api/routes/diagnosis.py     # ZROKY-Q2-207 — split by sub-resource
-zroky-backend/app/api/routes/auth.py          # ZROKY-Q2-208 — split oauth / password / session
-zroky-backend/app/api/routes/ingest.py        # ZROKY-Q2-209 — split intake / enrichment
-zroky-sdk/zroky/_async.py                     # ZROKY-Q2-210 — split queue / batcher / flusher
-zroky-backend/app/services/judge_engine.py    # ZROKY-Q2-212 - split provider client / rubric / verdict serialization
-zroky-backend/app/api/routes/calls.py         # ZROKY-Q2-213 - split list / detail / trace tree / golden actions
-zroky-backend/app/services/replay_runs.py     # ZROKY-Q2-214 - split create / quota / promotion / summaries
-zroky-sdk/zroky/_call.py                      # ZROKY-Q2-215 - split sync calls / capture context / span helpers
+#
+# Q2 split queue is currently empty: all previously whitelisted Python files
+# have been split below the 30 KB gate.
