@@ -41,11 +41,17 @@ describe("PublicLanding", () => {
   it("renders the reliability control-plane story and primary actions", () => {
     render(<PublicLanding />);
 
-    expect(screen.getByRole("heading", { name: "AI Agent Reliability Control Plane" })).toBeInTheDocument();
-    expect(screen.getByText(/failed production agent runs into trace evidence/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Create reliability workspace/i }).getAttribute("href")).toBe("/signup");
+    expect(screen.getByRole("heading", { name: "Fix failed agent runs before they ship again" })).toBeInTheDocument();
+    expect(screen.getByText(/capture the exact run, replay the fix/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Start workspace" }).some((link) => link.getAttribute("href") === "/signup")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Sign in" }).some((link) => link.getAttribute("href") === "/login")).toBe(true);
-    expect(screen.getByText("One product flow from incident to protected release.")).toBeInTheDocument();
-    expect(screen.getByText("Instrument once. Review failures in the workspace.")).toBeInTheDocument();
+    expect(screen.getByText("One reliability layer across your model stack.")).toBeInTheDocument();
+    expect(screen.getByText("The dashboard zooms into the part that matters.")).toBeInTheDocument();
+    expect(screen.getByText("A fix is not accepted until the replay proves it.")).toBeInTheDocument();
+    expect(screen.queryByText(/Latest captured trace/i)).not.toBeInTheDocument();
+    expect(screen.getByText("© 2026 Zroky")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "LinkedIn" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Instagram" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Twitter" })).toBeInTheDocument();
   });
 });
