@@ -51,6 +51,17 @@ def validate_runtime_settings(settings: Any) -> None:
             failures.append(f"{name} must be at least {min_length} characters in production")
         return value
 
+    def validate_optional_secret(name: str, *, min_length: int | None = None) -> str:
+        value = (getattr(settings, name, None) or "").strip()
+        if not value:
+            return ""
+        if _is_placeholder_secret(value):
+            failures.append(f"{name} must be set to a real production secret, not a placeholder")
+            return value
+        if min_length is not None and len(value) < min_length:
+            failures.append(f"{name} must be at least {min_length} characters in production")
+        return value
+
     if settings.DATABASE_URL.startswith("sqlite"):
         failures.append("DATABASE_URL must point to managed PostgreSQL in production")
 
@@ -154,10 +165,7 @@ def validate_runtime_settings(settings: Any) -> None:
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_KEY_SECRET must be configured when Razorpay billing is enabled in production",
         )
-        require_secret(
-            "RAZORPAY_WEBHOOK_SECRET",
-            "RAZORPAY_WEBHOOK_SECRET must be configured when Razorpay billing is enabled in production",
-        )
+        validate_optional_secret("RAZORPAY_WEBHOOK_SECRET")
         for name in (
             "RAZORPAY_DASHBOARD_URL",
             "BILLING_CHECKOUT_SUCCESS_URL",
@@ -170,15 +178,10 @@ def validate_runtime_settings(settings: Any) -> None:
             elif _is_local_url(value):
                 failures.append(f"{name} must point to a production URL when Razorpay billing is enabled")
 
-    slack_configured = any(
-        (value or "").strip()
-        for value in (
-            settings.SLACK_CLIENT_ID,
-            settings.SLACK_CLIENT_SECRET,
-            settings.SLACK_TOKEN_ENCRYPTION_KEY,
-            settings.SLACK_SIGNING_SECRET,
-        )
-    )
+    validate_optional_secret("SLACK_TOKEN_ENCRYPTION_KEY")
+    validate_optional_secret("SLACK_SIGNING_SECRET")
+
+    slack_configured = bool((settings.SLACK_CLIENT_ID or "").strip() or (settings.SLACK_CLIENT_SECRET or "").strip())
     if slack_configured:
         require_secret(
             "SLACK_CLIENT_ID",
@@ -187,14 +190,6 @@ def validate_runtime_settings(settings: Any) -> None:
         require_secret(
             "SLACK_CLIENT_SECRET",
             "SLACK_CLIENT_SECRET must be configured with Slack integration in production",
-        )
-        require_secret(
-            "SLACK_TOKEN_ENCRYPTION_KEY",
-            "SLACK_TOKEN_ENCRYPTION_KEY must be configured with Slack integration in production",
-        )
-        require_secret(
-            "SLACK_SIGNING_SECRET",
-            "SLACK_SIGNING_SECRET must be configured with Slack integration in production",
         )
 
     if is_jwt_configured(settings):

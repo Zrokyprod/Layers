@@ -168,16 +168,15 @@ def test_production_config_rejects_enabled_razorpay_billing_without_keys_direct_
     error_text = str(exc.value)
     assert "RAZORPAY_KEY_ID" in error_text
     assert "RAZORPAY_KEY_SECRET" in error_text
-    assert "RAZORPAY_WEBHOOK_SECRET" in error_text
 
 
-def test_production_config_accepts_enabled_razorpay_billing_with_keys_direct_settings() -> None:
+def test_production_config_accepts_enabled_razorpay_billing_without_webhook_secret_direct_settings() -> None:
     settings = _hardened_production_settings(
         BILLING_ENABLED=True,
         BILLING_PROVIDER="razorpay",
         RAZORPAY_KEY_ID="rzp_live_real_key",
         RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
-        RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-with-enough-length",
+        RAZORPAY_WEBHOOK_SECRET=None,
     )
 
     validate_runtime_settings(settings)
@@ -324,16 +323,15 @@ def test_production_config_rejects_enabled_razorpay_billing_without_keys() -> No
     error_text = str(exc.value)
     assert "RAZORPAY_KEY_ID" in error_text
     assert "RAZORPAY_KEY_SECRET" in error_text
-    assert "RAZORPAY_WEBHOOK_SECRET" in error_text
 
 
-def test_production_config_accepts_enabled_razorpay_billing_with_keys() -> None:
+def test_production_config_accepts_enabled_razorpay_billing_without_webhook_secret() -> None:
     settings = _hardened_production_settings(
         BILLING_ENABLED=True,
         BILLING_PROVIDER="razorpay",
         RAZORPAY_KEY_ID="rzp_live_real_key",
         RAZORPAY_KEY_SECRET="razorpay-live-secret-with-enough-length",
-        RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-with-enough-length",
+        RAZORPAY_WEBHOOK_SECRET=None,
     )
 
     validate_runtime_settings(settings)
@@ -352,16 +350,30 @@ def test_production_config_rejects_partial_slack_integration_config() -> None:
 
     error_text = str(exc.value)
     assert "SLACK_CLIENT_SECRET" in error_text
-    assert "SLACK_TOKEN_ENCRYPTION_KEY" in error_text
-    assert "SLACK_SIGNING_SECRET" in error_text
 
 
-def test_production_config_accepts_complete_slack_integration_config() -> None:
+def test_production_config_accepts_slack_oauth_client_pair_without_runtime_secrets() -> None:
     settings = _hardened_production_settings(
         SLACK_CLIENT_ID="slack-client-id",
         SLACK_CLIENT_SECRET="slack-client-secret",
-        SLACK_TOKEN_ENCRYPTION_KEY="slack-token-encryption-key",
-        SLACK_SIGNING_SECRET="slack-signing-secret",
+        SLACK_TOKEN_ENCRYPTION_KEY=None,
+        SLACK_SIGNING_SECRET=None,
     )
 
     validate_runtime_settings(settings)
+
+
+def test_production_config_rejects_placeholder_optional_integration_secrets() -> None:
+    settings = _hardened_production_settings(
+        RAZORPAY_WEBHOOK_SECRET="fake-webhook-secret",
+        SLACK_TOKEN_ENCRYPTION_KEY="dummy-slack-token-key",
+        SLACK_SIGNING_SECRET="change-me-slack-signing-secret",
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    error_text = str(exc.value)
+    assert "RAZORPAY_WEBHOOK_SECRET" in error_text
+    assert "SLACK_TOKEN_ENCRYPTION_KEY" in error_text
+    assert "SLACK_SIGNING_SECRET" in error_text
