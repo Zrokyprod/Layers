@@ -240,6 +240,25 @@ def validate_backend(values: dict[str, list[EnvValue]]) -> list[str]:
     require_one_secret(findings, values, ("PII_ENCRYPTION_KEY", "GITHUB_TOKEN_ENCRYPTION_KEY"), min_length=32)
     require_one_secret(findings, values, ("OPENROUTER_API_KEY", "OPENAI_API_KEY"), min_length=16)
 
+    # Hosted launch requirements: these are user-facing flows, not optional
+    # niceties. Keep them in the launch gate so a self-hosted runtime can still
+    # boot with fewer integrations, while the paid hosted rollout fails closed.
+    require_value(findings, values, "SMTP_HOST")
+    require_value(findings, values, "SMTP_USER")
+    require_value(findings, values, "SMTP_PASSWORD", min_length=16)
+    require_value(findings, values, "ALERTS_FROM_EMAIL")
+
+    require_value(findings, values, "GOOGLE_CLIENT_ID", min_length=8)
+    require_value(findings, values, "GOOGLE_CLIENT_SECRET", min_length=16)
+    require_value(findings, values, "GOOGLE_OAUTH_REDIRECT_URL", url=True)
+
+    require_value(findings, values, "GITHUB_CLIENT_ID", min_length=8)
+    require_value(findings, values, "GITHUB_CLIENT_SECRET", min_length=16)
+    require_value(findings, values, "GITHUB_OAUTH_REDIRECT_URL", url=True)
+    require_value(findings, values, "GITHUB_CONNECT_OAUTH_REDIRECT_URL", url=True)
+    require_value(findings, values, "GITHUB_TOKEN_ENCRYPTION_KEY", min_length=32)
+    require_value(findings, values, "GITHUB_PR_BOT_TOKEN", min_length=16)
+
     billing_enabled = latest(values, "BILLING_ENABLED")
     if billing_enabled is None or is_true(billing_enabled.value):
         provider = normalized(latest(values, "BILLING_PROVIDER").value if latest(values, "BILLING_PROVIDER") else "razorpay")
