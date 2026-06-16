@@ -19,8 +19,6 @@ import { loginWithPassword } from "@/lib/api";
 import { storeAuthSession } from "@/lib/auth";
 import { loginSchema, type LoginFormData } from "@/lib/schemas";
 
-const googleOAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_OAUTH === "true";
-
 function LoginForm() {
   const [error, setError] = useState("");
   const router = useRouter();
@@ -54,12 +52,12 @@ function LoginForm() {
     <AuthCard
       eyebrow="Existing workspace"
       title="Sign in to Zroky"
-      subtitle="Review failed runs, replay proof, golden contracts, CI gates, and owner evidence."
+      subtitle="Access traces, replays, and release gates."
       footer={<Link href="/signup" className="auth-link">Don&apos;t have an account? Sign up</Link>}
     >
       {error && <div className="auth-banner auth-banner-error">{error}</div>}
       <div className="auth-oauth-stack">
-        {googleOAuthEnabled ? <AuthProviderButton provider="google" onClick={() => handleOAuthLogin("google")} /> : null}
+        <AuthProviderButton provider="google" onClick={() => handleOAuthLogin("google")} />
         <AuthProviderButton provider="github" onClick={() => handleOAuthLogin("github")} />
       </div>
       <AuthDivider />
@@ -88,9 +86,8 @@ function LoginForm() {
       </form>
       <AuthAssuranceList
         items={[
-          "OAuth and password sign-in stay available",
-          "Returns to the reliability route you requested",
-          "Protected session for the workspace",
+          "OAuth and password supported",
+          "Protected workspace session",
         ]}
       />
     </AuthCard>

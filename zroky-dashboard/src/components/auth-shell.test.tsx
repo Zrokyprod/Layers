@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { AuthButton, AuthCard, AuthDivider, AuthInput, AuthShell } from "./auth-shell";
+import { AuthButton, AuthCard, AuthDivider, AuthInput, AuthProviderButton, AuthShell } from "./auth-shell";
 
 describe("AuthShell", () => {
   it("renders the premium brand panel and auth card slot", () => {
@@ -20,17 +20,29 @@ describe("AuthShell", () => {
     const logo = screen.getByRole("img", { name: "Zroky" });
     expect(logo.getAttribute("src")).toBe("/logo.png?v=landing-white");
     expect(screen.queryByText("ZROKY RELIABILITY")).not.toBeInTheDocument();
-    expect(screen.getByText("Fix failed agent runs before they ship again.")).toBeInTheDocument();
+    expect(screen.getByText("Workspace access.")).toBeInTheDocument();
     expect(screen.queryByText("Protected access")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Zroky reliability loop")).toBeInTheDocument();
-    expect(screen.getByLabelText("Reliability proof preview")).toBeInTheDocument();
-    expect(screen.getAllByText("Incidents").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Replay").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Goldens").length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Zroky reliability preview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Incidents")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reliability path")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe("/signup");
   }, 15000);
+});
+
+describe("AuthProviderButton", () => {
+  it("renders Google and GitHub provider actions", () => {
+    render(
+      <>
+        <AuthProviderButton provider="google" onClick={() => {}} />
+        <AuthProviderButton provider="github" onClick={() => {}} />
+      </>
+    );
+
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
+  });
 });
 
 describe("AuthInput", () => {

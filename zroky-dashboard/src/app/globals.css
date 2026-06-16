@@ -27451,8 +27451,8 @@ button.gm-kpi-card {
   --auth-danger-soft: rgba(225, 61, 53, 0.08);
   --auth-success: #16875a;
   --auth-success-soft: rgba(22, 135, 90, 0.08);
-  grid-template-columns: minmax(320px, 500px) minmax(340px, 444px);
-  gap: clamp(28px, 5vw, 76px);
+  grid-template-columns: minmax(248px, 340px) minmax(340px, 444px);
+  gap: clamp(36px, 8vw, 118px);
   padding: clamp(24px, 5vw, 64px);
   background: var(--auth-bg);
   color: var(--auth-text);
@@ -27475,13 +27475,13 @@ button.gm-kpi-card {
 }
 
 .auth-brand-panel {
-  gap: 20px;
-  max-width: 500px;
+  gap: 16px;
+  max-width: 340px;
 }
 
 .auth-logo-wrap {
-  width: 136px;
-  height: 38px;
+  width: 128px;
+  height: 36px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -27490,8 +27490,8 @@ button.gm-kpi-card {
 
 .auth-logo {
   display: block;
-  width: 118px;
-  max-height: 30px;
+  width: 112px;
+  max-height: 28px;
   object-fit: contain;
 }
 
@@ -27499,34 +27499,34 @@ button.gm-kpi-card {
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  min-height: 32px;
+  min-height: auto;
   margin: 0;
-  border: 1px solid var(--auth-border);
-  border-radius: 999px;
-  background: #ffffff;
-  padding: 7px 11px;
-  color: var(--auth-text);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--auth-muted);
   font-size: 0.72rem;
-  font-weight: 780;
+  font-weight: 760;
   letter-spacing: 0;
   text-transform: uppercase;
-  box-shadow: 0 10px 26px rgba(22, 25, 31, 0.05);
+  box-shadow: none;
 }
 
 .auth-brand-copy h1 {
-  max-width: 500px;
+  max-width: 340px;
   color: var(--auth-text);
-  font-size: clamp(2.75rem, 5vw, 4.75rem);
+  font-size: clamp(2.08rem, 3.1vw, 2.85rem);
   font-weight: 760;
-  line-height: 1.02;
+  line-height: 1.04;
   letter-spacing: 0;
 }
 
 .auth-brand-subtitle {
-  max-width: 430px;
+  max-width: 310px;
   color: var(--auth-text-soft);
-  font-size: 0.96rem;
-  line-height: 1.55;
+  font-size: 0.92rem;
+  line-height: 1.48;
 }
 
 .auth-loop {
@@ -27548,26 +27548,34 @@ button.gm-kpi-card {
 }
 
 .auth-signal-console {
+  max-width: 340px;
+  padding: 12px;
   border: 1px solid var(--auth-border);
   border-radius: 8px;
   background: #ffffff;
   box-shadow:
-    0 24px 62px rgba(22, 25, 31, 0.08),
+    0 18px 44px rgba(22, 25, 31, 0.07),
     0 1px 0 rgba(255, 255, 255, 0.82) inset;
 }
 
 .auth-console-header {
+  gap: 7px;
   color: var(--auth-text);
+  font-size: 0.72rem;
 }
 
 .auth-console-dot {
+  width: 7px;
+  height: 7px;
   background: var(--auth-success);
-  box-shadow: 0 0 0 5px rgba(22, 135, 90, 0.1);
+  box-shadow: 0 0 0 4px rgba(22, 135, 90, 0.1);
 }
 
 .auth-console-row {
+  min-height: 34px;
   border: 1px solid var(--auth-border);
   border-radius: 6px;
+  padding: 7px 9px;
   background: var(--auth-surface-raised);
 }
 
@@ -27577,6 +27585,7 @@ button.gm-kpi-card {
 
 .auth-console-row strong {
   color: var(--auth-text);
+  font-size: 0.72rem;
 }
 
 .auth-console-row-accent strong {
@@ -27746,18 +27755,28 @@ button.gm-kpi-card {
 }
 
 .auth-provider-button {
-  justify-content: space-between;
+  position: relative;
+  justify-content: center;
+  min-height: 46px;
+  padding-right: 44px;
+  padding-left: 44px;
 }
 
 .auth-provider-mark {
+  position: absolute;
+  left: 14px;
   border: 1px solid var(--auth-border);
-  background: var(--auth-surface-raised);
+  background: #ffffff;
   color: var(--auth-text);
 }
 
-.auth-provider-google,
+.auth-provider-mark svg {
+  width: 20px;
+  height: 20px;
+}
+
 .auth-provider-github svg {
-  color: var(--auth-text);
+  color: #181717;
 }
 
 .auth-divider {
@@ -27866,19 +27885,17 @@ button.gm-kpi-card {
   }
 
   .auth-logo-wrap {
-    width: 136px;
-    height: 38px;
+    width: 128px;
+    height: 36px;
   }
 
   .auth-logo {
-    width: 118px;
-    max-height: 30px;
+    width: 112px;
+    max-height: 28px;
   }
 
   .auth-brand-copy,
-  .auth-loop,
-  .auth-signal-console,
-  .auth-proof-grid {
+  .auth-signal-console {
     display: none;
   }
 
