@@ -92,6 +92,12 @@ const socialLinks = [
   { label: "Twitter", href: "#twitter", Icon: FaTwitter },
 ];
 
+const footerLinks = [
+  { label: "Privacy", href: "/privacy" },
+  { label: "Security", href: "/security" },
+  { label: "Contact", href: "/contact" },
+];
+
 const moduleViews = [
   {
     key: "issues",
@@ -746,6 +752,13 @@ await zroky.captureRun({
 
       <footer className="zlp-footer">
         <span>© 2026 Zroky</span>
+        <nav className="zlp-footer-links" aria-label="Footer links">
+          {footerLinks.map(({ label, href }) => (
+            <Link key={label} href={href}>
+              {label}
+            </Link>
+          ))}
+        </nav>
         <nav className="zlp-footer-social" aria-label="Social media">
           {socialLinks.map(({ label, href, Icon }) => (
             <a key={label} href={href} aria-label={label}>

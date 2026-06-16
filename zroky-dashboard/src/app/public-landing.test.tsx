@@ -50,6 +50,9 @@ describe("PublicLanding", () => {
     expect(screen.getByText("A fix is not accepted until the replay proves it.")).toBeInTheDocument();
     expect(screen.queryByText(/Latest captured trace/i)).not.toBeInTheDocument();
     expect(screen.getByText("© 2026 Zroky")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Privacy" }).getAttribute("href")).toBe("/privacy");
+    expect(screen.getByRole("link", { name: "Security" }).getAttribute("href")).toBe("/security");
+    expect(screen.getByRole("link", { name: "Contact" }).getAttribute("href")).toBe("/contact");
     expect(screen.getByRole("link", { name: "LinkedIn" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Instagram" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Twitter" })).toBeInTheDocument();
