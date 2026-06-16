@@ -16,7 +16,7 @@ import {
 import pricingContract from '../data/pricing-plans.json';
 import { SIGN_UP_URL } from '../lib/links';
 
-type PlanCode = 'free' | 'pilot' | 'pro' | 'enterprise';
+type PlanCode = 'free' | 'starter' | 'pro' | 'enterprise';
 
 type PricingPlan = {
   code: PlanCode;
@@ -59,7 +59,7 @@ const compactNumberFormatter = new Intl.NumberFormat('en-US', {
 
 const planIcons: Record<PlanCode, LucideIcon> = {
   free: Activity,
-  pilot: Zap,
+  starter: Zap,
   pro: GitBranch,
   enterprise: Server,
 };
@@ -116,7 +116,7 @@ function formatCiGates(nonBlocking: boolean, blocking: boolean) {
 }
 
 function formatProviderVault(enabled: boolean) {
-  return enabled ? 'Provider key vault included' : 'Enterprise provider key vault not included';
+  return enabled ? 'Provider key vault included' : 'Provider key vault locked';
 }
 
 function formatProjectSeats(projects: number, seats: number) {
@@ -138,18 +138,20 @@ function buildPlanBullets(plan: PricingPlan) {
   ];
 }
 
-const plans = (pricingContract.plans as PricingPlan[]).map((plan) => ({
-  name: plan.name,
-  price: plan.price.label,
-  period: plan.price.period,
-  desc: plan.description,
-  icon: planIcons[plan.code],
-  cta: plan.cta.label,
-  href: plan.cta.href === '/auth/register' ? SIGN_UP_URL : plan.cta.href,
-  featured: plan.featured,
-  bullets: buildPlanBullets(plan),
-  note: plan.note,
-}));
+const plans = (pricingContract.plans as PricingPlan[])
+  .filter((plan) => plan.code !== 'enterprise')
+  .map((plan) => ({
+    name: plan.name,
+    price: plan.price.label,
+    period: plan.price.period,
+    desc: plan.description,
+    icon: planIcons[plan.code],
+    cta: plan.cta.label,
+    href: plan.cta.href === '/auth/register' ? SIGN_UP_URL : plan.cta.href,
+    featured: plan.featured,
+    bullets: buildPlanBullets(plan),
+    note: plan.note,
+  }));
 
 const usageRules = [
   {
@@ -165,7 +167,7 @@ const usageRules = [
   {
     icon: Lock,
     title: 'Caps protect both sides',
-    body: 'Self-serve plans use explicit replay and CI limits. Teams get alerts before limits, then upgrade or move into an enterprise contract.',
+    body: 'Self-serve plans use explicit replay and CI limits. Teams get alerts before limits, then upgrade or pause new release-safety execution.',
   },
 ];
 
@@ -178,7 +180,7 @@ const overages = [
 const faqs = [
   {
     q: 'What counts as a replay run?',
-    a: 'A replay run is one verified attempt against captured production evidence. Pilot supports mocked-tool replay. Pro adds real LLM replay and live-sandbox replay through your provider key or optional Zroky-managed execution.',
+    a: 'A replay run is one verified attempt against captured production evidence. Starter supports mocked-tool replay. Pro adds real LLM replay and live-sandbox replay through your provider key or optional Zroky-managed execution.',
   },
   {
     q: 'Why is BYOK the default?',
@@ -194,15 +196,11 @@ const faqs = [
   },
   {
     q: 'Is CI blocking included?',
-    a: 'Pro includes non-blocking and blocking CI gates for protected releases. Enterprise can customize policy, enforcement, worker placement, and approval workflow.',
+    a: 'Starter includes non-blocking CI preview. Pro includes blocking CI gates for protected releases.',
   },
   {
     q: 'Can we use Zroky-managed replay?',
     a: 'Yes. Zroky-managed replay is optional and billed at provider token cost plus a 30% platform fee. Most production teams should start with BYOK for clean cost control.',
-  },
-  {
-    q: 'When should we choose Enterprise?',
-    a: 'Choose Enterprise when volume, retention, audit needs, SSO, private replay workers, VPC or self-hosted deployment, provider-key controls, or SLA terms must be negotiated directly.',
   },
 ];
 
@@ -264,9 +262,9 @@ export default function PricingPage() {
 
           <div className="mx-auto mt-8 grid max-w-4xl gap-2 rounded-2xl border border-line bg-white/[0.02] p-2 sm:mt-10 sm:grid-cols-3">
             {[
-              ['Start free', '50K captured calls and trace review.'],
-              ['Prove release safety', 'Pilot adds diagnosis, mocked replay, and basic Goldens.'],
-              ['Gate production', 'Pro adds real replay, CI gates, and outcome attribution.'],
+              ['Start free', '5K captured calls, traces, and issue grouping.'],
+              ['Prove release safety', 'Starter adds diagnosis, mocked replay, Goldens, and CI preview.'],
+              ['Gate production', 'Pro adds real replay, provider keys, blocking CI, and outcome attribution.'],
             ].map(([title, body]) => (
               <div key={title} className="rounded-xl border border-line bg-ink px-4 py-3">
                 <div className="font-mono text-[10px] uppercase tracking-wider text-tertiary">{title}</div>
@@ -279,7 +277,7 @@ export default function PricingPage() {
 
       <SectionReveal className="border-b border-line px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-[92rem]">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-3">
             {plans.map((plan, index) => {
               const Icon = plan.icon;
 
@@ -341,50 +339,6 @@ export default function PricingPage() {
                 </motion.article>
               );
             })}
-          </div>
-        </div>
-      </SectionReveal>
-
-      <SectionReveal className="border-b border-line px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-[92rem] gap-5 lg:grid-cols-[0.82fr_1.18fr] lg:items-stretch">
-          <div className="card p-6 lg:p-8">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-              <Server className="h-4 w-4" />
-              Enterprise
-            </span>
-            <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-primary md:text-5xl">
-              Higher volume, private workers, and contract controls.
-            </h2>
-            <p className="mt-5 text-base leading-8 text-secondary">
-              Enterprise is custom-priced for teams that need unlimited limits, SSO, private replay workers, VPC or self-hosted deployment, custom retention, audit logs, provider key vault, SLA, and security review.
-            </p>
-            <a
-              href="mailto:sales@zroky.com?subject=Zroky%20Scale%20or%20Enterprise"
-              className="btn-primary mt-7"
-            >
-              Talk to Zroky
-              <ArrowRight className="h-4 w-4" />
-            </a>
-          </div>
-
-          <div className="rounded-2xl border border-line bg-ink p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                ['Enterprise limits', 'Custom', 'Unlimited projects, calls, replay, Goldens, and seats under contract.'],
-                ['Deployment controls', 'Custom', 'SSO/SAML, private workers, VPC/self-host path, custom retention, audit logs, and SLA.'],
-              ].map(([name, price, body]) => (
-                <div key={name} className="card p-5">
-                  <div className="font-mono text-[10px] uppercase tracking-wider text-tertiary">{name}</div>
-                  <div className="mt-4 text-3xl font-semibold text-primary">{price}</div>
-                  <p className="mt-4 text-sm font-semibold leading-7 text-secondary">{body}</p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 rounded-xl border border-line-strong bg-white/[0.04] p-4">
-              <p className="text-sm font-semibold leading-7 text-primary">
-                Heavy replay and CI enforcement move into an explicit enterprise contract instead of hidden unlimited self-serve usage.
-              </p>
-            </div>
           </div>
         </div>
       </SectionReveal>

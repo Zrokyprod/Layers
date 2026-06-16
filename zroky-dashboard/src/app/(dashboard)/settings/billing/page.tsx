@@ -75,38 +75,40 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     code: "free",
     name: "Free",
     monthlyCostUsd: 0,
-    features: ["50K events/mo", "7 day retention", "2 seats", "Capture and trace review"],
+    features: ["5K events/mo", "7 day retention", "2 seats", "Capture, traces, and issue grouping"],
     selfServe: false,
   },
   {
-    code: "pilot",
-    name: "Pilot",
-    monthlyCostUsd: 29,
-    features: ["500K events/mo", "30 day retention", "5 seats", "100 mocked-tool replay runs/mo", "100 Golden traces"],
+    code: "starter",
+    name: "Starter",
+    monthlyCostUsd: 49,
+    features: [
+      "50K events/mo",
+      "30 day retention",
+      "Unlimited seats",
+      "50 mocked-tool replay runs/mo",
+      "250 Golden traces",
+      "Non-blocking CI preview",
+      "Provider key vault",
+    ],
     selfServe: true,
   },
   {
     code: "pro",
     name: "Pro",
-    monthlyCostUsd: 149,
+    monthlyCostUsd: 199,
     features: [
-      "3M events/mo",
+      "250K events/mo",
       "90 day retention",
-      "10 seats",
-      "100 real LLM replay runs/mo",
-      "1,000 mocked-tool replay runs/mo",
+      "Unlimited seats",
+      "500 real LLM replay runs/mo",
+      "500 mocked-tool replay runs/mo",
       "100 live-sandbox replay runs/mo",
-      "1,000 Golden traces",
-      "CI gates and outcome attribution",
+      "2,500 Golden traces",
+      "Blocking CI gates",
+      "Provider key vault and audit log",
     ],
     selfServe: true,
-  },
-  {
-    code: "enterprise",
-    name: "Enterprise",
-    monthlyCostUsd: null,
-    features: ["Unlimited events and replay limits", "Unlimited seats and projects", "Private replay worker", "SSO, audit logs, custom retention, provider key vault"],
-    selfServe: false,
   },
 ];
 
@@ -154,7 +156,9 @@ function catalogPlanCode(planCode: string | null | undefined): string {
   if (!normalized) {
     return "free";
   }
-  return normalized === "plus" ? "pro" : normalized;
+  if (normalized === "pilot") return "starter";
+  if (normalized === "plus") return "pro";
+  return normalized;
 }
 
 function displayPlanCode(planCode: string | null | undefined): string {
@@ -358,7 +362,13 @@ function BillingSettingsContent() {
 
   const currentPlanCode = billingMe?.plan_code ?? "free";
   const currentCatalogCode = catalogPlanCode(currentPlanCode);
-  const legacyPlanAliasNote = currentPlanCode.trim().toLowerCase() === "plus" ? "Legacy Plus maps to Pro entitlements." : null;
+  const currentPlanAlias = currentPlanCode.trim().toLowerCase();
+  const legacyPlanAliasNote =
+    currentPlanAlias === "plus"
+      ? "Legacy Plus maps to Pro entitlements."
+      : currentPlanAlias === "pilot"
+        ? "Legacy Pilot maps to Starter entitlements."
+        : null;
   const template = billingMe?.plan_template ?? {};
   const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
   const paymentStatus = paymentStatusLabel(billingMe);

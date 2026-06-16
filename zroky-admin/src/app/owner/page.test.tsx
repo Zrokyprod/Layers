@@ -66,7 +66,7 @@ const moneyPath: OwnerMoneyPathHealth = {
     {
       project_id: "proj_gap",
       project_name: "Gap Tenant",
-      plan_code: "pilot",
+      plan_code: "starter",
       last_capture_at: null,
       captures_24h: 0,
       open_issue_count: 1,

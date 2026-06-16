@@ -19,7 +19,8 @@ export function formatPlanLabel(planCode: string | null | undefined): string {
   if (!code) return "Plan unavailable";
   if (code === "free") return "Free Plan";
   if (code === "watch") return "Watch Plan";
-  if (code === "pilot") return "Pilot Plan";
+  if (code === "pilot") return "Starter Plan";
+  if (code === "starter") return "Starter Plan";
   if (code === "pro") return "Pro Plan";
   if (code === "plus") return "Plus Plan";
   if (code === "enterprise") return "Enterprise Plan";
@@ -27,7 +28,7 @@ export function formatPlanLabel(planCode: string | null | undefined): string {
 }
 
 export function isPaidGoldensPlan(planCode: string | null | undefined): boolean {
-  return ["pilot", "pro", "plus", "enterprise"].includes(normalizePlanCode(planCode));
+  return ["pilot", "starter", "pro", "plus", "enterprise"].includes(normalizePlanCode(planCode));
 }
 
 export function hasGoldensAccess(

@@ -73,7 +73,7 @@ const moneyPath: OwnerMoneyPathHealth = {
     {
       project_id: "proj_gap",
       project_name: "Provider Gap Tenant",
-      plan_code: "pilot",
+      plan_code: "starter",
       last_capture_at: null,
       captures_24h: 0,
       open_issue_count: 1,
@@ -87,7 +87,7 @@ const moneyPath: OwnerMoneyPathHealth = {
       provider_key_status: { state: "missing", active_provider_count: 0 },
       replay_quota_status: { state: "near_limit", enabled: true, used: 95, limit: 100, resets_at: "2026-07-01" },
       pricing_cost_status: { state: "stale", pricing_version: "old", pricing_source: "fallback_default", pricing_age_days: 45, cost_confidence: "stale", detail: "old pricing" },
-      billing_status: { state: "risk", plan_code: "pilot", subscription_status: "past_due", current_period_end: "2026-07-01T00:00:00Z" },
+      billing_status: { state: "risk", plan_code: "starter", subscription_status: "past_due", current_period_end: "2026-07-01T00:00:00Z" },
       support_status: { state: "urgent", open_count: 1, urgent_count: 1 },
       blocked_regressions_7d: 0,
       verified_fixes_7d: 0,

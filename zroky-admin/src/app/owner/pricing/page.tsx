@@ -581,7 +581,7 @@ export default function PricingPage() {
             <label className="owner-filter-group">
               <span className="owner-filter-label">Plan</span>
               <select className="owner-select" value={confirmPlanCode} onChange={(event) => setConfirmPlanCode(event.target.value)}>
-                <option value="pilot">pilot</option>
+                <option value="starter">starter</option>
                 <option value="pro">pro</option>
                 <option value="enterprise">enterprise</option>
               </select>
@@ -639,7 +639,7 @@ export default function PricingPage() {
                 className="input"
                 value={planCode}
                 onChange={(event) => setPlanCode(event.target.value)}
-                placeholder="free, pilot, pro"
+                placeholder="free, starter, pro"
               />
             </label>
             <button className="btn btn-soft" onClick={() => accountsQuery.refetch()} disabled={accountsQuery.isFetching}>

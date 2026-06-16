@@ -141,7 +141,7 @@ class _FakeRazorpayOrderClient:
         if order is None:
             return {
                 "id": order_id,
-                "amount": 1_192_000,
+                "amount": 1_592_000,
                 "currency": "INR",
                 "status": self._owner.order_status,
                 "notes": {"org_id": "org-alpha", "plan_code": "pro", "product": "zroky"},
@@ -158,7 +158,7 @@ class _FakeRazorpayPaymentClient:
         return {
             "id": payment_id,
             "order_id": "order_test_123",
-            "amount": order.get("amount", 1_192_000),
+            "amount": order.get("amount", 1_592_000),
             "currency": order.get("currency", "INR"),
             "status": self._owner.payment_status,
             "captured": self._owner.payment_status == "captured",
@@ -244,7 +244,8 @@ class TestBillingPlans:
             normalize_plan_code(None)
 
     def test_assert_self_serve_rules(self) -> None:
-        assert assert_self_serve_plan("pilot") == "pilot"
+        assert assert_self_serve_plan("pilot") == "starter"
+        assert assert_self_serve_plan("starter") == "starter"
         assert assert_self_serve_plan("pro") == "pro"
         with pytest.raises(PlanNotSelfServeError):
             assert_self_serve_plan("free")
@@ -254,7 +255,7 @@ class TestBillingPlans:
     def test_plan_entitlements_return_copy_and_share_keys(self) -> None:
         plan = get_plan_entitlements("free")
         plan["events.monthly_quota"] = 999
-        assert get_plan_entitlements("free")["events.monthly_quota"] == 50_000
+        assert get_plan_entitlements("free")["events.monthly_quota"] == 5_000
         ref = set(PLAN_ENTITLEMENTS["free"].keys())
         for code in VALID_PLAN_CODES:
             assert set(PLAN_ENTITLEMENTS[code].keys()) == ref
@@ -298,7 +299,7 @@ class TestRazorpayCheckoutRoute:
         assert response.status_code == 200
         body = response.json()
         assert body["order_id"] == "order_test_123"
-        assert body["amount"] == 1_192_000
+        assert body["amount"] == 1_592_000
         assert body["currency"] == "INR"
         assert body["plan_code"] == "pro"
         assert fake.order.last_payload is not None
@@ -329,7 +330,7 @@ class TestRazorpayCheckoutRoute:
     ) -> None:
         fake = _FakeRazorpayClient()
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pilot"}).status_code == 200
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"}).status_code == 200
 
         payment_id = "pay_test_123"
         response = client.post(
@@ -351,7 +352,7 @@ class TestRazorpayCheckoutRoute:
             assert sub.payment_provider == "razorpay"
             assert sub.payment_request_ref == "order_test_123"
             assert sub.payment_subscription_ref == payment_id
-            assert sub.plan_code == "pilot"
+            assert sub.plan_code == "starter"
             event = session.execute(
                 select(BillingEvent).where(
                     BillingEvent.provider == "razorpay",
@@ -367,7 +368,7 @@ class TestRazorpayCheckoutRoute:
         fake.payment_status = "authorized"
         fake.order_status = "attempted"
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pilot"}).status_code == 200
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"}).status_code == 200
 
         payment_id = "pay_authorized"
         response = client.post(
@@ -523,11 +524,13 @@ class TestBillingQuota:
         assert body["tenant_id"] == "org-alpha"
         assert body["plan_code"] == "pro"
         assert body["calls"]["used"] == 42
-        assert body["calls"]["limit"] == 3_000_000
+        assert body["calls"]["limit"] == 250_000
         assert body["replay"]["used"] == 1
-        assert body["replay"]["limit"] == 1_000
+        assert body["replay"]["limit"] == 500
         assert body["goldens"]["used"] == 2
+        assert body["goldens"]["limit"] == 2_500
         assert body["golden_sets"]["used"] == 1
+        assert body["golden_sets"]["limit"] == 25
         assert body["metering_health"]["state"] == "ok"
 
 

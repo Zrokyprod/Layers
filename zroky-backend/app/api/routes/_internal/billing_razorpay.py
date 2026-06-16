@@ -17,7 +17,7 @@ from app.services.billing_plans import (
     PlanNotSelfServeError,
     assert_self_serve_plan,
 )
-from app.services.entitlement_catalog import load_pricing_contract
+from app.services.entitlement_catalog import canonical_plan_code, load_pricing_contract
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,10 @@ def _monthly_plan_amount_usd(plan_code: str) -> int | None:
     except Exception:
         logger.exception("billing.pricing_contract_load_failed")
         return None
-    canonical = "pro" if plan_code == "plus" else plan_code
+    try:
+        canonical = canonical_plan_code(plan_code)
+    except InvalidPlanCodeError:
+        canonical = plan_code
     for raw_plan in contract.get("plans", []):
         if not isinstance(raw_plan, dict):
             continue
@@ -290,6 +293,7 @@ def _parse_stored_razorpay_request(value: str | None) -> tuple[str | None, str |
 
 
 _RAZORPAY_PLAN_ALIASES: dict[str, str] = {
+    "pilot": "starter",
     "plus": "pro",
 }
 

@@ -66,7 +66,7 @@ describe("BillingPage", () => {
       trial_end: null,
       sla_tier: "standard",
       plan_template: {
-        "events.monthly_quota": 50000,
+        "events.monthly_quota": 5000,
         "replay.monthly_runs": 0,
         "seats.included": 2,
       },
@@ -80,7 +80,7 @@ describe("BillingPage", () => {
       plan_code: "free",
       plan_name: "Free",
       subscription_status: "active",
-      calls: { used: 42, limit: 50000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
+      calls: { used: 42, limit: 5000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
       replay: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: "2026-07-01" },
       goldens: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: null },
       golden_sets: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: null },
@@ -95,20 +95,22 @@ describe("BillingPage", () => {
       screen.getByText("Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity."),
     ).toBeInTheDocument();
     expect(await screen.findByText("Plan & Pricing")).toBeInTheDocument();
-    expect(screen.getAllByText("42 / 50,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("42 / 5,000").length).toBeGreaterThan(0);
   });
 
   it("renders the backend-aligned self-serve plan catalog", async () => {
     render(<BillingPage />);
 
-    expect(await screen.findByText("Pilot")).toBeInTheDocument();
-    expect(screen.getByText(/500K events\/mo/)).toBeInTheDocument();
-    expect(screen.getByText(/100 mocked-tool replay runs\/mo/)).toBeInTheDocument();
+    expect(await screen.findByText("Starter")).toBeInTheDocument();
+    const starterCard = screen.getByText("Starter").closest(".billing-plan-card") as HTMLElement;
+    expect(within(starterCard).getByText(/50K events\/mo/)).toBeInTheDocument();
+    expect(within(starterCard).getByText(/50 mocked-tool replay runs\/mo/)).toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
-    expect(screen.getByText("$149.00")).toBeInTheDocument();
-    expect(screen.getByText(/3M events\/mo/)).toBeInTheDocument();
-    expect(screen.getByText(/100 real LLM replay runs\/mo/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pay with Razorpay for Pilot" })).toBeInTheDocument();
+    expect(screen.getByText("$199.00")).toBeInTheDocument();
+    const proCard = screen.getByText("Pro").closest(".billing-plan-card") as HTMLElement;
+    expect(within(proCard).getByText(/250K events\/mo/)).toBeInTheDocument();
+    expect(within(proCard).getByText(/500 real LLM replay runs\/mo/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay with Razorpay for Starter" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });
 
@@ -126,9 +128,9 @@ describe("BillingPage", () => {
       trial_end: null,
       sla_tier: "standard",
       plan_template: {
-        "events.monthly_quota": 3000000,
-        "replay.monthly_runs": 1000,
-        "seats.included": 10,
+        "events.monthly_quota": 250000,
+        "replay.monthly_runs": 500,
+        "seats.included": -1,
       },
     });
     api.getBillingUsage.mockResolvedValue({
@@ -140,10 +142,10 @@ describe("BillingPage", () => {
       plan_code: "pro",
       plan_name: "Pro",
       subscription_status: "active",
-      calls: { used: 1000, limit: 3000000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
-      replay: { used: 10, limit: 1000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
-      goldens: { used: 20, limit: 1000, unlimited: false, overage: null, state: "ok", resets_at: null },
-      golden_sets: { used: 2, limit: 50, unlimited: false, overage: null, state: "ok", resets_at: null },
+      calls: { used: 1000, limit: 250000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
+      replay: { used: 10, limit: 500, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
+      goldens: { used: 20, limit: 2500, unlimited: false, overage: null, state: "ok", resets_at: null },
+      golden_sets: { used: 2, limit: 25, unlimited: false, overage: null, state: "ok", resets_at: null },
       metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
 
@@ -155,5 +157,35 @@ describe("BillingPage", () => {
     const proCard = screen.getByText("Pro").closest(".billing-plan-card");
     expect(proCard?.className).toContain("billing-plan-current");
     expect(within(proCard as HTMLElement).getByText("Current")).toBeInTheDocument();
+  });
+
+  it("maps legacy Pilot subscriptions to the Starter catalog card", async () => {
+    api.getBillingMe.mockResolvedValue({
+      org_id: "org_1",
+      plan_code: "pilot",
+      status: "active",
+      seats: 3,
+      payment_provider: "razorpay",
+      payment_customer_ref: "billing@example.com",
+      payment_subscription_ref: "rzp_pay_123",
+      payment_request_ref: "rzp_order_123",
+      current_period_end: null,
+      trial_end: null,
+      sla_tier: "standard",
+      plan_template: {
+        "events.monthly_quota": 50000,
+        "replay.monthly_runs": 50,
+        "seats.included": -1,
+      },
+    });
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText("PILOT")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Pilot maps to Starter entitlements.")).toBeInTheDocument();
+
+    const starterCard = screen.getByText("Starter").closest(".billing-plan-card");
+    expect(starterCard?.className).toContain("billing-plan-current");
+    expect(within(starterCard as HTMLElement).getByText("Current")).toBeInTheDocument();
   });
 });

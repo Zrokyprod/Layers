@@ -119,7 +119,7 @@ def test_owner_money_path_health_aggregates_real_backend_state(
                 Subscription(
                     id="sub_gap",
                     org_id="proj_gap",
-                    plan_code="pilot",
+                    plan_code="starter",
                     status="past_due",
                     current_period_end=now + timedelta(days=30),
                 ),
@@ -134,7 +134,7 @@ def test_owner_money_path_health_aggregates_real_backend_state(
                     id="ec_gap",
                     tenant_id="proj_gap",
                     month=now.strftime("%Y-%m"),
-                    event_count=500000,
+                    event_count=50_000,
                     last_event_at=now,
                 ),
                 ProjectAlert(
@@ -341,7 +341,7 @@ def test_owner_money_path_health_aggregates_real_backend_state(
     assert good["next_owner_action"] == "review_blocked_ci"
 
     gap = tenants["proj_gap"]
-    assert gap["plan_code"] == "pilot"
+    assert gap["plan_code"] == "starter"
     assert gap["captures_24h"] == 0
     assert gap["open_issue_count"] == 1
     assert gap["provider_key_status"]["state"] == "missing"

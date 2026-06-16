@@ -27,7 +27,7 @@ EXPECTED_LIMITS = {
     "free": {
         "max_projects": 1,
         "max_members": 2,
-        "max_calls_per_month": 50_000,
+        "max_calls_per_month": 5_000,
         "max_diagnosis_jobs_per_month": 0,
         "max_real_replay_runs_per_month": 0,
         "max_mocked_tool_replay_runs_per_month": 0,
@@ -35,26 +35,26 @@ EXPECTED_LIMITS = {
         "max_golden_traces": 0,
         "retention_days": 7,
     },
-    "pilot": {
+    "starter": {
         "max_projects": 3,
-        "max_members": 5,
-        "max_calls_per_month": 500_000,
+        "max_members": -1,
+        "max_calls_per_month": 50_000,
         "max_diagnosis_jobs_per_month": 100,
         "max_real_replay_runs_per_month": 0,
-        "max_mocked_tool_replay_runs_per_month": 100,
+        "max_mocked_tool_replay_runs_per_month": 50,
         "max_live_sandbox_replay_runs_per_month": 0,
-        "max_golden_traces": 100,
+        "max_golden_traces": 250,
         "retention_days": 30,
     },
     "pro": {
         "max_projects": 10,
-        "max_members": 10,
-        "max_calls_per_month": 3_000_000,
+        "max_members": -1,
+        "max_calls_per_month": 250_000,
         "max_diagnosis_jobs_per_month": 1_000,
-        "max_real_replay_runs_per_month": 100,
-        "max_mocked_tool_replay_runs_per_month": 1_000,
+        "max_real_replay_runs_per_month": 500,
+        "max_mocked_tool_replay_runs_per_month": 500,
         "max_live_sandbox_replay_runs_per_month": 100,
-        "max_golden_traces": 1_000,
+        "max_golden_traces": 2_500,
         "retention_days": 90,
     },
     "enterprise": {
@@ -152,19 +152,21 @@ def test_packaged_pricing_contract_matches_shared_source() -> None:
 
 def test_default_boolean_entitlements_by_tier() -> None:
     free = resolve_plan_entitlements("free")
-    pilot = resolve_plan_entitlements("pilot")
+    starter = resolve_plan_entitlements("starter")
     pro = resolve_plan_entitlements("pro")
     enterprise = resolve_plan_entitlements("enterprise")
 
     assert free["watch.cloud_capture"] is True
     assert free["watch.basic_trace_view"] is True
-    assert free["pilot.failure_inbox"] is False
+    assert free["pilot.failure_inbox"] is True
+    assert free["pilot.replay_stub"] is False
     assert free["pro.ci_gate_blocking"] is False
 
-    assert pilot["pilot.failure_inbox"] is True
-    assert pilot["pilot.replay_mocked_tool"] is True
-    assert pilot["pilot.replay_real_llm"] is False
-    assert pilot["pro.ci_gate_blocking"] is False
+    assert starter["pilot.failure_inbox"] is True
+    assert starter["pilot.replay_mocked_tool"] is True
+    assert starter["pilot.replay_real_llm"] is False
+    assert starter["pro.ci_gate_nonblocking"] is True
+    assert starter["pro.ci_gate_blocking"] is False
 
     assert pro["pilot.replay_real_llm"] is True
     assert pro["pro.ci_gate_nonblocking"] is True
@@ -174,7 +176,11 @@ def test_default_boolean_entitlements_by_tier() -> None:
     assert all(enterprise[key] is True for key in ENTITLEMENT_KEYS)
 
 
-def test_plus_is_legacy_alias_for_canonical_pro() -> None:
+def test_legacy_aliases_resolve_to_launch_plans() -> None:
+    assert canonical_plan_code("pilot") == "starter"
+    assert get_catalog_entry("pilot").plan_code == "starter"
+    assert PLAN_ENTITLEMENTS["pilot"] == PLAN_ENTITLEMENTS["starter"]
+    assert resolve_plan_template("pilot") == resolve_plan_template("starter")
     assert canonical_plan_code("plus") == "pro"
     assert get_catalog_entry("plus").plan_code == "pro"
     assert PLAN_ENTITLEMENTS["plus"] == PLAN_ENTITLEMENTS["pro"]

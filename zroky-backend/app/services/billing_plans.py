@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services.entitlement_catalog import (
+    canonical_plan_code,
     DEFAULT_PLAN_CODE,
     DIGEST_AUDIENCE_VALUES,
     PLAN_ENTITLEMENTS,
@@ -17,7 +18,7 @@ from app.services.entitlement_catalog import (
     InvalidPlanCodeError,
 )
 
-SELF_SERVE_PLAN_CODES: tuple[str, ...] = ("pilot", "pro", "plus")
+SELF_SERVE_PLAN_CODES: tuple[str, ...] = ("starter", "pro")
 ENTERPRISE_PLAN_CODE: str = "enterprise"
 
 
@@ -34,7 +35,7 @@ def normalize_plan_code(value: str | None) -> str:
         raise InvalidPlanCodeError(
             f"plan_code {value!r} must be one of: {sorted(VALID_PLAN_CODES)}"
         )
-    return norm
+    return canonical_plan_code(norm)
 
 
 def assert_self_serve_plan(plan_code: str) -> str:

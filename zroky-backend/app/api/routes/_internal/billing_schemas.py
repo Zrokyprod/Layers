@@ -7,10 +7,11 @@ from pydantic import BaseModel, Field, model_validator
 class CheckoutRequest(BaseModel):
     plan_code: str = Field(
         description=(
-            "Self-serve plan code: 'pilot' | 'pro' | 'plus'. "
+            "Self-serve plan code: 'starter' | 'pro'. "
+            "Legacy 'pilot' maps to 'starter' and 'plus' maps to 'pro'. "
             "'enterprise' is sales-led; 'free' has no checkout."
         ),
-        examples=["pro"],
+        examples=["starter"],
     )
     customer_email: str | None = Field(
         default=None,
@@ -118,7 +119,7 @@ class BillingMeResponse(BaseModel):
     current_period_end: str | None = None
     trial_end: str | None = None
     # Module 12 — Reliability SLA tier (plan §11.4). 'none' for
-    # Free/Pro/Plus; 'team'/'enterprise' for tiers carrying the
+    # Free/Starter/Pro; 'team'/'enterprise' for tiers carrying the
     # refund-on-miss SLA contract. Read-only here; mutations happen
     # exclusively in the Founder Console (Module 13).
     sla_tier: str = Field(

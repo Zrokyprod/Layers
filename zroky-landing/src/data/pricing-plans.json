@@ -3,8 +3,9 @@
   "source_of_truth": "api-contracts/pricing-plans.json",
   "currency": "USD",
   "unlimited": -1,
-  "canonical_plan_order": ["free", "pilot", "pro", "enterprise"],
+  "canonical_plan_order": ["free", "starter", "pro", "enterprise"],
   "aliases": {
+    "pilot": "starter",
     "plus": "pro"
   },
   "plans": [
@@ -16,7 +17,7 @@
         "monthly_usd": 0,
         "period": "/mo"
       },
-      "description": "For first workspace validation before replay becomes part of release checks.",
+      "description": "For validating capture, traces, and issue grouping before replay becomes part of release checks.",
       "cta": {
         "label": "Start free",
         "href": "/auth/register"
@@ -24,7 +25,7 @@
       "featured": false,
       "note": "Best when you need production evidence before committing to replay workflows.",
       "pricing": {
-        "calls_per_month": 50000,
+        "calls_per_month": 5000,
         "retention_days": 7,
         "replay_credits": 0,
         "golden_traces": 0,
@@ -37,7 +38,7 @@
         "limits": {
           "max_projects": 1,
           "max_members": 2,
-          "max_calls_per_month": 50000,
+          "max_calls_per_month": 5000,
           "max_diagnosis_jobs_per_month": 0,
           "max_real_replay_runs_per_month": 0,
           "max_mocked_tool_replay_runs_per_month": 0,
@@ -48,8 +49,8 @@
         "entitlements": {
           "watch.cloud_capture": true,
           "watch.basic_trace_view": true,
-          "pilot.failure_inbox": false,
-          "pilot.issue_grouping": false,
+          "pilot.failure_inbox": true,
+          "pilot.issue_grouping": true,
           "pilot.root_cause_diagnosis": false,
           "pilot.replay_stub": false,
           "pilot.replay_real_llm": false,
@@ -71,7 +72,7 @@
           "enterprise.custom_detectors": false
         },
         "compatibility": {
-          "events.monthly_quota": 50000,
+          "events.monthly_quota": 5000,
           "retention.days": 7,
           "goldens.max_sets": 0,
           "replay.monthly_runs": 0,
@@ -89,40 +90,40 @@
       }
     },
     {
-      "code": "pilot",
-      "name": "Pilot",
+      "code": "starter",
+      "name": "Starter",
       "price": {
-        "label": "$29",
-        "monthly_usd": 29,
+        "label": "$49",
+        "monthly_usd": 49,
         "period": "/mo"
       },
-      "description": "For teams proving the regression workflow on one or two production agents.",
+      "description": "For small teams proving replay, diagnosis, and release-safety checks on real agent traffic.",
       "cta": {
-        "label": "Start pilot",
+        "label": "Start Starter",
         "href": "/auth/register"
       },
       "featured": false,
-      "note": "Use Pilot to validate issue grouping, diagnosis, mocked-tool replay, and basic Goldens.",
+      "note": "Use Starter to validate issue grouping, root-cause diagnosis, mocked-tool replay, and basic Goldens.",
       "pricing": {
-        "calls_per_month": 500000,
+        "calls_per_month": 50000,
         "retention_days": 30,
-        "replay_credits": 100,
-        "golden_traces": 100,
+        "replay_credits": 50,
+        "golden_traces": 250,
         "golden_sets": 5,
-        "non_blocking_ci": false,
+        "non_blocking_ci": true,
         "blocking_ci": false,
-        "provider_key_vault": false
+        "provider_key_vault": true
       },
       "enforcement": {
         "limits": {
           "max_projects": 3,
-          "max_members": 5,
-          "max_calls_per_month": 500000,
+          "max_members": -1,
+          "max_calls_per_month": 50000,
           "max_diagnosis_jobs_per_month": 100,
           "max_real_replay_runs_per_month": 0,
-          "max_mocked_tool_replay_runs_per_month": 100,
+          "max_mocked_tool_replay_runs_per_month": 50,
           "max_live_sandbox_replay_runs_per_month": 0,
-          "max_golden_traces": 100,
+          "max_golden_traces": 250,
           "retention_days": 30
         },
         "entitlements": {
@@ -138,23 +139,23 @@
           "pilot.alerts_basic": true,
           "pro.replay_live_sandbox": false,
           "pro.replay_shadow": false,
-          "pro.ci_gate_nonblocking": false,
+          "pro.ci_gate_nonblocking": true,
           "pro.ci_gate_blocking": false,
           "pro.outcome_attribution": false,
-          "pro.team_workflow": false,
+          "pro.team_workflow": true,
           "pro.advanced_goldens": false,
           "enterprise.private_replay_worker": false,
           "enterprise.sso": false,
           "enterprise.audit_logs": false,
           "enterprise.custom_retention": false,
-          "enterprise.provider_key_vault": false,
+          "enterprise.provider_key_vault": true,
           "enterprise.custom_detectors": false
         },
         "compatibility": {
-          "events.monthly_quota": 500000,
+          "events.monthly_quota": 50000,
           "retention.days": 30,
           "goldens.max_sets": 5,
-          "replay.monthly_runs": 100,
+          "replay.monthly_runs": 50,
           "pilot.autopilot_enabled": true,
           "pilot.tier2_pr_enabled": false,
           "pilot.real_llm_replay_enabled": false,
@@ -164,7 +165,7 @@
           "compliance.export_enabled": false,
           "selfhost.enabled": false,
           "sso.enabled": false,
-          "seats.included": 5
+          "seats.included": -1
         }
       }
     },
@@ -172,11 +173,11 @@
       "code": "pro",
       "name": "Pro",
       "price": {
-        "label": "$149",
-        "monthly_usd": 149,
+        "label": "$199",
+        "monthly_usd": 199,
         "period": "/mo"
       },
-      "description": "For teams that need release protection, real replay proof, and CI gates.",
+      "description": "For teams that need release protection, real replay proof, and blocking CI gates.",
       "cta": {
         "label": "Protect releases",
         "href": "/auth/register"
@@ -184,25 +185,25 @@
       "featured": true,
       "note": "The main self-serve plan when Zroky becomes part of the release process.",
       "pricing": {
-        "calls_per_month": 3000000,
+        "calls_per_month": 250000,
         "retention_days": 90,
-        "replay_credits": 1000,
-        "golden_traces": 1000,
-        "golden_sets": 50,
+        "replay_credits": 500,
+        "golden_traces": 2500,
+        "golden_sets": 25,
         "non_blocking_ci": true,
         "blocking_ci": true,
-        "provider_key_vault": false
+        "provider_key_vault": true
       },
       "enforcement": {
         "limits": {
           "max_projects": 10,
-          "max_members": 10,
-          "max_calls_per_month": 3000000,
+          "max_members": -1,
+          "max_calls_per_month": 250000,
           "max_diagnosis_jobs_per_month": 1000,
-          "max_real_replay_runs_per_month": 100,
-          "max_mocked_tool_replay_runs_per_month": 1000,
+          "max_real_replay_runs_per_month": 500,
+          "max_mocked_tool_replay_runs_per_month": 500,
           "max_live_sandbox_replay_runs_per_month": 100,
-          "max_golden_traces": 1000,
+          "max_golden_traces": 2500,
           "retention_days": 90
         },
         "entitlements": {
@@ -225,16 +226,16 @@
           "pro.advanced_goldens": true,
           "enterprise.private_replay_worker": false,
           "enterprise.sso": false,
-          "enterprise.audit_logs": false,
+          "enterprise.audit_logs": true,
           "enterprise.custom_retention": false,
-          "enterprise.provider_key_vault": false,
+          "enterprise.provider_key_vault": true,
           "enterprise.custom_detectors": false
         },
         "compatibility": {
-          "events.monthly_quota": 3000000,
+          "events.monthly_quota": 250000,
           "retention.days": 90,
-          "goldens.max_sets": 50,
-          "replay.monthly_runs": 1000,
+          "goldens.max_sets": 25,
+          "replay.monthly_runs": 500,
           "pilot.autopilot_enabled": true,
           "pilot.tier2_pr_enabled": true,
           "pilot.real_llm_replay_enabled": true,
@@ -244,7 +245,7 @@
           "compliance.export_enabled": true,
           "selfhost.enabled": false,
           "sso.enabled": false,
-          "seats.included": 10
+          "seats.included": -1
         }
       }
     },
@@ -256,7 +257,7 @@
         "monthly_usd": null,
         "period": ""
       },
-      "description": "For organizations that need unlimited limits, private execution, and controls.",
+      "description": "Internal custom-contract tier for organizations that need unlimited limits, private execution, and controls.",
       "cta": {
         "label": "Talk to Zroky",
         "href": "mailto:sales@zroky.com?subject=Zroky%20Enterprise"

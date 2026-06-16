@@ -318,12 +318,12 @@ def test_owner_pricing_plans_exposes_backend_entitlement_contract(client, monkey
     assert res.status_code == 200
     payload = res.json()
     assert payload["source_of_truth"] == "api-contracts/pricing-plans.json"
-    assert payload["canonical_plan_order"] == ["free", "pilot", "pro", "enterprise"]
-    assert payload["aliases"] == {"plus": "pro"}
+    assert payload["canonical_plan_order"] == ["free", "starter", "pro", "enterprise"]
+    assert payload["aliases"] == {"pilot": "starter", "plus": "pro"}
     assert payload["drift"] == []
 
     plans = {plan["code"]: plan for plan in payload["plans"]}
     assert plans["free"]["pricing"]["replay_credits"] == 0
-    assert plans["pilot"]["pricing"]["golden_sets"] == 5
+    assert plans["starter"]["pricing"]["golden_sets"] == 5
     assert plans["pro"]["pricing"]["blocking_ci"] is True
     assert plans["enterprise"]["pricing"]["provider_key_vault"] is True

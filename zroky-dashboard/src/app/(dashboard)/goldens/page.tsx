@@ -289,7 +289,7 @@ export default function GoldensPage() {
           <AlertTriangle aria-hidden="true" />
           <div>
             <strong>Goldens locked</strong>
-            <p>Upgrade to Pilot to create protected flows from verified replay evidence.</p>
+            <p>Upgrade to Starter to create protected flows from verified replay evidence.</p>
           </div>
           <Link href="/settings/billing" className="btn btn-soft">Upgrade</Link>
         </section>
@@ -378,7 +378,7 @@ export default function GoldensPage() {
             <strong>No Goldens yet</strong>
             <p>Create a Golden from a verified replay to protect that flow in future CI runs.</p>
             {showEntitlementWarning ? (
-              <p>Replay and Golden creation require an active Pilot, Pro, or Enterprise entitlement.</p>
+              <p>Replay and Golden creation require an active Starter or Pro entitlement.</p>
             ) : canUseGoldens ? (
               <Link href="/replay" className="btn btn-primary">Go to Replay</Link>
             ) : null}

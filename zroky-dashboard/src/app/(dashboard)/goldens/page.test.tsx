@@ -234,25 +234,25 @@ describe("GoldensPage MVP list", () => {
     expect(screen.getByRole("link", { name: "Go to Replay" }).getAttribute("href")).toBe("/replay");
   });
 
-  it("shows Upgrade to Pilot only for Free and Watch plans", () => {
+  it("shows Upgrade to Starter only for Free and Watch plans", () => {
     for (const planCode of ["free", "watch"]) {
       mockGoldens({ planTemplate: {}, planCode });
       const { unmount } = render(<GoldensPage />);
 
       expect(screen.getByText("Goldens locked")).toBeInTheDocument();
-      expect(screen.getByText("Upgrade to Pilot to create protected flows from verified replay evidence.")).toBeInTheDocument();
+      expect(screen.getByText("Upgrade to Starter to create protected flows from verified replay evidence.")).toBeInTheDocument();
 
       unmount();
     }
   });
 
   it("does not show the locked banner for paid Goldens plans", () => {
-    for (const planCode of ["pilot", "pro", "plus", "enterprise"]) {
+    for (const planCode of ["pilot", "starter", "pro", "plus", "enterprise"]) {
       mockGoldens({ planTemplate: {}, planCode });
       const { unmount } = render(<GoldensPage />);
 
       expect(screen.queryByText("Goldens locked")).not.toBeInTheDocument();
-      expect(screen.queryByText("Upgrade to Pilot to create protected flows from verified replay evidence.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Upgrade to Starter to create protected flows from verified replay evidence.")).not.toBeInTheDocument();
 
       unmount();
     }
@@ -263,7 +263,7 @@ describe("GoldensPage MVP list", () => {
 
     render(<GoldensPage />);
 
-    expect(screen.queryByText("Upgrade to Pilot to create protected flows from verified replay evidence.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upgrade to Starter to create protected flows from verified replay evidence.")).not.toBeInTheDocument();
     expect(screen.getByText("Goldens entitlement unavailable")).toBeInTheDocument();
     expect(screen.getByText("Refresh workspace plan or contact admin.")).toBeInTheDocument();
   });
@@ -287,7 +287,7 @@ describe("GoldensPage MVP list", () => {
     render(<GoldensPage />);
 
     expect(screen.queryByRole("link", { name: "Go to Replay" })).not.toBeInTheDocument();
-    expect(screen.getByText("Replay and Golden creation require an active Pilot, Pro, or Enterprise entitlement.")).toBeInTheDocument();
+    expect(screen.getByText("Replay and Golden creation require an active Starter or Pro entitlement.")).toBeInTheDocument();
   });
 
   it("keeps normal CTAs for Pro with valid Goldens entitlement", () => {

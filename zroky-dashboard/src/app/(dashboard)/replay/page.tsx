@@ -676,7 +676,7 @@ function ReplayPageContent() {
                 Replay proof engine
               </div>
               <h1>Replay</h1>
-              <p>Replay needs Pro or higher so fixes can be tested against pinned production traces before release.</p>
+              <p>Replay needs Starter or higher so fixes can be tested against pinned production traces before release.</p>
             </div>
             <Link href="/settings/billing?upgrade_hint=replay.monthly_runs" className="btn btn-primary">
               Upgrade plan
@@ -686,7 +686,7 @@ function ReplayPageContent() {
         </section>
         <section className="panel replay-plan-gate">
           <ShieldCheck aria-hidden="true" />
-          <h2>Replay requires Pro or higher</h2>
+          <h2>Replay requires Starter or higher</h2>
           <p>The Replay module runs production traces against candidate prompt and model configuration to catch regressions before they ship.</p>
         </section>
       </div>
