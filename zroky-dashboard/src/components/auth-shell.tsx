@@ -58,7 +58,9 @@ const authStagger: Variants = {
   },
 };
 
-const reliabilityLoop = ["Capture", "Diagnose", "Replay", "Gate"];
+const authLogoSrc = "/logo.png?v=landing-white";
+
+const reliabilityLoop = ["Capture", "Replay", "Promote", "Gate"];
 
 const proofCards = [
   {
@@ -79,10 +81,10 @@ const proofCards = [
 ] satisfies Array<{ icon: LucideIcon; title: string; copy: string }>;
 
 const consoleRows = [
-  { label: "Trace evidence", value: "Captured", tone: "accent" },
-  { label: "Root cause", value: "Diagnosed", tone: "neutral" },
-  { label: "Replay proof", value: "Verified", tone: "green" },
-  { label: "CI release gate", value: "Armed", tone: "neutral" },
+  { label: "Failing run", value: "Captured", tone: "accent" },
+  { label: "Fix replay", value: "Passed", tone: "green" },
+  { label: "Golden contract", value: "Promoted", tone: "neutral" },
+  { label: "CI gate", value: "Armed", tone: "neutral" },
 ] as const;
 
 export function AuthBrandPanel() {
@@ -96,12 +98,12 @@ export function AuthBrandPanel() {
       <motion.div className="auth-mark-row" variants={authFade}>
         <div className="auth-logo-wrap">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/zroky-auth-logo.png" alt="Zroky" className="auth-logo" />
+          <img src={authLogoSrc} alt="Zroky" className="auth-logo" />
         </div>
       </motion.div>
       <motion.div className="auth-brand-copy" variants={authFade}>
         <p className="auth-kicker">AI agent reliability control plane</p>
-        <h1>From failure to release gate.</h1>
+        <h1>Fix failed agent runs before they ship again.</h1>
         <p className="auth-brand-subtitle">
           Enter the workspace where failed AI-agent runs become trace evidence, replay proof, golden contracts, and CI gates.
         </p>

@@ -2009,7 +2009,7 @@ body:has(.app-shell) {
   color: var(--dashboard-text-soft) !important;
 }
 
-.auth-console-row-accent strong {
+.app-shell .auth-console-row-accent strong {
   color: #f8fafc;
 }
 

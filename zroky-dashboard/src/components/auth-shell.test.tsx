@@ -18,9 +18,9 @@ describe("AuthShell", () => {
     );
 
     const logo = screen.getByRole("img", { name: "Zroky" });
-    expect(logo.getAttribute("src")).toBe("/zroky-auth-logo.png");
+    expect(logo.getAttribute("src")).toBe("/logo.png?v=landing-white");
     expect(screen.queryByText("ZROKY RELIABILITY")).not.toBeInTheDocument();
-    expect(screen.getByText("From failure to release gate.")).toBeInTheDocument();
+    expect(screen.getByText("Fix failed agent runs before they ship again.")).toBeInTheDocument();
     expect(screen.queryByText("Protected access")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Zroky reliability loop")).toBeInTheDocument();
     expect(screen.getByLabelText("Reliability proof preview")).toBeInTheDocument();
