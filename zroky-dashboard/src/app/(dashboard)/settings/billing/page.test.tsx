@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import BillingPage from "./page";
 
@@ -86,6 +86,10 @@ describe("BillingPage", () => {
       golden_sets: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: null },
       metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders targeted upgrade_hint banners from module links", async () => {
@@ -187,5 +191,42 @@ describe("BillingPage", () => {
     const starterCard = screen.getByText("Starter").closest(".billing-plan-card");
     expect(starterCard?.className).toContain("billing-plan-current");
     expect(within(starterCard as HTMLElement).getByText("Current")).toBeInTheDocument();
+  });
+
+  it("polls billing while a Razorpay payment request is pending", async () => {
+    vi.useFakeTimers();
+    api.getBillingMe.mockResolvedValue({
+      org_id: "org_1",
+      plan_code: "free",
+      status: "active",
+      seats: 1,
+      payment_provider: "razorpay",
+      payment_customer_ref: null,
+      payment_subscription_ref: null,
+      payment_request_ref: "order_pending:starter",
+      current_period_end: null,
+      trial_end: null,
+      sla_tier: "standard",
+      plan_template: {
+        "events.monthly_quota": 5000,
+        "replay.monthly_runs": 0,
+        "seats.included": 2,
+      },
+    });
+
+    render(<BillingPage />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Pending")).toBeInTheDocument();
+    expect(api.getBillingMe).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+
+    expect(api.getBillingMe).toHaveBeenCalledTimes(2);
   });
 });

@@ -233,8 +233,11 @@ function BillingSettingsContent() {
   const [actionMsg, setActionMsg] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { quiet?: boolean }) => {
+    const quiet = options?.quiet === true;
+    if (!quiet) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const [me, usage] = await Promise.all([getBillingMe(), getBillingUsage()]);
@@ -243,7 +246,9 @@ function BillingSettingsContent() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load billing data.");
     } finally {
-      setLoading(false);
+      if (!quiet) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -353,6 +358,7 @@ function BillingSettingsContent() {
         setActionMsg(response.error?.description || "Razorpay payment failed.");
       });
       setActionMsg(`Opening Razorpay checkout for ${plan.name} (${formatRazorpayAmount(order.amount, order.currency)}).`);
+      await load({ quiet: true });
       checkout.open();
     } catch (e: unknown) {
       setActionMsg(e instanceof Error ? e.message : "Failed to update plan.");
@@ -372,6 +378,17 @@ function BillingSettingsContent() {
   const template = billingMe?.plan_template ?? {};
   const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
   const paymentStatus = paymentStatusLabel(billingMe);
+  const pendingPaymentConfirmation = Boolean(billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref);
+
+  useEffect(() => {
+    if (!pendingPaymentConfirmation) {
+      return undefined;
+    }
+    const intervalId = window.setInterval(() => {
+      void load({ quiet: true });
+    }, 5_000);
+    return () => window.clearInterval(intervalId);
+  }, [load, pendingPaymentConfirmation]);
 
   return (
     <div className="page-content">

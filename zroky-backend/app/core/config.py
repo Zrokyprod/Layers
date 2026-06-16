@@ -268,6 +268,11 @@ class Settings(BaseSettings):
     # sweeps share the minute because they query disjoint row sets
     # (status='trialing' vs status='past_due') and never contend.
     BILLING_LIFECYCLE_SWEEP_MINUTE: int = 7
+    # Recover Razorpay orders that are paid at the provider but still
+    # pending locally because the browser callback or webhook was missed.
+    BILLING_RAZORPAY_RECONCILE_ENABLED: bool = True
+    BILLING_RAZORPAY_RECONCILE_INTERVAL_SECONDS: int = 300
+    BILLING_RAZORPAY_RECONCILE_LIMIT: int = 100
 
     # â”€â”€ Entitlements resolver (Module 6; plan Â§11.2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Redis cache TTL for the merged (override > trial > plan) entitlement

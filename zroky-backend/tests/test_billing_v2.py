@@ -49,6 +49,7 @@ from app.services.entitlement_catalog import (
     PLAN_ALIASES,
     load_pricing_contract,
 )
+from app.services.razorpay_reconciliation import reconcile_pending_razorpay_orders
 
 _TEST_WEBHOOK_SECRET = "whsec_test_module_5"
 
@@ -148,6 +149,25 @@ class _FakeRazorpayOrderClient:
             }
         return dict(order)
 
+    def payments(self, order_id: str) -> dict[str, object]:
+        order = self._owner.orders.get(order_id) or {}
+        return {
+            "items": [
+                {
+                    "id": self._owner.payment_id,
+                    "order_id": order_id,
+                    "amount": order.get("amount", 1_592_000),
+                    "currency": order.get("currency", "INR"),
+                    "status": self._owner.payment_status,
+                    "captured": self._owner.payment_status == "captured",
+                    "notes": order.get(
+                        "notes",
+                        {"org_id": "org-alpha", "plan_code": "pro", "product": "zroky"},
+                    ),
+                }
+            ]
+        }
+
 
 class _FakeRazorpayPaymentClient:
     def __init__(self, owner: "_FakeRazorpayClient") -> None:
@@ -172,6 +192,7 @@ class _FakeRazorpayPaymentClient:
 class _FakeRazorpayClient:
     def __init__(self) -> None:
         self.orders: dict[str, dict[str, object]] = {}
+        self.payment_id = "pay_test_123"
         self.payment_status = "captured"
         self.order_status = "paid"
         self.order = _FakeRazorpayOrderClient(self)
@@ -414,6 +435,62 @@ class TestRazorpayCheckoutRoute:
         assert response.status_code == 400
         factory = client._session_factory  # type: ignore[attr-defined]
         with factory() as session:
+            sub = session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one()
+            assert sub.payment_subscription_ref is None
+            assert sub.plan_code == DEFAULT_PLAN_CODE
+
+
+class TestRazorpayReconciliation:
+    def test_reconciles_paid_pending_order_without_browser_verify(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake = _FakeRazorpayClient()
+        fake.payment_id = "pay_reconciled"
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"}).status_code == 200
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            result = reconcile_pending_razorpay_orders(session, client_factory=lambda: fake)
+            assert result.examined == 1
+            assert result.activated == 1
+            assert result.failed == 0
+
+            sub = session.execute(
+                select(Subscription).where(Subscription.org_id == "org-alpha")
+            ).scalar_one()
+            assert sub.payment_request_ref == "order_test_123"
+            assert sub.payment_subscription_ref == "pay_reconciled"
+            assert sub.status == "active"
+            assert sub.plan_code == "starter"
+            assert entitlements_resolver.get(session, "org-alpha", "events.monthly_quota") == 50_000
+
+            event = session.execute(
+                select(BillingEvent).where(
+                    BillingEvent.provider == "razorpay",
+                    BillingEvent.provider_event_id == "razorpay_reconcile:pay_reconciled",
+                )
+            ).scalar_one()
+            assert event.result == "applied"
+
+    def test_reconciliation_skips_order_metadata_mismatch(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake = _FakeRazorpayClient()
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pro"}).status_code == 200
+        fake.orders["order_test_123"]["notes"] = {"org_id": "other-org", "plan_code": "pro"}
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            result = reconcile_pending_razorpay_orders(session, client_factory=lambda: fake)
+            assert result.examined == 1
+            assert result.activated == 0
+            assert result.skipped == 1
+            assert result.records[0].detail == "order_org_mismatch"
+
             sub = session.execute(
                 select(Subscription).where(Subscription.org_id == "org-alpha")
             ).scalar_one()

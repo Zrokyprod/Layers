@@ -106,4 +106,58 @@ def expire_past_due_grace(
         session.close()
 
 
+@celery_app.task(
+    name="app.worker.tasks.reconcile_pending_razorpay_orders", queue="diagnosis_fast"
+)
+def reconcile_pending_razorpay_orders(limit: int | None = None) -> dict:
+    """Beat task: recover paid Razorpay orders still pending locally."""
+    from app.services.razorpay_reconciliation import (
+        reconcile_pending_razorpay_orders as reconcile_orders,
+    )
+
+    settings = get_settings()
+    if not settings.BILLING_ENABLED:
+        logger.info("reconcile_pending_razorpay_orders: BILLING_ENABLED=false - skipping")
+        return {"skipped": True, "reason": "BILLING_ENABLED=false"}
+    if settings.BILLING_PROVIDER != "razorpay":
+        logger.info(
+            "reconcile_pending_razorpay_orders: BILLING_PROVIDER=%s - skipping",
+            settings.BILLING_PROVIDER,
+        )
+        return {"skipped": True, "reason": "BILLING_PROVIDER is not razorpay"}
+    if not settings.BILLING_RAZORPAY_RECONCILE_ENABLED:
+        logger.info(
+            "reconcile_pending_razorpay_orders: BILLING_RAZORPAY_RECONCILE_ENABLED=false - skipping"
+        )
+        return {
+            "skipped": True,
+            "reason": "BILLING_RAZORPAY_RECONCILE_ENABLED=false",
+        }
+
+    effective_limit = (
+        int(limit)
+        if limit is not None and limit > 0
+        else int(settings.BILLING_RAZORPAY_RECONCILE_LIMIT)
+    )
+    session = SessionLocal()
+    try:
+        result = reconcile_orders(session, limit=effective_limit)
+        logger.info(
+            "reconcile_pending_razorpay_orders.completed",
+            extra={
+                "event": "razorpay_reconciliation",
+                "task": "reconcile_pending_razorpay_orders",
+                "examined": result.examined,
+                "activated": result.activated,
+                "skipped": result.skipped,
+                "failed": result.failed,
+            },
+        )
+        out = result.to_dict()
+        out.pop("records", None)
+        return out
+    finally:
+        session.close()
+
+
 __all__ = [name for name in globals() if not name.startswith("__")]
