@@ -584,3 +584,67 @@ def test_me_security_and_logout_all_flow(client):
 def test_github_start_returns_503_when_not_configured(client):
     resp = client.get("/v1/auth/github/start", follow_redirects=False)
     assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth
+# ---------------------------------------------------------------------------
+
+def test_google_session_callback_returns_token_bundle(client, monkeypatch):
+    from app.api.routes import auth as auth_routes
+    from app.services.security import generate_oauth_state
+
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "google-client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "google-client-secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URL", "https://app.zroky.com/auth/google/callback")
+    monkeypatch.setenv("OAUTH_STATE_SECRET", "google-state-secret")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        auth_routes,
+        "_exchange_google_code",
+        lambda **_: "google-access-token",
+    )
+    monkeypatch.setattr(
+        auth_routes,
+        "_fetch_google_user",
+        lambda token: {
+            "id": "google-user-session",
+            "email": "google-session@example.com",
+            "name": "Google Session",
+        },
+    )
+
+    state = generate_oauth_state("google-state-secret")
+    response = client.get(
+        "/v1/auth/google/session-callback",
+        params={"code": "oauth-code", "state": state},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["access_token"]
+    assert body["refresh_token"]
+    assert body["email"] == "google-session@example.com"
+    assert body["user_id"]
+
+    with SessionLocal() as db:
+        user = db.execute(
+            select(User).where(User.email_hash == compute_email_hash("google-session@example.com"))
+        ).scalar_one()
+        assert user.google_id == "google-user-session"
+
+
+def test_google_session_callback_rejects_invalid_state(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "google-client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "google-client-secret")
+    monkeypatch.setenv("OAUTH_STATE_SECRET", "google-state-secret")
+    get_settings.cache_clear()
+
+    response = client.get(
+        "/v1/auth/google/session-callback",
+        params={"code": "oauth-code", "state": "invalid-state"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid or expired OAuth state. Please try signing in again."

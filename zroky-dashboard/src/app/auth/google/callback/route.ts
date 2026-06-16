@@ -87,7 +87,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return loginRedirect(request, "oauth_failed");
   }
 
-  const callbackUrl = new URL("/api/zroky/v1/auth/google/callback", request.url);
+  const callbackUrl = new URL("/api/zroky/v1/auth/google/session-callback", request.url);
   request.nextUrl.searchParams.forEach((value, key) => {
     callbackUrl.searchParams.set(key, value);
   });
@@ -102,41 +102,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return loginRedirect(request, "oauth_failed");
   }
 
-  const location = response.headers.get("location");
   if (response.status === 400) {
     return loginRedirect(request, "oauth_expired");
   }
-  if (!location || response.status < 300 || response.status >= 400) {
-    return loginRedirect(request, "oauth_failed");
-  }
-
-  const handoffUrl = new URL(location, request.url);
-  const handoffId = handoffUrl.searchParams.get("handoff_id");
-  if (!handoffId) {
-    return loginRedirect(request, "oauth_failed");
-  }
-
-  let handoffResponse: Response;
-  try {
-    handoffResponse = await fetch(new URL("/api/zroky/v1/auth/oauth/handoff", request.url), {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ handoff_id: handoffId }),
-    });
-  } catch {
-    return loginRedirect(request, "oauth_failed");
-  }
-
-  if (!handoffResponse.ok) {
+  if (!response.ok) {
     return loginRedirect(request, "oauth_failed");
   }
 
   let rawTokens: unknown;
   try {
-    rawTokens = await handoffResponse.json();
+    rawTokens = await response.json();
   } catch {
     return loginRedirect(request, "oauth_failed");
   }

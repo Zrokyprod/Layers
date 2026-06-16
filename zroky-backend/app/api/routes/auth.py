@@ -560,19 +560,7 @@ def google_oauth_start() -> RedirectResponse:
     }
     return RedirectResponse(url=f"{_GOOGLE_AUTH_URL}?{urlencode(params)}")
 
-@router.get(
-    "/google/callback",
-    response_class=RedirectResponse,
-    status_code=status.HTTP_302_FOUND,
-    responses={status.HTTP_302_FOUND: {"description": "Redirect to dashboard OAuth handoff callback."}},
-)
-@limiter.limit("10/minute")
-def google_oauth_callback(
-    request: Request,
-    code: Annotated[str, Query()],
-    state: Annotated[str, Query()],
-    db: Annotated[Session, Depends(get_db)],
-) -> RedirectResponse:
+def _complete_google_oauth_login(code: str, state: str, db: Session) -> AuthTokenResponse:
     settings = get_settings()
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(
@@ -639,13 +627,41 @@ def google_oauth_callback(
     
     db.commit()
     db.refresh(user)
+    return _issue_token(user)
 
+
+@router.get(
+    "/google/callback",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+    responses={status.HTTP_302_FOUND: {"description": "Redirect to dashboard OAuth handoff callback."}},
+)
+@limiter.limit("10/minute")
+def google_oauth_callback(
+    request: Request,
+    code: Annotated[str, Query()],
+    state: Annotated[str, Query()],
+    db: Annotated[Session, Depends(get_db)],
+) -> RedirectResponse:
+    settings = get_settings()
+    token = _complete_google_oauth_login(code, state, db)
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
-    handoff_id = _store_oauth_handoff(_issue_token(user))
+    handoff_id = _store_oauth_handoff(token)
     params = urlencode({
         "handoff_id": handoff_id,
     })
     return RedirectResponse(url=f"{frontend_url}/auth/oauth/callback?{params}", status_code=302)
+
+
+@router.get("/google/session-callback", response_model=AuthTokenResponse)
+@limiter.limit("10/minute")
+def google_oauth_session_callback(
+    request: Request,
+    code: Annotated[str, Query()],
+    state: Annotated[str, Query()],
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthTokenResponse:
+    return _complete_google_oauth_login(code, state, db)
 
 
 @router.get("/me", response_model=MeResponse)
