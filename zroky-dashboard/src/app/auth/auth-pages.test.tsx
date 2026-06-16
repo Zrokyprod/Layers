@@ -87,6 +87,14 @@ describe("auth pages", () => {
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 
+  it("renders OAuth callback errors on login", () => {
+    navigation.searchParams = new URLSearchParams("error=oauth_expired");
+
+    render(<LoginPage />);
+
+    expect(screen.getByText("Google sign-in expired. Start again.")).toBeInTheDocument();
+  });
+
   it("renders signup workspace copy", () => {
     render(<SignupPage />);
 

@@ -19,10 +19,24 @@ import { loginWithPassword } from "@/lib/api";
 import { storeAuthSession } from "@/lib/auth";
 import { loginSchema, type LoginFormData } from "@/lib/schemas";
 
+function authErrorMessage(code: string | null): string {
+  switch (code) {
+    case "access_denied":
+      return "Google sign-in was cancelled.";
+    case "oauth_expired":
+      return "Google sign-in expired. Start again.";
+    case "oauth_failed":
+      return "Google sign-in could not complete. Start again.";
+    default:
+      return "";
+  }
+}
+
 function LoginForm() {
   const [error, setError] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
+  const visibleError = error || authErrorMessage(searchParams.get("error"));
 
   const {
     register,
@@ -55,7 +69,7 @@ function LoginForm() {
       subtitle="Access traces, replays, and release gates."
       footer={<Link href="/signup" className="auth-link">Don&apos;t have an account? Sign up</Link>}
     >
-      {error && <div className="auth-banner auth-banner-error">{error}</div>}
+      {visibleError && <div className="auth-banner auth-banner-error">{visibleError}</div>}
       <div className="auth-oauth-stack">
         <AuthProviderButton provider="google" onClick={() => handleOAuthLogin("google")} />
         <AuthProviderButton provider="github" onClick={() => handleOAuthLogin("github")} />
