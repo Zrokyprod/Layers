@@ -80,8 +80,10 @@ describe("auth pages", () => {
     render(<LoginPage />);
 
     expect(screen.getByRole("heading", { name: "Sign in to Zroky" })).toBeInTheDocument();
-    expect(screen.getByText("Review failed runs, replay proof, golden contracts, CI gates, and owner evidence.")).toBeInTheDocument();
+    expect(screen.getByText("Access traces, replays, and release gates.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Zroky" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 
@@ -89,15 +91,17 @@ describe("auth pages", () => {
     render(<SignupPage />);
 
     expect(screen.getByRole("heading", { name: "Create your Zroky workspace" })).toBeInTheDocument();
-    expect(screen.getByText("Create the workspace where failed agent runs become replay proof and release gates.")).toBeInTheDocument();
+    expect(screen.getByText("Start capturing failed agent runs.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
   });
 
   it("renders forgot password copy", () => {
     render(<ForgotPasswordPage />);
 
-    expect(screen.getByRole("heading", { name: "Recover workspace access" })).toBeInTheDocument();
-    expect(screen.getByText("Send a reset link while keeping account discovery private.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+    expect(screen.getByText("Send a secure reset link.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send reset link" })).toBeInTheDocument();
   });
 
@@ -106,15 +110,15 @@ describe("auth pages", () => {
 
     render(<ResetPasswordPage />);
 
-    expect(screen.getByRole("heading", { name: "Set a new password" })).toBeInTheDocument();
-    expect(screen.getByText("Set a new key for your reliability workspace session.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create new password" })).toBeInTheDocument();
+    expect(screen.getByText("Choose a new workspace password.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update password" })).toBeInTheDocument();
   });
 
   it("renders verify email copy", () => {
     render(<VerifyEmailPage />);
 
-    expect(screen.getByRole("heading", { name: "Verify your email" })).toBeInTheDocument();
-    expect(screen.getByText("Confirm your email to unlock trace capture, replay, and golden gates.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Check your email" })).toBeInTheDocument();
+    expect(screen.getByText("Open the verification link.")).toBeInTheDocument();
   });
 });

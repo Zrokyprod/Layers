@@ -55,7 +55,7 @@ function CallbackContent() {
 
   return (
     <AuthShell>
-      <AuthCard title="Completing GitHub sign-in" subtitle="Validating OAuth callback and creating your Zroky session.">
+      <AuthCard title="Signing in with GitHub" subtitle="Completing secure access.">
         {error ? (
           <div className="auth-banner auth-banner-error">
             {error} <Link href="/login" className="auth-link">Return to login</Link>
@@ -63,7 +63,7 @@ function CallbackContent() {
         ) : (
           <div className="auth-status">
             <div className="spinner" />
-            <p>Please wait. Redirecting to dashboard...</p>
+            <p>Redirecting to dashboard...</p>
           </div>
         )}
       </AuthCard>
@@ -74,7 +74,7 @@ function CallbackContent() {
 function CallbackFallback() {
   return (
     <AuthShell>
-      <AuthCard title="Completing GitHub sign-in" subtitle="Preparing callback context.">
+      <AuthCard title="Signing in with GitHub" subtitle="Preparing secure access.">
         <p className="hint">Loading...</p>
       </AuthCard>
     </AuthShell>

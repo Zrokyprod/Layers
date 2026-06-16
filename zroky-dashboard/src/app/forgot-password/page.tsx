@@ -37,14 +37,14 @@ export default function ForgotPasswordPage() {
     <AuthShell>
       <AuthCard
         eyebrow="Account recovery"
-        title="Recover workspace access"
-        subtitle="Send a reset link while keeping account discovery private."
+        title="Reset your password"
+        subtitle="Send a secure reset link."
         footer={<Link href="/login" className="auth-link">Back to login</Link>}
       >
         {message && <div className={`auth-banner ${isSuccess ? "auth-banner-success" : "auth-banner-error"}`}>{message}</div>}
         {!message && (
           <AuthEmailNotice>
-            Use the email connected to your Zroky workspace. The recovery response stays privacy-preserving.
+            Enter the email connected to your workspace.
           </AuthEmailNotice>
         )}
         <form onSubmit={onSubmit} className="auth-form">
@@ -62,9 +62,8 @@ export default function ForgotPasswordPage() {
         </form>
         <AuthAssuranceList
           items={[
-            "The response stays privacy-preserving",
-            "Reset instructions go only to the workspace inbox",
-            "You can return to sign in anytime",
+            "Private recovery response",
+            "Reset link sent to the workspace inbox",
           ]}
         />
       </AuthCard>

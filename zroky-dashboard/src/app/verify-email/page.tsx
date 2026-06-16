@@ -48,7 +48,7 @@ function VerifyEmailContent() {
     return (
       <>
         <AuthEmailNotice>
-          We sent a verification link to {email ? <strong>{email}</strong> : "your email address"}. Open it to unlock trace capture, replay, and golden gates.
+          Verification link sent to {email ? <strong>{email}</strong> : "your email address"}.
         </AuthEmailNotice>
         {message && (
           <div className={`auth-banner ${resendStatus === "error" ? "auth-banner-error" : "auth-banner-success"}`}>
@@ -61,8 +61,7 @@ function VerifyEmailContent() {
         <AuthAssuranceList
           items={[
             "Verification protects workspace access",
-            "Resend is available if the first email expires",
-            "Verified users can continue to dashboard",
+            "Resend is available if it expires",
           ]}
         />
         <p className="auth-small-copy">
@@ -105,8 +104,8 @@ export default function VerifyEmailPage() {
     <AuthShell>
       <AuthCard
         eyebrow="Workspace verification"
-        title="Verify your email"
-        subtitle="Confirm your email to unlock trace capture, replay, and golden gates."
+        title="Check your email"
+        subtitle="Open the verification link."
       >
         <Suspense fallback={<p className="hint">Loading...</p>}>
           <VerifyEmailContent />
