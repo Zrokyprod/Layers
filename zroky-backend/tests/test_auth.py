@@ -19,6 +19,7 @@ from app.db.session import SessionLocal, engine
 from app.core.config import get_settings
 from app.main import app
 from app.api.routes.auth import AuthTokenResponse, _store_email_verification_token, _store_oauth_handoff
+from app.services.security import hash_password
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -226,6 +227,40 @@ def test_login_with_correct_credentials_returns_token(client):
     assert "access_token" in data
     assert "refresh_token" in data
     assert data["email"] == "logintest@example.com"
+
+
+def test_login_bootstraps_default_project_for_legacy_account(client):
+    email = "legacy-noproject@example.com"
+    password = "legacysecure123"
+    with SessionLocal() as session:
+        user = User(
+            subject=f"email:{email}",
+            email=email,
+            password_hash=hash_password(password),
+            email_verified_at=datetime.now(UTC),
+            is_active=True,
+        )
+        session.add(user)
+        session.commit()
+        user_id = user.id
+
+    resp = client.post("/v1/auth/login", json={
+        "email": email,
+        "password": password,
+    })
+    assert resp.status_code == 200
+
+    with SessionLocal() as session:
+        membership = session.execute(
+            select(ProjectMembership).where(
+                ProjectMembership.user_id == user_id,
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one()
+        project = session.execute(select(Project).where(Project.id == membership.project_id)).scalar_one()
+        assert membership.role == "owner"
+        assert project.name == "My Project"
+        assert project.is_active is True
 
 
 def test_refresh_returns_rotated_session_bundle(client):

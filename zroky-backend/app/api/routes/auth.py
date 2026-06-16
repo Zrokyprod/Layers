@@ -80,20 +80,22 @@ _GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
-def _ensure_default_project_membership(db: Session, user: User) -> None:
+def _ensure_default_project_membership(db: Session, user: User) -> bool:
     if not user.id:
         db.flush()
 
     active_membership = db.execute(
         select(ProjectMembership)
+        .join(Project, Project.id == ProjectMembership.project_id)
         .where(
             ProjectMembership.user_id == user.id,
             ProjectMembership.is_active.is_(True),
+            Project.is_active.is_(True),
         )
         .limit(1)
     ).scalar_one_or_none()
     if active_membership is not None:
-        return
+        return False
 
     project = Project(
         id=generate_project_id(),
@@ -111,6 +113,8 @@ def _ensure_default_project_membership(db: Session, user: User) -> None:
             is_active=True,
         )
     )
+    db.flush()
+    return True
 
 
 @router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
@@ -272,8 +276,15 @@ def login(request: Request, body: LoginRequest, db: Annotated[Session, Depends(g
             detail="Invalid credentials.",
         )
 
+    should_commit = False
     if user.password_hash and password_hash_needs_upgrade(user.password_hash):
         user.password_hash = hash_password(body.password)
+        should_commit = True
+
+    if _ensure_default_project_membership(db, user):
+        should_commit = True
+
+    if should_commit:
         db.commit()
 
     return _issue_token(user)
@@ -718,6 +729,9 @@ def list_current_user_projects(
     db: Annotated[Session, Depends(get_db)] = None,
 ) -> list[CurrentUserProjectResponse]:
     user = _get_current_user(authorization=authorization, db=db)
+    if _ensure_default_project_membership(db, user):
+        db.commit()
+
     rows = db.execute(
         select(ProjectMembership, Project)
         .join(Project, Project.id == ProjectMembership.project_id)
