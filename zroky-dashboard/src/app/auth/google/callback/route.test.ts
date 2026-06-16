@@ -30,8 +30,10 @@ describe("/auth/google/callback", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://app.zroky.com/home");
-    expect(response.headers.get("set-cookie")).toContain("zroky_access_token=access-token");
-    expect(response.headers.get("set-cookie")).toContain("zroky_refresh_token=refresh-token");
+    const setCookie = response.headers.get("set-cookie");
+    expect(setCookie).toContain("zroky_access_token=access-token");
+    expect(setCookie).toContain("zroky_refresh_token=refresh-token");
+    expect(setCookie).toContain("SameSite=lax");
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       "https://app.zroky.com/api/zroky/v1/auth/google/session-callback?state=oauth-state&code=oauth-code&iss=https%3A%2F%2Faccounts.google.com",
     );

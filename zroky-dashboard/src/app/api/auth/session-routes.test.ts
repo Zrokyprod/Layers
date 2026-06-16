@@ -17,8 +17,10 @@ describe("auth session API routes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
-    expect(response.headers.get("set-cookie")).toContain("zroky_access_token=");
-    expect(response.headers.get("set-cookie")).toContain("zroky_refresh_token=");
+    const setCookie = response.headers.get("set-cookie");
+    expect(setCookie).toContain("zroky_access_token=");
+    expect(setCookie).toContain("zroky_refresh_token=");
+    expect(setCookie).toContain("SameSite=lax");
   });
 
   it("sets session cookies from a valid token payload", async () => {
@@ -37,8 +39,10 @@ describe("auth session API routes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
-    expect(response.headers.get("set-cookie")).toContain("zroky_access_token=access-token");
-    expect(response.headers.get("set-cookie")).toContain("zroky_refresh_token=refresh-token");
+    const setCookie = response.headers.get("set-cookie");
+    expect(setCookie).toContain("zroky_access_token=access-token");
+    expect(setCookie).toContain("zroky_refresh_token=refresh-token");
+    expect(setCookie).toContain("SameSite=lax");
   });
 
   it("rejects malformed set-session payloads", async () => {
@@ -86,8 +90,10 @@ describe("auth session API routes", () => {
       refresh_expires_in_seconds: 7200,
       email_verified: true,
     });
-    expect(response.headers.get("set-cookie")).toContain("zroky_access_token=rotated-access-token");
-    expect(response.headers.get("set-cookie")).toContain("zroky_refresh_token=rotated-refresh-token");
+    const setCookie = response.headers.get("set-cookie");
+    expect(setCookie).toContain("zroky_access_token=rotated-access-token");
+    expect(setCookie).toContain("zroky_refresh_token=rotated-refresh-token");
+    expect(setCookie).toContain("SameSite=lax");
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe("http://backend.test/v1/auth/refresh");
     expect((fetchMock.mock.calls[0]?.[1] as RequestInit).body).toBe(JSON.stringify({ refresh_token: "old-refresh-token" }));
   });

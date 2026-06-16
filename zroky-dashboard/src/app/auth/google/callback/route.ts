@@ -61,7 +61,7 @@ function setSessionCookies(response: NextResponse, tokens: AuthTokenResponse): v
   response.cookies.set(ACCESS_TOKEN_COOKIE, tokens.access_token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: tokens.access_expires_in_seconds,
     path: "/",
   });
@@ -69,7 +69,7 @@ function setSessionCookies(response: NextResponse, tokens: AuthTokenResponse): v
   response.cookies.set(REFRESH_TOKEN_COOKIE, tokens.refresh_token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: tokens.refresh_expires_in_seconds,
     path: "/",
   });

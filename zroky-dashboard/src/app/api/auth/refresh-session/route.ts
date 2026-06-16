@@ -128,7 +128,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   response.cookies.set(ACCESS_TOKEN_COOKIE, payload.access_token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: payload.access_expires_in_seconds,
     path: "/",
   });
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   response.cookies.set(REFRESH_TOKEN_COOKIE, payload.refresh_token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: payload.refresh_expires_in_seconds,
     path: "/",
   });
