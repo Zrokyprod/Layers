@@ -3,6 +3,7 @@ from app.api.routes._internal.owner_pricing_audit import _owner_audit, _resolve_
 from razorpay.errors import BadRequestError, GatewayError, ServerError
 
 from app.api.routes._internal.billing_razorpay import (
+    _parse_stored_razorpay_request,
     _razorpay_auth_failure,
     _razorpay_client,
     _razorpay_notes,
@@ -15,6 +16,10 @@ from app.services.billing_plans import (
     normalize_plan_code,
 )
 from app.services.entitlements import clear_trial_entitlements, seed_plan_entitlements
+from app.services.razorpay_reconciliation import reconcile_pending_razorpay_orders
+
+
+_RECOVERY_STALE_AFTER_SECONDS = 15 * 60
 
 
 class OwnerBillingPaymentConfirmRequest(BaseModel):
@@ -218,6 +223,29 @@ def _support_message_item(m: SupportTicketMessage) -> dict:
     }
 
 
+def _utc_or_none(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _age_seconds(value: datetime | None, *, now: datetime) -> int | None:
+    timestamp = _utc_or_none(value)
+    if timestamp is None:
+        return None
+    return max(0, int((now - timestamp).total_seconds()))
+
+
+def _billing_event_payload(event: BillingEvent) -> dict:
+    try:
+        payload = json.loads(event.payload_json or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 @router.get("/support/tickets")
 def owner_list_support_tickets(
     _: None = Depends(require_provisioning_access),
@@ -415,6 +443,126 @@ def owner_billing_accounts(
             for sub, project_name in rows
         ],
     }
+
+
+@router.get("/billing/payment-recovery")
+def owner_billing_payment_recovery(
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> dict:
+    now = datetime.now(UTC)
+    pending_filter = (
+        Subscription.payment_provider == "razorpay",
+        Subscription.payment_request_ref.is_not(None),
+        Subscription.payment_subscription_ref.is_(None),
+    )
+    pending_total = db.scalar(select(func.count()).select_from(Subscription).where(*pending_filter)) or 0
+    pending_rows = db.execute(
+        select(Subscription, Project.name)
+        .outerjoin(Project, Project.id == Subscription.org_id)
+        .where(*pending_filter)
+        .order_by(Subscription.updated_at.asc(), Subscription.created_at.asc())
+        .limit(limit)
+    ).all()
+
+    pending_items: list[dict] = []
+    oldest_age: int | None = None
+    stale_count = 0
+    for sub, project_name in pending_rows:
+        order_id, requested_plan = _parse_stored_razorpay_request(sub.payment_request_ref)
+        age = _age_seconds(sub.updated_at or sub.created_at, now=now)
+        stale = bool(age is not None and age >= _RECOVERY_STALE_AFTER_SECONDS)
+        if stale:
+            stale_count += 1
+        if age is not None:
+            oldest_age = age if oldest_age is None else max(oldest_age, age)
+        pending_items.append(
+            {
+                "org_id": sub.org_id,
+                "project_name": project_name,
+                "plan_code": sub.plan_code,
+                "subscription_status": sub.status,
+                "payment_request_ref": sub.payment_request_ref,
+                "order_id": order_id,
+                "requested_plan_code": requested_plan,
+                "updated_at": sub.updated_at,
+                "age_seconds": age,
+                "stale": stale,
+            }
+        )
+
+    # Count stale across all pending rows, not only the visible page.
+    if int(pending_total) > len(pending_items):
+        all_pending = db.execute(select(Subscription).where(*pending_filter)).scalars().all()
+        stale_count = 0
+        oldest_age = None
+        for sub in all_pending:
+            age = _age_seconds(sub.updated_at or sub.created_at, now=now)
+            if age is not None:
+                oldest_age = age if oldest_age is None else max(oldest_age, age)
+                if age >= _RECOVERY_STALE_AFTER_SECONDS:
+                    stale_count += 1
+
+    recent_events = db.execute(
+        select(BillingEvent)
+        .where(
+            BillingEvent.provider == "razorpay",
+            BillingEvent.event_type == "payment.reconciled",
+        )
+        .order_by(func.coalesce(BillingEvent.processed_at, BillingEvent.received_at).desc())
+        .limit(5)
+    ).scalars().all()
+    recent_reconciled = []
+    for event in recent_events:
+        payload = _billing_event_payload(event)
+        recent_reconciled.append(
+            {
+                "provider_event_id": event.provider_event_id,
+                "event_type": event.event_type,
+                "result": event.result,
+                "affected_org_id": event.affected_org_id,
+                "processed_at": event.processed_at,
+                "payment_id": payload.get("payment_id"),
+                "order_id": payload.get("order_id"),
+                "plan_code": payload.get("plan_code"),
+            }
+        )
+
+    return {
+        "pending_count": int(pending_total),
+        "stale_pending_count": stale_count,
+        "stale_after_seconds": _RECOVERY_STALE_AFTER_SECONDS,
+        "oldest_pending_age_seconds": oldest_age,
+        "pending_items": pending_items,
+        "recent_reconciled": recent_reconciled,
+        "last_reconciled_at": recent_reconciled[0]["processed_at"] if recent_reconciled else None,
+    }
+
+
+@router.post("/billing/payments/reconcile")
+@limiter.limit("10/minute")
+def owner_reconcile_pending_razorpay_payments(
+    request: Request,
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    result = reconcile_pending_razorpay_orders(db, limit=limit)
+    _owner_audit(
+        db,
+        action="owner.billing.razorpay_payment.reconcile",
+        actor=_resolve_actor(request),
+        target_id="razorpay",
+        metadata={
+            "examined": result.examined,
+            "activated": result.activated,
+            "skipped": result.skipped,
+            "failed": result.failed,
+        },
+    )
+    db.commit()
+    return result.to_dict()
 
 
 @router.post("/billing/payments/confirm")

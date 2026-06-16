@@ -502,6 +502,56 @@ export interface OwnerBillingPaymentConfirmResponse {
   current_period_end: string | null;
 }
 
+export interface OwnerBillingRecoveryPendingItem {
+  org_id: string;
+  project_name: string | null;
+  plan_code: string;
+  subscription_status: string;
+  payment_request_ref: string;
+  order_id: string | null;
+  requested_plan_code: string | null;
+  updated_at: string | null;
+  age_seconds: number | null;
+  stale: boolean;
+}
+
+export interface OwnerBillingRecoveryEvent {
+  provider_event_id: string;
+  event_type: string;
+  result: string;
+  affected_org_id: string | null;
+  processed_at: string | null;
+  payment_id: string | null;
+  order_id: string | null;
+  plan_code: string | null;
+}
+
+export interface OwnerBillingRecoverySummary {
+  pending_count: number;
+  stale_pending_count: number;
+  stale_after_seconds: number;
+  oldest_pending_age_seconds: number | null;
+  pending_items: OwnerBillingRecoveryPendingItem[];
+  recent_reconciled: OwnerBillingRecoveryEvent[];
+  last_reconciled_at: string | null;
+}
+
+export interface OwnerBillingRecoveryRunRecord {
+  org_id: string;
+  order_id: string | null;
+  plan_code: string | null;
+  result: string;
+  detail: string;
+}
+
+export interface OwnerBillingRecoveryRunResponse {
+  examined: number;
+  activated: number;
+  skipped: number;
+  failed: number;
+  records: OwnerBillingRecoveryRunRecord[];
+}
+
 export interface OwnerRetentionConfig {
   call_retention_days: number | null;
   diagnosis_retention_days: number | null;
@@ -745,6 +795,16 @@ export function fetchOwnerBillingAccounts(
   if (opts.offset !== undefined) params.set("offset", String(opts.offset));
   const qs = params.toString();
   return ownerRequest<OwnerBillingAccountsResponse>(`/v1/owner/billing/accounts${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchOwnerBillingRecovery(signal?: AbortSignal): Promise<OwnerBillingRecoverySummary> {
+  return ownerRequest<OwnerBillingRecoverySummary>("/v1/owner/billing/payment-recovery", { signal });
+}
+
+export function runOwnerBillingRecovery(limit = 50): Promise<OwnerBillingRecoveryRunResponse> {
+  return ownerRequest<OwnerBillingRecoveryRunResponse>(`/v1/owner/billing/payments/reconcile?limit=${limit}`, {
+    method: "POST",
+  });
 }
 
 export function confirmOwnerRazorpayPayment(

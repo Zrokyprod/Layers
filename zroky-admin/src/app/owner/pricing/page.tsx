@@ -5,14 +5,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useConfirmOwnerRazorpayPayment,
   useOwnerBillingAccounts,
+  useOwnerBillingRecovery,
   useOwnerBillingSummary,
   useOwnerMoneyPathHealth,
   useOwnerPricing,
   useOwnerPricingPlans,
+  useRunOwnerBillingRecovery,
   useUpdateOwnerPricing,
 } from "@/lib/hooks";
 import type {
   OwnerBillingAccountItem,
+  OwnerBillingRecoverySummary,
   OwnerBillingSummary,
   OwnerMoneyPathTenantRow,
   OwnerPricingPlan,
@@ -50,6 +53,16 @@ function fmtCount(value: number | null | undefined): string {
 function fmtMoney(value: number | null): string {
   if (value === null) return "Custom";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+}
+
+function fmtDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return "-";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 function statusCount(summary: OwnerBillingSummary | null, status: string): number | null {
@@ -209,10 +222,107 @@ function BillingAccountRow({
   );
 }
 
+function PaymentRecoveryPanel({
+  recovery,
+  isLoading,
+  isRunning,
+  message,
+  onRun,
+}: {
+  recovery: OwnerBillingRecoverySummary | null;
+  isLoading: boolean;
+  isRunning: boolean;
+  message: string;
+  onRun: () => void;
+}) {
+  const latest = recovery?.recent_reconciled?.[0] ?? null;
+  return (
+    <section className="panel">
+      <div className="panel-header">
+        Payment Recovery
+        <span className="panel-header-note">Webhook fallback, pending orders, and manual reconciliation.</span>
+      </div>
+      {message ? (
+        <div className={`alert-strip${message.startsWith("Error") ? " alert-strip-error" : ""}`}>
+          {message}
+        </div>
+      ) : null}
+      <div className="owner-stat-grid owner-stat-grid-embedded">
+        <div className={`owner-stat-card ${(recovery?.pending_count ?? 0) === 0 ? "owner-stat-card-accent" : ""}`}>
+          <span className="owner-stat-label">Pending Razorpay Orders</span>
+          <span className="owner-stat-value">{isLoading ? "-" : fmtCount(recovery?.pending_count)}</span>
+          <span className="owner-stat-sub">checkout orders without active payment refs</span>
+        </div>
+        <div className={`owner-stat-card ${(recovery?.stale_pending_count ?? 0) > 0 ? "owner-stat-card-danger" : ""}`}>
+          <span className="owner-stat-label">Stale Pending</span>
+          <span className="owner-stat-value">{isLoading ? "-" : fmtCount(recovery?.stale_pending_count)}</span>
+          <span className="owner-stat-sub">older than {fmtDuration(recovery?.stale_after_seconds)}</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Oldest Pending Age</span>
+          <span className="owner-stat-value">{isLoading ? "-" : fmtDuration(recovery?.oldest_pending_age_seconds)}</span>
+          <span className="owner-stat-sub">time since local checkout request update</span>
+        </div>
+        <div className="owner-stat-card">
+          <span className="owner-stat-label">Latest Recovered</span>
+          <span className="owner-stat-value">{latest?.plan_code ?? "-"}</span>
+          <span className="owner-stat-sub">{latest?.payment_id ?? recovery?.last_reconciled_at ?? "No recovered payment yet"}</span>
+        </div>
+      </div>
+      <div className="owner-panel-filter owner-panel-filter-embedded">
+        <div className="owner-filter-row">
+          <button className="btn btn-primary" onClick={onRun} disabled={isRunning}>
+            {isRunning ? "Reconciling..." : "Run reconciliation now"}
+          </button>
+          <span className="hint">Uses Razorpay order/payment verification before activating entitlements.</span>
+        </div>
+      </div>
+      <div className="owner-table-wrap owner-table-wrap-embedded">
+        <table className="owner-table">
+          <thead>
+            <tr>
+              {["Account", "Requested plan", "Age", "State", "Order", "Updated"].map((header) => (
+                <th key={header} className="owner-th">{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={6} className="owner-td owner-td-empty">Loading payment recovery state...</td></tr>
+            ) : (recovery?.pending_items ?? []).length === 0 ? (
+              <tr><td colSpan={6} className="owner-td owner-td-empty">No pending Razorpay orders.</td></tr>
+            ) : (
+              recovery?.pending_items.map((item) => (
+                <tr key={`${item.org_id}:${item.payment_request_ref}`} className="owner-tr">
+                  <td className="owner-td">
+                    <strong>{item.project_name ?? item.org_id}</strong>
+                    <div className="hint"><code>{item.org_id}</code></div>
+                  </td>
+                  <td className="owner-td">
+                    <span className="pill">{item.requested_plan_code ?? item.plan_code}</span>
+                  </td>
+                  <td className="owner-td">{fmtDuration(item.age_seconds)}</td>
+                  <td className="owner-td">
+                    <StatusBadge value={item.stale ? "stale pending" : "pending"} tone={item.stale ? "danger" : "warn"} />
+                    <div className="owner-user-id">{item.subscription_status}</div>
+                  </td>
+                  <td className="owner-td owner-td-truncate">{item.order_id ?? item.payment_request_ref}</td>
+                  <td className="owner-td owner-td-ts">{item.updated_at ? new Date(item.updated_at).toLocaleString() : "-"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export default function PricingPage() {
   const pricingQuery = useOwnerPricing();
   const pricingPlansQuery = useOwnerPricingPlans();
   const summaryQuery = useOwnerBillingSummary();
+  const recoveryQuery = useOwnerBillingRecovery();
   const moneyPathQuery = useOwnerMoneyPathHealth();
   const [accountStatus, setAccountStatus] = useState("");
   const [planCode, setPlanCode] = useState("");
@@ -223,10 +333,12 @@ export default function PricingPage() {
   });
   const updateMutation = useUpdateOwnerPricing();
   const confirmPaymentMutation = useConfirmOwnerRazorpayPayment();
+  const runRecoveryMutation = useRunOwnerBillingRecovery();
 
   const [config, setConfig] = useState<PricingConfig | null>(null);
   const [saveMsg, setSaveMsg] = useState("");
   const [confirmMsg, setConfirmMsg] = useState("");
+  const [recoveryMsg, setRecoveryMsg] = useState("");
   const [confirmOrgId, setConfirmOrgId] = useState("");
   const [confirmPlanCode, setConfirmPlanCode] = useState("pro");
   const [confirmPaymentRef, setConfirmPaymentRef] = useState("");
@@ -311,6 +423,18 @@ export default function PricingPage() {
     confirmSeats,
   ]);
 
+  const handleRunRecovery = useCallback(async () => {
+    setRecoveryMsg("");
+    try {
+      const result = await runRecoveryMutation.mutateAsync(50);
+      setRecoveryMsg(
+        `Reconciliation complete: ${result.activated} activated, ${result.skipped} skipped, ${result.failed} failed.`,
+      );
+    } catch (e: unknown) {
+      setRecoveryMsg(`Error: ${(e as Error).message}`);
+    }
+  }, [runRecoveryMutation]);
+
   const fieldLabels = ["Input ($/1M)", "Output ($/1M)", "Reasoning ($/1M)", "Cache Create ($/1M)", "Cache Read ($/1M)"];
   const summary = summaryQuery.data ?? null;
   const accounts = accountsQuery.data?.items ?? [];
@@ -361,6 +485,7 @@ export default function PricingPage() {
       {pricingPlansQuery.error && <div className="alert-strip alert-strip-error">{pricingPlansQuery.error.message}</div>}
       {summaryQuery.error && <div className="alert-strip alert-strip-error">{summaryQuery.error.message}</div>}
       {accountsQuery.error && <div className="alert-strip alert-strip-error">{accountsQuery.error.message}</div>}
+      {recoveryQuery.error && <div className="alert-strip alert-strip-error">{recoveryQuery.error.message}</div>}
       {moneyPathQuery.error && <div className="alert-strip alert-strip-error">{moneyPathQuery.error.message}</div>}
       {loading && !error && <p className="hint">Loading...</p>}
 
@@ -406,6 +531,14 @@ export default function PricingPage() {
           <span className="owner-stat-sub">{providerVerification?.detail ?? "No billing provider proof reported"}</span>
         </div>
       </section>
+
+      <PaymentRecoveryPanel
+        recovery={recoveryQuery.data ?? null}
+        isLoading={recoveryQuery.isLoading}
+        isRunning={runRecoveryMutation.isPending}
+        message={recoveryMsg}
+        onRun={() => void handleRunRecovery()}
+      />
 
       <section className="panel">
         <div className="panel-header">

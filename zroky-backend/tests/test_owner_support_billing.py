@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Entitlement, Project, Subscription, SupportTicket, SupportTicketMessage
+from app.db.models import BillingEvent, Entitlement, Project, Subscription, SupportTicket, SupportTicketMessage
 from app.db.session import get_db_session
 from app.main import app
 
@@ -42,15 +43,32 @@ class _FakeRazorpayOrderClient:
         return {
             "id": order_ref,
             "status": self._owner.order_status,
-            "amount": 1_000,
+            "amount": self._owner.amount,
             "currency": "INR",
             "notes": dict(self._owner.notes),
+        }
+
+    def payments(self, order_ref: str) -> dict:
+        return {
+            "items": [
+                {
+                    "id": self._owner.payment_id,
+                    "order_id": order_ref,
+                    "status": self._owner.payment_status,
+                    "captured": self._owner.payment_status == "captured",
+                    "amount": self._owner.amount,
+                    "currency": "INR",
+                    "notes": dict(self._owner.notes),
+                }
+            ]
         }
 
 
 class _FakeRazorpayClient:
     def __init__(self) -> None:
         self.order_id = "rzp_order_123"
+        self.payment_id = "rzp_pay_123"
+        self.amount = 1_592_000
         self.payment_status = "captured"
         self.order_status = "paid"
         self.notes = {"org_id": "org_razorpay", "plan_code": "pro"}
@@ -176,6 +194,103 @@ def test_owner_billing_accounts_include_razorpay_dashboard(client, monkeypatch: 
     assert row["payment_provider"] == "razorpay"
     assert row["payment_subscription_ref"] == "pay_123"
     assert row["payment_dashboard_url"]
+
+
+def test_owner_billing_payment_recovery_reports_pending_and_reconciled_events(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    now = datetime.now(UTC)
+    with session_factory() as db:
+        db.add(Project(id="org_pending", name="Pending Org", owner_ref="pending", is_active=True))
+        db.add(
+            Subscription(
+                id="sub_pending",
+                org_id="org_pending",
+                payment_provider="razorpay",
+                payment_request_ref="rzp_order_pending:starter",
+                payment_subscription_ref=None,
+                plan_code="free",
+                status="active",
+                updated_at=now - timedelta(minutes=20),
+            )
+        )
+        db.add(
+            BillingEvent(
+                provider="razorpay",
+                provider_event_id="razorpay_reconcile:rzp_pay_recovered",
+                event_type="payment.reconciled",
+                provider_created_at=now - timedelta(minutes=5),
+                processed_at=now - timedelta(minutes=5),
+                result="applied",
+                affected_org_id="org_recovered",
+                payload_json=json.dumps(
+                    {
+                        "payment_id": "rzp_pay_recovered",
+                        "order_id": "rzp_order_recovered",
+                        "plan_code": "pro",
+                    }
+                ),
+            )
+        )
+        db.commit()
+
+    res = test_client.get("/v1/owner/billing/payment-recovery", headers=owner_headers)
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["pending_count"] == 1
+    assert payload["stale_pending_count"] == 1
+    assert payload["oldest_pending_age_seconds"] >= 15 * 60
+    assert payload["pending_items"][0]["org_id"] == "org_pending"
+    assert payload["pending_items"][0]["order_id"] == "rzp_order_pending"
+    assert payload["pending_items"][0]["requested_plan_code"] == "starter"
+    assert payload["recent_reconciled"][0]["payment_id"] == "rzp_pay_recovered"
+
+
+def test_owner_can_run_razorpay_reconciliation(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    monkeypatch.setenv("ZROKY_EXCHANGE_RATE_USD_TO_INR", "80")
+    get_settings.cache_clear()
+    fake_razorpay = _FakeRazorpayClient()
+    fake_razorpay.notes = {"org_id": "org_razorpay", "plan_code": "pro"}
+    monkeypatch.setattr(
+        "app.services.razorpay_reconciliation._razorpay_client",
+        lambda: fake_razorpay,
+    )
+    with session_factory() as db:
+        db.add(
+            Subscription(
+                org_id="org_razorpay",
+                plan_code="free",
+                status="active",
+                payment_provider="razorpay",
+                payment_request_ref="rzp_order_123:pro",
+            )
+        )
+        db.commit()
+
+    res = test_client.post("/v1/owner/billing/payments/reconcile?limit=10", headers=owner_headers)
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["examined"] == 1
+    assert payload["activated"] == 1
+    with session_factory() as db:
+        sub = db.scalar(select(Subscription).where(Subscription.org_id == "org_razorpay"))
+        assert sub is not None
+        assert sub.plan_code == "pro"
+        assert sub.payment_subscription_ref == "rzp_pay_123"
+        rows = db.execute(
+            select(Entitlement).where(
+                Entitlement.org_id == "org_razorpay",
+                Entitlement.source == "plan",
+            )
+        ).scalars().all()
+        assert len(rows) > 0
 
 
 def test_owner_confirms_razorpay_payment_and_seeds_entitlements(client, monkeypatch: pytest.MonkeyPatch) -> None:

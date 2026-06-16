@@ -672,6 +672,10 @@ code,
   gap: 0.85rem;
 }
 
+.owner-stat-grid-embedded {
+  margin: 1rem;
+}
+
 .owner-stat-card {
   position: relative;
   display: grid;
@@ -686,6 +690,11 @@ code,
 .owner-stat-card-accent {
   border-color: #bfdbfe;
   background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+}
+
+.owner-stat-card-danger {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
 }
 
 .owner-stat-value {

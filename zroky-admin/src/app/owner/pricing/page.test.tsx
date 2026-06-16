@@ -5,6 +5,7 @@ import PricingPage from "./page";
 import * as hooks from "@/lib/hooks";
 import type {
   OwnerBillingAccountsResponse,
+  OwnerBillingRecoverySummary,
   OwnerBillingSummary,
   OwnerMoneyPathHealth,
   OwnerPricingPlansResponse,
@@ -16,9 +17,11 @@ vi.mock("@/lib/hooks", () => ({
   useOwnerPricingPlans: vi.fn(),
   useOwnerBillingSummary: vi.fn(),
   useOwnerBillingAccounts: vi.fn(),
+  useOwnerBillingRecovery: vi.fn(),
   useOwnerMoneyPathHealth: vi.fn(),
   useUpdateOwnerPricing: vi.fn(),
   useConfirmOwnerRazorpayPayment: vi.fn(),
+  useRunOwnerBillingRecovery: vi.fn(),
 }));
 
 const pricingConfig: PricingConfigResponse = {
@@ -126,6 +129,40 @@ const billingAccounts: OwnerBillingAccountsResponse = {
   ],
 };
 
+const billingRecovery: OwnerBillingRecoverySummary = {
+  pending_count: 1,
+  stale_pending_count: 1,
+  stale_after_seconds: 900,
+  oldest_pending_age_seconds: 1200,
+  pending_items: [
+    {
+      org_id: "proj_pending",
+      project_name: "Pending Tenant",
+      plan_code: "free",
+      subscription_status: "active",
+      payment_request_ref: "rzp_order_pending:starter",
+      order_id: "rzp_order_pending",
+      requested_plan_code: "starter",
+      updated_at: "2026-06-05T11:40:00Z",
+      age_seconds: 1200,
+      stale: true,
+    },
+  ],
+  recent_reconciled: [
+    {
+      provider_event_id: "razorpay_reconcile:rzp_pay_recovered",
+      event_type: "payment.reconciled",
+      result: "applied",
+      affected_org_id: "proj_pro",
+      processed_at: "2026-06-05T11:50:00Z",
+      payment_id: "rzp_pay_recovered",
+      order_id: "rzp_order_recovered",
+      plan_code: "pro",
+    },
+  ],
+  last_reconciled_at: "2026-06-05T11:50:00Z",
+};
+
 const moneyPath: OwnerMoneyPathHealth = {
   generated_at: "2026-06-05T12:00:00Z",
   windows: { captures_hours: 24, replays_days: 7 },
@@ -193,6 +230,11 @@ function mockHooks(moneyPathError: Error | null = null) {
     isFetching: false,
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof hooks.useOwnerBillingAccounts>);
+  vi.mocked(hooks.useOwnerBillingRecovery).mockReturnValue({
+    data: billingRecovery,
+    error: null,
+    isLoading: false,
+  } as unknown as ReturnType<typeof hooks.useOwnerBillingRecovery>);
   vi.mocked(hooks.useOwnerMoneyPathHealth).mockReturnValue({
     data: moneyPathError ? null : moneyPath,
     error: moneyPathError,
@@ -206,6 +248,10 @@ function mockHooks(moneyPathError: Error | null = null) {
     isPending: false,
     mutateAsync: vi.fn(),
   } as unknown as ReturnType<typeof hooks.useConfirmOwnerRazorpayPayment>);
+  vi.mocked(hooks.useRunOwnerBillingRecovery).mockReturnValue({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  } as unknown as ReturnType<typeof hooks.useRunOwnerBillingRecovery>);
 }
 
 describe("PricingPage", () => {
@@ -220,6 +266,7 @@ describe("PricingPage", () => {
 
     expect(screen.getByText("Revenue & Entitlements")).toBeInTheDocument();
     expect(screen.getByText("Plan Entitlement Matrix")).toBeInTheDocument();
+    expect(screen.getByText("Payment Recovery")).toBeInTheDocument();
     expect(screen.getByText("Confirm Razorpay Payment")).toBeInTheDocument();
     expect(screen.getByText("Razorpay Billing Accounts")).toBeInTheDocument();
     expect(screen.getByText("In sync")).toBeInTheDocument();
@@ -228,6 +275,10 @@ describe("PricingPage", () => {
     expect(screen.getByText("Tenant is near replay entitlement.")).toBeInTheDocument();
     expect(screen.getByText("Unknown plan")).toBeInTheDocument();
     expect(screen.getByText("No catalog entry matches this billing row.")).toBeInTheDocument();
+    expect(screen.getByText("Run reconciliation now")).toBeInTheDocument();
+    expect(screen.getByText("Pending Tenant")).toBeInTheDocument();
+    expect(screen.getByText("stale pending")).toBeInTheDocument();
+    expect(screen.getByText("rzp_pay_recovered")).toBeInTheDocument();
     expect(screen.getAllByText("Included").length).toBeGreaterThan(0);
   });
 
