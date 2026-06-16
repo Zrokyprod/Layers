@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -79,9 +79,48 @@ router = APIRouter(prefix="/v1/auth")
 _GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
+
+def _ensure_default_project_membership(db: Session, user: User) -> None:
+    if not user.id:
+        db.flush()
+
+    active_membership = db.execute(
+        select(ProjectMembership)
+        .where(
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.is_active.is_(True),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if active_membership is not None:
+        return
+
+    project = Project(
+        id=generate_project_id(),
+        name="My Project",
+        owner_ref=user.subject,
+        is_active=True,
+    )
+    db.add(project)
+    db.flush()
+    db.add(
+        ProjectMembership(
+            project_id=project.id,
+            user_id=user.id,
+            role="owner",
+            is_active=True,
+        )
+    )
+
+
 @router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
-def register(request: Request, body: RegisterRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTokenResponse:
+def register(
+    request: Request,
+    body: RegisterRequest,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthTokenResponse:
     if body.password != body.confirm_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -103,22 +142,7 @@ def register(request: Request, body: RegisterRequest, db: Annotated[Session, Dep
         email_verification_token=_store_email_verification_token(verification_token),
     )
     db.add(user)
-    db.flush()  # get user.id without committing
-
-    # Auto-create a default project + owner membership so dashboard works immediately
-    project = Project(
-        id=generate_project_id(),
-        name="My Project",
-        owner_ref=user.subject,
-    )
-    db.add(project)
-    db.flush()
-    membership = ProjectMembership(
-        project_id=project.id,
-        user_id=user.id,
-        role="owner",
-    )
-    db.add(membership)
+    _ensure_default_project_membership(db, user)
     db.commit()
     db.refresh(user)
 
@@ -126,7 +150,8 @@ def register(request: Request, body: RegisterRequest, db: Annotated[Session, Dep
     settings = get_settings()
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
     verify_url = f"{frontend_url}/auth/verify-email?token={verification_token}"
-    send_email(
+    background_tasks.add_task(
+        send_email,
         to=[body.email],
         subject="Verify your Zroky AI email address",
         html_body=f"""
@@ -192,6 +217,7 @@ def verify_email(
 @limiter.limit("2/minute")
 def resend_verification(
     request: Request,
+    background_tasks: BackgroundTasks,
     authorization: Annotated[str | None, Header()] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ) -> dict[str, str]:
@@ -206,7 +232,8 @@ def resend_verification(
     settings = get_settings()
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
     verify_url = f"{frontend_url}/auth/verify-email?token={token}"
-    send_email(
+    background_tasks.add_task(
+        send_email,
         to=[user.email],
         subject="Verify your Zroky AI email address",
         html_body=f"""
@@ -325,6 +352,7 @@ def complete_oauth_handoff(request: Request, body: OAuthHandoffRequest) -> AuthT
 def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
     # Always return 200 — never leak whether the email is registered.
@@ -338,7 +366,8 @@ def forgot_password(
         settings = get_settings()
         frontend = getattr(settings, "FRONTEND_URL", "http://localhost:3000").rstrip("/")
         reset_link = f"{frontend}/auth/reset-password?token={reset_token}"
-        send_email(
+        background_tasks.add_task(
+            send_email,
             to=[normalized],
             subject="Reset your Zroky password",
             html_body=(
@@ -509,6 +538,8 @@ def github_oauth_callback(
             user.github_id = github_id
             user.github_login = github_login or user.github_login
             user.display_name = user.display_name or github_login
+            if user.email_verified_at is None:
+                user.email_verified_at = datetime.now(UTC)
 
     if user is None:
         user = User(
@@ -517,6 +548,7 @@ def github_oauth_callback(
             github_id=github_id,
             github_login=github_login,
             display_name=github_login,
+            email_verified_at=datetime.now(UTC) if github_email else None,
         )
         db.add(user)
 
@@ -525,6 +557,7 @@ def github_oauth_callback(
         if not user.display_name:
             user.display_name = github_login
 
+    _ensure_default_project_membership(db, user)
     db.commit()
     db.refresh(user)
     return _issue_token(user)
@@ -615,6 +648,8 @@ def _complete_google_oauth_login(code: str, state: str, db: Session) -> AuthToke
                 )
             user.google_id = google_id
             user.display_name = user.display_name or google_name
+            if user.email_verified_at is None:
+                user.email_verified_at = datetime.now(UTC)
 
     if user is None:
         user = User(
@@ -622,9 +657,13 @@ def _complete_google_oauth_login(code: str, state: str, db: Session) -> AuthToke
             email=google_email.lower(),
             google_id=google_id,
             display_name=google_name,
+            email_verified_at=datetime.now(UTC),
         )
         db.add(user)
-    
+    elif user.email_verified_at is None:
+        user.email_verified_at = datetime.now(UTC)
+
+    _ensure_default_project_membership(db, user)
     db.commit()
     db.refresh(user)
     return _issue_token(user)
