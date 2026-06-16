@@ -52,6 +52,10 @@ function LoginForm() {
       const res = await loginWithPassword(data.email, data.password);
       await storeAuthSession(res);
       const next = searchParams.get("next");
+      if (!res.email_verified) {
+        router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+        return;
+      }
       router.push(next && next.startsWith("/") ? next : "/home");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Invalid email or password");

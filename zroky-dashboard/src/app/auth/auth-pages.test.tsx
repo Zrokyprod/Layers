@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,8 @@ import LoginPage from "../login/page";
 import SignupPage from "../signup/page";
 import ResetPasswordPage from "../reset-password/page";
 import VerifyEmailPage from "../verify-email/page";
+import { loginWithPassword } from "@/lib/api";
+import { storeAuthSession } from "@/lib/auth";
 
 const navigation = vi.hoisted(() => ({
   searchParams: new URLSearchParams(),
@@ -74,6 +76,8 @@ describe("auth pages", () => {
     navigation.push.mockReset();
     navigation.replace.mockReset();
     navigation.refresh.mockReset();
+    vi.mocked(loginWithPassword).mockReset();
+    vi.mocked(storeAuthSession).mockReset();
   });
 
   it("renders login with Zroky reliability copy", () => {
@@ -93,6 +97,30 @@ describe("auth pages", () => {
     render(<LoginPage />);
 
     expect(screen.getByText("Google sign-in expired. Start again.")).toBeInTheDocument();
+  });
+
+  it("sends unverified password logins to email verification before dashboard access", async () => {
+    vi.mocked(loginWithPassword).mockResolvedValue({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      access_expires_in_seconds: 3600,
+      refresh_expires_in_seconds: 86400,
+      token_type: "bearer",
+      user_id: "user_1",
+      email: "new@example.com",
+      email_verified: false,
+    });
+
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "new@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(storeAuthSession).toHaveBeenCalled();
+      expect(navigation.push).toHaveBeenCalledWith("/verify-email?email=new%40example.com");
+    });
   });
 
   it("renders signup workspace copy", () => {
