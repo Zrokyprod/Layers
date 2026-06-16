@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api";
 import HomePage from "./page";
 
 const api = vi.hoisted(() => ({
@@ -329,6 +330,27 @@ describe("Command Center home", () => {
     expect(screen.getByLabelText("First run checklist")).toBeInTheDocument();
     expect(screen.queryByLabelText("Next best action")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Failure queue" })).toBeNull();
+  });
+
+  it("does not show a refresh failure when free-plan replay and goldens are gated", async () => {
+    mockInbox({}, []);
+    api.listReplayRuns.mockRejectedValue(
+      new ApiError("GET", "/v1/replay/runs", 402, {
+        message: "Your plan does not include 'pilot.autopilot_enabled'.",
+        code: null,
+      }),
+    );
+    api.listGoldenSets.mockRejectedValue(
+      new ApiError("GET", "/v1/goldens", 402, {
+        message: "Your plan does not include 'pilot.autopilot_enabled'.",
+        code: null,
+      }),
+    );
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "Capture your first agent failure." })).toBeInTheDocument();
+    expect(screen.queryByText(/Partial refresh:/)).toBeNull();
   });
 
   it("renders Cost Impact values and sums loaded issue impact", async () => {

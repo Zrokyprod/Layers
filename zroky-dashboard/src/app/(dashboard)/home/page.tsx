@@ -33,6 +33,7 @@ import {
 import { hasPlanEntitlement } from "@/components/feature-gate";
 import { StatusPill } from "@/components/status-pill";
 import {
+  ApiError,
   createReplayRunFromIssue,
   getAnalyticsSummary,
   getBillingMe,
@@ -124,6 +125,10 @@ function isAbortError(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed.";
+}
+
+function isPlanGateError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 402;
 }
 
 async function settleLoad<T>(
@@ -357,6 +362,16 @@ export default function HomePage() {
 
       for (const result of results) {
         if (result.status === "rejected") {
+          if (result.key === "replayRuns" && isPlanGateError(result.reason)) {
+            updates.replayRuns = [];
+            successCount += 1;
+            continue;
+          }
+          if (result.key === "goldenSets" && isPlanGateError(result.reason)) {
+            updates.goldenSets = [];
+            successCount += 1;
+            continue;
+          }
           if (!isAbortError(result.reason)) {
             nextErrors[result.key] = errorMessage(result.reason);
           }
