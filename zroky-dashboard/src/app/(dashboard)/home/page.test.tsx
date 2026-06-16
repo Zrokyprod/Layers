@@ -9,9 +9,13 @@ const api = vi.hoisted(() => ({
   createReplayRunFromIssue: vi.fn(),
   getAnalyticsSummary: vi.fn(),
   getBillingMe: vi.fn(),
+  getCaptureHealth: vi.fn(),
   getReplayQuota: vi.fn(),
+  listCalls: vi.fn(),
   listGoldenSets: vi.fn(),
   listIssues: vi.fn(),
+  listProjectApiKeys: vi.fn(),
+  listProviderKeys: vi.fn(),
   listReplayRuns: vi.fn(),
   resolveIssue: vi.fn(),
 }));
@@ -36,6 +40,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),
   }),
+}));
+
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: { selectedProject: string }) => T) => selector({ selectedProject: "proj_1" }),
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -151,6 +159,48 @@ function goldenSet(overrides: Partial<import("@/lib/api").GoldenSetView> = {}): 
   };
 }
 
+function captureHealth(
+  overrides: Partial<import("@/lib/types").CaptureHealthResponse> = {},
+): import("@/lib/types").CaptureHealthResponse {
+  return {
+    project_id: "proj_1",
+    status: "no_data",
+    stale_after_minutes: 15,
+    last_call_id: null,
+    last_seen_at: null,
+    seconds_since_last_call: null,
+    last_provider: null,
+    last_model: null,
+    last_call_type: null,
+    last_source: null,
+    calls_24h: 0,
+    sdk_events_24h: 0,
+    gateway_events_24h: 0,
+    retrieval_spans_24h: 0,
+    memory_spans_24h: 0,
+    trace_runs_24h: 0,
+    trace_spans_24h: 0,
+    policy_spans_24h: 0,
+    handoff_spans_24h: 0,
+    incomplete_trace_runs_24h: 0,
+    projection_failures_24h: 0,
+    gateway_count: 0,
+    gateway_unhealthy_count: 0,
+    gateway_worst_status: "unknown",
+    gateway_spool_backlog: 0,
+    gateway_spool_bytes: 0,
+    gateway_spool_oldest_age_seconds: 0,
+    gateway_loss_count: 0,
+    gateway_backpressure_rejections: 0,
+    gateway_last_heartbeat_at: null,
+    error_events_24h: 0,
+    outcome_events_24h: 0,
+    sampled_recent_calls: 0,
+    validation_warnings: [],
+    ...overrides,
+  };
+}
+
 function rowForIssueTitle(title: string): HTMLElement {
   const table = screen.getByRole("table");
   const row = within(table).getAllByText(title)[0]?.closest("tr");
@@ -244,6 +294,32 @@ function mockInbox(
     unusual_activity: null,
     updated_at: now,
   });
+  api.listCalls.mockResolvedValue({
+    total: 0,
+    limit: 10,
+    offset: 0,
+    items: [],
+  });
+  api.getCaptureHealth.mockResolvedValue(captureHealth());
+  api.listProjectApiKeys.mockResolvedValue([
+    {
+      key_id: "key_1",
+      project_id: "proj_1",
+      name: "Default capture key",
+      key_prefix: "zrk_live",
+      scopes: ["capture:write"],
+      revoked: false,
+      expired: false,
+      expires_at: null,
+      rotated_from_key_id: null,
+      last_used_at: null,
+      created_at: now,
+    },
+  ]);
+  api.listProviderKeys.mockResolvedValue({
+    items: [],
+    total_in_page: 0,
+  });
 }
 
 describe("Command Center home", () => {
@@ -264,6 +340,7 @@ describe("Command Center home", () => {
     expect(screen.getByRole("heading", { name: "Command Center" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("1 issues need trusted replay before they can become Goldens or block CI.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Command Center live status")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Run trusted replay" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "View all issues" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Loaded open issues")).toBeNull();
@@ -321,13 +398,17 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Capture your first agent failure." })).toBeInTheDocument();
-    expect(screen.getByText("Start by capturing one agent call. Zroky turns failed runs into issues, stub replay, verified replay, Goldens, and CI gates.")).toBeInTheDocument();
-    expect(screen.getByText("Provider keys are only needed later for verified replay.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Create project key" }).getAttribute("href")).toBe("/settings/keys");
-    expect(screen.getByRole("link", { name: "Confirm first trace" }).getAttribute("href")).toBe("/trace");
+    expect(await screen.findByRole("heading", { name: "Start with one captured agent run." })).toBeInTheDocument();
+    expect(screen.getByText("Create a project key and capture one real agent trace. Replay, Goldens, and CI unlock when your plan allows them.")).toBeInTheDocument();
+    expect(screen.getByText("Send one real agent trace")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Send first trace" }).map((link) => link.getAttribute("href"))).toEqual([
+      "/trace",
+      "/trace",
+    ]);
+    expect(screen.getByRole("link", { name: "Open traces" }).getAttribute("href")).toBe("/trace");
     expect(screen.getByRole("link", { name: "Open provider settings" }).getAttribute("href")).toBe("/settings/providers");
-    expect(screen.getByLabelText("First run checklist")).toBeInTheDocument();
+    expect(screen.getByLabelText("Command Center setup path")).toBeInTheDocument();
+    expect(screen.getByLabelText("Plan unlock status")).toBeInTheDocument();
     expect(screen.queryByLabelText("Next best action")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Failure queue" })).toBeNull();
   });
@@ -349,7 +430,7 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Capture your first agent failure." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Start with one captured agent run." })).toBeInTheDocument();
     expect(screen.queryByText(/Partial refresh:/)).toBeNull();
   });
 

@@ -37,9 +37,13 @@ import {
   createReplayRunFromIssue,
   getAnalyticsSummary,
   getBillingMe,
+  getCaptureHealth,
   getReplayQuota,
+  listCalls,
   listGoldenSets,
   listIssues,
+  listProjectApiKeys,
+  listProviderKeys,
   listReplayRuns,
   resolveIssue,
   type GoldenSetView,
@@ -50,7 +54,16 @@ import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
 import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel, severityRank } from "@/lib/issue-format";
 import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
-import type { AnalyticsSummaryResponse, BillingMeResponse, IssueItem } from "@/lib/types";
+import { useDashboardStore } from "@/lib/store";
+import type {
+  AnalyticsSummaryResponse,
+  ApiKeyResponse,
+  BillingMeResponse,
+  CallListItem,
+  CaptureHealthResponse,
+  IssueItem,
+  ProviderKeyResponse,
+} from "@/lib/types";
 
 type InboxData = {
   issues: IssueItem[];
@@ -59,6 +72,10 @@ type InboxData = {
   billing: BillingMeResponse | null;
   quota: ReplayQuotaResponse | null;
   summary: AnalyticsSummaryResponse | null;
+  calls: CallListItem[];
+  captureHealth: CaptureHealthResponse | null;
+  apiKeys: ApiKeyResponse[];
+  providerKeys: ProviderKeyResponse[];
 };
 
 type IssueAction = "view" | "replay" | "open_goldens" | "upgrade";
@@ -74,6 +91,10 @@ const loadSourceLabels: Record<InboxLoadKey, string> = {
   billing: "Billing",
   quota: "Replay quota",
   summary: "Analytics",
+  calls: "Traces",
+  captureHealth: "Capture health",
+  apiKeys: "Project keys",
+  providerKeys: "Provider keys",
 };
 
 const GOLDEN_ELIGIBLE_REPLAY_STATUSES = new Set(["verified_fix"]);
@@ -206,6 +227,41 @@ function planLimitText(quota: ReplayQuotaResponse | null): string {
   return `${formatCount(quota.used)} used / ${formatCount(quota.limit)} runs`;
 }
 
+function templateNumber(planTemplate: Record<string, unknown> | undefined, keys: string[]): number | null {
+  if (!planTemplate) return null;
+  for (const key of keys) {
+    const value = planTemplate[key];
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  }
+  return null;
+}
+
+function planEventLimitText(planCode: string | undefined, planTemplate: Record<string, unknown> | undefined): string {
+  const templateLimit = templateNumber(planTemplate, [
+    "limits.events_per_month",
+    "limits.calls_per_month",
+    "events_per_month",
+    "calls_per_month",
+    "monthly_events",
+    "monthly_calls",
+  ]);
+  if (templateLimit) return `${formatCount(templateLimit)} events/month`;
+
+  const normalized = planCode?.trim().toLowerCase();
+  if (normalized === "free") return "50K events/month";
+  if (normalized === "starter" || normalized === "pilot") return "250K events/month";
+  if (normalized === "pro" || normalized === "plus") return "1M events/month";
+  return "Plan limit active";
+}
+
+function captureStatusLabel(status: CaptureHealthResponse["status"] | "unknown", capturedCallCount: number): string {
+  if (capturedCallCount > 0) return `${formatCount(capturedCallCount)} captured`;
+  if (status === "connected") return "Live capture";
+  if (status === "stale") return "Capture stale";
+  if (status === "no_data") return "No capture yet";
+  return "Checking capture";
+}
+
 function issueAgent(issue: IssueItem): string {
   return issue.affected_agent ?? issue.agent_name ?? "Agent not captured";
 }
@@ -315,6 +371,7 @@ function severityBadge(issue: IssueItem) {
 
 export default function HomePage() {
   const router = useRouter();
+  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const [data, setData] = useState<InboxData>({
     issues: [],
     replayRuns: [],
@@ -322,6 +379,10 @@ export default function HomePage() {
     billing: null,
     quota: null,
     summary: null,
+    calls: [],
+    captureHealth: null,
+    apiKeys: [],
+    providerKeys: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -350,6 +411,10 @@ export default function HomePage() {
         settleLoad("billing", getBillingMe(signal)),
         settleLoad("quota", getReplayQuota(signal)),
         settleLoad("summary", getAnalyticsSummary(1, signal)),
+        settleLoad("calls", listCalls({ limit: 10, sort_by: "created_at", sort_order: "desc" }, signal)),
+        settleLoad("captureHealth", getCaptureHealth(signal)),
+        settleLoad("apiKeys", selectedProject ? listProjectApiKeys(selectedProject, signal) : Promise.resolve([])),
+        settleLoad("providerKeys", listProviderKeys({ include_revoked: false }, signal)),
       ]);
 
       if (signal?.aborted || results.every((result) => result.status === "rejected" && isAbortError(result.reason))) {
@@ -391,6 +456,14 @@ export default function HomePage() {
           updates.quota = result.value as ReplayQuotaResponse;
         } else if (result.key === "summary") {
           updates.summary = result.value as AnalyticsSummaryResponse;
+        } else if (result.key === "calls") {
+          updates.calls = (result.value as { items: CallListItem[] }).items;
+        } else if (result.key === "captureHealth") {
+          updates.captureHealth = result.value as CaptureHealthResponse;
+        } else if (result.key === "apiKeys") {
+          updates.apiKeys = result.value as ApiKeyResponse[];
+        } else if (result.key === "providerKeys") {
+          updates.providerKeys = (result.value as { items: ProviderKeyResponse[] }).items;
         }
       }
 
@@ -412,7 +485,7 @@ export default function HomePage() {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [selectedProject]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -433,6 +506,7 @@ export default function HomePage() {
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       ctrl.abort();
+      loadInFlightRef.current = false;
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
@@ -484,10 +558,16 @@ export default function HomePage() {
   const failedCiRuns = data.replayRuns.filter(isFailedCiRun).slice(0, 6);
   const goldensNeedingReview = data.goldenSets.filter(needsGoldenReview).slice(0, 6);
   const planLabel = data.billing?.plan_code ? data.billing.plan_code.toUpperCase() : "PLAN";
+  const eventLimitLabel = planEventLimitText(data.billing?.plan_code, planTemplate);
+  const activeProjectKeyCount = data.apiKeys.filter((key) => !key.revoked && !key.expired).length;
+  const activeProviderKeyCount = data.providerKeys.filter((key) => key.is_active && !key.revoked_at).length;
+  const captureStatus = data.captureHealth?.status ?? "unknown";
+  const capturedCallCount = Math.max(data.captureHealth?.calls_24h ?? 0, data.calls.length);
+  const captureLabel = captureStatusLabel(captureStatus, capturedCallCount);
   const hasLoadedIssues = sortedIssues.length > 0;
   const headerSubtitle = hasLoadedIssues
     ? `${formatCount(needsTrustedReplayCount)} issues need trusted replay before they can become Goldens or block CI.`
-    : "Start by capturing one agent call. Zroky turns failed runs into issues, stub replay, verified replay, Goldens, and CI gates.";
+    : "Create a project key and capture one real agent trace. Replay, Goldens, and CI unlock when your plan allows them.";
   const loadErrorKeys = Object.keys(loadErrors) as InboxLoadKey[];
   const loadErrorText = loadErrorKeys.map((key) => loadSourceLabels[key]).join(", ");
   const issuesLoadFailed = loadErrorKeys.includes("issues");
@@ -586,6 +666,20 @@ export default function HomePage() {
           </div>
           <h1>Command Center</h1>
           <p>{loading ? "Loading trusted replay gaps for open production issues." : headerSubtitle}</p>
+          <div className="fi-hero-strip" aria-label="Command Center live status">
+            <div>
+              <span>Plan</span>
+              <strong>{planLabel}</strong>
+            </div>
+            <div>
+              <span>Capture</span>
+              <strong>{loading ? "Checking" : captureLabel}</strong>
+            </div>
+            <div>
+              <span>Project keys</span>
+              <strong>{loading ? "Checking" : activeProjectKeyCount > 0 ? `${activeProjectKeyCount} active` : "Missing"}</strong>
+            </div>
+          </div>
         </div>
         <div className="fi-hero-actions">
           <div className="fi-refresh-meta" aria-live="polite">
@@ -640,7 +734,17 @@ export default function HomePage() {
       ) : null}
 
       {showFirstRunOnboarding ? (
-        <FirstRunOnboarding />
+        <FirstRunOnboarding
+          planLabel={planLabel}
+          eventLimitLabel={eventLimitLabel}
+          projectKeyCount={activeProjectKeyCount}
+          capturedCallCount={capturedCallCount}
+          captureStatus={captureStatus}
+          providerKeyCount={activeProviderKeyCount}
+          replayUnlocked={caps.canReplay}
+          goldensUnlocked={caps.canGoldens}
+          ciUnlocked={caps.canCi}
+        />
       ) : (
         <>
       <section className="fi-command-overview" aria-label="Failure command overview">
