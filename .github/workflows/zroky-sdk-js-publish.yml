@@ -108,6 +108,7 @@ jobs:
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/zroky-sdk-js-v'))
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Download package artifact
@@ -131,7 +132,55 @@ jobs:
             exit 1
           fi
 
+      - name: Verify npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami --registry=https://registry.npmjs.org
+
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish dist/zroky-sdk-*.tgz --access public
+        run: npm publish dist/zroky-sdk-*.tgz --access public --provenance
+
+  verify-npm-registry:
+    runs-on: ubuntu-latest
+    needs: publish-npm
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_registry == 'npm') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/zroky-sdk-js-v'))
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify published package installs
+        run: |
+          VERSION="$(node -p "require('./zroky-sdk-js/package.json').version")"
+          for attempt in 1 2 3 4 5 6; do
+            if npm view "@zroky/sdk@$VERSION" version --registry=https://registry.npmjs.org; then
+              break
+            fi
+            echo "Package not visible yet; retrying in 10s..."
+            sleep 10
+          done
+          test "$(npm view "@zroky/sdk@$VERSION" version --registry=https://registry.npmjs.org)" = "$VERSION"
+          WORKDIR="$(mktemp -d)"
+          cd "$WORKDIR"
+          npm init -y >/dev/null
+          npm install "@zroky/sdk@$VERSION" --ignore-scripts --registry=https://registry.npmjs.org
+          node - <<'JS'
+          const sdk = require("@zroky/sdk");
+          for (const name of ["init", "wrap", "traceRun", "captureToolCall"]) {
+            if (typeof sdk[name] !== "function") {
+              throw new Error(`Missing @zroky/sdk export: ${name}`);
+            }
+          }
+          JS
