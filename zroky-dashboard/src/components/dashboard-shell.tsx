@@ -370,6 +370,23 @@ function initials(name: string): string {
   );
 }
 
+function compactIdentifier(value: string | null | undefined, lead = 9, tail = 4): string {
+  const normalized = value?.trim();
+  if (!normalized) return "Unavailable";
+  if (normalized.length <= lead + tail + 1) return normalized;
+  return `${normalized.slice(0, lead)}...${normalized.slice(-tail)}`;
+}
+
+function formatRoleLabel(role: string | null | undefined): string {
+  const normalized = role?.trim();
+  if (!normalized) return "Member";
+  return normalized
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function ProjectContextGate({
   isLoading,
   noProjects,
@@ -626,6 +643,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         ? "Loading workspace"
         : "Workspace unavailable");
   const orgProjectId = selectedProjectMembership?.project_id ?? projectQuery.data?.project_id ?? selectedProject ?? null;
+  const orgProjectIdLabel = compactIdentifier(orgProjectId);
+  const orgRoleLabel = selectedProjectMembership ? formatRoleLabel(selectedProjectMembership.role) : null;
   const envDisplay = envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
   const accountEmail = meQuery.data?.email?.trim() || null;
   const accountName =
@@ -768,12 +787,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               aria-expanded={openMenu === "workspace"}
               onClick={() => toggleMenu("workspace")}
             >
-              <span className="org-avatar">{initials(orgName)}</span>
+              <span className="org-avatar" aria-hidden="true">
+                {initials(orgName)}
+              </span>
               <span className="org-info">
+                <span className="org-kicker">Project</span>
                 <span className="org-name">{orgName}</span>
-                <span className="org-env">
-                  <span className="org-env-dot" />
-                  {envDisplay}
+                <span className="org-meta">
+                  <span className="org-env">
+                    <span className="org-env-dot" />
+                    {envDisplay}
+                  </span>
                 </span>
               </span>
               <ChevronDown size={13} className="org-chevron" />
@@ -782,12 +806,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             {openMenu === "workspace" ? (
               <div className="shell-popover shell-popover-up org-popover" role="menu" aria-label="Workspace menu">
                 <div className="shell-popover-head">
-                  <span>Current project</span>
+                  <span>Active project</span>
                   <strong>{projectSelectionRequired ? "Select a project" : orgName}</strong>
+                  {!projectSelectionRequired ? (
+                    <small>
+                      {envDisplay}
+                      {orgRoleLabel ? ` - ${orgRoleLabel}` : ""}
+                    </small>
+                  ) : null}
                 </div>
                 {myProjects.length > 0 ? (
                   myProjects.map((project) => {
                     const isSelected = project.project_id === selectedProject;
+                    const projectRoleLabel = formatRoleLabel(project.role);
                     return (
                       <button
                         key={project.project_id}
@@ -801,7 +832,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                         <span>
                           <strong>{project.project_name}</strong>
                           <small>
-                            {project.project_id} - {project.role}
+                            <span className="org-menu-project-id" title={project.project_id}>
+                              {compactIdentifier(project.project_id)}
+                            </span>
+                            <span className="org-role-badge">{projectRoleLabel}</span>
                           </small>
                         </span>
                         {isSelected ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
@@ -835,7 +869,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   <FolderOpen size={15} aria-hidden="true" />
                   <span>
                     <strong>Project ID</strong>
-                    <small>{orgProjectId ?? "Unavailable"}</small>
+                    <small title={orgProjectId ?? undefined}>{orgProjectIdLabel}</small>
                   </span>
                 </div>
               </div>

@@ -78,6 +78,49 @@ function isProblemMessage(value: string): boolean {
   return text.includes("failed") || text.includes("error") || text.includes("unavailable");
 }
 
+function compactIdentifier(value: string | null | undefined, lead = 12, tail = 6): string {
+  const normalized = value?.trim();
+  if (!normalized) return "Unavailable";
+  if (normalized.length <= lead + tail + 1) return normalized;
+  return `${normalized.slice(0, lead)}...${normalized.slice(-tail)}`;
+}
+
+function formatOwnerRef(ownerRef: string | null): { label: string; detail: string | null; raw: string | null } {
+  const raw = ownerRef?.trim() || null;
+  if (!raw) return { label: "Current account", detail: null, raw };
+
+  const separatorIndex = raw.indexOf(":");
+  if (separatorIndex === -1) {
+    return { label: "Project owner", detail: compactIdentifier(raw, 8, 5), raw };
+  }
+
+  const provider = raw.slice(0, separatorIndex).toLowerCase();
+  const subject = raw.slice(separatorIndex + 1);
+
+  if (provider === "email") {
+    return { label: subject || "Email account", detail: "Email owner", raw };
+  }
+
+  const providerLabel =
+    provider === "google" ? "Google account" : provider === "github" ? "GitHub account" : "Project owner";
+  return { label: providerLabel, detail: compactIdentifier(subject || raw, 8, 5), raw };
+}
+
+const sectionLabels: Record<SectionKey, string> = {
+  github: "GitHub connection",
+  pii: "PII policy",
+  retention: "Retention policy",
+  notifications: "Notifications",
+};
+
+function friendlySectionError(value: string): string {
+  const text = value.toLowerCase();
+  if (text.includes("internal server error")) {
+    return "Backend returned an error. Project setup remains usable.";
+  }
+  return value;
+}
+
 export default function SettingsPage() {
   const [state, setState] = useState<SettingsState>({
     project: null,
@@ -337,6 +380,8 @@ export default function SettingsPage() {
   const eraseConfirmMatches = Boolean(project && eraseConfirmInput.trim() === project.project_id);
   const previewReadyForDelete = Boolean(eraseSummary?.dry_run);
   const retentionDays = state.retention?.retention_days ?? null;
+  const ownerDisplay = project ? formatOwnerRef(project.owner_ref) : null;
+  const projectIdLabel = project ? compactIdentifier(project.project_id) : "Unavailable";
 
   return (
     <div className="page-content settings-project-page">
@@ -385,21 +430,27 @@ export default function SettingsPage() {
             </div>
 
             <div className="settings-project-facts" aria-label="Current project facts">
-              <div>
+              <div className="settings-project-fact">
                 <span>Project ID</span>
-                <strong className="mono">{project.project_id}</strong>
+                <strong className="mono" title={project.project_id}>
+                  {projectIdLabel}
+                </strong>
+                <small>Capture scope</small>
               </div>
-              <div>
+              <div className="settings-project-fact">
                 <span>Owner</span>
-                <strong>{safeString(project.owner_ref, "Current account")}</strong>
+                <strong title={ownerDisplay?.raw ?? undefined}>{ownerDisplay?.label ?? "Current account"}</strong>
+                {ownerDisplay?.detail ? <small>{ownerDisplay.detail}</small> : null}
               </div>
-              <div>
+              <div className="settings-project-fact">
                 <span>Created</span>
                 <strong>{formatDateTime(project.created_at)}</strong>
+                <small>Workspace start</small>
               </div>
-              <div>
+              <div className="settings-project-fact">
                 <span>Updated</span>
                 <strong>{formatDateTime(project.updated_at)}</strong>
+                <small>Latest metadata</small>
               </div>
             </div>
           </section>
@@ -440,18 +491,18 @@ export default function SettingsPage() {
           </section>
 
           {Object.values(sectionErrors).some(Boolean) ? (
-            <section className="panel panel-muted">
+            <section className="panel panel-muted settings-partial-warning">
               <header className="panel-header">
-                <h3>Some controls could not load</h3>
-                <p>Loaded controls remain usable. Refresh after backend or role access is available.</p>
+                <h3>Advanced controls need a retry</h3>
+                <p>Project identity and setup actions are available. Retry after backend access is healthy.</p>
               </header>
               <div className="list">
                 {Object.entries(sectionErrors).map(([key, value]) =>
                   value ? (
                     <div key={key} className="list-row">
                       <div className="list-main">
-                        <strong>{key}</strong>
-                        <span>{value}</span>
+                        <strong>{sectionLabels[key as SectionKey] ?? key}</strong>
+                        <span>{friendlySectionError(value)}</span>
                       </div>
                     </div>
                   ) : null,
