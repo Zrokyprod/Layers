@@ -438,6 +438,56 @@ GitHub paid-launch readiness is checked by:
 
 Any `fail` or `not_verified` gate blocks paid launch.
 
+## SDK Public Publish Runbook
+
+Public SDK publishing requires registry credentials owned by the Zroky npm and
+PyPI accounts. Never commit registry tokens.
+
+Packages:
+
+- JavaScript: `@zroky-ai/sdk`
+- Python: `zroky`
+
+npm publish:
+
+1. Confirm the npm scope/organization `@zroky-ai`.
+2. Add an npm automation token with publish access as GitHub secret `NPM_TOKEN`.
+3. Run GitHub Actions workflow `Zroky JS SDK Publish`.
+4. Use `target_registry=npm` and `expected_version` from
+   `zroky-sdk-js/package.json`.
+5. Wait for `publish-npm` and `verify-npm-registry` to pass.
+
+PyPI publish:
+
+1. Configure a Trusted Publisher, or a pending publisher for first publish,
+   separately on TestPyPI and PyPI.
+2. Use project name `zroky`, owner `Zrokyprod`, repository `Layers`, workflow
+   filename `zroky-sdk-publish.yml`, and leave environment blank unless the
+   workflow is intentionally changed to use one.
+3. Run GitHub Actions workflow `Zroky SDK Publish` first with
+   `target_repository=testpypi`, `auth_method=trusted-publisher`, and
+   `expected_version` from `zroky-sdk/pyproject.toml`.
+4. After `verify-testpypi-registry` passes, run the same workflow with
+   `target_repository=pypi`.
+5. Confirm `verify-pypi-registry` passes.
+
+Token fallback:
+
+- Use `TEST_PYPI_API_TOKEN` for TestPyPI.
+- Use `PYPI_API_TOKEN` for PyPI.
+- For a first-time PyPI project, prefer Trusted Publisher or an account-level
+  token that can create the project. Rotate to project-scoped tokens after the
+  first publish if token auth remains necessary.
+
+Manual workflow dispatch is preferred for first release. Later releases can use
+version tags:
+
+- Python: `zroky-sdk-vX.Y.Z`
+- JavaScript: `zroky-sdk-js-vX.Y.Z`
+
+Registry versions are immutable. If publish partially succeeds and verification
+fails, fix forward by bumping the package version before publishing again.
+
 Real environment proof is still required before production launch:
 
 - billing provider sandbox/live webhook verification

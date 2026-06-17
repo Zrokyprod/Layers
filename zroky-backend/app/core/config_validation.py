@@ -152,6 +152,8 @@ def validate_runtime_settings(settings: Any) -> None:
     elif len(platform_llm_key) < 16:
         failures.append("OPENROUTER_API_KEY or OPENAI_API_KEY must be at least 16 characters in production")
 
+    validate_optional_secret("RAZORPAY_WEBHOOK_SECRET")
+
     if settings.BILLING_ENABLED:
         if (settings.BILLING_PROVIDER or "").strip().lower() != "razorpay":
             failures.append("BILLING_PROVIDER must be razorpay in production")
@@ -165,7 +167,6 @@ def validate_runtime_settings(settings: Any) -> None:
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_KEY_SECRET must be configured when Razorpay billing is enabled in production",
         )
-        validate_optional_secret("RAZORPAY_WEBHOOK_SECRET")
         for name in (
             "RAZORPAY_DASHBOARD_URL",
             "BILLING_CHECKOUT_SUCCESS_URL",
