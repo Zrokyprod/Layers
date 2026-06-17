@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
-  CheckCircle2,
   Clock3,
   DollarSign,
   GitPullRequest,
@@ -18,17 +17,11 @@ import {
 } from "lucide-react";
 
 import {
-  DecisionChip,
-  DetailMetric,
   EmptyQueue,
   FirstRunOnboarding,
   KpiCard,
   LockedUpgradeLink,
-  ProofStep,
-  QueueList,
-  ReadinessStep,
   SectionHeader,
-  type ReadinessState,
 } from "@/components/command-center-primitives";
 import { hasPlanEntitlement } from "@/components/feature-gate";
 import { StatusPill } from "@/components/status-pill";
@@ -45,12 +38,11 @@ import {
   listProjectApiKeys,
   listProviderKeys,
   listReplayRuns,
-  resolveIssue,
   type GoldenSetView,
   type ReplayQuotaResponse,
   type ReplayRunItem,
 } from "@/lib/api";
-import { detectorLabel, severityBadgeColor } from "@/lib/detector-meta";
+import { detectorLabel } from "@/lib/detector-meta";
 import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel, severityRank } from "@/lib/issue-format";
 import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
@@ -82,6 +74,20 @@ type IssueAction = "view" | "replay" | "open_goldens" | "upgrade";
 type InboxLoadKey = keyof InboxData;
 type InboxLoadErrors = Partial<Record<InboxLoadKey, string>>;
 type InboxQueueFocus = "all" | "critical_high" | "replay_gap" | "impact" | "verified";
+type PriorityTone = "danger" | "warning" | "success" | "neutral";
+
+type PriorityRow = {
+  id: string;
+  priority: string;
+  type: string;
+  title: string;
+  detail: string;
+  impact: string;
+  status: string;
+  tone: PriorityTone;
+  action: ReactNode;
+  issueId?: string;
+};
 
 const refreshIntervalMs = 30_000;
 const loadSourceLabels: Record<InboxLoadKey, string> = {
@@ -200,13 +206,6 @@ function needsGoldenReview(set: GoldenSetView): boolean {
   return set.trace_count === 0 || set.is_flaky || !set.blocks_ci;
 }
 
-function goldenReviewReason(set: GoldenSetView): string {
-  if (set.trace_count === 0) return "No traces yet";
-  if (set.is_flaky) return "Marked flaky";
-  if (!set.blocks_ci) return "Not blocking CI";
-  return "Needs review";
-}
-
 function chooseIssueAction(
   issue: IssueItem,
   caps: { canReplay: boolean; canGoldens: boolean },
@@ -227,33 +226,6 @@ function planLimitText(quota: ReplayQuotaResponse | null): string {
   return `${formatCount(quota.used)} used / ${formatCount(quota.limit)} runs`;
 }
 
-function templateNumber(planTemplate: Record<string, unknown> | undefined, keys: string[]): number | null {
-  if (!planTemplate) return null;
-  for (const key of keys) {
-    const value = planTemplate[key];
-    if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
-  }
-  return null;
-}
-
-function planEventLimitText(planCode: string | undefined, planTemplate: Record<string, unknown> | undefined): string {
-  const templateLimit = templateNumber(planTemplate, [
-    "limits.events_per_month",
-    "limits.calls_per_month",
-    "events_per_month",
-    "calls_per_month",
-    "monthly_events",
-    "monthly_calls",
-  ]);
-  if (templateLimit) return `${formatCount(templateLimit)} events/month`;
-
-  const normalized = planCode?.trim().toLowerCase();
-  if (normalized === "free") return "50K events/month";
-  if (normalized === "starter" || normalized === "pilot") return "250K events/month";
-  if (normalized === "pro" || normalized === "plus") return "1M events/month";
-  return "Plan limit active";
-}
-
 function captureStatusLabel(status: CaptureHealthResponse["status"] | "unknown", capturedCallCount: number): string {
   if (capturedCallCount > 0) return `${formatCount(capturedCallCount)} captured`;
   if (status === "connected") return "Live capture";
@@ -262,18 +234,9 @@ function captureStatusLabel(status: CaptureHealthResponse["status"] | "unknown",
   return "Checking capture";
 }
 
-function issueAgent(issue: IssueItem): string {
-  return issue.affected_agent ?? issue.agent_name ?? "Agent not captured";
-}
-
 function issueEnvironment(): string {
   const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
   return envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
-}
-
-function issueNumber(issue: IssueItem): string {
-  const parts = issue.id.split(/[_-]/);
-  return parts[parts.length - 1] || issue.id;
 }
 
 function evidenceSummary(issue: IssueItem): string {
@@ -283,38 +246,6 @@ function evidenceSummary(issue: IssueItem): string {
     issue.user_impact ??
     "No evidence summary captured yet."
   );
-}
-
-function nextActionTitle(action: IssueAction): string {
-  if (action === "replay") return "Run trusted replay";
-  if (action === "open_goldens") return "Open Goldens";
-  if (action === "upgrade") return "Upgrade to unlock action";
-  return "View issue";
-}
-
-function nextActionOutcome(action: IssueAction): string {
-  if (action === "replay") {
-    return "Next: replay the exact failed scenario, compare the candidate fix, then make it eligible for a Golden.";
-  }
-  if (action === "open_goldens") {
-    return "Next: choose a Golden set, add the verified behavior, then use it as release protection.";
-  }
-  if (action === "upgrade") {
-    return "Next: unlock replay and Golden actions before this issue can protect releases.";
-  }
-  return "Next: inspect the full issue, evidence, root cause, and available remediation path.";
-}
-
-function hasEvidence(issue: IssueItem): boolean {
-  return issue.evidence_traces.length > 0 || Boolean(issue.sample_call_id);
-}
-
-function hasRootCause(issue: IssueItem): boolean {
-  return Boolean(issue.root_cause?.trim()) || Boolean(issue.evidence_traces.find((trace) => trace.evidence_summary));
-}
-
-function goldenReady(issue: IssueItem): boolean {
-  return hasTrustedGoldenReplay(issue) && Boolean(issue.sample_call_id);
 }
 
 function filterIssuesForFocus(items: IssueItem[], focus: InboxQueueFocus): IssueItem[] {
@@ -352,21 +283,43 @@ function formatLastUpdated(value: number | null): string {
   }).format(new Date(value));
 }
 
-function readinessState(count: number, total: number, inverted = false): ReadinessState {
-  if (total === 0) return "neutral";
-  if (inverted) return count === 0 ? "good" : "blocked";
-  if (count === total) return "good";
-  if (count > 0) return "warn";
-  return "blocked";
+function percentDelta(current: number | null | undefined, previous: number | null | undefined): number | null {
+  if (typeof current !== "number" || typeof previous !== "number" || !Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) {
+    return null;
+  }
+  return Math.round(((current - previous) / previous) * 100);
 }
 
-function severityBadge(issue: IssueItem) {
-  return (
-    <span className={`alert-cat-badge badge-${severityBadgeColor(issue.severity)} fi-severity-badge`}>
-      <AlertTriangle aria-hidden="true" />
-      {issue.severity}
-    </span>
-  );
+function formatTrend(value: number | null): string {
+  if (value == null) return "No trend";
+  if (value > 0) return `+${value}%`;
+  return `${value}%`;
+}
+
+function statusLabel(value: string): string {
+  const normalized = value.replace(/_/g, " ").trim().toLowerCase();
+  return normalized ? `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}` : "Unknown";
+}
+
+function isFailureCall(call: CallListItem): boolean {
+  const status = call.status.toLowerCase();
+  return status.includes("fail") || status.includes("error") || Boolean(call.error_code);
+}
+
+function runPassed(run: ReplayRunItem): boolean {
+  const status = run.status.toLowerCase();
+  return status.includes("pass") || status === "completed" || run.summary.verified_fix === true;
+}
+
+function runFailed(run: ReplayRunItem): boolean {
+  const status = run.status.toLowerCase();
+  return status.includes("fail") || status.includes("error") || status === "not_verified";
+}
+
+function averageLatencyMs(calls: CallListItem[]): number | null {
+  const latencies = calls.map((call) => call.latency_ms).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (latencies.length === 0) return null;
+  return Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length);
 }
 
 export default function HomePage() {
@@ -527,13 +480,6 @@ export default function HomePage() {
 
   const sortedIssues = useMemo(() => sortIssues(data.issues), [data.issues]);
   const focusedIssues = useMemo(() => filterIssuesForFocus(sortedIssues, queueFocus), [queueFocus, sortedIssues]);
-  const selectedIssue = useMemo(
-    () => focusedIssues.find((issue) => issue.id === selectedIssueId) ?? focusedIssues[0] ?? sortedIssues[0] ?? null,
-    [focusedIssues, selectedIssueId, sortedIssues],
-  );
-  const nextBestIssue = useMemo(() => {
-    return sortedIssues.find((issue) => chooseIssueAction(issue, caps) !== "view") ?? sortedIssues[0] ?? null;
-  }, [caps, sortedIssues]);
 
   useEffect(() => {
     if (loading || sortedIssues.length === 0) return;
@@ -548,30 +494,41 @@ export default function HomePage() {
   ).length;
   const needsTrustedReplayCount = data.issues.filter((issue) => !hasTrustedGoldenReplay(issue)).length;
   const openIssuesCount = data.issues.length;
-  const diagnosedCount = data.issues.filter(hasRootCause).length;
-  const evidenceCount = data.issues.filter(hasEvidence).length;
   const trustedReplayCount = data.issues.filter(hasTrustedGoldenReplay).length;
-  const goldenReadyCount = data.issues.filter(goldenReady).length;
-  const loadedIssueImpactUsd = data.issues.reduce((sum, issue) => sum + (issueImpactUsd(issue) ?? 0), 0);
-  const verifiedFixesCount = data.issues.filter(hasTrustedGoldenReplay).length;
   const pendingRuns = data.replayRuns.filter((run) => isPendingRun(run) && !isCiRun(run)).slice(0, 6);
   const failedCiRuns = data.replayRuns.filter(isFailedCiRun).slice(0, 6);
   const goldensNeedingReview = data.goldenSets.filter(needsGoldenReview).slice(0, 6);
   const planLabel = data.billing?.plan_code ? data.billing.plan_code.toUpperCase() : "PLAN";
-  const eventLimitLabel = planEventLimitText(data.billing?.plan_code, planTemplate);
   const activeProjectKeyCount = data.apiKeys.filter((key) => !key.revoked && !key.expired).length;
   const activeProviderKeyCount = data.providerKeys.filter((key) => key.is_active && !key.revoked_at).length;
   const captureStatus = data.captureHealth?.status ?? "unknown";
   const capturedCallCount = Math.max(data.captureHealth?.calls_24h ?? 0, data.calls.length);
   const captureLabel = captureStatusLabel(captureStatus, capturedCallCount);
+  const failedRunsCount = Math.max(data.calls.filter(isFailureCall).length, criticalHighCount);
+  const replayPassCount = data.replayRuns.filter(runPassed).length;
+  const replayFailCount = data.replayRuns.filter(runFailed).length;
+  const replayCompletedCount = replayPassCount + replayFailCount;
+  const replayPassRate =
+    replayCompletedCount > 0
+      ? Math.round((replayPassCount / replayCompletedCount) * 100)
+      : openIssuesCount > 0
+        ? Math.round((trustedReplayCount / openIssuesCount) * 100)
+        : 0;
+  const costTrend = percentDelta(data.summary?.cost_today_usd, data.summary?.cost_yesterday_usd);
+  const latencyAverage = averageLatencyMs(data.calls);
+  const protectedGoldenCount = data.goldenSets.filter((set) => set.blocks_ci && !set.is_flaky).length;
   const hasLoadedIssues = sortedIssues.length > 0;
-  const headerSubtitle = hasLoadedIssues
-    ? `${formatCount(needsTrustedReplayCount)} issues need trusted replay before they can become Goldens or block CI.`
-    : "Create a project key and capture one real agent trace. Replay, Goldens, and CI unlock when your plan allows them.";
+  const hasWorkspaceActivity = capturedCallCount > 0 || hasLoadedIssues || data.replayRuns.length > 0 || data.goldenSets.length > 0;
+  const headerSubtitle = hasWorkspaceActivity
+    ? "Reliability control plane for production agent runs."
+    : "Capture your first agent run to start reliability monitoring.";
+  const commandStatusText = `${planLabel} plan | My Project | ${formatCount(capturedCallCount)} traces captured${
+    hasWorkspaceActivity ? ` | ${issueEnvironment()}` : ""
+  }`;
   const loadErrorKeys = Object.keys(loadErrors) as InboxLoadKey[];
   const loadErrorText = loadErrorKeys.map((key) => loadSourceLabels[key]).join(", ");
   const issuesLoadFailed = loadErrorKeys.includes("issues");
-  const showFirstRunOnboarding = !loading && !error && !issuesLoadFailed && !hasLoadedIssues;
+  const showFirstRunOnboarding = !loading && !error && !issuesLoadFailed && !hasWorkspaceActivity;
   const lastUpdatedLabel = formatLastUpdated(lastUpdatedAt);
 
   function focusQueue(nextFocus: InboxQueueFocus) {
@@ -590,23 +547,6 @@ export default function HomePage() {
       router.push(`/replay/${run.id}`);
     } catch (replayError) {
       setActionError(replayError instanceof Error ? replayError.message : "Failed to create replay run.");
-    } finally {
-      setBusyIssueId(null);
-    }
-  }
-
-  async function onResolve(issue: IssueItem) {
-    setActionError(null);
-    setBusyIssueId(issue.id);
-    try {
-      const updated = await resolveIssue(issue.id, { resolution_source: "manual" });
-      setData((prev) => ({
-        ...prev,
-        issues: prev.issues.filter((item) => item.id !== updated.id),
-      }));
-      setLastUpdatedAt(Date.now());
-    } catch (resolveError) {
-      setActionError(resolveError instanceof Error ? resolveError.message : "Failed to resolve issue.");
     } finally {
       setBusyIssueId(null);
     }
@@ -652,34 +592,136 @@ export default function HomePage() {
     setSelectedIssueId(issue.id);
   }
 
-  const nextAction = nextBestIssue ? chooseIssueAction(nextBestIssue, caps) : "view";
-  const selectedEvidence = selectedIssue?.evidence_traces ?? [];
-  const selectedPrimaryEvidence = selectedEvidence[0] ?? null;
+  const captureBacklog = data.captureHealth?.gateway_spool_backlog ?? 0;
+  const captureHasProblem =
+    captureStatus === "stale" ||
+    (data.captureHealth?.gateway_unhealthy_count ?? 0) > 0 ||
+    captureBacklog > 0 ||
+    (data.captureHealth?.gateway_loss_count ?? 0) > 0;
+  const priorityIssueSource = queueFocus === "all" ? sortedIssues : focusedIssues;
+  const priorityRows: PriorityRow[] = [
+    ...priorityIssueSource.slice(0, 3).map((issue) => {
+      const severity = issue.severity.toLowerCase();
+      const priority = severity === "critical" ? "P0" : severity === "high" ? "P1" : "P2";
+      return {
+        id: issue.id,
+        priority,
+        type: severity === "critical" || severity === "high" ? "Critical failure" : "Issue",
+        title: issue.title,
+        detail: evidenceSummary(issue),
+        impact: issueImpactUsd(issue) != null ? formatIssueImpact(issue) : `${formatCount(issue.occurrence_count)} calls`,
+        status: replayLabel(issue.replay_coverage_status),
+        tone: severity === "critical" ? "danger" : isReplayGap(issue) ? "warning" : "neutral",
+        action: renderIssueAction(issue, { replayLabel: "Run replay", viewLabel: "Open issue" }),
+        issueId: issue.id,
+      } satisfies PriorityRow;
+    }),
+    ...pendingRuns.slice(0, 1).map((run) => ({
+      id: run.id,
+      priority: "P1",
+      type: "Replay waiting",
+      title: run.golden_set_id,
+      detail: `${run.replay_mode.replace(/_/g, " ")} replay created ${formatDateTime(run.created_at)}`,
+      impact: "-",
+      status: statusLabel(run.status),
+      tone: "warning" as const,
+      action: (
+        <Link href={`/replay/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
+          Review result
+        </Link>
+      ),
+    })),
+    ...failedCiRuns.slice(0, 1).map((run) => ({
+      id: run.id,
+      priority: "P2",
+      type: "CI failing",
+      title: run.golden_set_id,
+      detail: run.git_sha ? `Blocking ${run.git_sha}` : "Gate needs review",
+      impact: "1 gate",
+      status: statusLabel(run.status),
+      tone: "danger" as const,
+      action: caps.canCi ? (
+        <Link href={`/ci-gates/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
+          Open gate
+        </Link>
+      ) : (
+        <LockedUpgradeLink label="Upgrade to unlock CI gates" />
+      ),
+    })),
+    ...(captureHasProblem
+      ? [
+          {
+            id: "capture-health",
+            priority: "P2",
+            type: "Capture health",
+            title: captureStatus === "stale" ? "Capture stale" : "Gateway backlog",
+            detail: captureStatus === "stale" ? "No recent trace received." : "Events not yet processed.",
+            impact: captureBacklog > 0 ? `${formatCount(captureBacklog)} events` : captureLabel,
+            status: captureStatus === "stale" ? "stale" : "backlog",
+            tone: "warning" as const,
+            action: (
+              <Link href="/trace" className="btn btn-soft btn-sm fi-btn-secondary">
+                Inspect capture
+              </Link>
+            ),
+          },
+        ]
+      : []),
+  ].slice(0, 5);
+  const latestReplayRun = [...data.replayRuns].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )[0];
+  const latestGoldenSet = [...data.goldenSets].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+  )[0];
+  const latestCall = data.calls[0] ?? null;
+  const recentEvidenceRows = [
+    {
+      label: "Latest trace",
+      title: latestCall?.agent_name ?? latestCall?.call_id ?? "No trace yet",
+      detail: latestCall ? formatDateTime(latestCall.created_at) : "Waiting for capture",
+      status: latestCall?.status ?? "waiting",
+    },
+    {
+      label: "Latest failure",
+      title: sortedIssues[0]?.title ?? "No failure issue",
+      detail: sortedIssues[0] ? detectorLabel(sortedIssues[0].failure_code) : "No open failures",
+      status: sortedIssues[0]?.severity ?? "stable",
+    },
+    {
+      label: "Latest replay",
+      title: latestReplayRun?.golden_set_id ?? "No replay run",
+      detail: latestReplayRun ? formatDateTime(latestReplayRun.created_at) : planLimitText(data.quota),
+      status: latestReplayRun?.status ?? (caps.canReplay ? "pending" : "locked"),
+    },
+    {
+      label: "Latest golden update",
+      title: latestGoldenSet?.name ?? "No golden set",
+      detail: latestGoldenSet ? `${formatCount(latestGoldenSet.trace_count)} traces` : "Waiting for verified replay",
+      status: latestGoldenSet?.blocks_ci ? "protected" : latestGoldenSet ? "review" : "waiting",
+    },
+  ];
+  const releaseReadinessRows = [
+    { label: "Protected flows", value: formatCount(protectedGoldenCount), tone: protectedGoldenCount > 0 ? "success" : "neutral" },
+    { label: "Unprotected failures", value: formatCount(needsTrustedReplayCount), tone: needsTrustedReplayCount > 0 ? "warning" : "success" },
+    { label: "CI gate health", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocking` : "healthy", tone: failedCiRuns.length > 0 ? "danger" : "success" },
+    { label: "Provider key health", value: activeProviderKeyCount > 0 ? "healthy" : "optional", tone: activeProviderKeyCount > 0 ? "success" : "neutral" },
+  ];
+  const pipelineStages = [
+    { label: "Traces", value: formatCount(capturedCallCount), helper: `${captureLabel}` },
+    { label: "Issues", value: `${formatCount(openIssuesCount)} open`, helper: `${formatCount(needsTrustedReplayCount)} need replay` },
+    { label: "Replay", value: `${formatCount(replayPassRate)}% pass`, helper: `${formatCount(replayFailCount)} failing` },
+    { label: "Goldens", value: `${formatCount(protectedGoldenCount)} protected`, helper: `${formatCount(goldensNeedingReview.length)} need review` },
+    { label: "CI gates", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocking` : "healthy", helper: caps.canCi ? "gate checks active" : "upgrade required" },
+  ];
 
   return (
     <div className="fi-screen">
       <section className="fi-hero">
         <div className="fi-hero-main">
-          <div className="fi-eyebrow">
-            <AlertTriangle aria-hidden="true" />
-            Production failure queue
-          </div>
           <h1>Command Center</h1>
           <p>{loading ? "Loading trusted replay gaps for open production issues." : headerSubtitle}</p>
-          <div className="fi-hero-strip" aria-label="Command Center live status">
-            <div>
-              <span>Plan</span>
-              <strong>{planLabel}</strong>
-            </div>
-            <div>
-              <span>Capture</span>
-              <strong>{loading ? "Checking" : captureLabel}</strong>
-            </div>
-            <div>
-              <span>Project keys</span>
-              <strong>{loading ? "Checking" : activeProjectKeyCount > 0 ? `${activeProjectKeyCount} active` : "Missing"}</strong>
-            </div>
-          </div>
+          <div className="fi-command-meta" aria-label="Command Center live status">{loading ? "Checking workspace status" : commandStatusText}</div>
         </div>
         <div className="fi-hero-actions">
           <div className="fi-refresh-meta" aria-live="polite">
@@ -701,9 +743,11 @@ export default function HomePage() {
             <RefreshCw aria-hidden="true" className={refreshing ? "fi-spin" : undefined} />
             {refreshing ? "Refreshing" : "Refresh"}
           </button>
-          <Link href="/issues" className="btn btn-soft btn-sm fi-btn-secondary">
-            View all issues
-          </Link>
+          {hasWorkspaceActivity ? (
+            <Link href="/issues" className="btn btn-soft btn-sm fi-btn-secondary">
+              View all issues
+            </Link>
+          ) : null}
         </div>
       </section>
 
@@ -735,8 +779,6 @@ export default function HomePage() {
 
       {showFirstRunOnboarding ? (
         <FirstRunOnboarding
-          planLabel={planLabel}
-          eventLimitLabel={eventLimitLabel}
           projectKeyCount={activeProjectKeyCount}
           capturedCallCount={capturedCallCount}
           captureStatus={captureStatus}
@@ -747,122 +789,49 @@ export default function HomePage() {
         />
       ) : (
         <>
-      <section className="fi-command-overview" aria-label="Failure command overview">
-        <section className="fi-next-card" aria-label="Next best action">
-          <div className="fi-next-content">
-            <span className="fi-section-kicker">Next best action</span>
-            {nextBestIssue ? (
-              <>
-                <h2>
-                  {nextActionTitle(nextAction)} for {nextBestIssue.title}
-                </h2>
-                <div className="fi-next-reasons" aria-label="Next action decision reasons">
-                  <DecisionChip label="Severity" value={nextBestIssue.severity} />
-                  <DecisionChip label="Impact" value={formatIssueImpact(nextBestIssue)} />
-                  <DecisionChip label="Affected calls" value={formatCount(nextBestIssue.occurrence_count)} />
-                  <DecisionChip label="Replay proof" value={replayLabel(nextBestIssue.replay_coverage_status)} />
-                </div>
-                <p className="fi-next-outcome">{nextActionOutcome(nextAction)}</p>
-              </>
-            ) : (
-              <>
-                <h2>No open issue needs action.</h2>
-                <p className="fi-next-outcome">
-                  Open production issues will appear here when they need replay proof, Golden coverage, or CI protection.
-                </p>
-              </>
-            )}
-          </div>
-          {nextBestIssue ? (
-            <div className="fi-next-action">
-              {renderIssueAction(nextBestIssue, { replayLabel: "Run trusted replay" })}
-            </div>
-          ) : null}
-        </section>
-
-        <section className="fi-readiness-rail" aria-label="Failure readiness pipeline">
-          <ReadinessStep
-            icon={<AlertTriangle aria-hidden="true" />}
-            label="Captured failures"
-            value={loading ? "-" : formatCount(openIssuesCount)}
-            helper={loading ? "Checking capture evidence." : `${formatCount(evidenceCount)} with sample call or trace evidence.`}
-            state={readinessState(openIssuesCount, Math.max(openIssuesCount, 1), true)}
-            href="/issues"
-          />
-          <ReadinessStep
-            icon={<ListChecks aria-hidden="true" />}
-            label="Diagnosed"
-            value={loading ? "-" : `${formatCount(diagnosedCount)} / ${formatCount(openIssuesCount)}`}
-            helper="Root cause or evidence summary is attached."
-            state={readinessState(diagnosedCount, openIssuesCount)}
-            href="/issues"
-          />
-          <ReadinessStep
-            icon={<RotateCcw aria-hidden="true" />}
-            label="Replay proof"
-            value={loading ? "-" : `${formatCount(trustedReplayCount)} / ${formatCount(openIssuesCount)}`}
-            helper="Verified fixes can move toward Goldens."
-            state={readinessState(trustedReplayCount, openIssuesCount)}
-            href="/replay"
-          />
-          <ReadinessStep
-            icon={<ShieldCheck aria-hidden="true" />}
-            label="Golden ready"
-            value={loading ? "-" : formatCount(goldenReadyCount)}
-            helper="Verified traces ready for regression coverage."
-            state={readinessState(goldenReadyCount, openIssuesCount)}
-            href="/goldens"
-          />
-          <ReadinessStep
-            icon={<GitPullRequest aria-hidden="true" />}
-            label="CI risk"
-            value={loading ? "-" : formatCount(failedCiRuns.length)}
-            helper="Failed or not_verified gate runs need review."
-            state={readinessState(failedCiRuns.length, Math.max(failedCiRuns.length, 1), true)}
-            href="/ci-gates"
-          />
-        </section>
-      </section>
-
-      <section className="fi-kpi-grid" aria-label="Command Center summary">
+      <section className="fi-kpi-grid fi-command-metrics" aria-label="Command Center summary">
         <KpiCard
           icon={<AlertTriangle aria-hidden="true" />}
-          label="Critical & high"
-          value={loading ? "-" : formatCount(criticalHighCount)}
-          helper="Highest-risk loaded open issues."
+          label="Failed runs"
+          value={loading ? "-" : formatCount(failedRunsCount)}
+          helper={data.calls.length > 0 ? "Failed or errored traces in the latest sample." : "Highest-risk loaded failures."}
           active={queueFocus === "critical_high"}
           onClick={() => focusQueue("critical_high")}
         />
         <KpiCard
+          icon={<ListChecks aria-hidden="true" />}
+          label="New issues"
+          value={loading ? "-" : formatCount(openIssuesCount)}
+          helper={`${formatCount(needsTrustedReplayCount)} still need replay proof.`}
+          active={queueFocus === "all"}
+          onClick={() => focusQueue("all")}
+        />
+        <KpiCard
           icon={<RotateCcw aria-hidden="true" />}
-          label="Needs trusted replay"
-          value={loading ? "-" : formatCount(needsTrustedReplayCount)}
-          helper="Cannot become Goldens or block CI yet."
+          label="Replay pass/fail"
+          value={loading ? "-" : replayCompletedCount > 0 || openIssuesCount > 0 ? `${formatCount(replayPassRate)}% pass` : "No runs"}
+          helper={`${formatCount(replayFailCount)} failing or not verified.`}
           active={queueFocus === "replay_gap"}
           onClick={() => focusQueue("replay_gap")}
         />
         <KpiCard
-          icon={<DollarSign aria-hidden="true" />}
-          label="Loaded issue impact"
-          value={loading ? "-" : formatUsd(loadedIssueImpactUsd)}
-          helper="Cost signal from loaded open issues."
-          active={queueFocus === "impact"}
-          onClick={() => focusQueue("impact")}
+          icon={<GitPullRequest aria-hidden="true" />}
+          label="CI blocked regressions"
+          value={loading ? "-" : formatCount(failedCiRuns.length)}
+          helper={failedCiRuns.length > 0 ? "Blocking or not_verified gate runs." : "No blocking CI gates loaded."}
         />
         <KpiCard
-          icon={<ShieldCheck aria-hidden="true" />}
-          label="Verified fixes"
-          value={loading ? "-" : formatCount(verifiedFixesCount)}
-          helper="Eligible for Golden creation when a sample call exists."
-          active={queueFocus === "verified"}
-          onClick={() => focusQueue("verified")}
+          icon={<DollarSign aria-hidden="true" />}
+          label="Cost / latency trend"
+          value={loading ? "-" : `${formatTrend(costTrend)} cost`}
+          helper={latencyAverage == null ? "Latency trend needs captured traces." : `${formatCount(latencyAverage)}ms average latency.`}
         />
       </section>
 
-      <section className="fi-command-grid">
+      <section className="fi-ops-layout">
         <section className="fi-section fi-priority-section">
           <SectionHeader
-            title="Failure queue"
+            title="What needs action now?"
             description={queueFocusDescription(queueFocus)}
             action={
               queueFocus === "all" ? undefined : (
@@ -875,50 +844,58 @@ export default function HomePage() {
 
           {loading ? (
             <div className="fi-loading" aria-label="Loading Command Center" />
-          ) : focusedIssues.length === 0 ? (
-            <EmptyQueue>No open failures loaded.</EmptyQueue>
+          ) : priorityRows.length === 0 ? (
+            <EmptyQueue>No action required right now.</EmptyQueue>
           ) : (
             <div className="fi-table-wrap">
               <table className="fi-issues-table">
                 <thead>
                   <tr>
-                    <th>Issue</th>
+                    <th>Priority</th>
+                    <th>Type</th>
+                    <th>Item</th>
                     <th>Impact</th>
-                    <th>Replay proof</th>
-                    <th>Last seen</th>
+                    <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {focusedIssues.map((issue) => (
+                  {priorityRows.map((row) => (
                     <tr
-                      key={issue.id}
-                      className={selectedIssue?.id === issue.id ? "is-selected" : undefined}
-                      aria-selected={selectedIssue?.id === issue.id}
-                      tabIndex={0}
-                      onClick={() => setSelectedIssueId(issue.id)}
-                      onKeyDown={(event) => onIssueRowKeyDown(event, issue)}
+                      key={row.id}
+                      className={row.issueId && selectedIssueId === row.issueId ? "is-selected" : undefined}
+                      aria-selected={row.issueId ? selectedIssueId === row.issueId : undefined}
+                      tabIndex={row.issueId ? 0 : undefined}
+                      onClick={row.issueId ? () => setSelectedIssueId(row.issueId ?? null) : undefined}
+                      onKeyDown={
+                        row.issueId
+                          ? (event) => {
+                              const issue = sortedIssues.find((item) => item.id === row.issueId);
+                              if (issue) onIssueRowKeyDown(event, issue);
+                            }
+                          : undefined
+                      }
                     >
                       <td>
+                        <span className="fi-priority-pill">{row.priority}</span>
+                      </td>
+                      <td>
+                        <span className="fi-replay-state">{row.type}</span>
+                      </td>
+                      <td>
                         <div className="fi-issue-cell">
-                          {severityBadge(issue)}
-                          <button type="button" className="fi-issue-title-button" onClick={() => setSelectedIssueId(issue.id)}>
-                            {issue.title}
-                          </button>
-                          <span>
-                            {detectorLabel(issue.failure_code)} - {issueAgent(issue)} - {formatCount(issue.occurrence_count)} affected calls
-                          </span>
+                          <strong>{row.title}</strong>
+                          <span>{row.detail}</span>
                         </div>
                       </td>
                       <td>
-                        <strong className="fi-impact-value">{formatIssueImpact(issue)}</strong>
+                        <strong className="fi-impact-value">{row.impact}</strong>
                       </td>
                       <td>
-                        <span className="fi-replay-state">{replayLabel(issue.replay_coverage_status)}</span>
+                        <span className="fi-status-tag" data-tone={row.tone}>{row.status}</span>
                       </td>
-                      <td>{formatDateTime(issue.last_seen_at)}</td>
                       <td>
-                        <div className="fi-row-actions">{renderIssueAction(issue)}</div>
+                        <div className="fi-row-actions">{row.action}</div>
                       </td>
                     </tr>
                   ))}
@@ -928,256 +905,57 @@ export default function HomePage() {
           )}
         </section>
 
-        <aside className="fi-section fi-detail-panel" aria-label="Selected issue detail">
-          {selectedIssue ? (
-            <>
-              <div className="fi-detail-head">
-                <span className="fi-section-kicker">Issue #{issueNumber(selectedIssue)}</span>
-                <h2>{selectedIssue.title}</h2>
-                {severityBadge(selectedIssue)}
-              </div>
+        <aside className="fi-ops-rail" aria-label="Command Center side rail">
+          <section className="fi-section fi-recent-evidence" aria-label="Recent evidence">
+            <SectionHeader title="Recent evidence" description="Latest traces, failures, replay, and Golden updates." />
+            <div className="fi-evidence-list">
+              {recentEvidenceRows.map((row) => (
+                <div className="fi-evidence-row" key={row.label}>
+                  <div>
+                    <span>{row.label}</span>
+                    <strong>{row.title}</strong>
+                    <small>{row.detail}</small>
+                  </div>
+                  <StatusPill value={row.status} />
+                </div>
+              ))}
+            </div>
+          </section>
 
-              <div className="fi-detail-grid">
-                <DetailMetric label="Detected" value={formatDateTime(selectedIssue.last_seen_at)} />
-                <DetailMetric label="First seen" value={formatDateTime(selectedIssue.first_seen_at)} />
-                <DetailMetric label="Occurrences" value={formatCount(selectedIssue.occurrence_count)} />
-                <DetailMetric label="Affected agent" value={issueAgent(selectedIssue)} />
-                <DetailMetric label="Environment" value={issueEnvironment()} />
-                <DetailMetric label="Replay proof" value={replayLabel(selectedIssue.replay_coverage_status)} />
-              </div>
-
-              <div className="fi-detail-block">
-                <span>Root cause</span>
-                <p>{selectedIssue.root_cause || evidenceSummary(selectedIssue)}</p>
-              </div>
-
-              <div className="fi-detail-block">
-                <span>Cost impact</span>
-                <p>
-                  {formatIssueImpact(selectedIssue)} from {formatCount(selectedIssue.occurrence_count)} affected calls
-                </p>
-              </div>
-
-              <div className="fi-detail-block">
-                <span>Example trace</span>
-                {selectedPrimaryEvidence ? (
-                  <p>
-                    {selectedPrimaryEvidence.evidence_summary ??
-                      `${selectedPrimaryEvidence.workflow_name ?? "Workflow not captured"} on ${
-                        selectedPrimaryEvidence.provider ?? "unknown provider"
-                      }/${selectedPrimaryEvidence.model ?? "unknown model"}`}
-                  </p>
-                ) : (
-                  <p>No trace evidence attached to this issue yet.</p>
-                )}
-              </div>
-
-              <div className="fi-proof-ladder" aria-label="Selected issue proof ladder">
-                <ProofStep
-                  icon={<ListChecks aria-hidden="true" />}
-                  label="Evidence captured"
-                  helper={hasEvidence(selectedIssue) ? "Sample call or trace evidence is available." : "Capture data is missing."}
-                  state={hasEvidence(selectedIssue) ? "good" : "blocked"}
-                />
-                <ProofStep
-                  icon={<AlertTriangle aria-hidden="true" />}
-                  label="Diagnosis ready"
-                  helper={hasRootCause(selectedIssue) ? "Diagnosis has an explainable failure reason." : "Diagnosis needs evidence before replay."}
-                  state={hasRootCause(selectedIssue) ? "good" : "warn"}
-                />
-                <ProofStep
-                  icon={<RotateCcw aria-hidden="true" />}
-                  label="Trusted replay"
-                  helper={hasTrustedGoldenReplay(selectedIssue) ? "Replay verified the fix." : replayLabel(selectedIssue.replay_coverage_status)}
-                  state={hasTrustedGoldenReplay(selectedIssue) ? "good" : "blocked"}
-                />
-                <ProofStep
-                  icon={<ShieldCheck aria-hidden="true" />}
-                  label="Golden coverage"
-                  helper={goldenReady(selectedIssue) ? "Ready to become a regression guard." : "Needs verified replay and a sample call."}
-                  state={goldenReady(selectedIssue) ? "good" : "warn"}
-                />
-                <ProofStep
-                  icon={<GitPullRequest aria-hidden="true" />}
-                  label="CI gate"
-                  helper={goldenReady(selectedIssue) && caps.canCi ? "Can protect pull requests." : "Needs Golden coverage before CI can block regressions."}
-                  state={goldenReady(selectedIssue) && caps.canCi ? "good" : "neutral"}
-                />
-              </div>
-
-              <div className="fi-detail-actions">
-                {renderIssueAction(selectedIssue, { replayLabel: "Run trusted replay" })}
-                <Link href={`/issues/${selectedIssue.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
-                  View issue
-                </Link>
-                <button
-                  type="button"
-                  className="btn btn-soft btn-sm fi-btn-secondary"
-                  onClick={() => void onResolve(selectedIssue)}
-                  disabled={busyIssueId === selectedIssue.id}
-                >
-                  <CheckCircle2 aria-hidden="true" />
-                  Resolve
-                </button>
-              </div>
-            </>
-          ) : (
-            <EmptyQueue>No issue selected.</EmptyQueue>
-          )}
+          <section className="fi-section fi-release-readiness" aria-label="Release readiness">
+            <SectionHeader title="Release readiness" description="Protection and gate health for deploys." />
+            <div className="fi-readiness-list">
+              {releaseReadinessRows.map((row) => (
+                <div className="fi-readiness-row" data-tone={row.tone} key={row.label}>
+                  <span>{row.label}</span>
+                  <strong>{row.value}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
         </aside>
       </section>
 
-      <section className="fi-section fi-trace-section">
-        <SectionHeader
-          title="Trace evidence"
-          description="Evidence timeline for the selected issue."
-          icon={<ListChecks aria-hidden="true" />}
-        />
-        {selectedIssue && selectedEvidence.length > 0 ? (
-          <div className="fi-trace-list">
-            {selectedEvidence.slice(0, 4).map((trace, index) => (
-              <div key={`${trace.call_id ?? trace.trace_id ?? index}`} className="fi-trace-row">
-                <div>
-                  <strong>{trace.evidence_summary ?? trace.workflow_name ?? "Trace evidence"}</strong>
-                  <span>
-                    {trace.provider ?? "unknown provider"} / {trace.model ?? "unknown model"} - {trace.status ?? "unknown status"}
-                  </span>
-                </div>
-                <div className="fi-trace-meta">
-                  <span>{trace.created_at ? formatDateTime(trace.created_at) : "Time not captured"}</span>
-                  <span>{trace.call_id ?? trace.trace_id ?? "Trace id unavailable"}</span>
-                </div>
+      <section className="fi-section fi-pipeline-section" aria-label="Reliability pipeline">
+        <SectionHeader title="Reliability pipeline" description="Trace to release gate coverage." />
+        <div className="fi-pipeline">
+          {pipelineStages.map((stage, index) => (
+            <div className="fi-pipeline-stage" key={stage.label}>
+              <div className="fi-pipeline-node">
+                {index === 0 ? <ListChecks aria-hidden="true" /> : null}
+                {index === 1 ? <AlertTriangle aria-hidden="true" /> : null}
+                {index === 2 ? <RotateCcw aria-hidden="true" /> : null}
+                {index === 3 ? <ShieldCheck aria-hidden="true" /> : null}
+                {index === 4 ? <GitPullRequest aria-hidden="true" /> : null}
               </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyQueue>No trace evidence attached.</EmptyQueue>
-        )}
-      </section>
-
-      <section className="fi-grid fi-secondary-grid" aria-label="Secondary system cards">
-        <article className="fi-section fi-secondary-card">
-          <SectionHeader
-            title="Pending replay runs"
-            description="Replay work still waiting or running."
-            action={
-              caps.canReplay ? (
-                <Link href="/replay" className="btn btn-soft btn-sm fi-btn-secondary">
-                  Replay
-                </Link>
-              ) : (
-                <LockedUpgradeLink label="Upgrade to unlock replay" />
-              )
-            }
-          />
-          <QueueList
-            items={pendingRuns}
-            empty="No pending replay runs."
-            renderItem={(run) => (
-              <Link key={run.id} href={`/replay/${run.id}`} className="fi-queue-row">
-                <div className="fi-queue-main">
-                  <strong>{run.replay_mode.replace(/_/g, " ")} replay</strong>
-                  <span>{run.golden_set_id} - created {formatDateTime(run.created_at)}</span>
-                </div>
-                <StatusPill value={run.status} />
-              </Link>
-            )}
-          />
-        </article>
-
-        <article className="fi-section fi-secondary-card">
-          <SectionHeader
-            title="Failed/not_verified CI gates"
-            description="Regression CI runs that need human review."
-            icon={<GitPullRequest aria-hidden="true" />}
-          />
-          <QueueList
-            items={failedCiRuns}
-            empty="No failed or not_verified CI gates."
-            renderItem={(run) => (
-              <div key={run.id} className="fi-queue-row">
-                <div className="fi-queue-main">
-                  <strong>{run.status === "not_verified" ? "Not verified" : "CI gate failed"}</strong>
-                  <span>{run.git_sha ?? run.id} - {formatDateTime(run.created_at)}</span>
-                </div>
-                <div className="fi-row-actions">
-                  <StatusPill value={run.status} />
-                  {caps.canCi ? (
-                    <Link href={`/ci-gates/${run.id}`} className="btn btn-primary btn-sm fi-btn-primary">
-                      Review CI run
-                    </Link>
-                  ) : (
-                    <LockedUpgradeLink label="Upgrade to unlock CI actions" />
-                  )}
-                </div>
+              <div>
+                <span>{stage.label}</span>
+                <strong>{stage.value}</strong>
+                <small>{stage.helper}</small>
               </div>
-            )}
-          />
-        </article>
-
-        <article className="fi-section fi-secondary-card">
-          <SectionHeader
-            title="Goldens needing review"
-            description="Empty, flaky, or non-blocking Golden sets."
-            action={
-              caps.canGoldens ? (
-                <Link href="/goldens" className="btn btn-soft btn-sm fi-btn-secondary">
-                  Goldens
-                </Link>
-              ) : (
-                <LockedUpgradeLink label="Upgrade to unlock Goldens" />
-              )
-            }
-          />
-          <QueueList
-            items={goldensNeedingReview}
-            empty="No goldens needing review."
-            renderItem={(set) => (
-              <Link key={set.id} href={`/goldens/${set.id}`} className="fi-queue-row">
-                <div className="fi-queue-main">
-                  <strong>{set.name}</strong>
-                  <span>{goldenReviewReason(set)} - {formatCount(set.trace_count)} traces</span>
-                </div>
-                <StatusPill value={set.is_flaky ? "warning" : set.blocks_ci ? "stable" : "pending"} />
-              </Link>
-            )}
-          />
-        </article>
-
-        <article className="fi-section fi-secondary-card">
-          <SectionHeader
-            title="Usage/plan status"
-            description="Plan and usage indicators for action gates."
-            action={
-              <Link href="/cost" className="btn btn-soft btn-sm fi-btn-secondary">
-                Cost
-              </Link>
-            }
-          />
-          <div className="fi-queue-list">
-            <div className="fi-queue-row">
-              <div className="fi-queue-main">
-                <strong>Plan</strong>
-                <span>{data.billing?.status ?? "Subscription status unavailable"}</span>
-              </div>
-              <span className="fi-mono">{planLabel}</span>
             </div>
-            <div className="fi-queue-row">
-              <div className="fi-queue-main">
-                <strong>Replay quota</strong>
-                <span>{planLimitText(data.quota)}</span>
-              </div>
-              <StatusPill value={data.quota?.enabled ? "stable" : "warning"} />
-            </div>
-            <div className="fi-queue-row">
-              <div className="fi-queue-main">
-                <strong>Calls in 24h</strong>
-                <span>Latest analytics summary.</span>
-              </div>
-              <span className="fi-mono">{formatCount(data.summary?.calls_today)}</span>
-            </div>
-          </div>
-        </article>
+          ))}
+        </div>
       </section>
         </>
       )}

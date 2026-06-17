@@ -3,13 +3,16 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  ArrowRight,
   CheckCircle2,
+  Circle,
   Code2,
+  ExternalLink,
   GitPullRequest,
   KeyRound,
   LockKeyhole,
-  PlayCircle,
   Route,
+  Send,
   ShieldCheck,
   Terminal,
 } from "lucide-react";
@@ -187,8 +190,6 @@ export function ProofStep({
 type SetupState = "done" | "current" | "locked" | "idle";
 
 export function FirstRunOnboarding({
-  planLabel,
-  eventLimitLabel,
   projectKeyCount,
   capturedCallCount,
   captureStatus,
@@ -197,8 +198,6 @@ export function FirstRunOnboarding({
   goldensUnlocked,
   ciUnlocked,
 }: {
-  planLabel: string;
-  eventLimitLabel: string;
   projectKeyCount: number;
   capturedCallCount: number;
   captureStatus: "connected" | "stale" | "no_data" | "unknown";
@@ -220,10 +219,10 @@ export function FirstRunOnboarding({
     : !hasCapture
       ? {
           href: "/trace",
-          label: "Send first trace",
-          title: "Send one real agent trace",
-          detail: "Run a staging or production agent call and confirm it appears in Traces.",
-          icon: <PlayCircle aria-hidden="true" />,
+          label: "Send test capture",
+          title: "Send test capture",
+          detail: "Run one agent call and confirm the first trace lands in Zroky.",
+          icon: <Send aria-hidden="true" />,
         }
       : {
           href: "/trace",
@@ -243,198 +242,160 @@ export function FirstRunOnboarding({
   const setupSteps: { label: string; detail: string; state: SetupState }[] = [
     {
       label: "Project key",
-      detail: hasProjectKey ? `${projectKeyCount} active key${projectKeyCount === 1 ? "" : "s"}` : "Required first",
+      detail: hasProjectKey ? "Created" : "In progress",
       state: hasProjectKey ? "done" : "current",
     },
     {
-      label: "Trace capture",
-      detail: hasCapture ? captureLabel : "Send one run",
+      label: "SDK/Gateway connected",
+      detail: hasCapture ? "Connected" : hasProjectKey ? "Waiting" : "Locked",
       state: hasCapture ? "done" : hasProjectKey ? "current" : "locked",
     },
     {
-      label: "Failure issue",
-      detail: hasCapture ? "Waiting for failure" : "Needs evidence",
-      state: hasCapture ? "current" : "locked",
+      label: "First trace received",
+      detail: hasCapture ? captureLabel : "Waiting",
+      state: hasCapture ? "done" : "locked",
     },
     {
-      label: "Replay proof",
-      detail: replayUnlocked ? "Available" : "Plan locked",
-      state: replayUnlocked ? "idle" : "locked",
-    },
-    {
-      label: "Golden / CI",
-      detail: goldensUnlocked || ciUnlocked ? "Available after proof" : "Upgrade path",
-      state: goldensUnlocked || ciUnlocked ? "idle" : "locked",
+      label: "First issue/replay ready",
+      detail: hasCapture && replayUnlocked ? "Ready when issue appears" : "Waiting",
+      state: hasCapture && replayUnlocked ? "current" : "locked",
     },
   ];
-  const unlocks = [
+  const healthRows: { label: string; value: string; state: SetupState; icon: ReactNode }[] = [
+    {
+      label: "API key",
+      value: hasProjectKey ? "Created" : "Missing",
+      state: hasProjectKey ? "done" : "current",
+      icon: <KeyRound aria-hidden="true" />,
+    },
+    {
+      label: "Capture",
+      value: hasCapture ? "Connected" : "Waiting",
+      state: hasCapture ? "done" : "current",
+      icon: <Route aria-hidden="true" />,
+    },
     {
       label: "Provider key",
-      value: providerKeyCount > 0 ? `${providerKeyCount} active` : "Add later",
+      value: providerKeyCount > 0 ? "Connected" : "Optional",
       state: providerKeyCount > 0 ? "done" : "idle",
+      icon: <Terminal aria-hidden="true" />,
     },
     {
-      label: "Replay",
-      value: replayUnlocked ? "Available" : "Locked",
-      state: replayUnlocked ? "done" : "locked",
-    },
-    {
-      label: "Goldens",
-      value: goldensUnlocked ? "Available" : "Locked",
-      state: goldensUnlocked ? "done" : "locked",
-    },
-    {
-      label: "CI gates",
-      value: ciUnlocked ? "Available" : "Locked",
-      state: ciUnlocked ? "done" : "locked",
+      label: "CI",
+      value: ciUnlocked ? "Not configured" : "Not configured",
+      state: ciUnlocked ? "idle" : "locked",
+      icon: <GitPullRequest aria-hidden="true" />,
     },
   ];
+  const canShowReplayNext = replayUnlocked || goldensUnlocked || ciUnlocked;
 
   return (
-    <section className="fi-onboarding" aria-label="First capture setup">
-      <div className="fi-onboarding-top fi-setup-hero">
-        <div className="fi-onboarding-copy">
-          <span className="fi-section-kicker">Workspace setup</span>
-          <h2>Start with one captured agent run.</h2>
-          <p>
-            Create a project key, send a real trace, then let failures promote into replay proof, Goldens, and CI
-            gates when your plan unlocks them.
-          </p>
-          <div className="fi-setup-status-grid" aria-label="Workspace setup snapshot">
-            <div className="fi-setup-status" data-state="done">
-              <span>Plan</span>
-              <strong>{planLabel}</strong>
-            </div>
-            <div className="fi-setup-status">
-              <span>Event limit</span>
-              <strong>{eventLimitLabel}</strong>
-            </div>
-            <div className="fi-setup-status" data-state={hasProjectKey ? "done" : "current"}>
-              <span>Project key</span>
-              <strong>{hasProjectKey ? `${projectKeyCount} active` : "Missing"}</strong>
-            </div>
-            <div className="fi-setup-status" data-state={hasCapture ? "done" : "current"}>
-              <span>Capture</span>
-              <strong>{captureLabel}</strong>
-            </div>
-          </div>
-          <div className="fi-onboarding-actions">
+    <section className="fi-setup-cockpit" aria-label="First capture setup">
+      <div className="fi-setup-primary-grid">
+        <article className="fi-next-setup" aria-label="Next required setup action">
+          <span className="fi-setup-icon" aria-hidden="true">
+            {nextAction.icon}
+          </span>
+          <span className="fi-section-kicker">Next required action</span>
+          <h3>{nextAction.title}</h3>
+          <p>{nextAction.detail}</p>
+          <div className="fi-setup-actions">
             <Link href={nextAction.href} className="btn btn-primary btn-sm fi-btn-primary">
               {nextAction.icon}
               {nextAction.label}
             </Link>
-            <Link href="/trace" className="btn btn-soft btn-sm fi-btn-secondary">
-              <PlayCircle aria-hidden="true" />
-              Open traces
+            <Link href="/docs" className="fi-inline-link">
+              View setup docs
+              <ExternalLink aria-hidden="true" />
             </Link>
           </div>
-        </div>
+        </article>
 
-        <div className="fi-next-setup" aria-label="Next required setup action">
-          <span className="fi-section-kicker">Next required action</span>
-          <h3>{nextAction.title}</h3>
-          <p>{nextAction.detail}</p>
-          <Link href={nextAction.href} className="btn btn-primary btn-sm fi-btn-primary">
-            {nextAction.icon}
-            {nextAction.label}
-          </Link>
-        </div>
+        <article className="fi-connection-panel" aria-label="Connection health">
+          <h3>Connection health</h3>
+          <div className="fi-health-list">
+            {healthRows.map((row) => (
+              <div className="fi-health-row" data-state={row.state} key={row.label}>
+                <span className="fi-health-icon">{row.icon}</span>
+                <strong>{row.label}</strong>
+                <span className="fi-health-value">
+                  <Circle aria-hidden="true" />
+                  {row.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </article>
       </div>
 
       <div className="fi-onboarding-flow" aria-label="Command Center setup path">
+        <h3>Setup progress</h3>
         {setupSteps.map((step, index) => (
           <div className="fi-onboarding-flow-step" data-state={step.state} key={step.label}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
-            <strong>{step.label}</strong>
-            <small>{step.detail}</small>
+            <span>{index + 1}</span>
+            <div>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </div>
+            {step.state === "locked" ? <LockKeyhole aria-hidden="true" /> : null}
           </div>
         ))}
       </div>
 
-      <div className="fi-onboarding-grid">
-        <article className="fi-onboarding-card">
-          <div className="fi-onboarding-card-head">
-            <span className="fi-onboarding-icon">
-              <Code2 aria-hidden="true" />
+      <div className="fi-setup-action-grid" aria-label="Setup options">
+        {[
+          {
+            href: "/settings/keys",
+            icon: <Terminal aria-hidden="true" />,
+            label: "Install SDK",
+            detail: "Add Zroky SDK to your agent.",
+            action: "View instructions",
+          },
+          {
+            href: "/settings/keys",
+            icon: <Route aria-hidden="true" />,
+            label: "Use Gateway",
+            detail: "Send traces via API Gateway.",
+            action: "Get gateway key",
+          },
+          {
+            href: "/trace",
+            icon: <Send aria-hidden="true" />,
+            label: "Send test capture",
+            detail: "Verify setup with one trace.",
+            action: "Send test now",
+          },
+        ].map((item) => (
+          <Link href={item.href} className="fi-setup-action-card" key={item.label}>
+            <span className="fi-onboarding-icon">{item.icon}</span>
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+            <span>
+              {item.action}
+              <ArrowRight aria-hidden="true" />
             </span>
-            <div>
-              <h3>SDK capture</h3>
-              <p>Wrap the agent call where your application already invokes the model or tool chain.</p>
-            </div>
-          </div>
-          <pre className="fi-onboarding-code" aria-label="Python SDK capture snippet">
-            <code>{`pip install zroky
-export ZROKY_API_KEY=...
-
-zroky.init()
-zroky.call("checkout-agent", input=payload)`}</code>
-          </pre>
-        </article>
-
-        <article className="fi-onboarding-card">
-          <div className="fi-onboarding-card-head">
-            <span className="fi-onboarding-icon">
-              <Route aria-hidden="true" />
-            </span>
-            <div>
-              <h3>Gateway capture</h3>
-              <p>Route provider traffic through Zroky when you cannot change agent code quickly.</p>
-            </div>
-          </div>
-          <pre className="fi-onboarding-code" aria-label="Gateway capture snippet">
-            <code>{`docker run -p 8090:8090 \\
-  ghcr.io/zroky-ai/zroky-gateway:latest
-
-export OPENAI_BASE_URL=http://localhost:8090/v1`}</code>
-          </pre>
-        </article>
-
-        <article className="fi-onboarding-card fi-onboarding-provider">
-          <div className="fi-onboarding-card-head">
-            <span className="fi-onboarding-icon">
-              <Terminal aria-hidden="true" />
-            </span>
-            <div>
-              <h3>Unlock sequence</h3>
-              <p>Keep capture separate from paid replay work.</p>
-            </div>
-          </div>
-          <div className="fi-unlock-list" aria-label="Plan unlock status">
-            {unlocks.map((unlock) => (
-              <div className="fi-unlock-row" data-state={unlock.state} key={unlock.label}>
-                <span>{unlock.label}</span>
-                <strong>{unlock.value}</strong>
-              </div>
-            ))}
-          </div>
-          <Link href="/settings/providers" className="btn btn-soft btn-sm fi-btn-secondary">
-            <KeyRound aria-hidden="true" />
-            Open provider settings
           </Link>
-        </article>
+        ))}
       </div>
 
-      <div className="fi-onboarding-checklist" aria-label="First run checklist">
-        <div>
-          <span className="fi-section-kicker">Operating model</span>
-          <h3>Evidence first. Proof after.</h3>
-        </div>
+      <div className="fi-onboarding-checklist" aria-label="What happens next">
+        <h3>What happens next</h3>
         <div className="fi-proof-preview" aria-label="Command Center operating model">
           <div>
             <Code2 aria-hidden="true" />
-            <span>Capture a real run</span>
+            <span>Trace appears</span>
           </div>
           <div>
             <Terminal aria-hidden="true" />
-            <span>Diagnose the failure</span>
+            <span>Failure becomes issue</span>
           </div>
           <div>
             <ShieldCheck aria-hidden="true" />
-            <span>Promote verified behavior</span>
+            <span>{canShowReplayNext ? "Replay verifies fix" : "Replay unlocks after upgrade"}</span>
           </div>
           <div>
             <GitPullRequest aria-hidden="true" />
-            <span>Gate risky releases</span>
+            <span>Golden blocks regression</span>
           </div>
         </div>
       </div>
