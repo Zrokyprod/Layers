@@ -376,12 +376,10 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Command Center" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("Reliability control plane for production agent runs.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Command Center live status").textContent).toBe(
-      "PRO plan | My Project | 0 traces captured | Production",
-    );
+    expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Run replay" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "View all issues" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Loaded open issues")).toBeNull();
@@ -435,7 +433,7 @@ describe("Command Center home", () => {
 
     expect(await screen.findByRole("heading", { name: "Create a project key" })).toBeInTheDocument();
     expect(screen.getByText("Capture your first agent run to start reliability monitoring.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Command Center live status").textContent).toBe("PRO plan | My Project | 0 traces captured");
+    expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getByRole("link", { name: /Create project key/i }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("heading", { name: "Connection health" })).toBeInTheDocument();
     expect(screen.getByText("API key")).toBeInTheDocument();
@@ -477,9 +475,7 @@ describe("Command Center home", () => {
 
     expect(await screen.findByRole("heading", { name: "What needs action now?" })).toBeInTheDocument();
     expect(screen.getByText("No action required right now.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Command Center live status").textContent).toBe(
-      "PRO plan | My Project | 1 traces captured | Production",
-    );
+    expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Setup progress" })).toBeNull();
   });
 

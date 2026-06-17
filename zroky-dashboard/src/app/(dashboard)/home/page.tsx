@@ -234,11 +234,6 @@ function captureStatusLabel(status: CaptureHealthResponse["status"] | "unknown",
   return "Checking capture";
 }
 
-function issueEnvironment(): string {
-  const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
-  return envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
-}
-
 function evidenceSummary(issue: IssueItem): string {
   return (
     issue.evidence_traces.find((trace) => trace.evidence_summary)?.evidence_summary ??
@@ -498,7 +493,6 @@ export default function HomePage() {
   const pendingRuns = data.replayRuns.filter((run) => isPendingRun(run) && !isCiRun(run)).slice(0, 6);
   const failedCiRuns = data.replayRuns.filter(isFailedCiRun).slice(0, 6);
   const goldensNeedingReview = data.goldenSets.filter(needsGoldenReview).slice(0, 6);
-  const planLabel = data.billing?.plan_code ? data.billing.plan_code.toUpperCase() : "PLAN";
   const activeProjectKeyCount = data.apiKeys.filter((key) => !key.revoked && !key.expired).length;
   const activeProviderKeyCount = data.providerKeys.filter((key) => key.is_active && !key.revoked_at).length;
   const captureStatus = data.captureHealth?.status ?? "unknown";
@@ -522,9 +516,6 @@ export default function HomePage() {
   const headerSubtitle = hasWorkspaceActivity
     ? "Reliability control plane for production agent runs."
     : "Capture your first agent run to start reliability monitoring.";
-  const commandStatusText = `${planLabel} plan | My Project | ${formatCount(capturedCallCount)} traces captured${
-    hasWorkspaceActivity ? ` | ${issueEnvironment()}` : ""
-  }`;
   const loadErrorKeys = Object.keys(loadErrors) as InboxLoadKey[];
   const loadErrorText = loadErrorKeys.map((key) => loadSourceLabels[key]).join(", ");
   const issuesLoadFailed = loadErrorKeys.includes("issues");
@@ -719,9 +710,8 @@ export default function HomePage() {
     <div className="fi-screen">
       <section className="fi-hero">
         <div className="fi-hero-main">
-          <h1>Command Center</h1>
+          <h1>Home</h1>
           <p>{loading ? "Loading trusted replay gaps for open production issues." : headerSubtitle}</p>
-          <div className="fi-command-meta" aria-label="Command Center live status">{loading ? "Checking workspace status" : commandStatusText}</div>
         </div>
         <div className="fi-hero-actions">
           <div className="fi-refresh-meta" aria-live="polite">

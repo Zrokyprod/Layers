@@ -56,7 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "failure-inbox",
     href: "/home",
-    label: "Command Center",
+    label: "Home",
     subtitle: "Capture health, failure queue, replay proof, Goldens, CI gates, and next actions.",
     Icon: Inbox,
     badgeKey: "agents",
@@ -166,7 +166,7 @@ const DASHBOARD_ROUTES = [
   {
     id: "home",
     href: "/home",
-    label: "Command Center",
+    label: "Home",
     subtitle: "Production failure queue, replay gaps, CI gates, and review actions.",
     Icon: Bot,
   },
