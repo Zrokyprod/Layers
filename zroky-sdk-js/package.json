@@ -36,6 +36,7 @@
   "license": "FSL-1.1-MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zroky-ai/zroky-sdk-js"
+    "url": "https://github.com/Zrokyprod/Layers",
+    "directory": "zroky-sdk-js"
   }
 }
