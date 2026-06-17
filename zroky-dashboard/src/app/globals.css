@@ -30956,6 +30956,39 @@ button.gm-kpi-card {
   padding: 22px;
 }
 
+.app-shell .keys-onboarding-panel {
+  display: grid;
+  gap: 14px;
+  border-color: rgba(167, 139, 250, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.022)),
+    #0b0c0f;
+}
+
+.app-shell .keys-onboarding-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.app-shell .keys-onboarding-header h2 {
+  margin: 8px 0 0;
+  color: var(--text-primary);
+  font-size: clamp(1.28rem, 2vw, 1.72rem);
+  font-weight: 690;
+  letter-spacing: 0;
+  line-height: 1.12;
+}
+
+.app-shell .keys-onboarding-header p {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.48;
+}
+
 .app-shell .keys-hero-copy {
   min-width: 0;
 }
@@ -30990,7 +31023,7 @@ button.gm-kpi-card {
 .app-shell .keys-capture-path {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -31013,6 +31046,12 @@ button.gm-kpi-card {
   border-color: rgba(167, 139, 250, 0.35);
   background: rgba(167, 139, 250, 0.11);
   color: var(--brand-orange-hover);
+}
+
+.app-shell .keys-capture-path span.is-done {
+  border-color: rgba(34, 197, 94, 0.26);
+  background: rgba(34, 197, 94, 0.08);
+  color: #86efac;
 }
 
 .app-shell .keys-capture-path strong {
@@ -31238,7 +31277,14 @@ button.gm-kpi-card {
   gap: 8px;
 }
 
-.app-shell .keys-snippet-card pre {
+.app-shell .keys-command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-shell .keys-snippet-card pre,
+.app-shell .keys-command-grid pre {
   min-width: 0;
   overflow-x: auto;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -31268,13 +31314,15 @@ button.gm-kpi-card {
   }
 
   .app-shell .keys-capture-path,
-  .app-shell .keys-code-grid {
+  .app-shell .keys-code-grid,
+  .app-shell .keys-command-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   .app-shell .keys-setup-hero,
+  .app-shell .keys-onboarding-panel,
   .app-shell .keys-newkey-banner {
     padding: 16px;
   }
@@ -31284,12 +31332,18 @@ button.gm-kpi-card {
   .app-shell .keys-create-panel .keys-create-form,
   .app-shell .keys-provider-note,
   .app-shell .keys-code-grid,
+  .app-shell .keys-command-grid,
   .app-shell .keys-newkey-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell .keys-onboarding-header {
     grid-template-columns: 1fr;
   }
 
   .app-shell .keys-hero-actions,
   .app-shell .keys-hero-actions .btn,
+  .app-shell .keys-onboarding-header .btn,
   .app-shell .keys-copy-actions,
   .app-shell .keys-copy-actions .btn,
   .app-shell .keys-provider-note .btn,

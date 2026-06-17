@@ -7212,12 +7212,38 @@ body:has(.app-shell) {
 }
 
 .app-shell .keys-setup-hero,
+.app-shell .keys-onboarding-panel,
 .app-shell .providers-setup-hero {
   overflow: hidden !important;
   gap: 18px !important;
   background:
     linear-gradient(135deg, rgba(248, 250, 252, 0.06), rgba(248, 250, 252, 0.018) 60%),
     var(--dashboard-surface) !important;
+}
+
+.app-shell .keys-onboarding-panel {
+  display: grid !important;
+  gap: 14px !important;
+}
+
+.app-shell .keys-onboarding-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+
+.app-shell .keys-onboarding-header h2 {
+  margin: 8px 0 0 !important;
+  color: var(--dashboard-text) !important;
+  font-size: clamp(1.28rem, 2vw, 1.72rem) !important;
+  line-height: 1.12 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .keys-onboarding-header p {
+  margin: 7px 0 0 !important;
+  color: var(--dashboard-text-soft) !important;
 }
 
 .app-shell .keys-hero-copy h1,
@@ -7253,6 +7279,10 @@ body:has(.app-shell) {
   gap: 8px !important;
 }
 
+.app-shell .keys-capture-path {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
 .app-shell .keys-capture-path span,
 .app-shell .providers-flow-rail span,
 .app-shell .keys-next-grid > div,
@@ -7271,6 +7301,12 @@ body:has(.app-shell) {
   border-color: var(--dashboard-accent) !important;
   background: var(--dashboard-accent-soft) !important;
   color: var(--dashboard-text) !important;
+}
+
+.app-shell .keys-capture-path span.is-done {
+  border-color: rgba(34, 197, 94, 0.28) !important;
+  background: rgba(34, 197, 94, 0.08) !important;
+  color: #86efac !important;
 }
 
 .app-shell .keys-capture-path strong,
@@ -7298,6 +7334,7 @@ body:has(.app-shell) {
 }
 
 .app-shell .keys-snippet-grid,
+.app-shell .keys-command-grid,
 .app-shell .providers-card-grid,
 .app-shell .settings-integration-grid {
   display: grid !important;
@@ -7531,6 +7568,7 @@ body:has(.app-shell) {
 
 @media (max-width: 720px) {
   .app-shell .keys-setup-hero,
+  .app-shell .keys-onboarding-panel,
   .app-shell .providers-setup-hero {
     padding: 16px !important;
   }
@@ -7542,6 +7580,7 @@ body:has(.app-shell) {
   }
 
   .app-shell .keys-capture-path,
+  .app-shell .keys-command-grid,
   .app-shell .providers-flow-rail,
   .app-shell .keys-primary-grid,
   .app-shell .providers-primary-grid,
@@ -7558,6 +7597,10 @@ body:has(.app-shell) {
     grid-template-columns: 1fr !important;
   }
 
+  .app-shell .keys-onboarding-header {
+    grid-template-columns: 1fr !important;
+  }
+
   .app-shell .keys-hero-actions,
   .app-shell .providers-hero-actions,
   .app-shell .provider-actions,
@@ -7570,6 +7613,7 @@ body:has(.app-shell) {
   }
 
   .app-shell .keys-hero-actions .btn,
+  .app-shell .keys-onboarding-header .btn,
   .app-shell .providers-hero-actions .btn,
   .app-shell .provider-actions .btn,
   .app-shell .team-member-actions .btn,

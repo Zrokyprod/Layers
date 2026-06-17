@@ -5,17 +5,14 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  Clock3,
   Code2,
   Copy,
   KeyRound,
   Plug,
   RotateCcw,
   Route,
-  ShieldCheck,
   Terminal,
 } from "lucide-react";
 
@@ -31,7 +28,7 @@ import {
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
 
 const defaultKeyName = "Production capture key";
-const capturePath = ["Project key", "SDK/Gateway capture", "First trace", "Stub replay", "Verified replay"];
+const capturePath = ["Create key", "Run SDK/Gateway", "First trace", "Stub replay"];
 
 export default function ApiKeysPage() {
   const projectQuery = useProjectSettings();
@@ -117,39 +114,79 @@ export default function ApiKeysPage() {
   const loading = projectQuery.isLoading || keysQuery.isLoading;
   const error = projectQuery.error?.message ?? keysQuery.error?.message ?? null;
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
-  const neverUsedKeys = activeKeys.filter((key) => !key.last_used_at).length;
-  const expiringSoonKeys = activeKeys.filter((key) => {
-    if (!key.expires_at) return false;
-    const expiresAt = new Date(key.expires_at).getTime();
-    return Number.isFinite(expiresAt) && expiresAt - Date.now() < 14 * 24 * 60 * 60 * 1000;
-  }).length;
+  const hasActiveKey = activeKeys.length > 0 || newKey !== null;
+  const currentStepIndex = hasActiveKey ? 1 : 0;
+  const snippetProjectId = projectId || "proj_...";
+  const jsSetupSnippet = `npm install @zroky/sdk
+export ZROKY_PROJECT_ID="${snippetProjectId}"
+export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
+export ZROKY_ENDPOINT="https://api.zroky.com/v1/ingest"`;
+  const pythonSetupSnippet = `pip install zroky
+export ZROKY_PROJECT="${snippetProjectId}"
+export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
+export ZROKY_INGEST_URL="https://api.zroky.com/v1/ingest"`;
+  const jsSmokeSnippet = `import { init, traceRun, captureToolCall } from "@zroky/sdk";
+
+init({
+  agentName: "first-capture-agent",
+  workflowId: "first-capture",
+  environment: "production",
+});
+
+await traceRun({ name: "first-capture", userInput: "smoke test" }, async () => {
+  await captureToolCall({
+    name: "lookup_order",
+    result: { ok: true },
+  });
+  return "captured";
+});`;
+  const pythonSmokeSnippet = `import zroky
+
+zroky.init()
+
+with zroky.trace_run(
+    name="first-capture",
+    user_input="smoke test",
+    environment="production",
+) as run:
+    zroky.capture_tool_call(
+        name="lookup_order",
+        result={"ok": True},
+    )
+    run.set_final_answer("captured")
+
+zroky.flush()`;
+  const gatewaySnippet = `docker run -p 8090:8090 \\
+  -e ZROKY_API_KEY=zk_live_... \\
+  ghcr.io/zroky-ai/zroky-gateway:latest
+
+export OPENAI_BASE_URL=http://localhost:8090/v1`;
 
   return (
     <div className="page-content keys-setup-page">
-      <section className="panel keys-setup-hero">
-        <div className="keys-hero-copy">
-          <span className="settings-section-kicker">
-            <KeyRound aria-hidden="true" />
-            Capture setup
-          </span>
-          <h1>Create a project key. Capture your first agent call.</h1>
-          <p>
-            Project keys send production evidence to Zroky. Provider keys are separate and only used when verified
-            replay runs.
-          </p>
-        </div>
-        <div className="keys-hero-actions">
-          <Link href="/trace" className="btn btn-primary">
-            Confirm first trace
+      <section className="panel keys-onboarding-panel" aria-labelledby="project-key-setup-title">
+        <header className="keys-onboarding-header">
+          <div>
+            <span className="settings-section-kicker">
+              <KeyRound aria-hidden="true" />
+              Capture setup
+            </span>
+            <h2 id="project-key-setup-title">Project key setup</h2>
+            <p>Create one key, run one SDK or Gateway call, then confirm your first trace.</p>
+          </div>
+          <Link href="/trace" className="btn btn-soft">
+            Open traces
             <ArrowRight aria-hidden="true" />
           </Link>
-          <Link href="/settings/providers" className="btn btn-soft">
-            Provider keys
-          </Link>
-        </div>
+        </header>
         <div className="keys-capture-path" aria-label="Project key to verified replay path">
           {capturePath.map((step, index) => (
-            <span key={step} className={index === 0 ? "is-current" : undefined}>
+            <span
+              key={step}
+              className={
+                index < currentStepIndex ? "is-done" : index === currentStepIndex ? "is-current" : undefined
+              }
+            >
               {String(index + 1).padStart(2, "0")}
               <strong>{step}</strong>
             </span>
@@ -177,25 +214,42 @@ export default function ApiKeysPage() {
           </div>
           <div className="keys-next-grid">
             <div>
-              <span>Scope</span>
-              <strong>{newKey.scopes.join(", ")}</strong>
+              <span>Project</span>
+              <strong>{newKey.project_id}</strong>
             </div>
             <div>
               <span>Expires</span>
               <strong>{newKey.expires_at ? formatDateTime(newKey.expires_at) : "Never"}</strong>
             </div>
             <div>
-              <span>Next step</span>
-              <strong>Install SDK or route Gateway traffic.</strong>
+              <span>Scope</span>
+              <strong>{newKey.scopes.join(", ")}</strong>
             </div>
           </div>
+          <div className="keys-command-grid" aria-label="One-time setup commands">
+            <pre aria-label="Node SDK environment setup">
+              <code>{jsSetupSnippet}</code>
+            </pre>
+            <pre aria-label="Python SDK environment setup">
+              <code>{pythonSetupSnippet}</code>
+            </pre>
+          </div>
           <div className="keys-copy-actions">
-            <Link href="/trace" className="btn btn-soft">
-              Confirm first trace
-            </Link>
+            <button type="button" className="btn btn-soft" onClick={() => void copyKey(jsSetupSnippet)}>
+              <Copy aria-hidden="true" />
+              Copy Node setup
+            </button>
+            <button type="button" className="btn btn-soft" onClick={() => void copyKey(pythonSetupSnippet)}>
+              <Copy aria-hidden="true" />
+              Copy Python setup
+            </button>
             <button type="button" className="btn btn-soft" onClick={() => setNewKey(null)}>
               Done
             </button>
+            <Link href="/trace" className="btn btn-primary">
+              Open traces
+              <ArrowRight aria-hidden="true" />
+            </Link>
           </div>
         </section>
       )}
@@ -206,39 +260,12 @@ export default function ApiKeysPage() {
         </p>
       )}
 
-      <section className="settings-summary-grid">
-        <article className="panel settings-summary-card">
-          <KeyRound aria-hidden="true" />
-          <span>Active keys</span>
-          <strong>{activeKeys.length}</strong>
-          <small>{keys.length} total including revoked or expired keys.</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <Clock3 aria-hidden="true" />
-          <span>Never used</span>
-          <strong>{neverUsedKeys}</strong>
-          <small>Unused capture keys should be rotated after rollout.</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <AlertTriangle aria-hidden="true" />
-          <span>Expiring soon</span>
-          <strong>{expiringSoonKeys}</strong>
-          <small>Keys expiring within 14 days need replacement planning.</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <ShieldCheck aria-hidden="true" />
-          <span>Capture scope</span>
-          <strong>project:member</strong>
-          <small>Project-scoped evidence capture for SDK and Gateway traffic.</small>
-        </article>
-      </section>
-
       <section className="keys-primary-grid">
         <article className="panel keys-create-panel">
           <header className="panel-header">
             <div>
-              <h2>Create capture key</h2>
-              <p>Use this key in the SDK or Gateway. It does not grant model-provider access.</p>
+              <h2>Create project key</h2>
+              <p>Use it only for Zroky capture. It does not grant model-provider access.</p>
             </div>
           </header>
 
@@ -282,11 +309,11 @@ export default function ApiKeysPage() {
           <div className="keys-provider-note">
             <Plug aria-hidden="true" />
             <div>
-              <strong>Do not add provider keys for capture.</strong>
-              <span>Connect provider keys only for verified replay.</span>
+              <strong>Provider keys are not needed for capture.</strong>
+              <span>Add them later only when verified replay needs live model calls.</span>
             </div>
             <Link href="/settings/providers" className="btn btn-soft btn-sm">
-              Open provider settings
+              Provider settings
             </Link>
           </div>
         </article>
@@ -296,14 +323,11 @@ export default function ApiKeysPage() {
             <Terminal aria-hidden="true" />
             First run
           </span>
-          <h2>Start with evidence, not replay.</h2>
-          <p>
-            Once one call is captured, Zroky can diagnose the issue, run stub replay, and later ask for a provider key
-            only when verified replay is needed.
-          </p>
+          <h2>What to do next</h2>
+          <p>After the key exists, run one smoke capture and open Traces to verify delivery.</p>
           <ol className="keys-checklist">
-            {["Create project key", "Install SDK or Gateway", "Run one agent call", "Confirm trace", "Use stub replay"].map((step) => (
-              <li key={step}>
+            {["Create project key", "Install SDK or Gateway", "Run one smoke capture", "Confirm trace"].map((step, index) => (
+              <li key={step} className={index === 0 && hasActiveKey ? "is-done" : undefined}>
                 <CheckCircle2 aria-hidden="true" />
                 {step}
               </li>
@@ -318,23 +342,15 @@ export default function ApiKeysPage() {
             <Code2 aria-hidden="true" />
             <div>
               <h2>SDK capture</h2>
-              <p>Use when you can wrap the model/tool call in application code.</p>
+              <p>Use when you can add Zroky directly inside your app code.</p>
             </div>
           </div>
           <div className="keys-code-grid">
-            <pre aria-label="Python SDK project key snippet">
-              <code>{`pip install zroky
-export ZROKY_API_KEY=zk_live_...
-
-zroky.init()
-zroky.call("checkout-agent", input=payload)`}</code>
-            </pre>
             <pre aria-label="TypeScript SDK project key snippet">
-              <code>{`npm install @zroky/sdk
-export ZROKY_API_KEY=zk_live_...
-
-init()
-const client = wrap(new OpenAI())`}</code>
+              <code>{jsSmokeSnippet}</code>
+            </pre>
+            <pre aria-label="Python SDK project key snippet">
+              <code>{pythonSmokeSnippet}</code>
             </pre>
           </div>
         </article>
@@ -348,11 +364,7 @@ const client = wrap(new OpenAI())`}</code>
             </div>
           </div>
           <pre aria-label="Gateway project key snippet">
-            <code>{`docker run -p 8090:8090 \\
-  -e ZROKY_API_KEY=zk_live_... \\
-  ghcr.io/zroky-ai/zroky-gateway:latest
-
-export OPENAI_BASE_URL=http://localhost:8090/v1`}</code>
+            <code>{gatewaySnippet}</code>
           </pre>
         </article>
       </section>
