@@ -38620,6 +38620,12 @@ body:has(.app-shell),
   }
 }
 
+@media (max-width: 1500px) {
+  .fi-ops-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1280px) {
   .fi-command-metrics,
   .fi-pipeline {

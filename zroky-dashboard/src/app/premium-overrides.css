@@ -8728,6 +8728,12 @@ body:has(.app-shell) {
   }
 }
 
+@media (max-width: 1500px) {
+  .app-shell .fi-screen .fi-ops-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @media (max-width: 980px) {
   .app-shell .fi-screen .fi-command-hero {
     grid-template-columns: 1fr;
