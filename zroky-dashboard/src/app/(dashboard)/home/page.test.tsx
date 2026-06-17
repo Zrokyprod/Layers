@@ -378,17 +378,19 @@ describe("Command Center home", () => {
 
     expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
-    expect(screen.getByText("CI gate blocking release")).toBeInTheDocument();
-    expect(screen.getByText("Open the failing gate, verify the replay result, then protect the release path.")).toBeInTheDocument();
+    expect(screen.getByText("Release blocked")).toBeInTheDocument();
+    expect(screen.getByText("1 gate failing on regression-ci:proj_1.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Run replay" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Open gate" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "View all issues" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Loaded open issues")).toBeNull();
     expect(screen.queryByText("Replay mode")).toBeNull();
     expect(screen.queryByText("Silent failures detected")).toBeNull();
 
     const summary = screen.getByLabelText("Home summary");
-    expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(4);
+    expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(5);
+    expect(within(summaryCard("Failed runs")).getByText("2")).toBeInTheDocument();
     expect(within(summaryCard("New issues")).getByText("2")).toBeInTheDocument();
     expect(within(summaryCard("Replay pass/fail")).getByText("0% pass")).toBeInTheDocument();
     expect(within(summaryCard("CI blocked regressions")).getByText("1")).toBeInTheDocument();
@@ -414,7 +416,7 @@ describe("Command Center home", () => {
     expect(screen.getByRole("heading", { name: "Recent evidence" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Release readiness" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Reliability pipeline" })).toBeInTheDocument();
-    expect(screen.getByText("Open gate")).toBeInTheDocument();
+    expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 
   it("guides first users through the setup cockpit before capture", async () => {
@@ -434,7 +436,7 @@ describe("Command Center home", () => {
     expect(await screen.findByRole("heading", { name: "Create a project key" })).toBeInTheDocument();
     expect(screen.getByText("Capture your first agent run to start reliability monitoring.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
-    expect(screen.getByRole("link", { name: /Create project key/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getAllByRole("link", { name: /Create project key/i })[0]?.getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("heading", { name: "Connection health" })).toBeInTheDocument();
     expect(screen.getByText("API key")).toBeInTheDocument();
     expect(screen.getByText("Missing")).toBeInTheDocument();
@@ -528,7 +530,7 @@ describe("Command Center home", () => {
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Schema drift")).getByText("$7.50")).toBeInTheDocument();
     expect(within(summaryCard("Cost / latency trend")).getByText("+25% cost")).toBeInTheDocument();
-    expect(screen.getByText("Latency trend needs captured traces.")).toBeInTheDocument();
+    expect(screen.getByText("Capture traces to calculate latency.")).toBeInTheDocument();
   });
 
   it("uses estimated wasted AI cost when blast radius is missing", async () => {
@@ -633,6 +635,6 @@ describe("Command Center home", () => {
 
     expect(await screen.findByText("Not verified")).toBeInTheDocument();
     expect(screen.getByText("CI failing")).toBeInTheDocument();
-    expect(screen.getByText("Open gate")).toBeInTheDocument();
+    expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 });

@@ -52,6 +52,7 @@ export function KpiCard({
   label,
   value,
   helper,
+  trend,
   active,
   onClick,
 }: {
@@ -59,6 +60,7 @@ export function KpiCard({
   label: string;
   value: string;
   helper: string;
+  trend?: string | null;
   active?: boolean;
   onClick?: () => void;
 }) {
@@ -66,13 +68,8 @@ export function KpiCard({
     <>
       <div className="fi-kpi-topline">
         <span>{label}</span>
-        <div className="fi-kpi-card-mark" aria-hidden="true">
-          <div className="fi-kpi-spark">
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
+        <div className="fi-kpi-card-mark">
+          {trend ? <span className="fi-kpi-trend">{trend}</span> : null}
           <div className="fi-kpi-icon">{icon}</div>
         </div>
       </div>

@@ -8,9 +8,9 @@ test.describe("public auth pages", () => {
   const publicPages = [
     { path: "/login", text: /Sign in to Zroky/i },
     { path: "/signup", text: /Create your Zroky workspace/i },
-    { path: "/forgot-password", text: /Recover workspace access/i },
+    { path: "/forgot-password", text: /Reset your password/i },
     { path: "/reset-password", text: /New password|Invalid or missing reset token/i },
-    { path: "/verify-email", text: /Verify your email/i },
+    { path: "/verify-email", text: /Check your email/i },
     { path: "/auth/github/callback", text: /GitHub/i },
     { path: "/auth/github/connect/callback", text: /GitHub/i },
     { path: "/auth/oauth/callback", text: /Sign in to Zroky|Signing you in|OAuth/i },
@@ -72,7 +72,7 @@ test.describe("authenticated session", () => {
     const seed = readSeed();
     await page.goto("/home");
 
-    await expect(page.getByRole("heading", { name: "Command Center" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
     await expectHealthyPage(page);
 

@@ -584,10 +584,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const planCode = billingQuery.data?.plan_code;
   const planLabel = formatPlanLabel(planCode);
   const billingStatus = billingQuery.data?.status ?? (billingQuery.isLoading ? "loading" : "unavailable");
+  const eventsQuota = numericEntitlement(planTemplate, "events.monthly_quota");
   const planPeriod = billingQuery.isLoading
     ? "Loading billing period"
-    : periodCopy(billingQuery.data?.current_period_end, billingQuery.data?.trial_end);
-  const eventsQuota = numericEntitlement(planTemplate, "events.monthly_quota");
+    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && eventsQuota != null
+      ? `${formatCompactNumber(eventsQuota)} events/month included`
+      : periodCopy(billingQuery.data?.current_period_end, billingQuery.data?.trial_end);
   const budgetStatus = budgetQuery.data;
   const hasBudgetLimit = typeof budgetStatus?.limit_usd === "number" && budgetStatus.limit_usd > 0;
   const budgetPercent = hasBudgetLimit

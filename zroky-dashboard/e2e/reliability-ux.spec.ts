@@ -11,14 +11,14 @@ type ReliabilityRoute = {
 const RELIABILITY_ROUTES: ReliabilityRoute[] = [
   {
     path: "/home",
-    heading: "Command Center",
+    heading: "Home",
     labels: [
-      "Critical & high",
-      "Needs trusted replay",
-      "Failure queue",
-      "Replay proof",
-      "Failed/not_verified CI gates",
-      "Goldens needing review",
+      "Highest priority",
+      "What needs action now?",
+      "Replay pass/fail",
+      "Release readiness",
+      "Reliability pipeline",
+      "CI gate health",
     ],
   },
   {
@@ -55,7 +55,7 @@ function reliabilityDetailRoutes(): ReliabilityRoute[] {
         "Evidence workbench",
         "Replay, Golden, and CI readiness",
         "Active Golden linked",
-        "Gate linked",
+        "CI gate readiness",
       ],
     },
     {

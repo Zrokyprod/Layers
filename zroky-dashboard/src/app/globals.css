@@ -39,6 +39,19 @@
   --space-3: 24px;
   --space-4: 32px;
   --space-5: 40px;
+  /* Modular type scale for product surfaces. */
+  --fs-2xs: 0.6875rem;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.25rem;
+  --fs-2xl: 1.5rem;
+  --fs-3xl: 2rem;
+  --fs-4xl: 2.5rem;
+  --lh-tight: 1.1;
+  --lh-snug: 1.25;
+  --lh-normal: 1.5;
   --transition-fast: 180ms ease-out;
   --transition-base: 220ms ease-out;
 
@@ -37697,21 +37710,21 @@ body:has(.app-shell),
 /* Command Center v2 final UX ---------------------------------------------- */
 
 .fi-screen {
-  --fi-bg: #070a10;
-  --fi-surface: #0d121b;
-  --fi-surface-raised: #111722;
-  --fi-surface-soft: #090e16;
-  --fi-surface-inset: #070b11;
-  --fi-surface-strong: #f8fafc;
-  --fi-border: rgba(248, 250, 252, 0.12);
-  --fi-border-strong: rgba(248, 250, 252, 0.22);
-  --fi-text: #f8fafc;
-  --fi-text-soft: #d7dde8;
-  --fi-muted: #8b96a8;
-  --fi-success: #2dd4a3;
-  --fi-warning: #f4c95d;
-  --fi-danger: #ff5d83;
-  --fi-shadow: 0 18px 52px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --fi-bg: var(--bg-canvas);
+  --fi-surface: var(--bg-panel);
+  --fi-surface-raised: var(--bg-panel-elevated);
+  --fi-surface-soft: var(--bg-panel-soft);
+  --fi-surface-inset: var(--bg-canvas);
+  --fi-surface-strong: var(--text-primary);
+  --fi-border: var(--line-soft);
+  --fi-border-strong: var(--line-strong);
+  --fi-text: var(--text-primary);
+  --fi-text-soft: var(--text-secondary);
+  --fi-muted: var(--text-tertiary);
+  --fi-success: var(--status-success);
+  --fi-warning: var(--status-warning);
+  --fi-danger: var(--status-error);
+  --fi-shadow: var(--shadow-soft);
   gap: 14px;
   color: var(--fi-text);
 }
