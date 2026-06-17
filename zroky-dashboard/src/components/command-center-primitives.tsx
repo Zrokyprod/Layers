@@ -257,7 +257,7 @@ export function FirstRunOnboarding({
     },
     {
       label: "First issue/replay ready",
-      detail: hasCapture && replayUnlocked ? "Ready when issue appears" : "Waiting",
+      detail: hasCapture && replayUnlocked ? "Ready when issue appears" : replayUnlocked ? "Waiting" : "Upgrade later",
       state: hasCapture && replayUnlocked ? "current" : "locked",
     },
   ];
@@ -282,7 +282,7 @@ export function FirstRunOnboarding({
     },
     {
       label: "CI",
-      value: ciUnlocked ? "Not configured" : "Not configured",
+      value: ciUnlocked ? "Not configured" : "Locked",
       state: ciUnlocked ? "idle" : "locked",
       icon: <GitPullRequest aria-hidden="true" />,
     },
@@ -299,6 +299,22 @@ export function FirstRunOnboarding({
           <span className="fi-section-kicker">Next required action</span>
           <h3>{nextAction.title}</h3>
           <p>{nextAction.detail}</p>
+          <div className="fi-capture-path" aria-label="Developer capture path">
+            <span>
+              <Code2 aria-hidden="true" />
+              SDK
+            </span>
+            <ArrowRight aria-hidden="true" />
+            <span>
+              <Route aria-hidden="true" />
+              Gateway
+            </span>
+            <ArrowRight aria-hidden="true" />
+            <span>
+              <Send aria-hidden="true" />
+              Trace
+            </span>
+          </div>
           <div className="fi-setup-actions">
             <Link href={nextAction.href} className="btn btn-primary btn-sm fi-btn-primary">
               {nextAction.icon}
