@@ -8578,7 +8578,7 @@ body:has(.app-shell) {
   color: #f8fafc !important;
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 980px) {
   .app-shell .fi-screen .fi-setup-primary-grid {
     grid-template-columns: 1fr;
   }
