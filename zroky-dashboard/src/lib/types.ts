@@ -1129,8 +1129,6 @@ export interface BillingMeResponse {
   payment_customer_ref: string | null;
   payment_subscription_ref: string | null;
   payment_request_ref: string | null;
-  stripe_customer_id: string | null;
-  stripe_sub_id: string | null;
   current_period_end: string | null;
   trial_end: string | null;
   sla_tier: string;

@@ -10,7 +10,7 @@ require_entitlement code path.
 
 Coverage:
   - Gate denies free-tier orgs with 402 + X-Zroky-Plan-Hint header
-  - Gate allows pro/plus/enterprise orgs (real DB rows)
+  - Gate allows starter/pro/plus/enterprise orgs (real DB rows)
   - X-Zroky-Plan-Hint reflects current plan_code on both pass and fail
   - 402 body shape matches plan §10.x contract (detail, required_entitlement,
     current_plan, upgrade_hint_url)
@@ -95,8 +95,8 @@ def _seed_org(client: TestClient, *, org_id: str, plan_code: str) -> None:
                 plan_code=plan_code,
                 status="active",
                 seats=1,
-                stripe_customer_id=f"cus_{org_id}",
-                stripe_sub_id=f"si_{org_id}",
+                payment_customer_ref=f"cus_{org_id}",
+                payment_subscription_ref=f"si_{org_id}",
                 current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
             )
         )
@@ -185,6 +185,15 @@ class TestGateAllow:
         )
         assert response.status_code == 200
         assert response.headers.get(PLAN_HINT_HEADER) == "pro"
+
+    def test_starter_org_allowed_through_pilot(self, client: TestClient) -> None:
+        _seed_org(client, org_id="starter-org", plan_code="starter")
+        response = client.get(
+            "/v1/pilot/actions",
+            headers={PROJECT_HEADER: "starter-org"},
+        )
+        assert response.status_code == 200
+        assert response.headers.get(PLAN_HINT_HEADER) == "starter"
 
     def test_plus_org_allowed_through_goldens(self, client: TestClient) -> None:
         _seed_org(client, org_id="plus-org", plan_code="plus")
@@ -284,7 +293,7 @@ class TestMinValueGate:
         factory = client._factory  # type: ignore[attr-defined]
         session = factory()
         try:
-            # pro.replay.monthly_runs = 1_000, so it passes min_value=100.
+            # pro.replay.monthly_runs = 500, so it passes min_value=100.
             value_or_raise = require_entitlement(
                 "replay.monthly_runs", min_value=100,
             )

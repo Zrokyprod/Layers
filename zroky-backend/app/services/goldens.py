@@ -453,6 +453,8 @@ def source_evidence_from_call(call: Call) -> tuple[str | None, str]:
         "completion",
         "result",
         "response_text",
+        "output_content",
+        "normalized_output",
         "error",
         "message",
     )

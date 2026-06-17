@@ -8,20 +8,55 @@ Endpoints:
     GET  /v1/auth/github/start    — redirect to GitHub OAuth
     GET  /v1/auth/github/callback — exchange code -> JWT
 """
-import hashlib
-import re
 import secrets
-from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from datetime import UTC, datetime
+from typing import Annotated
 from urllib.parse import urlencode
 
-import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, field_validator
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.routes._internal.auth_current_user import (
+    _decode_current_session_expiry,
+    _get_current_user,
+    _me_response,
+)
+from app.api.routes._internal.auth_oauth_clients import (
+    _exchange_github_code,
+    _exchange_google_code,
+    _fetch_github_user,
+    _fetch_google_user,
+    _fetch_primary_github_email,
+)
+from app.api.routes._internal.auth_schemas import (
+    AuthTokenResponse,
+    ChangePasswordRequest,
+    CurrentUserProjectResponse,
+    DeleteAccountRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    MeResponse,
+    OAuthHandoffRequest,
+    RefreshTokenRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    SecurityStatusResponse,
+    SessionHandoffRequest,
+    SessionHandoffResponse,
+    UpdateMeRequest,
+)
+from app.api.routes._internal.auth_tokens import (
+    _consume_oauth_handoff,
+    _email_verification_token_expired,
+    _email_verification_token_filter,
+    _issue_token,
+    _require_auth_secret,
+    _store_email_verification_token,
+    _store_oauth_handoff,
+    _validated_session_handoff_token,
+)
 from app.auth.identity import extract_bearer_token
 from app.core.config import get_settings
 from app.core.limiter import limiter
@@ -34,8 +69,6 @@ from app.services.security import (
     generate_oauth_state,
     generate_project_id,
     hash_password,
-    issue_access_token,
-    issue_refresh_token,
     password_hash_needs_upgrade,
     verify_oauth_state,
     verify_password,
@@ -43,295 +76,55 @@ from app.services.security import (
 
 router = APIRouter(prefix="/v1/auth")
 
-_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
-_MIN_PW_LEN = 8
 _GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
-_GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
-_GITHUB_USER_URL = "https://api.github.com/user"
-_GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
-
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
-_OAUTH_HANDOFF_KEY_PREFIX = "oauth_handoff:"
-_OAUTH_HANDOFF_TTL_SECONDS = 300
-_EMAIL_VERIFICATION_TOKEN_PREFIX = "sha256:"
-_EMAIL_VERIFICATION_TTL_SECONDS = 24 * 60 * 60
 
 
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
+def _ensure_default_project_membership(db: Session, user: User) -> bool:
+    if not user.id:
+        db.flush()
 
-class RegisterRequest(BaseModel):
-    email: str
-    password: str
-    confirm_password: str
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        if not _EMAIL_RE.match(v.strip().lower()):
-            raise ValueError("Invalid email format.")
-        return v.strip().lower()
-
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < _MIN_PW_LEN:
-            raise ValueError(f"Password must be at least {_MIN_PW_LEN} characters.")
-        return v
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class AuthTokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    access_expires_in_seconds: int
-    refresh_expires_in_seconds: int
-    token_type: str = "bearer"
-    user_id: str
-    email: str | None
-    email_verified: bool = True
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: str
-
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        return v
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-    @field_validator("refresh_token")
-    @classmethod
-    def validate_refresh_token(cls, value: str) -> str:
-        token = value.strip()
-        if not token:
-            raise ValueError("Refresh token is required.")
-        return token
-
-
-class OAuthHandoffRequest(BaseModel):
-    handoff_id: str
-
-    @field_validator("handoff_id")
-    @classmethod
-    def validate_handoff_id(cls, value: str) -> str:
-        handoff_id = value.strip()
-        if not re.fullmatch(r"[A-Za-z0-9_-]{20,160}", handoff_id):
-            raise ValueError("Invalid OAuth handoff id.")
-        return handoff_id
-
-
-class SessionHandoffRequest(BaseModel):
-    access_token: str
-    refresh_token: str
-    access_expires_in_seconds: int
-    refresh_expires_in_seconds: int
-    token_type: str = "bearer"
-    user_id: str | None = None
-    email: str | None = None
-    email_verified: bool = True
-
-    @field_validator("access_token", "refresh_token")
-    @classmethod
-    def validate_token(cls, value: str) -> str:
-        token = value.strip()
-        if not token:
-            raise ValueError("Token is required.")
-        return token
-
-    @field_validator("access_expires_in_seconds", "refresh_expires_in_seconds")
-    @classmethod
-    def validate_expiry(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("Token expiry must be positive.")
-        return value
-
-
-class SessionHandoffResponse(BaseModel):
-    handoff_id: str
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _require_auth_secret() -> str:
-    settings = get_settings()
-    if not settings.AUTH_JWT_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email/password auth is not configured on this server.",
+    active_membership = db.execute(
+        select(ProjectMembership)
+        .join(Project, Project.id == ProjectMembership.project_id)
+        .where(
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.is_active.is_(True),
+            Project.is_active.is_(True),
         )
-    return settings.AUTH_JWT_SECRET
-
-
-def _issue_token(user: User) -> AuthTokenResponse:
-    settings = get_settings()
-    secret = _require_auth_secret()
-    access_expire_hours = max(1, settings.AUTH_JWT_EXPIRE_HOURS)
-    refresh_expire_hours = max(access_expire_hours, settings.AUTH_REFRESH_TOKEN_EXPIRE_HOURS)
-
-    access_token = issue_access_token(
-        user_id=user.id,
-        email=user.email,
-        subject=user.subject,
-        expire_hours=access_expire_hours,
-        secret=secret,
-    )
-    refresh_token = issue_refresh_token(
-        user_id=user.id,
-        email=user.email,
-        subject=user.subject,
-        expire_hours=refresh_expire_hours,
-        secret=secret,
-    )
-
-    return AuthTokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        access_expires_in_seconds=access_expire_hours * 60 * 60,
-        refresh_expires_in_seconds=refresh_expire_hours * 60 * 60,
-        user_id=user.id,
-        email=user.email,
-        email_verified=user.email_verified_at is not None,
-    )
-
-
-def _store_oauth_handoff(token: AuthTokenResponse) -> str:
-    handoff_id = secrets.token_urlsafe(32)
-    token_store.set_with_ttl(
-        f"{_OAUTH_HANDOFF_KEY_PREFIX}{handoff_id}",
-        token.model_dump_json(),
-        _OAUTH_HANDOFF_TTL_SECONDS,
-    )
-    return handoff_id
-
-
-def _consume_oauth_handoff(handoff_id: str) -> AuthTokenResponse:
-    key = f"{_OAUTH_HANDOFF_KEY_PREFIX}{handoff_id}"
-    raw = token_store.get(key)
-    if raw is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired OAuth handoff.",
-        )
-
-    token_store.delete(key)
-    try:
-        return AuthTokenResponse.model_validate_json(raw)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired OAuth handoff.",
-        ) from exc
-
-
-def _email_verification_digest(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-def _store_email_verification_token(token: str, *, now: datetime | None = None) -> str:
-    issued_at = int((now or datetime.now(UTC)).timestamp())
-    return f"{_EMAIL_VERIFICATION_TOKEN_PREFIX}{issued_at}:{_email_verification_digest(token)}"
-
-
-def _email_verification_token_filter(token: str):
-    digest = _email_verification_digest(token)
-    return or_(
-        User.email_verification_token == f"{_EMAIL_VERIFICATION_TOKEN_PREFIX}{digest}",
-        User.email_verification_token == token,
-        User.email_verification_token.like(f"{_EMAIL_VERIFICATION_TOKEN_PREFIX}%:{digest}"),
-    )
-
-
-def _email_verification_token_expired(stored_token: str | None, *, now: datetime | None = None) -> bool:
-    if not stored_token or not stored_token.startswith(_EMAIL_VERIFICATION_TOKEN_PREFIX):
+        .limit(1)
+    ).scalar_one_or_none()
+    if active_membership is not None:
         return False
-    parts = stored_token.split(":", 2)
-    if len(parts) != 3:
-        return False
-    try:
-        issued_at = datetime.fromtimestamp(int(parts[1]), tz=UTC)
-    except (TypeError, ValueError, OSError):
-        return True
-    return (now or datetime.now(UTC)) - issued_at > timedelta(seconds=_EMAIL_VERIFICATION_TTL_SECONDS)
 
-
-def _validated_session_handoff_token(body: SessionHandoffRequest, db: Session) -> AuthTokenResponse:
-    secret = _require_auth_secret()
-    try:
-        access_claims = decode_session_token(body.access_token, secret, expected_use="access")
-        refresh_claims = decode_session_token(body.refresh_token, secret, expected_use="refresh")
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session handoff tokens.",
-        ) from exc
-
-    access_user_id = str(access_claims.get("user_id") or "").strip()
-    refresh_user_id = str(refresh_claims.get("user_id") or "").strip()
-    if not access_user_id or access_user_id != refresh_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session handoff tokens.",
-        )
-
-    if body.user_id and body.user_id != access_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session handoff tokens.",
-        )
-
-    user = db.execute(select(User).where(User.id == access_user_id)).scalar_one_or_none()
-    if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session handoff tokens.",
-        )
-
-    if token_store.get(f"jwt_blacklisted_user:{access_user_id}"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="All sessions for this user have been revoked.",
-        )
-
-    return AuthTokenResponse(
-        access_token=body.access_token,
-        refresh_token=body.refresh_token,
-        access_expires_in_seconds=body.access_expires_in_seconds,
-        refresh_expires_in_seconds=body.refresh_expires_in_seconds,
-        token_type=body.token_type,
-        user_id=access_user_id,
-        email=user.email,
-        email_verified=user.email_verified_at is not None,
+    project = Project(
+        id=generate_project_id(),
+        name="My Project",
+        owner_ref=user.subject,
+        is_active=True,
     )
+    db.add(project)
+    db.flush()
+    db.add(
+        ProjectMembership(
+            project_id=project.id,
+            user_id=user.id,
+            role="owner",
+            is_active=True,
+        )
+    )
+    db.flush()
+    return True
 
-
-# ---------------------------------------------------------------------------
-# Register
-# ---------------------------------------------------------------------------
 
 @router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
-def register(request: Request, body: RegisterRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTokenResponse:
+def register(
+    request: Request,
+    body: RegisterRequest,
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthTokenResponse:
     if body.password != body.confirm_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -353,22 +146,7 @@ def register(request: Request, body: RegisterRequest, db: Annotated[Session, Dep
         email_verification_token=_store_email_verification_token(verification_token),
     )
     db.add(user)
-    db.flush()  # get user.id without committing
-
-    # Auto-create a default project + owner membership so dashboard works immediately
-    project = Project(
-        id=generate_project_id(),
-        name="My Project",
-        owner_ref=user.subject,
-    )
-    db.add(project)
-    db.flush()
-    membership = ProjectMembership(
-        project_id=project.id,
-        user_id=user.id,
-        role="owner",
-    )
-    db.add(membership)
+    _ensure_default_project_membership(db, user)
     db.commit()
     db.refresh(user)
 
@@ -376,7 +154,8 @@ def register(request: Request, body: RegisterRequest, db: Annotated[Session, Dep
     settings = get_settings()
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
     verify_url = f"{frontend_url}/auth/verify-email?token={verification_token}"
-    send_email(
+    background_tasks.add_task(
+        send_email,
         to=[body.email],
         subject="Verify your Zroky AI email address",
         html_body=f"""
@@ -442,6 +221,7 @@ def verify_email(
 @limiter.limit("2/minute")
 def resend_verification(
     request: Request,
+    background_tasks: BackgroundTasks,
     authorization: Annotated[str | None, Header()] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ) -> dict[str, str]:
@@ -456,7 +236,8 @@ def resend_verification(
     settings = get_settings()
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
     verify_url = f"{frontend_url}/auth/verify-email?token={token}"
-    send_email(
+    background_tasks.add_task(
+        send_email,
         to=[user.email],
         subject="Verify your Zroky AI email address",
         html_body=f"""
@@ -495,8 +276,15 @@ def login(request: Request, body: LoginRequest, db: Annotated[Session, Depends(g
             detail="Invalid credentials.",
         )
 
+    should_commit = False
     if user.password_hash and password_hash_needs_upgrade(user.password_hash):
         user.password_hash = hash_password(body.password)
+        should_commit = True
+
+    if _ensure_default_project_membership(db, user):
+        should_commit = True
+
+    if should_commit:
         db.commit()
 
     return _issue_token(user)
@@ -575,6 +363,7 @@ def complete_oauth_handoff(request: Request, body: OAuthHandoffRequest) -> AuthT
 def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
     # Always return 200 — never leak whether the email is registered.
@@ -588,7 +377,8 @@ def forgot_password(
         settings = get_settings()
         frontend = getattr(settings, "FRONTEND_URL", "http://localhost:3000").rstrip("/")
         reset_link = f"{frontend}/auth/reset-password?token={reset_token}"
-        send_email(
+        background_tasks.add_task(
+            send_email,
             to=[normalized],
             subject="Reset your Zroky password",
             html_body=(
@@ -759,6 +549,8 @@ def github_oauth_callback(
             user.github_id = github_id
             user.github_login = github_login or user.github_login
             user.display_name = user.display_name or github_login
+            if user.email_verified_at is None:
+                user.email_verified_at = datetime.now(UTC)
 
     if user is None:
         user = User(
@@ -767,6 +559,7 @@ def github_oauth_callback(
             github_id=github_id,
             github_login=github_login,
             display_name=github_login,
+            email_verified_at=datetime.now(UTC) if github_email else None,
         )
         db.add(user)
 
@@ -775,80 +568,11 @@ def github_oauth_callback(
         if not user.display_name:
             user.display_name = github_login
 
+    _ensure_default_project_membership(db, user)
     db.commit()
     db.refresh(user)
     return _issue_token(user)
 
-
-# ---------------------------------------------------------------------------
-# GitHub HTTP helpers
-# ---------------------------------------------------------------------------
-
-def _exchange_github_code(
-    *,
-    code: str,
-    client_id: str,
-    client_secret: str,
-    redirect_uri: str,
-) -> str:
-    try:
-        response = httpx.post(
-            _GITHUB_TOKEN_URL,
-            data={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "redirect_uri": redirect_uri,
-            },
-            headers={"Accept": "application/json"},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        if "access_token" not in data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"GitHub token exchange failed: {data.get('error_description', 'unknown error')}",
-            )
-        return str(data["access_token"])
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to contact GitHub. Please try again.",
-        ) from exc
-
-
-def _fetch_github_user(token: str) -> dict[str, Any]:
-    try:
-        response = httpx.get(
-            _GITHUB_USER_URL,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-        return response.json()  # type: ignore[return-value]
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch GitHub profile. Please try again.",
-        ) from exc
-
-
-def _fetch_primary_github_email(token: str) -> str | None:
-    try:
-        response = httpx.get(
-            _GITHUB_EMAILS_URL,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-        emails: list[dict[str, Any]] = response.json()
-        primary = next((e for e in emails if e.get("primary") and e.get("verified")), None)
-        return str(primary["email"]) if primary else None
-    except Exception:  # noqa: BLE001
-        return None
 
 # ---------------------------------------------------------------------------
 # Google OAuth
@@ -880,19 +604,7 @@ def google_oauth_start() -> RedirectResponse:
     }
     return RedirectResponse(url=f"{_GOOGLE_AUTH_URL}?{urlencode(params)}")
 
-@router.get(
-    "/google/callback",
-    response_class=RedirectResponse,
-    status_code=status.HTTP_302_FOUND,
-    responses={status.HTTP_302_FOUND: {"description": "Redirect to dashboard OAuth handoff callback."}},
-)
-@limiter.limit("10/minute")
-def google_oauth_callback(
-    request: Request,
-    code: Annotated[str, Query()],
-    state: Annotated[str, Query()],
-    db: Annotated[Session, Depends(get_db)],
-) -> RedirectResponse:
+def _complete_google_oauth_login(code: str, state: str, db: Session) -> AuthTokenResponse:
     settings = get_settings()
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(
@@ -947,6 +659,8 @@ def google_oauth_callback(
                 )
             user.google_id = google_id
             user.display_name = user.display_name or google_name
+            if user.email_verified_at is None:
+                user.email_verified_at = datetime.now(UTC)
 
     if user is None:
         user = User(
@@ -954,181 +668,50 @@ def google_oauth_callback(
             email=google_email.lower(),
             google_id=google_id,
             display_name=google_name,
+            email_verified_at=datetime.now(UTC),
         )
         db.add(user)
-    
+    elif user.email_verified_at is None:
+        user.email_verified_at = datetime.now(UTC)
+
+    _ensure_default_project_membership(db, user)
     db.commit()
     db.refresh(user)
+    return _issue_token(user)
 
+
+@router.get(
+    "/google/callback",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+    responses={status.HTTP_302_FOUND: {"description": "Redirect to dashboard OAuth handoff callback."}},
+)
+@limiter.limit("10/minute")
+def google_oauth_callback(
+    request: Request,
+    code: Annotated[str, Query()],
+    state: Annotated[str, Query()],
+    db: Annotated[Session, Depends(get_db)],
+) -> RedirectResponse:
+    settings = get_settings()
+    token = _complete_google_oauth_login(code, state, db)
     frontend_url = (settings.FRONTEND_URL or "https://zroky-dashboard.vercel.app").rstrip("/")
-    handoff_id = _store_oauth_handoff(_issue_token(user))
+    handoff_id = _store_oauth_handoff(token)
     params = urlencode({
         "handoff_id": handoff_id,
     })
     return RedirectResponse(url=f"{frontend_url}/auth/oauth/callback?{params}", status_code=302)
 
 
-def _exchange_google_code(
-    *,
-    code: str,
-    client_id: str,
-    client_secret: str,
-    redirect_uri: str,
-) -> str:
-    try:
-        response = httpx.post(
-            _GOOGLE_TOKEN_URL,
-            data={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": redirect_uri,
-            },
-            headers={"Accept": "application/json"},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        token = data.get("access_token")
-        if not token:
-            raise ValueError("No access token returned from Google")
-        return str(token)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to contact Google. Please try again.",
-        ) from exc
-
-def _fetch_google_user(token: str) -> dict[str, Any]:
-    try:
-        response = httpx.get(
-            _GOOGLE_USERINFO_URL,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            timeout=10.0,
-        )
-        response.raise_for_status()
-        return response.json()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch Google profile. Please try again.",
-        ) from exc
-
-
-# ---------------------------------------------------------------------------
-# Me — current user profile
-# ---------------------------------------------------------------------------
-
-class MeResponse(BaseModel):
-    user_id: str
-    email: str | None
-    display_name: str | None
-    github_login: str | None
-    google_id: str | None
-    has_password: bool
-    is_active: bool
-    email_verified: bool
-    created_at: str
-
-
-class CurrentUserProjectResponse(BaseModel):
-    membership_id: str
-    project_id: str
-    project_name: str
-    role: str
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-
-class UpdateMeRequest(BaseModel):
-    display_name: str | None = None
-
-    @field_validator("display_name")
-    @classmethod
-    def validate_display_name(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        if not normalized:
-            return None
-        if len(normalized) > 80:
-            raise ValueError("Display name must be 80 characters or fewer.")
-        return normalized
-
-
-class SecurityStatusResponse(BaseModel):
-    two_factor_enabled: bool
-    password_login_enabled: bool
-    github_connected: bool
-    google_connected: bool
-    current_session_expires_at: str | None = None
-    global_logout_available: bool = True
-
-
-class DeleteAccountRequest(BaseModel):
-    confirm_email: str
-
-
-def _get_current_user(authorization: str | None = None, db: Session | None = None) -> User:
-    """Extract and validate Bearer token, return User."""
-    if db is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database session unavailable.")
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid Authorization header.")
-    token = authorization[len("Bearer "):]
-    secret = _require_auth_secret()
-    try:
-        payload = decode_session_token(token, secret, expected_use="access")
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token.")
-    jti = str(payload.get("jti") or "").strip()
-    if jti and token_store.get(f"jwt_blacklisted:{jti}"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has been revoked.")
-    user_id = payload.get("user_id") or payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject.")
-    stmt = select(User).where(User.id == user_id)
-    user = db.scalars(stmt).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-    if token_store.get(f"jwt_blacklisted_user:{user.id}"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="All sessions for this user have been revoked.")
-    return user
-
-
-def _decode_current_session_expiry(authorization: str | None) -> str | None:
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-    token = authorization[len("Bearer "):]
-    try:
-        payload = decode_session_token(token, _require_auth_secret())
-    except Exception:
-        return None
-    exp = payload.get("exp")
-    if isinstance(exp, (int, float)):
-        return datetime.fromtimestamp(exp, tz=UTC).isoformat()
-    return None
-
-
-def _me_response(user: User) -> MeResponse:
-    return MeResponse(
-        user_id=user.id,
-        email=user.email,
-        display_name=user.display_name if hasattr(user, "display_name") else None,
-        github_login=user.github_login,
-        google_id=user.google_id,
-        has_password=bool(user.password_hash),
-        is_active=bool(user.is_active),
-        email_verified=user.email_verified_at is not None,
-        created_at=user.created_at.isoformat() if hasattr(user, "created_at") and user.created_at else "",
-    )
+@router.get("/google/session-callback", response_model=AuthTokenResponse)
+@limiter.limit("10/minute")
+def google_oauth_session_callback(
+    request: Request,
+    code: Annotated[str, Query()],
+    state: Annotated[str, Query()],
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthTokenResponse:
+    return _complete_google_oauth_login(code, state, db)
 
 
 @router.get("/me", response_model=MeResponse)
@@ -1146,6 +729,9 @@ def list_current_user_projects(
     db: Annotated[Session, Depends(get_db)] = None,
 ) -> list[CurrentUserProjectResponse]:
     user = _get_current_user(authorization=authorization, db=db)
+    if _ensure_default_project_membership(db, user):
+        db.commit()
+
     rows = db.execute(
         select(ProjectMembership, Project)
         .join(Project, Project.id == ProjectMembership.project_id)

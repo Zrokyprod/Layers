@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function DetailsPage() {
-  redirect("/#product");
+  redirect("https://zroky.com/#product");
 }

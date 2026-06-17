@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -82,6 +83,10 @@ def _as_float(value: Any) -> float:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _redis_cost_buckets_enabled() -> bool:
+    return os.getenv("TESTING", "").strip().lower() != "true"
 
 
 def _as_datetime_iso(value: datetime | None) -> str | None:
@@ -719,11 +724,18 @@ def enrich_payload_with_cost_buckets(*, tenant_id: str, payload: Mapping[str, An
 
     if event_cost_usd > 0:
         try:
-            bucket_cost = _aggregate_with_redis(
-                tenant_id=tenant_id,
-                bucket_start=bucket_start,
-                event_cost_usd=event_cost_usd,
-            )
+            if _redis_cost_buckets_enabled():
+                bucket_cost = _aggregate_with_redis(
+                    tenant_id=tenant_id,
+                    bucket_start=bucket_start,
+                    event_cost_usd=event_cost_usd,
+                )
+            else:
+                bucket_cost = _aggregate_with_memory(
+                    tenant_id=tenant_id,
+                    bucket_start=bucket_start,
+                    event_cost_usd=event_cost_usd,
+                )
         except redis.RedisError:
             bucket_cost = _aggregate_with_memory(
                 tenant_id=tenant_id,

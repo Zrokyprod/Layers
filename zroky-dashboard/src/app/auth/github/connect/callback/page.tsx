@@ -51,7 +51,7 @@ function ConnectCallbackContent() {
 
   return (
     <AuthShell>
-      <AuthCard title="Connecting GitHub repository" subtitle="Validating OAuth callback and saving repo access.">
+      <AuthCard title="Connecting GitHub" subtitle="Saving repository access.">
         {error ? (
           <div className="auth-banner auth-banner-error">
             {error} <Link href="/settings" className="auth-link">Return to settings</Link>
@@ -59,7 +59,7 @@ function ConnectCallbackContent() {
         ) : (
           <div className="auth-status">
             <div className="spinner" />
-            <p>Please wait. Redirecting to settings...</p>
+            <p>Redirecting to settings...</p>
           </div>
         )}
       </AuthCard>
@@ -70,7 +70,7 @@ function ConnectCallbackContent() {
 function ConnectCallbackFallback() {
   return (
     <AuthShell>
-      <AuthCard title="Connecting GitHub repository" subtitle="Preparing callback context.">
+      <AuthCard title="Connecting GitHub" subtitle="Preparing secure access.">
         <p className="hint">Loading...</p>
       </AuthCard>
     </AuthShell>

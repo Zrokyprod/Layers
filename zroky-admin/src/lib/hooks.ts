@@ -10,6 +10,7 @@ import {
   fetchAuditLog,
   fetchOwnerBillingSummary,
   fetchOwnerBillingAccounts,
+  fetchOwnerBillingRecovery,
   fetchOwnerHealth,
   fetchOwnerInfra,
   fetchOwnerMoneyPathHealth,
@@ -28,6 +29,7 @@ import {
   fetchRateLimits,
   fetchUserMemberships,
   replyOwnerSupportTicket,
+  runOwnerBillingRecovery,
   setMaintenanceMode,
   setProjectStatus,
   setProjectRateLimit,
@@ -322,6 +324,13 @@ export function useOwnerBillingAccounts(opts: { status?: string; plan_code?: str
   });
 }
 
+export function useOwnerBillingRecovery() {
+  return useQuery({
+    queryKey: ["owner", "billing", "recovery"],
+    queryFn: ({ signal }) => fetchOwnerBillingRecovery(signal),
+  });
+}
+
 export function useUpdateOwnerPricing() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -334,6 +343,17 @@ export function useConfirmOwnerRazorpayPayment() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: OwnerBillingPaymentConfirmRequest) => confirmOwnerRazorpayPayment(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["owner", "billing"] });
+      queryClient.invalidateQueries({ queryKey: ["owner", "money-path-health"] });
+    },
+  });
+}
+
+export function useRunOwnerBillingRecovery() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (limit?: number) => runOwnerBillingRecovery(limit ?? 50),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["owner", "billing"] });
       queryClient.invalidateQueries({ queryKey: ["owner", "money-path-health"] });

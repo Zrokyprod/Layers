@@ -1,19 +1,11 @@
 "use client";
 
-import {
-  ArrowRight,
-  CheckCircle2,
-  Eye,
-  EyeOff,
-  GitBranch,
-  KeyRound,
-  Mail,
-  ScanLine,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, Mail } from "lucide-react";
+import { motion, useReducedMotion, type Variants } from "motion/react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { useState } from "react";
+import { FaGithub } from "react-icons/fa";
+import { FcGoogle } from "react-icons/fc";
 
 type AuthShellProps = {
   children: ReactNode;
@@ -41,91 +33,62 @@ type AuthButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 type AuthProvider = "google" | "github";
 
-const reliabilityLoop = ["Failure", "Evidence", "Replay", "Gate"];
+const authFade: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.42, ease: "easeOut" },
+  },
+};
 
-const proofCards = [
-  {
-    icon: ScanLine,
-    title: "Trace",
-    copy: "Every failed run keeps its evidence.",
+const authStagger: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
   },
-  {
-    icon: GitBranch,
-    title: "Replay",
-    copy: "Fixes run against the exact scenario.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Guard",
-    copy: "CI blocks repeat regressions.",
-  },
-] satisfies Array<{ icon: LucideIcon; title: string; copy: string }>;
+};
 
-const consoleRows = [
-  { label: "Failed run", value: "Captured", tone: "accent" },
-  { label: "Root cause", value: "Diagnosed", tone: "neutral" },
-  { label: "Replay proof", value: "Verified", tone: "green" },
-  { label: "Regression gate", value: "Ready", tone: "neutral" },
-] as const;
+const authLogoSrc = "/logo.png?v=landing-white";
 
 export function AuthBrandPanel() {
+  const shouldReduceMotion = useReducedMotion();
+  const motionProps = shouldReduceMotion
+    ? { initial: false as const }
+    : { initial: "hidden", animate: "visible", variants: authStagger };
+
   return (
-    <section className="auth-brand-panel" aria-label="Zroky reliability platform">
-      <div className="auth-mark-row">
+    <motion.section className="auth-brand-panel" aria-label="Zroky reliability platform" {...motionProps}>
+      <motion.div className="auth-mark-row" variants={authFade}>
         <div className="auth-logo-wrap">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/zroky-auth-logo.png" alt="Zroky" className="auth-logo" />
+          <img src={authLogoSrc} alt="Zroky" className="auth-logo" />
         </div>
-      </div>
-      <div className="auth-brand-copy">
-        <p className="auth-kicker">AI reliability control plane</p>
-        <h1>Catch. Replay. Guard.</h1>
-        <p className="auth-brand-subtitle">
-          Enter the workspace where failed AI-agent runs become diagnosis, replay proof, golden traces, and CI gates.
-        </p>
-      </div>
-      <ol className="auth-loop" aria-label="Zroky reliability loop">
-        {reliabilityLoop.map((step, index) => (
-          <li key={step}>
-            <span>{step}</span>
-            {index < reliabilityLoop.length - 1 && <b aria-hidden="true">-&gt;</b>}
-          </li>
-        ))}
-      </ol>
-      <div className="auth-signal-console" aria-label="Reliability proof preview">
-        <div className="auth-console-header">
-          <span className="auth-console-dot" aria-hidden="true" />
-          <span>Failure path preview</span>
-        </div>
-        <div className="auth-console-flow">
-          {consoleRows.map((row) => (
-            <div key={row.label} className={`auth-console-row auth-console-row-${row.tone}`}>
-              <span>{row.label}</span>
-              <strong>{row.value}</strong>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="auth-proof-grid">
-        {proofCards.map((card) => (
-          <article key={card.title} className="auth-proof-card">
-            <card.icon size={16} aria-hidden="true" />
-            <strong>{card.title}</strong>
-            <span>{card.copy}</span>
-          </article>
-        ))}
-      </div>
-    </section>
+      </motion.div>
+      <motion.div className="auth-brand-copy" variants={authFade}>
+        <p className="auth-kicker">AI agent reliability</p>
+        <h1>Workspace access.</h1>
+        <p className="auth-brand-subtitle">Capture failures. Replay fixes. Gate releases.</p>
+      </motion.div>
+    </motion.section>
   );
 }
 
 export function AuthShell({ children }: AuthShellProps) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <main className="auth-shell">
       <AuthBrandPanel />
-      <section className="auth-form-panel" aria-label="Authentication form">
+      <motion.section
+        className="auth-form-panel"
+        aria-label="Authentication form"
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 18 }}
+        animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.44, ease: "easeOut" as const, delay: 0.08 }}
+      >
         {children}
-      </section>
+      </motion.section>
     </main>
   );
 }
@@ -232,10 +195,9 @@ export function AuthProviderButton({
   return (
     <AuthButton type="button" variant="secondary" className="auth-provider-button" onClick={onClick}>
       <span className={`auth-provider-mark auth-provider-${provider}`} aria-hidden="true">
-        {isGoogle ? "G" : "GH"}
+        {isGoogle ? <FcGoogle size={20} /> : <FaGithub size={20} />}
       </span>
       <span>{label}</span>
-      <ArrowRight size={15} aria-hidden="true" />
     </AuthButton>
   );
 }

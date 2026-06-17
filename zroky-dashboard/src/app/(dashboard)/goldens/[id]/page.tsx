@@ -382,7 +382,7 @@ export default function GoldenDetailPage() {
       </section>
 
       <div className="gd-layout">
-        <main className="gd-main">
+        <div className="gd-main">
           <section className="gm-table-section">
             <header className="gm-section-header">
               <div>
@@ -606,7 +606,7 @@ export default function GoldenDetailPage() {
             </header>
             {historyQuery.isLoading ? <p className="notif-meta">Loading history...</p> : <HistoryList items={historyQuery.data?.items ?? []} />}
           </section>
-        </main>
+        </div>
 
         <aside className="gd-side-panel">
           <section className="gd-card">

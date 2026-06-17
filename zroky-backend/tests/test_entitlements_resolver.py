@@ -77,8 +77,8 @@ def _seed_subscription(
         plan_code=plan_code,
         status=status,
         seats=1,
-        stripe_customer_id=f"cus_{org_id}",
-        stripe_sub_id=f"si_{org_id}",
+        payment_customer_ref=f"cus_{org_id}",
+        payment_subscription_ref=f"si_{org_id}",
         current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
     )
     db.add(sub)
@@ -295,6 +295,22 @@ class TestResolveAll:
         assert first["pilot.autopilot_enabled"] is True
         assert second["pilot.autopilot_enabled"] is False
 
+    def test_testing_mode_uses_memory_cache_without_redis(
+        self,
+        db_session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TESTING", "true")
+        monkeypatch.setattr(
+            entitlements_resolver,
+            "get_redis_client",
+            lambda: pytest.fail("Redis should not be used in test mode."),
+        )
+        _seed_subscription(db_session, org_id="org-1", plan_code="pro")
+
+        assert resolve_all(db_session, "org-1") == PLAN_ENTITLEMENTS["pro"]
+        invalidate("org-1")
+
 
 class TestHasGet:
     def test_has_bool_true(self, db_session) -> None:
@@ -307,7 +323,7 @@ class TestHasGet:
 
     def test_has_int_quota(self, db_session) -> None:
         _seed_subscription(db_session, org_id="org-1", plan_code="pro")
-        # pro.replay.monthly_runs = 1_000
+        # pro.replay.monthly_runs = 500
         assert has(db_session, "org-1", "replay.monthly_runs") is True
 
     def test_has_zero_quota_is_false(self, db_session) -> None:
@@ -321,7 +337,7 @@ class TestHasGet:
 
     def test_get_returns_raw_value(self, db_session) -> None:
         _seed_subscription(db_session, org_id="org-1", plan_code="pro")
-        assert get(db_session, "org-1", "replay.monthly_runs") == 1_000
+        assert get(db_session, "org-1", "replay.monthly_runs") == 500
 
     def test_get_default_for_missing_key(self, db_session) -> None:
         _seed_subscription(db_session, org_id="org-1", plan_code="free")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from threading import Lock
@@ -63,16 +64,17 @@ def _coerce_bool(value: object, default: bool) -> bool:
 def _load_rate_limit_config() -> IngestRateLimitConfig:
     settings = get_settings()
     overrides: dict[str, object] = {}
-    try:
-        raw = get_redis_client().get(_RATE_LIMIT_OVERRIDE_KEY)
-        if raw:
-            if isinstance(raw, bytes):
-                raw = raw.decode("utf-8")
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                overrides = parsed
-    except (redis.RedisError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
-        overrides = {}
+    if _redis_ingest_protection_enabled():
+        try:
+            raw = get_redis_client().get(_RATE_LIMIT_OVERRIDE_KEY)
+            if raw:
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8")
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    overrides = parsed
+        except (redis.RedisError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            overrides = {}
 
     return IngestRateLimitConfig(
         enforce_rate_limit=_coerce_bool(
@@ -263,6 +265,17 @@ def evaluate_ingest_rate_limit(tenant_id: str) -> IngestRateLimitDecision:
 
     now_ts = time.time()
 
+    if not _redis_ingest_protection_enabled():
+        return _evaluate_with_memory(
+            tenant_id=tenant_id,
+            now_ts=now_ts,
+            soft_limit=soft_limit,
+            burst_limit=burst_limit,
+            window_seconds=window_seconds,
+            sustained_threshold=sustained_threshold,
+            backpressure_ttl_seconds=backpressure_ttl_seconds,
+        )
+
     try:
         return _evaluate_with_redis(
             tenant_id=tenant_id,
@@ -283,3 +296,14 @@ def evaluate_ingest_rate_limit(tenant_id: str) -> IngestRateLimitDecision:
             sustained_threshold=sustained_threshold,
             backpressure_ttl_seconds=backpressure_ttl_seconds,
         )
+
+
+def _redis_ingest_protection_enabled() -> bool:
+    if os.getenv("TESTING", "").strip().lower() != "true":
+        return True
+    return os.getenv("ZROKY_TEST_USE_REDIS_INGEST_PROTECTION", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }

@@ -69,7 +69,26 @@ def test_load_config_defaults_to_cloud_ingest_url(monkeypatch):
 
     cfg = load_config()
 
-    assert cfg.ingest_url == "https://api.zroky.com/v1/ingest"
+    assert cfg.ingest_url == "https://api.zroky.com"
+
+
+@pytest.mark.parametrize(
+    ("raw_url", "expected_url"),
+    [
+        ("https://api.zroky.com", "https://api.zroky.com"),
+        ("https://api.zroky.com/", "https://api.zroky.com"),
+        ("https://api.zroky.com/v1/ingest", "https://api.zroky.com"),
+        ("https://api.zroky.com/api/v1/ingest", "https://api.zroky.com"),
+        ("http://localhost:8000/api/v1/ingest", "http://localhost:8000"),
+        ("http://localhost:8000/v1/ingest", "http://localhost:8000"),
+    ],
+)
+def test_load_config_normalizes_ingest_endpoint_to_api_base(monkeypatch, raw_url, expected_url):
+    monkeypatch.setenv("ZROKY_INGEST_URL", raw_url)
+
+    cfg = load_config()
+
+    assert cfg.ingest_url == expected_url
 
 
 def test_runtime_policy_url_uses_control_plane_endpoint():

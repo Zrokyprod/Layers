@@ -8,12 +8,7 @@ import HomePage from './pages/HomePage';
 import PricingPage from './pages/PricingPage';
 import ChangelogPage from './pages/ChangelogPage';
 import DocsPage from './pages/DocsPage';
-import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import CheckEmailPage from './pages/auth/CheckEmailPage';
-import ResetPasswordPage from './pages/auth/ResetPasswordPage';
-import VerifyEmailPage from './pages/auth/VerifyEmailPage';
+import { buildDashboardAuthUrl, isDashboardAuthAlias } from './lib/links';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -35,34 +30,50 @@ function PageFade({ children }: { children: ReactNode }) {
   );
 }
 
-const AUTH_PATHS = ['/auth/'];
+function DashboardAuthRedirect() {
+  const location = useLocation();
+  const targetUrl = buildDashboardAuthUrl(location.pathname, location.search);
+
+  useEffect(() => {
+    window.location.replace(targetUrl);
+  }, [targetUrl]);
+
+  return (
+    <div className="grid min-h-screen place-items-center bg-ink px-6 text-center">
+      <div>
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-tertiary">Zroky app</p>
+        <h1 className="mt-3 text-2xl font-semibold text-primary">Redirecting to secure auth...</h1>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const location = useLocation();
-  const isAuth = AUTH_PATHS.some((p) => location.pathname.startsWith(p));
+  const isAuthRedirect = isDashboardAuthAlias(location.pathname);
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-ink">
-      {!isAuth && <div className="pointer-events-none fixed inset-0 z-0 grid-bg opacity-60" />}
+      {!isAuthRedirect && <div className="pointer-events-none fixed inset-0 z-0 grid-bg opacity-60" />}
       <ScrollToTop />
-      {!isAuth && <Nav />}
-      <main className={isAuth ? '' : 'relative z-10 flex w-full flex-col items-center overflow-x-hidden'}>
+      {!isAuthRedirect && <Nav />}
+      <main className={isAuthRedirect ? '' : 'relative z-10 flex w-full flex-col items-center overflow-x-hidden'}>
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<PageFade><HomePage /></PageFade>} />
             <Route path="/pricing" element={<PageFade><PricingPage /></PageFade>} />
             <Route path="/changelog" element={<PageFade><ChangelogPage /></PageFade>} />
             <Route path="/docs" element={<PageFade><DocsPage /></PageFade>} />
-            <Route path="/auth/login" element={<PageFade><LoginPage /></PageFade>} />
-            <Route path="/auth/register" element={<PageFade><RegisterPage /></PageFade>} />
-            <Route path="/auth/forgot-password" element={<PageFade><ForgotPasswordPage /></PageFade>} />
-            <Route path="/auth/check-email" element={<PageFade><CheckEmailPage /></PageFade>} />
-            <Route path="/auth/reset-password" element={<PageFade><ResetPasswordPage /></PageFade>} />
-            <Route path="/auth/verify-email" element={<PageFade><VerifyEmailPage /></PageFade>} />
+            <Route path="/auth/*" element={<DashboardAuthRedirect />} />
+            <Route path="/login" element={<DashboardAuthRedirect />} />
+            <Route path="/signup" element={<DashboardAuthRedirect />} />
+            <Route path="/forgot-password" element={<DashboardAuthRedirect />} />
+            <Route path="/reset-password" element={<DashboardAuthRedirect />} />
+            <Route path="/verify-email" element={<DashboardAuthRedirect />} />
           </Routes>
         </AnimatePresence>
       </main>
-      {!isAuth && <Footer />}
+      {!isAuthRedirect && <Footer />}
     </div>
   );
 }

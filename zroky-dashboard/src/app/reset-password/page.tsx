@@ -81,9 +81,8 @@ function ResetPasswordForm() {
       </AuthButton>
       <AuthAssuranceList
         items={[
-          "The reset token is validated first",
-          "Successful reset returns you to sign in",
-          "New session starts from a clean login",
+          "Reset token validated first",
+          "Returns to sign in after reset",
         ]}
       />
     </form>
@@ -95,8 +94,8 @@ export default function ResetPasswordPage() {
     <AuthShell>
       <AuthCard
         eyebrow="Secure reset"
-        title="Set a new password"
-        subtitle="Choose a new key for your Zroky workspace session."
+        title="Create new password"
+        subtitle="Choose a new workspace password."
         footer={<Link href="/login" className="auth-link">Back to login</Link>}
       >
         <Suspense fallback={<p className="hint">Loading...</p>}>

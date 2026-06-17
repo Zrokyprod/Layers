@@ -5,7 +5,7 @@
  * outcome() — attach a business cost to a Zroky call.
  *
  * Usage:
- *   import { outcome } from "@zroky/sdk";
+ *   import { outcome } from "@zroky-ai/sdk";
  *
  *   // After your AI call:
  *   const result = await wrappedClient.chat(params);

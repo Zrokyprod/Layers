@@ -5,7 +5,7 @@ Module 5 ships only the WRITE side:
   - `seed_plan_entitlements(db, org_id, plan_code)` overwrites all
     `source='plan'` rows for an org with the canonical template from
     `services.billing_plans.PLAN_ENTITLEMENTS`. Called from
-    `stripe_sync.apply_*` whenever a subscription becomes active /
+    billing provider sync whenever a subscription becomes active /
     is updated to a new plan.
   - `clear_plan_entitlements(db, org_id)` drops the plan-source rows
     when a subscription is canceled (the org falls back to whatever
@@ -160,7 +160,7 @@ def upsert_entitlement(
     return row
 
 
-# ── plan-source bulk seed (called by stripe_sync) ───────────────────────────
+# ── plan-source bulk seed ───────────────────────────────────────────────────
 
 
 def seed_plan_entitlements(

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Rule 4 benchmark: @zroky/sdk bundle gzipped < 30 KB.
+ * Rule 4 benchmark: @zroky-ai/sdk bundle gzipped < 30 KB.
  * Run: node scripts/bench_js_sdk_size.js
  */
 const { createReadStream, statSync } = require("node:fs");

@@ -70,7 +70,7 @@ response = zroky.call(
 )`;
 
 export const typescriptCaptureCode = `import OpenAI from "openai";
-import { init, wrap } from "@zroky/sdk";
+import { init, wrap } from "@zroky-ai/sdk";
 
 init({
   projectId: process.env.ZROKY_PROJECT_ID,
@@ -139,7 +139,7 @@ export const docsArticles: Record<DocsSlug, DocsArticle> = {
     description:
       'Use this path when you want the shortest real adoption flow: create access, capture production evidence, diagnose it into an issue, run replay, promote a Golden, and wire a CI gate.',
     outcome: 'By the end, your first agent flow follows Capture -> Diagnose -> Issue -> Replay -> Golden -> CI Gate.',
-    primaryCta: { label: 'Create account', href: '/auth/register' },
+    primaryCta: { label: 'Create account', href: 'https://app.zroky.com/signup' },
     sections: [
       {
         id: 'before-you-start',
@@ -286,7 +286,7 @@ export OPENAI_API_KEY="sk_provider_xxxx"`,
       {
         id: 'install',
         title: 'Install',
-        codeBlocks: [{ label: 'Install packages', language: 'bash', code: 'npm install @zroky/sdk openai' }],
+        codeBlocks: [{ label: 'Install packages', language: 'bash', code: 'npm install @zroky-ai/sdk openai' }],
       },
       {
         id: 'configure',
@@ -437,7 +437,7 @@ export OPENAI_API_KEY="sk_provider_xxxx"`,
           'BYOK keeps model spend visible in your provider account.',
           'Use replay credits and CI execution caps to prevent surprise usage.',
           'Start with stub replay for structure checks, then spend real provider tokens only on release-relevant incidents.',
-          'Use pricing limits to decide when a team should move from Pilot to Pro or Enterprise.',
+          'Use pricing limits to decide when a team should move from Starter to Pro.',
         ],
       },
     ],

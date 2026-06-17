@@ -6,7 +6,7 @@
  *
  * Usage:
  *   import OpenAI from "openai";
- *   import { wrap } from "@zroky/sdk";
+ *   import { wrap } from "@zroky-ai/sdk";
  *
  *   const openai = wrap(new OpenAI());
  *   // All subsequent calls are captured automatically.

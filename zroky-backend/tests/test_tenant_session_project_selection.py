@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
@@ -155,6 +156,37 @@ def test_current_user_projects_lists_active_memberships_without_tenant_context(d
     assert [project.project_id for project in projects] == ["proj_a", "proj_b"]
     assert projects[0].project_name == "proj_a"
     assert projects[0].role == "admin"
+
+
+def test_current_user_projects_bootstraps_default_project_for_projectless_user(db_session) -> None:
+    user = User(subject="user:projectless", email="projectless@example.com", is_active=True)
+    db_session.add(user)
+    db_session.commit()
+
+    token = issue_access_token(
+        user_id=user.id,
+        email=user.email,
+        subject=user.subject,
+        expire_hours=1,
+        secret=AUTH_SECRET,
+    )
+
+    projects = list_current_user_projects(authorization=f"Bearer {token}", db=db_session)
+
+    assert len(projects) == 1
+    assert projects[0].project_name == "My Project"
+    assert projects[0].role == "owner"
+
+    membership = db_session.execute(
+        select(ProjectMembership).where(
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.project_id == projects[0].project_id,
+            ProjectMembership.is_active.is_(True),
+        )
+    ).scalar_one()
+    project = db_session.execute(select(Project).where(Project.id == membership.project_id)).scalar_one()
+    assert project.is_active is True
+    assert project.owner_ref == user.subject
 
 
 def test_project_role_guard_accepts_internal_session_when_path_matches_selected_project(db_session) -> None:

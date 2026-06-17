@@ -1928,7 +1928,7 @@ body:has(.app-shell) {
   border-color: var(--dashboard-info-border) !important;
 }
 
-.app-shell .alert-card-stripe,
+.app-shell .alert-card-accent,
 .app-shell .priority-queue-severity,
 .app-shell .cost-stale-warning,
 .app-shell .cost-forecast-warning,
@@ -2009,7 +2009,7 @@ body:has(.app-shell) {
   color: var(--dashboard-text-soft) !important;
 }
 
-.auth-console-row-accent strong {
+.app-shell .auth-console-row-accent strong {
   color: #f8fafc;
 }
 
@@ -6394,9 +6394,9 @@ body:has(.app-shell) {
   white-space: normal !important;
 }
 
-.app-shell .alert-card-stripe {
+.app-shell .alert-card-accent {
   border: 0 !important;
-  background: var(--alert-stripe, var(--dashboard-muted)) !important;
+  background: var(--alert-accent, var(--dashboard-muted)) !important;
   color: inherit !important;
 }
 
@@ -7212,12 +7212,38 @@ body:has(.app-shell) {
 }
 
 .app-shell .keys-setup-hero,
+.app-shell .keys-onboarding-panel,
 .app-shell .providers-setup-hero {
   overflow: hidden !important;
   gap: 18px !important;
   background:
     linear-gradient(135deg, rgba(248, 250, 252, 0.06), rgba(248, 250, 252, 0.018) 60%),
     var(--dashboard-surface) !important;
+}
+
+.app-shell .keys-onboarding-panel {
+  display: grid !important;
+  gap: 14px !important;
+}
+
+.app-shell .keys-onboarding-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+
+.app-shell .keys-onboarding-header h2 {
+  margin: 8px 0 0 !important;
+  color: var(--dashboard-text) !important;
+  font-size: clamp(1.28rem, 2vw, 1.72rem) !important;
+  line-height: 1.12 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .keys-onboarding-header p {
+  margin: 7px 0 0 !important;
+  color: var(--dashboard-text-soft) !important;
 }
 
 .app-shell .keys-hero-copy h1,
@@ -7253,6 +7279,10 @@ body:has(.app-shell) {
   gap: 8px !important;
 }
 
+.app-shell .keys-capture-path {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
 .app-shell .keys-capture-path span,
 .app-shell .providers-flow-rail span,
 .app-shell .keys-next-grid > div,
@@ -7271,6 +7301,12 @@ body:has(.app-shell) {
   border-color: var(--dashboard-accent) !important;
   background: var(--dashboard-accent-soft) !important;
   color: var(--dashboard-text) !important;
+}
+
+.app-shell .keys-capture-path span.is-done {
+  border-color: rgba(34, 197, 94, 0.28) !important;
+  background: rgba(34, 197, 94, 0.08) !important;
+  color: #86efac !important;
 }
 
 .app-shell .keys-capture-path strong,
@@ -7298,6 +7334,7 @@ body:has(.app-shell) {
 }
 
 .app-shell .keys-snippet-grid,
+.app-shell .keys-command-grid,
 .app-shell .providers-card-grid,
 .app-shell .settings-integration-grid {
   display: grid !important;
@@ -7531,6 +7568,7 @@ body:has(.app-shell) {
 
 @media (max-width: 720px) {
   .app-shell .keys-setup-hero,
+  .app-shell .keys-onboarding-panel,
   .app-shell .providers-setup-hero {
     padding: 16px !important;
   }
@@ -7542,6 +7580,7 @@ body:has(.app-shell) {
   }
 
   .app-shell .keys-capture-path,
+  .app-shell .keys-command-grid,
   .app-shell .providers-flow-rail,
   .app-shell .keys-primary-grid,
   .app-shell .providers-primary-grid,
@@ -7558,6 +7597,10 @@ body:has(.app-shell) {
     grid-template-columns: 1fr !important;
   }
 
+  .app-shell .keys-onboarding-header {
+    grid-template-columns: 1fr !important;
+  }
+
   .app-shell .keys-hero-actions,
   .app-shell .providers-hero-actions,
   .app-shell .provider-actions,
@@ -7570,6 +7613,7 @@ body:has(.app-shell) {
   }
 
   .app-shell .keys-hero-actions .btn,
+  .app-shell .keys-onboarding-header .btn,
   .app-shell .providers-hero-actions .btn,
   .app-shell .provider-actions .btn,
   .app-shell .team-member-actions .btn,
@@ -8352,5 +8396,996 @@ body:has(.app-shell) {
   .app-shell .agents-inspector-actions .btn,
   .app-shell .drift-tab-btn {
     width: 100% !important;
+  }
+}
+
+/* Command Center final polish: first-run cockpit, dark shell focus, and reduced setup noise. */
+
+.app-shell:has(.fi-screen) .topbar-search {
+  max-width: 430px !important;
+  opacity: 0.76;
+}
+
+.app-shell:has(.fi-screen) .topbar-controls {
+  opacity: 0.9;
+}
+
+.app-shell:has(.fi-screen) .nav-link-placeholder {
+  color: rgba(215, 221, 232, 0.56) !important;
+}
+
+.app-shell:has(.fi-screen) .nav-link-placeholder .nav-link-icon {
+  opacity: 0.58;
+}
+
+.app-shell:has(.fi-screen) .nav-link-soon {
+  border-color: rgba(248, 250, 252, 0.08) !important;
+  background: rgba(248, 250, 252, 0.05) !important;
+  color: rgba(248, 250, 252, 0.62) !important;
+  font-size: 0.58rem !important;
+  font-weight: 780 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .fi-screen .fi-hero {
+  min-height: 134px !important;
+  border-color: rgba(248, 250, 252, 0.14) !important;
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.064), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 11, 16, 0.98)) !important;
+  box-shadow: inset 0 1px 0 rgba(248, 250, 252, 0.08), 0 22px 70px rgba(0, 0, 0, 0.38) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero {
+  position: relative;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 178px !important;
+  align-items: center;
+}
+
+.app-shell .fi-screen .fi-command-hero[data-tone="danger"] {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(255, 93, 131, 0.14), rgba(255, 93, 131, 0) 30%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.064), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 11, 16, 0.98)) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero[data-tone="warning"] {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(244, 201, 93, 0.14), rgba(244, 201, 93, 0) 30%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.064), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 11, 16, 0.98)) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero[data-tone="success"] {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(45, 212, 163, 0.14), rgba(45, 212, 163, 0) 30%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.064), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 11, 16, 0.98)) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero h1 {
+  margin: 0 0 12px !important;
+  color: var(--dashboard-muted) !important;
+  font-size: 0.74rem !important;
+  font-weight: 760 !important;
+  letter-spacing: 0.08em !important;
+  line-height: 1.2 !important;
+  text-transform: uppercase !important;
+  text-shadow: none !important;
+}
+
+.app-shell .fi-screen .fi-hero-signal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 16px;
+}
+
+.app-shell .fi-screen .fi-hero-signal strong {
+  color: var(--dashboard-text) !important;
+  font-family: var(--font-manrope), var(--font-inter), system-ui, sans-serif;
+  font-size: clamp(2.3rem, 5.8vw, 4.75rem) !important;
+  font-weight: 820 !important;
+  letter-spacing: 0 !important;
+  line-height: 0.95 !important;
+}
+
+.app-shell .fi-screen .fi-hero-signal span {
+  max-width: 18ch;
+  color: var(--dashboard-text) !important;
+  font-size: clamp(1.15rem, 2.4vw, 2.05rem) !important;
+  font-weight: 740 !important;
+  line-height: 1.05 !important;
+}
+
+.app-shell .fi-screen .fi-command-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.app-shell .fi-screen .fi-command-metrics .fi-kpi-card {
+  min-height: 118px !important;
+}
+
+.app-shell .fi-screen .fi-command-metrics .fi-kpi-card strong {
+  font-size: clamp(1.25rem, 1.8vw, 1.75rem) !important;
+}
+
+.app-shell .fi-screen .fi-priority-code {
+  display: inline-flex;
+  color: var(--dashboard-muted) !important;
+  font-family: var(--font-jetbrains-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.app-shell .fi-screen .fi-row-type {
+  color: var(--dashboard-text-soft) !important;
+  font-size: 0.76rem;
+  font-weight: 690;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.app-shell .fi-screen .fi-loading-skeleton {
+  border-color: rgba(248, 250, 252, 0.1) !important;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.035), rgba(248, 250, 252, 0)),
+    var(--dashboard-surface-inset) !important;
+}
+
+.app-shell .fi-screen .fi-setup-primary-grid {
+  grid-template-columns: minmax(0, 1.42fr) minmax(320px, 0.72fr);
+  gap: 14px;
+}
+
+.app-shell .fi-screen .fi-next-setup {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  min-height: 298px;
+  overflow: hidden;
+  border-color: rgba(248, 250, 252, 0.15) !important;
+  background:
+    linear-gradient(135deg, rgba(248, 250, 252, 0.078), rgba(248, 250, 252, 0) 38%),
+    linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 10, 14, 0.98)) !important;
+  padding: 20px !important;
+  box-shadow: inset 0 1px 0 rgba(248, 250, 252, 0.075), 0 24px 70px rgba(0, 0, 0, 0.42) !important;
+}
+
+.app-shell .fi-screen .fi-next-setup::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(45, 212, 163, 0.11), rgba(45, 212, 163, 0) 42%),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.045), transparent 32%);
+  content: "";
+}
+
+.app-shell .fi-screen .fi-next-setup::after {
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  left: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(45, 212, 163, 0), rgba(45, 212, 163, 0.42), rgba(45, 212, 163, 0));
+  content: "";
+  opacity: 0.72;
+}
+
+.app-shell .fi-screen .fi-next-setup > * {
+  position: relative;
+  z-index: 1;
+}
+
+.app-shell .fi-screen .fi-next-setup .fi-setup-icon {
+  width: 36px;
+  height: 36px;
+  border-color: rgba(248, 250, 252, 0.14) !important;
+  background: rgba(5, 8, 13, 0.78) !important;
+}
+
+.app-shell .fi-screen .fi-next-setup h3 {
+  max-width: 17ch;
+  margin: 0;
+  color: #ffffff !important;
+  font-size: clamp(1.55rem, 2.15vw, 2.1rem);
+  font-weight: 760;
+  line-height: 1.04;
+}
+
+.app-shell .fi-screen .fi-next-setup p {
+  max-width: 54ch;
+  margin: 0;
+  color: #c9d2df !important;
+  font-size: 0.9rem;
+  line-height: 1.48;
+}
+
+.app-shell .fi-screen .fi-capture-path {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  gap: 7px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(248, 250, 252, 0.12);
+  border-radius: 8px;
+  background: rgba(6, 9, 14, 0.82);
+  padding: 8px;
+  color: #aeb8c9;
+  box-shadow: inset 0 1px 0 rgba(248, 250, 252, 0.045);
+}
+
+.app-shell .fi-screen .fi-capture-path span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  border: 1px solid rgba(248, 250, 252, 0.1);
+  border-radius: 7px;
+  background: rgba(248, 250, 252, 0.055);
+  padding: 5px 8px;
+  color: #f8fafc;
+  font-family: var(--font-jetbrains-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.app-shell .fi-screen .fi-capture-path svg {
+  width: 13px;
+  height: 13px;
+}
+
+.app-shell .fi-screen .fi-capture-path > svg {
+  color: rgba(248, 250, 252, 0.46);
+}
+
+.app-shell .fi-screen .fi-connection-panel {
+  gap: 14px;
+  border-color: rgba(248, 250, 252, 0.13) !important;
+  padding: 18px !important;
+}
+
+.app-shell .fi-screen .fi-health-row {
+  min-height: 50px;
+  background: rgba(7, 11, 17, 0.78) !important;
+}
+
+.app-shell .fi-screen .fi-health-row[data-state="locked"] .fi-health-value {
+  color: #ff7a9a !important;
+}
+
+.app-shell .fi-screen .fi-onboarding-flow {
+  align-items: stretch;
+  gap: 9px;
+  border-color: rgba(248, 250, 252, 0.1) !important;
+  background: rgba(6, 9, 14, 0.72) !important;
+  padding: 12px !important;
+}
+
+.app-shell .fi-screen .fi-onboarding-flow-step {
+  min-height: 76px;
+  background: rgba(12, 17, 25, 0.86) !important;
+}
+
+.app-shell .fi-screen .fi-onboarding-flow-step[data-state="current"] {
+  border-color: rgba(248, 250, 252, 0.24) !important;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.075), rgba(248, 250, 252, 0.022)) !important;
+}
+
+.app-shell .fi-screen .fi-onboarding-flow-step[data-state="locked"] {
+  opacity: 0.74;
+}
+
+.app-shell .fi-screen .fi-setup-action-grid {
+  gap: 12px;
+}
+
+.app-shell .fi-screen .fi-setup-action-card {
+  min-height: 126px;
+  align-content: start;
+  border-color: rgba(248, 250, 252, 0.12) !important;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.04), rgba(248, 250, 252, 0.012)),
+    rgba(13, 18, 27, 0.92) !important;
+  padding: 16px !important;
+}
+
+.app-shell .fi-screen .fi-setup-action-card:hover,
+.app-shell .fi-screen .fi-setup-action-card:focus-visible {
+  border-color: rgba(248, 250, 252, 0.22) !important;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.07), rgba(248, 250, 252, 0.018)),
+    rgba(17, 23, 34, 0.98) !important;
+}
+
+.app-shell .fi-screen .fi-onboarding-checklist {
+  border-color: rgba(248, 250, 252, 0.1) !important;
+  background: rgba(6, 9, 14, 0.72) !important;
+  padding: 14px !important;
+}
+
+.app-shell .fi-screen .fi-proof-preview {
+  gap: 9px;
+}
+
+.app-shell .fi-screen .fi-proof-preview > div {
+  min-height: 58px;
+  border: 1px solid rgba(248, 250, 252, 0.1);
+  border-radius: 8px;
+  background: rgba(13, 18, 27, 0.82) !important;
+  color: #f8fafc !important;
+}
+
+@media (max-width: 1180px) {
+  .app-shell .fi-screen .fi-command-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 1500px) {
+  .app-shell .fi-screen .fi-ops-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell .fi-screen .fi-command-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell .fi-screen .fi-setup-primary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell:has(.fi-screen) .topbar-search {
+    opacity: 1;
+  }
+
+  .app-shell .fi-screen .fi-next-setup {
+    min-height: 0;
+  }
+
+  .app-shell .fi-screen .fi-command-metrics {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Home command center v3: tokenized hierarchy and connected flow. */
+
+.app-shell .fi-screen {
+  --home-panel: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-canvas));
+  --home-panel-soft: color-mix(in srgb, var(--bg-panel-soft) 78%, var(--bg-canvas));
+  --home-panel-muted: color-mix(in srgb, var(--bg-panel-soft) 56%, var(--bg-canvas));
+  --home-border: var(--line-soft);
+  --home-border-strong: var(--line-strong);
+  --home-text: var(--text-primary);
+  --home-text-soft: var(--text-secondary);
+  --home-muted: var(--text-tertiary);
+  --home-success: var(--status-success);
+  --home-warning: var(--status-warning);
+  --home-danger: var(--status-error);
+  --home-success-bg: var(--status-success-bg);
+  --home-warning-bg: var(--status-warning-bg);
+  --home-danger-bg: var(--status-error-bg);
+  gap: var(--space-2);
+}
+
+.app-shell .fi-screen .fi-command-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  min-height: 13rem !important;
+  border: 1px solid var(--home-border) !important;
+  border-left-width: 0.25rem !important;
+  border-radius: var(--radius-md) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 58%, transparent), transparent),
+    var(--home-panel) !important;
+  box-shadow: var(--shadow-soft) !important;
+  padding: var(--space-3) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero[data-tone="danger"] {
+  border-left-color: var(--home-danger) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--home-danger-bg) 72%, transparent), transparent),
+    var(--home-panel) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero[data-tone="warning"] {
+  border-left-color: var(--home-warning) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--home-warning-bg) 72%, transparent), transparent),
+    var(--home-panel) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero[data-tone="success"] {
+  border-left-color: var(--home-success) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--home-success-bg) 72%, transparent), transparent),
+    var(--home-panel) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero::after {
+  display: none !important;
+}
+
+.app-shell .fi-screen .fi-command-hero h1 {
+  margin: 0 0 var(--space-1) !important;
+  color: var(--home-muted) !important;
+  font-size: var(--fs-xs) !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+  line-height: var(--lh-snug) !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell .fi-screen .fi-hero-main {
+  max-width: 48rem;
+}
+
+.app-shell .fi-screen .fi-hero-signal {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.app-shell .fi-screen .fi-hero-eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  color: var(--home-muted) !important;
+  font-size: var(--fs-sm) !important;
+  font-weight: 720 !important;
+  line-height: var(--lh-snug) !important;
+}
+
+.app-shell .fi-screen .fi-hero-signal strong {
+  max-width: 18ch;
+  color: var(--home-text) !important;
+  font-size: clamp(var(--fs-3xl), 4vw, var(--fs-4xl)) !important;
+  font-weight: 820 !important;
+  letter-spacing: 0 !important;
+  line-height: var(--lh-tight) !important;
+}
+
+.app-shell .fi-screen .fi-command-hero p {
+  max-width: 42rem;
+  margin: var(--space-1) 0 0 !important;
+  color: var(--home-text-soft) !important;
+  font-size: var(--fs-md) !important;
+  line-height: var(--lh-normal) !important;
+}
+
+.app-shell .fi-screen .fi-hero-primary-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.app-shell .fi-screen .fi-hero-actions {
+  align-self: start;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.app-shell .fi-screen .fi-refresh-meta {
+  border-color: var(--home-border) !important;
+  background: var(--home-panel-soft) !important;
+  color: var(--home-muted) !important;
+  font-size: var(--fs-xs);
+}
+
+.app-shell .fi-screen .fi-command-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: var(--space-1) !important;
+}
+
+.app-shell .fi-screen .fi-kpi-card {
+  min-height: 9rem !important;
+  border-color: var(--home-border) !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--home-panel-soft) !important;
+  padding: var(--space-2) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .fi-screen .fi-kpi-card:hover,
+.app-shell .fi-screen .fi-kpi-card:focus-visible {
+  border-color: var(--home-border-strong) !important;
+  background: color-mix(in srgb, var(--home-panel-soft) 78%, var(--bg-panel-elevated)) !important;
+  transform: translateY(-0.0625rem);
+}
+
+.app-shell .fi-screen .fi-kpi-card.is-active {
+  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent-soft) 38%, var(--home-panel-soft)) !important;
+  box-shadow: 0 0 0 0.1875rem var(--accent-soft) !important;
+}
+
+.app-shell .fi-screen .fi-kpi-topline {
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.app-shell .fi-screen .fi-kpi-topline > span {
+  color: var(--home-muted) !important;
+  font-size: var(--fs-xs) !important;
+  font-weight: 760 !important;
+  line-height: var(--lh-snug) !important;
+  text-transform: uppercase;
+}
+
+.app-shell .fi-screen .fi-kpi-card strong {
+  color: var(--home-text) !important;
+  font-size: var(--fs-3xl) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+  line-height: var(--lh-tight) !important;
+}
+
+.app-shell .fi-screen .fi-kpi-card p {
+  color: var(--home-text-soft) !important;
+  font-size: var(--fs-sm) !important;
+  line-height: var(--lh-normal) !important;
+}
+
+.app-shell .fi-screen .fi-kpi-card-mark {
+  gap: var(--space-1);
+}
+
+.app-shell .fi-screen .fi-kpi-spark {
+  display: none !important;
+}
+
+.app-shell .fi-screen .fi-kpi-icon {
+  width: 2rem !important;
+  height: 2rem !important;
+  border-color: var(--home-border) !important;
+  background: var(--home-panel-muted) !important;
+  color: var(--home-text-soft) !important;
+}
+
+.app-shell .fi-screen .fi-kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  border: 1px solid var(--home-border);
+  border-radius: var(--radius-md);
+  background: var(--home-panel-muted);
+  padding: 0 var(--space-1);
+  color: var(--home-muted);
+  font-size: var(--fs-xs);
+  font-weight: 720;
+  line-height: var(--lh-snug);
+}
+
+.app-shell .fi-screen .fi-section {
+  border-color: var(--home-border) !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--home-panel) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .fi-screen .fi-priority-section {
+  box-shadow: var(--shadow-soft) !important;
+}
+
+.app-shell .fi-screen .fi-section-header h3 {
+  color: var(--home-text) !important;
+  font-size: var(--fs-lg) !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+  line-height: var(--lh-snug) !important;
+}
+
+.app-shell .fi-screen .fi-section-header p {
+  color: var(--home-text-soft) !important;
+  font-size: var(--fs-sm) !important;
+  line-height: var(--lh-normal) !important;
+}
+
+.app-shell .fi-screen .fi-table-wrap {
+  border-color: var(--home-border) !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--home-panel-soft) !important;
+}
+
+.app-shell .fi-screen .fi-issues-table th {
+  background: var(--home-panel-muted) !important;
+  color: var(--home-muted) !important;
+  font-size: var(--fs-xs) !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .fi-screen .fi-issues-table td {
+  min-height: 4.75rem;
+  border-color: var(--home-border) !important;
+  color: var(--home-text-soft) !important;
+  font-size: var(--fs-sm) !important;
+  line-height: var(--lh-normal) !important;
+}
+
+.app-shell .fi-screen .fi-issues-table tbody tr:hover td,
+.app-shell .fi-screen .fi-issues-table tbody tr:focus-visible td {
+  background: color-mix(in srgb, var(--accent-soft) 28%, transparent) !important;
+}
+
+.app-shell .fi-screen .fi-issues-table tbody tr.is-selected td {
+  background: color-mix(in srgb, var(--accent-soft) 42%, transparent) !important;
+}
+
+.app-shell .fi-screen .fi-issues-table tbody tr.is-selected td:first-child {
+  box-shadow: inset 0.1875rem 0 0 var(--accent) !important;
+}
+
+.app-shell .fi-screen .fi-priority-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 1.625rem;
+  border: 1px solid var(--home-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--home-panel-muted);
+  padding: 0 var(--space-1);
+  color: var(--home-text-soft);
+  font-family: var(--font-jetbrains-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: var(--fs-xs);
+  font-weight: 780;
+  line-height: var(--lh-tight);
+}
+
+.app-shell .fi-screen .fi-row-type {
+  color: var(--home-text-soft) !important;
+  font-size: var(--fs-sm) !important;
+  font-weight: 680 !important;
+  line-height: var(--lh-snug) !important;
+}
+
+.app-shell .fi-screen .fi-issue-cell strong,
+.app-shell .fi-screen .fi-impact-value {
+  color: var(--home-text) !important;
+}
+
+.app-shell .fi-screen .fi-priority-section .fi-issues-table th:nth-child(4),
+.app-shell .fi-screen .fi-priority-section .fi-issues-table td:nth-child(4) {
+  text-align: right;
+}
+
+.app-shell .fi-screen .fi-impact-value {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.app-shell .fi-screen .fi-status-tag {
+  display: none !important;
+}
+
+.app-shell .fi-screen .fi-status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--home-text-soft);
+  font-size: var(--fs-sm);
+  font-weight: 720;
+  line-height: var(--lh-snug);
+  white-space: nowrap;
+}
+
+.app-shell .fi-screen .fi-status-text > span {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-xl);
+  background: var(--home-muted);
+}
+
+.app-shell .fi-screen .fi-status-text[data-tone="danger"] {
+  color: var(--home-danger);
+}
+
+.app-shell .fi-screen .fi-status-text[data-tone="danger"] > span {
+  background: var(--home-danger);
+}
+
+.app-shell .fi-screen .fi-status-text[data-tone="warning"] {
+  color: var(--home-warning);
+}
+
+.app-shell .fi-screen .fi-status-text[data-tone="warning"] > span {
+  background: var(--home-warning);
+}
+
+.app-shell .fi-screen .fi-status-text[data-tone="success"] {
+  color: var(--home-success);
+}
+
+.app-shell .fi-screen .fi-status-text[data-tone="success"] > span {
+  background: var(--home-success);
+}
+
+.app-shell .fi-screen .fi-row-actions .btn {
+  min-width: 8.75rem;
+}
+
+.app-shell .fi-screen .fi-ops-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem) !important;
+  gap: var(--space-2) !important;
+}
+
+.app-shell .fi-screen .fi-ops-rail {
+  gap: var(--space-2);
+}
+
+.app-shell .fi-screen .fi-evidence-list,
+.app-shell .fi-screen .fi-readiness-list {
+  gap: var(--space-1);
+}
+
+.app-shell .fi-screen .fi-evidence-row {
+  min-height: 4.5rem;
+  border-color: var(--home-border) !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--home-panel-soft) !important;
+  padding: var(--space-1) var(--space-2) !important;
+}
+
+.app-shell .fi-screen .fi-evidence-row span,
+.app-shell .fi-screen .fi-evidence-row small {
+  color: var(--home-muted) !important;
+  font-size: var(--fs-xs) !important;
+  line-height: var(--lh-snug) !important;
+}
+
+.app-shell .fi-screen .fi-evidence-row strong {
+  color: var(--home-text) !important;
+  font-size: var(--fs-sm) !important;
+  line-height: var(--lh-snug) !important;
+}
+
+.app-shell .fi-screen .fi-evidence-row .status-pill {
+  border-color: var(--home-border) !important;
+  background: var(--home-panel-muted) !important;
+  font-size: var(--fs-xs) !important;
+}
+
+.app-shell .fi-screen .fi-readiness-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 3.25rem;
+  border-color: var(--home-border) !important;
+  border-left-width: 0 !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--home-panel-soft) !important;
+  padding: var(--space-1) var(--space-2) !important;
+}
+
+.app-shell .fi-screen .fi-readiness-row::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-xl);
+  background: var(--home-muted);
+}
+
+.app-shell .fi-screen .fi-readiness-row[data-tone="success"]::before {
+  background: var(--home-success);
+}
+
+.app-shell .fi-screen .fi-readiness-row[data-tone="warning"]::before {
+  background: var(--home-warning);
+}
+
+.app-shell .fi-screen .fi-readiness-row[data-tone="danger"]::before {
+  background: var(--home-danger);
+}
+
+.app-shell .fi-screen .fi-readiness-row span {
+  color: var(--home-text-soft) !important;
+  font-size: var(--fs-sm) !important;
+}
+
+.app-shell .fi-screen .fi-readiness-row strong {
+  color: var(--home-text) !important;
+  font-size: var(--fs-sm) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell .fi-screen .fi-pipeline-section {
+  background: var(--home-panel-soft) !important;
+}
+
+.app-shell .fi-screen .fi-pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0 !important;
+  align-items: stretch;
+}
+
+.app-shell .fi-screen .fi-pipeline-stage {
+  position: relative;
+  min-height: 7.25rem;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: var(--space-2) var(--space-1) !important;
+}
+
+.app-shell .fi-screen .fi-pipeline-stage:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 2.25rem;
+  right: calc(var(--space-1) * -1);
+  width: var(--space-2);
+  height: 0.125rem;
+  background: var(--home-border-strong);
+}
+
+.app-shell .fi-screen .fi-pipeline-node {
+  width: 2rem !important;
+  height: 2rem !important;
+  border-color: var(--home-border) !important;
+  background: var(--home-panel-muted) !important;
+  color: var(--home-text-soft) !important;
+}
+
+.app-shell .fi-screen .fi-pipeline-stage[data-tone="success"] .fi-pipeline-node {
+  border-color: var(--home-success) !important;
+  color: var(--home-success) !important;
+}
+
+.app-shell .fi-screen .fi-pipeline-stage[data-tone="warning"] .fi-pipeline-node {
+  border-color: var(--home-warning) !important;
+  color: var(--home-warning) !important;
+}
+
+.app-shell .fi-screen .fi-pipeline-stage[data-tone="danger"] .fi-pipeline-node {
+  border-color: var(--home-danger) !important;
+  color: var(--home-danger) !important;
+}
+
+.app-shell .fi-screen .fi-pipeline-stage span,
+.app-shell .fi-screen .fi-pipeline-stage small {
+  color: var(--home-muted) !important;
+  font-size: var(--fs-xs) !important;
+  line-height: var(--lh-snug) !important;
+}
+
+.app-shell .fi-screen .fi-pipeline-stage strong {
+  color: var(--home-text) !important;
+  font-size: var(--fs-md) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell .fi-screen .fi-loading-skeleton,
+.app-shell .fi-screen .fi-rail-skeleton .fi-section,
+.app-shell .fi-screen .fi-kpi-skeleton-card {
+  border-color: var(--home-border) !important;
+  background: var(--home-panel-soft) !important;
+}
+
+.app-shell .fi-screen .fi-skeleton-line,
+.app-shell .fi-screen .fi-skeleton-row span,
+.app-shell .fi-screen .fi-skeleton-row-card span,
+.app-shell .fi-screen .fi-pipeline-skeleton span,
+.app-shell .fi-screen .fi-pipeline-skeleton strong,
+.app-shell .fi-screen .fi-pipeline-skeleton small {
+  background: color-mix(in srgb, var(--home-text) 9%, transparent) !important;
+}
+
+.app-shell .fi-screen .fi-skeleton-line.is-label {
+  width: 52%;
+  height: 0.75rem;
+}
+
+.app-shell .fi-screen .fi-skeleton-line.is-value {
+  width: 34%;
+  height: 2rem;
+}
+
+.app-shell .fi-screen .fi-skeleton-line.is-helper {
+  width: 78%;
+  height: 0.875rem;
+}
+
+.app-shell .fi-screen .fi-skeleton-stack {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.app-shell .fi-screen .fi-skeleton-row-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4rem;
+  gap: var(--space-1);
+  align-items: center;
+  min-height: 3.25rem;
+  border: 1px solid var(--home-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+}
+
+.app-shell .fi-screen .fi-skeleton-row-card span,
+.app-shell .fi-screen .fi-pipeline-skeleton span,
+.app-shell .fi-screen .fi-pipeline-skeleton strong,
+.app-shell .fi-screen .fi-pipeline-skeleton small {
+  display: block;
+  height: 0.75rem;
+  border-radius: var(--radius-md);
+}
+
+.app-shell .fi-screen :is(.fi-kpi-card, .fi-pipeline-stage, .fi-evidence-row) {
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .fi-screen :is(.fi-kpi-card, .fi-pipeline-stage, .fi-evidence-row),
+  .app-shell .fi-screen .fi-skeleton-line::after,
+  .app-shell .fi-screen .fi-skeleton-row span::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 1500px) {
+  .app-shell .fi-screen .fi-ops-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1280px) {
+  .app-shell .fi-screen .fi-command-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell .fi-screen .fi-command-hero {
+    grid-template-columns: 1fr !important;
+    align-items: start;
+  }
+
+  .app-shell .fi-screen .fi-hero-actions {
+    justify-content: flex-start;
+  }
+
+  .app-shell .fi-screen .fi-command-metrics,
+  .app-shell .fi-screen .fi-pipeline {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .fi-screen .fi-pipeline-stage:not(:last-child)::after {
+    top: auto;
+    right: auto;
+    bottom: calc(var(--space-1) * -1);
+    left: 1.5rem;
+    width: 0.125rem;
+    height: var(--space-2);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell .fi-screen .fi-command-hero,
+  .app-shell .fi-screen .fi-section,
+  .app-shell .fi-screen .fi-kpi-card {
+    padding: var(--space-2) !important;
+  }
+
+  .app-shell .fi-screen .fi-row-actions .btn {
+    min-width: 0;
   }
 }

@@ -1,19 +1,19 @@
 """
 Subscription lifecycle automation (Module 12; plan section 11.4).
 
-Closes the gap between the Stripe-event-driven state machine and the
+Closes the gap between provider-event-driven subscription state and the
 non-event-driven transitions that section 11.4 binds:
 
   * Trial expiry (no-card 14-day Pro trial)
-        Stripe does not fire any event when our application-managed
+        Razorpay does not fire an application trial-expiry event when
         trial elapses. Without a sweeper a `trialing` row keeps Pro
         entitlements forever.
 
   * Past-due grace expiry
-        Stripe's dunning sequence (typically 4 retries over ~21 days)
+        Provider retry sequences
         eventually emits `customer.subscription.deleted`, but section
         11.4 binds a 7-day grace cap so the customer experience is
-        bounded. We hard-downgrade at 7d regardless of Stripe's
+        bounded. We hard-downgrade at 7d regardless of the provider
         retry timeline.
 
 Both transitions are pull-driven: a Celery beat task calls into this
@@ -23,21 +23,21 @@ imports) so tests can drive the same code paths directly.
 Eligibility filters — locked decisions:
 
   * Trial expiry: `status='trialing'` AND `trial_end < now()` AND
-    `stripe_sub_id IS NULL`.
-        The `stripe_sub_id IS NULL` predicate restricts the sweep to
+    `payment_subscription_ref IS NULL`.
+        The `payment_subscription_ref IS NULL` predicate restricts the sweep to
         application-managed (no-card) trials. Customers with a real
-        Stripe subscription transition through Stripe's
+        provider subscription transition through provider
         `customer.subscription.updated` event — sweeping them here
         would race against the webhook (and `_is_stale_event` in
-        `stripe_sync` would then block the legitimate post-webhook
+        billing sync would then block the legitimate post-webhook
         upgrade for paid customers).
 
   * Past-due grace expiry: `status='past_due'` AND
     `current_period_end + grace_days < now()`.
-        These rows ALL have `stripe_sub_id` set (they paid before).
-        On hard-downgrade we clear `stripe_sub_id` so a delayed
+        These rows were paid before.
+        On hard-downgrade we clear `payment_subscription_ref` so a delayed
         `invoice.paid` for the old subscription cannot resurrect the
-        customer (the invoice handler looks up by stripe_sub_id and
+        customer (the provider handler looks up by payment_subscription_ref and
         will simply find no row).
 
 Audit trail: every state transition writes one `audit_log_admin` row
@@ -129,8 +129,6 @@ def _snapshot(sub: Subscription) -> dict[str, Any]:
         "payment_subscription_ref": sub.payment_subscription_ref,
         "payment_customer_ref": sub.payment_customer_ref,
         "payment_request_ref": sub.payment_request_ref,
-        "stripe_sub_id": sub.stripe_sub_id,
-        "stripe_customer_id": sub.stripe_customer_id,
         "current_period_end": (
             sub.current_period_end.isoformat()
             if sub.current_period_end is not None else None
@@ -174,15 +172,14 @@ def _write_audit(
 def _select_expired_trial_subs(
     db: Session, *, now: datetime, limit: int
 ) -> list[Subscription]:
-    """Eligibility query for the trial-expiry sweep. The `stripe_sub_id
+    """Eligibility query for the trial-expiry sweep. The `payment_subscription_ref
     IS NULL` filter is the locked-decision boundary that prevents this
-    task from racing the Stripe webhook on paid customers."""
+    task from racing provider webhook handling on paid customers."""
     return list(db.execute(
         select(Subscription)
         .where(Subscription.status == "trialing")
         .where(Subscription.trial_end.is_not(None))
         .where(Subscription.trial_end < now)
-        .where(Subscription.stripe_sub_id.is_(None))
         .where(Subscription.payment_subscription_ref.is_(None))
         .order_by(Subscription.trial_end.asc())
         .limit(limit)
@@ -193,7 +190,7 @@ def sweep_expired_trials(
     db: Session, *, limit: int = 500, now: datetime | None = None
 ) -> SweepResult:
     """Walk subscriptions in `trialing` whose `trial_end` has passed
-    AND that have no Stripe subscription, downgrading each to free.
+    AND that have no provider subscription, downgrading each to free.
 
     Caller owns the Session lifecycle. We commit per-row so a failure
     on one row does not roll back successful transitions on others.
@@ -219,7 +216,7 @@ def sweep_expired_trials(
                 db, sub=sub,
                 action="subscription.auto_downgrade_trial",
                 reason="trial_expired",
-                clear_stripe_sub_id=False,  # already NULL by filter
+                clear_payment_subscription_ref=False,  # already NULL by filter
             )
             result.transitioned += 1
             result.transitions.append(transition)
@@ -272,9 +269,9 @@ def sweep_expired_past_due_grace(
     older than `grace_days`, hard-downgrading each to free.
 
     Per plan section 11.4: 7-day grace then hard-downgrade. The
-    `stripe_sub_id` is cleared on transition so a delayed Stripe
+    `payment_subscription_ref` is cleared on transition so a delayed provider
     `invoice.paid` event for the old subscription cannot resurrect
-    the customer (the handler looks up by stripe_sub_id and finds
+    the customer (the handler looks up by payment_subscription_ref and finds
     nothing).
     """
     if grace_days < 0:
@@ -295,7 +292,7 @@ def sweep_expired_past_due_grace(
                 db, sub=sub,
                 action="subscription.auto_downgrade_past_due",
                 reason="past_due_grace_expired",
-                clear_stripe_sub_id=True,
+                clear_payment_subscription_ref=True,
             )
             result.transitioned += 1
             result.transitions.append(transition)
@@ -323,15 +320,15 @@ def _transition_to_free(
     sub: Subscription,
     action: str,
     reason: str,
-    clear_stripe_sub_id: bool,
+    clear_payment_subscription_ref: bool,
 ) -> TransitionRecord:
     """Move a subscription row to (`free`, `active`) state, re-seed
     `source='plan'` entitlements as the free template, and drop any
     lingering trial overlay. Writes one audit row per call.
 
-    `clear_stripe_sub_id` exists so the trial-expiry path (no Stripe
-    sub) can leave the column alone while the past-due-grace path
-    actively clears it to defang stale `invoice.paid` events.
+    `clear_payment_subscription_ref` exists so the trial-expiry path
+    can leave the provider reference alone while the past-due-grace path
+    actively clears it to defang stale provider success events.
 
     Commits on success. On any internal error the caller is expected
     to roll back — we don't try/except here because the orchestrators
@@ -343,8 +340,7 @@ def _transition_to_free(
     sub.plan_code = DEFAULT_PLAN_CODE  # 'free'
     sub.status = "active"
     sub.trial_end = None
-    if clear_stripe_sub_id:
-        sub.stripe_sub_id = None
+    if clear_payment_subscription_ref:
         sub.payment_subscription_ref = None
         sub.payment_request_ref = None
     # Note: sla_tier is intentionally NOT reset. A customer who

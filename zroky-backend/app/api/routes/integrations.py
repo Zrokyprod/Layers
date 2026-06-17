@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import logging
 from datetime import datetime, timezone
@@ -7,7 +5,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -306,7 +304,7 @@ def disconnect_slack(
 @limiter.limit("10/minute")
 async def send_slack_test_message(
     request: Request,
-    body: SlackTestMessageRequest,
+    body: SlackTestMessageRequest = Body(...),
     tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
 ) -> SlackTestMessageResponse:
@@ -428,7 +426,7 @@ def get_teams_status(
 @limiter.limit("10/minute")
 def upsert_teams_install(
     request: Request,
-    body: TeamsInstallRequest,
+    body: TeamsInstallRequest = Body(...),
     context: TenantContext = Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
 ) -> TeamsInstallStatusResponse:
@@ -471,7 +469,7 @@ def disconnect_teams(
 @limiter.limit("10/minute")
 async def send_teams_test_message(
     request: Request,
-    body: TeamsTestMessageRequest,
+    body: TeamsTestMessageRequest = Body(...),
     tenant_id: str = Depends(require_tenant_role("admin")),
     db: Session = Depends(get_db_session),
 ) -> TeamsTestMessageResponse:

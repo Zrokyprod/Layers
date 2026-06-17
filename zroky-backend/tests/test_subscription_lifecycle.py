@@ -4,16 +4,16 @@ Coverage:
   - services.subscription_lifecycle
       * sweep_expired_trials
           - happy path → state transitions to (free, active)
-          - eligibility filter: stripe_sub_id IS NULL (paid trials skipped)
+          - eligibility filter: payment_subscription_ref IS NULL (paid trials skipped)
           - eligibility filter: trial_end in future (skipped)
           - audit row written with before/after snapshots
           - sla_tier preserved across auto-downgrade
-          - trial expiry sweep does NOT clear stripe_sub_id
+          - trial expiry sweep does NOT clear payment_subscription_ref
             (that's past-due-only; here it's already NULL)
           - idempotent — second run finds no eligible rows
       * sweep_expired_past_due_grace
           - happy path → state transitions to (free, active),
-            stripe_sub_id cleared
+            payment_subscription_ref cleared
           - eligibility: current_period_end < now - grace_days
           - eligibility: rows still inside grace are skipped
           - grace_days kwarg honored
@@ -86,8 +86,8 @@ def _make_subscription(
     status: str = "trialing",
     trial_end: datetime | None = None,
     current_period_end: datetime | None = None,
-    stripe_sub_id: str | None = None,
-    stripe_customer_id: str | None = None,
+    payment_subscription_ref: str | None = None,
+    payment_customer_ref: str | None = None,
     sla_tier: str = "none",
 ) -> Subscription:
     """Build + commit a Subscription row with sensible test defaults.
@@ -101,8 +101,8 @@ def _make_subscription(
         plan_code=plan_code,
         status=status,
         seats=1,
-        stripe_sub_id=stripe_sub_id,
-        stripe_customer_id=stripe_customer_id,
+        payment_subscription_ref=payment_subscription_ref,
+        payment_customer_ref=payment_customer_ref,
         trial_end=trial_end,
         current_period_end=current_period_end,
         sla_tier=sla_tier,
@@ -148,7 +148,7 @@ class TestSweepExpiredTrials:
             plan_code="pro",
             status="trialing",
             trial_end=now - timedelta(hours=1),  # expired 1h ago
-            stripe_sub_id=None,  # no-card trial
+            payment_subscription_ref=None,  # no-card trial
         )
 
         result = sweep_expired_trials(db_session)
@@ -173,8 +173,8 @@ class TestSweepExpiredTrials:
         assert sub.status == "active"
         assert sub.trial_end is None
 
-    def test_skips_paid_trial_with_stripe_sub_id(self, db_session) -> None:
-        """Customers with a Stripe subscription must be left to the
+    def test_skips_paid_trial_with_payment_subscription_ref(self, db_session) -> None:
+        """Customers with a provider subscription must be left to the
         webhook (`customer.subscription.updated`) — sweeping them would
         race the event AND `_is_stale_event` would block legitimate
         post-trial upgrades."""
@@ -185,7 +185,7 @@ class TestSweepExpiredTrials:
             plan_code="pro",
             status="trialing",
             trial_end=now - timedelta(hours=1),
-            stripe_sub_id="sub_paid_xyz",  # has Stripe sub
+            payment_subscription_ref="sub_paid_xyz",  # has provider sub
         )
 
         result = sweep_expired_trials(db_session)
@@ -362,8 +362,8 @@ class TestSweepExpiredPastDueGrace:
             plan_code="pro",
             status="past_due",
             current_period_end=now - timedelta(days=10),  # 10d > 7d grace
-            stripe_sub_id="sub_paid_old",
-            stripe_customer_id="cus_keep",
+            payment_subscription_ref="sub_paid_old",
+            payment_customer_ref="cus_keep",
         )
 
         result = sweep_expired_past_due_grace(db_session)
@@ -372,11 +372,11 @@ class TestSweepExpiredPastDueGrace:
         db_session.refresh(sub)
         assert sub.plan_code == "free"
         assert sub.status == "active"
-        # stripe_sub_id MUST be cleared so a delayed invoice.paid for
+        # payment_subscription_ref MUST be cleared so a delayed invoice.paid for
         # the old subscription cannot resurrect the customer.
-        assert sub.stripe_sub_id is None
-        # stripe_customer_id retained for support / future re-checkout.
-        assert sub.stripe_customer_id == "cus_keep"
+        assert sub.payment_subscription_ref is None
+        # payment_customer_ref retained for support / future re-checkout.
+        assert sub.payment_customer_ref == "cus_keep"
 
     def test_skips_within_grace(self, db_session) -> None:
         now = datetime.now(timezone.utc)
@@ -386,7 +386,7 @@ class TestSweepExpiredPastDueGrace:
             plan_code="pro",
             status="past_due",
             current_period_end=now - timedelta(days=3),  # well within 7d
-            stripe_sub_id="sub_in_grace",
+            payment_subscription_ref="sub_in_grace",
         )
 
         result = sweep_expired_past_due_grace(db_session)
@@ -400,7 +400,7 @@ class TestSweepExpiredPastDueGrace:
             plan_code="pro",
             status="past_due",
             current_period_end=now - timedelta(days=5),
-            stripe_sub_id="sub_custom",
+            payment_subscription_ref="sub_custom",
         )
 
         # Default 7d → still in grace
@@ -420,7 +420,7 @@ class TestSweepExpiredPastDueGrace:
             plan_code="pro",
             status="past_due",
             current_period_end=now - timedelta(seconds=1),
-            stripe_sub_id="sub_zero",
+            payment_subscription_ref="sub_zero",
         )
 
         result = sweep_expired_past_due_grace(db_session, grace_days=0)
@@ -434,7 +434,7 @@ class TestSweepExpiredPastDueGrace:
             plan_code="pro",
             status="active",
             current_period_end=now - timedelta(days=30),
-            stripe_sub_id="sub_active_old_period",
+            payment_subscription_ref="sub_active_old_period",
         )
 
         result = sweep_expired_past_due_grace(db_session)
@@ -449,7 +449,7 @@ class TestSweepExpiredPastDueGrace:
             plan_code="pro",
             status="past_due",
             current_period_end=None,
-            stripe_sub_id="sub_no_period",
+            payment_subscription_ref="sub_no_period",
         )
 
         result = sweep_expired_past_due_grace(db_session)
@@ -463,7 +463,7 @@ class TestSweepExpiredPastDueGrace:
             plan_code="pro",
             status="past_due",
             current_period_end=now - timedelta(days=14),
-            stripe_sub_id="sub_audit",
+            payment_subscription_ref="sub_audit",
         )
 
         sweep_expired_past_due_grace(db_session)
@@ -483,7 +483,7 @@ class TestSweepExpiredPastDueGrace:
             plan_code="plus",
             status="past_due",
             current_period_end=now - timedelta(days=10),
-            stripe_sub_id="sub_sla",
+            payment_subscription_ref="sub_sla",
             sla_tier="enterprise",
         )
 
@@ -561,10 +561,10 @@ class TestRouterSeparation:
         for path in (
             "/v1/billing/plans",
             "/v1/billing/subscription",
-            "/v1/billing/usage",
         ):
             assert path in legacy_paths, f"legacy path missing: {path}"
             assert path not in main_paths
+        assert "/v1/billing/usage" in main_paths
 
 
 class TestBillingMeSlaTier:

@@ -15,6 +15,7 @@ from app.api.routes import regression_ci as regression_ci_routes
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import DiagnosisJob, GoldenSet, ReplayRun
+from app.services.regression_ci import durable_gate
 from app.services.notification_dispatch import (
     dispatch_ci_gate_failed_slack_alert,
     dispatch_replay_slack_alert,
@@ -308,12 +309,15 @@ def test_regression_ci_background_dispatches_failed_gate(
             }
 
     monkeypatch.setattr(regression_ci_routes, "SessionLocal", worker_session_factory)
+    monkeypatch.setattr(durable_gate, "SessionLocal", worker_session_factory)
     monkeypatch.setattr("app.services.entitlements_resolver.resolve_all", lambda *_args, **_kwargs: {})
     monkeypatch.setattr("app.services.entitlements_resolver.get_plan_code", lambda *_args, **_kwargs: "pro")
     monkeypatch.setattr("app.services.entitlements_resolver.has", lambda *_args, **_kwargs: False)
     monkeypatch.setattr("app.services.judge_engine.get_evaluator", lambda *_args, **_kwargs: object())
     monkeypatch.setattr("app.services.embedding_service.get_embedding_service", lambda: None)
     monkeypatch.setattr(regression_ci_routes, "run_regression_ci", lambda *_args, **_kwargs: _Report())
+    monkeypatch.setattr(durable_gate, "run_regression_ci", lambda *_args, **_kwargs: _Report())
+    monkeypatch.setattr(durable_gate, "apply_golden_gate_policy", lambda _session, report: report)
     monkeypatch.setattr(
         "app.services.notification_dispatch.dispatch_ci_gate_failed_slack_alert",
         lambda **kwargs: calls.append(kwargs) or True,

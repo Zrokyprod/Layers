@@ -156,27 +156,7 @@ def ingest_outcome(
     return evt
 
 
-# ── Stripe / Zendesk / Salesforce webhook normalisation ────────────────────────
-
-
-def normalise_stripe_refund(payload: dict[str, Any]) -> dict[str, Any]:
-    """Extract canonical outcome fields from a Stripe charge.refund.created payload."""
-    obj = payload.get("data", {}).get("object", payload)
-    amount_cents = obj.get("amount", 0)
-    currency = (obj.get("currency") or "usd").upper()
-    amount_usd = amount_cents / 100.0 if currency == "USD" else amount_cents / 100.0
-    call_id = (obj.get("metadata") or {}).get("zroky_call_id")
-    external_ref = obj.get("id")
-    idempotency_key = f"stripe:{external_ref}" if external_ref else None
-    return dict(
-        outcome_type="refund_issued",
-        amount_usd=amount_usd,
-        call_id=call_id,
-        source="stripe",
-        external_ref=external_ref,
-        idempotency_key=idempotency_key,
-        metadata={"stripe_reason": obj.get("reason"), "currency": currency},
-    )
+# ── Zendesk / Salesforce webhook normalisation ─────────────────────────────────
 
 
 def normalise_zendesk_ticket(payload: dict[str, Any]) -> dict[str, Any]:

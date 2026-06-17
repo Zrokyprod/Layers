@@ -160,7 +160,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerProjectsResponse"
+                  "$ref": "#/components/schemas/app__api__routes__internal__OwnerProjectsResponse"
                 }
               }
             }
@@ -9422,61 +9422,6 @@
         }
       }
     },
-    "/v1/outcomes/webhooks/stripe": {
-      "post": {
-        "tags": [
-          "outcomes",
-          "outcomes"
-        ],
-        "summary": "Stripe Webhook",
-        "description": "Receive Stripe charge.refund.created events and ingest as outcome_events.",
-        "operationId": "stripe_webhook_v1_outcomes_webhooks_stripe_post",
-        "parameters": [
-          {
-            "name": "stripe-signature",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Stripe-Signature"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Stripe Webhook V1 Outcomes Webhooks Stripe Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/outcomes/webhooks/zendesk": {
       "post": {
         "tags": [
@@ -10687,7 +10632,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerStatsResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerStatsResponse"
                 }
               }
             }
@@ -10766,7 +10711,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerUsersResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUsersResponse"
                 }
               }
             }
@@ -13762,7 +13707,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerProjectsResponse"
+                  "$ref": "#/components/schemas/app__api__routes__internal__OwnerProjectsResponse"
                 }
               }
             }
@@ -23024,61 +22969,6 @@
         }
       }
     },
-    "/api/v1/outcomes/webhooks/stripe": {
-      "post": {
-        "tags": [
-          "outcomes",
-          "outcomes"
-        ],
-        "summary": "Stripe Webhook",
-        "description": "Receive Stripe charge.refund.created events and ingest as outcome_events.",
-        "operationId": "stripe_webhook_api_v1_outcomes_webhooks_stripe_post",
-        "parameters": [
-          {
-            "name": "stripe-signature",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Stripe-Signature"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Stripe Webhook Api V1 Outcomes Webhooks Stripe Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/outcomes/webhooks/zendesk": {
       "post": {
         "tags": [
@@ -24289,7 +24179,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerStatsResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerStatsResponse"
                 }
               }
             }
@@ -24368,7 +24258,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerUsersResponse"
+                  "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUsersResponse"
                 }
               }
             }
@@ -29082,28 +28972,6 @@
               }
             ],
             "title": "Payment Request Ref"
-          },
-          "stripe_customer_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stripe Customer Id"
-          },
-          "stripe_sub_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stripe Sub Id"
           },
           "current_period_end": {
             "anyOf": [
@@ -40104,78 +39972,6 @@
         ],
         "title": "OwnerPricingCostStatus"
       },
-      "OwnerProjectItem": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "owner_ref": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Ref"
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "call_count": {
-            "type": "integer",
-            "title": "Call Count"
-          },
-          "total_cost_usd": {
-            "type": "number",
-            "title": "Total Cost Usd"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "owner_ref",
-          "is_active",
-          "created_at",
-          "call_count",
-          "total_cost_usd"
-        ],
-        "title": "OwnerProjectItem"
-      },
-      "OwnerProjectsResponse": {
-        "properties": {
-          "projects": {
-            "items": {
-              "$ref": "#/components/schemas/OwnerProjectItem"
-            },
-            "type": "array",
-            "title": "Projects"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "projects",
-          "total"
-        ],
-        "title": "OwnerProjectsResponse"
-      },
       "OwnerProviderKeyStatus": {
         "properties": {
           "state": {
@@ -40226,54 +40022,6 @@
           "resets_at"
         ],
         "title": "OwnerReplayQuotaStatus"
-      },
-      "OwnerStatsResponse": {
-        "properties": {
-          "total_users": {
-            "type": "integer",
-            "title": "Total Users"
-          },
-          "total_projects": {
-            "type": "integer",
-            "title": "Total Projects"
-          },
-          "total_calls": {
-            "type": "integer",
-            "title": "Total Calls"
-          },
-          "calls_last_7d": {
-            "type": "integer",
-            "title": "Calls Last 7D"
-          },
-          "total_cost_usd": {
-            "type": "number",
-            "title": "Total Cost Usd"
-          },
-          "cost_last_7d_usd": {
-            "type": "number",
-            "title": "Cost Last 7D Usd"
-          },
-          "new_users_last_7d": {
-            "type": "integer",
-            "title": "New Users Last 7D"
-          },
-          "active_users_last_7d": {
-            "type": "integer",
-            "title": "Active Users Last 7D"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total_users",
-          "total_projects",
-          "total_calls",
-          "calls_last_7d",
-          "total_cost_usd",
-          "cost_last_7d_usd",
-          "new_users_last_7d",
-          "active_users_last_7d"
-        ],
-        "title": "OwnerStatsResponse"
       },
       "OwnerSupportReplyRequest": {
         "properties": {
@@ -40354,80 +40102,6 @@
         },
         "type": "object",
         "title": "OwnerSupportTicketUpdateRequest"
-      },
-      "OwnerUserItem": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "github_login": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Github Login"
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "project_count": {
-            "type": "integer",
-            "title": "Project Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "email",
-          "github_login",
-          "is_active",
-          "created_at",
-          "project_count"
-        ],
-        "title": "OwnerUserItem"
-      },
-      "OwnerUsersResponse": {
-        "properties": {
-          "users": {
-            "items": {
-              "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUserItem"
-            },
-            "type": "array",
-            "title": "Users"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "users",
-          "total"
-        ],
-        "title": "OwnerUsersResponse"
       },
       "PiiDetectorTestRequest": {
         "properties": {
@@ -48141,6 +47815,54 @@
         ],
         "title": "OwnerProjectsResponse"
       },
+      "app__api__routes___internal__owner_common__OwnerStatsResponse": {
+        "properties": {
+          "total_users": {
+            "type": "integer",
+            "title": "Total Users"
+          },
+          "total_projects": {
+            "type": "integer",
+            "title": "Total Projects"
+          },
+          "total_calls": {
+            "type": "integer",
+            "title": "Total Calls"
+          },
+          "calls_last_7d": {
+            "type": "integer",
+            "title": "Calls Last 7D"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "title": "Total Cost Usd"
+          },
+          "cost_last_7d_usd": {
+            "type": "number",
+            "title": "Cost Last 7D Usd"
+          },
+          "new_users_last_7d": {
+            "type": "integer",
+            "title": "New Users Last 7D"
+          },
+          "active_users_last_7d": {
+            "type": "integer",
+            "title": "Active Users Last 7D"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_users",
+          "total_projects",
+          "total_calls",
+          "calls_last_7d",
+          "total_cost_usd",
+          "cost_last_7d_usd",
+          "new_users_last_7d",
+          "active_users_last_7d"
+        ],
+        "title": "OwnerStatsResponse"
+      },
       "app__api__routes___internal__owner_common__OwnerUserItem": {
         "properties": {
           "id": {
@@ -48206,6 +47928,99 @@
         ],
         "title": "OwnerUserItem"
       },
+      "app__api__routes___internal__owner_common__OwnerUsersResponse": {
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/app__api__routes___internal__owner_common__OwnerUserItem"
+            },
+            "type": "array",
+            "title": "Users"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "users",
+          "total"
+        ],
+        "title": "OwnerUsersResponse"
+      },
+      "app__api__routes__internal__OwnerProjectItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "owner_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Ref"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "call_count": {
+            "type": "integer",
+            "title": "Call Count"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "title": "Total Cost Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "owner_ref",
+          "is_active",
+          "created_at",
+          "call_count",
+          "total_cost_usd"
+        ],
+        "title": "OwnerProjectItem"
+      },
+      "app__api__routes__internal__OwnerProjectsResponse": {
+        "properties": {
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/app__api__routes__internal__OwnerProjectItem"
+            },
+            "type": "array",
+            "title": "Projects"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "projects",
+          "total"
+        ],
+        "title": "OwnerProjectsResponse"
+      },
       "app__api__routes__internal__OwnerStatsResponse": {
         "properties": {
           "total_users": {
@@ -48249,11 +48064,64 @@
         ],
         "title": "OwnerStatsResponse"
       },
+      "app__api__routes__internal__OwnerUserItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "github_login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Login"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "project_count": {
+            "type": "integer",
+            "title": "Project Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "github_login",
+          "is_active",
+          "created_at",
+          "project_count"
+        ],
+        "title": "OwnerUserItem"
+      },
       "app__api__routes__internal__OwnerUsersResponse": {
         "properties": {
           "users": {
             "items": {
-              "$ref": "#/components/schemas/OwnerUserItem"
+              "$ref": "#/components/schemas/app__api__routes__internal__OwnerUserItem"
             },
             "type": "array",
             "title": "Users"

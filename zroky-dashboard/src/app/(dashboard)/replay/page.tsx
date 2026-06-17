@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -18,6 +18,7 @@ import {
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { KpiCard } from "@/components/command-center-primitives";
 import {
   listGoldenSets,
   listIssues,
@@ -241,29 +242,6 @@ function SourcePicker<T>({
   );
 }
 
-function ReplayMetric({
-  icon,
-  label,
-  value,
-  helper,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  helper: string;
-}) {
-  return (
-    <div className="metric-card replay-metric-card">
-      <div className="replay-metric-top">
-        {icon}
-        <span className="notif-meta">{label}</span>
-      </div>
-      <strong>{value}</strong>
-      <span>{helper}</span>
-    </div>
-  );
-}
-
 function StatusBadge({ status }: { status: string }) {
   return <span className={`alert-cat-badge ${statusClass(status)}`}>{statusLabel(status)}</span>;
 }
@@ -449,8 +427,15 @@ function ReplayPageContent() {
   const providerKeysQuery = useActiveProviderKeys();
   const quota = quotaQuery.data;
   const isPlanEnabled = quota?.enabled ?? null;
+  const realComparisonEnabled = quota?.real_comparison_enabled !== false;
   const quotaIsPending = quotaQuery.isLoading || quotaQuery.isFetching;
   const quotaErrorMessage = quotaQuery.error instanceof Error ? quotaQuery.error.message : "Replay quota check failed.";
+
+  useEffect(() => {
+    if (!realComparisonEnabled && replayMode !== STUB_REPLAY_MODE) {
+      setReplayMode(STUB_REPLAY_MODE);
+    }
+  }, [realComparisonEnabled, replayMode]);
 
   const issuesQuery = useQuery({
     queryKey: ["issues", "replay-launcher"],
@@ -610,6 +595,7 @@ function ReplayPageContent() {
   const launchDisabled =
     isLaunching ||
     isPlanEnabled !== true ||
+    (!realComparisonEnabled && replayMode !== STUB_REPLAY_MODE) ||
     (launchSource === "issue" && !selectedIssueId) ||
     (launchSource === "call" && !selectedCallId) ||
     (launchSource === "golden" && !selectedGoldenId) ||
@@ -690,7 +676,7 @@ function ReplayPageContent() {
                 Replay proof engine
               </div>
               <h1>Replay</h1>
-              <p>Replay needs Pro or higher so fixes can be tested against pinned production traces before release.</p>
+              <p>Replay needs Starter or higher so fixes can be tested against pinned production traces before release.</p>
             </div>
             <Link href="/settings/billing?upgrade_hint=replay.monthly_runs" className="btn btn-primary">
               Upgrade plan
@@ -700,7 +686,7 @@ function ReplayPageContent() {
         </section>
         <section className="panel replay-plan-gate">
           <ShieldCheck aria-hidden="true" />
-          <h2>Replay requires Pro or higher</h2>
+          <h2>Replay requires Starter or higher</h2>
           <p>The Replay module runs production traces against candidate prompt and model configuration to catch regressions before they ship.</p>
         </section>
       </div>
@@ -741,11 +727,31 @@ function ReplayPageContent() {
         </div>
       </section>
 
-      <section className="metric-strip replay-command-metrics" aria-label="Replay summary">
-        <ReplayMetric icon={<History aria-hidden="true" />} label="Visible runs" value={runs.length.toLocaleString()} helper="Current filtered queue" />
-        <ReplayMetric icon={<CheckCircle2 aria-hidden="true" />} label="Verified fixes" value={runStats.verified.toLocaleString()} helper="Non-stub runs with proof" />
-        <ReplayMetric icon={<Clock3 aria-hidden="true" />} label="Live queue" value={runStats.running.toLocaleString()} helper="Pending or running now" />
-        <ReplayMetric icon={<DollarSign aria-hidden="true" />} label="Protected spend" value={moneyLabel(runStats.preventedCost)} helper={`${moneyLabel(runStats.replayCost)} replay cost visible`} />
+      <section className="fi-kpi-grid replay-command-metrics" aria-label="Replay summary">
+        <KpiCard
+          icon={<History aria-hidden="true" />}
+          label="Visible runs"
+          value={runs.length.toLocaleString()}
+          helper="Current filtered queue"
+        />
+        <KpiCard
+          icon={<CheckCircle2 aria-hidden="true" />}
+          label="Verified fixes"
+          value={runStats.verified.toLocaleString()}
+          helper="Non-stub runs with proof"
+        />
+        <KpiCard
+          icon={<Clock3 aria-hidden="true" />}
+          label="Live queue"
+          value={runStats.running.toLocaleString()}
+          helper="Pending or running now"
+        />
+        <KpiCard
+          icon={<DollarSign aria-hidden="true" />}
+          label="Protected spend"
+          value={moneyLabel(runStats.preventedCost)}
+          helper={`${moneyLabel(runStats.replayCost)} replay cost visible`}
+        />
       </section>
 
       {isPlanEnabled !== true ? (
@@ -861,17 +867,22 @@ function ReplayPageContent() {
             ) : null}
 
             <div className="replay-mode-grid" aria-label="Replay mode">
-              {REPLAY_MODE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={replayMode === option.value ? "is-active" : ""}
-                  onClick={() => setReplayMode(option.value)}
-                >
-                  <strong>{option.label}</strong>
-                  <span>{option.proof}</span>
-                </button>
-              ))}
+              {REPLAY_MODE_OPTIONS.map((option) => {
+                const disabled = !realComparisonEnabled && option.value !== STUB_REPLAY_MODE;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={replayMode === option.value ? "is-active" : ""}
+                    disabled={disabled}
+                    title={disabled ? "Real comparison replay is disabled on this control plane." : undefined}
+                    onClick={() => setReplayMode(option.value)}
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.proof}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="replay-launch-row">

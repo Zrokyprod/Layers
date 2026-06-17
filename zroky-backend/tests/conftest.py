@@ -4,6 +4,9 @@ Sets environment variables BEFORE any app module is imported.
 conftest.py is loaded by pytest before test modules, so this runs first.
 """
 import os
+import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +30,70 @@ try:
     get_settings.cache_clear()
 except Exception:
     pass
+
+
+def _install_fast_sqlite_schema_clone() -> None:
+    """Speed up tests that create a fresh full SQLite schema per test."""
+    try:
+        import app.db.models  # noqa: F401
+        from sqlalchemy import create_engine
+
+        from app.db.base import Base
+    except Exception:
+        return
+
+    original_create_all = Base.metadata.create_all
+    template_path = (
+        Path(tempfile.gettempdir()) / f"zroky_pytest_schema_{os.getpid()}.db"
+    )
+    template_ready = False
+
+    def _sqlite_file_path(bind) -> Path | None:
+        if getattr(getattr(bind, "dialect", None), "name", None) != "sqlite":
+            return None
+        database = getattr(getattr(bind, "url", None), "database", None)
+        if not database or database == ":memory:":
+            return None
+        path = Path(str(database))
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        return path
+
+    def _ensure_template() -> None:
+        nonlocal template_ready
+        if template_ready and template_path.exists():
+            return
+        tmp_path = template_path.with_suffix(".tmp.db")
+        tmp_path.unlink(missing_ok=True)
+        engine = create_engine(
+            f"sqlite:///{tmp_path}",
+            connect_args={"check_same_thread": False},
+            future=True,
+        )
+        try:
+            original_create_all(bind=engine)
+        finally:
+            engine.dispose()
+        tmp_path.replace(template_path)
+        template_ready = True
+
+    def _fast_create_all(bind=None, tables=None, checkfirst=True):
+        if tables is None and checkfirst and bind is not None:
+            target = _sqlite_file_path(bind)
+            if target is not None and (
+                not target.exists() or target.stat().st_size == 0
+            ):
+                _ensure_template()
+                bind.dispose()
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(template_path, target)
+                return None
+        return original_create_all(bind=bind, tables=tables, checkfirst=checkfirst)
+
+    Base.metadata.create_all = _fast_create_all  # type: ignore[method-assign]
+
+
+_install_fast_sqlite_schema_clone()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

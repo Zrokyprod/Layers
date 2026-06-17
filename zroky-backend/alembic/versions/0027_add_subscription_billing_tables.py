@@ -36,14 +36,14 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
-            onupdate=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            onupdate=sa.text("CURRENT_TIMESTAMP"),
         ),
     )
     op.create_index("ix_subscription_plans_slug", "subscription_plans", ["slug"], unique=True)
@@ -72,13 +72,13 @@ def upgrade() -> None:
             "current_period_start",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "current_period_end",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column("canceled_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("seats", sa.Integer(), nullable=False, server_default=sa.text("1")),
@@ -87,14 +87,14 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
-            onupdate=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+            onupdate=sa.text("CURRENT_TIMESTAMP"),
         ),
     )
     op.create_index("ix_tenant_subscriptions_tenant", "tenant_subscriptions", ["tenant_id"], unique=True)

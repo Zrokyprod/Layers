@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   GoldenSetView,
   GoldenTraceView,
   RegressionCIRunDetailResponse,
@@ -470,8 +470,6 @@ export const moneyPathBilling = {
   payment_customer_ref: null,
   payment_subscription_ref: null,
   payment_request_ref: null,
-  stripe_customer_id: null,
-  stripe_sub_id: null,
   current_period_end: null,
   trial_end: null,
   sla_tier: "standard",

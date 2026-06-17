@@ -15,7 +15,7 @@ _LOOP_CACHE_PREFIX = "zroky:loop:v1"
 
 def _cache_suffix(*, tenant_id: str, agent_name: str, prompt_fingerprint: str) -> str:
     raw = f"{tenant_id}|{agent_name}|{prompt_fingerprint}".encode("utf-8")
-    return hashlib.sha1(raw).hexdigest()
+    return hashlib.sha1(raw, usedforsecurity=False).hexdigest()
 
 
 def _events_key(suffix: str) -> str:

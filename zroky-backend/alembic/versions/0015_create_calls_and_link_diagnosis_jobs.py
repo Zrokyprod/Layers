@@ -57,21 +57,20 @@ def upgrade() -> None:
         unique=False,
     )
 
-    op.add_column("diagnosis_jobs", sa.Column("call_id", sa.String(length=64), nullable=True))
-    op.create_index(
-        "ix_diagnosis_jobs_tenant_call",
-        "diagnosis_jobs",
-        ["tenant_id", "call_id"],
-        unique=False,
-    )
-    op.create_foreign_key(
-        "fk_diagnosis_jobs_call_id_calls",
-        "diagnosis_jobs",
-        "calls",
-        ["call_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("diagnosis_jobs") as batch_op:
+        batch_op.add_column(sa.Column("call_id", sa.String(length=64), nullable=True))
+        batch_op.create_index(
+            "ix_diagnosis_jobs_tenant_call",
+            ["tenant_id", "call_id"],
+            unique=False,
+        )
+        batch_op.create_foreign_key(
+            "fk_diagnosis_jobs_call_id_calls",
+            "calls",
+            ["call_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
@@ -95,9 +94,10 @@ def downgrade() -> None:
         op.execute("ALTER TABLE calls NO FORCE ROW LEVEL SECURITY")
         op.execute("ALTER TABLE calls DISABLE ROW LEVEL SECURITY")
 
-    op.drop_constraint("fk_diagnosis_jobs_call_id_calls", "diagnosis_jobs", type_="foreignkey")
-    op.drop_index("ix_diagnosis_jobs_tenant_call", table_name="diagnosis_jobs")
-    op.drop_column("diagnosis_jobs", "call_id")
+    with op.batch_alter_table("diagnosis_jobs") as batch_op:
+        batch_op.drop_constraint("fk_diagnosis_jobs_call_id_calls", type_="foreignkey")
+        batch_op.drop_index("ix_diagnosis_jobs_tenant_call")
+        batch_op.drop_column("call_id")
     op.drop_index("ix_calls_project_provider_model_created", table_name="calls")
     op.drop_index("ix_calls_project_provider", table_name="calls")
     op.drop_index("ix_calls_project_status_created", table_name="calls")

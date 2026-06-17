@@ -1,16 +1,21 @@
-﻿import { render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api";
 import HomePage from "./page";
 
 const api = vi.hoisted(() => ({
   createReplayRunFromIssue: vi.fn(),
   getAnalyticsSummary: vi.fn(),
   getBillingMe: vi.fn(),
+  getCaptureHealth: vi.fn(),
   getReplayQuota: vi.fn(),
+  listCalls: vi.fn(),
   listGoldenSets: vi.fn(),
   listIssues: vi.fn(),
+  listProjectApiKeys: vi.fn(),
+  listProviderKeys: vi.fn(),
   listReplayRuns: vi.fn(),
   resolveIssue: vi.fn(),
 }));
@@ -35,6 +40,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),
   }),
+}));
+
+vi.mock("@/lib/store", () => ({
+  useDashboardStore: <T,>(selector: (state: { selectedProject: string }) => T) => selector({ selectedProject: "proj_1" }),
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -150,6 +159,48 @@ function goldenSet(overrides: Partial<import("@/lib/api").GoldenSetView> = {}): 
   };
 }
 
+function captureHealth(
+  overrides: Partial<import("@/lib/types").CaptureHealthResponse> = {},
+): import("@/lib/types").CaptureHealthResponse {
+  return {
+    project_id: "proj_1",
+    status: "no_data",
+    stale_after_minutes: 15,
+    last_call_id: null,
+    last_seen_at: null,
+    seconds_since_last_call: null,
+    last_provider: null,
+    last_model: null,
+    last_call_type: null,
+    last_source: null,
+    calls_24h: 0,
+    sdk_events_24h: 0,
+    gateway_events_24h: 0,
+    retrieval_spans_24h: 0,
+    memory_spans_24h: 0,
+    trace_runs_24h: 0,
+    trace_spans_24h: 0,
+    policy_spans_24h: 0,
+    handoff_spans_24h: 0,
+    incomplete_trace_runs_24h: 0,
+    projection_failures_24h: 0,
+    gateway_count: 0,
+    gateway_unhealthy_count: 0,
+    gateway_worst_status: "unknown",
+    gateway_spool_backlog: 0,
+    gateway_spool_bytes: 0,
+    gateway_spool_oldest_age_seconds: 0,
+    gateway_loss_count: 0,
+    gateway_backpressure_rejections: 0,
+    gateway_last_heartbeat_at: null,
+    error_events_24h: 0,
+    outcome_events_24h: 0,
+    sampled_recent_calls: 0,
+    validation_warnings: [],
+    ...overrides,
+  };
+}
+
 function rowForIssueTitle(title: string): HTMLElement {
   const table = screen.getByRole("table");
   const row = within(table).getAllByText(title)[0]?.closest("tr");
@@ -209,8 +260,6 @@ function mockInbox(
     payment_customer_ref: null,
     payment_subscription_ref: null,
     payment_request_ref: null,
-    stripe_customer_id: null,
-    stripe_sub_id: null,
     current_period_end: null,
     trial_end: null,
     sla_tier: "standard",
@@ -245,6 +294,71 @@ function mockInbox(
     unusual_activity: null,
     updated_at: now,
   });
+  api.listCalls.mockResolvedValue({
+    total: 0,
+    limit: 10,
+    offset: 0,
+    items: [],
+  });
+  api.getCaptureHealth.mockResolvedValue(captureHealth());
+  api.listProjectApiKeys.mockResolvedValue([
+    {
+      key_id: "key_1",
+      project_id: "proj_1",
+      name: "Default capture key",
+      key_prefix: "zrk_live",
+      scopes: ["capture:write"],
+      revoked: false,
+      expired: false,
+      expires_at: null,
+      rotated_from_key_id: null,
+      last_used_at: null,
+      created_at: now,
+    },
+  ]);
+  api.listProviderKeys.mockResolvedValue({
+    items: [],
+    total_in_page: 0,
+  });
+}
+
+function call(overrides: Partial<import("@/lib/types").CallListItem> = {}): import("@/lib/types").CallListItem {
+  return {
+    call_id: "call_1",
+    tenant_id: "proj_1",
+    status: "ok",
+    provider: "openai",
+    model: "gpt-4.1",
+    agent_name: "checkout-agent",
+    user_id: null,
+    call_type: "agent",
+    total_tokens: 1200,
+    cost_usd: 0.18,
+    pricing_version: null,
+    pricing_last_updated_at: null,
+    pricing_age_days: null,
+    cost_confidence: "estimated",
+    latency_ms: 820,
+    error_code: null,
+    diagnoses: [],
+    has_blast_radius: false,
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  };
+}
+
+function clearReplayAndGoldens() {
+  api.listReplayRuns.mockResolvedValue({
+    items: [],
+    next_cursor: null,
+    total_in_page: 0,
+  });
+  api.listGoldenSets.mockResolvedValue({
+    items: [],
+    next_cursor: null,
+    total_in_page: 0,
+  });
 }
 
 describe("Command Center home", () => {
@@ -252,7 +366,7 @@ describe("Command Center home", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the action-first Command Center", async () => {
+  it("renders the active operations cockpit", async () => {
     mockInbox({
       "pilot.root_cause_diagnosis": true,
       "pilot.replay_stub": true,
@@ -262,55 +376,50 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Command Center" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
-    expect(screen.getByText("1 issues need trusted replay before they can become Goldens or block CI.")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Run trusted replay" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("Release blocked")).toBeInTheDocument();
+    expect(screen.getByText("1 gate failing on regression-ci:proj_1.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Command Center live status")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Run replay" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Open gate" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "View all issues" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Loaded open issues")).toBeNull();
     expect(screen.queryByText("Replay mode")).toBeNull();
     expect(screen.queryByText("Silent failures detected")).toBeNull();
 
-    const nextBestAction = screen.getByLabelText("Next best action");
-    const summary = screen.getByLabelText("Command Center summary");
-    expect(Boolean(nextBestAction.compareDocumentPosition(summary) & 4)).toBe(true);
+    const summary = screen.getByLabelText("Home summary");
+    expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(5);
+    expect(within(summaryCard("Failed runs")).getByText("2")).toBeInTheDocument();
+    expect(within(summaryCard("New issues")).getByText("2")).toBeInTheDocument();
+    expect(within(summaryCard("Replay pass/fail")).getByText("0% pass")).toBeInTheDocument();
+    expect(within(summaryCard("CI blocked regressions")).getByText("1")).toBeInTheDocument();
+    expect(within(summaryCard("Cost / latency trend")).getByText("+25% cost")).toBeInTheDocument();
+    expect(summary).toBeInTheDocument();
 
-    expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(4);
-    expect(within(summaryCard("Critical & high")).getByText("2")).toBeInTheDocument();
-    expect(within(summaryCard("Needs trusted replay")).getByText("1")).toBeInTheDocument();
-    expect(within(summaryCard("Loaded issue impact")).getByText("$24.00")).toBeInTheDocument();
-    expect(within(summaryCard("Verified fixes")).getByText("1")).toBeInTheDocument();
-
-    expect(screen.getByRole("heading", { name: "Failure queue" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What needs action now?" })).toBeInTheDocument();
     expect(screen.getByText("Sorted by severity, impact, and replay trust gaps.")).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Issue",
+      "Priority",
+      "Type",
+      "Item",
       "Impact",
-      "Replay proof",
-      "Last seen",
+      "Status",
       "Action",
     ]);
-    expect(within(table).queryByText("Severity")).toBeNull();
-    expect(within(table).queryByText("Failure code")).toBeNull();
-    expect(within(rowForIssueTitle("Checkout loop")).getByText(/Checkout Agent/)).toBeInTheDocument();
-    expect(within(rowForIssueTitle("Checkout loop")).getByText(/42 affected calls/)).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText("Critical failure")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText("Loop repeated the same checkout tool call.")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText("No trusted replay")).toBeInTheDocument();
 
-    const detail = screen.getByLabelText("Selected issue detail");
-    expect(within(detail).getByText("Issue #1")).toBeInTheDocument();
-    expect(within(detail).getByText("Root cause")).toBeInTheDocument();
-    expect(within(detail).getByText("Replay proof")).toBeInTheDocument();
-    expect(within(detail).getByText("Cost impact")).toBeInTheDocument();
-    expect(within(detail).getByText("Loop repeated the same checkout tool call.")).toBeInTheDocument();
-
-    expect(screen.getByRole("heading", { name: "Trace evidence" })).toBeInTheDocument();
-    expect(screen.getAllByText("Pending replay runs").length).toBeGreaterThan(0);
-    expect(screen.getByText("Failed/not_verified CI gates")).toBeInTheDocument();
-    expect(screen.getByText("Goldens needing review")).toBeInTheDocument();
-    expect(screen.getByText("Usage/plan status")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent evidence" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Release readiness" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Reliability pipeline" })).toBeInTheDocument();
+    expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 
-  it("guides first users through capture before replay when no issues are loaded", async () => {
+  it("guides first users through the setup cockpit before capture", async () => {
     mockInbox(
       {
         "pilot.root_cause_diagnosis": true,
@@ -319,21 +428,82 @@ describe("Command Center home", () => {
       },
       [],
     );
+    clearReplayAndGoldens();
+    api.listProjectApiKeys.mockResolvedValue([]);
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Capture your first agent failure." })).toBeInTheDocument();
-    expect(screen.getByText("Start by capturing one agent call. Zroky turns failed runs into issues, stub replay, verified replay, Goldens, and CI gates.")).toBeInTheDocument();
-    expect(screen.getByText("Provider keys are only needed later for verified replay.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Create project key" }).getAttribute("href")).toBe("/settings/keys");
-    expect(screen.getByRole("link", { name: "Confirm first trace" }).getAttribute("href")).toBe("/trace");
-    expect(screen.getByRole("link", { name: "Open provider settings" }).getAttribute("href")).toBe("/settings/providers");
-    expect(screen.getByLabelText("First run checklist")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Next best action")).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Failure queue" })).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Create a project key" })).toBeInTheDocument();
+    expect(screen.getByText("Capture your first agent run to start reliability monitoring.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Command Center live status")).toBeNull();
+    expect(screen.getAllByRole("link", { name: /Create project key/i })[0]?.getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByRole("heading", { name: "Connection health" })).toBeInTheDocument();
+    expect(screen.getByText("API key")).toBeInTheDocument();
+    expect(screen.getByText("Missing")).toBeInTheDocument();
+    expect(screen.getByText("Capture")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Setup progress" })).toBeInTheDocument();
+    expect(screen.getByText("Project key")).toBeInTheDocument();
+    expect(screen.getByText("SDK/Gateway connected")).toBeInTheDocument();
+    expect(screen.getByText("First trace received")).toBeInTheDocument();
+    expect(screen.getByText("First issue/replay ready")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByRole("link", { name: /Use Gateway/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByRole("link", { name: /Send test capture/i }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("heading", { name: "What happens next" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "What needs action now?" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "View all issues" })).toBeNull();
   });
 
-  it("renders Cost Impact values and sums loaded issue impact", async () => {
+  it("switches to operations mode after the first trace even with no issues", async () => {
+    mockInbox(
+      {
+        "pilot.root_cause_diagnosis": true,
+        "pilot.replay_stub": true,
+        "pilot.goldens_basic": true,
+      },
+      [],
+    );
+    clearReplayAndGoldens();
+    api.listCalls.mockResolvedValue({
+      total: 1,
+      limit: 10,
+      offset: 0,
+      items: [call()],
+    });
+    api.getCaptureHealth.mockResolvedValue(captureHealth({ status: "connected", calls_24h: 1 }));
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "What needs action now?" })).toBeInTheDocument();
+    expect(screen.getByText("No action required right now.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Command Center live status")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Setup progress" })).toBeNull();
+  });
+
+  it("does not show a refresh failure when free-plan replay and goldens are gated", async () => {
+    mockInbox({}, []);
+    api.listProjectApiKeys.mockResolvedValue([]);
+    api.listReplayRuns.mockRejectedValue(
+      new ApiError("GET", "/v1/replay/runs", 402, {
+        message: "Your plan does not include 'pilot.autopilot_enabled'.",
+        code: null,
+      }),
+    );
+    api.listGoldenSets.mockRejectedValue(
+      new ApiError("GET", "/v1/goldens", 402, {
+        message: "Your plan does not include 'pilot.autopilot_enabled'.",
+        code: null,
+      }),
+    );
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "Create a project key" })).toBeInTheDocument();
+    expect(screen.queryByText(/Partial refresh:/)).toBeNull();
+  });
+
+  it("renders Cost Impact values in priority rows and keeps cost trend visible", async () => {
     mockInbox(
       {
         "pilot.root_cause_diagnosis": true,
@@ -359,8 +529,8 @@ describe("Command Center home", () => {
     await screen.findAllByText("Checkout loop");
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Schema drift")).getByText("$7.50")).toBeInTheDocument();
-    expect(within(summaryCard("Loaded issue impact")).getByText("$19.50")).toBeInTheDocument();
-    expect(screen.getByText("Cost signal from loaded open issues.")).toBeInTheDocument();
+    expect(within(summaryCard("Cost / latency trend")).getByText("+25% cost")).toBeInTheDocument();
+    expect(screen.getByText("Capture traces to calculate latency.")).toBeInTheDocument();
   });
 
   it("uses estimated wasted AI cost when blast radius is missing", async () => {
@@ -377,10 +547,9 @@ describe("Command Center home", () => {
 
     await screen.findAllByText("Checkout loop");
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$3.25")).toBeInTheDocument();
-    expect(within(summaryCard("Loaded issue impact")).getByText("$3.25")).toBeInTheDocument();
   });
 
-  it("renders a dash when cost impact is missing", async () => {
+  it("falls back to affected calls when cost impact is missing", async () => {
     mockInbox(
       {
         "pilot.root_cause_diagnosis": true,
@@ -393,7 +562,7 @@ describe("Command Center home", () => {
     render(<HomePage />);
 
     await screen.findAllByText("Checkout loop");
-    expect(within(rowForIssueTitle("Checkout loop")).getByText("\u2014")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText("42 calls")).toBeInTheDocument();
   });
 
   it("shows upgrade gates for free users", async () => {
@@ -403,7 +572,7 @@ describe("Command Center home", () => {
 
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upgrade").length).toBeGreaterThan(0);
-    expect(screen.getByText("Usage/plan status")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Release readiness" })).toBeInTheDocument();
   });
 
   it("enables pilot replay and golden actions only for verified fixes", async () => {
@@ -416,7 +585,7 @@ describe("Command Center home", () => {
     render(<HomePage />);
 
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Replay").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Run replay").length).toBeGreaterThan(0);
     expect(within(rowForIssueTitle("Answer drift")).getByText("Open Goldens")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).queryByText("Open Goldens")).toBeNull();
   });
@@ -450,7 +619,7 @@ describe("Command Center home", () => {
     await screen.findAllByText("Checkout loop");
     const row = rowForIssueTitle("Checkout loop");
     expect(within(row).queryByText("Open Goldens")).toBeNull();
-    expect(within(row).getByRole("button", { name: /Replay/i })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /Run replay/i })).toBeInTheDocument();
     expect(within(row).getByText(label)).toBeInTheDocument();
   });
 
@@ -465,6 +634,7 @@ describe("Command Center home", () => {
     render(<HomePage />);
 
     expect(await screen.findByText("Not verified")).toBeInTheDocument();
-    expect(screen.getByText("Review CI run")).toBeInTheDocument();
+    expect(screen.getByText("CI failing")).toBeInTheDocument();
+    expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 });

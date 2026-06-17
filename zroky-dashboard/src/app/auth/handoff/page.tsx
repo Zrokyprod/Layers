@@ -14,7 +14,7 @@ function HandoffContent() {
 
   return (
     <AuthShell>
-      <AuthCard title="Signing you in" subtitle="Creating your authenticated dashboard session.">
+      <AuthCard title="Signing you in" subtitle="Completing secure access.">
         <div className="auth-status">
           <div className="spinner" />
           <p>Redirecting to dashboard...</p>

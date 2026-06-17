@@ -15,6 +15,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { KpiCard, SectionHeader } from "@/components/command-center-primitives";
 import {
   getRegressionCIRun,
   listReplayRuns,
@@ -286,31 +287,46 @@ export default function CiGatesPage() {
       </section>
 
       <section className="ci-kpi-grid" aria-label="CI gate summary">
-        <button type="button" className={`ci-kpi-card ci-kpi-button${statusFilter === "blocked" ? " is-active" : ""}`} onClick={() => setStatusFilter("blocked")}>
-          <span>Failed / blocked</span>
-          <strong>{metrics.failed}</strong>
-          <p>Requires protected-flow review</p>
-        </button>
-        <button type="button" className={`ci-kpi-card ci-kpi-button${statusFilter === "not_verified" ? " is-active" : ""}`} onClick={() => setStatusFilter("not_verified")}>
-          <span>Not verified</span>
-          <strong>{metrics.notVerified}</strong>
-          <p>Never counted as pass</p>
-        </button>
-        <button type="button" className={`ci-kpi-card ci-kpi-button${statusFilter === "running" ? " is-active" : ""}`} onClick={() => setStatusFilter("running")}>
-          <span>Running / pending</span>
-          <strong>{metrics.running}</strong>
-          <p>Auto-refresh watches these</p>
-        </button>
-        <button type="button" className={`ci-kpi-card ci-kpi-button${statusFilter === "pass" ? " is-active" : ""}`} onClick={() => setStatusFilter("pass")}>
-          <span>Passed</span>
-          <strong>{metrics.passed}</strong>
-          <p>Trusted replay under threshold</p>
-        </button>
-        <button type="button" className={`ci-kpi-card ci-kpi-button${statusFilter === "all" && !query ? " is-active" : ""}`} onClick={clearFilters}>
-          <span>Protected flows</span>
-          <strong>{metrics.protectedFlows}</strong>
-          <p>Checked in loaded runs</p>
-        </button>
+        <KpiCard
+          icon={<AlertTriangle aria-hidden="true" />}
+          label="Failed / blocked"
+          value={String(metrics.failed)}
+          helper="Requires protected-flow review"
+          active={statusFilter === "blocked"}
+          onClick={() => setStatusFilter("blocked")}
+        />
+        <KpiCard
+          icon={<ShieldAlert aria-hidden="true" />}
+          label="Not verified"
+          value={String(metrics.notVerified)}
+          helper="Never counted as pass"
+          active={statusFilter === "not_verified"}
+          onClick={() => setStatusFilter("not_verified")}
+        />
+        <KpiCard
+          icon={<RefreshCw aria-hidden="true" />}
+          label="Running / pending"
+          value={String(metrics.running)}
+          helper="Auto-refresh watches these"
+          active={statusFilter === "running"}
+          onClick={() => setStatusFilter("running")}
+        />
+        <KpiCard
+          icon={<CheckCircle2 aria-hidden="true" />}
+          label="Passed"
+          value={String(metrics.passed)}
+          helper="Trusted replay under threshold"
+          active={statusFilter === "pass"}
+          onClick={() => setStatusFilter("pass")}
+        />
+        <KpiCard
+          icon={<ShieldCheck aria-hidden="true" />}
+          label="Protected flows"
+          value={String(metrics.protectedFlows)}
+          helper="Checked in loaded runs"
+          active={statusFilter === "all" && !query}
+          onClick={clearFilters}
+        />
       </section>
 
       <section className="ci-toolbar" aria-label="CI gate controls">
@@ -391,16 +407,16 @@ export default function CiGatesPage() {
       ) : null}
 
       <section className="ci-table-section">
-        <header className="ci-section-header">
-          <div>
-            <h2>Regression CI runs</h2>
-            <p>{filteredRuns.length} visible of {state.runs.length} loaded runs. PR verdicts, replay proof, failed flow counts, and commit metadata.</p>
-          </div>
-          <span className="ci-trust-copy">
-            <ShieldAlert aria-hidden="true" />
-            Not verified is never treated as pass.
-          </span>
-        </header>
+        <SectionHeader
+          title="Regression CI runs"
+          description={`${filteredRuns.length} visible of ${state.runs.length} loaded runs. PR verdicts, replay proof, failed flow counts, and commit metadata.`}
+          action={
+            <span className="ci-trust-copy">
+              <ShieldAlert aria-hidden="true" />
+              Not verified is never treated as pass.
+            </span>
+          }
+        />
 
         {replayContextWarning ? (
           <div className="ci-context-warning" role="status">

@@ -1,10 +1,25 @@
 from app.api.routes._internal.owner_common import *
 from app.api.routes._internal.owner_pricing_audit import _owner_audit, _resolve_actor
+from razorpay.errors import BadRequestError, GatewayError, ServerError
+
+from app.api.routes._internal.billing_razorpay import (
+    _parse_stored_razorpay_request,
+    _razorpay_auth_failure,
+    _razorpay_client,
+    _razorpay_notes,
+    _razorpay_order_is_paid,
+    _razorpay_payment_is_captured,
+)
+from app.db.models import BillingEvent
 from app.services.billing_plans import (
     InvalidPlanCodeError,
     normalize_plan_code,
 )
 from app.services.entitlements import clear_trial_entitlements, seed_plan_entitlements
+from app.services.razorpay_reconciliation import reconcile_pending_razorpay_orders
+
+
+_RECOVERY_STALE_AFTER_SECONDS = 15 * 60
 
 
 class OwnerBillingPaymentConfirmRequest(BaseModel):
@@ -25,6 +40,156 @@ class OwnerSupportTicketUpdateRequest(BaseModel):
 class OwnerSupportReplyRequest(BaseModel):
     body: str
     is_internal: bool = False
+
+
+def _razorpay_entity_status(entity: dict) -> str:
+    return str(entity.get("status") or "").strip().lower()
+
+
+def _owner_razorpay_order_ref(value: str | None) -> str | None:
+    if not value:
+        return None
+    order_ref, _, _plan_suffix = value.partition(":")
+    return order_ref.strip() or None
+
+
+def _fetch_razorpay_payment_for_owner(payment_ref: str) -> dict:
+    try:
+        payment = _razorpay_client().payment.fetch(payment_ref)
+    except BadRequestError as exc:
+        status_code = (
+            status.HTTP_401_UNAUTHORIZED
+            if _razorpay_auth_failure(exc)
+            else status.HTTP_400_BAD_REQUEST
+        )
+        detail = (
+            "Razorpay authentication failed."
+            if status_code == status.HTTP_401_UNAUTHORIZED
+            else "Razorpay payment could not be verified."
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    except (GatewayError, ServerError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay payment verification is temporarily unavailable.",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay payment verification failed.",
+        ) from exc
+
+    if not isinstance(payment, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Razorpay payment verification returned an invalid response.",
+        )
+    return payment
+
+
+def _fetch_razorpay_order_for_owner(order_ref: str) -> dict:
+    try:
+        order = _razorpay_client().order.fetch(order_ref)
+    except BadRequestError as exc:
+        status_code = (
+            status.HTTP_401_UNAUTHORIZED
+            if _razorpay_auth_failure(exc)
+            else status.HTTP_400_BAD_REQUEST
+        )
+        detail = (
+            "Razorpay authentication failed."
+            if status_code == status.HTTP_401_UNAUTHORIZED
+            else "Razorpay order could not be verified."
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    except (GatewayError, ServerError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay order verification is temporarily unavailable.",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Razorpay order verification failed.",
+        ) from exc
+
+    if not isinstance(order, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Razorpay order verification returned an invalid response.",
+        )
+    return order
+
+
+def _verify_owner_razorpay_payment(
+    *,
+    org_id: str,
+    plan_code: str,
+    payment_ref: str,
+    requested_order_ref: str | None,
+    stored_order_ref: str | None,
+) -> tuple[dict, dict, str | None, bool]:
+    payment = _fetch_razorpay_payment_for_owner(payment_ref)
+    provider_payment_id = str(payment.get("id") or "").strip()
+    if provider_payment_id and provider_payment_id != payment_ref:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Razorpay payment response does not match payment_ref.",
+        )
+
+    payment_order_ref = str(payment.get("order_id") or "").strip() or None
+    requested_order_ref = _owner_razorpay_order_ref(requested_order_ref)
+    stored_order_ref = _owner_razorpay_order_ref(stored_order_ref)
+    order_ref = requested_order_ref or stored_order_ref or payment_order_ref
+    if requested_order_ref and payment_order_ref and requested_order_ref != payment_order_ref:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="payment_request_ref does not match the Razorpay payment order.",
+        )
+
+    order: dict = {}
+    if order_ref:
+        order = _fetch_razorpay_order_for_owner(order_ref)
+        provider_order_id = str(order.get("id") or "").strip()
+        if provider_order_id and provider_order_id != order_ref:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Razorpay order response does not match payment_request_ref.",
+            )
+
+    if not (_razorpay_payment_is_captured(payment) or _razorpay_order_is_paid(order)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Razorpay payment is not captured or order is not paid yet.",
+        )
+
+    notes = _razorpay_notes(payment, order)
+    metadata_bound = False
+    note_org_id = str(notes.get("org_id") or "").strip()
+    if note_org_id:
+        metadata_bound = True
+        if note_org_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Razorpay metadata org_id does not match this org.",
+            )
+    note_plan_code = str(notes.get("plan_code") or "").strip().lower()
+    if note_plan_code:
+        metadata_bound = True
+        try:
+            note_plan_code = normalize_plan_code(note_plan_code)
+        except InvalidPlanCodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Razorpay metadata plan_code is invalid.",
+            ) from exc
+        if note_plan_code != plan_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Razorpay metadata plan_code does not match the requested plan.",
+            )
+
+    return payment, order, order_ref, metadata_bound
 
 
 def _support_ticket_item(t: SupportTicket) -> dict:
@@ -56,6 +221,29 @@ def _support_message_item(m: SupportTicketMessage) -> dict:
         "is_internal": m.is_internal,
         "created_at": m.created_at,
     }
+
+
+def _utc_or_none(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _age_seconds(value: datetime | None, *, now: datetime) -> int | None:
+    timestamp = _utc_or_none(value)
+    if timestamp is None:
+        return None
+    return max(0, int((now - timestamp).total_seconds()))
+
+
+def _billing_event_payload(event: BillingEvent) -> dict:
+    try:
+        payload = json.loads(event.payload_json or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 @router.get("/support/tickets")
@@ -228,12 +416,6 @@ def owner_billing_accounts(
     total = db.scalar(count_q) or 0
     rows = db.execute(q.limit(limit).offset(offset)).all()
 
-    def stripe_customer_url(customer_id: str | None) -> str | None:
-        return f"https://dashboard.stripe.com/customers/{customer_id}" if customer_id else None
-
-    def stripe_subscription_url(subscription_id: str | None) -> str | None:
-        return f"https://dashboard.stripe.com/subscriptions/{subscription_id}" if subscription_id else None
-
     def razorpay_dashboard_url() -> str | None:
         url = (get_settings().RAZORPAY_DASHBOARD_URL or "").strip()
         return url or None
@@ -256,15 +438,131 @@ def owner_billing_accounts(
                 "payment_request_ref": sub.payment_request_ref,
                 "payment_dashboard_url": razorpay_dashboard_url()
                     if sub.payment_provider == "razorpay" else None,
-                "stripe_customer_id": sub.stripe_customer_id,
-                "stripe_sub_id": sub.stripe_sub_id,
-                "stripe_customer_url": stripe_customer_url(sub.stripe_customer_id),
-                "stripe_subscription_url": stripe_subscription_url(sub.stripe_sub_id),
                 "updated_at": sub.updated_at,
             }
             for sub, project_name in rows
         ],
     }
+
+
+@router.get("/billing/payment-recovery")
+def owner_billing_payment_recovery(
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> dict:
+    now = datetime.now(UTC)
+    pending_filter = (
+        Subscription.payment_provider == "razorpay",
+        Subscription.payment_request_ref.is_not(None),
+        Subscription.payment_subscription_ref.is_(None),
+    )
+    pending_total = db.scalar(select(func.count()).select_from(Subscription).where(*pending_filter)) or 0
+    pending_rows = db.execute(
+        select(Subscription, Project.name)
+        .outerjoin(Project, Project.id == Subscription.org_id)
+        .where(*pending_filter)
+        .order_by(Subscription.updated_at.asc(), Subscription.created_at.asc())
+        .limit(limit)
+    ).all()
+
+    pending_items: list[dict] = []
+    oldest_age: int | None = None
+    stale_count = 0
+    for sub, project_name in pending_rows:
+        order_id, requested_plan = _parse_stored_razorpay_request(sub.payment_request_ref)
+        age = _age_seconds(sub.updated_at or sub.created_at, now=now)
+        stale = bool(age is not None and age >= _RECOVERY_STALE_AFTER_SECONDS)
+        if stale:
+            stale_count += 1
+        if age is not None:
+            oldest_age = age if oldest_age is None else max(oldest_age, age)
+        pending_items.append(
+            {
+                "org_id": sub.org_id,
+                "project_name": project_name,
+                "plan_code": sub.plan_code,
+                "subscription_status": sub.status,
+                "payment_request_ref": sub.payment_request_ref,
+                "order_id": order_id,
+                "requested_plan_code": requested_plan,
+                "updated_at": sub.updated_at,
+                "age_seconds": age,
+                "stale": stale,
+            }
+        )
+
+    # Count stale across all pending rows, not only the visible page.
+    if int(pending_total) > len(pending_items):
+        all_pending = db.execute(select(Subscription).where(*pending_filter)).scalars().all()
+        stale_count = 0
+        oldest_age = None
+        for sub in all_pending:
+            age = _age_seconds(sub.updated_at or sub.created_at, now=now)
+            if age is not None:
+                oldest_age = age if oldest_age is None else max(oldest_age, age)
+                if age >= _RECOVERY_STALE_AFTER_SECONDS:
+                    stale_count += 1
+
+    recent_events = db.execute(
+        select(BillingEvent)
+        .where(
+            BillingEvent.provider == "razorpay",
+            BillingEvent.event_type == "payment.reconciled",
+        )
+        .order_by(func.coalesce(BillingEvent.processed_at, BillingEvent.received_at).desc())
+        .limit(5)
+    ).scalars().all()
+    recent_reconciled = []
+    for event in recent_events:
+        payload = _billing_event_payload(event)
+        recent_reconciled.append(
+            {
+                "provider_event_id": event.provider_event_id,
+                "event_type": event.event_type,
+                "result": event.result,
+                "affected_org_id": event.affected_org_id,
+                "processed_at": event.processed_at,
+                "payment_id": payload.get("payment_id"),
+                "order_id": payload.get("order_id"),
+                "plan_code": payload.get("plan_code"),
+            }
+        )
+
+    return {
+        "pending_count": int(pending_total),
+        "stale_pending_count": stale_count,
+        "stale_after_seconds": _RECOVERY_STALE_AFTER_SECONDS,
+        "oldest_pending_age_seconds": oldest_age,
+        "pending_items": pending_items,
+        "recent_reconciled": recent_reconciled,
+        "last_reconciled_at": recent_reconciled[0]["processed_at"] if recent_reconciled else None,
+    }
+
+
+@router.post("/billing/payments/reconcile")
+@limiter.limit("10/minute")
+def owner_reconcile_pending_razorpay_payments(
+    request: Request,
+    _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    result = reconcile_pending_razorpay_orders(db, limit=limit)
+    _owner_audit(
+        db,
+        action="owner.billing.razorpay_payment.reconcile",
+        actor=_resolve_actor(request),
+        target_id="razorpay",
+        metadata={
+            "examined": result.examined,
+            "activated": result.activated,
+            "skipped": result.skipped,
+            "failed": result.failed,
+        },
+    )
+    db.commit()
+    return result.to_dict()
 
 
 @router.post("/billing/payments/confirm")
@@ -287,6 +585,7 @@ def owner_confirm_razorpay_payment(
 
     org_id = body.org_id.strip()
     payment_ref = body.payment_ref.strip()
+    requested_order_ref = body.payment_request_ref.strip() if body.payment_request_ref else None
     if not org_id:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="org_id is required")
     if not payment_ref:
@@ -304,6 +603,20 @@ def owner_confirm_razorpay_payment(
     sub = db.scalar(select(Subscription).where(Subscription.org_id == org_id))
     if sub is None and existing_payment is not None:
         sub = existing_payment
+
+    stored_order_ref = (
+        requested_order_ref
+        or (existing_payment.payment_request_ref if existing_payment is not None else None)
+        or (sub.payment_request_ref if sub is not None else None)
+    )
+    payment, order, verified_order_ref, metadata_bound = _verify_owner_razorpay_payment(
+        org_id=org_id,
+        plan_code=plan_code,
+        payment_ref=payment_ref,
+        requested_order_ref=requested_order_ref,
+        stored_order_ref=stored_order_ref,
+    )
+
     if sub is None:
         sub = Subscription(
             org_id=org_id,
@@ -319,8 +632,10 @@ def owner_confirm_razorpay_payment(
     sub.payment_subscription_ref = payment_ref
     if body.customer_ref:
         sub.payment_customer_ref = body.customer_ref.strip() or None
-    if body.payment_request_ref:
-        sub.payment_request_ref = body.payment_request_ref.strip() or None
+    elif payment.get("email"):
+        sub.payment_customer_ref = str(payment.get("email") or "").strip() or None
+    if verified_order_ref:
+        sub.payment_request_ref = verified_order_ref
     if body.seats is not None:
         sub.seats = max(1, int(body.seats))
     sub.plan_code = plan_code
@@ -330,6 +645,39 @@ def owner_confirm_razorpay_payment(
 
     seed_plan_entitlements(db, org_id=org_id, plan_code=plan_code, commit=False)
     clear_trial_entitlements(db, org_id=org_id, commit=False)
+    provider_event_id = f"owner_razorpay_confirm:{payment_ref}"
+    existing_event = db.scalar(
+        select(BillingEvent).where(
+            BillingEvent.provider == "razorpay",
+            BillingEvent.provider_event_id == provider_event_id,
+        )
+    )
+    if existing_event is None:
+        db.add(
+            BillingEvent(
+                provider="razorpay",
+                provider_event_id=provider_event_id,
+                event_type="payment.succeeded",
+                provider_created_at=datetime.now(UTC),
+                processed_at=datetime.now(UTC),
+                result="applied",
+                affected_org_id=org_id,
+                payload_json=json.dumps(
+                    {
+                        "source": "owner_confirm",
+                        "payment_id": payment_ref,
+                        "order_id": verified_order_ref,
+                        "plan_code": plan_code,
+                        "org_id": org_id,
+                        "payment_status": _razorpay_entity_status(payment),
+                        "order_status": _razorpay_entity_status(order),
+                        "metadata_bound": metadata_bound,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            )
+        )
     _owner_audit(
         db,
         action="owner.billing.razorpay_payment.confirm",
@@ -338,8 +686,10 @@ def owner_confirm_razorpay_payment(
         metadata={
             "plan_code": plan_code,
             "payment_ref": payment_ref,
-            "payment_request_ref": body.payment_request_ref,
+            "payment_request_ref": verified_order_ref,
             "current_period_end": sub.current_period_end,
+            "provider_verified": True,
+            "provider_metadata_bound": metadata_bound,
         },
     )
     db.commit()
@@ -355,6 +705,9 @@ def owner_confirm_razorpay_payment(
         "status": sub.status,
         "payment_provider": sub.payment_provider,
         "payment_subscription_ref": sub.payment_subscription_ref,
+        "payment_request_ref": sub.payment_request_ref,
+        "provider_verified": True,
+        "provider_metadata_bound": metadata_bound,
         "current_period_end": sub.current_period_end,
     }
 

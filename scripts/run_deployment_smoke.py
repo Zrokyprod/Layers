@@ -187,6 +187,256 @@ def _provision_project(
     return project_id, api_key, api_key_id
 
 
+def _create_project_api_key(
+    api_base_url: str,
+    *,
+    project_id: str,
+    provisioning_token: str,
+    provisioning_header: str,
+    name: str,
+    timeout: float,
+) -> tuple[str, str, str]:
+    response = _request(
+        "POST",
+        _url(api_base_url, f"/v1/projects/{project_id}/api-keys"),
+        headers={provisioning_header: provisioning_token},
+        payload={"name": name, "scopes": ["project:member"], "expires_in_days": 30},
+        timeout=timeout,
+    )
+    _expect_status(response, 201, "backend create lifecycle API key")
+    body = _require_json_object(response, "backend create lifecycle API key")
+    raw_key = str(body.get("api_key") or "")
+    key_id = str(body.get("key_id") or "")
+    key_prefix = str(body.get("key_prefix") or "")
+    scopes = body.get("scopes")
+    if not raw_key.startswith("zk_live_") or not key_id or not key_prefix or not raw_key.startswith(key_prefix):
+        _fail("backend create lifecycle API key", "response did not include a valid one-time key/key_id/prefix")
+    if scopes != ["project:member"]:
+        _fail("backend create lifecycle API key", f"expected project:member scope, got {scopes!r}")
+    _pass("backend create lifecycle API key", f"api_key_id={key_id} prefix={key_prefix}...")
+    return raw_key, key_id, key_prefix
+
+
+def _list_project_api_keys(
+    api_base_url: str,
+    *,
+    project_id: str,
+    provisioning_token: str,
+    provisioning_header: str,
+    timeout: float,
+) -> list[dict[str, Any]]:
+    response = _request(
+        "GET",
+        _url(api_base_url, f"/v1/projects/{project_id}/api-keys"),
+        headers={provisioning_header: provisioning_token},
+        timeout=timeout,
+    )
+    _expect_status(response, 200, "backend list API keys")
+    if not isinstance(response.body, list):
+        _fail("backend list API keys", f"expected JSON list, got: {response.text[:600]}")
+    return [item for item in response.body if isinstance(item, dict)]
+
+
+def _require_api_key_metadata(
+    items: list[dict[str, Any]],
+    *,
+    key_id: str,
+    raw_key: str,
+    label: str,
+    revoked: bool | None = None,
+    last_used: bool | None = None,
+) -> dict[str, Any]:
+    serialized = json.dumps(items, separators=(",", ":"), sort_keys=True)
+    if raw_key in serialized:
+        _fail(label, "API key list leaked raw secret material")
+    item = next((entry for entry in items if str(entry.get("key_id") or "") == key_id), None)
+    if item is None:
+        _fail(label, f"key_id={key_id} not found in key list")
+    if "api_key" in item:
+        _fail(label, "API key metadata response included api_key")
+    if revoked is not None and bool(item.get("revoked")) is not revoked:
+        _fail(label, f"expected revoked={revoked}, got {item.get('revoked')!r}")
+    if last_used is not None:
+        has_last_used = bool(item.get("last_used_at"))
+        if has_last_used is not last_used:
+            _fail(label, f"expected last_used={last_used}, got last_used_at={item.get('last_used_at')!r}")
+    return item
+
+
+def _ingest_lifecycle_call(api_base_url: str, *, api_key: str, label: str, timeout: float) -> str:
+    call_id = f"call_deploy_key_{label}_{uuid4().hex[:14]}"
+    trace_id = f"trace_deploy_key_{label}_{uuid4().hex[:14]}"
+    event = {
+        "schema_version": "v2",
+        "call_id": call_id,
+        "event_id": f"{call_id}:event",
+        "trace_id": trace_id,
+        "provider": "deployment-key-smoke",
+        "model": "deployment-key-smoke-model",
+        "call_type": "chat",
+        "status": "failed",
+        "latency_ms": 456,
+        "prompt_tokens": 72,
+        "completion_tokens": 18,
+        "estimated_cost_usd": 0.001,
+        "agent_name": "deployment-key-smoke-agent",
+        "workflow_name": "deployment-key-smoke",
+        "prompt_fingerprint": "fp-deployment-key-smoke",
+        "prompt_version": "deploy-key-smoke-v1",
+        "environment": "production",
+        "is_production": True,
+        "output_content": "{\"status\":\"failed\",\"reason\":\"deployment-key-smoke\"}",
+        "error_message": "Synthetic deployment key lifecycle failure",
+        "tool_calls": [{"name": "deployment_key_smoke_tool", "args": {"ok": False}}],
+        "metadata": {"source": "deployment_key_lifecycle_smoke"},
+    }
+    ingest = _request(
+        "POST",
+        _url(api_base_url, "/v1/ingest"),
+        headers={"x-api-key": api_key, "X-Idempotency-Key": f"{call_id}:idem"},
+        payload={"events": [event]},
+        timeout=timeout,
+    )
+    _expect_status(ingest, 202, f"backend API key ingest {label}")
+    ingest_body = _require_json_object(ingest, f"backend API key ingest {label}")
+    if ingest_body.get("accepted") != 1 or ingest_body.get("queued") != 1:
+        _fail(f"backend API key ingest {label}", f"expected accepted=1 queued=1, got {ingest.text[:600]}")
+    call = _request(
+        "GET",
+        _url(api_base_url, f"/v1/calls/{call_id}"),
+        headers={"x-api-key": api_key},
+        timeout=timeout,
+    )
+    _expect_status(call, 200, f"backend API key call detail {label}")
+    call_body = _require_json_object(call, f"backend API key call detail {label}")
+    call_payload = call_body.get("call") if isinstance(call_body.get("call"), dict) else call_body
+    if call_payload.get("call_id") != call_id:
+        _fail(f"backend API key call detail {label}", f"unexpected call detail body: {call.text[:600]}")
+    _pass(f"backend API key lifecycle ingest {label}", f"call_id={call_id}")
+    return call_id
+
+
+def _check_api_key_lifecycle(
+    api_base_url: str,
+    *,
+    project_id: str,
+    provisioning_token: str,
+    provisioning_header: str,
+    timeout: float,
+) -> dict[str, str]:
+    raw_a, key_a_id, key_a_prefix = _create_project_api_key(
+        api_base_url,
+        project_id=project_id,
+        provisioning_token=provisioning_token,
+        provisioning_header=provisioning_header,
+        name="deployment-key-lifecycle-a",
+        timeout=timeout,
+    )
+    items = _list_project_api_keys(
+        api_base_url,
+        project_id=project_id,
+        provisioning_token=provisioning_token,
+        provisioning_header=provisioning_header,
+        timeout=timeout,
+    )
+    _require_api_key_metadata(
+        items,
+        key_id=key_a_id,
+        raw_key=raw_a,
+        label="backend API key metadata before use",
+        revoked=False,
+        last_used=False,
+    )
+    call_a_id = _ingest_lifecycle_call(api_base_url, api_key=raw_a, label="a", timeout=timeout)
+
+    items = _list_project_api_keys(
+        api_base_url,
+        project_id=project_id,
+        provisioning_token=provisioning_token,
+        provisioning_header=provisioning_header,
+        timeout=timeout,
+    )
+    _require_api_key_metadata(
+        items,
+        key_id=key_a_id,
+        raw_key=raw_a,
+        label="backend API key metadata after use",
+        revoked=False,
+        last_used=True,
+    )
+
+    rotated = _request(
+        "POST",
+        _url(api_base_url, f"/v1/projects/{project_id}/api-keys/{key_a_id}/rotate"),
+        headers={provisioning_header: provisioning_token},
+        timeout=timeout,
+    )
+    _expect_status(rotated, 200, "backend rotate API key")
+    rotated_body = _require_json_object(rotated, "backend rotate API key")
+    raw_b = str(rotated_body.get("api_key") or "")
+    key_b_id = str(rotated_body.get("key_id") or "")
+    key_b_prefix = str(rotated_body.get("key_prefix") or "")
+    if not raw_b.startswith("zk_live_") or not key_b_id or key_b_id == key_a_id:
+        _fail("backend rotate API key", "replacement key material was invalid")
+    if str(rotated_body.get("rotated_from_key_id") or "") != key_a_id:
+        _fail("backend rotate API key", "replacement key did not link to rotated key")
+    _pass("backend rotate API key", f"old_key_id={key_a_id} new_key_id={key_b_id}")
+
+    old_reuse = _request(
+        "GET",
+        _url(api_base_url, f"/v1/calls/{call_a_id}"),
+        headers={"x-api-key": raw_a},
+        timeout=timeout,
+    )
+    _expect_status(old_reuse, 401, "backend rotated API key rejected")
+    _pass("backend rotated API key rejected", f"key_id={key_a_id}")
+
+    call_b_id = _ingest_lifecycle_call(api_base_url, api_key=raw_b, label="b", timeout=timeout)
+    items = _list_project_api_keys(
+        api_base_url,
+        project_id=project_id,
+        provisioning_token=provisioning_token,
+        provisioning_header=provisioning_header,
+        timeout=timeout,
+    )
+    _require_api_key_metadata(
+        items,
+        key_id=key_b_id,
+        raw_key=raw_b,
+        label="backend replacement API key metadata after use",
+        revoked=False,
+        last_used=True,
+    )
+
+    revoked = _request(
+        "POST",
+        _url(api_base_url, f"/v1/projects/{project_id}/api-keys/{key_b_id}/revoke"),
+        headers={provisioning_header: provisioning_token},
+        timeout=timeout,
+    )
+    _expect_status(revoked, 200, "backend revoke replacement API key")
+    revoked_body = _require_json_object(revoked, "backend revoke replacement API key")
+    if revoked_body.get("revoked") is not True:
+        _fail("backend revoke replacement API key", f"expected revoked=true, got {revoked.text[:600]}")
+    rejected = _request(
+        "GET",
+        _url(api_base_url, f"/v1/calls/{call_b_id}"),
+        headers={"x-api-key": raw_b},
+        timeout=timeout,
+    )
+    _expect_status(rejected, 401, "backend revoked API key rejected")
+    _pass("backend revoked API key rejected", f"key_id={key_b_id}")
+
+    return {
+        "api_key_lifecycle_key_a_id": key_a_id,
+        "api_key_lifecycle_key_a_prefix": f"{key_a_prefix}...",
+        "api_key_lifecycle_key_b_id": key_b_id,
+        "api_key_lifecycle_key_b_prefix": f"{key_b_prefix}...",
+        "api_key_lifecycle_call_a_id": call_a_id,
+        "api_key_lifecycle_call_b_id": call_b_id,
+    }
+
+
 def _run_railway_python(
     remote_code: str,
     *,
@@ -236,14 +486,21 @@ from app.services import entitlements_resolver
 
 project_id = os.environ["PROJECT_ID"]
 now = datetime.now(timezone.utc)
+subscription_columns = set(Subscription.__mapper__.attrs.keys())
+
+
+def subscription_values(**values):
+    return {key: value for key, value in values.items() if key in subscription_columns}
+
+
 with SessionLocal() as db:
     sub = db.execute(select(Subscription).where(Subscription.org_id == project_id)).scalar_one_or_none()
     if sub is None:
-        sub = Subscription(
+        sub = Subscription(**subscription_values(
             id=str(uuid4()),
             org_id=project_id,
-            stripe_customer_id=None,
-            stripe_sub_id=None,
+            payment_customer_ref=None,
+            payment_subscription_ref=None,
             plan_code="pro",
             status="active",
             seats=3,
@@ -252,13 +509,16 @@ with SessionLocal() as db:
             sla_tier="none",
             created_at=now,
             updated_at=now,
-        )
+        ))
         db.add(sub)
     else:
-        sub.plan_code = "pro"
-        sub.status = "active"
-        sub.current_period_end = now + timedelta(days=30)
-        sub.updated_at = now
+        for key, value in subscription_values(
+            plan_code="pro",
+            status="active",
+            current_period_end=now + timedelta(days=30),
+            updated_at=now,
+        ).items():
+            setattr(sub, key, value)
         db.add(sub)
     seed_plan_entitlements(db, org_id=project_id, plan_code="pro", commit=False)
     db.commit()
@@ -673,22 +933,36 @@ def _check_landing(landing_url: str, dashboard_url: str, timeout: float) -> None
     _expect_status(landing, 200, "landing home")
     landing_text = landing.text + _collect_script_bundle_text(landing_url, landing.text, timeout)
     required = [
-        "Stop shipping the same agent failure twice",
-        "Create project",
-        "See CI gate demo",
+        "Fix failed agent runs before they ship again",
+        "Trace captured",
+        "Replay required",
+        "Golden pending",
+        "CI unprotected",
+        "Privacy",
+        "Security",
+        "Contact",
+        "2026 Zroky",
     ]
     missing = [text for text in required if text not in landing_text]
     if missing:
         _fail("landing home", f"missing copy: {missing}")
     _pass("landing home", landing.final_url)
 
-    register = _request("GET", _url(landing_url, "/auth/register"), timeout=timeout)
-    _expect_status(register, 200, "landing register CTA")
-    _pass("landing register CTA", register.final_url)
-
-    login = _request("GET", _url(landing_url, "/auth/login"), timeout=timeout)
-    _expect_status(login, 200, "landing login link")
-    _pass("landing login link", login.final_url)
+    for path, dashboard_path, label in [
+        ("/signup", "/signup", "landing signup redirect"),
+        ("/login", "/login", "landing login redirect"),
+    ]:
+        page = _request("GET", _url(landing_url, path), timeout=timeout)
+        _expect_status(page, 200, label)
+        expected = _url(dashboard_url, dashboard_path)
+        # The current public site is a static Vercel artifact. Auth entrypoints
+        # are static redirect documents rather than server-side 30x responses.
+        if not (
+            page.final_url.rstrip("/").startswith(expected.rstrip("/"))
+            or expected in page.text
+        ):
+            _fail(label, f"expected redirect page to include {expected}, got {page.final_url}")
+        _pass(label, expected)
 
     dashboard_login = _request("GET", _url(dashboard_url, "/login"), timeout=timeout)
     _expect_status(dashboard_login, 200, "dashboard URL from landing context")
@@ -746,6 +1020,15 @@ def main() -> int:
             timeout=args.timeout_seconds,
         )
         result_ids.update({"project_id": project_id, "api_key_id": api_key_id})
+        result_ids.update(
+            _check_api_key_lifecycle(
+                args.api_base_url,
+                project_id=project_id,
+                provisioning_token=args.provisioning_token,
+                provisioning_header=args.provisioning_header,
+                timeout=args.timeout_seconds,
+            )
+        )
 
         if args.grant_pro_via_railway_ssh:
             _grant_pro_with_railway_ssh(

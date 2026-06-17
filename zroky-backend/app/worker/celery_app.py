@@ -60,6 +60,21 @@ if settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
         "options": {"queue": "diagnosis_fast"},
     }
 
+if (
+    settings.BILLING_ENABLED
+    and settings.BILLING_PROVIDER == "razorpay"
+    and settings.BILLING_RAZORPAY_RECONCILE_ENABLED
+):
+    _razorpay_reconcile_interval = max(
+        60,
+        int(settings.BILLING_RAZORPAY_RECONCILE_INTERVAL_SECONDS),
+    )
+    beat_schedule["billing-razorpay-pending-reconcile"] = {
+        "task": "app.worker.tasks.reconcile_pending_razorpay_orders",
+        "schedule": _razorpay_reconcile_interval,
+        "options": {"queue": "diagnosis_fast"},
+    }
+
 # Wedge 3: Judge Calibration.
 if settings.JUDGE_CALIBRATION_ENABLED:
     _cal_hour = min(max(int(settings.JUDGE_CALIBRATION_CRON_HOUR), 0), 23)

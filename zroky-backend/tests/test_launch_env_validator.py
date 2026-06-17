@@ -55,7 +55,20 @@ GITHUB_WEBHOOK_SECRET=github-webhook-secret
 REPLAY_WORKER_TOKEN=replay-worker-token
 METRICS_TOKEN=metrics-token-with-enough-length
 PII_ENCRYPTION_KEY=pii-encryption-key-with-32-characters
+GITHUB_TOKEN_ENCRYPTION_KEY=github-token-encryption-key-with-32-characters
 OPENROUTER_API_KEY=openrouter-platform-key
+SMTP_HOST=smtp.resend.com
+SMTP_USER=resend
+SMTP_PASSWORD=smtp-password-with-enough-length
+ALERTS_FROM_EMAIL=noreply@zroky.ai
+GOOGLE_CLIENT_ID=google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=google-client-secret-with-enough-length
+GOOGLE_OAUTH_REDIRECT_URL=https://app.zroky.ai/auth/google/callback
+GITHUB_CLIENT_ID=github-client-id
+GITHUB_CLIENT_SECRET=github-client-secret-with-enough-length
+GITHUB_OAUTH_REDIRECT_URL=https://app.zroky.ai/auth/github/callback
+GITHUB_CONNECT_OAUTH_REDIRECT_URL=https://app.zroky.ai/auth/github/connect/callback
+GITHUB_PR_BOT_TOKEN=github-pr-bot-token-with-enough-length
 BILLING_ENABLED=true
 BILLING_PROVIDER=razorpay
 RAZORPAY_KEY_ID=rzp_live_launchready
@@ -88,6 +101,46 @@ def test_backend_launch_env_accepts_razorpay_live_checkout_urls() -> None:
     values = _env_values(validator, _valid_backend_env())
 
     assert validator.validate_backend(values) == []
+
+
+def test_backend_launch_env_requires_hosted_customer_integrations() -> None:
+    validator = _load_validator()
+    stripped_env = "\n".join(
+        line
+        for line in _valid_backend_env().strip().splitlines()
+        if not line.startswith(
+            (
+                "SMTP_",
+                "ALERTS_FROM_EMAIL=",
+                "GOOGLE_",
+                "GITHUB_CLIENT_",
+                "GITHUB_OAUTH_REDIRECT_URL=",
+                "GITHUB_CONNECT_OAUTH_REDIRECT_URL=",
+                "GITHUB_TOKEN_ENCRYPTION_KEY=",
+                "GITHUB_PR_BOT_TOKEN=",
+            )
+        )
+    )
+    values = _env_values(validator, stripped_env)
+
+    findings = validator.validate_backend(values)
+
+    for key in (
+        "SMTP_HOST",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+        "ALERTS_FROM_EMAIL",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_OAUTH_REDIRECT_URL",
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "GITHUB_OAUTH_REDIRECT_URL",
+        "GITHUB_CONNECT_OAUTH_REDIRECT_URL",
+        "GITHUB_TOKEN_ENCRYPTION_KEY",
+        "GITHUB_PR_BOT_TOKEN",
+    ):
+        assert any(key in finding for finding in findings), key
 
 
 def test_gateway_launch_env_requires_fail_closed_spool_config() -> None:

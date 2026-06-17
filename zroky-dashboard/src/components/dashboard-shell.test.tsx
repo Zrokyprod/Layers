@@ -251,7 +251,7 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     expect(primaryNavLabels()).toEqual([
-      "Command Center",
+      "Home",
       "Agents",
       "Traces",
       "Failures",

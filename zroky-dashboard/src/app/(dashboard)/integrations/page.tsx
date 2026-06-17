@@ -7,7 +7,7 @@ import IntegrationsSettingsPage from "../settings/integrations/page";
 
 export default function IntegrationsPage() {
   return (
-    <main className="dashboard-page integrations-page">
+    <div className="dashboard-page integrations-page">
       <section className="page-header">
         <div>
           <span className="eyebrow">Reliability connections</span>
@@ -48,6 +48,6 @@ export default function IntegrationsPage() {
       </section>
 
       <IntegrationsSettingsPage />
-    </main>
+    </div>
   );
 }

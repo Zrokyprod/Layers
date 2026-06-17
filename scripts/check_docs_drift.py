@@ -1,19 +1,12 @@
-"""Documentation drift check (Rule 10 — ZROKY-005).
+"""Documentation drift check (Rule 10).
 
-Fails CI when a public symbol or API path mentioned in prose docs no longer
-exists in the code or the frozen API contract.
-
-Current phase (Sprint 0): validates that:
-  1. Every endpoint path cited in docs/ markdown exists in api-contracts/zroky-api-v1.openapi.json
-  2. Every Python symbol cited as `module.ClassName` in docs/ can be imported
-
-Full Rule 10 enforcement (Week 3+) will add:
-  - Orphan-symbol detection (symbol in docs but removed from code)
-  - Redoc build verification from the OpenAPI spec
+Fails CI when a public API path mentioned in product docs no longer exists in
+the frozen API contract.
 
 Run locally:  python scripts/check_docs_drift.py
 CI:           same (non-zero exit fails the job)
 """
+
 from __future__ import annotations
 
 import json
@@ -22,13 +15,17 @@ import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_DOCS_DIRS = [
-    _REPO_ROOT / "docs",
-    _REPO_ROOT / "api-contracts",
+_DOCS_DIRS = [_REPO_ROOT / "docs"]
+_DOC_SOURCE_FILES = [
+    _REPO_ROOT / "README.md",
+    _REPO_ROOT / "zroky-landing" / "src" / "pages" / "docs" / "docsContent.ts",
+    _REPO_ROOT / "zroky-landing" / "src" / "pages" / "DocsPage.tsx",
 ]
 _OPENAPI_PATH = _REPO_ROOT / "api-contracts" / "zroky-api-v1.openapi.json"
 
-_PATH_PATTERN = re.compile(r"`(/api/v\d+[^`\s]*)`")
+_PATH_PATTERN = re.compile(
+    r"(?P<path>/(?:api/zroky/|api/)?v\d+(?:/[A-Za-z0-9_{}.$%+~:=@-]+)+[^`'\"\s),]*)"
+)
 
 
 def _load_openapi_paths() -> set[str]:
@@ -39,48 +36,76 @@ def _load_openapi_paths() -> set[str]:
 
 
 def _scan_doc_files() -> list[Path]:
-    files: list[Path] = []
-    for d in _DOCS_DIRS:
-        if d.exists():
-            files.extend(d.rglob("*.md"))
-    return files
+    files: set[Path] = {path for path in _DOC_SOURCE_FILES if path.exists()}
+    for directory in _DOCS_DIRS:
+        if directory.exists():
+            files.update(directory.rglob("*.md"))
+            files.update(directory.rglob("*.mdx"))
+    return sorted(files)
+
+
+def _normalize_cited_path(raw: str) -> str:
+    path = raw.split("?", 1)[0].split("#", 1)[0].rstrip("\\.,;:")
+    if path.startswith("/api/zroky/"):
+        path = "/" + path.removeprefix("/api/zroky/")
+    elif path.startswith("/api/"):
+        path = "/" + path.removeprefix("/api/")
+    return path
+
+
+def _path_matches_spec(cited_path: str, spec_path: str) -> bool:
+    cited_segments = cited_path.strip("/").split("/")
+    spec_segments = spec_path.strip("/").split("/")
+    if len(cited_segments) != len(spec_segments):
+        return False
+    return all(
+        cited == spec
+        or (cited.startswith("{") and cited.endswith("}"))
+        or (spec.startswith("{") and spec.endswith("}"))
+        for cited, spec in zip(cited_segments, spec_segments, strict=True)
+    )
 
 
 def main() -> int:
-    print("Docs drift check (Rule 10) — Sprint 0 scope")
+    print("Docs drift check (Rule 10)")
     openapi_paths = _load_openapi_paths()
     print(f"  OpenAPI paths loaded : {len(openapi_paths)}")
 
     doc_files = _scan_doc_files()
-    print(f"  Markdown files scanned: {len(doc_files)}")
+    print(f"  Docs sources scanned : {len(doc_files)}")
+
+    if not doc_files:
+        print("\n::error::Docs drift check scanned zero documentation sources.")
+        return 1
 
     violations: list[str] = []
+    citation_count = 0
 
     for doc_path in doc_files:
         text = doc_path.read_text(encoding="utf-8")
         for match in _PATH_PATTERN.finditer(text):
-            cited_path = match.group(1)
-            # Strip query params
-            base = cited_path.split("?")[0]
-            # Normalize path params: /api/v1/projects/{id} → /api/v1/projects/{project_id}
-            # Just check if base path prefix exists (fuzzy: first 3 segments)
-            segments = base.strip("/").split("/")
+            cited_path = match.group("path")
+            base = _normalize_cited_path(cited_path)
+            citation_count += 1
             found = any(
-                p.strip("/").split("/")[: len(segments)] == segments
-                or p == base
-                for p in openapi_paths
+                spec_path == base or _path_matches_spec(base, spec_path)
+                for spec_path in openapi_paths
             )
             if not found and openapi_paths:
                 rel = doc_path.relative_to(_REPO_ROOT).as_posix()
-                violations.append(f"  [drift] {rel}: cited path '{cited_path}' not in OpenAPI spec")
+                violations.append(
+                    f"  [drift] {rel}: cited path '{cited_path}' not in OpenAPI spec"
+                )
+
+    print(f"  Endpoint citations : {citation_count}")
 
     if violations:
         print(f"\n::error::Docs drift violations ({len(violations)}):")
-        for v in violations:
-            print(v)
+        for violation in violations:
+            print(violation)
         return 1
 
-    print("OK — no documentation drift detected.")
+    print("OK - no documentation drift detected.")
     return 0
 
 

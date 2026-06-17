@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,8 @@ import LoginPage from "../login/page";
 import SignupPage from "../signup/page";
 import ResetPasswordPage from "../reset-password/page";
 import VerifyEmailPage from "../verify-email/page";
+import { loginWithPassword } from "@/lib/api";
+import { storeAuthSession } from "@/lib/auth";
 
 const navigation = vi.hoisted(() => ({
   searchParams: new URLSearchParams(),
@@ -74,30 +76,68 @@ describe("auth pages", () => {
     navigation.push.mockReset();
     navigation.replace.mockReset();
     navigation.refresh.mockReset();
+    vi.mocked(loginWithPassword).mockReset();
+    vi.mocked(storeAuthSession).mockReset();
   });
 
   it("renders login with Zroky reliability copy", () => {
     render(<LoginPage />);
 
     expect(screen.getByRole("heading", { name: "Sign in to Zroky" })).toBeInTheDocument();
-    expect(screen.getByText("Resume incident triage, replay verification, golden traces, and CI regression gates.")).toBeInTheDocument();
+    expect(screen.getByText("Access traces, replays, and release gates.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Zroky" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+
+  it("renders OAuth callback errors on login", () => {
+    navigation.searchParams = new URLSearchParams("error=oauth_expired");
+
+    render(<LoginPage />);
+
+    expect(screen.getByText("Google sign-in expired. Start again.")).toBeInTheDocument();
+  });
+
+  it("sends unverified password logins to email verification before dashboard access", async () => {
+    vi.mocked(loginWithPassword).mockResolvedValue({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      access_expires_in_seconds: 3600,
+      refresh_expires_in_seconds: 86400,
+      token_type: "bearer",
+      user_id: "user_1",
+      email: "new@example.com",
+      email_verified: false,
+    });
+
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "new@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(storeAuthSession).toHaveBeenCalled();
+      expect(navigation.push).toHaveBeenCalledWith("/verify-email?email=new%40example.com");
+    });
   });
 
   it("renders signup workspace copy", () => {
     render(<SignupPage />);
 
     expect(screen.getByRole("heading", { name: "Create your Zroky workspace" })).toBeInTheDocument();
-    expect(screen.getByText("Start capturing failed agent runs and turn replay proof into regression gates.")).toBeInTheDocument();
+    expect(screen.getByText("Start capturing failed agent runs.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
   });
 
   it("renders forgot password copy", () => {
     render(<ForgotPasswordPage />);
 
-    expect(screen.getByRole("heading", { name: "Recover workspace access" })).toBeInTheDocument();
-    expect(screen.getByText("Send a private reset link without exposing whether an email exists.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+    expect(screen.getByText("Send a secure reset link.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send reset link" })).toBeInTheDocument();
   });
 
@@ -106,15 +146,15 @@ describe("auth pages", () => {
 
     render(<ResetPasswordPage />);
 
-    expect(screen.getByRole("heading", { name: "Set a new password" })).toBeInTheDocument();
-    expect(screen.getByText("Choose a new key for your Zroky workspace session.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create new password" })).toBeInTheDocument();
+    expect(screen.getByText("Choose a new workspace password.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update password" })).toBeInTheDocument();
   });
 
   it("renders verify email copy", () => {
     render(<VerifyEmailPage />);
 
-    expect(screen.getByRole("heading", { name: "Verify your email" })).toBeInTheDocument();
-    expect(screen.getByText("One confirmation unlocks the reliability workspace.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Check your email" })).toBeInTheDocument();
+    expect(screen.getByText("Open the verification link.")).toBeInTheDocument();
   });
 });

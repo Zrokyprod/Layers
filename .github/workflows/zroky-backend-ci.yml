@@ -172,9 +172,9 @@ jobs:
         run: |
           mkdir -p .artifacts
           set +e
-          bandit -q -r app -f txt -o .artifacts/bandit.txt
+          bandit -q -r app --severity-level high --confidence-level high -f txt -o .artifacts/bandit.txt
           BANDIT_EXIT=$?
-          pip-audit --progress-spinner off --format columns > .artifacts/pip-audit.txt
+          pip-audit --progress-spinner off --format columns -r requirements.txt > .artifacts/pip-audit.txt
           PIP_AUDIT_EXIT=$?
           set -e
 

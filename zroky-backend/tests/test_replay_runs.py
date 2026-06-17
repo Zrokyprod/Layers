@@ -351,13 +351,13 @@ class TestDispatchReplayRun:
         summary = parse_summary(run.summary_json)
         assert summary["source_kind"] == "call"
         assert summary["source_call_id"] == "call-1"
-        assert summary["trace_count_at_dispatch"] == 0
+        assert summary["trace_count_at_dispatch"] == 1
         trace = db_session.execute(
             select(GoldenTrace).where(GoldenTrace.golden_set_id == run.golden_set_id)
         ).scalar_one()
         assert trace.call_id == "call-1"
-        assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
-        assert trace.expected_output_text is None
+        assert trace.status == GOLDEN_TRACE_STATUS_ACTIVE
+        assert trace.expected_output_text == "ok"
         assert trace.source_output_text == "ok"
 
     def test_override_bypasses_idempotency(
@@ -1087,8 +1087,8 @@ class TestCreateReplayFromIssueRoute:
                 select(GoldenTrace).where(GoldenTrace.golden_set_id == run.golden_set_id)
             ).scalar_one()
             assert trace.call_id == "call-issue"
-            assert trace.status == GOLDEN_TRACE_STATUS_DRAFT
-            assert trace.expected_output_text is None
+            assert trace.status == GOLDEN_TRACE_STATUS_ACTIVE
+            assert trace.expected_output_text == "issue fixed"
             assert trace.source_output_text == "issue fixed"
 
         detail = client.get(

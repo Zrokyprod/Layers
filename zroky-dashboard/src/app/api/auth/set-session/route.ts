@@ -34,7 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   response.cookies.set(ACCESS_TOKEN_COOKIE, access_token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: access_max_age_seconds,
     path: "/",
   });
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   response.cookies.set(REFRESH_TOKEN_COOKIE, refresh_token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: refresh_max_age_seconds,
     path: "/",
   });

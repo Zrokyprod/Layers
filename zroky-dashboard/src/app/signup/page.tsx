@@ -20,8 +20,6 @@ import { registerWithPassword } from "@/lib/api";
 import { storeAuthSession } from "@/lib/auth";
 import { registerSchema, type RegisterFormData } from "@/lib/schemas";
 
-const googleOAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_OAUTH === "true";
-
 export default function SignupPage() {
   const [error, setError] = useState("");
   const router = useRouter();
@@ -59,11 +57,11 @@ export default function SignupPage() {
       <AuthCard
         eyebrow="New reliability workspace"
         title="Create your Zroky workspace"
-        subtitle="Start capturing failed agent runs and turn replay proof into regression gates."
+        subtitle="Start capturing failed agent runs."
         footer={<Link href="/login" className="auth-link">Already have an account? Sign in</Link>}
       >
         <div className="auth-oauth-stack">
-          {googleOAuthEnabled ? <AuthProviderButton provider="google" onClick={() => handleOAuth("google")} /> : null}
+          <AuthProviderButton provider="google" onClick={() => handleOAuth("google")} />
           <AuthProviderButton provider="github" onClick={() => handleOAuth("github")} />
         </div>
         <AuthDivider>Or register with email</AuthDivider>
@@ -100,9 +98,8 @@ export default function SignupPage() {
         </form>
         <AuthAssuranceList
           items={[
-            "Email verification protects the workspace",
-            "Capture failed runs after setup",
-            "Replay, Goldens, and CI gates are ready",
+            "Email verification protects workspace access",
+            "Replay and CI gates stay connected",
           ]}
         />
       </AuthCard>

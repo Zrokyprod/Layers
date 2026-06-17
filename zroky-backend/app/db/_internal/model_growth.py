@@ -37,9 +37,6 @@ class Subscription(Base):
     payment_customer_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     payment_subscription_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     payment_request_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    # Deprecated Stripe-specific aliases kept for backward-compatible reads.
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    stripe_sub_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     plan_code: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text("'active'")
@@ -65,7 +62,6 @@ class Subscription(Base):
 
     __table_args__ = (
         UniqueConstraint("org_id", name="ux_subscriptions_org"),
-        UniqueConstraint("stripe_sub_id", name="ux_subscriptions_stripe_sub_id"),
         UniqueConstraint(
             "payment_subscription_ref",
             name="ux_subscriptions_payment_subscription_ref",
@@ -81,7 +77,6 @@ class Subscription(Base):
         Index("ix_subscriptions_payment_provider", "payment_provider"),
         Index("ix_subscriptions_payment_customer_ref", "payment_customer_ref"),
         Index("ix_subscriptions_payment_request_ref", "payment_request_ref"),
-        Index("ix_subscriptions_stripe_customer_id", "stripe_customer_id"),
         Index("ix_subscriptions_status", "status"),
         Index("ix_subscriptions_plan_code", "plan_code"),
         Index("ix_subscriptions_current_period_end", "current_period_end"),
@@ -390,51 +385,6 @@ class ProviderKeyVault(Base):
             "ix_provider_keys_vault_key_fingerprint",
             "key_fingerprint",
         ),
-    )
-
-
-class StripeEvent(Base):
-    """One row per Stripe webhook event we have ever seen.
-
-    `stripe_event_id` is UNIQUE so the dispatcher can use INSERT-or-conflict
-    semantics for idempotent claim. Duplicates short-circuit with HTTP 200
-    so Stripe stops retrying.
-    """
-
-    __tablename__ = "stripe_events"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    stripe_event_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    stripe_created_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    received_at: Mapped[datetime] = mapped_column(
-        UTCDateTime, nullable=False, server_default=func.now()
-    )
-    processed_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    result: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default=text("'pending'")
-    )
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    affected_org_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
-    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "stripe_event_id", name="ux_stripe_events_stripe_event_id"
-        ),
-        CheckConstraint(
-            "result IN ('pending', 'applied', 'skipped', 'failed')",
-            name="ck_stripe_events_result",
-        ),
-        Index("ix_stripe_events_event_type", "event_type"),
-        Index("ix_stripe_events_received_at", "received_at"),
-        Index("ix_stripe_events_affected_org_id", "affected_org_id"),
     )
 
 

@@ -17,6 +17,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { docsNav } from './docs/docsContent';
+import { SIGN_UP_URL } from '../lib/links';
 
 const pythonSnippet = `import os
 import openai
@@ -37,7 +38,7 @@ response = zroky.call(
 )`;
 
 const typescriptSnippet = `import OpenAI from "openai";
-import { init, wrap } from "@zroky/sdk";
+import { init, wrap } from "@zroky-ai/sdk";
 
 init({
   projectId: process.env.ZROKY_PROJECT_ID,
@@ -580,7 +581,7 @@ export default function DocsPage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <a href="/auth/register" className="btn-primary">
+              <a href={SIGN_UP_URL} className="btn-primary">
                 Protect your first agent flow
                 <ArrowRight className="h-4 w-4" />
               </a>

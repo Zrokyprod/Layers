@@ -24,12 +24,11 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -47,7 +46,18 @@ from app.services.goldens import (
     get_golden_set,
     source_evidence_from_call,
 )
-from app.services.issue_projection import issue_projection_from_anomaly, projection_evidence
+from app.services._internal.replay_runs_summary_quota import (
+    ReplayQuotaResult,
+    build_summary_url,
+    check_replay_monthly_quota,
+    parse_summary,
+)
+from app.services._internal.replay_runs_source_context import (
+    _one_click_set_name,
+    _source_context_from_call,
+    _source_context_from_issue,
+)
+from app.services.issue_projection import issue_projection_from_anomaly
 
 logger = logging.getLogger(__name__)
 
@@ -483,131 +493,6 @@ def was_idempotent_hit(run: ReplayRun) -> bool:
     return getattr(run, "_zroky_was_new", True) is False
 
 
-def _safe_json_object(raw: str | None) -> dict[str, Any]:
-    if not raw:
-        return {}
-    try:
-        decoded = json.loads(raw)
-        return decoded if isinstance(decoded, dict) else {}
-    except Exception:
-        return {}
-
-
-def _first_text(*values: Any) -> str | None:
-    for value in values:
-        if value is None:
-            continue
-        text = str(value).strip()
-        if text:
-            return text
-    return None
-
-
-def _first_context_value(payloads: list[dict[str, Any]], *keys: str) -> str | None:
-    for payload in payloads:
-        for key in keys:
-            value = _first_text(payload.get(key))
-            if value:
-                return value
-    return None
-
-
-def _float_or_none(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _compact_source_context(context: dict[str, Any]) -> dict[str, Any]:
-    compact: dict[str, Any] = {}
-    for key, value in context.items():
-        if value is None or value == "":
-            continue
-        if isinstance(value, str):
-            limit = 420 if key == "reason" else 180
-            compact[key] = value[:limit]
-        else:
-            compact[key] = value
-    return compact
-
-
-def _source_context_from_call(call: Call) -> dict[str, Any]:
-    payload = _safe_json_object(call.payload_json)
-    metadata = _safe_json_object(call.metadata_json)
-    evidence = [payload, metadata]
-    reason = _first_context_value(
-        evidence,
-        "failure_reason",
-        "error_message",
-        "error",
-        "reason",
-        "summary",
-    )
-    return _compact_source_context(
-        {
-            "kind": "call",
-            "id": call.id,
-            "call_id": call.id,
-            "title": f"{call.agent_name or 'Agent'} call {call.id[:12]}",
-            "reason": reason or call.error_code or call.status,
-            "failure_code": call.error_code,
-            "affected_agent": call.agent_name,
-            "affected_workflow": _first_context_value(evidence, "workflow_name", "workflow"),
-            "last_seen_at": call.created_at.isoformat(),
-            "origin": "call",
-        }
-    )
-
-
-def _source_context_from_issue(anomaly: Anomaly) -> dict[str, Any]:
-    issue = issue_projection_from_anomaly(anomaly)
-    evidence = projection_evidence(anomaly)
-    legacy = evidence.get("legacy_issue")
-    if not isinstance(legacy, dict):
-        legacy = {}
-    payloads = [evidence, legacy]
-    reason = _first_context_value(
-        payloads,
-        "root_cause",
-        "failure_reason",
-        "reason",
-        "summary",
-    )
-    agent = _first_context_value(payloads, "agent_name", "affected_agent") or issue.agent_name
-    workflow = _first_context_value(payloads, "workflow_name", "workflow", "affected_workflow")
-    origin = "discovery" if evidence.get("source") == "discovery" or anomaly.detector == "BEHAVIORAL_DRIFT" else "issue"
-    title = _first_context_value(payloads, "title")
-    if not title:
-        target = workflow or agent or "Affected flow"
-        title = f"{target} - {issue.failure_code.replace('_', ' ').lower()}"
-    return _compact_source_context(
-        {
-            "kind": "issue",
-            "id": issue.id,
-            "issue_id": issue.id,
-            "call_id": issue.sample_call_id,
-            "title": title,
-            "reason": reason or f"{issue.failure_code.replace('_', ' ').lower()} is recurring.",
-            "failure_code": issue.failure_code,
-            "severity": issue.severity,
-            "affected_agent": agent,
-            "affected_workflow": workflow,
-            "occurrence_count": int(issue.occurrence_count or 0),
-            "last_seen_at": issue.last_seen_at.isoformat(),
-            "origin": origin,
-            "confidence": _float_or_none(evidence.get("confidence")),
-            "discovery_signature": _first_text(evidence.get("discovery_signature")),
-        }
-    )
-
-
-def _one_click_set_name(*, source_kind: str, source_id: str) -> str:
-    return f"One-click replay: {source_kind} {source_id[:12]} {str(uuid4())[:8]}"
-
-
 def create_replay_from_call(
     db: Session,
     *,
@@ -634,11 +519,13 @@ def create_replay_from_call(
         name=_one_click_set_name(source_kind="call", source_id=call_id),
         description=f"Auto-created from call {call_id}.",
     )
+    source_output_text, _ = source_evidence_from_call(call)
     trace = mark_call_as_golden(
         db,
         project_id=project_id,
         call_id=call_id,
         golden_set_id=golden_set.id,
+        expected_output_text=source_output_text,
     )
     if trace is None:
         return None
@@ -844,131 +731,4 @@ def mark_call_as_golden(
         expected_latency_ms=expected_latency_ms,
         criteria_json=criteria_json,
         weight=weight,
-    )
-
-
-# ── summary helper for response payloads ─────────────────────────────────────
-
-
-def parse_summary(summary_json: str | None) -> dict[str, Any]:
-    """Defensive parser for the `summary_json` blob on a ReplayRun row."""
-    if not summary_json:
-        return {}
-    try:
-        decoded = json.loads(summary_json)
-        return decoded if isinstance(decoded, dict) else {}
-    except Exception:
-        return {}
-
-
-# ── summary URL builder (Module 9) ───────────────────────────────────────────
-
-
-def build_summary_url(run: ReplayRun) -> str:
-    """Return the dashboard URL for a replay run.
-
-    Used as `details_url` on PR checks and as the response field on the
-    Module-9 dispatch endpoints. Read at call time so test settings
-    overrides (`monkeypatch.setattr(settings, "FRONTEND_URL", ...)`) take
-    effect without import-time caching.
-    """
-    # Local import to avoid creating a circular dependency at the top of
-    # this module — `app.core.config` itself imports nothing from
-    # `services` but the cached settings instance can be patched in
-    # tests, so we re-resolve every call.
-    from app.core.config import get_settings
-
-    settings = get_settings()
-    base = (settings.FRONTEND_URL or "https://zroky.com").rstrip("/")
-    return f"{base}/replay/{run.id}"
-
-
-# ── monthly quota ─────────────────────────────────────────────────────────────
-
-
-@dataclass
-class ReplayQuotaResult:
-    """Monthly replay quota state for a tenant.
-
-    ``limit == -1`` means unlimited (Enterprise). Callers must treat
-    -1 as "no cap" rather than a literal number; the quota is never
-    considered exceeded when limit is -1.
-    """
-
-    enabled: bool    # pilot.autopilot_enabled — basic feature gate
-    used: int        # ReplayRun + ReplayJob rows created this calendar month
-    limit: int       # replay.monthly_runs; -1 = unlimited
-    resets_at: str   # ISO date of first day of next calendar month
-    plan_code: str   # e.g. "pro", "plus", "enterprise"
-
-
-def check_replay_monthly_quota(db: Session, tenant_id: str) -> ReplayQuotaResult:
-    """Return the monthly replay quota state for ``tenant_id``.
-
-    Counts both :class:`ReplayRun` (batch golden-set runs) and the
-    legacy :class:`ReplayJob` rows (single-call worker jobs) against
-    the plan's ``replay.monthly_runs`` entitlement. The combined total
-    is what the dashboard quota banner displays.
-
-    Never raises — returns ``allowed=False / limit=0`` on any DB or
-    resolver error so a transient failure never opens a quota bypass.
-    """
-    from app.db.models import ReplayJob  # local: intentionally separate service
-    from app.services import entitlements_resolver
-
-    now = datetime.now(timezone.utc)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if now.month == 12:
-        resets_dt = month_start.replace(year=now.year + 1, month=1)
-    else:
-        resets_dt = month_start.replace(month=now.month + 1)
-
-    resets_at = resets_dt.date().isoformat()
-
-    try:
-        enabled: bool = entitlements_resolver.has(db, tenant_id, "pilot.autopilot_enabled")
-        raw_limit = entitlements_resolver.get(
-            db, tenant_id, "replay.monthly_runs", default=0
-        )
-        limit: int = int(raw_limit) if raw_limit is not None else 0
-        plan_code: str = entitlements_resolver.get_plan_code(db, tenant_id)
-
-        run_count: int = (
-            db.execute(
-                select(func.count(ReplayRun.id)).where(
-                    ReplayRun.project_id == tenant_id,
-                    ReplayRun.created_at >= month_start,
-                )
-            ).scalar_one()
-            or 0
-        )
-        job_count: int = (
-            db.execute(
-                select(func.count(ReplayJob.id)).where(
-                    ReplayJob.tenant_id == tenant_id,
-                    ReplayJob.created_at >= month_start,
-                )
-            ).scalar_one()
-            or 0
-        )
-        used = run_count + job_count
-
-    except Exception:  # noqa: BLE001
-        logger.exception(
-            "check_replay_monthly_quota failed for tenant=%s — denying", tenant_id
-        )
-        return ReplayQuotaResult(
-            enabled=False,
-            used=0,
-            limit=0,
-            resets_at=resets_at,
-            plan_code="unknown",
-        )
-
-    return ReplayQuotaResult(
-        enabled=enabled,
-        used=used,
-        limit=limit,
-        resets_at=resets_at,
-        plan_code=plan_code,
     )

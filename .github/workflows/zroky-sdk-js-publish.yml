@@ -1,0 +1,186 @@
+name: Zroky JS SDK Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_registry:
+        description: "Publish destination"
+        required: true
+        default: "dry-run"
+        type: choice
+        options:
+          - dry-run
+          - npm
+      expected_version:
+        description: "Optional version check (example: 0.1.0)"
+        required: false
+        type: string
+  push:
+    tags:
+      - "zroky-sdk-js-v*"
+
+concurrency:
+  group: zroky-sdk-js-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zroky-sdk-js
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: zroky-sdk-js/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run SDK test suite
+        run: npm test
+
+      - name: Build package
+        run: npm run build
+
+      - name: Bundle size check
+        run: npm run size
+
+      - name: Verify version constraints for dispatch or tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_VERSION_INPUT: ${{ github.event.inputs.expected_version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          node <<'JS'
+          const fs = require("node:fs");
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const version = pkg.version;
+          const expectedInput = (process.env.EXPECTED_VERSION_INPUT || "").trim();
+          if (expectedInput && expectedInput !== version) {
+            console.error(`Version mismatch: expected_version=${expectedInput}, package=${version}`);
+            process.exit(1);
+          }
+
+          const eventName = process.env.EVENT_NAME || "";
+          const refName = process.env.REF_NAME || "";
+          if (eventName === "push" && refName.startsWith("zroky-sdk-js-v")) {
+            const tagVersion = refName.slice("zroky-sdk-js-v".length);
+            if (tagVersion !== version) {
+              console.error(`Tag version mismatch: tag=${tagVersion}, package=${version}`);
+              process.exit(1);
+            }
+          }
+
+          console.log(`Version checks passed for ${version}`);
+          JS
+
+      - name: Pack tarball dry run
+        run: npm pack --dry-run
+
+      - name: Pack tarball
+        run: npm pack
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zroky-sdk-js-package
+          path: zroky-sdk-js/*.tgz
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    needs: build-and-verify
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_registry == 'npm') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/zroky-sdk-js-v'))
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zroky-sdk-js-package
+          path: dist
+
+      - name: Set up Node 22 for npm publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Require npm token
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret is required to publish @zroky-ai/sdk."
+            exit 1
+          fi
+
+      - name: Verify npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami --registry=https://registry.npmjs.org
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish dist/*.tgz --access public --provenance
+
+  verify-npm-registry:
+    runs-on: ubuntu-latest
+    needs: publish-npm
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_registry == 'npm') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/zroky-sdk-js-v'))
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify published package installs
+        run: |
+          VERSION="$(node -p "require('./zroky-sdk-js/package.json').version")"
+          for attempt in 1 2 3 4 5 6; do
+            if npm view "@zroky-ai/sdk@$VERSION" version --registry=https://registry.npmjs.org; then
+              break
+            fi
+            echo "Package not visible yet; retrying in 10s..."
+            sleep 10
+          done
+          test "$(npm view "@zroky-ai/sdk@$VERSION" version --registry=https://registry.npmjs.org)" = "$VERSION"
+          WORKDIR="$(mktemp -d)"
+          cd "$WORKDIR"
+          npm init -y >/dev/null
+          npm install "@zroky-ai/sdk@$VERSION" --ignore-scripts --registry=https://registry.npmjs.org
+          node - <<'JS'
+          const sdk = require("@zroky-ai/sdk");
+          for (const name of ["init", "wrap", "traceRun", "captureToolCall"]) {
+            if (typeof sdk[name] !== "function") {
+              throw new Error(`Missing @zroky-ai/sdk export: ${name}`);
+            }
+          }
+          JS

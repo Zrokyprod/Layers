@@ -14,7 +14,7 @@ Resolution algorithm (per plan §11.2):
   4. For keys NOT present in any source row, fall back to the canonical
      template `PLAN_ENTITLEMENTS[subscription.plan_code]`.
   5. If no `subscriptions` row exists for `org_id` (brand new org with
-     no Stripe handshake yet), fall back to `PLAN_ENTITLEMENTS["free"]`.
+     no billing row yet), fall back to `PLAN_ENTITLEMENTS["free"]`.
      This is the safe default — every endpoint's plan-gate evaluates
      against free-tier entitlements until billing infrastructure has
      written rows.
@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -138,12 +139,15 @@ def resolve_all(db: Session, org_id: str) -> dict[str, Any]:
     ttl = max(1, settings.ENTITLEMENT_CACHE_TTL_SECONDS)
     cache_key = f"{_CACHE_KEY_PREFIX}:{org_id}"
     now_ts = time.time()
+    use_redis = _redis_cache_enabled()
 
     # Step 1: Redis
-    try:
-        cached_json = get_redis_client().get(cache_key)
-    except redis.RedisError:
-        cached_json = None
+    cached_json = None
+    if use_redis:
+        try:
+            cached_json = get_redis_client().get(cache_key)
+        except redis.RedisError:
+            cached_json = None
     if cached_json:
         try:
             parsed = json.loads(cached_json)
@@ -162,10 +166,11 @@ def resolve_all(db: Session, org_id: str) -> dict[str, Any]:
 
     # Best-effort write-through to both caches.
     serialized = json.dumps(resolved, separators=(",", ":"), sort_keys=True)
-    try:
-        get_redis_client().setex(cache_key, ttl, serialized)
-    except redis.RedisError:
-        pass  # Redis flapping; memory cache below still saves us.
+    if use_redis:
+        try:
+            get_redis_client().setex(cache_key, ttl, serialized)
+        except redis.RedisError:
+            pass  # Redis flapping; memory cache below still saves us.
     _memory_set(org_id, resolved, now_ts + ttl)
 
     return resolved
@@ -181,10 +186,11 @@ def invalidate(org_id: str) -> None:
     if not org_id:
         return
     cache_key = f"{_CACHE_KEY_PREFIX}:{org_id}"
-    try:
-        get_redis_client().delete(cache_key)
-    except redis.RedisError:
-        pass  # Best-effort; the TTL is the safety net.
+    if _redis_cache_enabled():
+        try:
+            get_redis_client().delete(cache_key)
+        except redis.RedisError:
+            pass  # Best-effort; the TTL is the safety net.
     with _MEMORY_LOCK:
         _MEMORY_CACHE.pop(org_id, None)
 
@@ -228,6 +234,10 @@ def _truthy(value: Any) -> bool:
     if isinstance(value, (list, tuple, set, dict)):
         return bool(value)
     return False
+
+
+def _redis_cache_enabled() -> bool:
+    return os.getenv("TESTING", "").strip().lower() != "true"
 
 
 def _memory_get(org_id: str, now_ts: float) -> dict[str, Any] | None:

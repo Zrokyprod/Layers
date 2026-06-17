@@ -105,16 +105,19 @@ describe("ApiKeysPage", () => {
   it("renders a capture-first setup page and empty state", () => {
     render(<ApiKeysPage />);
 
-    expect(screen.getByRole("heading", { name: "Create a project key. Capture your first agent call." })).toBeInTheDocument();
-    expect(screen.getByText("Project key")).toBeInTheDocument();
-    expect(screen.getByText("SDK/Gateway capture")).toBeInTheDocument();
-    expect(screen.getByText("Verified replay")).toBeInTheDocument();
-    expect(screen.getByText("Do not add provider keys for capture.")).toBeInTheDocument();
-    expect(screen.getByText("Connect provider keys only for verified replay.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project key setup" })).toBeInTheDocument();
+    expect(screen.getByText("Create key")).toBeInTheDocument();
+    expect(screen.getByText("Run SDK/Gateway")).toBeInTheDocument();
+    expect(screen.getByText("First trace")).toBeInTheDocument();
+    expect(screen.getByText("Stub replay")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create project key" })).toBeInTheDocument();
+    expect(screen.getByText("Provider keys are not needed for capture.")).toBeInTheDocument();
+    expect(screen.getByText("Add them later only when verified replay needs live model calls.")).toBeInTheDocument();
     expect(screen.getByText("No project keys yet. Create one to start capturing calls.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Confirm first trace" }).getAttribute("href")).toBe("/trace");
-    expect(screen.getByRole("link", { name: "Provider keys" }).getAttribute("href")).toBe("/settings/providers");
-    expect(screen.getByRole("link", { name: "Open provider settings" }).getAttribute("href")).toBe("/settings/providers");
+    expect(screen.getByRole("link", { name: "Open traces" }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("link", { name: "Provider settings" }).getAttribute("href")).toBe("/settings/providers");
+    expect(screen.getByText((content) => content.includes("traceRun"))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("zroky.trace_run"))).toBeInTheDocument();
   });
 
   it("creates a project key with the expected payload and shows the one-time copy panel", async () => {
@@ -134,10 +137,15 @@ describe("ApiKeysPage", () => {
     );
     expect(await screen.findByRole("heading", { name: "Copy this project key now." })).toBeInTheDocument();
     expect(screen.getByText("zk_live_created_secret")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Confirm first trace" }).some((link) => link.getAttribute("href") === "/trace")).toBe(true);
+    expect(screen.getByText("proj_1")).toBeInTheDocument();
+    expect(screen.getAllByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"')).length).toBe(2);
+    expect(screen.getAllByRole("link", { name: "Open traces" }).some((link) => link.getAttribute("href") === "/trace")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Copy key" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("zk_live_created_secret"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Node setup" }));
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("ZROKY_PROJECT_ID")));
   });
 
   it("rotates an active key and shows the replacement key panel", async () => {

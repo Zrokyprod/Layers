@@ -345,7 +345,7 @@ export default function CiGateDetailPage() {
       </section>
 
       <div className="ci-detail-layout">
-        <main className="ci-detail-main">
+        <div className="ci-detail-main">
           <section className="ci-card">
             <header className="ci-section-header">
               <div>
@@ -475,7 +475,7 @@ export default function CiGateDetailPage() {
             </header>
             <p className="ci-body-copy">{runNotes(detail)}</p>
           </section>
-        </main>
+        </div>
 
         <aside className="ci-action-panel">
           <section className="ci-card">

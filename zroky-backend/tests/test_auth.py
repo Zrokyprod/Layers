@@ -13,11 +13,13 @@ os.environ.setdefault("AUTH_JWT_SECRET", "test-secret-key-for-auth-tests")
 os.environ.setdefault("ALLOW_PROJECT_HEADER_CONTEXT", "true")
 os.environ.setdefault("REQUIRE_PROVISIONING_TOKEN", "false")
 
-from app.db.models import User, compute_email_hash
+from app.db.models import Project, ProjectMembership, User, compute_email_hash
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
+from app.core.config import get_settings
 from app.main import app
 from app.api.routes.auth import AuthTokenResponse, _store_email_verification_token, _store_oauth_handoff
+from app.services.security import hash_password
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -51,6 +53,18 @@ def test_register_creates_account_and_returns_token(client):
     assert data["refresh_expires_in_seconds"] > data["access_expires_in_seconds"]
     assert data["token_type"] == "bearer"
     assert data["email"] == "alice@example.com"
+
+    with SessionLocal() as session:
+        user = session.execute(select(User).where(User.email_hash == compute_email_hash("alice@example.com"))).scalar_one()
+        membership = session.execute(
+            select(ProjectMembership).where(
+                ProjectMembership.user_id == user.id,
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one()
+        project = session.execute(select(Project).where(Project.id == membership.project_id)).scalar_one()
+        assert membership.role == "owner"
+        assert project.name == "My Project"
 
 
 def test_register_login_alias_paths_under_api_v1(client):
@@ -213,6 +227,40 @@ def test_login_with_correct_credentials_returns_token(client):
     assert "access_token" in data
     assert "refresh_token" in data
     assert data["email"] == "logintest@example.com"
+
+
+def test_login_bootstraps_default_project_for_legacy_account(client):
+    email = "legacy-noproject@example.com"
+    password = "legacysecure123"
+    with SessionLocal() as session:
+        user = User(
+            subject=f"email:{email}",
+            email=email,
+            password_hash=hash_password(password),
+            email_verified_at=datetime.now(UTC),
+            is_active=True,
+        )
+        session.add(user)
+        session.commit()
+        user_id = user.id
+
+    resp = client.post("/v1/auth/login", json={
+        "email": email,
+        "password": password,
+    })
+    assert resp.status_code == 200
+
+    with SessionLocal() as session:
+        membership = session.execute(
+            select(ProjectMembership).where(
+                ProjectMembership.user_id == user_id,
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one()
+        project = session.execute(select(Project).where(Project.id == membership.project_id)).scalar_one()
+        assert membership.role == "owner"
+        assert project.name == "My Project"
+        assert project.is_active is True
 
 
 def test_refresh_returns_rotated_session_bundle(client):
@@ -380,7 +428,7 @@ def test_token_is_decodable_with_secret(client):
         "confirm_password": "password123",
     })
     token = resp.json()["access_token"]
-    claims = pyjwt.decode(token, "test-secret-key-for-auth-tests", algorithms=["HS256"])
+    claims = pyjwt.decode(token, get_settings().AUTH_JWT_SECRET, algorithms=["HS256"])
     assert claims["email"] == "jwtcheck@example.com"
     assert "sub" in claims
     assert "exp" in claims
@@ -583,3 +631,128 @@ def test_me_security_and_logout_all_flow(client):
 def test_github_start_returns_503_when_not_configured(client):
     resp = client.get("/v1/auth/github/start", follow_redirects=False)
     assert resp.status_code == 503
+
+
+def test_github_callback_returns_token_and_default_project(client, monkeypatch):
+    from app.api.routes import auth as auth_routes
+    from app.services.security import generate_oauth_state
+
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "github-client-id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "github-client-secret")
+    monkeypatch.setenv("GITHUB_OAUTH_REDIRECT_URL", "https://app.zroky.com/auth/github/callback")
+    monkeypatch.setenv("OAUTH_STATE_SECRET", "github-state-secret")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(auth_routes, "_exchange_github_code", lambda **_: "github-access-token")
+    monkeypatch.setattr(
+        auth_routes,
+        "_fetch_github_user",
+        lambda token: {
+            "id": "github-user-session",
+            "login": "github-session",
+            "email": None,
+        },
+    )
+    monkeypatch.setattr(auth_routes, "_fetch_primary_github_email", lambda token: "github-session@example.com")
+
+    state = generate_oauth_state("github-state-secret")
+    response = client.get(
+        "/v1/auth/github/callback",
+        params={"code": "oauth-code", "state": state},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["access_token"]
+    assert body["refresh_token"]
+    assert body["email"] == "github-session@example.com"
+    assert body["email_verified"] is True
+
+    with SessionLocal() as db:
+        user = db.execute(
+            select(User).where(User.email_hash == compute_email_hash("github-session@example.com"))
+        ).scalar_one()
+        membership = db.execute(
+            select(ProjectMembership).where(
+                ProjectMembership.user_id == user.id,
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one()
+        project = db.execute(select(Project).where(Project.id == membership.project_id)).scalar_one()
+        assert user.github_id == "github-user-session"
+        assert membership.role == "owner"
+        assert project.name == "My Project"
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth
+# ---------------------------------------------------------------------------
+
+def test_google_session_callback_returns_token_bundle(client, monkeypatch):
+    from app.api.routes import auth as auth_routes
+    from app.services.security import generate_oauth_state
+
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "google-client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "google-client-secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URL", "https://app.zroky.com/auth/google/callback")
+    monkeypatch.setenv("OAUTH_STATE_SECRET", "google-state-secret")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        auth_routes,
+        "_exchange_google_code",
+        lambda **_: "google-access-token",
+    )
+    monkeypatch.setattr(
+        auth_routes,
+        "_fetch_google_user",
+        lambda token: {
+            "id": "google-user-session",
+            "email": "google-session@example.com",
+            "name": "Google Session",
+        },
+    )
+
+    state = generate_oauth_state("google-state-secret")
+    response = client.get(
+        "/v1/auth/google/session-callback",
+        params={"code": "oauth-code", "state": state},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["access_token"]
+    assert body["refresh_token"]
+    assert body["email"] == "google-session@example.com"
+    assert body["user_id"]
+
+    with SessionLocal() as db:
+        user = db.execute(
+            select(User).where(User.email_hash == compute_email_hash("google-session@example.com"))
+        ).scalar_one()
+        assert user.google_id == "google-user-session"
+        assert user.email_verified_at is not None
+        membership = db.execute(
+            select(ProjectMembership).where(
+                ProjectMembership.user_id == user.id,
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one()
+        project = db.execute(select(Project).where(Project.id == membership.project_id)).scalar_one()
+        assert membership.role == "owner"
+        assert project.name == "My Project"
+
+
+def test_google_session_callback_rejects_invalid_state(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "google-client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "google-client-secret")
+    monkeypatch.setenv("OAUTH_STATE_SECRET", "google-state-secret")
+    get_settings.cache_clear()
+
+    response = client.get(
+        "/v1/auth/google/session-callback",
+        params={"code": "oauth-code", "state": "invalid-state"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid or expired OAuth state. Please try signing in again."
