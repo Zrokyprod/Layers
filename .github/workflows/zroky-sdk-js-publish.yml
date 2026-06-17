@@ -140,7 +140,7 @@ jobs:
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish dist/*.tgz --access public --provenance
+        run: npm publish ./dist/*.tgz --access public --provenance
 
   verify-npm-registry:
     runs-on: ubuntu-latest
