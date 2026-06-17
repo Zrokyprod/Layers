@@ -30,10 +30,13 @@ temporary project, and checks the expected SDK exports.
 
 Preferred auth method: PyPI Trusted Publisher.
 
-1. Configure a PyPI Trusted Publisher, or a pending publisher for first publish:
-   - Project: `zroky`
-   - Owner/repository: this GitHub repository
-   - Workflow: `.github/workflows/zroky-sdk-publish.yml`
+1. Configure a Trusted Publisher, or a pending publisher for first publish.
+   Configure this separately on TestPyPI and PyPI because they are separate
+   registries:
+   - Project name: `zroky`
+   - Owner: `Zrokyprod`
+   - Repository name: `Layers`
+   - Workflow filename: `zroky-sdk-publish.yml`
    - Environment: leave empty unless you intentionally add a matching GitHub
      environment to the workflow.
 2. Run GitHub Actions workflow `Zroky SDK Publish`.
