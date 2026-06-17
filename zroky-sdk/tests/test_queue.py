@@ -143,7 +143,6 @@ def test_queue_drops_events_when_full():
         instance.send_batch = lambda batch: None
 
         q = EventQueue(config=config)
-        q.start()
 
         # Fill queue beyond capacity
         results = []
@@ -165,7 +164,6 @@ def test_enqueue_returns_bool():
 
     with patch("zroky._internal.queue.IngestClient"):
         q = EventQueue(config=config)
-        q.start()
 
         # First enqueue should succeed
         assert q.enqueue(_make_event()) is True
@@ -181,7 +179,6 @@ def test_queue_tracks_dropped_count():
 
     with patch("zroky._internal.queue.IngestClient"):
         q = EventQueue(config=config)
-        q.start()
 
         initial_dropped = q.dropped_count
         assert initial_dropped == 0
