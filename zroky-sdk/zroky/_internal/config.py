@@ -9,6 +9,9 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+_DEFAULT_API_BASE_URL = "https://api.zroky.com"
+_INGEST_ENDPOINT_SUFFIXES = ("/api/v1/ingest", "/v1/ingest", "/ingest")
+
 
 @dataclass
 class SDKConfig:
@@ -121,10 +124,9 @@ def load_config(
     resolved_mask = mask_pii if mask_pii is not None else _truthy(
         os.environ.get("ZROKY_MASK_PII", "true")
     )
-    resolved_url = (
-        ingest_url
-        or os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.com/v1/ingest")
-    ).rstrip("/")
+    resolved_url = _normalize_ingest_url(
+        ingest_url or os.environ.get("ZROKY_INGEST_URL", _DEFAULT_API_BASE_URL)
+    )
     default_agent = os.environ.get("ZROKY_AGENT")
     verbose = _truthy(os.environ.get("ZROKY_VERBOSE", "false"))
     batch_size = int(os.environ.get("ZROKY_BATCH_SIZE", "10"))
@@ -350,6 +352,16 @@ def load_config(
 
 def _truthy(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_ingest_url(value: str) -> str:
+    """Normalize base URL or full ingest endpoint input into an API base URL."""
+    normalized = value.strip().rstrip("/") or _DEFAULT_API_BASE_URL
+    for suffix in _INGEST_ENDPOINT_SUFFIXES:
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)].rstrip("/")
+            break
+    return normalized or _DEFAULT_API_BASE_URL
 
 
 def _resolve_string_tuple(

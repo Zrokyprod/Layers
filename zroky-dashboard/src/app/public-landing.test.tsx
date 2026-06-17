@@ -39,7 +39,7 @@ beforeAll(() => {
 
 describe("PublicLanding", () => {
   it("renders the reliability control-plane story and primary actions", () => {
-    render(<PublicLanding />);
+    const { container } = render(<PublicLanding />);
 
     expect(screen.getByRole("heading", { name: "Fix failed agent runs before they ship again" })).toBeInTheDocument();
     expect(screen.getByText(/capture the exact run, replay the fix/i)).toBeInTheDocument();
@@ -56,5 +56,8 @@ describe("PublicLanding", () => {
     expect(screen.getByRole("link", { name: "LinkedIn" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Instagram" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Twitter" })).toBeInTheDocument();
+    expect(container.textContent).toContain('import { init, traceRun, wrap } from "@zroky/sdk";');
+    expect(container.textContent).not.toContain("new Zroky");
+    expect(container.textContent).not.toContain("zroky-sdk");
   });
 });

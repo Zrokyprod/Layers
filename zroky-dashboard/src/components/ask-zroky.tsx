@@ -487,7 +487,7 @@ export function AskZroky() {
                     - copy your project key
                   </li>
                   <li>
-                    <code className="ask-inline-code">npm i zroky-sdk</code> - install the SDK
+                    <code className="ask-inline-code">npm i @zroky/sdk</code> - install the SDK
                   </li>
                   <li>Instrument one LLM call - live data appears in seconds</li>
                 </ol>

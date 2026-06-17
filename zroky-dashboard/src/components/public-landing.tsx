@@ -264,25 +264,31 @@ export function PublicLanding() {
     () => moduleViews.find((view) => view.key === activeModule) ?? moduleViews[3],
     [activeModule],
   );
+  const sdkSnippet = `import OpenAI from "openai";
+import { init, traceRun, wrap } from "@zroky/sdk";
 
-  const copySdkSnippet = async () => {
-    const snippet = `import { Zroky } from "zroky-sdk";
-
-const zroky = new Zroky({
+init({
   apiKey: process.env.ZROKY_API_KEY,
-  workspace: "acme-cx"
+  projectId: process.env.ZROKY_PROJECT_ID,
+  endpoint: "https://api.zroky.com/v1/ingest",
+  agentName: "support-bot",
+  workflowName: "refund-status",
+  environment: "production",
 });
 
-await zroky.captureRun({
-  agent: "support-bot",
-  provider: "openai",
-  model: "gpt-4.1",
-  trace: true,
-  output: true
+const openai = wrap(new OpenAI());
+
+await traceRun({ name: "refund-status-check", userInput: "Where is my refund?" }, async () => {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Check refund status for order 1421." }],
+  });
+  return response.choices[0]?.message?.content ?? "";
 });`;
 
+  const copySdkSnippet = async () => {
     try {
-      await navigator.clipboard?.writeText(snippet);
+      await navigator.clipboard?.writeText(sdkSnippet);
       setCopyState("copied");
       window.setTimeout(() => setCopyState("idle"), 1800);
     } catch {
@@ -365,20 +371,7 @@ await zroky.captureRun({
                     {copyState === "copied" ? "Copied" : "Copy"}
                   </button>
                 </div>
-                <pre>{`import { Zroky } from "zroky-sdk";
-
-const zroky = new Zroky({
-  apiKey: process.env.ZROKY_API_KEY,
-  workspace: "acme-cx"
-});
-
-await zroky.captureRun({
-  agent: "support-bot",
-  provider: "openai",
-  model: "gpt-4.1",
-  trace: true,
-  output: true
-});`}</pre>
+                <pre>{sdkSnippet}</pre>
               </article>
 
               <article className="zlp-timeline-panel">

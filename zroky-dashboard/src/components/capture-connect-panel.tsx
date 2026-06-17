@@ -121,7 +121,7 @@ export function CaptureConnectPanel({
 
   const snippets = useMemo(() => {
     const apiBaseUrl = process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL || "https://api.zroky.com";
-    const ingestUrl = `${apiBaseUrl.replace(/\/$/, "")}/api/v1/ingest`;
+    const ingestUrl = `${apiBaseUrl.replace(/\/$/, "")}/v1/ingest`;
     const sdkInstall = "npm install @zroky/sdk";
     const sdkCode = `import OpenAI from "openai";
 import { init, wrap } from "@zroky/sdk";
