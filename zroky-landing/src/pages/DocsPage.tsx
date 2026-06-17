@@ -38,7 +38,7 @@ response = zroky.call(
 )`;
 
 const typescriptSnippet = `import OpenAI from "openai";
-import { init, wrap } from "@zroky/sdk";
+import { init, wrap } from "@zroky-ai/sdk";
 
 init({
   projectId: process.env.ZROKY_PROJECT_ID,

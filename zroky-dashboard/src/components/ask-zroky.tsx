@@ -1,4 +1,4 @@
-ï»¿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -177,7 +177,7 @@ export function AskZroky() {
   const createReplayFromCall = useCreateReplayRunFromCall();
   const createReplayFromIssue = useCreateReplayRunFromIssue();
 
-  // Dynamic suggestion data â€” only fetched when drawer is open
+  // Dynamic suggestion data — only fetched when drawer is open
   const callsQuery = useQuery({
     queryKey: ["calls", "list", { limit: 1 }],
     queryFn: () => listCalls({ limit: 1 }),
@@ -288,7 +288,7 @@ export function AskZroky() {
         {
           id: uid(),
           role: "assistant",
-          text: `Sorry â€” I could not answer that. (${message})`,
+          text: `Sorry — I could not answer that. (${message})`,
           used_llm: false,
         },
       ]);
@@ -313,7 +313,7 @@ export function AskZroky() {
     try {
       await submitAskFeedback(body);
     } catch {
-      // non-critical â€” UI already updated optimistically
+      // non-critical — UI already updated optimistically
     }
   }
 
@@ -487,7 +487,7 @@ export function AskZroky() {
                     - copy your project key
                   </li>
                   <li>
-                    <code className="ask-inline-code">npm i @zroky/sdk</code> - install the SDK
+                    <code className="ask-inline-code">npm i @zroky-ai/sdk</code> - install the SDK
                   </li>
                   <li>Instrument one LLM call - live data appears in seconds</li>
                 </ol>
@@ -643,7 +643,7 @@ export function AskZroky() {
             ref={inputRef}
             type="text"
             className="ask-input"
-            placeholder="Ask anything about your agentâ€¦"
+            placeholder="Ask anything about your agent…"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             disabled={pending}

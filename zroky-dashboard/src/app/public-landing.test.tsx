@@ -56,7 +56,7 @@ describe("PublicLanding", () => {
     expect(screen.getByRole("link", { name: "LinkedIn" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Instagram" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Twitter" })).toBeInTheDocument();
-    expect(container.textContent).toContain('import { init, traceRun, wrap } from "@zroky/sdk";');
+    expect(container.textContent).toContain('import { init, traceRun, wrap } from "@zroky-ai/sdk";');
     expect(container.textContent).not.toContain("new Zroky");
     expect(container.textContent).not.toContain("zroky-sdk");
   });

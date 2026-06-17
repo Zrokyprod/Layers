@@ -70,7 +70,7 @@ response = zroky.call(
 )`;
 
 export const typescriptCaptureCode = `import OpenAI from "openai";
-import { init, wrap } from "@zroky/sdk";
+import { init, wrap } from "@zroky-ai/sdk";
 
 init({
   projectId: process.env.ZROKY_PROJECT_ID,
@@ -286,7 +286,7 @@ export OPENAI_API_KEY="sk_provider_xxxx"`,
       {
         id: 'install',
         title: 'Install',
-        codeBlocks: [{ label: 'Install packages', language: 'bash', code: 'npm install @zroky/sdk openai' }],
+        codeBlocks: [{ label: 'Install packages', language: 'bash', code: 'npm install @zroky-ai/sdk openai' }],
       },
       {
         id: 'configure',

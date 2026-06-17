@@ -5,7 +5,7 @@
  * @zroky/trace — function-level trace decorator / wrapper.
  *
  * Usage:
- *   import { trace } from "@zroky/sdk";
+ *   import { trace } from "@zroky-ai/sdk";
  *
  *   const tracedFn = trace(myAgentFunction, { agentName: "planner" });
  *   await tracedFn(args);

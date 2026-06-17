@@ -6,13 +6,13 @@ registry tokens.
 
 ## Packages
 
-- JavaScript: `@zroky/sdk`
+- JavaScript: `@zroky-ai/sdk`
 - Python: `zroky`
 
 ## npm publish
 
-1. Create or confirm the npm scope/organization `@zroky`.
-2. Create an npm automation token with permission to publish `@zroky/sdk`.
+1. Create or confirm the npm scope/organization `@zroky-ai`.
+2. Create an npm automation token with permission to publish `@zroky-ai/sdk`.
 3. Add the token to GitHub repository secrets as `NPM_TOKEN`.
 4. Run GitHub Actions workflow `Zroky JS SDK Publish`.
 5. Choose:
@@ -74,7 +74,7 @@ After both public registry publishes pass, verify from a clean machine or temp
 directory:
 
 ```bash
-npm install @zroky/sdk@0.1.0
+npm install @zroky-ai/sdk@0.1.0
 python -m pip install zroky==0.1.0
 ```
 

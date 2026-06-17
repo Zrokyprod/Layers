@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { captureRetrieval, init, trace, wrap } from "@zroky/sdk";
+import { captureRetrieval, init, trace, wrap } from "@zroky-ai/sdk";
 
 init({
   projectId: process.env.ZROKY_PROJECT_ID,

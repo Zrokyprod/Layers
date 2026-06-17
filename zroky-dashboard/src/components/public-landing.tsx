@@ -265,7 +265,7 @@ export function PublicLanding() {
     [activeModule],
   );
   const sdkSnippet = `import OpenAI from "openai";
-import { init, traceRun, wrap } from "@zroky/sdk";
+import { init, traceRun, wrap } from "@zroky-ai/sdk";
 
 init({
   apiKey: process.env.ZROKY_API_KEY,

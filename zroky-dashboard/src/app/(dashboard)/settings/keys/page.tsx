@@ -117,7 +117,7 @@ export default function ApiKeysPage() {
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const currentStepIndex = hasActiveKey ? 1 : 0;
   const snippetProjectId = projectId || "proj_...";
-  const jsSetupSnippet = `npm install @zroky/sdk
+  const jsSetupSnippet = `npm install @zroky-ai/sdk
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
 export ZROKY_ENDPOINT="https://api.zroky.com/v1/ingest"`;
@@ -125,7 +125,7 @@ export ZROKY_ENDPOINT="https://api.zroky.com/v1/ingest"`;
 export ZROKY_PROJECT="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
 export ZROKY_INGEST_URL="https://api.zroky.com/v1/ingest"`;
-  const jsSmokeSnippet = `import { init, traceRun, captureToolCall } from "@zroky/sdk";
+  const jsSmokeSnippet = `import { init, traceRun, captureToolCall } from "@zroky-ai/sdk";
 
 init({
   agentName: "first-capture-agent",

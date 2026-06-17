@@ -1,5 +1,5 @@
 {
-  "name": "@zroky/sdk",
+  "name": "@zroky-ai/sdk",
   "version": "0.1.0",
   "description": "Zroky AI SDK — capture + preflight for OpenAI and compatible providers.",
   "main": "./dist/index.js",
