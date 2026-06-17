@@ -64,7 +64,7 @@ describe("SettingsLayout", () => {
     );
 
     expect(screen.getByRole("link", { name: "Integrations" }).className).toContain("settings-tab-link-active");
-    expect(screen.getByText("Slack and Teams delivery")).toBeInTheDocument();
+    expect(screen.getByText("Alert delivery")).toBeInTheDocument();
   });
 
   it("does not include personal account controls in workspace settings", () => {

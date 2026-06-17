@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  BellRing,
-  CheckCircle2,
+  ArrowRight,
+  CreditCard,
   Database,
   Download,
   GitPullRequest,
-  LockKeyhole,
+  KeyRound,
+  Plug,
   RefreshCw,
-  ShieldCheck,
   Trash2,
+  Users,
 } from "lucide-react";
 
 import {
@@ -337,7 +337,6 @@ export default function SettingsPage() {
   const eraseConfirmMatches = Boolean(project && eraseConfirmInput.trim() === project.project_id);
   const previewReadyForDelete = Boolean(eraseSummary?.dry_run);
   const retentionDays = state.retention?.retention_days ?? null;
-  const retentionBand = retentionDays == null ? "unknown" : retentionDays >= 30 ? "ready" : "short";
 
   return (
     <div className="page-content settings-project-page">
@@ -370,53 +369,81 @@ export default function SettingsPage() {
 
       {!loading && project ? (
         <>
-          <section className="settings-summary-grid">
-            <article className="panel settings-summary-card">
-              <Database aria-hidden="true" />
-              <span>Project</span>
-              <strong>{safeString(project.name, "Project")}</strong>
-              <small className="mono">{project.project_id}</small>
-            </article>
-            <article className="panel settings-summary-card">
-              <GitPullRequest aria-hidden="true" />
-              <span>GitHub PRs</span>
-              <strong>{githubConnected ? "Connected" : "Not connected"}</strong>
-              <small>{state.githubConnection?.github_login ? `@${state.githubConnection.github_login}` : "Connect repo access for generated PRs"}</small>
-            </article>
-            <article className="panel settings-summary-card">
-              <ShieldCheck aria-hidden="true" />
-              <span>Retention</span>
-              <strong>{retentionDays ?? "-"} days</strong>
-              <small>{retentionBand === "short" ? "Short retention, review compliance needs" : `Updated ${formatDateTime(state.retention?.updated_at ?? null)}`}</small>
-            </article>
-            <article className="panel settings-summary-card">
-              <BellRing aria-hidden="true" />
-              <span>Alert channels</span>
-              <strong>{enabledNotificationChannels}/5 enabled</strong>
-              <small>Delivery toggles are project scoped.</small>
-            </article>
+          <section className="panel settings-project-cockpit" aria-labelledby="settings-project-title">
+            <div className="settings-project-cockpit-header">
+              <div>
+                <span className="settings-section-kicker">
+                  <Database aria-hidden="true" />
+                  Project
+                </span>
+                <h2 id="settings-project-title">{safeString(project.name, "My Project")}</h2>
+                <p>
+                  Your first project is created automatically. Capture keys, members, billing, and evidence are scoped to this project.
+                </p>
+              </div>
+              <StatusPill value={project.is_active ? "active" : "inactive"} />
+            </div>
+
+            <div className="settings-project-facts" aria-label="Current project facts">
+              <div>
+                <span>Project ID</span>
+                <strong className="mono">{project.project_id}</strong>
+              </div>
+              <div>
+                <span>Owner</span>
+                <strong>{safeString(project.owner_ref, "Current account")}</strong>
+              </div>
+              <div>
+                <span>Created</span>
+                <strong>{formatDateTime(project.created_at)}</strong>
+              </div>
+              <div>
+                <span>Updated</span>
+                <strong>{formatDateTime(project.updated_at)}</strong>
+              </div>
+            </div>
           </section>
 
-          <section className="settings-readiness-grid" aria-label="Project settings readiness">
-            <div className="settings-readiness-item">
-              <CheckCircle2 aria-hidden="true" />
-              <span>PII detector saves only valid regex patterns.</span>
-            </div>
-            <div className="settings-readiness-item">
-              <LockKeyhole aria-hidden="true" />
-              <span>Data erasure requires preview plus exact project ID.</span>
-            </div>
-            <div className={githubConnected ? "settings-readiness-item" : "settings-readiness-item settings-readiness-warn"}>
-              {githubConnected ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
-              <span>{githubConnected ? "GitHub PR generation can use connected repo access." : "GitHub PR generation needs repo OAuth connection."}</span>
-            </div>
+          <section className="settings-project-action-grid" aria-label="Project setup actions">
+            <Link href="/settings/keys" className="settings-workspace-card">
+              <KeyRound aria-hidden="true" />
+              <span>
+                <strong>Project key</strong>
+                <small>Create or rotate capture credentials.</small>
+              </span>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link href="/settings/providers" className="settings-workspace-card">
+              <Plug aria-hidden="true" />
+              <span>
+                <strong>Provider keys</strong>
+                <small>Add only when replay needs live model calls.</small>
+              </span>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link href="/settings/team" className="settings-workspace-card">
+              <Users aria-hidden="true" />
+              <span>
+                <strong>Members</strong>
+                <small>Invite teammates and manage roles.</small>
+              </span>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link href="/settings/billing" className="settings-workspace-card">
+              <CreditCard aria-hidden="true" />
+              <span>
+                <strong>Plan & usage</strong>
+                <small>Review limits, budget, and upgrade state.</small>
+              </span>
+              <ArrowRight aria-hidden="true" />
+            </Link>
           </section>
 
           {Object.values(sectionErrors).some(Boolean) ? (
             <section className="panel panel-muted">
               <header className="panel-header">
-                <h3>Partial Settings Access</h3>
-                <p>Some admin-only or backend-backed settings did not load. The available controls remain usable.</p>
+                <h3>Some controls could not load</h3>
+                <p>Loaded controls remain usable. Refresh after backend or role access is available.</p>
               </header>
               <div className="list">
                 {Object.entries(sectionErrors).map(([key, value]) =>
@@ -437,8 +464,8 @@ export default function SettingsPage() {
             <article className="panel settings-control-panel">
               <header className="panel-header">
                 <div>
-                  <h3>Project Metadata</h3>
-                  <p>Identity and ownership for the active Zroky project.</p>
+                  <h3>Project details</h3>
+                  <p>Read-only identity for the active project.</p>
                 </div>
                 <button type="button" className="btn btn-soft" onClick={() => void load()}>
                   <RefreshCw aria-hidden="true" />
@@ -461,7 +488,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="list-row">
                   <div className="list-main">
-                    <strong>Owner reference</strong>
+                    <strong>Owner</strong>
                     <span>{safeString(project.owner_ref, "-")}</span>
                   </div>
                 </div>
@@ -484,8 +511,8 @@ export default function SettingsPage() {
             <article className="panel settings-control-panel">
               <header className="panel-header">
                 <div>
-                  <h3>GitHub PR Connection</h3>
-                  <p>Connect your GitHub account so generated fixes can open pull requests.</p>
+                  <h3>GitHub connection</h3>
+                  <p>Optional repo access for generated fix pull requests.</p>
                 </div>
                 <StatusPill value={githubConnected ? "verified" : "warning"} />
               </header>
@@ -530,7 +557,7 @@ export default function SettingsPage() {
               <header className="panel-header">
                 <div>
                   <h3>PII Policy</h3>
-                  <p>Custom redaction patterns used before storing captured call evidence.</p>
+                  <p>Custom redaction patterns for captured evidence.</p>
                 </div>
               </header>
 
@@ -599,7 +626,7 @@ export default function SettingsPage() {
               <header className="panel-header">
                 <div>
                   <h3>Retention & Notifications</h3>
-                  <p>Control data lifecycle and delivery channels for operational alerts.</p>
+                  <p>{retentionDays ?? "-"} day retention. {enabledNotificationChannels}/5 alert channels enabled.</p>
                 </div>
               </header>
 
@@ -659,7 +686,7 @@ export default function SettingsPage() {
               <header className="panel-header">
                 <div>
                   <h3>Data Export</h3>
-                  <p>Download calls, diagnoses, and alerts for portability or offline audit.</p>
+                  <p>Download project evidence as JSON.</p>
                 </div>
               </header>
               <div className="actions">
@@ -673,8 +700,8 @@ export default function SettingsPage() {
             <article className="panel settings-control-panel profile-danger-zone">
               <header className="panel-header">
                 <div>
-                  <h3 className="profile-danger-title">Project Data Erasure</h3>
-                  <p>Preview or permanently delete project operational data. Run preview before deleting.</p>
+                  <h3 className="profile-danger-title">Danger zone</h3>
+                  <p>Preview first, then delete operational evidence for this project.</p>
                 </div>
               </header>
               <div className="settings-inline-form">

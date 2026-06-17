@@ -6714,6 +6714,107 @@ body:has(.app-shell) {
   color: var(--dashboard-bg) !important;
 }
 
+.app-shell .settings-project-cockpit {
+  display: grid !important;
+  gap: 14px !important;
+  border-color: var(--dashboard-border) !important;
+  background:
+    linear-gradient(135deg, var(--dashboard-surface-soft), var(--dashboard-surface) 62%),
+    var(--dashboard-surface) !important;
+  color: var(--dashboard-text) !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+.app-shell .settings-project-cockpit-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+
+.app-shell .settings-project-cockpit h2 {
+  margin: 10px 0 0 !important;
+  color: var(--dashboard-text) !important;
+  font-size: 1.75rem !important;
+  font-weight: 720 !important;
+  line-height: 1.12 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-cockpit p {
+  max-width: 720px !important;
+  margin: 8px 0 0 !important;
+  color: var(--dashboard-text-soft) !important;
+  line-height: 1.5 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-facts {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.app-shell .settings-project-facts > div {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  border: 1px solid var(--dashboard-border) !important;
+  border-radius: 8px !important;
+  background: var(--dashboard-surface-inset) !important;
+  padding: 11px 12px !important;
+}
+
+.app-shell .settings-project-facts span,
+.app-shell .settings-project-action-grid .settings-workspace-card small {
+  color: var(--dashboard-muted) !important;
+  font-size: 0.72rem !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-facts strong,
+.app-shell .settings-project-action-grid .settings-workspace-card strong {
+  min-width: 0 !important;
+  color: var(--dashboard-text) !important;
+  overflow-wrap: anywhere !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-action-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.app-shell .settings-project-action-grid .settings-workspace-card {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  gap: 10px !important;
+  align-items: center !important;
+  min-height: 88px !important;
+  padding: 14px !important;
+  text-decoration: none !important;
+}
+
+.app-shell .settings-project-action-grid .settings-workspace-card > svg:first-child {
+  width: 18px !important;
+  height: 18px !important;
+  color: var(--dashboard-accent) !important;
+}
+
+.app-shell .settings-project-action-grid .settings-workspace-card > svg:last-child {
+  width: 15px !important;
+  height: 15px !important;
+  color: var(--dashboard-muted) !important;
+}
+
+.app-shell .settings-project-action-grid .settings-workspace-card span {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
 .app-shell .settings-summary-grid {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -7083,6 +7184,8 @@ body:has(.app-shell) {
 
 @media (max-width: 980px) {
   .app-shell .settings-summary-grid,
+  .app-shell .settings-project-facts,
+  .app-shell .settings-project-action-grid,
   .app-shell .settings-readiness-grid,
   .app-shell .settings-integration-grid,
   .app-shell .settings-gate-map {
@@ -7131,6 +7234,8 @@ body:has(.app-shell) {
   }
 
   .app-shell .settings-summary-grid,
+  .app-shell .settings-project-facts,
+  .app-shell .settings-project-action-grid,
   .app-shell .settings-readiness-grid,
   .app-shell .settings-integration-grid,
   .app-shell .settings-gate-map,

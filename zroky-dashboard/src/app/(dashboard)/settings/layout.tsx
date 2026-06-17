@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
-  Activity,
   CreditCard,
   BellRing,
   KeyRound,
@@ -25,13 +24,13 @@ const SETTINGS_TABS: ReadonlyArray<{
   icon: LucideIcon;
   exact?: boolean;
 }> = [
-  { href: "/settings", label: "Project", description: "Project defaults and data controls", icon: SettingsIcon, exact: true },
-  { href: "/settings/keys", label: "API keys", description: "Capture and ingest credentials", icon: KeyRound },
-  { href: "/settings/providers", label: "Providers", description: "Model provider vault", icon: Plug },
+  { href: "/settings", label: "Project", description: "Current project and data controls", icon: SettingsIcon, exact: true },
+  { href: "/settings/keys", label: "API keys", description: "Capture credentials", icon: KeyRound },
+  { href: "/settings/providers", label: "Providers", description: "Model provider keys", icon: Plug },
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },
-  { href: "/settings/billing", label: "Plan & Billing", description: "Subscription and usage", icon: CreditCard },
-  { href: "/settings/evaluation", label: "Evaluation", description: "Judge and calibration controls", icon: SlidersHorizontal },
-  { href: "/settings/integrations", label: "Integrations", description: "Slack and Teams delivery", icon: BellRing },
+  { href: "/settings/billing", label: "Plan & Billing", description: "Plan, usage, and budget", icon: CreditCard },
+  { href: "/settings/evaluation", label: "Evaluation", description: "Judge calibration", icon: SlidersHorizontal },
+  { href: "/settings/integrations", label: "Integrations", description: "Alert delivery", icon: BellRing },
 ] as const;
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
@@ -46,10 +45,10 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
           <div>
             <span className="module-eyebrow">
               <ShieldCheck aria-hidden="true" />
-              Control plane
+              Settings
             </span>
-            <h1>Settings Control Plane</h1>
-            <p>Configure the project surface that captures failures, protects secrets, gates releases, and routes alerts.</p>
+            <h1>Settings</h1>
+            <p>Manage the active project, capture keys, providers, members, billing, and alerts.</p>
           </div>
           <div className="settings-hero-current">
             <ActiveIcon aria-hidden="true" />
@@ -58,11 +57,6 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               <small>{activeTab.description}</small>
             </span>
           </div>
-        </div>
-        <div className="settings-hero-rail" aria-label="Settings trust areas">
-          <span><Activity aria-hidden="true" /> Live project state</span>
-          <span><ShieldCheck aria-hidden="true" /> Guarded destructive actions</span>
-          <span><KeyRound aria-hidden="true" /> Secret rotation controls</span>
         </div>
       </section>
 
