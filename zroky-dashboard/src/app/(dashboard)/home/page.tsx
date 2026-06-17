@@ -143,7 +143,7 @@ function issueImpactUsd(issue: IssueItem): number | null {
 
 function formatIssueImpact(issue: IssueItem): string {
   const impactUsd = issueImpactUsd(issue);
-  return impactUsd == null ? "\u2014" : formatUsd(impactUsd);
+  return impactUsd == null ? "No cost data" : formatUsd(impactUsd);
 }
 
 function isAbortError(error: unknown): boolean {
@@ -285,20 +285,15 @@ function percentDelta(current: number | null | undefined, previous: number | nul
   return Math.round(((current - previous) / previous) * 100);
 }
 
-function formatTrend(value: number | null): string {
-  if (value == null) return "No trend";
-  if (value > 0) return `+${value}%`;
-  return `${value}%`;
+function formatCostTrend(value: number | null): string {
+  if (value == null) return "Trend pending";
+  if (value > 0) return `+${value}% cost`;
+  return `${value}% cost`;
 }
 
 function statusLabel(value: string): string {
   const normalized = value.replace(/_/g, " ").trim().toLowerCase();
   return normalized ? `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}` : "Unknown";
-}
-
-function isFailureCall(call: CallListItem): boolean {
-  const status = call.status.toLowerCase();
-  return status.includes("fail") || status.includes("error") || Boolean(call.error_code);
 }
 
 function runPassed(run: ReplayRunItem): boolean {
@@ -315,6 +310,25 @@ function averageLatencyMs(calls: CallListItem[]): number | null {
   const latencies = calls.map((call) => call.latency_ms).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   if (latencies.length === 0) return null;
   return Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length);
+}
+
+function CommandCenterSkeleton() {
+  return (
+    <div className="fi-loading-skeleton" aria-label="Loading Home data" aria-busy="true">
+      <div className="fi-skeleton-line is-wide" />
+      <div className="fi-skeleton-line" />
+      <div className="fi-skeleton-table">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div className="fi-skeleton-row" key={index}>
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function HomePage() {
@@ -420,7 +434,7 @@ export default function HomePage() {
       if (successCount > 0) {
         setLastUpdatedAt(Date.now());
       } else {
-        setError("Command Center could not refresh. Showing the last loaded state.");
+        setError("Home could not refresh. Showing the last loaded state.");
       }
     } catch (loadError) {
       if (!signal?.aborted) {
@@ -498,7 +512,12 @@ export default function HomePage() {
   const captureStatus = data.captureHealth?.status ?? "unknown";
   const capturedCallCount = Math.max(data.captureHealth?.calls_24h ?? 0, data.calls.length);
   const captureLabel = captureStatusLabel(captureStatus, capturedCallCount);
-  const failedRunsCount = Math.max(data.calls.filter(isFailureCall).length, criticalHighCount);
+  const captureBacklog = data.captureHealth?.gateway_spool_backlog ?? 0;
+  const captureHasProblem =
+    captureStatus === "stale" ||
+    (data.captureHealth?.gateway_unhealthy_count ?? 0) > 0 ||
+    captureBacklog > 0 ||
+    (data.captureHealth?.gateway_loss_count ?? 0) > 0;
   const replayPassCount = data.replayRuns.filter(runPassed).length;
   const replayFailCount = data.replayRuns.filter(runFailed).length;
   const replayCompletedCount = replayPassCount + replayFailCount;
@@ -516,6 +535,64 @@ export default function HomePage() {
   const headerSubtitle = hasWorkspaceActivity
     ? "Reliability control plane for production agent runs."
     : "Capture your first agent run to start reliability monitoring.";
+  const heroSignal = loading
+    ? {
+        value: "Loading",
+        label: "workspace reliability state",
+        detail: "Fetching issues, traces, replay proof, and CI gate health.",
+        tone: "neutral" as const,
+      }
+    : !hasWorkspaceActivity
+      ? {
+          value: "Ready",
+          label: "capture the first trace",
+          detail: headerSubtitle,
+          tone: "neutral" as const,
+        }
+      : failedCiRuns.length > 0
+        ? {
+            value: formatCount(failedCiRuns.length),
+            label: failedCiRuns.length === 1 ? "CI gate blocking release" : "CI gates blocking release",
+            detail: "Open the failing gate, verify the replay result, then protect the release path.",
+            tone: "danger" as const,
+          }
+        : criticalHighCount > 0
+          ? {
+              value: formatCount(criticalHighCount),
+              label: criticalHighCount === 1 ? "critical/high failure needs action" : "critical/high failures need action",
+              detail:
+                needsTrustedReplayCount > 0
+                  ? `${formatCount(needsTrustedReplayCount)} still need trusted replay proof.`
+                  : "All loaded high-risk failures have trusted replay proof.",
+              tone: "danger" as const,
+            }
+          : captureHasProblem
+            ? {
+                value: "Capture",
+                label: "health needs attention",
+                detail: captureStatus === "stale" ? "No recent trace received from this project." : "Gateway events are waiting to process.",
+                tone: "warning" as const,
+              }
+            : needsTrustedReplayCount > 0
+              ? {
+                  value: formatCount(needsTrustedReplayCount),
+                  label: needsTrustedReplayCount === 1 ? "failure needs replay proof" : "failures need replay proof",
+                  detail: "Run replay before converting the flow into a Golden or CI gate.",
+                  tone: "warning" as const,
+                }
+              : protectedGoldenCount > 0
+                ? {
+                    value: "Protected",
+                    label: "release gates are healthy",
+                    detail: `${formatCount(protectedGoldenCount)} protected flow${protectedGoldenCount === 1 ? "" : "s"} loaded with no blocking gate.`,
+                    tone: "success" as const,
+                  }
+                : {
+                    value: "Quiet",
+                    label: "no urgent action loaded",
+                    detail: headerSubtitle,
+                    tone: "success" as const,
+                  };
   const loadErrorKeys = Object.keys(loadErrors) as InboxLoadKey[];
   const loadErrorText = loadErrorKeys.map((key) => loadSourceLabels[key]).join(", ");
   const issuesLoadFailed = loadErrorKeys.includes("issues");
@@ -583,12 +660,6 @@ export default function HomePage() {
     setSelectedIssueId(issue.id);
   }
 
-  const captureBacklog = data.captureHealth?.gateway_spool_backlog ?? 0;
-  const captureHasProblem =
-    captureStatus === "stale" ||
-    (data.captureHealth?.gateway_unhealthy_count ?? 0) > 0 ||
-    captureBacklog > 0 ||
-    (data.captureHealth?.gateway_loss_count ?? 0) > 0;
   const priorityIssueSource = queueFocus === "all" ? sortedIssues : focusedIssues;
   const priorityRows: PriorityRow[] = [
     ...priorityIssueSource.slice(0, 3).map((issue) => {
@@ -613,7 +684,7 @@ export default function HomePage() {
       type: "Replay waiting",
       title: run.golden_set_id,
       detail: `${run.replay_mode.replace(/_/g, " ")} replay created ${formatDateTime(run.created_at)}`,
-      impact: "-",
+      impact: "Pending replay",
       status: statusLabel(run.status),
       tone: "warning" as const,
       action: (
@@ -708,10 +779,14 @@ export default function HomePage() {
 
   return (
     <div className="fi-screen">
-      <section className="fi-hero">
+      <section className="fi-hero fi-command-hero" data-tone={heroSignal.tone}>
         <div className="fi-hero-main">
           <h1>Home</h1>
-          <p>{loading ? "Loading trusted replay gaps for open production issues." : headerSubtitle}</p>
+          <div className="fi-hero-signal" aria-live="polite">
+            <strong>{heroSignal.value}</strong>
+            <span>{heroSignal.label}</span>
+          </div>
+          <p>{heroSignal.detail}</p>
         </div>
         <div className="fi-hero-actions">
           <div className="fi-refresh-meta" aria-live="polite">
@@ -779,19 +854,11 @@ export default function HomePage() {
         />
       ) : (
         <>
-      <section className="fi-kpi-grid fi-command-metrics" aria-label="Command Center summary">
-        <KpiCard
-          icon={<AlertTriangle aria-hidden="true" />}
-          label="Failed runs"
-          value={loading ? "-" : formatCount(failedRunsCount)}
-          helper={data.calls.length > 0 ? "Failed or errored traces in the latest sample." : "Highest-risk loaded failures."}
-          active={queueFocus === "critical_high"}
-          onClick={() => focusQueue("critical_high")}
-        />
+      <section className="fi-kpi-grid fi-command-metrics" aria-label="Home summary">
         <KpiCard
           icon={<ListChecks aria-hidden="true" />}
           label="New issues"
-          value={loading ? "-" : formatCount(openIssuesCount)}
+          value={loading ? "Loading" : formatCount(openIssuesCount)}
           helper={`${formatCount(needsTrustedReplayCount)} still need replay proof.`}
           active={queueFocus === "all"}
           onClick={() => focusQueue("all")}
@@ -799,7 +866,7 @@ export default function HomePage() {
         <KpiCard
           icon={<RotateCcw aria-hidden="true" />}
           label="Replay pass/fail"
-          value={loading ? "-" : replayCompletedCount > 0 || openIssuesCount > 0 ? `${formatCount(replayPassRate)}% pass` : "No runs"}
+          value={loading ? "Loading" : replayCompletedCount > 0 || openIssuesCount > 0 ? `${formatCount(replayPassRate)}% pass` : "No runs"}
           helper={`${formatCount(replayFailCount)} failing or not verified.`}
           active={queueFocus === "replay_gap"}
           onClick={() => focusQueue("replay_gap")}
@@ -807,13 +874,13 @@ export default function HomePage() {
         <KpiCard
           icon={<GitPullRequest aria-hidden="true" />}
           label="CI blocked regressions"
-          value={loading ? "-" : formatCount(failedCiRuns.length)}
+          value={loading ? "Loading" : formatCount(failedCiRuns.length)}
           helper={failedCiRuns.length > 0 ? "Blocking or not_verified gate runs." : "No blocking CI gates loaded."}
         />
         <KpiCard
           icon={<DollarSign aria-hidden="true" />}
           label="Cost / latency trend"
-          value={loading ? "-" : `${formatTrend(costTrend)} cost`}
+          value={loading ? "Loading" : formatCostTrend(costTrend)}
           helper={latencyAverage == null ? "Latency trend needs captured traces." : `${formatCount(latencyAverage)}ms average latency.`}
         />
       </section>
@@ -833,7 +900,7 @@ export default function HomePage() {
           />
 
           {loading ? (
-            <div className="fi-loading" aria-label="Loading Command Center" />
+            <CommandCenterSkeleton />
           ) : priorityRows.length === 0 ? (
             <EmptyQueue>No action required right now.</EmptyQueue>
           ) : (
@@ -867,10 +934,10 @@ export default function HomePage() {
                       }
                     >
                       <td>
-                        <span className="fi-priority-pill">{row.priority}</span>
+                        <span className="fi-priority-code">{row.priority}</span>
                       </td>
                       <td>
-                        <span className="fi-replay-state">{row.type}</span>
+                        <span className="fi-row-type">{row.type}</span>
                       </td>
                       <td>
                         <div className="fi-issue-cell">
@@ -895,7 +962,7 @@ export default function HomePage() {
           )}
         </section>
 
-        <aside className="fi-ops-rail" aria-label="Command Center side rail">
+        <aside className="fi-ops-rail" aria-label="Home side rail">
           <section className="fi-section fi-recent-evidence" aria-label="Recent evidence">
             <SectionHeader title="Recent evidence" description="Latest traces, failures, replay, and Golden updates." />
             <div className="fi-evidence-list">

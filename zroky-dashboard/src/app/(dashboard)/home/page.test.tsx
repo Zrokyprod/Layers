@@ -378,7 +378,8 @@ describe("Command Center home", () => {
 
     expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Reliability control plane for production agent runs.")).toBeInTheDocument();
+    expect(screen.getByText("CI gate blocking release")).toBeInTheDocument();
+    expect(screen.getByText("Open the failing gate, verify the replay result, then protect the release path.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Run replay" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "View all issues" }).length).toBeGreaterThan(0);
@@ -386,9 +387,8 @@ describe("Command Center home", () => {
     expect(screen.queryByText("Replay mode")).toBeNull();
     expect(screen.queryByText("Silent failures detected")).toBeNull();
 
-    const summary = screen.getByLabelText("Command Center summary");
-    expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(5);
-    expect(within(summaryCard("Failed runs")).getByText("2")).toBeInTheDocument();
+    const summary = screen.getByLabelText("Home summary");
+    expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(4);
     expect(within(summaryCard("New issues")).getByText("2")).toBeInTheDocument();
     expect(within(summaryCard("Replay pass/fail")).getByText("0% pass")).toBeInTheDocument();
     expect(within(summaryCard("CI blocked regressions")).getByText("1")).toBeInTheDocument();

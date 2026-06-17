@@ -42,7 +42,7 @@
   --transition-fast: 180ms ease-out;
   --transition-base: 220ms ease-out;
 
-  /* shadcn/ui theme variables - premium dark default */
+  /* shadcn/ui theme variables - light default */
   --background: 0 0% 100%;
   --foreground: 222 47% 7%;
   --card: 0 0% 100%;
@@ -116,52 +116,52 @@
 
 .dark {
   /* ZROKY custom design-system - dark mode */
-  --bg-canvas: #f6f7f9;
-  --bg-panel: #ffffff;
-  --bg-panel-soft: #f1f4f7;
-  --bg-panel-strong: #ffffff;
-  --bg-panel-elevated: #ffffff;
-  --text-primary: #101216;
-  --text-secondary: #4c5563;
-  --text-tertiary: #828b99;
-  --text-inverse: #ffffff;
-  --line-soft: #dce3eb;
-  --line-strong: #b8c4d0;
-  --accent: #635bff;
-  --accent-hover: #4f46e5;
-  --accent-pressed: #3730a3;
-  --accent-soft: rgba(99, 91, 255, 0.08);
-  --accent-glow: rgba(99, 91, 255, 0.14);
-  --ok: #16a34a;
-  --warn: #b7791f;
-  --danger: #d9465f;
-  --status-success: #16a34a;
-  --status-success-bg: rgba(22, 163, 74, 0.10);
-  --status-warning: #b7791f;
-  --status-warning-bg: rgba(183, 121, 31, 0.10);
-  --status-warning-soft: rgba(183, 121, 31, 0.18);
-  --status-error: #d9465f;
-  --status-error-bg: rgba(217, 70, 95, 0.10);
+  --bg-canvas: #050608;
+  --bg-panel: #0e1117;
+  --bg-panel-soft: #151820;
+  --bg-panel-strong: #1b202a;
+  --bg-panel-elevated: #11151d;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --text-inverse: #050608;
+  --line-soft: rgba(248, 250, 252, 0.10);
+  --line-strong: rgba(248, 250, 252, 0.18);
+  --accent: #f8fafc;
+  --accent-hover: #ffffff;
+  --accent-pressed: #cbd5e1;
+  --accent-soft: rgba(248, 250, 252, 0.08);
+  --accent-glow: rgba(248, 250, 252, 0.16);
+  --ok: #2dd4a3;
+  --warn: #f4c95d;
+  --danger: #ff5d83;
+  --status-success: #2dd4a3;
+  --status-success-bg: rgba(45, 212, 163, 0.12);
+  --status-warning: #f4c95d;
+  --status-warning-bg: rgba(244, 201, 93, 0.12);
+  --status-warning-soft: rgba(244, 201, 93, 0.18);
+  --status-error: #ff5d83;
+  --status-error-bg: rgba(255, 93, 131, 0.12);
 
   /* shadcn/ui theme variables - dark mode */
-  --background: 0 0% 100%;
-  --foreground: 222 47% 7%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 7%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 7%;
-  --primary: 245 85% 61%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 210 20% 96%;
-  --secondary-foreground: 222 47% 7%;
-  --muted: 210 20% 96%;
-  --muted-foreground: 215 16% 47%;
-  --accent-foreground: 222 47% 7%;
-  --destructive: 346 77% 56%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 214 18% 88%;
-  --input: 214 18% 88%;
-  --ring: 245 85% 61%;
+  --background: 225 28% 4%;
+  --foreground: 210 40% 98%;
+  --card: 223 24% 8%;
+  --card-foreground: 210 40% 98%;
+  --popover: 223 24% 8%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 225 28% 4%;
+  --secondary: 220 17% 14%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 220 17% 14%;
+  --muted-foreground: 215 18% 66%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 346 100% 68%;
+  --destructive-foreground: 225 28% 4%;
+  --border: 220 14% 18%;
+  --input: 220 14% 18%;
+  --ring: 210 40% 98%;
 }
 
 * {
@@ -37727,6 +37727,44 @@ body:has(.app-shell),
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 22px 70px rgba(0, 0, 0, 0.34);
 }
 
+.fi-command-hero {
+  position: relative;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fi-command-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto 22px 0 auto;
+  width: min(320px, 42vw);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fi-border-strong), transparent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.fi-command-hero[data-tone="danger"] {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(255, 93, 131, 0.12), rgba(255, 93, 131, 0) 30%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.055), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(180deg, rgba(18, 23, 34, 0.98), rgba(10, 14, 21, 0.98));
+}
+
+.fi-command-hero[data-tone="warning"] {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(244, 201, 93, 0.12), rgba(244, 201, 93, 0) 30%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.055), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(180deg, rgba(18, 23, 34, 0.98), rgba(10, 14, 21, 0.98));
+}
+
+.fi-command-hero[data-tone="success"] {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(45, 212, 163, 0.12), rgba(45, 212, 163, 0) 30%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.055), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(180deg, rgba(18, 23, 34, 0.98), rgba(10, 14, 21, 0.98));
+}
+
 .fi-section,
 .fi-kpi-card,
 .fi-notice {
@@ -37742,6 +37780,40 @@ body:has(.app-shell),
   margin-top: 0;
   font-size: clamp(1.85rem, 2.6vw, 2.55rem);
   font-weight: 720;
+}
+
+.fi-command-hero h1 {
+  margin: 0 0 12px;
+  color: var(--fi-muted);
+  font-size: 0.74rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.fi-hero-signal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 16px;
+}
+
+.fi-hero-signal strong {
+  color: var(--fi-text);
+  font-family: var(--font-manrope), var(--font-inter), system-ui, sans-serif;
+  font-size: clamp(2.3rem, 5.8vw, 4.75rem);
+  font-weight: 820;
+  letter-spacing: 0;
+  line-height: 0.95;
+}
+
+.fi-hero-signal span {
+  max-width: 18ch;
+  color: var(--fi-text);
+  font-size: clamp(1.15rem, 2.4vw, 2.05rem);
+  font-weight: 740;
+  line-height: 1.05;
 }
 
 .fi-hero p {
@@ -37785,16 +37857,16 @@ body:has(.app-shell),
 }
 
 .fi-command-metrics {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .fi-kpi-card {
-  min-height: 132px;
-  padding: 15px;
+  min-height: 118px;
+  padding: 14px;
 }
 
 .fi-kpi-card strong {
-  font-size: clamp(1.5rem, 2vw, 2.05rem);
+  font-size: clamp(1.25rem, 1.8vw, 1.75rem);
 }
 
 .fi-kpi-card-mark {
@@ -38257,7 +38329,7 @@ body:has(.app-shell),
   background: rgba(248, 250, 252, 0.055);
 }
 
-.fi-priority-pill,
+.fi-priority-code,
 .fi-status-tag {
   display: inline-flex;
   align-items: center;
@@ -38272,11 +38344,20 @@ body:has(.app-shell),
   white-space: nowrap;
 }
 
-.fi-priority-pill {
-  border-color: rgba(248, 250, 252, 0.24);
-  background: #f8fafc;
-  color: #0b1018;
+.fi-priority-code {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fi-muted);
   font-family: var(--font-jetbrains-mono), "SFMono-Regular", Consolas, monospace;
+  padding-inline: 0;
+}
+
+.fi-row-type {
+  color: var(--fi-text-soft);
+  font-size: 0.76rem;
+  font-weight: 690;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .fi-status-tag {
@@ -38300,6 +38381,70 @@ body:has(.app-shell),
   border-color: rgba(45, 212, 163, 0.28);
   background: rgba(45, 212, 163, 0.1);
   color: var(--fi-success);
+}
+
+.fi-loading-skeleton {
+  display: grid;
+  gap: 12px;
+  min-height: 260px;
+  border: 1px solid var(--fi-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.035), rgba(248, 250, 252, 0)),
+    var(--fi-surface-soft);
+  padding: 14px;
+  overflow: hidden;
+}
+
+.fi-skeleton-line,
+.fi-skeleton-row span {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.075);
+}
+
+.fi-skeleton-line::after,
+.fi-skeleton-row span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(248, 250, 252, 0.12), transparent);
+  animation: fi-skeleton-shimmer 1.45s ease-in-out infinite;
+}
+
+.fi-skeleton-line {
+  width: 42%;
+  height: 12px;
+}
+
+.fi-skeleton-line.is-wide {
+  width: 68%;
+}
+
+.fi-skeleton-table {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.fi-skeleton-row {
+  display: grid;
+  grid-template-columns: 0.5fr 0.8fr 2fr 0.9fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 42px;
+}
+
+.fi-skeleton-row span {
+  height: 10px;
+}
+
+@keyframes fi-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .fi-ops-rail {
