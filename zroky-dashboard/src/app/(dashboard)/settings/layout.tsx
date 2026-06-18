@@ -24,7 +24,7 @@ const SETTINGS_TABS: ReadonlyArray<{
   icon: LucideIcon;
   exact?: boolean;
 }> = [
-  { href: "/settings", label: "Project", description: "Project directory and workspace identity", icon: SettingsIcon, exact: true },
+  { href: "/settings", label: "Project", description: "Active projects and deletion", icon: SettingsIcon, exact: true },
   { href: "/settings/keys", label: "API keys", description: "Capture credentials", icon: KeyRound },
   { href: "/settings/providers", label: "Providers", description: "Model provider keys", icon: Plug },
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },

@@ -12,6 +12,18 @@ class ProjectCreateRequest(BaseModel):
     owner_ref: str | None = Field(default=None, max_length=128)
 
 
+class ProjectDeleteRequest(BaseModel):
+    confirm_project_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("confirm_project_name")
+    @classmethod
+    def validate_confirm_project_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Project name confirmation must not be empty")
+        return normalized
+
+
 class ProjectResponse(BaseModel):
     project_id: str
     name: str

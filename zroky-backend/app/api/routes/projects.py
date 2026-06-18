@@ -1,12 +1,13 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.authorization import require_project_role
 from app.api.dependencies.provisioning import require_provisioning_access
+from app.api.routes._internal.auth_current_user import _get_current_user
 from app.core.limiter import limiter
 from app.db.models import ApiKey, DiagnosisShareToken, Project, ProjectMembership, User, compute_email_hash
 from app.db.session import get_db_session
@@ -18,6 +19,7 @@ from app.schemas.project import (
     ProjectMembershipResponse,
     ProjectMembershipUpsertRequest,
     ProjectCreateRequest,
+    ProjectDeleteRequest,
     ProjectResponse,
     ProjectInviteRequest,
     ProjectInviteResponse,
@@ -145,6 +147,86 @@ def list_projects(
 
     projects = db.execute(query).scalars().all()
     return [_project_to_response(project) for project in projects]
+
+
+@router.delete(
+    "/{project_id}",
+    response_model=ProjectResponse,
+    dependencies=[Depends(require_project_role("owner"))],
+)
+@limiter.limit("2/hour")
+def delete_project(
+    request: Request,
+    project_id: str,
+    body: ProjectDeleteRequest,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db_session),
+) -> ProjectResponse:
+    user = _get_current_user(authorization=authorization, db=db)
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if not project.is_active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Project is already inactive")
+
+    if body.confirm_project_name != project.name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project name confirmation does not match.",
+        )
+
+    owner_membership = db.execute(
+        select(ProjectMembership).where(
+            ProjectMembership.project_id == project_id,
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.role == "owner",
+            ProjectMembership.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if owner_membership is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a project owner can delete a project.")
+
+    remaining_active_projects = db.scalar(
+        select(func.count())
+        .select_from(ProjectMembership)
+        .join(Project, Project.id == ProjectMembership.project_id)
+        .where(
+            ProjectMembership.user_id == user.id,
+            ProjectMembership.is_active.is_(True),
+            Project.is_active.is_(True),
+            Project.id != project_id,
+        )
+    ) or 0
+    if remaining_active_projects < 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Create or switch to another active project before deleting your only project.",
+        )
+
+    now = datetime.now(timezone.utc)
+    project.is_active = False
+
+    memberships = db.execute(
+        select(ProjectMembership).where(
+            ProjectMembership.project_id == project_id,
+            ProjectMembership.is_active.is_(True),
+        )
+    ).scalars().all()
+    for membership in memberships:
+        membership.is_active = False
+
+    api_keys = db.execute(
+        select(ApiKey).where(
+            ApiKey.project_id == project_id,
+            ApiKey.revoked_at.is_(None),
+        )
+    ).scalars().all()
+    for api_key in api_keys:
+        api_key.revoked_at = now
+
+    db.commit()
+    db.refresh(project)
+    return _project_to_response(project)
 
 
 @router.post(

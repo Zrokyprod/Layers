@@ -1,29 +1,12 @@
-import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SettingsPage from "./page";
 
 const api = vi.hoisted(() => ({
-  exportProjectData: vi.fn(),
+  deleteProject: vi.fn(),
   getProjectSettings: vi.fn(),
   listMyProjects: vi.fn(),
-}));
-
-vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...props
-  }: {
-    href: string;
-    children: ReactNode;
-    [key: string]: unknown;
-  }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -59,38 +42,59 @@ describe("SettingsPage", () => {
         membership_id: "mem_2",
         project_id: "proj_2",
         project_name: "Checkout Agent",
-        role: "member",
+        role: "owner",
         is_active: true,
         created_at: "2026-06-18T10:00:00.000Z",
         updated_at: "2026-06-18T10:30:00.000Z",
       },
     ]);
+    api.deleteProject.mockResolvedValue({
+      project_id: "proj_2",
+      name: "Checkout Agent",
+      owner_ref: "email:user@example.com",
+      is_active: false,
+      created_at: "2026-06-18T10:00:00.000Z",
+      updated_at: "2026-06-18T10:31:00.000Z",
+    });
   });
 
-  it("shows a retryable error panel when project settings cannot load", async () => {
+  it("shows a retryable error panel when projects cannot load", async () => {
     api.getProjectSettings.mockRejectedValue(new Error("Backend API is unavailable."));
 
     render(<SettingsPage />);
 
-    expect(await screen.findByText("Settings could not load")).toBeInTheDocument();
+    expect(await screen.findByText("Projects could not load")).toBeInTheDocument();
     expect(screen.getByText("Backend API is unavailable.")).toBeInTheDocument();
-    expect(screen.queryByText("Project directory")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Active projects" })).not.toBeInTheDocument();
   });
 
-  it("shows the active project, project directory, and only project setup actions", async () => {
+  it("shows active projects as a list and keeps setup cards out of project settings", async () => {
     render(<SettingsPage />);
 
-    expect(await screen.findByRole("heading", { name: "My Project" })).toBeInTheDocument();
-    expect(screen.getByText(/Workspace identity, capture scope/i)).toBeInTheDocument();
-    expect(screen.getByText("Project directory")).toBeInTheDocument();
-    expect(screen.getByText("Checkout Agent")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Switch" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Project key/i }).getAttribute("href")).toBe("/settings/keys");
-    expect(screen.getByRole("link", { name: /Provider keys/i }).getAttribute("href")).toBe("/settings/providers");
-    expect(screen.getByRole("link", { name: /Members/i }).getAttribute("href")).toBe("/settings/team");
-    expect(screen.getByRole("link", { name: /Plan & usage/i }).getAttribute("href")).toBe("/settings/billing");
-    expect(screen.queryByText("GitHub connection")).not.toBeInTheDocument();
-    expect(screen.queryByText("Retention & Notifications")).not.toBeInTheDocument();
-    expect(screen.queryByText("Danger zone")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View My Project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View Checkout Agent" })).toBeInTheDocument();
+    expect(screen.getByText("2 active projects")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Project key/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Provider keys/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Project export")).not.toBeInTheDocument();
+  });
+
+  it("selects a project and calls delete with typed confirmation", async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "View Checkout Agent" }));
+    fireEvent.change(screen.getByLabelText("Type project name"), {
+      target: { value: "Checkout Agent" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+
+    await waitFor(() => {
+      expect(api.deleteProject).toHaveBeenCalledWith(
+        "proj_2",
+        { confirm_project_name: "Checkout Agent" },
+        "proj_2",
+      );
+    });
   });
 });

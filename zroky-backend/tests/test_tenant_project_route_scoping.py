@@ -162,6 +162,32 @@ def _seed_two_project_user(factory) -> str:
         return token
 
 
+def _seed_single_project_user(factory) -> str:
+    with factory() as session:
+        user = User(subject="user:single-project", email="single@example.com", is_active=True)
+        session.add(user)
+        session.flush()
+        session.add(Project(id="proj_single", name="Single Project", owner_ref=user.subject, is_active=True))
+        session.flush()
+        session.add(
+            ProjectMembership(
+                project_id="proj_single",
+                user_id=user.id,
+                role="owner",
+                is_active=True,
+            )
+        )
+        session.commit()
+        token = issue_access_token(
+            user_id=user.id,
+            email=user.email,
+            subject=user.subject,
+            expire_hours=1,
+            secret=AUTH_SECRET,
+        )
+        return token
+
+
 def test_same_session_switches_core_project_scoped_surfaces(client_ctx: TestClient) -> None:
     token = _seed_two_project_user(client_ctx._session_factory)  # type: ignore[attr-defined]
 
@@ -203,6 +229,39 @@ def test_same_session_switches_core_project_scoped_surfaces(client_ctx: TestClie
     assert beta_team.status_code == 200
     assert {item["project_id"] for item in alpha_team.json()} == {"proj_alpha"}
     assert {item["project_id"] for item in beta_team.json()} == {"proj_beta"}
+
+
+def test_project_delete_soft_deactivates_project_and_removes_from_user_list(client_ctx: TestClient) -> None:
+    token = _seed_two_project_user(client_ctx._session_factory)  # type: ignore[attr-defined]
+
+    response = client_ctx.request(
+        "DELETE",
+        "/v1/projects/proj_beta",
+        headers=_headers(token, "proj_beta"),
+        json={"confirm_project_name": "Beta Project"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["project_id"] == "proj_beta"
+    assert response.json()["is_active"] is False
+
+    projects = client_ctx.get("/v1/auth/me/projects", headers={"Authorization": f"Bearer {token}"})
+    assert projects.status_code == 200
+    assert [project["project_id"] for project in projects.json()] == ["proj_alpha"]
+
+
+def test_project_delete_blocks_only_active_project(client_ctx: TestClient) -> None:
+    token = _seed_single_project_user(client_ctx._session_factory)  # type: ignore[attr-defined]
+
+    response = client_ctx.request(
+        "DELETE",
+        "/v1/projects/proj_single",
+        headers=_headers(token, "proj_single"),
+        json={"confirm_project_name": "Single Project"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Create or switch to another active project before deleting your only project."
 
 
 def test_project_path_rejects_selected_project_mismatch(client_ctx: TestClient) -> None:

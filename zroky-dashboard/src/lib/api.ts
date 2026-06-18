@@ -106,6 +106,7 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
   timeoutMs?: number;
+  projectIdOverride?: string | null;
 };
 
 type ParsedErrorDetail = {
@@ -398,7 +399,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       headers["content-type"] = "application/json";
     }
     if (typeof window !== "undefined") {
-      const selectedProject = useDashboardStore.getState().selectedProject?.trim();
+      const selectedProject =
+        options.projectIdOverride === undefined
+          ? useDashboardStore.getState().selectedProject?.trim()
+          : options.projectIdOverride?.trim();
       if (selectedProject) {
         headers["x-project-id"] = selectedProject;
       }
@@ -1131,6 +1135,18 @@ export function exportProjectData(query?: {
 
 export function listProjectApiKeys(projectId: string, signal?: AbortSignal): Promise<ApiKeyResponse[]> {
   return request<ApiKeyResponse[]>(`/v1/projects/${encodeURIComponent(projectId)}/api-keys`, { signal });
+}
+
+export function deleteProject(
+  projectId: string,
+  body: { confirm_project_name: string },
+  projectIdOverride: string = projectId,
+): Promise<ProjectResponse> {
+  return request<ProjectResponse>(`/v1/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+    body,
+    projectIdOverride,
+  });
 }
 
 export function createProjectApiKey(

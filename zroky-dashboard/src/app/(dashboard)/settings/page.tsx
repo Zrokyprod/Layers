@@ -1,27 +1,16 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import {
-  ArrowRight,
-  CreditCard,
-  Database,
-  Download,
-  FolderKanban,
-  KeyRound,
-  Plug,
-  RefreshCw,
-  Users,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { RefreshCw, Trash2 } from "lucide-react";
 
-import { exportProjectData, getProjectSettings, listMyProjects } from "@/lib/api";
+import { deleteProject, getProjectSettings, listMyProjects } from "@/lib/api";
 import { formatDateTime, safeString } from "@/lib/format";
 import { useDashboardStore } from "@/lib/store";
 import type { CurrentUserProjectResponse, ProjectResponse } from "@/lib/types";
 import { StatusPill } from "@/components/status-pill";
 
 type SettingsState = {
-  project: ProjectResponse | null;
+  activeProject: ProjectResponse | null;
   projects: CurrentUserProjectResponse[];
 };
 
@@ -40,35 +29,29 @@ function withSettingsTimeout<T>(promise: Promise<T>, detail: string): Promise<T>
 
 function isProblemMessage(value: string): boolean {
   const text = value.toLowerCase();
-  return text.includes("failed") || text.includes("error") || text.includes("unavailable");
+  return text.includes("failed") || text.includes("error") || text.includes("unavailable") || text.includes("cannot");
 }
 
-function compactIdentifier(value: string | null | undefined, lead = 12, tail = 6): string {
+function compactIdentifier(value: string | null | undefined, lead = 10, tail = 6): string {
   const normalized = value?.trim();
   if (!normalized) return "Unavailable";
   if (normalized.length <= lead + tail + 1) return normalized;
   return `${normalized.slice(0, lead)}...${normalized.slice(-tail)}`;
 }
 
-function formatOwnerRef(ownerRef: string | null): { label: string; detail: string | null; raw: string | null } {
-  const raw = ownerRef?.trim() || null;
-  if (!raw) return { label: "Current account", detail: null, raw };
+function formatOwnerRef(ownerRef: string | null): string {
+  const raw = ownerRef?.trim();
+  if (!raw) return "Current account";
 
   const separatorIndex = raw.indexOf(":");
-  if (separatorIndex === -1) {
-    return { label: "Project owner", detail: compactIdentifier(raw, 8, 5), raw };
-  }
+  if (separatorIndex === -1) return compactIdentifier(raw, 8, 5);
 
   const provider = raw.slice(0, separatorIndex).toLowerCase();
   const subject = raw.slice(separatorIndex + 1);
-
-  if (provider === "email") {
-    return { label: subject || "Email account", detail: "Email owner", raw };
-  }
-
-  const providerLabel =
-    provider === "google" ? "Google account" : provider === "github" ? "GitHub account" : "Project owner";
-  return { label: providerLabel, detail: compactIdentifier(subject || raw, 8, 5), raw };
+  if (provider === "email") return subject || "Email account";
+  if (provider === "google") return "Google account";
+  if (provider === "github") return "GitHub account";
+  return compactIdentifier(subject || raw, 8, 5);
 }
 
 function formatRoleLabel(role: string | null | undefined): string {
@@ -81,30 +64,28 @@ function formatRoleLabel(role: string | null | undefined): string {
     .join(" ");
 }
 
-function projectRows(project: ProjectResponse | null, projects: CurrentUserProjectResponse[]) {
-  if (projects.length > 0) return projects;
-  if (!project) return [];
-  return [
-    {
-      membership_id: project.project_id,
-      project_id: project.project_id,
-      project_name: project.name,
-      role: "owner",
-      is_active: project.is_active,
-      created_at: project.created_at,
-      updated_at: project.updated_at,
-    },
-  ];
+function fallbackProjectRow(project: ProjectResponse): CurrentUserProjectResponse {
+  return {
+    membership_id: project.project_id,
+    project_id: project.project_id,
+    project_name: project.name,
+    role: "owner",
+    is_active: project.is_active,
+    created_at: project.created_at,
+    updated_at: project.updated_at,
+  };
 }
 
 export default function SettingsPage() {
-  const [state, setState] = useState<SettingsState>({ project: null, projects: [] });
+  const [state, setState] = useState<SettingsState>({ activeProject: null, projects: [] });
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projectListError, setProjectListError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
-  const [exporting, setExporting] = useState(false);
-  const setSelectedProject = useDashboardStore((store) => store.setSelectedProject);
+  const setActiveProject = useDashboardStore((store) => store.setSelectedProject);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,28 +93,32 @@ export default function SettingsPage() {
     setProjectListError(null);
 
     try {
-      const [projectResult, projectsResult] = await Promise.allSettled([
+      const [activeResult, projectsResult] = await Promise.allSettled([
         withSettingsTimeout(
           getProjectSettings(),
           `Backend API timed out after ${settingsLoadTimeoutMs}ms. Start the Zroky backend and retry.`,
         ),
-        withSettingsTimeout(listMyProjects(), "Project directory load timed out."),
+        withSettingsTimeout(listMyProjects(), "Project list load timed out."),
       ]);
 
-      if (projectResult.status === "rejected") {
-        throw projectResult.reason;
+      if (activeResult.status === "rejected") {
+        throw activeResult.reason;
       }
 
-      setState({
-        project: projectResult.value,
-        projects: projectsResult.status === "fulfilled" ? projectsResult.value : [],
-      });
+      const activeProject = activeResult.value;
+      const projects = projectsResult.status === "fulfilled" ? projectsResult.value : [fallbackProjectRow(activeProject)];
+      setState({ activeProject, projects });
+      setSelectedProjectId((current) =>
+        current && projects.some((project) => project.project_id === current)
+          ? current
+          : activeProject.project_id,
+      );
 
       if (projectsResult.status === "rejected") {
-        setProjectListError(errorMessage(projectsResult.reason, "Project directory could not load."));
+        setProjectListError(errorMessage(projectsResult.reason, "Project list could not load."));
       }
     } catch (loadError) {
-      setError(errorMessage(loadError, "Failed to load project settings."));
+      setError(errorMessage(loadError, "Failed to load projects."));
     } finally {
       setLoading(false);
     }
@@ -143,45 +128,71 @@ export default function SettingsPage() {
     void load();
   }, [load]);
 
-  async function onExportData() {
+  const rows = useMemo(() => {
+    if (state.projects.length > 0) return state.projects;
+    return state.activeProject ? [fallbackProjectRow(state.activeProject)] : [];
+  }, [state.activeProject, state.projects]);
+
+  const selectedProject = rows.find((project) => project.project_id === selectedProjectId) ?? rows[0] ?? null;
+  const activeProjectId = state.activeProject?.project_id ?? null;
+  const selectedIsActive = Boolean(selectedProject && selectedProject.project_id === activeProjectId);
+  const selectedRole = selectedProject?.role?.trim().toLowerCase() ?? "";
+  const canDeleteSelected = Boolean(
+    selectedProject &&
+      rows.length > 1 &&
+      selectedRole === "owner" &&
+      deleteConfirm.trim() === selectedProject.project_name,
+  );
+  const deleteDisabledReason =
+    !selectedProject
+      ? "Select a project first."
+      : rows.length <= 1
+        ? "You need another active project before deleting this one."
+        : selectedRole !== "owner"
+          ? "Only a project owner can delete this project."
+          : "Type the project name exactly to enable delete.";
+
+  function onSelectProject(projectId: string) {
+    setSelectedProjectId(projectId);
+    setDeleteConfirm("");
+  }
+
+  function onMakeActive(projectId: string) {
+    if (projectId === activeProjectId) return;
+    setStatusMessage("Active project changed.");
+    setActiveProject(projectId);
+    window.setTimeout(() => void load(), 0);
+  }
+
+  async function onDeleteSelectedProject() {
+    if (!selectedProject || !canDeleteSelected) {
+      setStatusMessage(deleteDisabledReason);
+      return;
+    }
+
     setStatusMessage("");
+    setDeleting(true);
     try {
-      setExporting(true);
-      const payload = await exportProjectData({ limit: 500, include_payload: true });
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      link.href = downloadUrl;
-      link.download = `zroky-export-${payload.tenant_id}-${timestamp}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(downloadUrl);
-      setStatusMessage(`Export downloaded: ${payload.call_count} calls, ${payload.diagnosis_count} diagnoses, ${payload.alert_count} alerts.`);
-    } catch (exportError) {
-      setStatusMessage(errorMessage(exportError, "Failed to export project data."));
+      await deleteProject(
+        selectedProject.project_id,
+        { confirm_project_name: selectedProject.project_name },
+        selectedProject.project_id,
+      );
+      const remaining = rows.filter((project) => project.project_id !== selectedProject.project_id);
+      const nextProject = remaining.find((project) => project.project_id === activeProjectId) ?? remaining[0] ?? null;
+      if (selectedProject.project_id === activeProjectId) {
+        setActiveProject(nextProject?.project_id ?? null);
+      }
+      setSelectedProjectId(nextProject?.project_id ?? null);
+      setDeleteConfirm("");
+      setStatusMessage("Project deleted.");
+      await load();
+    } catch (deleteError) {
+      setStatusMessage(errorMessage(deleteError, "Failed to delete project."));
     } finally {
-      setExporting(false);
+      setDeleting(false);
     }
   }
-
-  function onSwitchProject(projectId: string) {
-    if (projectId === state.project?.project_id) return;
-    setStatusMessage("Project switched. Refreshing settings.");
-    setSelectedProject(projectId);
-    window.setTimeout(() => {
-      void load();
-    }, 0);
-  }
-
-  const project = state.project;
-  const rows = projectRows(project, state.projects);
-  const ownerDisplay = project ? formatOwnerRef(project.owner_ref) : null;
-  const projectIdLabel = project ? compactIdentifier(project.project_id) : "Unavailable";
-  const currentMembership = project
-    ? rows.find((row) => row.project_id === project.project_id) ?? null
-    : null;
 
   return (
     <div className="page-content settings-project-page">
@@ -189,7 +200,7 @@ export default function SettingsPage() {
         <section className="panel settings-error-panel">
           <header className="panel-header">
             <div>
-              <h3>Settings could not load</h3>
+              <h3>Projects could not load</h3>
               <p>{error}</p>
             </div>
             <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
@@ -207,150 +218,137 @@ export default function SettingsPage() {
       ) : null}
 
       {loading ? (
-        <section className="panel settings-project-skeleton" aria-label="Loading project settings">
+        <section className="panel settings-project-skeleton" aria-label="Loading projects">
           <div className="loading" />
         </section>
       ) : null}
 
-      {!loading && project ? (
-        <>
-          <section className="panel settings-project-cockpit" aria-labelledby="settings-project-title">
-            <div className="settings-project-cockpit-header">
+      {!loading && !error ? (
+        <section className="settings-project-registry" aria-label="Project registry">
+          <div className="settings-project-list-panel">
+            <div className="settings-project-toolbar">
               <div>
-                <span className="settings-section-kicker">
-                  <Database aria-hidden="true" />
-                  Project
-                </span>
-                <h2 id="settings-project-title">{safeString(project.name, "My Project")}</h2>
-                <p>Workspace identity, capture scope, access, and billing stay tied to the selected project.</p>
+                <h2>Projects</h2>
+                <p>{rows.length === 1 ? "1 active project" : `${rows.length} active projects`}</p>
               </div>
-              <div className="settings-project-cockpit-status">
-                <StatusPill value={project.is_active ? "active" : "inactive"} />
-                <small>{rows.length === 1 ? "1 project available" : `${rows.length} projects available`}</small>
-              </div>
+              <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
+                <RefreshCw aria-hidden="true" />
+                Refresh
+              </button>
             </div>
-
-            <div className="settings-project-facts" aria-label="Current project facts">
-              <div className="settings-project-fact">
-                <span>Project ID</span>
-                <strong className="mono" title={project.project_id}>
-                  {projectIdLabel}
-                </strong>
-                <small>Capture scope</small>
-              </div>
-              <div className="settings-project-fact">
-                <span>Your role</span>
-                <strong>{formatRoleLabel(currentMembership?.role ?? "owner")}</strong>
-                <small>Access level</small>
-              </div>
-              <div className="settings-project-fact">
-                <span>Owner</span>
-                <strong title={ownerDisplay?.raw ?? undefined}>{ownerDisplay?.label ?? "Current account"}</strong>
-                {ownerDisplay?.detail ? <small>{ownerDisplay.detail}</small> : <small>Project owner</small>}
-              </div>
-              <div className="settings-project-fact">
-                <span>Updated</span>
-                <strong>{formatDateTime(project.updated_at)}</strong>
-                <small>Latest metadata</small>
-              </div>
-            </div>
-          </section>
-
-          <section className="panel settings-project-directory" aria-labelledby="settings-project-directory-title">
-            <header className="panel-header">
-              <div>
-                <h3 id="settings-project-directory-title">
-                  <FolderKanban aria-hidden="true" />
-                  Project directory
-                </h3>
-                <p>Use this list when your account has multiple projects. Switching updates the active dashboard scope.</p>
-              </div>
-              <span className="pill">{rows.length === 1 ? "Single project" : `${rows.length} projects`}</span>
-            </header>
 
             {projectListError ? (
               <div className="alert-strip alert-strip-error">{projectListError}</div>
             ) : null}
 
-            <div className="settings-project-list" role="list">
-              {rows.map((row) => {
-                const isCurrent = row.project_id === project.project_id;
+            <div className="settings-project-table" role="list" aria-label="Active projects">
+              <div className="settings-project-table-head" aria-hidden="true">
+                <span>Project</span>
+                <span>Role</span>
+                <span>Status</span>
+                <span>Updated</span>
+              </div>
+              {rows.map((project) => {
+                const isSelected = project.project_id === selectedProject?.project_id;
+                const isActive = project.project_id === activeProjectId;
                 return (
-                  <div key={row.membership_id || row.project_id} className="settings-project-row" role="listitem">
-                    <div className="settings-project-row-main">
-                      <strong>{safeString(row.project_name, "Untitled project")}</strong>
-                      <span className="mono" title={row.project_id}>
-                        {compactIdentifier(row.project_id)}
-                      </span>
-                    </div>
-                    <div className="settings-project-row-meta">
-                      <span>{formatRoleLabel(row.role)}</span>
-                      <span>Created {formatDateTime(row.created_at)}</span>
-                      <span>Updated {formatDateTime(row.updated_at)}</span>
-                    </div>
-                    <div className="settings-project-row-action">
-                      {isCurrent ? (
-                        <StatusPill value="active" />
-                      ) : (
-                        <button type="button" className="btn btn-soft" onClick={() => onSwitchProject(row.project_id)}>
-                          Switch
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  <button
+                    key={project.project_id}
+                    type="button"
+                    className={`settings-project-table-row${isSelected ? " is-selected" : ""}`}
+                    aria-label={`View ${project.project_name}`}
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectProject(project.project_id)}
+                  >
+                    <span>
+                      <strong>{safeString(project.project_name, "Untitled project")}</strong>
+                      <small className="mono" title={project.project_id}>
+                        {compactIdentifier(project.project_id)}
+                      </small>
+                    </span>
+                    <span>{formatRoleLabel(project.role)}</span>
+                    <span>{isActive ? "Active" : "Available"}</span>
+                    <span>{formatDateTime(project.updated_at)}</span>
+                  </button>
                 );
               })}
             </div>
-          </section>
+          </div>
 
-          <section className="settings-project-action-grid" aria-label="Project setup actions">
-            <Link href="/settings/keys" className="settings-workspace-card">
-              <KeyRound aria-hidden="true" />
-              <span>
-                <strong>Project key</strong>
-                <small>Create or rotate capture credentials.</small>
-              </span>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link href="/settings/providers" className="settings-workspace-card">
-              <Plug aria-hidden="true" />
-              <span>
-                <strong>Provider keys</strong>
-                <small>Add only when replay needs live model calls.</small>
-              </span>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link href="/settings/team" className="settings-workspace-card">
-              <Users aria-hidden="true" />
-              <span>
-                <strong>Members</strong>
-                <small>Invite teammates and manage roles.</small>
-              </span>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link href="/settings/billing" className="settings-workspace-card">
-              <CreditCard aria-hidden="true" />
-              <span>
-                <strong>Plan & usage</strong>
-                <small>Review limits, budget, and upgrade state.</small>
-              </span>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </section>
+          <aside className="settings-project-details-panel" aria-label="Project details">
+            {selectedProject ? (
+              <>
+                <header>
+                  <span>Details</span>
+                  <h3>{safeString(selectedProject.project_name, "Untitled project")}</h3>
+                  <StatusPill value={selectedIsActive ? "active" : "verified"} />
+                </header>
 
-          <section className="panel settings-control-panel settings-project-utility-panel">
-            <header className="panel-header">
-              <div>
-                <h3>Project export</h3>
-                <p>Download a scoped JSON export for support, migration, or offline audit.</p>
-              </div>
-              <button type="button" className="btn btn-soft" onClick={() => void onExportData()} disabled={exporting}>
-                <Download aria-hidden="true" />
-                {exporting ? "Preparing..." : "Download JSON"}
-              </button>
-            </header>
-          </section>
-        </>
+                <dl className="settings-project-details-list">
+                  <div>
+                    <dt>Project ID</dt>
+                    <dd className="mono">{selectedProject.project_id}</dd>
+                  </div>
+                  <div>
+                    <dt>Role</dt>
+                    <dd>{formatRoleLabel(selectedProject.role)}</dd>
+                  </div>
+                  <div>
+                    <dt>Owner</dt>
+                    <dd>{selectedProject.project_id === activeProjectId ? formatOwnerRef(state.activeProject?.owner_ref ?? null) : "Project member"}</dd>
+                  </div>
+                  <div>
+                    <dt>Created</dt>
+                    <dd>{formatDateTime(selectedProject.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>Updated</dt>
+                    <dd>{formatDateTime(selectedProject.updated_at)}</dd>
+                  </div>
+                </dl>
+
+                {!selectedIsActive ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => onMakeActive(selectedProject.project_id)}
+                  >
+                    Make active
+                  </button>
+                ) : null}
+
+                <div className="settings-project-delete">
+                  <div>
+                    <strong>Delete project</strong>
+                    <p>
+                      Deletes the project from your active workspace list and disables its capture keys. Existing evidence is preserved for audit.
+                    </p>
+                  </div>
+                  <label htmlFor="projectDeleteConfirm">Type project name</label>
+                  <input
+                    id="projectDeleteConfirm"
+                    value={deleteConfirm}
+                    onChange={(event) => setDeleteConfirm(event.target.value)}
+                    placeholder={selectedProject.project_name}
+                    disabled={deleting || rows.length <= 1 || selectedRole !== "owner"}
+                  />
+                  {!canDeleteSelected ? <small>{deleteDisabledReason}</small> : null}
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => void onDeleteSelectedProject()}
+                    disabled={deleting || !canDeleteSelected}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    {deleting ? "Deleting..." : "Delete project"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p>No active project found.</p>
+            )}
+          </aside>
+        </section>
       ) : null}
     </div>
   );
