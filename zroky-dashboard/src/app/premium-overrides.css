@@ -6699,9 +6699,9 @@ body:has(.app-shell) {
   --settings-panel-bg-inset: var(--dashboard-surface-inset);
   display: grid !important;
   width: 100% !important;
-  max-width: 1180px !important;
+  max-width: none !important;
   gap: 14px !important;
-  margin: 0 auto !important;
+  margin: 0 !important;
   background: transparent !important;
   color: var(--dashboard-text) !important;
 }
@@ -6857,6 +6857,20 @@ body:has(.app-shell) {
   align-items: start !important;
 }
 
+.app-shell .settings-project-cockpit-status {
+  display: grid !important;
+  justify-items: end !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+.app-shell .settings-project-cockpit-status small {
+  color: var(--dashboard-muted) !important;
+  font-size: 0.72rem !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+}
+
 .app-shell .settings-project-cockpit h2 {
   margin: 10px 0 0 !important;
   color: var(--dashboard-text) !important;
@@ -6967,6 +6981,94 @@ body:has(.app-shell) {
   display: grid !important;
   gap: 3px !important;
   min-width: 0 !important;
+}
+
+.app-shell .settings-project-directory {
+  display: grid !important;
+  gap: 14px !important;
+  border-color: var(--dashboard-border) !important;
+  background: var(--settings-panel-bg) !important;
+  color: var(--dashboard-text) !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+.app-shell .settings-project-directory .panel-header h3 {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.app-shell .settings-project-directory .panel-header h3 svg {
+  width: 17px !important;
+  height: 17px !important;
+  color: var(--dashboard-accent) !important;
+}
+
+.app-shell .settings-project-list {
+  display: grid !important;
+  gap: 10px !important;
+}
+
+.app-shell .settings-project-row {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(260px, 1.8fr) auto !important;
+  align-items: center !important;
+  gap: 14px !important;
+  min-width: 0 !important;
+  padding: 14px !important;
+  border: 1px solid var(--dashboard-border) !important;
+  border-radius: 8px !important;
+  background: var(--dashboard-surface-inset) !important;
+  color: var(--dashboard-text) !important;
+  transition: var(--transition-base) !important;
+}
+
+.app-shell .settings-project-row:hover {
+  border-color: var(--dashboard-border-strong) !important;
+  background: var(--dashboard-surface-soft) !important;
+}
+
+.app-shell .settings-project-row-main,
+.app-shell .settings-project-row-meta {
+  display: grid !important;
+  min-width: 0 !important;
+  gap: 5px !important;
+}
+
+.app-shell .settings-project-row-main strong {
+  overflow: hidden !important;
+  color: var(--dashboard-text) !important;
+  font-size: 0.95rem !important;
+  font-weight: 820 !important;
+  letter-spacing: 0 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell .settings-project-row-main span,
+.app-shell .settings-project-row-meta span {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: var(--dashboard-muted) !important;
+  font-size: 0.76rem !important;
+  font-weight: 720 !important;
+  letter-spacing: 0 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell .settings-project-row-meta {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.app-shell .settings-project-row-action {
+  display: flex !important;
+  justify-content: flex-end !important;
+}
+
+.app-shell .settings-project-utility-panel {
+  border-color: var(--dashboard-border) !important;
+  background: var(--settings-panel-bg) !important;
 }
 
 .app-shell .settings-partial-warning {
@@ -7629,6 +7731,10 @@ body:has(.app-shell) {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   gap: 14px !important;
+}
+
+.app-shell .settings-integration-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 
 .app-shell .providers-card-grid {

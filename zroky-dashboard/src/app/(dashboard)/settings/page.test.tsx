@@ -5,18 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "./page";
 
 const api = vi.hoisted(() => ({
-  disconnectGithubRepoConnection: vi.fn(),
-  eraseRetentionData: vi.fn(),
   exportProjectData: vi.fn(),
-  getGithubConnectionStatus: vi.fn(),
-  getNotifications: vi.fn(),
-  getPiiPolicy: vi.fn(),
   getProjectSettings: vi.fn(),
-  getRetention: vi.fn(),
-  testPiiDetector: vi.fn(),
-  updateNotifications: vi.fn(),
-  updatePiiPolicy: vi.fn(),
-  updateRetention: vi.fn(),
+  listMyProjects: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -54,30 +45,26 @@ describe("SettingsPage", () => {
       created_at: "2026-06-17T10:00:00.000Z",
       updated_at: "2026-06-17T10:30:00.000Z",
     });
-    api.getGithubConnectionStatus.mockResolvedValue({
-      connected: false,
-      github_id: null,
-      github_login: null,
-      scopes: [],
-      connected_at: null,
-      updated_at: null,
-    });
-    api.getPiiPolicy.mockResolvedValue({
-      custom_patterns: [],
-      updated_at: "2026-06-17T10:30:00.000Z",
-    });
-    api.getRetention.mockResolvedValue({
-      retention_days: 30,
-      updated_at: "2026-06-17T10:30:00.000Z",
-    });
-    api.getNotifications.mockResolvedValue({
-      email_enabled: true,
-      slack_enabled: false,
-      teams_enabled: false,
-      browser_enabled: true,
-      terminal_enabled: true,
-      updated_at: "2026-06-17T10:30:00.000Z",
-    });
+    api.listMyProjects.mockResolvedValue([
+      {
+        membership_id: "mem_1",
+        project_id: "proj_1",
+        project_name: "My Project",
+        role: "owner",
+        is_active: true,
+        created_at: "2026-06-17T10:00:00.000Z",
+        updated_at: "2026-06-17T10:30:00.000Z",
+      },
+      {
+        membership_id: "mem_2",
+        project_id: "proj_2",
+        project_name: "Checkout Agent",
+        role: "member",
+        is_active: true,
+        created_at: "2026-06-18T10:00:00.000Z",
+        updated_at: "2026-06-18T10:30:00.000Z",
+      },
+    ]);
   });
 
   it("shows a retryable error panel when project settings cannot load", async () => {
@@ -87,20 +74,23 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("Settings could not load")).toBeInTheDocument();
     expect(screen.getByText("Backend API is unavailable.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save retention" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Project directory")).not.toBeInTheDocument();
   });
 
-  it("shows the active project and only real setup actions", async () => {
+  it("shows the active project, project directory, and only project setup actions", async () => {
     render(<SettingsPage />);
 
     expect(await screen.findByRole("heading", { name: "My Project" })).toBeInTheDocument();
-    expect(screen.getByText(/Your first project is created automatically/)).toBeInTheDocument();
-    expect(screen.getAllByText("proj_1").length).toBeGreaterThan(0);
-    expect(screen.getByText("Project details")).toBeInTheDocument();
+    expect(screen.getByText(/Workspace identity, capture scope/i)).toBeInTheDocument();
+    expect(screen.getByText("Project directory")).toBeInTheDocument();
+    expect(screen.getByText("Checkout Agent")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Project key/i }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("link", { name: /Provider keys/i }).getAttribute("href")).toBe("/settings/providers");
     expect(screen.getByRole("link", { name: /Members/i }).getAttribute("href")).toBe("/settings/team");
     expect(screen.getByRole("link", { name: /Plan & usage/i }).getAttribute("href")).toBe("/settings/billing");
-    expect(screen.queryByRole("button", { name: /Create project/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("GitHub connection")).not.toBeInTheDocument();
+    expect(screen.queryByText("Retention & Notifications")).not.toBeInTheDocument();
+    expect(screen.queryByText("Danger zone")).not.toBeInTheDocument();
   });
 });

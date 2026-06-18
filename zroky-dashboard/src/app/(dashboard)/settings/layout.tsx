@@ -24,13 +24,13 @@ const SETTINGS_TABS: ReadonlyArray<{
   icon: LucideIcon;
   exact?: boolean;
 }> = [
-  { href: "/settings", label: "Project", description: "Current project and data controls", icon: SettingsIcon, exact: true },
+  { href: "/settings", label: "Project", description: "Project directory and workspace identity", icon: SettingsIcon, exact: true },
   { href: "/settings/keys", label: "API keys", description: "Capture credentials", icon: KeyRound },
   { href: "/settings/providers", label: "Providers", description: "Model provider keys", icon: Plug },
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },
   { href: "/settings/billing", label: "Plan & Billing", description: "Plan, usage, and budget", icon: CreditCard },
   { href: "/settings/evaluation", label: "Evaluation", description: "Judge calibration", icon: SlidersHorizontal },
-  { href: "/settings/integrations", label: "Integrations", description: "Alert delivery", icon: BellRing },
+  { href: "/settings/integrations", label: "Integrations", description: "GitHub, Slack, and Teams", icon: BellRing },
 ] as const;
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
@@ -48,7 +48,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               Settings
             </span>
             <h1>Settings</h1>
-            <p>Manage the active project, capture keys, providers, members, billing, and alerts.</p>
+            <p>Manage project scope, capture keys, providers, members, billing, and integrations.</p>
           </div>
           <div className="settings-hero-current">
             <ActiveIcon aria-hidden="true" />
