@@ -108,6 +108,10 @@ function issueAgent(issue: IssueItem): string {
   return issue.affected_agent ?? issue.agent_name ?? "Agent not captured";
 }
 
+function issueProvider(issue: IssueItem): string | null {
+  return issue.evidence_traces.find((trace) => trace.provider?.trim())?.provider ?? null;
+}
+
 function affectedTraceCount(issue: IssueItem): number {
   return issue.affected_trace_count ?? issue.blast_radius?.affected_traces ?? issue.occurrence_count;
 }
@@ -293,12 +297,13 @@ export default function IssuesPage() {
   }
 
   async function onReplay(issue: IssueItem) {
-    if (hasActiveProviderKey(providerKeysQuery.data?.items)) {
+    const expectedProvider = issueProvider(issue);
+    if (hasActiveProviderKey(providerKeysQuery.data?.items, expectedProvider)) {
       await runReplay(issue);
       return;
     }
     const refreshed = await providerKeysQuery.refetch();
-    if (hasActiveProviderKey(refreshed.data?.items)) {
+    if (hasActiveProviderKey(refreshed.data?.items, expectedProvider)) {
       await runReplay(issue);
       return;
     }
@@ -403,6 +408,7 @@ export default function IssuesPage() {
 
       {providerKeyGateIssue ? (
         <ProviderKeyReplayGate
+          expectedProvider={issueProvider(providerKeyGateIssue)}
           onClose={() => setProviderKeyGateIssue(null)}
           onSavedAndRun={onProviderKeySavedAndRun}
           onUseStub={onUseStubReplay}

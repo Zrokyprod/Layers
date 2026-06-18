@@ -44,7 +44,10 @@ import type { BillingMeResponse, IssueEvidenceTrace, IssueItem } from "@/lib/typ
 
 type ActionState = "issue_replay" | "call_replay" | "promote_golden" | "ci_gate" | "resolve" | "ignore" | "triage" | null;
 type ConfirmAction = "resolve" | "ignore" | null;
-type ProviderKeyPendingAction = { type: "issue" } | { type: "call"; callId: string } | { type: "ci" };
+type ProviderKeyPendingAction =
+  | { type: "issue"; provider?: string | null }
+  | { type: "call"; callId: string; provider?: string | null }
+  | { type: "ci"; provider?: string | null };
 type ProofState = "good" | "warn" | "blocked" | "neutral";
 type PrimaryAction =
   | "run_replay"
@@ -116,6 +119,18 @@ function sortedEvidence(traces: IssueEvidenceTrace[]): IssueEvidenceTrace[] {
 
 function traceTarget(trace: IssueEvidenceTrace): string | null {
   return trace.trace_id ?? trace.call_id;
+}
+
+function issueProvider(issue: IssueItem | null): string | null {
+  return issue?.evidence_traces.find((trace) => trace.provider?.trim())?.provider ?? null;
+}
+
+function callProvider(issue: IssueItem | null, callId: string): string | null {
+  if (!issue) return null;
+  return (
+    issue.evidence_traces.find((trace) => trace.call_id === callId && trace.provider?.trim())?.provider ??
+    issueProvider(issue)
+  );
 }
 
 function hasEvidence(issue: IssueItem): boolean {
@@ -442,10 +457,10 @@ export default function IssueDetailPage() {
   );
   const orderedEvidence = useMemo(() => (issue ? sortedEvidence(issue.evidence_traces) : []), [issue]);
 
-  async function hasProviderKeyForReplay() {
-    if (hasActiveProviderKey(providerKeysQuery.data?.items)) return true;
+  async function hasProviderKeyForReplay(provider?: string | null) {
+    if (hasActiveProviderKey(providerKeysQuery.data?.items, provider)) return true;
     const refreshed = await providerKeysQuery.refetch();
-    return hasActiveProviderKey(refreshed.data?.items);
+    return hasActiveProviderKey(refreshed.data?.items, provider);
   }
 
   async function runIssueReplay(replayMode = DEFAULT_VERIFICATION_REPLAY_MODE) {
@@ -466,11 +481,12 @@ export default function IssueDetailPage() {
   }
 
   async function onReplayIssue() {
-    if (await hasProviderKeyForReplay()) {
+    const provider = issueProvider(issue);
+    if (await hasProviderKeyForReplay(provider)) {
       await runIssueReplay();
       return;
     }
-    setProviderKeyPendingAction({ type: "issue" });
+    setProviderKeyPendingAction({ type: "issue", provider });
   }
 
   async function runCallReplay(callId: string, replayMode = DEFAULT_VERIFICATION_REPLAY_MODE) {
@@ -490,11 +506,12 @@ export default function IssueDetailPage() {
   }
 
   async function onReplayCall(callId: string) {
-    if (await hasProviderKeyForReplay()) {
+    const provider = callProvider(issue, callId);
+    if (await hasProviderKeyForReplay(provider)) {
       await runCallReplay(callId);
       return;
     }
-    setProviderKeyPendingAction({ type: "call", callId });
+    setProviderKeyPendingAction({ type: "call", callId, provider });
   }
 
   async function onPromoteGolden() {
@@ -515,8 +532,9 @@ export default function IssueDetailPage() {
 
   async function onRunCiGate() {
     if (!issue) return;
-    if (!(await hasProviderKeyForReplay())) {
-      setProviderKeyPendingAction({ type: "ci" });
+    const provider = issueProvider(issue);
+    if (!(await hasProviderKeyForReplay(provider))) {
+      setProviderKeyPendingAction({ type: "ci", provider });
       return;
     }
     await runCiGate();
@@ -795,6 +813,7 @@ export default function IssueDetailPage() {
 
       {providerKeyPendingAction ? (
         <ProviderKeyReplayGate
+          expectedProvider={providerKeyPendingAction.provider ?? null}
           onClose={() => setProviderKeyPendingAction(null)}
           onSavedAndRun={onProviderKeySavedAndRun}
           onUseStub={onUseStubReplay}

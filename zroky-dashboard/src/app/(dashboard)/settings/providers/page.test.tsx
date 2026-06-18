@@ -6,6 +6,7 @@ import ProvidersPage from "./page";
 
 const api = vi.hoisted(() => ({
   createProviderKey: vi.fn(),
+  getBillingMe: vi.fn(),
   listProviderKeys: vi.fn(),
   listProviderVerifications: vi.fn(),
   revokeProviderKey: vi.fn(),
@@ -68,15 +69,38 @@ function verification(overrides: Partial<import("@/lib/types").ProviderVerificat
   };
 }
 
+function billing(overrides: Partial<import("@/lib/types").BillingMeResponse> = {}): import("@/lib/types").BillingMeResponse {
+  return {
+    org_id: "org_1",
+    plan_code: "pro",
+    status: "active",
+    seats: 1,
+    payment_provider: "manual",
+    payment_customer_ref: null,
+    payment_subscription_ref: null,
+    payment_request_ref: null,
+    current_period_end: null,
+    trial_end: null,
+    sla_tier: "standard",
+    plan_template: {
+      "enterprise.provider_key_vault": true,
+    },
+    ...overrides,
+  };
+}
+
 function mockProviderApi({
   keys = [],
   verifications = [verification()],
+  billingMe = billing(),
 }: {
   keys?: import("@/lib/types").ProviderKeyResponse[];
   verifications?: import("@/lib/types").ProviderVerificationItem[];
+  billingMe?: import("@/lib/types").BillingMeResponse;
 } = {}) {
   api.listProviderKeys.mockResolvedValue({ items: keys, total_in_page: keys.length });
   api.listProviderVerifications.mockResolvedValue({ items: verifications });
+  api.getBillingMe.mockResolvedValue(billingMe);
 }
 
 describe("ProvidersPage", () => {
@@ -88,8 +112,8 @@ describe("ProvidersPage", () => {
   it("renders the BYOK setup story and no-key empty state", async () => {
     render(<ProvidersPage />);
 
-    expect(await screen.findByRole("heading", { name: "Connect provider keys only when verified replay needs them." })).toBeInTheDocument();
-    expect(screen.getByText("Capture stays keyless. Verified replay uses your provider account so model spend stays visible.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Save provider keys only when replay needs real provider access." })).toBeInTheDocument();
+    expect(screen.getByText("Capture and stub replay stay keyless. Vault keys are encrypted and used only by provider-backed replay paths enabled for this workspace.")).toBeInTheDocument();
     expect(screen.getByText("Capture without key")).toBeInTheDocument();
     expect(screen.getAllByText("Stub replay").length).toBeGreaterThan(0);
     expect(screen.getByText("CI gate")).toBeInTheDocument();
@@ -102,7 +126,7 @@ describe("ProvidersPage", () => {
     api.createProviderKey.mockResolvedValue(providerKey());
 
     render(<ProvidersPage />);
-    await screen.findByRole("heading", { name: "Connect provider keys only when verified replay needs them." });
+    await screen.findByRole("heading", { name: "Save provider keys only when replay needs real provider access." });
 
     const keyInput = screen.getByLabelText("API key");
     fireEvent.change(keyInput, { target: { value: "sk-test-provider-key" } });
@@ -115,7 +139,7 @@ describe("ProvidersPage", () => {
         label: "production",
       }),
     );
-    expect(await screen.findByText("OpenAI key saved. Verified replay can now run with your provider account.")).toBeInTheDocument();
+    expect(await screen.findByText("OpenAI key saved in the encrypted vault.")).toBeInTheDocument();
     expect((keyInput as HTMLInputElement).value).toBe("");
     expect(screen.queryByText("sk-test-provider-key")).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("sk-test-provider-key")).not.toBeInTheDocument();
@@ -160,7 +184,7 @@ describe("ProvidersPage", () => {
     render(<ProvidersPage />);
 
     await screen.findByText("Priority providers");
-    fireEvent.click(screen.getAllByRole("button", { name: "Test connection" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Check provider status" })[0]);
 
     await waitFor(() => expect(api.testProviderConnection).toHaveBeenCalledWith("openai"));
     expect(await screen.findByText("OK: Connection verified.")).toBeInTheDocument();
@@ -177,5 +201,22 @@ describe("ProvidersPage", () => {
     expect(screen.getByLabelText("Provider")).toBeInTheDocument();
     expect(screen.getByLabelText("API key")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save provider key" })).toBeInTheDocument();
+  });
+
+  it("locks the save form before free-plan users paste a provider secret", async () => {
+    mockProviderApi({
+      billingMe: billing({
+        plan_code: "free",
+        plan_template: {
+          "enterprise.provider_key_vault": false,
+        },
+      }),
+    });
+
+    render(<ProvidersPage />);
+
+    expect(await screen.findByText("Provider key vault is not included in Free Plan.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Upgrade plan" }).getAttribute("href")).toBe("/settings/billing?upgrade_hint=enterprise.provider_key_vault");
+    expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
   });
 });

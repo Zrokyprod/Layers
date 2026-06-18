@@ -15,71 +15,38 @@ import {
 } from "lucide-react";
 
 import {
+  ApiError,
   createProviderKey,
+  getBillingMe,
   listProviderKeys,
   listProviderVerifications,
   revokeProviderKey,
   testProviderConnection,
 } from "@/lib/api";
+import { formatPlanLabel, hasPlanEntitlement } from "@/components/feature-gate";
 import { formatDateTime } from "@/lib/format";
-import type { ProviderKeyResponse, ProviderVerificationItem } from "@/lib/types";
-
-const PROVIDER_META: Record<string, { label: string; description: string }> = {
-  openai: {
-    label: "OpenAI",
-    description: "Chat completions, responses, and embeddings.",
-  },
-  anthropic: {
-    label: "Anthropic",
-    description: "Claude models for reasoning and long context.",
-  },
-  gemini: {
-    label: "Google Gemini",
-    description: "Gemini models for multimodal and long-context workflows.",
-  },
-  openrouter: {
-    label: "OpenRouter",
-    description: "Multi-provider routing for replay and evaluation workers.",
-  },
-  azure_openai: {
-    label: "Azure OpenAI",
-    description: "Azure-hosted OpenAI deployments.",
-  },
-  custom: {
-    label: "Custom",
-    description: "Private or custom provider endpoint.",
-  },
-};
-
-const PRIMARY_PROVIDERS = ["openai", "anthropic", "gemini", "openrouter"];
-
-const PROVIDER_OPTIONS = [
-  "openai",
-  "anthropic",
-  "gemini",
-  "openrouter",
-  "azure_openai",
-  "vertex",
-  "cohere",
-  "mistral",
-  "deepseek",
-  "bedrock",
-  "groq",
-  "custom",
-];
+import {
+  PRIMARY_PROVIDER_VALUES,
+  PROVIDER_KEY_OPTIONS,
+  normalizeProviderValue,
+  providerDescription,
+  providerLabel,
+} from "@/lib/provider-registry";
+import type { BillingMeResponse, ProviderKeyResponse, ProviderVerificationItem } from "@/lib/types";
 
 const replayProviderFlow = [
   "Capture without key",
   "Stub replay",
-  "Connect provider key",
-  "Verified replay",
+  "Save provider key",
+  "Provider-backed replay",
   "CI gate",
 ];
 
 type TestState = "idle" | "testing" | "ok" | "error";
 
 function keyFingerprint(key: ProviderKeyResponse): string {
-  return `${key.key_fingerprint.slice(0, 8)}...${key.key_last4 ?? "----"}`;
+  const fingerprint = key.key_fingerprint?.trim();
+  return `${fingerprint ? fingerprint.slice(0, 8) : "unknown"}...${key.key_last4 ?? "----"}`;
 }
 
 function isConfigProblem(message: string | null): boolean {
@@ -91,10 +58,13 @@ function isConfigProblem(message: string | null): boolean {
 export default function ProvidersPage() {
   const [items, setItems] = useState<ProviderVerificationItem[]>([]);
   const [providerKeys, setProviderKeys] = useState<ProviderKeyResponse[]>([]);
+  const [billing, setBilling] = useState<BillingMeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [keysLoading, setKeysLoading] = useState(true);
+  const [billingLoading, setBillingLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [testStates, setTestStates] = useState<Record<string, TestState>>({});
   const [testMessages, setTestMessages] = useState<Record<string, string>>({});
@@ -135,6 +105,21 @@ export default function ProvidersPage() {
     }
   }, [includeRevoked]);
 
+  const loadBilling = useCallback(async (signal?: AbortSignal) => {
+    try {
+      setBillingLoading(true);
+      const data = await getBillingMe(signal);
+      setBilling(data);
+      setBillingError(null);
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setBillingError(err instanceof Error ? err.message : "Failed to load plan.");
+      }
+    } finally {
+      setBillingLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     void loadProviders(controller.signal);
@@ -146,6 +131,12 @@ export default function ProvidersPage() {
     void loadKeys(controller.signal);
     return () => controller.abort();
   }, [loadKeys]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadBilling(controller.signal);
+    return () => controller.abort();
+  }, [loadBilling]);
 
   async function onTest(provider: string) {
     setTestStates((state) => ({ ...state, [provider]: "testing" }));
@@ -176,10 +167,14 @@ export default function ProvidersPage() {
         label: labelInput.trim() || null,
       });
       setPlaintextInput("");
-      setStatusMessage(`${labelForProvider(providerInput)} key saved. Verified replay can now run with your provider account.`);
+      setStatusMessage(`${labelForProvider(providerInput)} key saved in the encrypted vault.`);
       await loadKeys();
     } catch (err) {
-      setKeyError(err instanceof Error ? err.message : "Failed to save provider key.");
+      if (err instanceof ApiError && err.status === 402) {
+        setKeyError("Provider key vault is not included in the current plan. Upgrade before saving provider secrets.");
+      } else {
+        setKeyError(err instanceof Error ? err.message : "Failed to save provider key.");
+      }
     } finally {
       setSavingKey(false);
     }
@@ -204,7 +199,11 @@ export default function ProvidersPage() {
   }
 
   const allProviders = useMemo(() => {
-    return Array.from(new Set([...PRIMARY_PROVIDERS, ...PROVIDER_OPTIONS, ...items.map((item) => item.provider)]));
+    return Array.from(new Set([
+      ...PRIMARY_PROVIDER_VALUES,
+      ...PROVIDER_KEY_OPTIONS.map((provider) => provider.value),
+      ...items.map((item) => normalizeProviderValue(item.provider) ?? item.provider),
+    ]));
   }, [items]);
 
   function getItem(provider: string): ProviderVerificationItem | undefined {
@@ -212,7 +211,7 @@ export default function ProvidersPage() {
   }
 
   function labelForProvider(provider: string): string {
-    return PROVIDER_META[provider]?.label ?? provider;
+    return providerLabel(provider);
   }
 
   function activeKeyForProvider(provider: string): ProviderKeyResponse | undefined {
@@ -223,12 +222,15 @@ export default function ProvidersPage() {
   const detectedProviders = items.filter((item) => item.tracked_call_count > 0).length;
   const verifiedProviders = items.filter((item) => item.status === "verified").length;
   const vaultConfigProblem = isConfigProblem(keyError);
-  const secondaryProviders = allProviders.filter((provider) => !PRIMARY_PROVIDERS.includes(provider));
+  const canManageProviderVault = hasPlanEntitlement(billing?.plan_template, "enterprise.provider_key_vault");
+  const providerVaultUnavailable = !billingLoading && !billingError && !canManageProviderVault;
+  const providerSaveDisabled = billingLoading || Boolean(billingError);
+  const secondaryProviders = allProviders.filter((provider) => !PRIMARY_PROVIDER_VALUES.includes(provider as typeof PRIMARY_PROVIDER_VALUES[number]));
 
   function renderProviderCard(provider: string, variant: "primary" | "secondary") {
     const item = getItem(provider);
     const activeKey = activeKeyForProvider(provider);
-    const meta = PROVIDER_META[provider];
+    const label = labelForProvider(provider);
     const testState = testStates[provider] ?? "idle";
     const testMsg = testMessages[provider] ?? "";
     const status = item?.status ?? "unverified";
@@ -236,17 +238,17 @@ export default function ProvidersPage() {
     return (
       <article key={provider} className={`provider-card provider-status-card provider-${variant}`}>
         <div className="provider-avatar">
-          {(meta?.label ?? provider).charAt(0).toUpperCase()}
+          {label.charAt(0).toUpperCase()}
         </div>
         <div className="provider-info">
           <div className="provider-name-row">
-            <span className="provider-name">{meta?.label ?? provider}</span>
+            <span className="provider-name">{label}</span>
             <span className={`pill${activeKey ? " pill-green" : ""}`}>{activeKey ? "Active key" : "No key"}</span>
             <span className={`pill${status === "verified" ? " pill-green" : status === "failed" ? " pill-red" : ""}`}>
-              {status}
+              Provider {status}
             </span>
           </div>
-          <p className="provider-desc">{meta?.description ?? "Provider is available for verified replay when a key is saved."}</p>
+          <p className="provider-desc">{providerDescription(provider)}</p>
           <div className="provider-card-meta">
             <span>{item ? `${item.tracked_call_count.toLocaleString()} tracked calls` : "No captured traffic yet"}</span>
             <span>{item?.last_checked_at ? `Last checked ${formatDateTime(item.last_checked_at)}` : "Not checked yet"}</span>
@@ -267,7 +269,7 @@ export default function ProvidersPage() {
             onClick={() => void onTest(provider)}
           >
             <RefreshCw aria-hidden="true" />
-            {testState === "testing" ? "Testing..." : "Test connection"}
+            {testState === "testing" ? "Checking..." : "Check provider status"}
           </button>
         </div>
       </article>
@@ -282,8 +284,8 @@ export default function ProvidersPage() {
             <KeyRound aria-hidden="true" />
             BYOK replay
           </span>
-          <h1>Connect provider keys only when verified replay needs them.</h1>
-          <p>Capture stays keyless. Verified replay uses your provider account so model spend stays visible.</p>
+          <h1>Save provider keys only when replay needs real provider access.</h1>
+          <p>Capture and stub replay stay keyless. Vault keys are encrypted and used only by provider-backed replay paths enabled for this workspace.</p>
         </div>
         <div className="providers-hero-actions">
           <Link href="/replay" className="btn btn-primary">
@@ -321,15 +323,21 @@ export default function ProvidersPage() {
         </article>
         <article className="panel settings-summary-card">
           <CheckCircle2 aria-hidden="true" />
-          <span>Verified</span>
+          <span>Status OK</span>
           <strong>{verifiedProviders}</strong>
-          <small>Connectivity tests that passed recently.</small>
+          <small>Provider status checks that passed recently.</small>
         </article>
         <article className="panel settings-summary-card">
           <ShieldAlert aria-hidden="true" />
           <span>Vault state</span>
-          <strong>{vaultConfigProblem ? "Needs config" : "Reachable"}</strong>
-          <small>{vaultConfigProblem ? "Set backend provider key encryption before saving." : "Key list endpoint responded."}</small>
+          <strong>{vaultConfigProblem ? "Needs config" : providerVaultUnavailable ? "Plan locked" : "Available"}</strong>
+          <small>
+            {vaultConfigProblem
+              ? "Set backend provider key encryption before saving."
+              : providerVaultUnavailable
+                ? "Upgrade required before saving provider secrets."
+                : "Key list endpoint responded."}
+          </small>
         </article>
       </section>
 
@@ -337,10 +345,20 @@ export default function ProvidersPage() {
         <article className="panel providers-save-panel">
           <header className="panel-header">
             <div>
-              <h2>Save provider key for verified replay</h2>
-              <p>Capture, traces, issues, and stub replay work without this key. Connect it only when real replay proof is needed.</p>
+              <h2>Save provider key</h2>
+              <p>Only save a key when provider-backed replay is enabled for this workspace. Capture, traces, issues, and stub replay do not need it.</p>
             </div>
           </header>
+
+          {billingError ? (
+            <div className="settings-config-warning" role="status">
+              <AlertTriangle aria-hidden="true" />
+              <div>
+                <strong>Plan check failed.</strong>
+                <span>{billingError}</span>
+              </div>
+            </div>
+          ) : null}
 
           {vaultConfigProblem ? (
             <div className="settings-config-warning" role="status">
@@ -352,47 +370,60 @@ export default function ProvidersPage() {
             </div>
           ) : null}
 
-          <form className="providers-save-form" onSubmit={onSaveProviderKey}>
-            <div className="field">
-              <label htmlFor="providerKeyProvider">Provider</label>
-              <select
-                id="providerKeyProvider"
-                value={providerInput}
-                onChange={(event) => setProviderInput(event.target.value)}
-                disabled={savingKey}
-              >
-                {PROVIDER_OPTIONS.map((provider) => (
-                  <option key={provider} value={provider}>{labelForProvider(provider)}</option>
-                ))}
-              </select>
+          {providerVaultUnavailable ? (
+            <div className="settings-config-warning provider-vault-lock" role="status">
+              <LockKeyhole aria-hidden="true" />
+              <div>
+                <strong>Provider key vault is not included in {formatPlanLabel(billing?.plan_code)}.</strong>
+                <span>Upgrade before pasting provider secrets. Free capture and stub replay continue without provider keys.</span>
+              </div>
+              <Link href="/settings/billing?upgrade_hint=enterprise.provider_key_vault" className="btn btn-primary btn-sm">
+                Upgrade plan
+              </Link>
             </div>
-            <div className="field">
-              <label htmlFor="providerKeyLabel">Label</label>
-              <input
-                id="providerKeyLabel"
-                value={labelInput}
-                onChange={(event) => setLabelInput(event.target.value)}
-                placeholder="production"
-                disabled={savingKey}
-              />
-            </div>
-            <div className="field providers-key-field">
-              <label htmlFor="providerKeyPlaintext">API key</label>
-              <input
-                id="providerKeyPlaintext"
-                type="password"
-                value={plaintextInput}
-                onChange={(event) => setPlaintextInput(event.target.value)}
-                placeholder="Paste provider API key"
-                disabled={savingKey}
-              />
-              <span className="field-hint">Plaintext is submitted once, encrypted by the vault, then cleared from this form.</span>
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={savingKey || plaintextInput.trim().length < 8}>
-              <ShieldCheck aria-hidden="true" />
-              {savingKey ? "Saving..." : "Save provider key"}
-            </button>
-          </form>
+          ) : (
+            <form className="providers-save-form" onSubmit={onSaveProviderKey}>
+              <div className="field">
+                <label htmlFor="providerKeyProvider">Provider</label>
+                <select
+                  id="providerKeyProvider"
+                  value={providerInput}
+                  onChange={(event) => setProviderInput(event.target.value)}
+                  disabled={savingKey || providerSaveDisabled}
+                >
+                  {PROVIDER_KEY_OPTIONS.map((provider) => (
+                    <option key={provider.value} value={provider.value}>{provider.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="providerKeyLabel">Label</label>
+                <input
+                  id="providerKeyLabel"
+                  value={labelInput}
+                  onChange={(event) => setLabelInput(event.target.value)}
+                  placeholder="production"
+                  disabled={savingKey || providerSaveDisabled}
+                />
+              </div>
+              <div className="field providers-key-field">
+                <label htmlFor="providerKeyPlaintext">API key</label>
+                <input
+                  id="providerKeyPlaintext"
+                  type="password"
+                  value={plaintextInput}
+                  onChange={(event) => setPlaintextInput(event.target.value)}
+                  placeholder="Paste provider API key"
+                  disabled={savingKey || providerSaveDisabled}
+                />
+                <span className="field-hint">Plaintext is submitted once, encrypted by the vault, then cleared from this form.</span>
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={savingKey || providerSaveDisabled || plaintextInput.trim().length < 8}>
+                <ShieldCheck aria-hidden="true" />
+                {savingKey ? "Saving..." : billingLoading ? "Checking plan..." : billingError ? "Plan unavailable" : "Save provider key"}
+              </button>
+            </form>
+          )}
 
           {keyError && !vaultConfigProblem ? <p className="field-error">{keyError}</p> : null}
         </article>
@@ -403,7 +434,7 @@ export default function ProvidersPage() {
             Key rule
           </span>
           <h2>Do not add provider keys for capture.</h2>
-          <p>Provider keys are only used by verified replay, CI replay, and evaluation workers. Your normal capture path remains project-key based.</p>
+          <p>Provider keys are for provider-backed replay and evaluation workers only. Your normal capture path remains project-key based.</p>
           <div className="providers-rule-list">
             {["Signup and login", "SDK/Gateway capture", "Trace and issue browsing", "Stub replay"].map((item) => (
               <span key={item}>
@@ -419,7 +450,7 @@ export default function ProvidersPage() {
         <header className="panel-header">
           <div>
             <h2>Priority providers</h2>
-            <p>Connect the provider your agent already uses, then run a connection test before verified replay.</p>
+            <p>Connect the provider your agent already uses. Status checks show provider availability; vault keys are shown separately.</p>
           </div>
         </header>
 
@@ -427,7 +458,7 @@ export default function ProvidersPage() {
         {error ? <p className="field-error">{error}</p> : null}
         {!loading && !error ? (
           <div className="providers-card-grid">
-            {PRIMARY_PROVIDERS.map((provider) => renderProviderCard(provider, "primary"))}
+            {PRIMARY_PROVIDER_VALUES.map((provider) => renderProviderCard(provider, "primary"))}
           </div>
         ) : null}
       </section>

@@ -81,14 +81,14 @@ vi.mock("@/lib/hooks", () => ({
   useActiveProviderKeys: () => ({
     data: {
       items: providerKeyState.active
-        ? [{ id: "key_1", is_active: true }]
+        ? [{ id: "key_1", provider: "openai", is_active: true }]
         : [],
       total_in_page: providerKeyState.active ? 1 : 0,
     },
     refetch: vi.fn(async () => ({
       data: {
         items: providerKeyState.active
-          ? [{ id: "key_1", is_active: true }]
+          ? [{ id: "key_1", provider: "openai", is_active: true }]
           : [],
         total_in_page: providerKeyState.active ? 1 : 0,
       },
@@ -403,7 +403,7 @@ describe("ReplayPage command center", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
 
-    expect(await screen.findByText("Connect your provider key to run verified replay.")).toBeInTheDocument();
+    expect(await screen.findByText("Connect the matching provider key.")).toBeInTheDocument();
     expect(hooks.issueMutate).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Use stub replay" }));

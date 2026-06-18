@@ -137,6 +137,10 @@ function issueReason(issue: IssueItem | null | undefined) {
   return issue?.root_cause || issue?.recommended_next_action || issue?.user_impact || "No source finding reason captured.";
 }
 
+function issueProvider(issue: IssueItem | null | undefined): string | null {
+  return issue?.evidence_traces.find((trace) => trace.provider?.trim())?.provider ?? null;
+}
+
 function sourceContextLabel(context: ReplaySourceContext | null | undefined) {
   if (!context) return "Source context not captured";
   return context.title || context.failure_code || context.id || "Source context";
@@ -513,6 +517,12 @@ function ReplayPageContent() {
   );
   const selectedIssue = issues.find((issue) => issue.id === selectedIssueId) ?? issues[0] ?? null;
   const selectedCall = calls.find((call) => call.call_id === selectedCallId) ?? calls[0] ?? null;
+  const expectedProviderForLaunch =
+    launchSource === "call"
+      ? selectedCall?.provider ?? null
+      : launchSource === "issue"
+        ? issueProvider(selectedIssue)
+        : null;
   const selectedGolden = goldenSets.find((set) => set.id === selectedGoldenId) ?? runnableGoldenSets[0] ?? goldenSets[0] ?? null;
 
   const runStats = useMemo(() => {
@@ -607,9 +617,9 @@ function ReplayPageContent() {
 
   async function hasProviderKeyForReplay(mode: ReplayMode) {
     if (!actionRequiresProviderKey(mode)) return true;
-    if (hasActiveProviderKey(providerKeysQuery.data?.items)) return true;
+    if (hasActiveProviderKey(providerKeysQuery.data?.items, expectedProviderForLaunch)) return true;
     const refreshed = await providerKeysQuery.refetch();
-    return hasActiveProviderKey(refreshed.data?.items);
+    return hasActiveProviderKey(refreshed.data?.items, expectedProviderForLaunch);
   }
 
   function dispatchReplay(mode: ReplayMode = replayMode) {
@@ -911,6 +921,7 @@ function ReplayPageContent() {
 
             {providerKeyGateOpen ? (
               <ProviderKeyReplayGate
+                expectedProvider={expectedProviderForLaunch}
                 onClose={() => setProviderKeyGateOpen(false)}
                 onSavedAndRun={onProviderKeySavedAndRun}
                 onUseStub={onUseStubReplay}

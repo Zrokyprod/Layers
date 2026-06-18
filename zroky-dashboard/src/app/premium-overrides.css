@@ -7242,6 +7242,21 @@ body:has(.app-shell) {
   color: var(--dashboard-text) !important;
 }
 
+.app-shell .provider-vault-lock {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+}
+
+.app-shell .provider-key-gate-provider-note {
+  margin-top: 8px !important;
+  color: var(--dashboard-text-soft) !important;
+}
+
+.app-shell .provider-key-gate-provider-note strong {
+  color: var(--dashboard-text) !important;
+}
+
 .app-shell .field-success,
 .app-shell .settings-shell .provider-test-msg.ok {
   color: var(--dashboard-success-text) !important;

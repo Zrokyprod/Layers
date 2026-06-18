@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { createProviderKey } from "@/lib/api";
 import { PROVIDER_KEY_OPTIONS, PROVIDER_KEY_QUERY_KEY } from "@/lib/provider-key-gate";
+import { normalizeProviderValue, providerLabel } from "@/lib/provider-registry";
 
 type ProviderKeyReplayGateProps = {
+  expectedProvider?: string | null;
   onClose?: () => void;
   onSavedAndRun: () => void | Promise<void>;
   onUseStub?: () => void;
@@ -16,17 +18,26 @@ type ProviderKeyReplayGateProps = {
 };
 
 export function ProviderKeyReplayGate({
+  expectedProvider,
   onClose,
   onSavedAndRun,
   onUseStub,
   showUseStub = true,
 }: ProviderKeyReplayGateProps) {
   const queryClient = useQueryClient();
-  const [provider, setProvider] = useState("openai");
+  const normalizedExpectedProvider = normalizeProviderValue(expectedProvider);
+  const defaultProvider = PROVIDER_KEY_OPTIONS.some((option) => option.value === normalizedExpectedProvider)
+    ? normalizedExpectedProvider!
+    : "openai";
+  const [provider, setProvider] = useState(defaultProvider);
   const [label, setLabel] = useState("production");
   const [plaintextKey, setPlaintextKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setProvider(defaultProvider);
+  }, [defaultProvider]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,8 +68,13 @@ export function ProviderKeyReplayGate({
             <KeyRound aria-hidden="true" />
             BYOK replay
           </div>
-          <h3>Connect your provider key to run verified replay.</h3>
-          <p>Capture works without a key. Verified replay uses your provider account so model spend stays visible.</p>
+          <h3>Connect the matching provider key.</h3>
+          <p>Capture and stub replay work without this. Provider-backed replay needs an active key for the provider behind the selected run.</p>
+          {normalizedExpectedProvider ? (
+            <p className="provider-key-gate-provider-note">
+              Expected provider: <strong>{providerLabel(normalizedExpectedProvider)}</strong>
+            </p>
+          ) : null}
         </div>
         {onClose ? (
           <button type="button" className="btn btn-soft btn-sm" onClick={onClose} disabled={saving}>

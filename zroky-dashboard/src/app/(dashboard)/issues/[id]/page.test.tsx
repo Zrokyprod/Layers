@@ -60,12 +60,12 @@ vi.mock("@/lib/api", async () => {
 vi.mock("@/lib/hooks", () => ({
   useActiveProviderKeys: () => ({
     data: {
-      items: providerKeyState.active ? [{ id: "key_1", is_active: true }] : [],
+      items: providerKeyState.active ? [{ id: "key_1", provider: "openai", is_active: true }] : [],
       total_in_page: providerKeyState.active ? 1 : 0,
     },
     refetch: vi.fn(async () => ({
       data: {
-        items: providerKeyState.active ? [{ id: "key_1", is_active: true }] : [],
+        items: providerKeyState.active ? [{ id: "key_1", provider: "openai", is_active: true }] : [],
         total_in_page: providerKeyState.active ? 1 : 0,
       },
     })),
