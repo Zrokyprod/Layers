@@ -77,6 +77,7 @@ lint_output.txt
 .vscode/
 .idea/
 .codex/
+.agents/
 .windsurf/
 .claude/
 .devin/

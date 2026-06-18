@@ -64,7 +64,7 @@ const releases = [
       'Managed replay is optional and explained as provider cost plus platform fee.',
       'Extra captured calls, replay credits, and CI executions have clear overage rules.',
     ],
-    proof: 'Teams can start cheap and scale only when replay and CI become business-critical.',
+    proof: 'Organizations can start cheap and scale only when replay and CI become business-critical.',
     href: '/pricing',
     cta: 'View pricing',
   },

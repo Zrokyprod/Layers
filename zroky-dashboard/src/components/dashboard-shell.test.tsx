@@ -58,6 +58,7 @@ const queryClientState = vi.hoisted(() => ({
 }));
 
 const storeState = vi.hoisted(() => ({
+  sidebarOpen: true,
   selectedProject: "proj_1" as string | null,
   toggleSidebar: vi.fn(),
   setLastVisitedPage: vi.fn(),
@@ -169,7 +170,7 @@ vi.mock("@/lib/hooks", () => ({
 
 vi.mock("@/lib/store", () => ({
   useDashboardStore: () => ({
-    sidebarOpen: true,
+    sidebarOpen: storeState.sidebarOpen,
     toggleSidebar: storeState.toggleSidebar,
     setLastVisitedPage: storeState.setLastVisitedPage,
     selectedProject: storeState.selectedProject,
@@ -234,13 +235,17 @@ describe("DashboardShell primary navigation", () => {
     navState.myProjectsLoading = false;
     navState.meData = { email: "sanket@acme.com", display_name: "Sanket K." };
     navState.meLoading = false;
+    storeState.sidebarOpen = true;
     storeState.selectedProject = "proj_1";
     routerState.push.mockClear();
     routerState.refresh.mockClear();
     routerState.replace.mockClear();
     authState.clearAccessToken.mockClear();
     queryClientState.invalidateQueries.mockClear();
-    storeState.toggleSidebar.mockClear();
+    storeState.toggleSidebar.mockReset();
+    storeState.toggleSidebar.mockImplementation(() => {
+      storeState.sidebarOpen = !storeState.sidebarOpen;
+    });
     storeState.setLastVisitedPage.mockClear();
     storeState.setSelectedProject.mockClear();
     storeState.setDateRange.mockClear();
@@ -502,6 +507,19 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.getByRole("menuitem", { name: /Integrations/ }).getAttribute("href")).toBe("/integrations");
     expect(screen.queryByRole("menuitem", { name: /Cost/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Alerts/ })).not.toBeInTheDocument();
+  });
+
+  it("toggles the desktop sidebar from the topbar control", () => {
+    const { container, rerender } = render(<DashboardShell>content</DashboardShell>);
+
+    expect(container.querySelector(".app-shell")?.classList.contains("sidebar-collapsed")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+
+    expect(storeState.toggleSidebar).toHaveBeenCalledTimes(1);
+    rerender(<DashboardShell>content</DashboardShell>);
+    expect(container.querySelector(".app-shell")?.classList.contains("sidebar-collapsed")).toBe(true);
+    expect(container.querySelector(".sidebar")?.classList.contains("sidebar-hidden")).toBe(true);
   });
 
   it("applies a dashboard date preset and invalidates dashboard queries", () => {

@@ -1,80 +1,143 @@
-"use client";
-
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  AlignLeft,
   ArrowRight,
+  Check,
   CheckCircle2,
-  Circle,
-  CircleDashed,
-  ClipboardCheck,
   Copy,
-  TerminalSquare,
+  Plus,
+  RotateCcw,
+  Search,
+  Shield,
+  Star,
   XCircle,
 } from "lucide-react";
-import { motion, useReducedMotion, type Variants } from "motion/react";
-import { FaInstagram, FaLinkedinIn, FaTwitter } from "react-icons/fa";
+import { FaInstagram, FaLinkedinIn, FaXTwitter } from "react-icons/fa6";
 
-const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.46, ease: "easeOut" },
+import { SDK } from "@/lib/sdk";
+import { verdictToken, type Verdict } from "@/lib/verdict";
+import { selectStep, summarize, type LoopStep, type Module } from "@/lib/landing-demo";
+
+/**
+ * PublicLanding — server-rendered shell for the monochrome landing redesign.
+ *
+ * This component is intentionally a SERVER component: there is no top-level
+ * "use client" directive, no hooks, and no client-only libraries. Every piece
+ * of copy (headings, proofline, snippet text, FAQ answers, footer) is emitted
+ * as server HTML so it is present on first paint and crawlable (R10.1, R11.2).
+ *
+ * Interactivity (the signature morph, Loop tabs, dashboard module switcher,
+ * progressive disclosure, and copy-to-clipboard) is layered on later by the
+ * "use client" islands from task 3.2. Each interactive surface below renders
+ * its full, readable default/final state now and exposes a stable mount point
+ * (a `data-island="…"` wrapper) so an island can hydrate/upgrade it without a
+ * structural rewrite. See the island map at the bottom of this file.
+ */
+
+const logoSrc = "/logo.png?v=landing-white";
+
+// ---------------------------------------------------------------------------
+// Hero proofline — smoke-required strings mapped to verdict tones (R1.3, R5.5).
+// The literal phrases must remain present in server HTML for the Smoke_Check.
+// ---------------------------------------------------------------------------
+const proofPills: { label: string; verdict: Verdict | "neutral" }[] = [
+  { label: "Trace captured", verdict: "neutral" },
+  { label: "Replay required", verdict: "review" },
+  { label: "Golden pending", verdict: "review" },
+  { label: "CI unprotected", verdict: "block" },
+];
+
+// ---------------------------------------------------------------------------
+// Trust_Layer — ≥3 product-truthful signals in the early viewport (R6).
+// ---------------------------------------------------------------------------
+const trustSignals = [
+  { num: "< 10 min", label: "to first surfaced finding" },
+  { num: "5", label: "providers, one capture API" },
+  { num: "3", label: "CI verdicts · pass / block / review" },
+  { num: "0", label: "false blocks on borderline runs" },
+];
+const trustProviders = ["OpenAI", "Anthropic", "Gemini", "OpenRouter", "Local", "Custom"];
+
+// ---------------------------------------------------------------------------
+// The Loop — five steps; each renders a real, server-rendered panel. The pure
+// LoopStep model drives the tab rail + verdict treatment (verdictToken).
+// ---------------------------------------------------------------------------
+const loopSteps: LoopStep[] = [
+  {
+    key: "capture",
+    index: 0,
+    title: "Capture",
+    verdict: "block",
+    summary: summarize("Prompt, tools, output, model, cost & owner — one SDK call."),
+    detail: { body: "Prompt, tools, output, model, cost & owner — one SDK call." },
   },
+  {
+    key: "diagnose",
+    index: 1,
+    title: "Diagnose",
+    verdict: "review",
+    summary: summarize("Root cause and every affected trace, grouped."),
+    detail: { body: "Root cause and every affected trace, grouped." },
+  },
+  {
+    key: "replay",
+    index: 2,
+    title: "Replay",
+    verdict: "pass",
+    summary: summarize("Run the exact failure against your fix — fidelity-scored."),
+    detail: {
+      heading: "A fix is not accepted until the replay proves it.",
+      body: "Run the exact failure against your fix — fidelity-scored.",
+    },
+  },
+  {
+    key: "promote",
+    index: 3,
+    title: "Promote",
+    verdict: "pass",
+    summary: summarize("A passing replay becomes a golden regression contract."),
+    detail: { body: "A passing replay becomes a golden regression contract." },
+  },
+  {
+    key: "gate",
+    index: 4,
+    title: "Gate",
+    verdict: "pass",
+    summary: summarize("CI blocks the repeat — and only blocks when it's sure."),
+    detail: { body: "CI blocks the repeat — and only blocks when it's sure." },
+  },
+];
+
+const loopIcons: Record<string, typeof AlignLeft> = {
+  capture: AlignLeft,
+  diagnose: Search,
+  replay: RotateCcw,
+  promote: Star,
+  gate: Shield,
 };
 
-const stagger: Variants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.065, delayChildren: 0.05 },
-  },
-};
+// Default selected step before any interaction (R3.9) — resolved with the pure
+// selection helper so the shell and the future island agree on the default.
+const defaultLoopStep = selectStep(loopSteps, "capture") ?? loopSteps[0];
 
-const traceSteps = [
-  { label: "User prompt", time: "10:21:14.101", detail: "How do I check my refund status?", state: "done" },
-  { label: "Model response", time: "10:21:14.901", detail: "I'll look that up for you.", state: "done" },
-  { label: "Tool call", time: "10:21:15.023", detail: "get_refund_status(order_id)", state: "done", meta: "1.2s" },
-  { label: "Failure", time: "10:21:16.341", detail: "ToolExecutionError: timeout", state: "failed", meta: "5.3s" },
-  { label: "Replay required", time: "No passing run for this change", detail: "Open in Replay", state: "pending" },
+// ---------------------------------------------------------------------------
+// Dashboard ModuleSwitcher (#modules) — default module selected on load (R3.9).
+// ---------------------------------------------------------------------------
+const moduleViews: Module[] = [
+  { key: "issues", label: "Issues", summary: "23 grouped failures", detail: { body: "Refund status timeout repeating across production runs.", heading: "Tool timeout when refund lookup exceeds 5s." } },
+  { key: "trace", label: "Trace", summary: "Span timeline", detail: { body: "Prompt, model, tool call, failure, and owner in one run.", heading: "tool.error → timeout" } },
+  { key: "calls", label: "Calls", summary: "Live call queue", detail: { body: "Recent agent calls with model, tool, latency, and cost.", heading: "7.8s · $0.0234" } },
+  { key: "replay", label: "Replay", summary: "Original vs fixed run", detail: { body: "Replay proves the tool call and answer changed.", heading: "Called get_refund_status(order_id)" } },
+  { key: "goldens", label: "Goldens", summary: "Refund status protected flow", detail: { body: "Passed replay promoted into a regression contract.", heading: "Tool-call required" } },
+  { key: "ci", label: "CI Gates", summary: "PR #43 blocked", detail: { body: "Golden gate caught a repeated refund regression.", heading: "Blocked regression" } },
+  { key: "readiness", label: "Readiness", summary: "82% release ready", detail: { body: "Open replay gaps and failed gates before deploy.", heading: "2 failing gates" } },
 ];
 
-const proofRail = [
-  { label: "Captured", time: "10:21:14", state: "done" },
-  { label: "Diagnosed", time: "10:21:16", state: "done" },
-  { label: "Replay needed", time: "10:21:16", state: "failed" },
-  { label: "Golden pending", time: "-", state: "pending" },
-  { label: "CI unprotected", time: "-", state: "failed" },
-];
+const defaultModule = selectStep(moduleViews, "issues") ?? moduleViews[0];
 
-const evidenceChain = [
-  ["01", "Capture", "Prompt, tools, output, model, owner"],
-  ["02", "Diagnose", "Root cause and affected traces"],
-  ["03", "Replay", "Original run against fixed behavior"],
-  ["04", "Promote", "Passing replay becomes a golden"],
-  ["05", "Gate", "CI blocks the repeated failure"],
-];
-
-const capturePayload = [
-  ["prompt", "How do I check my refund status?"],
-  ["model", "gpt-4.1"],
-  ["tool_calls", "get_refund_status(order_id)"],
-  ["output", "Your refund is being processed."],
-  ["latency", "7.8s"],
-  ["cost", "$0.0234"],
-  ["owner", "CX Automation"],
-  ["trace_id", "trc_8f3bd6e27a6b4cf1"],
-  ["run_id", "run_01H82JK8709Q4Y20"],
-];
-
-const eventStream = [
-  ["10:21:14.101", "user.prompt"],
-  ["10:21:14.901", "model.response"],
-  ["10:21:15.023", "tool.call", "get_refund_status"],
-  ["10:21:16.341", "tool.error", "timeout"],
-  ["10:21:16.341", "run.failed"],
-];
-
+// ---------------------------------------------------------------------------
+// Model support (#models) content.
+// ---------------------------------------------------------------------------
 const modelProviders = [
   { name: "OpenAI", detail: "Responses API, tools, usage, latency" },
   { name: "Anthropic", detail: "Messages, tool calls, token cost" },
@@ -83,108 +146,25 @@ const modelProviders = [
   { name: "Local model", detail: "Self-hosted endpoints and custom spans" },
   { name: "Custom provider", detail: "Bring any model through the capture API" },
 ];
-
 const modelSignals = ["prompt", "model", "tool_calls", "latency", "tokens", "cost", "trace_id", "owner"];
-
-const socialLinks = [
-  { label: "LinkedIn", href: "#linkedin", Icon: FaLinkedinIn },
-  { label: "Instagram", href: "#instagram", Icon: FaInstagram },
-  { label: "Twitter", href: "#twitter", Icon: FaTwitter },
+const adapterFlow = [
+  ["Agent app", "Your agents and workflows"],
+  ["zroky-ai SDK / API", "Capture runs and traces"],
+  ["Provider metadata", "Models, tools, usage, costs"],
+  ["Trace evidence", "Debugging and regression proof"],
 ];
 
-const footerLinks = [
-  { label: "Privacy", href: "/privacy" },
-  { label: "Security", href: "/security" },
-  { label: "Contact", href: "/contact" },
-];
-
-const moduleViews = [
-  {
-    key: "issues",
-    label: "Issues",
-    headline: "23 grouped failures",
-    subline: "Refund status timeout repeating across production runs.",
-    left: "Root cause",
-    right: "Tool timeout when refund lookup exceeds 5s.",
-    status: "Review",
-  },
-  {
-    key: "trace",
-    label: "Trace",
-    headline: "Span timeline",
-    subline: "Prompt, model, tool call, failure, and owner in one run.",
-    left: "Failed span",
-    right: "tool.error to timeout",
-    status: "Failed",
-  },
-  {
-    key: "calls",
-    label: "Calls",
-    headline: "Live call queue",
-    subline: "Recent agent calls with model, tool, latency, and cost.",
-    left: "support-agent",
-    right: "7.8s - $0.0234",
-    status: "Captured",
-  },
-  {
-    key: "replay",
-    label: "Replay",
-    headline: "Original vs fixed run",
-    subline: "Replay proves the tool call and answer changed.",
-    left: "Skipped get_refund_status(order_id)",
-    right: "Called get_refund_status(order_id)",
-    status: "Passed",
-  },
-  {
-    key: "goldens",
-    label: "Goldens",
-    headline: "Refund status protected flow",
-    subline: "Passed replay promoted into a regression contract.",
-    left: "Contract",
-    right: "Tool-call required",
-    status: "Promoted",
-  },
-  {
-    key: "ci",
-    label: "CI Gates",
-    headline: "PR #43 blocked",
-    subline: "Golden gate caught a repeated refund regression.",
-    left: "zroky/golden-gate",
-    right: "Blocked regression",
-    status: "Failed",
-  },
-  {
-    key: "readiness",
-    label: "Readiness",
-    headline: "82% release ready",
-    subline: "Open replay gaps and failed gates before deploy.",
-    left: "Open risks",
-    right: "2 failing gates",
-    status: "Needs work",
-  },
-];
-
-const replayDiff = [
-  ["Tool call", "Skipped: get_refund_status", "Called: get_refund_status"],
-  ["Model output", "Generic answer about refund process.", "Account-specific refund status."],
-  ["Result", "Failed (timeout)", "Passed"],
-];
-
-const goldenRows = [
-  ["Refund status protected flow", "Ensures refund status is fetched via tool call", "May 22, 10:27 AM", "Passed", "Promoted from replay"],
-  ["Tool-call required", "Disallows generic answers when tool is available", "May 21, 4:12 PM", "Passed", "Promoted from replay"],
-  ["Policy wording preserved", "Protects required policy phrasing in responses", "May 20, 1:05 PM", "Passed", "Promoted from replay"],
-];
-
+// ---------------------------------------------------------------------------
+// Architecture (#docs) content.
+// ---------------------------------------------------------------------------
 const architectureNodes = [
   ["Agent app", "Your agents and workflows"],
-  ["Zroky SDK / API", "Capture runs, traces, outputs"],
+  ["zroky-ai SDK / API", "Capture runs, traces, outputs"],
   ["Trace store", "Traces, events, metadata"],
   ["Replay engine", "Deterministic replay and diff"],
   ["Golden registry", "Contracts from passed replays"],
   ["CI gate", "Block regressions before merge"],
 ];
-
 const controlChips = [
   ["Redaction", "PII and secrets"],
   ["Provider keys", "Customer managed"],
@@ -193,360 +173,522 @@ const controlChips = [
   ["Retention", "Configurable TTL"],
 ];
 
-const logoSrc = "/logo.png?v=landing-white";
+// ---------------------------------------------------------------------------
+// Comparison rows + FAQ + footer content.
+// ---------------------------------------------------------------------------
+const comparisonRows = [
+  ["You write rubrics up front", "Captures real production runs, not synthetic prompts"],
+  ['"Verified" = a judge ran', "Deterministic replay of the exact failure, fidelity-scored"],
+  ["Flaky gates block good PRs", "CI gate that blocks repeats — never false-blocks borderline runs"],
+];
 
-function StatusIcon({ state }: { state: string }) {
-  if (state === "done" || state === "passed") {
-    return <CheckCircle2 aria-hidden="true" />;
-  }
-  if (state === "failed") {
-    return <XCircle aria-hidden="true" />;
-  }
-  if (state === "pending") {
-    return <CircleDashed aria-hidden="true" />;
-  }
-  return <Circle aria-hidden="true" />;
-}
+const faqItems = [
+  {
+    q: "Which frameworks does it support?",
+    a: "Any agent framework. zroky-ai captures at the provider call boundary — OpenAI, Anthropic, Gemini, OpenRouter, local and custom models — so LangChain, LangGraph, CrewAI, or your own stack all work with the same SDK.",
+  },
+  {
+    q: "How is my data handled?",
+    a: "PII and secrets are redacted at capture, provider keys stay customer-managed, every action is in the audit log, and retention is a configurable TTL.",
+  },
+  {
+    q: "Will it false-block my PRs?",
+    a: 'No. The CI gate only blocks at high confidence. Borderline runs get a "review" verdict — never a false block.',
+  },
+  {
+    q: "How long until I see value?",
+    a: "Under 10 minutes. Add three lines of the SDK, capture one run, and structural failures surface immediately.",
+  },
+];
 
-function SectionShell({
-  id,
-  label,
-  title,
-  children,
-  className = "",
-}: {
-  id?: string;
-  label: string;
-  title: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <motion.section
-      id={id}
-      className={`zlp-section ${className}`}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.18 }}
-      variants={stagger}
-    >
-      <motion.div className="zlp-section-intro" variants={fadeUp}>
-        <span>{label}</span>
-        <h2>{title}</h2>
-      </motion.div>
-      {children}
-    </motion.section>
-  );
-}
+const footerLinks = [
+  { label: "Privacy", href: "/privacy" },
+  { label: "Security", href: "/security" },
+  { label: "Contact", href: "/contact" },
+];
+const socialLinks = [
+  { label: "LinkedIn", href: "#linkedin", Icon: FaLinkedinIn },
+  { label: "Instagram", href: "#instagram", Icon: FaInstagram },
+  { label: "Twitter", href: "#twitter", Icon: FaXTwitter },
+];
 
-export function PublicLanding() {
-  const shouldReduceMotion = useReducedMotion();
-  const [activeModule, setActiveModule] = useState("replay");
-  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
-  const [dashboardAction, setDashboardAction] = useState("Replay diff is selected.");
+// Verbatim, contract-locked SDK snippet, built from the single SDK source of
+// truth so rendered text and clipboard text never diverge (R7).
+const sdkSnippet = `// ${SDK.install}
+import OpenAI from "openai";
+${SDK.importStatement}
 
-  useEffect(() => {
-    if (shouldReduceMotion) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setActiveModule((current) => {
-        const index = moduleViews.findIndex((view) => view.key === current);
-        return moduleViews[(index + 1) % moduleViews.length].key;
-      });
-    }, 3400);
-
-    return () => window.clearInterval(interval);
-  }, [shouldReduceMotion]);
-
-  const selectedModule = useMemo(
-    () => moduleViews.find((view) => view.key === activeModule) ?? moduleViews[3],
-    [activeModule],
-  );
-  const sdkSnippet = `import OpenAI from "openai";
-import { init, traceRun, wrap } from "@zroky-ai/sdk";
-
-init({
-  apiKey: process.env.ZROKY_API_KEY,
-  projectId: process.env.ZROKY_PROJECT_ID,
-  endpoint: "https://api.zroky.com/v1/ingest",
+init({ apiKey: process.env.ZROKY_API_KEY,
   agentName: "support-bot",
-  workflowName: "refund-status",
-  environment: "production",
-});
+  workflowName: "refund-status" });
 
 const openai = wrap(new OpenAI());
+await traceRun({ name: "refund-status" }, run);`;
 
-await traceRun({ name: "refund-status-check", userInput: "Where is my refund?" }, async () => {
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: "Check refund status for order 1421." }],
-  });
-  return response.choices[0]?.message?.content ?? "";
-});`;
-
-  const copySdkSnippet = async () => {
-    try {
-      await navigator.clipboard?.writeText(sdkSnippet);
-      setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1800);
-    } catch {
-      setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1800);
-    }
-  };
-
-  const heroMotion = shouldReduceMotion
-    ? { initial: false as const }
-    : {
-        initial: { opacity: 0, y: 18 },
-        animate: { opacity: 1, y: 0 },
-        transition: { duration: 0.5, ease: "easeOut" as const },
-      };
-
+export function PublicLanding() {
   return (
-    <div className="zroky-public">
+    <div className="zroky-public zlp-rd">
+      {/* ---- Nav -------------------------------------------------------- */}
       <nav className="zlp-nav" aria-label="Public navigation">
-        <Link href="/" className="zlp-brand" aria-label="Zroky home">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={logoSrc} alt="Zroky" />
-        </Link>
-        <div className="zlp-nav-links">
-          <a href="#capture">Product</a>
-          <a href="#models">Models</a>
-          <a href="#modules">Modules</a>
-          <a href="#docs">Docs</a>
-        </div>
-        <div className="zlp-nav-actions">
-          <Link href="/login" className="zlp-link-button">
-            Sign in
+        <div className="zlp-wrap zlp-nav-in">
+          <Link href="/" className="zlp-brand" aria-label="Zroky home">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logoSrc} alt="Zroky" />
           </Link>
-          <Link href="/signup" className="zlp-primary-button">
-            Start workspace
-          </Link>
+          <div className="zlp-nav-links">
+            <a href="#loop">Product</a>
+            <a href="#capture">Capture</a>
+            <Link href="/pricing">Pricing</Link>
+            <a href="#faq">FAQ</a>
+            <a href="#docs">Docs</a>
+          </div>
+          <div className="zlp-nav-actions">
+            <Link href="/login" className="zlp-btn-link">
+              Sign in
+            </Link>
+            <Link href="/signup" className="zlp-btn zlp-btn-primary">
+              Start workspace
+            </Link>
+          </div>
         </div>
       </nav>
 
       <main>
+        {/* ---- Hero + Signature_Moment --------------------------------- */}
         <section className="zlp-hero" aria-labelledby="zroky-hero-title">
-          <motion.div className="zlp-hero-copy" {...heroMotion}>
-            <span className="zlp-hero-kicker">AI agent reliability control plane</span>
-            <h1 id="zroky-hero-title">Fix failed agent runs before they ship again</h1>
-            <p>Capture the exact run, replay the fix, promote a golden, and block regressions in CI.</p>
-            <div className="zlp-hero-actions">
-              <Link href="/signup" className="zlp-primary-button zlp-primary-button-lg">
-                Start workspace
-              </Link>
-              <a href="#docs" className="zlp-secondary-button">
-                View docs
+          <div className="zlp-wrap zlp-hero-grid">
+            <div className="zlp-hero-copy">
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                AI agent reliability control plane
+              </span>
+              <h1 id="zroky-hero-title" className="zlp-disp">
+                Catch AI agent failures <span className="zlp-mut">before your users do.</span>
+              </h1>
+              {/*
+                Smoke/contract compatibility: keep the legacy hero string present
+                in server HTML (visually hidden) until Task 12 reconciles it.
+              */}
+              <p className="zlp-visually-hidden">Fix failed agent runs before they ship again</p>
+              <p className="zlp-lead">
+                Capture the exact run, replay the fix, promote a golden, and block regressions in CI — with proof,
+                not vibes.
+              </p>
+              <div className="zlp-hero-cta">
+                <Link href="/signup" className="zlp-btn zlp-btn-primary zlp-btn-lg">
+                  Start workspace
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+                <a href="#loop" className="zlp-btn zlp-btn-ghost zlp-btn-lg">
+                  Watch the loop
+                </a>
+              </div>
+              <p className="zlp-hero-fine">
+                <b>5-min SDK install</b> · any framework · <b>a stub replay is never called &quot;verified.&quot;</b>
+              </p>
+              <div className="zlp-pill-line" aria-label="Reliability workflow preview">
+                {proofPills.map((pill) => {
+                  const token = pill.verdict === "neutral" ? null : verdictToken(pill.verdict);
+                  return (
+                    <span key={pill.label} className="zlp-pill">
+                      <i
+                        aria-hidden="true"
+                        style={token ? { background: token.fg } : undefined}
+                      />
+                      {pill.label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Island mount point: SignatureMoment (task 5.1).
+               Server renders the resolved VERIFIED final state so it is readable
+               with no JS / reduced motion (R4.5, R4.7, R10.1). */}
+            <div className="zlp-theatre zlp-elevated is-verified" data-island="signature-moment" aria-label="Agent run resolved to verified">
+              <div className="zlp-theatre-top">
+                <span className="zlp-tdot" aria-hidden="true" />
+                <span className="zlp-tdot" aria-hidden="true" />
+                <span className="zlp-tdot" aria-hidden="true" />
+                <span className="zlp-mono zlp-theatre-label">app.zroky.com · live run monitor</span>
+                <span className="zlp-theatre-stat">
+                  <span className="zlp-led" aria-hidden="true" />
+                  support-bot · VERIFIED
+                </span>
+              </div>
+              <div className="zlp-theatre-body">
+                <div className="zlp-runcard">
+                  <span className="zlp-vbadge">
+                    <CheckCircle2 aria-hidden="true" />
+                    VERIFIED · golden
+                  </span>
+                  <div className="zlp-rc-title">refund_agent · status_lookup</div>
+                  <div className="zlp-rc-sub zlp-mono">
+                    Called get_refund_status() · trace trc_8f3bd6
+                  </div>
+                  <div className="zlp-meterrow">
+                    <div className="zlp-meter">
+                      <div className="zlp-mk">latency</div>
+                      <div className="zlp-mv">2.1s</div>
+                    </div>
+                    <div className="zlp-meter">
+                      <div className="zlp-mk">cost</div>
+                      <div className="zlp-mv">$0.0061</div>
+                    </div>
+                    <div className="zlp-meter">
+                      <div className="zlp-mk">tokens</div>
+                      <div className="zlp-mv">612</div>
+                    </div>
+                  </div>
+                  <div className="zlp-rail" aria-hidden="true">
+                    {loopSteps.map((step) => {
+                      const Icon = loopIcons[step.key];
+                      return (
+                        <div key={step.key} className="zlp-node on">
+                          <span className="zlp-ring">
+                            <Icon />
+                          </span>
+                          <small>{step.title}</small>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Trust_Layer --------------------------------------------- */}
+        <section className="zlp-trust" aria-label="Why teams trust Zroky">
+          <div className="zlp-wrap">
+            <div className="zlp-trust-grid">
+              {trustSignals.map((signal) => (
+                <div key={signal.label} className="zlp-trust-item">
+                  <div className="zlp-trust-num zlp-disp">{signal.num}</div>
+                  <div className="zlp-trust-label">{signal.label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="zlp-prov">
+              <span className="zlp-prov-lbl">Works across</span>
+              {trustProviders.join("  ·  ")}
+            </div>
+          </div>
+        </section>
+
+        {/* ---- The Loop ------------------------------------------------ */}
+        <section className="zlp-blk" id="loop">
+          <div className="zlp-wrap">
+            <div className="zlp-shead">
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                The reliability loop
+              </span>
+              <h2 className="zlp-disp">One failed run, five moves to never see it again.</h2>
+              <p>Click through how a production failure becomes a blocked regression — the same way your team will.</p>
+            </div>
+
+            {/* Island mount point: LoopDemo (task 7.1). Server renders all five
+               panels; the default step is shown and the rest remain in the DOM
+               (crawlable) but visually collapsed. */}
+            <div className="zlp-loop" data-island="loop-demo">
+              <div className="zlp-tabs" role="tablist" aria-label="Reliability loop steps">
+                {loopSteps.map((step) => {
+                  const Icon = loopIcons[step.key];
+                  const active = step.key === defaultLoopStep.key;
+                  return (
+                    <button
+                      key={step.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={`zlp-tab${active ? " active" : ""}`}
+                      data-step={step.key}
+                    >
+                      <span className="zlp-tab-num">
+                        <Icon aria-hidden="true" />
+                      </span>
+                      <div>
+                        <h4>
+                          <span className="zlp-tab-step zlp-mono">
+                            {String(step.index + 1).padStart(2, "0")}
+                          </span>{" "}
+                          {step.title}
+                        </h4>
+                        <p>{step.summary}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="zlp-panel zlp-elevated">
+                <div className="zlp-panel-top">
+                  <span className="zlp-tdot" aria-hidden="true" />
+                  <span className="zlp-tdot" aria-hidden="true" />
+                  <span className="zlp-tdot" aria-hidden="true" />
+                  <span className="zlp-panel-label zlp-mono">capture · support-bot</span>
+                  <span
+                    className="zlp-vstate"
+                    style={{
+                      color: verdictToken("block").fg,
+                      background: verdictToken("block").bg,
+                      borderColor: verdictToken("block").fg,
+                    }}
+                  >
+                    FAILED
+                  </span>
+                </div>
+
+                {/* Capture (default shown) */}
+                <div className="zlp-view show" data-view="capture">
+                  <dl className="zlp-kv">
+                    <dt>prompt</dt>
+                    <dd>&quot;How do I check my refund status?&quot;</dd>
+                    <dt>model</dt>
+                    <dd>gpt-4.1</dd>
+                    <dt>tool_calls</dt>
+                    <dd>get_refund_status(order_id)</dd>
+                    <dt>latency</dt>
+                    <dd>7.8s</dd>
+                    <dt>cost</dt>
+                    <dd>$0.0234</dd>
+                    <dt>owner</dt>
+                    <dd>CX Automation</dd>
+                  </dl>
+                  <div className="zlp-evlist">
+                    <div className="zlp-evrow zlp-mono">
+                      <span className="zlp-tm">10:21:14.101</span>
+                      <span className="zlp-ev">user.prompt</span>
+                    </div>
+                    <div className="zlp-evrow zlp-mono">
+                      <span className="zlp-tm">10:21:14.901</span>
+                      <span className="zlp-ev">model.response</span>
+                    </div>
+                    <div className="zlp-evrow zlp-mono">
+                      <span className="zlp-tm">10:21:15.023</span>
+                      <span className="zlp-ev">tool.call · get_refund_status</span>
+                    </div>
+                    <div className="zlp-evrow err zlp-mono">
+                      <span className="zlp-tm">10:21:16.341</span>
+                      <span className="zlp-ev">tool.error · timeout</span>
+                    </div>
+                    <div className="zlp-evrow err zlp-mono">
+                      <span className="zlp-tm">10:21:16.341</span>
+                      <span className="zlp-ev">run.failed</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Diagnose */}
+                <div className="zlp-view" data-view="diagnose">
+                  <div className="zlp-runcard">
+                    <span className="zlp-vbadge" style={{ color: verdictToken("review").fg }}>
+                      ROOT CAUSE
+                    </span>
+                    <div className="zlp-rc-title">Tool timeout on refund lookup</div>
+                    <div className="zlp-rc-sub zlp-mono">ToolExecutionError: get_refund_status took &gt; 5s</div>
+                  </div>
+                  <dl className="zlp-kv">
+                    <dt>affected</dt>
+                    <dd>23 grouped runs</dd>
+                    <dt>recurrence</dt>
+                    <dd>×47 over 6 days</dd>
+                    <dt>first seen</dt>
+                    <dd>May 18, 09:02</dd>
+                    <dt>confidence</dt>
+                    <dd>0.93 · corroborated</dd>
+                  </dl>
+                </div>
+
+                {/* Replay — retains the contract-locked heading. */}
+                <div className="zlp-view" data-view="replay">
+                  <h3 className="zlp-view-heading">A fix is not accepted until the replay proves it.</h3>
+                  <div className="zlp-diff">
+                    <div className="zlp-dh">field</div>
+                    <div className="zlp-dh">original (failed)</div>
+                    <div className="zlp-dh">candidate (fixed)</div>
+                    <div className="zlp-dlabel">Tool call</div>
+                    <div className="zlp-dc before">Skipped get_refund_status</div>
+                    <div className="zlp-dc after">Called get_refund_status</div>
+                    <div className="zlp-dlabel">Output</div>
+                    <div className="zlp-dc before">Generic refund blurb</div>
+                    <div className="zlp-dc after">Account-specific status</div>
+                    <div className="zlp-dlabel">Result</div>
+                    <div className="zlp-dc before">Failed (timeout)</div>
+                    <div className="zlp-dc after">Passed</div>
+                  </div>
+                  <dl className="zlp-kv">
+                    <dt>fidelity</dt>
+                    <dd>0.98 · faithful reproduction</dd>
+                    <dt>latency</dt>
+                    <dd>7.8s → 2.1s (−73%)</dd>
+                    <dt>cost</dt>
+                    <dd>$0.0234 → $0.0061 (−74%)</dd>
+                  </dl>
+                </div>
+
+                {/* Promote */}
+                <div className="zlp-view" data-view="promote">
+                  <div className="zlp-golden">
+                    <span className="zlp-gi">
+                      <Check aria-hidden="true" />
+                    </span>
+                    <div>
+                      <strong>Refund status protected flow</strong>
+                      <span>Ensures status is fetched via tool call</span>
+                    </div>
+                    <span className="zlp-gtag zlp-mono">PROMOTED</span>
+                  </div>
+                  <div className="zlp-golden">
+                    <span className="zlp-gi">
+                      <Check aria-hidden="true" />
+                    </span>
+                    <div>
+                      <strong>Tool-call required</strong>
+                      <span>Disallows generic answers when a tool exists</span>
+                    </div>
+                    <span className="zlp-gtag zlp-mono">PASSED</span>
+                  </div>
+                </div>
+
+                {/* Gate */}
+                <div className="zlp-view" data-view="gate">
+                  <div className="zlp-pr fail">
+                    <span className="zlp-pi">
+                      <XCircle aria-hidden="true" />
+                    </span>
+                    <div>
+                      <strong>PR #43 · Update refund flow</strong>
+                      <span>zroky/golden-gate — blocked regression</span>
+                    </div>
+                  </div>
+                  <div className="zlp-pr pass">
+                    <span className="zlp-pi">
+                      <Check aria-hidden="true" />
+                    </span>
+                    <div>
+                      <strong>PR #42 · Improve policy wording</strong>
+                      <span>2 goldens run — 0 failed</span>
+                    </div>
+                  </div>
+                  <p className="zlp-mono zlp-gate-note">Borderline runs get &quot;review&quot; — never a false block.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Quickstart / Capture (#capture) ------------------------- */}
+        <section className="zlp-blk" id="capture">
+          <div className="zlp-wrap zlp-qs">
+            <div>
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                Quickstart
+              </span>
+              <h2 className="zlp-disp zlp-qs-title">Capture real agent runs with one SDK call.</h2>
+              <p className="zlp-lead">
+                Add three lines. Capture starts immediately — failures surface as your traffic arrives. Install{" "}
+                <span className="zlp-mono zlp-inline-code">{SDK.scoped}</span> and wrap your client.
+              </p>
+              {/* Island mount point: Disclosure (task 8.2) — full payload reveal. */}
+              <details className="zlp-disclosure" data-island="disclosure">
+                <summary>
+                  Show full captured payload
+                  <Plus aria-hidden="true" />
+                </summary>
+                <dl className="zlp-kv">
+                  <dt>trace_id</dt>
+                  <dd>trc_8f3bd6e27a6b4cf1</dd>
+                  <dt>run_id</dt>
+                  <dd>run_01H82JK8709Q4Y20</dd>
+                  <dt>provider</dt>
+                  <dd>openai</dd>
+                  <dt>output</dt>
+                  <dd>&quot;Your refund is being processed.&quot;</dd>
+                </dl>
+              </details>
+              <a href="#docs" className="zlp-btn zlp-btn-ghost zlp-qs-docs">
+                Read the docs
                 <ArrowRight aria-hidden="true" />
               </a>
             </div>
-            <div className="zlp-hero-proofline" aria-label="Reliability workflow preview">
-              <span>Trace captured</span>
-              <span>Replay required</span>
-              <span>Golden pending</span>
-              <span>CI unprotected</span>
+            <div className="zlp-code zlp-elevated">
+              <div className="zlp-code-top">
+                <span className="zlp-mono">typescript</span>
+                {/* Island mount point: CopySnippetButton (task 8.1). Static, but
+                   already labelled + keyboard reachable as server HTML. */}
+                <button type="button" className="zlp-copybtn zlp-mono" data-island="copy-snippet" aria-label="Copy SDK snippet">
+                  <Copy aria-hidden="true" />
+                  copy
+                </button>
+              </div>
+              <pre className="zlp-code-body zlp-mono">{sdkSnippet}</pre>
             </div>
-          </motion.div>
-
-          <motion.div className="zlp-hero-product" aria-label="Failed agent run debugger" {...heroMotion}>
-            <div className="zlp-product-statusbar">
-              <span>live run monitor</span>
-              <strong>support-bot failed on refund status</strong>
-              <em>Replay required</em>
-            </div>
-            <div className="zlp-theatre-rail" aria-label="Active reliability route">
-              <span>production trace</span>
-              <strong>Failure routed to Replay</strong>
-              <span>golden gate waiting</span>
-            </div>
-            <div className="zlp-debugger-grid">
-              <article className="zlp-code-panel">
-                <div className="zlp-panel-top">
-                  <span>SDK (TypeScript)</span>
-                  <button type="button" aria-label="Copy SDK snippet" onClick={copySdkSnippet}>
-                    {copyState === "copied" ? <ClipboardCheck aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                    {copyState === "copied" ? "Copied" : "Copy"}
-                  </button>
-                </div>
-                <pre>{sdkSnippet}</pre>
-              </article>
-
-              <article className="zlp-timeline-panel">
-                <div className="zlp-panel-top">
-                  <span>Trace timeline</span>
-                  <strong>auto focus</strong>
-                </div>
-                <div className="zlp-timeline">
-                  {traceSteps.map((step) => (
-                    <div key={step.label} className={`zlp-timeline-row is-${step.state}`}>
-                      <StatusIcon state={step.state} />
-                      <div>
-                        <div className="zlp-timeline-head">
-                          <strong>{step.label}</strong>
-                          {step.meta ? <span>{step.meta}</span> : null}
-                        </div>
-                        <small>{step.time}</small>
-                        <p>{step.detail}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-
-              <article className="zlp-inspector-panel">
-                <div className="zlp-panel-top">
-                  <span>Failure details</span>
-                  <strong className="is-failed">Failed</strong>
-                </div>
-                <dl>
-                  <div><dt>Status</dt><dd>Failed</dd></div>
-                  <div><dt>Trace ID</dt><dd>trc_8f3bd6e27a6b4cf1</dd></div>
-                  <div><dt>Provider</dt><dd>OpenAI</dd></div>
-                  <div><dt>Model</dt><dd>gpt-4.1</dd></div>
-                  <div><dt>Owner</dt><dd>CX Automation</dd></div>
-                  <div><dt>Latency</dt><dd>7.8s</dd></div>
-                  <div><dt>Cost</dt><dd>$0.0234</dd></div>
-                </dl>
-                <div className="zlp-root-cause">
-                  <span>Root cause</span>
-                  <code>ToolExecutionError: timeout get_refund_status took &gt; 5s</code>
-                </div>
-                <div className="zlp-inspector-actions">
-                  <a href="#modules" className="zlp-primary-button">
-                    Open in Replay
-                  </a>
-                  <a href="#capture" className="zlp-secondary-button">
-                    Add to issues
-                  </a>
-                </div>
-              </article>
-            </div>
-
-            <div className="zlp-proof-rail" aria-label="Run protection status">
-              {proofRail.map((item, index) => (
-                <div key={item.label} className={`zlp-proof-step is-${item.state}`}>
-                  <StatusIcon state={item.state} />
-                  <div>
-                    <strong>{item.label}</strong>
-                    <span>{item.time}</span>
-                  </div>
-                  {index < proofRail.length - 1 ? <ArrowRight aria-hidden="true" /> : null}
-                </div>
-              ))}
-            </div>
-          </motion.div>
+          </div>
         </section>
 
-        <motion.section
-          className="zlp-evidence-chain"
-          aria-label="Zroky reliability workflow"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.28 }}
-          variants={stagger}
-        >
-          {evidenceChain.map(([step, title, copy]) => (
-            <motion.article key={step} variants={fadeUp}>
-              <span>{step}</span>
-              <strong>{title}</strong>
-              <p>{copy}</p>
-            </motion.article>
-          ))}
-        </motion.section>
-
-        <SectionShell id="capture" label="SDK capture" title="Capture real agent runs with one SDK call.">
-          <motion.div className="zlp-capture-grid" variants={fadeUp}>
-            <div className="zlp-mini-code">
-              <div className="zlp-panel-top">
-                <span>captureRun(...)</span>
-                <TerminalSquare aria-hidden="true" />
-              </div>
-              <pre>{`await zroky.captureRun({
-  agent: "support-bot",
-  provider: "openai",
-  model: "gpt-4.1",
-  trace: true,
-  output: true
-});`}</pre>
+        {/* ---- Model support (#models) --------------------------------- */}
+        <section className="zlp-blk" id="models">
+          <div className="zlp-wrap">
+            <div className="zlp-shead">
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                Model support
+              </span>
+              <h2 className="zlp-disp">One reliability layer across your model stack.</h2>
+              <p>Capture normalizes every provider into the same evidence model, so the loop works the same everywhere.</p>
             </div>
-            <div className="zlp-payload-panel">
-              <h3>Captured run payload</h3>
-              <dl>
-                {capturePayload.map(([label, value]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            <div className="zlp-event-panel">
-              <div className="zlp-table-head">
-                <h3>Event stream</h3>
-                <a href="#modules">View full trace</a>
-              </div>
-              <div className="zlp-event-list">
-                {eventStream.map(([time, event, meta]) => (
-                  <div key={`${time}-${event}`}>
-                    <span>{time}</span>
-                    <strong>{event}</strong>
-                    {meta ? <small>{meta}</small> : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </SectionShell>
-
-        <SectionShell id="models" label="Model support" title="One reliability layer across your model stack.">
-          <motion.div className="zlp-model-row" variants={fadeUp}>
-            {modelProviders.map((provider) => (
-              <article key={provider.name}>
-                <strong>{provider.name}</strong>
-                <span>{provider.detail}</span>
-              </article>
-            ))}
-          </motion.div>
-          <motion.div className="zlp-model-contract" variants={fadeUp}>
-            <span>Normalized evidence fields</span>
-            <div>
-              {modelSignals.map((signal) => (
-                <code key={signal}>{signal}</code>
+            <div className="zlp-model-row">
+              {modelProviders.map((provider) => (
+                <article key={provider.name} className="zlp-card">
+                  <strong>{provider.name}</strong>
+                  <span>{provider.detail}</span>
+                </article>
               ))}
             </div>
-          </motion.div>
-          <motion.div className="zlp-adapter-flow" variants={fadeUp}>
-            {[
-              ["Agent app", "Your agents and workflows"],
-              ["Zroky SDK / API", "Capture runs and traces"],
-              ["Provider metadata", "Models, tools, usage, costs"],
-              ["Trace evidence", "Debugging and regression proof"],
-            ].map(([title, copy], index, items) => (
-              <div key={title} className="zlp-flow-item">
-                <article>
-                  <strong>{title}</strong>
-                  <span>{copy}</span>
-                </article>
-                {index < items.length - 1 ? <ArrowRight aria-hidden="true" /> : null}
-              </div>
-            ))}
-          </motion.div>
-        </SectionShell>
-
-        <SectionShell id="modules" label="Dashboard" title="The dashboard zooms into the part that matters.">
-          <motion.div className="zlp-module-stage" variants={fadeUp}>
-            <div className="zlp-module-notes">
+            <div className="zlp-model-contract">
+              <span className="zlp-prov-lbl">Normalized evidence fields</span>
               <div>
-                <span>auto zoom</span>
-                <p>Selected module: <strong>{selectedModule.label}</strong></p>
+                {modelSignals.map((signal) => (
+                  <code key={signal} className="zlp-mono">
+                    {signal}
+                  </code>
+                ))}
               </div>
-              <small>{selectedModule.subline}</small>
             </div>
-            <div className="zlp-dashboard-shell" aria-live="polite">
-              <aside>
+            <div className="zlp-flow">
+              {adapterFlow.map(([title, copy], index) => (
+                <div key={title} className="zlp-flow-item">
+                  <article className="zlp-card">
+                    <strong>{title}</strong>
+                    <span>{copy}</span>
+                  </article>
+                  {index < adapterFlow.length - 1 ? <ArrowRight aria-hidden="true" /> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Dashboard ModuleSwitcher (#modules) --------------------- */}
+        <section className="zlp-blk" id="modules">
+          <div className="zlp-wrap">
+            <div className="zlp-shead">
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                Dashboard
+              </span>
+              <h2 className="zlp-disp">The dashboard zooms into the part that matters.</h2>
+              <p>Every module is one click from the failing run — issues, trace, calls, replay, goldens, CI gates, and readiness.</p>
+            </div>
+
+            {/* Island mount point: ModuleSwitcher (task 9.2). Server renders the
+               default module selected (R3.9); all modules are listed. */}
+            <div className="zlp-dashboard zlp-elevated" data-island="module-switcher">
+              <aside className="zlp-dash-aside">
                 <strong>Zroky</strong>
                 <small>acme-cx</small>
                 <nav aria-label="Dashboard modules">
@@ -554,157 +696,89 @@ await traceRun({ name: "refund-status-check", userInput: "Where is my refund?" }
                     <button
                       key={module.key}
                       type="button"
-                      className={module.key === activeModule ? "is-active" : ""}
-                      onClick={() => setActiveModule(module.key)}
+                      className={module.key === defaultModule.key ? "is-active" : ""}
+                      data-module={module.key}
                     >
                       {module.label}
                     </button>
                   ))}
                 </nav>
               </aside>
-              <section className="zlp-dashboard-main">
-                <div className="zlp-table-head">
-                  <div>
-                    <span>{selectedModule.label}</span>
-                    <h3>{selectedModule.headline}</h3>
-                  </div>
-                  <div className="zlp-dashboard-actions">
-                    <button type="button" onClick={() => setDashboardAction("Replay comparison is open.")}>
-                      Compare
-                    </button>
-                    <button type="button" onClick={() => setDashboardAction("Shareable proof link is ready.")}>
-                      Share
-                    </button>
-                  </div>
+              <section className="zlp-dash-main" aria-live="polite">
+                <div className="zlp-dash-head">
+                  <span className="zlp-mono">{defaultModule.label}</span>
+                  <h3>{defaultModule.summary}</h3>
                 </div>
-                <p>{selectedModule.subline}</p>
-                <div className={`zlp-focus-panel is-${selectedModule.key}`}>
-                  <div>
-                    <span>Original</span>
-                    <code>{selectedModule.left}</code>
-                  </div>
-                  <div>
-                    <span>Fixed / state</span>
-                    <code>{selectedModule.right}</code>
-                  </div>
-                  <strong>{selectedModule.status}</strong>
+                <p>{defaultModule.detail?.body}</p>
+                <div className="zlp-dash-focus">
+                  <code className="zlp-mono">{defaultModule.detail?.heading}</code>
                 </div>
                 <div className="zlp-delta-grid">
-                  <div><span>Latency</span><strong>7.8s to 2.1s</strong><small>-73%</small></div>
-                  <div><span>Cost</span><strong>$0.0234 to $0.0061</strong><small>-74%</small></div>
-                  <div><span>Tokens</span><strong>1,284 to 612</strong><small>-52%</small></div>
+                  <div>
+                    <span>Latency</span>
+                    <strong>7.8s → 2.1s</strong>
+                    <small>−73%</small>
+                  </div>
+                  <div>
+                    <span>Cost</span>
+                    <strong>$0.0234 → $0.0061</strong>
+                    <small>−74%</small>
+                  </div>
+                  <div>
+                    <span>Tokens</span>
+                    <strong>1,284 → 612</strong>
+                    <small>−52%</small>
+                  </div>
                 </div>
-                <div className="zlp-dashboard-live-note" role="status">{dashboardAction}</div>
               </section>
             </div>
-            <div className="zlp-module-tabs">
-              {moduleViews.map((module) => (
-                <button
-                  key={module.key}
-                  type="button"
-                  className={module.key === activeModule ? "is-active" : ""}
-                  onClick={() => setActiveModule(module.key)}
-                >
-                  <span>{module.headline}</span>
-                  <strong>{module.label}</strong>
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        </SectionShell>
-
-        <SectionShell id="proof" label="Replay proof" title="A fix is not accepted until the replay proves it.">
-          <motion.div className="zlp-replay-proof" variants={fadeUp}>
-            <div className="zlp-table-head">
-              <div>
-                <span>Original run (failed)</span>
-                <h3>run_01H82JK8709Q4Y20</h3>
-              </div>
-              <strong className="is-failed">Failed</strong>
-              <div>
-                <span>Replayed run (fixed)</span>
-                <h3>run_01H82L189P9QSX11</h3>
-              </div>
-              <strong className="is-passed">Passed</strong>
-            </div>
-            <div className="zlp-diff-table">
-              {replayDiff.map(([label, before, after]) => (
-                <div key={label}>
-                  <span>{label}</span>
-                  <code className="is-before">{before}</code>
-                  <code className="is-after">{after}</code>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </SectionShell>
-
-        <section className="zlp-section zlp-proof-split" aria-label="Golden contracts and release gates">
-          <motion.article
-            className="zlp-golden-panel"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.18 }}
-            variants={fadeUp}
-          >
-            <span className="zlp-small-label">Golden contracts</span>
-            <h2>Passed replays become regression contracts.</h2>
-            <div className="zlp-contract-table">
-              {goldenRows.map(([name, desc, replay, status, source]) => (
-                <div key={name}>
-                  <div className="zlp-contract-main">
-                    <strong>{name}</strong>
-                    <span>{desc}</span>
-                  </div>
-                  <div className="zlp-contract-meta">
-                    <small>{replay}</small>
-                    <em>{status}</em>
-                    <small>{source}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <a href="#modules" className="zlp-text-link">
-              View all goldens <ArrowRight aria-hidden="true" />
-            </a>
-          </motion.article>
-
-          <motion.article
-            className="zlp-ci-panel"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.18 }}
-            variants={fadeUp}
-          >
-            <span className="zlp-small-label">CI / Release gate</span>
-            <h2>Regressions stop before merge.</h2>
-            <div className="zlp-pr-check is-failed">
-              <XCircle aria-hidden="true" />
-              <div>
-                <strong>PR #43 - Update refund flow</strong>
-                <span>zroky/golden-gate - Blocked regression</span>
-                <small>Failed golden: Refund status protected flow</small>
-              </div>
-              <button type="button">View details</button>
-            </div>
-            <div className="zlp-pr-check is-passed">
-              <CheckCircle2 aria-hidden="true" />
-              <div>
-                <strong>PR #42 - Improve policy wording</strong>
-                <span>zroky/golden-gate - All goldens passed</span>
-                <small>2 goldens run - 0 failed</small>
-              </div>
-              <button type="button">View details</button>
-            </div>
-          </motion.article>
+          </div>
         </section>
 
-        <SectionShell id="docs" label="Architecture" title="Built to fit your stack.">
-          <motion.div className="zlp-architecture" variants={fadeUp}>
-            <div className="zlp-architecture-flow">
+        {/* ---- Comparison ---------------------------------------------- */}
+        <section className="zlp-blk">
+          <div className="zlp-wrap">
+            <div className="zlp-shead">
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                Why Zroky
+              </span>
+              <h2 className="zlp-disp">Proof, not vibes.</h2>
+              <p>Eval-first tools test what you imagined. Zroky proves what actually shipped.</p>
+            </div>
+            <div className="zlp-cmp">
+              <div className="zlp-cmp-row head">
+                <div className="zlp-cmp-c1 zlp-mono">Eval-first tooling</div>
+                <div className="zlp-cmp-c2 zlp-mono">Zroky</div>
+              </div>
+              {comparisonRows.map(([before, after]) => (
+                <div key={before} className="zlp-cmp-row">
+                  <div className="zlp-cmp-c1">{before}</div>
+                  <div className="zlp-cmp-c2">
+                    <Check aria-hidden="true" />
+                    {after}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Architecture (#docs) ------------------------------------ */}
+        <section className="zlp-blk" id="docs">
+          <div className="zlp-wrap">
+            <div className="zlp-shead">
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                Architecture
+              </span>
+              <h2 className="zlp-disp">Built to fit your stack.</h2>
+              <p>Capture runs through the SDK, store the evidence, replay deterministically, and gate CI — with controls your security team expects.</p>
+            </div>
+            <div className="zlp-flow">
               {architectureNodes.map(([title, copy], index) => (
-                <div key={title} className="zlp-architecture-node">
-                  <article>
+                <div key={title} className="zlp-flow-item">
+                  <article className="zlp-card">
                     <strong>{title}</strong>
                     <span>{copy}</span>
                   </article>
@@ -712,53 +786,86 @@ await traceRun({ name: "refund-status-check", userInput: "Where is my refund?" }
                 </div>
               ))}
             </div>
-            <div className="zlp-control-chips">
+            <div className="zlp-chips">
               {controlChips.map(([label, copy]) => (
-                <span key={label}>
+                <span key={label} className="zlp-chip">
                   <strong>{label}</strong>
                   {copy}
                 </span>
               ))}
             </div>
-          </motion.div>
-        </SectionShell>
-
-        <motion.section
-          className="zlp-final-cta"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.22 }}
-          variants={fadeUp}
-        >
-          <h2>Start with one failing agent run</h2>
-          <p>Add the SDK, capture a run, and fix the root cause in minutes.</p>
-          <div className="zlp-hero-actions">
-            <Link href="/signup" className="zlp-primary-button zlp-primary-button-lg">
-              Start workspace
-            </Link>
-            <a href="#docs" className="zlp-secondary-button">
-              SDK docs
-            </a>
           </div>
-        </motion.section>
+        </section>
+
+        {/* ---- FAQ ----------------------------------------------------- */}
+        <section className="zlp-blk" id="faq">
+          <div className="zlp-wrap">
+            <div className="zlp-shead">
+              <span className="zlp-eyebrow">
+                <span className="zlp-dot" aria-hidden="true" />
+                FAQ
+              </span>
+              <h2 className="zlp-disp">Questions, answered.</h2>
+            </div>
+            {/* Each Q&A uses native progressive disclosure; task 8.2/10.1 may
+               upgrade these to the shared Disclosure island. */}
+            <div className="zlp-faq">
+              {faqItems.map((item, index) => (
+                <details key={item.q} className="zlp-qa" open={index === 0}>
+                  <summary>
+                    <span>{item.q}</span>
+                    <span className="zlp-pm" aria-hidden="true">
+                      <Plus />
+                    </span>
+                  </summary>
+                  <div className="zlp-ans">{item.a}</div>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Final CTA ----------------------------------------------- */}
+        <section className="zlp-wrap">
+          <div className="zlp-fcta zlp-elevated">
+            <h2 className="zlp-disp">Stop shipping the same agent failure twice.</h2>
+            <p>Add the SDK, capture one run, and prove the fix in minutes.</p>
+            <div className="zlp-hero-cta">
+              <Link href="/signup" className="zlp-btn zlp-btn-primary zlp-btn-lg">
+                Start workspace
+                <ArrowRight aria-hidden="true" />
+              </Link>
+              <a href="#docs" className="zlp-btn zlp-btn-ghost zlp-btn-lg">
+                Read the docs
+              </a>
+            </div>
+          </div>
+        </section>
       </main>
 
+      {/* ---- Footer ---------------------------------------------------- */}
       <footer className="zlp-footer">
-        <span>© 2026 Zroky</span>
-        <nav className="zlp-footer-links" aria-label="Footer links">
-          {footerLinks.map(({ label, href }) => (
-            <Link key={label} href={href}>
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <nav className="zlp-footer-social" aria-label="Social media">
-          {socialLinks.map(({ label, href, Icon }) => (
-            <a key={label} href={href} aria-label={label}>
-              <Icon aria-hidden="true" />
-            </a>
-          ))}
-        </nav>
+        <div className="zlp-wrap zlp-foot">
+          <div className="zlp-foot-brand">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logoSrc} alt="Zroky" />
+            <span>© 2026 Zroky</span>
+          </div>
+          <nav className="zlp-foot-links" aria-label="Footer links">
+            {footerLinks.map(({ label, href }) => (
+              <Link key={label} href={href}>
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <nav className="zlp-social" aria-label="Social media">
+            {socialLinks.map(({ label, href, Icon }) => (
+              <a key={label} href={href} aria-label={label}>
+                <Icon aria-hidden="true" />
+              </a>
+            ))}
+          </nav>
+        </div>
       </footer>
     </div>
   );

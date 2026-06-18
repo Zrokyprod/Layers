@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleDot,
+  FolderOpen,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 
 import { deleteProject, getProjectSettings, listMyProjects } from "@/lib/api";
 import { formatDateTime, safeString } from "@/lib/format";
@@ -111,7 +118,7 @@ export default function SettingsPage() {
       setSelectedProjectId((current) =>
         current && projects.some((project) => project.project_id === current)
           ? current
-          : activeProject.project_id,
+          : null,
       );
 
       if (projectsResult.status === "rejected") {
@@ -133,10 +140,13 @@ export default function SettingsPage() {
     return state.activeProject ? [fallbackProjectRow(state.activeProject)] : [];
   }, [state.activeProject, state.projects]);
 
-  const selectedProject = rows.find((project) => project.project_id === selectedProjectId) ?? rows[0] ?? null;
+  const selectedProject = selectedProjectId
+    ? rows.find((project) => project.project_id === selectedProjectId) ?? null
+    : null;
   const activeProjectId = state.activeProject?.project_id ?? null;
   const selectedIsActive = Boolean(selectedProject && selectedProject.project_id === activeProjectId);
   const selectedRole = selectedProject?.role?.trim().toLowerCase() ?? "";
+  const selectedProjectUpdated = selectedProject ? formatDateTime(selectedProject.updated_at) : "Unavailable";
   const canDeleteSelected = Boolean(
     selectedProject &&
       rows.length > 1 &&
@@ -219,17 +229,31 @@ export default function SettingsPage() {
 
       {loading ? (
         <section className="panel settings-project-skeleton" aria-label="Loading projects">
-          <div className="loading" />
+          <div>
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <span />
+            <span />
+            <span />
+          </div>
         </section>
       ) : null}
 
       {!loading && !error ? (
-        <section className="settings-project-registry" aria-label="Project registry">
-          <div className="settings-project-list-panel">
+        <section className="settings-project-console" aria-label="Project registry">
+          <div className="settings-project-command">
             <div className="settings-project-toolbar">
               <div>
                 <h2>Projects</h2>
-                <p>{rows.length === 1 ? "1 active project" : `${rows.length} active projects`}</p>
+                <p>Manage the exact project context used for capture, replay, goldens, and CI gates.</p>
               </div>
               <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
                 <RefreshCw aria-hidden="true" />
@@ -238,116 +262,164 @@ export default function SettingsPage() {
             </div>
 
             {projectListError ? (
-              <div className="alert-strip alert-strip-error">{projectListError}</div>
-            ) : null}
-
-            <div className="settings-project-table" role="list" aria-label="Active projects">
-              <div className="settings-project-table-head" aria-hidden="true">
-                <span>Project</span>
-                <span>Role</span>
-                <span>Status</span>
-                <span>Updated</span>
+              <div className="settings-project-warning" role="status">
+                <AlertTriangle aria-hidden="true" />
+                <span>{projectListError}</span>
               </div>
-              {rows.map((project) => {
-                const isSelected = project.project_id === selectedProject?.project_id;
-                const isActive = project.project_id === activeProjectId;
-                return (
-                  <button
-                    key={project.project_id}
-                    type="button"
-                    className={`settings-project-table-row${isSelected ? " is-selected" : ""}`}
-                    aria-label={`View ${project.project_name}`}
-                    aria-pressed={isSelected}
-                    onClick={() => onSelectProject(project.project_id)}
-                  >
-                    <span>
-                      <strong>{safeString(project.project_name, "Untitled project")}</strong>
-                      <small className="mono" title={project.project_id}>
-                        {compactIdentifier(project.project_id)}
-                      </small>
-                    </span>
-                    <span>{formatRoleLabel(project.role)}</span>
-                    <span>{isActive ? "Active" : "Available"}</span>
-                    <span>{formatDateTime(project.updated_at)}</span>
-                  </button>
-                );
-              })}
-            </div>
+            ) : null}
           </div>
 
-          <aside className="settings-project-details-panel" aria-label="Project details">
-            {selectedProject ? (
-              <>
-                <header>
-                  <span>Details</span>
-                  <h3>{safeString(selectedProject.project_name, "Untitled project")}</h3>
-                  <StatusPill value={selectedIsActive ? "active" : "verified"} />
-                </header>
-
-                <dl className="settings-project-details-list">
-                  <div>
-                    <dt>Project ID</dt>
-                    <dd className="mono">{selectedProject.project_id}</dd>
-                  </div>
-                  <div>
-                    <dt>Role</dt>
-                    <dd>{formatRoleLabel(selectedProject.role)}</dd>
-                  </div>
-                  <div>
-                    <dt>Owner</dt>
-                    <dd>{selectedProject.project_id === activeProjectId ? formatOwnerRef(state.activeProject?.owner_ref ?? null) : "Project member"}</dd>
-                  </div>
-                  <div>
-                    <dt>Created</dt>
-                    <dd>{formatDateTime(selectedProject.created_at)}</dd>
-                  </div>
-                  <div>
-                    <dt>Updated</dt>
-                    <dd>{formatDateTime(selectedProject.updated_at)}</dd>
-                  </div>
-                </dl>
-
-                {!selectedIsActive ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => onMakeActive(selectedProject.project_id)}
-                  >
-                    Make active
-                  </button>
-                ) : null}
-
-                <div className="settings-project-delete">
-                  <div>
-                    <strong>Delete project</strong>
-                    <p>
-                      Deletes the project from your active workspace list and disables its capture keys. Existing evidence is preserved for audit.
-                    </p>
-                  </div>
-                  <label htmlFor="projectDeleteConfirm">Type project name</label>
-                  <input
-                    id="projectDeleteConfirm"
-                    value={deleteConfirm}
-                    onChange={(event) => setDeleteConfirm(event.target.value)}
-                    placeholder={selectedProject.project_name}
-                    disabled={deleting || rows.length <= 1 || selectedRole !== "owner"}
-                  />
-                  {!canDeleteSelected ? <small>{deleteDisabledReason}</small> : null}
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => void onDeleteSelectedProject()}
-                    disabled={deleting || !canDeleteSelected}
-                  >
-                    <Trash2 aria-hidden="true" />
-                    {deleting ? "Deleting..." : "Delete project"}
-                  </button>
+          <div className="settings-project-registry">
+            <div className="settings-project-list-panel">
+              <div className="settings-project-section-head">
+                <div>
+                  <span>Active workspace</span>
+                  <strong>Select a project</strong>
                 </div>
-              </>
-            ) : (
-              <p>No active project found.</p>
-            )}
-          </aside>
+                <small>{selectedProject ? `Selected: ${safeString(selectedProject.project_name, "Untitled project")}` : "No project selected"}</small>
+              </div>
+
+              <div className="settings-project-table" role="list" aria-label="Active projects">
+                <div className="settings-project-table-head" aria-hidden="true">
+                  <span>Project</span>
+                  <span>Role</span>
+                  <span>Status</span>
+                  <span>Updated</span>
+                </div>
+                {rows.length > 0 ? (
+                  rows.map((project) => {
+                    const isSelected = project.project_id === selectedProject?.project_id;
+                    const isActive = project.project_id === activeProjectId;
+                    return (
+                      <button
+                        key={project.project_id}
+                        type="button"
+                        className={`settings-project-table-row${isSelected ? " is-selected" : ""}`}
+                        aria-label={`View ${project.project_name}`}
+                        aria-pressed={isSelected}
+                        onClick={() => onSelectProject(project.project_id)}
+                      >
+                        <span className="settings-project-name-cell">
+                          <strong>{safeString(project.project_name, "Untitled project")}</strong>
+                          <small className="mono" title={project.project_id}>
+                            {compactIdentifier(project.project_id)}
+                          </small>
+                        </span>
+                        <span>{formatRoleLabel(project.role)}</span>
+                        <span className={isActive ? "settings-project-state is-active" : "settings-project-state"}>
+                          {isActive ? (
+                            <CheckCircle2 aria-hidden="true" />
+                          ) : (
+                            <CircleDot aria-hidden="true" />
+                          )}
+                          {isActive ? "Active" : "Available"}
+                        </span>
+                        <span>{formatDateTime(project.updated_at)}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="settings-project-empty" role="status">
+                    <FolderOpen aria-hidden="true" />
+                    <strong>No active project found</strong>
+                    <span>Create or join a project before capture keys and replay evidence can attach to a workspace.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <aside className="settings-project-details-panel" aria-label="Project details">
+              {selectedProject ? (
+                <>
+                  <header>
+                    <div>
+                      <span>Selected project</span>
+                      <h3>{safeString(selectedProject.project_name, "Untitled project")}</h3>
+                    </div>
+                    <StatusPill value={selectedIsActive ? "active" : "verified"} />
+                  </header>
+
+                  <div className="settings-project-context">
+                    <div>
+                      <span>Capture context</span>
+                      <strong>{selectedIsActive ? "Currently active" : "Not active"}</strong>
+                    </div>
+                    <div>
+                      <span>Last update</span>
+                      <strong>{selectedProjectUpdated}</strong>
+                    </div>
+                  </div>
+
+                  <dl className="settings-project-details-list">
+                    <div>
+                      <dt>Project ID</dt>
+                      <dd className="mono">{selectedProject.project_id}</dd>
+                    </div>
+                    <div>
+                      <dt>Role</dt>
+                      <dd>{formatRoleLabel(selectedProject.role)}</dd>
+                    </div>
+                    <div>
+                      <dt>Owner</dt>
+                      <dd>{selectedProject.project_id === activeProjectId ? formatOwnerRef(state.activeProject?.owner_ref ?? null) : "Project member"}</dd>
+                    </div>
+                    <div>
+                      <dt>Created</dt>
+                      <dd>{formatDateTime(selectedProject.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>Updated</dt>
+                      <dd>{formatDateTime(selectedProject.updated_at)}</dd>
+                    </div>
+                  </dl>
+
+                  {!selectedIsActive ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary settings-project-active-button"
+                      onClick={() => onMakeActive(selectedProject.project_id)}
+                    >
+                      <CheckCircle2 aria-hidden="true" />
+                      Make active
+                    </button>
+                  ) : null}
+
+                  <div className="settings-project-delete">
+                    <div>
+                      <strong>Delete project</strong>
+                      <p>
+                        Removes this project from the active workspace list and disables capture keys. Existing evidence stays available for audit.
+                      </p>
+                    </div>
+                    <label htmlFor="projectDeleteConfirm">Type project name</label>
+                    <input
+                      id="projectDeleteConfirm"
+                      value={deleteConfirm}
+                      onChange={(event) => setDeleteConfirm(event.target.value)}
+                      placeholder={selectedProject.project_name}
+                      disabled={deleting || rows.length <= 1 || selectedRole !== "owner"}
+                    />
+                    {!canDeleteSelected ? <small>{deleteDisabledReason}</small> : null}
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => void onDeleteSelectedProject()}
+                      disabled={deleting || !canDeleteSelected}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      {deleting ? "Deleting..." : "Delete project"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="settings-project-empty" role="status">
+                  <FolderOpen aria-hidden="true" />
+                  <strong>No project selected</strong>
+                  <span>Select a project from the active workspace list.</span>
+                </div>
+              )}
+            </aside>
+          </div>
         </section>
       ) : null}
     </div>

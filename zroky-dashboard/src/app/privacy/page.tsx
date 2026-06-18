@@ -21,7 +21,7 @@ export default function PrivacyPage() {
       </p>
       <h2>Customer controls</h2>
       <p>
-        Teams can rotate or revoke project keys, separate provider keys from capture keys, and control which
+        Organizations can rotate or revoke project keys, separate provider keys from capture keys, and control which
         production evidence is promoted into replay and golden flows.
       </p>
       <h2>Operational use</h2>

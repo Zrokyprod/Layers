@@ -121,12 +121,12 @@ vi.mock("@/lib/api", async () => {
 vi.mock("@/lib/hooks", () => ({
   useActiveProviderKeys: () => ({
     data: {
-      items: [{ id: "provider_key_money_path", is_active: true }],
+      items: [{ id: "provider_key_money_path", provider: "custom", is_active: true }],
       total_in_page: 1,
     },
     refetch: vi.fn(async () => ({
       data: {
-        items: [{ id: "provider_key_money_path", is_active: true }],
+        items: [{ id: "provider_key_money_path", provider: "custom", is_active: true }],
         total_in_page: 1,
       },
     })),

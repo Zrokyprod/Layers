@@ -8,7 +8,6 @@ const api = vi.hoisted(() => ({
   disconnectGithubRepoConnection: vi.fn(),
   getGithubConnectionStatus: vi.fn(),
   getSlackInstallStatus: vi.fn(),
-  getTeamsInstallStatus: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -58,14 +57,6 @@ describe("IntegrationsSettingsPage", () => {
       installed_at: null,
       updated_at: null,
     });
-    api.getTeamsInstallStatus.mockResolvedValue({
-      connected: false,
-      channel_name: null,
-      connector_type: null,
-      installed_by_user: null,
-      installed_at: null,
-      updated_at: null,
-    });
   });
 
   it("shows GitHub beside alert delivery integrations", async () => {
@@ -75,6 +66,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getAllByText("@zroky").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Reconnect GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Slack" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Microsoft Teams" })).toBeInTheDocument();
+    expect(screen.getByText((_content, element) => element?.textContent === "1/2")).toBeInTheDocument();
+    expect(api.getSlackInstallStatus).toHaveBeenCalledTimes(1);
   });
 });

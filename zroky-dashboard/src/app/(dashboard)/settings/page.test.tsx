@@ -74,10 +74,23 @@ describe("SettingsPage", () => {
     expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View My Project" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View Checkout Agent" })).toBeInTheDocument();
-    expect(screen.getByText("2 active projects")).toBeInTheDocument();
+    expect(screen.getAllByText("No project selected").length).toBeGreaterThan(0);
+    expect(screen.queryByText("2 active projects")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Project key/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Provider keys/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Project export")).not.toBeInTheDocument();
+  });
+
+  it("shows project details only after a project is clicked", async () => {
+    render(<SettingsPage />);
+
+    expect(await screen.findByRole("button", { name: "View My Project" })).toBeInTheDocument();
+    expect(screen.queryByText("Project ID")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "View My Project" }));
+
+    expect(screen.getByText("Project ID")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete project" })).toBeInTheDocument();
   });
 
   it("selects a project and calls delete with typed confirmation", async () => {

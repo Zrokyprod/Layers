@@ -30,7 +30,7 @@ const SETTINGS_TABS: ReadonlyArray<{
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },
   { href: "/settings/billing", label: "Plan & Billing", description: "Plan, usage, and budget", icon: CreditCard },
   { href: "/settings/evaluation", label: "Evaluation", description: "Judge calibration", icon: SlidersHorizontal },
-  { href: "/settings/integrations", label: "Integrations", description: "GitHub, Slack, and Teams", icon: BellRing },
+  { href: "/settings/integrations", label: "Integrations", description: "GitHub and Slack", icon: BellRing },
 ] as const;
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {

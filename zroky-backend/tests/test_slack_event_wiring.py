@@ -105,7 +105,7 @@ def _patch_diagnosis_side_effects(monkeypatch: pytest.MonkeyPatch, new_issue_cal
         monkeypatch.setattr(worker_tasks, name, lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         "app.services.notification_dispatch.dispatch_alert_to_tenant_channels",
-        lambda **_kwargs: {"slack": False, "teams": False},
+        lambda **_kwargs: {"slack": False},
     )
     monkeypatch.setattr(
         "app.services.notification_dispatch.dispatch_new_issue_slack_alert",

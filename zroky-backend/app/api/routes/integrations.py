@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.tenant import require_tenant_context, require_tenant_role, TenantContext
 from app.core.config import Settings, get_settings
 from app.core.limiter import limiter
-from app.db.models import TenantSlackInstall, TenantTeamsInstall
+from app.db.models import TenantSlackInstall
 from app.db.session import get_db_session, get_db_session_read
 from app.services.dashboard_config import ensure_project_exists, get_or_create_dashboard_config, set_notification_settings, get_notification_settings
 from app.services.security import generate_oauth_state_with_payload, verify_oauth_state_with_payload
@@ -27,7 +27,6 @@ from app.services.slack_judgment import (
     resolve_slack_install,
     verify_slack_signature,
 )
-from app.services.teams_integration import build_teams_status, encrypt_teams_webhook_url, ensure_teams_webhook_encryption_ready, get_teams_install, send_teams_message
 
 router = APIRouter(prefix="/v1/integrations")
 logger = logging.getLogger(__name__)
@@ -58,29 +57,6 @@ class SlackTestMessageRequest(BaseModel):
 
 
 class SlackTestMessageResponse(BaseModel):
-    ok: bool
-    message: str
-
-
-class TeamsInstallStatusResponse(BaseModel):
-    connected: bool
-    channel_name: str | None = None
-    connector_type: str | None = None
-    installed_by_user: str | None = None
-    installed_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
-class TeamsInstallRequest(BaseModel):
-    webhook_url: str
-    channel_name: str | None = None
-
-
-class TeamsTestMessageRequest(BaseModel):
-    text: str | None = None
-
-
-class TeamsTestMessageResponse(BaseModel):
     ok: bool
     message: str
 
@@ -411,74 +387,3 @@ async def handle_slack_actions(
     except Exception:
         logger.exception("slack action failed action=%s", action_id)
         return build_slack_error_payload("Ask Judgment failed. Retry from Slack or open Zroky dashboard.")
-
-
-@router.get("/teams/status", response_model=TeamsInstallStatusResponse)
-def get_teams_status(
-    tenant_id: str = Depends(require_tenant_role("admin")),
-    db: Session = Depends(get_db_session_read),
-) -> TeamsInstallStatusResponse:
-    ensure_project_exists(db, tenant_id)
-    return TeamsInstallStatusResponse(**build_teams_status(get_teams_install(db, tenant_id)))
-
-
-@router.put("/teams/install", response_model=TeamsInstallStatusResponse)
-@limiter.limit("10/minute")
-def upsert_teams_install(
-    request: Request,
-    body: TeamsInstallRequest = Body(...),
-    context: TenantContext = Depends(require_tenant_context),
-    db: Session = Depends(get_db_session),
-) -> TeamsInstallStatusResponse:
-    if context.role not in {"admin", "owner"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant admin role is required.")
-    ensure_project_exists(db, context.tenant_id)
-    ensure_teams_webhook_encryption_ready()
-    now = datetime.now(timezone.utc)
-    channel_name = body.channel_name.strip() if body.channel_name and body.channel_name.strip() else None
-    install = get_teams_install(db, context.tenant_id)
-    if install is None:
-        install = TenantTeamsInstall(tenant_id=context.tenant_id, installed_at=now)
-    install.webhook_url_encrypted = encrypt_teams_webhook_url(body.webhook_url)
-    install.channel_name = channel_name
-    install.connector_type = "webhook"
-    install.installed_by_user = context.subject
-    install.updated_at = now
-    db.add(install)
-    db.commit()
-    db.refresh(install)
-    return TeamsInstallStatusResponse(**build_teams_status(install))
-
-
-@router.delete("/teams/install", response_model=TeamsInstallStatusResponse)
-@limiter.limit("10/minute")
-def disconnect_teams(
-    request: Request,
-    tenant_id: str = Depends(require_tenant_role("admin")),
-    db: Session = Depends(get_db_session),
-) -> TeamsInstallStatusResponse:
-    ensure_project_exists(db, tenant_id)
-    install = get_teams_install(db, tenant_id)
-    if install is not None:
-        db.delete(install)
-        db.commit()
-    return TeamsInstallStatusResponse(**build_teams_status(None))
-
-
-@router.post("/teams/test", response_model=TeamsTestMessageResponse)
-@limiter.limit("10/minute")
-async def send_teams_test_message(
-    request: Request,
-    body: TeamsTestMessageRequest = Body(...),
-    tenant_id: str = Depends(require_tenant_role("admin")),
-    db: Session = Depends(get_db_session),
-) -> TeamsTestMessageResponse:
-    ensure_project_exists(db, tenant_id)
-    install = get_teams_install(db, tenant_id)
-    if install is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Microsoft Teams is not connected for this project.")
-    text = body.text or "Zroky Microsoft Teams integration is connected. You will receive alerts and reliability events here."
-    ok = await send_teams_message(db, tenant_id, text)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Microsoft Teams test message failed.")
-    return TeamsTestMessageResponse(ok=True, message="Microsoft Teams test message sent.")

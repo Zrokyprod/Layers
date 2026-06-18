@@ -15,9 +15,8 @@ test.describe("settings and account", () => {
       { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
       { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },
       { path: "/settings/evaluation", labels: ["Evaluation", "Calibration"] },
-      { path: "/settings/integrations", labels: ["Integrations", "Slack", "Teams"] },
+      { path: "/settings/integrations", labels: ["Integrations", "Slack"] },
       { path: "/settings/integrations/slack", labels: ["Slack", "Not connected", "Install"] },
-      { path: "/settings/integrations/teams", labels: ["Teams", "Not connected", "webhook"] },
       { path: "/account", labels: ["Your Identity", "Account Security"] },
     ];
 

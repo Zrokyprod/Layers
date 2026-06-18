@@ -54,7 +54,7 @@ describe("SettingsLayout", () => {
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
   });
 
-  it("keeps Slack and Teams child routes active under Integrations", () => {
+  it("keeps Slack child routes active under Integrations", () => {
     navigation.pathname = "/settings/integrations/slack";
 
     render(
@@ -64,7 +64,7 @@ describe("SettingsLayout", () => {
     );
 
     expect(screen.getByRole("link", { name: "Integrations" }).className).toContain("settings-tab-link-active");
-    expect(screen.getByText("Alert delivery")).toBeInTheDocument();
+    expect(screen.getByText("GitHub and Slack")).toBeInTheDocument();
   });
 
   it("does not include personal account controls in workspace settings", () => {

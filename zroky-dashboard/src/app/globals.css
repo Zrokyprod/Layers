@@ -33714,27 +33714,156 @@ button.gm-kpi-card {
   }
 }
 
-/* Selected public landing implementation ----------------------------------- */
+/* ===========================================================================
+   Monochrome design system — landing-redesign (Task 1.1)
+   Source of truth: design-mockups/zroky-redesign/monochrome.html (:root tokens)
+   Scope: tokens + treatments are confined to the `.zroky-public` landing layer
+   so unrelated dashboard styles are never affected. Legacy `zlp-*` token names
+   are remapped to monochrome values so existing landing sections render
+   coherently until they are rebuilt section-by-section in later tasks.
+   Requirements: 5.2, 5.3, 5.4, 5.7, 4.1, 4.5, 9.7
+   =========================================================================== */
 .zroky-public {
-  --zlp-bg: #fbfbfa;
-  --zlp-panel: #ffffff;
-  --zlp-panel-soft: #f7f7f5;
-  --zlp-ink: #0b0c0e;
-  --zlp-ink-soft: #3d424a;
-  --zlp-muted: #727982;
-  --zlp-line: #e3e5e1;
-  --zlp-line-strong: #c9cdc7;
-  --zlp-dark: #0c0f12;
-  --zlp-dark-soft: #151a20;
-  --zlp-dark-line: rgba(255, 255, 255, 0.12);
-  --zlp-danger: #e13d35;
-  --zlp-danger-soft: rgba(225, 61, 53, 0.08);
-  --zlp-success: #16875a;
-  --zlp-success-soft: rgba(22, 135, 90, 0.08);
+  /* --- Grayscale ramp (the entire base palette) ------------------------- */
+  --zlp-ink-900: #08090b; /* page background (true near-black) */
+  --zlp-ink-850: #0b0d10; /* raised background band */
+  --zlp-ink-800: #101317; /* surface / panel */
+  --zlp-ink-700: #171a1f; /* surface-2 / inset */
+  --zlp-surface: rgba(255, 255, 255, 0.025); /* faint raised tint */
+  --zlp-surface-2: rgba(255, 255, 255, 0.05); /* stronger raised tint */
+  --zlp-line: rgba(255, 255, 255, 0.09); /* hairline borders */
+  --zlp-line-strong: rgba(255, 255, 255, 0.16); /* strong borders */
+  --zlp-text: #eef1f6; /* primary text (off-white) */
+  --zlp-text-2: #a2a9b7; /* secondary text (layered grey) */
+  --zlp-text-3: #676e7c; /* tertiary / mono labels */
+  --zlp-white: #fff; /* max-contrast emphasis */
+
+  /* --- Meaning-only color tokens (the ONLY places color may appear) ----- */
+  --zlp-pass: #3bd68b; /* Verdict = pass only */
+  --zlp-block: #fb6a6a; /* Verdict = block only */
+  --zlp-review: #fbbf24; /* Verdict = review only */
+  --zlp-accent: #7c5cff; /* restrained brand accent: primary CTA + 1 focal highlight */
+  --zlp-accent-strong: #6a48f5; /* pressed / hover accent */
+  --zlp-neutral-verdict: var(--zlp-text-3); /* any non pass/block/review outcome (R5.6) */
+
+  /* soft verdict fills (tints of the meaning-only colors) */
+  --zlp-pass-soft: rgba(59, 214, 139, 0.12);
+  --zlp-block-soft: rgba(251, 106, 106, 0.12);
+  --zlp-review-soft: rgba(251, 191, 36, 0.12);
+
+  /* --- Motion: single shared easing curve (R4.1) ------------------------ */
+  --zlp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease: var(--zlp-ease); /* mockup-parity alias (scoped) */
+
+  /* --- Radius tokens ---------------------------------------------------- */
+  --zlp-radius: 18px;
+  --zlp-radius-sm: 12px;
+  --radius: var(--zlp-radius); /* mockup-parity alias (scoped) */
+  --radius-sm: var(--zlp-radius-sm); /* mockup-parity alias (scoped) */
+
+  /* --- Spacing scale (4 / 8 / 12 / 18 / 26 / 42 / 84) ------------------- */
+  --zlp-space-1: 4px;
+  --zlp-space-2: 8px;
+  --zlp-space-3: 12px;
+  --zlp-space-4: 18px;
+  --zlp-space-5: 26px;
+  --zlp-space-6: 42px;
+  --zlp-space-7: 84px;
+
+  /* --- Elevation / depth (R5.3) ---------------------------------------- */
+  --zlp-shadow: 0 34px 90px -46px rgba(0, 0, 0, 0.95);
+  --zlp-shadow-soft: 0 18px 50px -30px rgba(0, 0, 0, 0.8);
+  --shadow: var(--zlp-shadow); /* mockup-parity alias (scoped) */
+
+  --zlp-maxw: 1180px;
+
+  /* --- Legacy token remap → monochrome (keeps existing sections coherent
+     until they are rebuilt; no light/cream/orange leakage) --------------- */
+  --zlp-bg: var(--zlp-ink-900);
+  --zlp-bg-soft: var(--zlp-ink-850);
+  --zlp-panel: var(--zlp-ink-800);
+  --zlp-panel-soft: var(--zlp-ink-700);
+  --zlp-ink: var(--zlp-text);
+  --zlp-ink-soft: var(--zlp-text-2);
+  --zlp-muted: var(--zlp-text-2);
+  --zlp-dark: var(--zlp-ink-850);
+  --zlp-dark-2: var(--zlp-ink-800);
+  --zlp-dark-soft: var(--zlp-ink-800);
+  --zlp-dark-text: var(--zlp-text);
+  --zlp-dark-muted: var(--zlp-text-2);
+  --zlp-line-dark: var(--zlp-line);
+  --zlp-amber: var(--zlp-review);
+  --zlp-danger: var(--zlp-block);
+  --zlp-danger-soft: var(--zlp-block-soft);
+  --zlp-success: var(--zlp-pass);
+  --zlp-success-bright: var(--zlp-pass);
+  --zlp-success-soft: var(--zlp-pass-soft);
+
+  position: relative;
   min-height: 100vh;
-  background: var(--zlp-bg);
-  color: var(--zlp-ink);
+  background: var(--zlp-ink-900);
+  color: var(--zlp-text);
   font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Masked-grid background field + radial glow (depth treatment, R5.3).
+   Decorative only — marked out of the a11y tree via aria-hidden pseudo
+   elements (R9.3). Pointer events disabled so it never traps interaction. */
+.zroky-public::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(60% 50% at 78% 4%, rgba(255, 255, 255, 0.06), transparent 60%);
+}
+
+.zroky-public::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(80% 60% at 50% 0%, #000, transparent 75%);
+  mask-image: radial-gradient(80% 60% at 50% 0%, #000, transparent 75%);
+}
+
+/* Keep real content above the background field. */
+.zroky-public > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Optional standalone background-field element for the rebuilt server shell
+   (later tasks render <div class="zlp-bgfield" aria-hidden="true" />). */
+.zroky-public .zlp-bgfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Reusable elevation helper (depth treatment #1, R5.3). */
+.zroky-public .zlp-elevated {
+  box-shadow: var(--zlp-shadow);
+}
+
+/* Single reduced-motion guard for the landing — disables all entrance,
+   feedback, signature, and auto-advance motion and renders final states
+   (R4.5, R9.7). */
+@media (prefers-reduced-motion: reduce) {
+  .zroky-public *,
+  .zroky-public *::before,
+  .zroky-public *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .zroky-public [id] {
@@ -38709,5 +38838,1287 @@ body:has(.app-shell),
   .fi-inline-link {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* =========================================================================
+   landing-redesign — monochrome shell (task 3.1)
+   Scoped under `.zroky-public.zlp-rd` so it overrides the legacy landing
+   section styles without removing them. Layout primitives + section styles
+   are ported from design-mockups/zroky-redesign/monochrome.html and use the
+   monochrome tokens established in task 1.1. Color appears only for verdicts
+   and the single brand accent (R5).
+   ========================================================================= */
+
+/* ---- Shared utilities --------------------------------------------------- */
+.zlp-rd .zlp-wrap {
+  width: min(100% - 40px, var(--zlp-maxw));
+  margin-inline: auto;
+}
+.zlp-rd .zlp-mono {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
+}
+.zlp-rd .zlp-disp {
+  font-family: var(--font-space-grotesk), "Space Grotesk", var(--font-inter), sans-serif;
+  letter-spacing: -0.02em;
+}
+.zlp-rd .zlp-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.zlp-rd .zlp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--zlp-text-2);
+  padding: 6px 13px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 100px;
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-eyebrow .zlp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zlp-white);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+}
+
+/* ---- Buttons ------------------------------------------------------------ */
+.zlp-rd .zlp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 11px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: 0.25s var(--zlp-ease);
+  border: 1px solid transparent;
+  min-height: 44px;
+}
+.zlp-rd .zlp-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.zlp-rd .zlp-btn-lg {
+  padding: 13px 22px;
+  font-size: 15px;
+}
+.zlp-rd .zlp-btn-primary {
+  background: var(--zlp-white);
+  color: var(--zlp-ink-900);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset;
+}
+.zlp-rd .zlp-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 34px -12px rgba(255, 255, 255, 0.4);
+}
+.zlp-rd .zlp-btn-ghost {
+  color: var(--zlp-text);
+  border-color: var(--zlp-line-strong);
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-btn-ghost:hover {
+  border-color: var(--zlp-text-3);
+  background: var(--zlp-surface-2);
+}
+.zlp-rd .zlp-btn-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--zlp-text-2);
+  font-size: 14px;
+  font-weight: 500;
+  min-height: 44px;
+  padding: 0 6px;
+}
+.zlp-rd .zlp-btn-link:hover {
+  color: var(--zlp-text);
+}
+.zlp-rd a:focus-visible,
+.zlp-rd button:focus-visible,
+.zlp-rd summary:focus-visible {
+  outline: 2px solid var(--zlp-accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ---- Nav ---------------------------------------------------------------- */
+.zlp-rd.zlp-rd .zlp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(14px);
+  background: linear-gradient(180deg, rgba(8, 9, 11, 0.9), rgba(8, 9, 11, 0.5));
+  border: 0;
+  border-bottom: 1px solid var(--zlp-line);
+  padding: 0;
+}
+.zlp-rd .zlp-nav-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 66px;
+}
+.zlp-rd .zlp-brand {
+  display: inline-flex;
+  align-items: center;
+}
+.zlp-rd .zlp-brand img {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+.zlp-rd .zlp-nav-links {
+  display: flex;
+  gap: 28px;
+  font-size: 14px;
+  color: var(--zlp-text-2);
+}
+.zlp-rd .zlp-nav-links a {
+  color: var(--zlp-text-2);
+  display: inline-flex;
+  align-items: center;
+}
+.zlp-rd .zlp-nav-links a:hover {
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ---- Hero --------------------------------------------------------------- */
+.zlp-rd.zlp-rd .zlp-hero {
+  padding: 92px 0 56px;
+  background: transparent;
+}
+.zlp-rd .zlp-hero-grid {
+  display: grid;
+  grid-template-columns: 1.04fr 0.96fr;
+  gap: 52px;
+  align-items: center;
+}
+.zlp-rd .zlp-hero h1 {
+  font-size: clamp(2.6rem, 5vw, 4.1rem);
+  line-height: 1;
+  font-weight: 700;
+  margin: 22px 0 0;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-hero h1 .zlp-mut {
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-lead {
+  font-size: 1.16rem;
+  color: var(--zlp-text-2);
+  max-width: 32rem;
+  margin: 22px 0 0;
+  line-height: 1.6;
+}
+.zlp-rd .zlp-hero-cta {
+  display: flex;
+  gap: 14px;
+  margin-top: 30px;
+  flex-wrap: wrap;
+}
+.zlp-rd .zlp-hero-fine {
+  margin-top: 20px;
+  font-size: 12.5px;
+  color: var(--zlp-text-3);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.zlp-rd .zlp-hero-fine b {
+  color: var(--zlp-text-2);
+  font-weight: 500;
+}
+.zlp-rd .zlp-pill-line {
+  display: flex;
+  gap: 8px;
+  margin-top: 26px;
+  flex-wrap: wrap;
+}
+.zlp-rd .zlp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  padding: 6px 11px;
+  border-radius: 100px;
+  border: 1px solid var(--zlp-line);
+  background: var(--zlp-surface);
+  color: var(--zlp-text-2);
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+.zlp-rd .zlp-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--zlp-text-3);
+}
+
+/* ---- Signature theatre -------------------------------------------------- */
+.zlp-rd .zlp-theatre {
+  position: relative;
+  border: 1px solid var(--zlp-line-strong);
+  border-radius: var(--zlp-radius);
+  background: linear-gradient(180deg, var(--zlp-ink-800), var(--zlp-ink-850));
+  overflow: hidden;
+}
+.zlp-rd .zlp-theatre-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--zlp-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.zlp-rd .zlp-tdot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #23262d;
+  display: inline-block;
+}
+.zlp-rd .zlp-theatre-label {
+  margin-left: 10px;
+  font-size: 11px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-theatre-stat {
+  margin-left: auto;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--zlp-pass);
+}
+.zlp-rd .zlp-theatre-stat .zlp-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--zlp-pass);
+  box-shadow: 0 0 10px var(--zlp-pass);
+}
+.zlp-rd .zlp-theatre-body {
+  padding: 18px;
+}
+.zlp-rd .zlp-runcard {
+  border: 1px solid var(--zlp-line);
+  border-radius: 14px;
+  padding: 15px;
+  background: var(--zlp-ink-900);
+  position: relative;
+  overflow: hidden;
+}
+.zlp-rd .zlp-vbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 7px;
+  text-transform: uppercase;
+  color: var(--zlp-pass);
+  background: var(--zlp-pass-soft);
+  border: 1px solid rgba(59, 214, 139, 0.45);
+}
+.zlp-rd .zlp-vbadge svg {
+  width: 13px;
+  height: 13px;
+}
+.zlp-rd .zlp-rc-title {
+  margin-top: 11px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.zlp-rd .zlp-rc-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--zlp-text-2);
+}
+.zlp-rd .zlp-meterrow {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.zlp-rd .zlp-meter {
+  flex: 1;
+  border: 1px solid var(--zlp-line);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-mk {
+  font-size: 10px;
+  color: var(--zlp-text-3);
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+.zlp-rd .zlp-mv {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 3px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+.zlp-rd .zlp-rail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  position: relative;
+}
+.zlp-rd .zlp-rail::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 13px;
+  height: 2px;
+  background: var(--zlp-line);
+}
+.zlp-rd .zlp-node {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.zlp-rd .zlp-ring {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--zlp-line-strong);
+  background: var(--zlp-ink-900);
+  display: grid;
+  place-items: center;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-ring svg {
+  width: 13px;
+  height: 13px;
+}
+.zlp-rd .zlp-node.on .zlp-ring {
+  border-color: var(--zlp-pass);
+  color: var(--zlp-pass);
+  background: var(--zlp-pass-soft);
+}
+.zlp-rd .zlp-node small {
+  font-size: 10px;
+  color: var(--zlp-text-2);
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+
+/* ---- Trust -------------------------------------------------------------- */
+.zlp-rd .zlp-trust {
+  padding: 30px 0;
+  border-block: 1px solid var(--zlp-line);
+  margin-top: 30px;
+  background: transparent;
+}
+.zlp-rd .zlp-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+.zlp-rd .zlp-trust-item {
+  padding: 6px 22px;
+  border-left: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-trust-item:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+.zlp-rd .zlp-trust-num {
+  font-size: 1.9rem;
+  font-weight: 700;
+}
+.zlp-rd .zlp-trust-label {
+  font-size: 12.5px;
+  color: var(--zlp-text-3);
+  margin-top: 2px;
+}
+.zlp-rd .zlp-prov {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  font-weight: 600;
+  color: var(--zlp-text-3);
+  font-size: 14px;
+}
+.zlp-rd .zlp-prov-lbl {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* ---- Section + heads ---------------------------------------------------- */
+.zlp-rd .zlp-blk {
+  padding: 80px 0;
+  background: transparent;
+}
+.zlp-rd .zlp-shead {
+  max-width: 42rem;
+}
+.zlp-rd .zlp-shead h2 {
+  font-size: clamp(1.9rem, 3.2vw, 2.7rem);
+  font-weight: 700;
+  margin: 14px 0 0;
+  line-height: 1.08;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-shead p {
+  color: var(--zlp-text-2);
+  font-size: 1.05rem;
+  margin: 14px 0 0;
+}
+
+/* ---- The Loop ----------------------------------------------------------- */
+.zlp-rd .zlp-loop {
+  margin-top: 40px;
+  display: grid;
+  grid-template-columns: 0.82fr 1.18fr;
+  gap: 28px;
+  align-items: start;
+}
+.zlp-rd .zlp-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zlp-rd .zlp-tab {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--zlp-line);
+  background: var(--zlp-surface);
+  border-radius: 14px;
+  padding: 15px 16px;
+  transition: 0.28s var(--zlp-ease);
+  position: relative;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+}
+.zlp-rd .zlp-tab:hover {
+  border-color: var(--zlp-line-strong);
+}
+.zlp-rd .zlp-tab.active {
+  border-color: var(--zlp-line-strong);
+  background: var(--zlp-surface-2);
+}
+.zlp-rd .zlp-tab.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--zlp-white);
+}
+.zlp-rd .zlp-tab-num {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--zlp-line-strong);
+  background: var(--zlp-ink-800);
+  color: var(--zlp-text-2);
+}
+.zlp-rd .zlp-tab.active .zlp-tab-num {
+  color: var(--zlp-ink-900);
+  background: var(--zlp-white);
+  border-color: var(--zlp-white);
+}
+.zlp-rd .zlp-tab-num svg {
+  width: 16px;
+  height: 16px;
+}
+.zlp-rd .zlp-tab h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.zlp-rd .zlp-tab-step {
+  font-size: 10px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-tab p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--zlp-text-2);
+  line-height: 1.5;
+}
+.zlp-rd .zlp-panel {
+  border: 1px solid var(--zlp-line-strong);
+  border-radius: var(--zlp-radius);
+  background: linear-gradient(180deg, var(--zlp-ink-800), var(--zlp-ink-850));
+  overflow: hidden;
+  min-height: 420px;
+}
+.zlp-rd .zlp-panel-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--zlp-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.zlp-rd .zlp-panel-label {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-vstate {
+  margin-left: auto;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+}
+.zlp-rd .zlp-view {
+  padding: 20px;
+  display: none;
+}
+.zlp-rd .zlp-view.show {
+  display: block;
+}
+.zlp-rd .zlp-view-heading {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 9px 16px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 12.5px;
+  margin: 0;
+}
+.zlp-rd .zlp-kv dt {
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-kv dd {
+  margin: 0;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-evlist {
+  margin-top: 16px;
+}
+.zlp-rd .zlp-evrow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--zlp-line);
+  font-size: 12px;
+}
+.zlp-rd .zlp-evrow:first-child {
+  border-top: none;
+}
+.zlp-rd .zlp-evrow .zlp-tm {
+  color: var(--zlp-text-3);
+  min-width: 88px;
+}
+.zlp-rd .zlp-evrow .zlp-ev {
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-evrow.err .zlp-ev {
+  color: var(--zlp-block);
+}
+.zlp-rd .zlp-diff {
+  display: grid;
+  grid-template-columns: 120px 1fr 1fr;
+  border: 1px solid var(--zlp-line);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.zlp-rd .zlp-dh {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--zlp-text-3);
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-dc {
+  padding: 11px 12px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 12px;
+  border-bottom: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-dc.before {
+  color: var(--zlp-block);
+  background: rgba(251, 106, 106, 0.05);
+}
+.zlp-rd .zlp-dc.after {
+  color: var(--zlp-pass);
+  background: rgba(59, 214, 139, 0.05);
+}
+.zlp-rd .zlp-dlabel {
+  padding: 11px 12px;
+  font-size: 12px;
+  color: var(--zlp-text-2);
+  border-bottom: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-golden {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 12px;
+  margin-bottom: 9px;
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-gi {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--zlp-pass-soft);
+  color: var(--zlp-pass);
+  flex-shrink: 0;
+}
+.zlp-rd .zlp-gi svg {
+  width: 15px;
+  height: 15px;
+}
+.zlp-rd .zlp-golden strong {
+  font-size: 13.5px;
+  display: block;
+}
+.zlp-rd .zlp-golden span {
+  font-size: 12px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-gtag {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--zlp-pass);
+  border: 1px solid rgba(59, 214, 139, 0.4);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.zlp-rd .zlp-pr {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 12px;
+  margin-bottom: 9px;
+  border: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-pr.fail {
+  border-color: rgba(251, 106, 106, 0.35);
+  background: rgba(251, 106, 106, 0.06);
+}
+.zlp-rd .zlp-pr.pass {
+  border-color: rgba(59, 214, 139, 0.3);
+  background: rgba(59, 214, 139, 0.05);
+}
+.zlp-rd .zlp-pi {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.zlp-rd .zlp-pr.fail .zlp-pi {
+  color: var(--zlp-block);
+  background: rgba(251, 106, 106, 0.14);
+}
+.zlp-rd .zlp-pr.pass .zlp-pi {
+  color: var(--zlp-pass);
+  background: rgba(59, 214, 139, 0.14);
+}
+.zlp-rd .zlp-pi svg {
+  width: 15px;
+  height: 15px;
+}
+.zlp-rd .zlp-pr strong {
+  font-size: 13px;
+  display: block;
+}
+.zlp-rd .zlp-pr span {
+  font-size: 11.5px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-gate-note {
+  font-size: 12.5px;
+  color: var(--zlp-text-3);
+  margin-top: 14px;
+}
+
+/* ---- Quickstart --------------------------------------------------------- */
+.zlp-rd .zlp-qs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  align-items: center;
+}
+.zlp-rd .zlp-qs-title {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  margin-top: 14px;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-inline-code {
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-qs-docs {
+  margin-top: 22px;
+}
+.zlp-rd .zlp-disclosure {
+  margin-top: 20px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 12px;
+  background: var(--zlp-surface);
+  padding: 0 14px;
+}
+.zlp-rd .zlp-disclosure > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--zlp-text-2);
+}
+.zlp-rd .zlp-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.zlp-rd .zlp-disclosure > summary svg {
+  width: 16px;
+  height: 16px;
+  transition: 0.3s var(--zlp-ease);
+}
+.zlp-rd .zlp-disclosure[open] > summary svg {
+  transform: rotate(45deg);
+}
+.zlp-rd .zlp-disclosure .zlp-kv {
+  padding-bottom: 14px;
+}
+.zlp-rd .zlp-code {
+  border: 1px solid var(--zlp-line-strong);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--zlp-ink-850);
+}
+.zlp-rd .zlp-code-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-code-top span {
+  font-size: 11px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-code-body {
+  font-size: 12.5px;
+  line-height: 1.75;
+  padding: 16px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--zlp-text-2);
+  margin: 0;
+}
+.zlp-rd .zlp-copybtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--zlp-text-2);
+  border: 1px solid var(--zlp-line);
+  border-radius: 7px;
+  padding: 6px 9px;
+  cursor: pointer;
+  background: var(--zlp-surface);
+  min-height: 32px;
+}
+.zlp-rd .zlp-copybtn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ---- Cards / model row / flow ------------------------------------------ */
+.zlp-rd .zlp-card {
+  border: 1px solid var(--zlp-line);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--zlp-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: 0.25s var(--zlp-ease);
+}
+.zlp-rd .zlp-card:hover {
+  border-color: var(--zlp-line-strong);
+  background: var(--zlp-surface-2);
+}
+.zlp-rd .zlp-card strong {
+  font-size: 14px;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-card span {
+  font-size: 12.5px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-model-row {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.zlp-rd .zlp-model-contract {
+  margin-top: 18px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-model-contract > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.zlp-rd .zlp-model-contract code {
+  font-size: 12px;
+  padding: 5px 9px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 7px;
+  background: var(--zlp-ink-800);
+  color: var(--zlp-text-2);
+}
+.zlp-rd .zlp-flow {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+.zlp-rd .zlp-flow-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 200px;
+}
+.zlp-rd .zlp-flow-item .zlp-card {
+  flex: 1;
+}
+.zlp-rd .zlp-flow-item > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--zlp-text-3);
+  flex-shrink: 0;
+}
+
+/* ---- Dashboard ---------------------------------------------------------- */
+.zlp-rd .zlp-dashboard {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  border: 1px solid var(--zlp-line-strong);
+  border-radius: var(--zlp-radius);
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--zlp-ink-800), var(--zlp-ink-850));
+}
+.zlp-rd .zlp-dash-aside {
+  border-right: 1px solid var(--zlp-line);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.zlp-rd .zlp-dash-aside > strong {
+  font-size: 14px;
+}
+.zlp-rd .zlp-dash-aside > small {
+  font-size: 11px;
+  color: var(--zlp-text-3);
+  margin-bottom: 12px;
+}
+.zlp-rd .zlp-dash-aside nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.zlp-rd .zlp-dash-aside button {
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--zlp-text-2);
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  cursor: pointer;
+  min-height: 40px;
+  transition: 0.2s var(--zlp-ease);
+}
+.zlp-rd .zlp-dash-aside button:hover {
+  color: var(--zlp-text);
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-dash-aside button.is-active {
+  color: var(--zlp-ink-900);
+  background: var(--zlp-white);
+  border-color: var(--zlp-white);
+  font-weight: 600;
+}
+.zlp-rd .zlp-dash-main {
+  padding: 22px;
+}
+.zlp-rd .zlp-dash-head span {
+  font-size: 11px;
+  color: var(--zlp-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.zlp-rd .zlp-dash-head h3 {
+  margin: 6px 0 0;
+  font-size: 1.3rem;
+}
+.zlp-rd .zlp-dash-main > p {
+  color: var(--zlp-text-2);
+  font-size: 13.5px;
+  margin: 10px 0 0;
+}
+.zlp-rd .zlp-dash-focus {
+  margin-top: 16px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-dash-focus code {
+  font-size: 12.5px;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-delta-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.zlp-rd .zlp-delta-grid > div {
+  border: 1px solid var(--zlp-line);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--zlp-surface);
+}
+.zlp-rd .zlp-delta-grid span {
+  font-size: 11px;
+  color: var(--zlp-text-3);
+  display: block;
+}
+.zlp-rd .zlp-delta-grid strong {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 13px;
+  display: block;
+  margin-top: 4px;
+}
+.zlp-rd .zlp-delta-grid small {
+  color: var(--zlp-pass);
+  font-size: 11px;
+}
+
+/* ---- Comparison --------------------------------------------------------- */
+.zlp-rd .zlp-cmp {
+  margin-top: 34px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.zlp-rd .zlp-cmp-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-cmp-row:first-child {
+  border-top: none;
+}
+.zlp-rd .zlp-cmp-c1,
+.zlp-rd .zlp-cmp-c2 {
+  padding: 16px 18px;
+  font-size: 14px;
+}
+.zlp-rd .zlp-cmp-c1 {
+  color: var(--zlp-text-3);
+  border-right: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-cmp-c2 {
+  color: var(--zlp-text);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.zlp-rd .zlp-cmp-c2 svg {
+  width: 16px;
+  height: 16px;
+  color: var(--zlp-pass);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.zlp-rd .zlp-cmp-row.head .zlp-cmp-c1,
+.zlp-rd .zlp-cmp-row.head .zlp-cmp-c2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--zlp-text-3);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* ---- Architecture chips ------------------------------------------------- */
+.zlp-rd .zlp-chips {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.zlp-rd .zlp-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--zlp-surface);
+  font-size: 12px;
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-chip strong {
+  font-size: 13px;
+  color: var(--zlp-text);
+}
+
+/* ---- FAQ ---------------------------------------------------------------- */
+.zlp-rd .zlp-faq {
+  margin-top: 30px;
+  max-width: 760px;
+}
+.zlp-rd .zlp-qa {
+  border-bottom: 1px solid var(--zlp-line);
+}
+.zlp-rd .zlp-qa summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 18px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+.zlp-rd .zlp-qa summary::-webkit-details-marker {
+  display: none;
+}
+.zlp-rd .zlp-pm {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--zlp-line-strong);
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--zlp-text-2);
+  transition: 0.3s var(--zlp-ease);
+  flex-shrink: 0;
+}
+.zlp-rd .zlp-pm svg {
+  width: 14px;
+  height: 14px;
+}
+.zlp-rd .zlp-qa[open] .zlp-pm {
+  transform: rotate(45deg);
+  color: var(--zlp-white);
+}
+.zlp-rd .zlp-ans {
+  color: var(--zlp-text-2);
+  font-size: 14.5px;
+  padding: 0 0 18px;
+  max-width: 90%;
+  line-height: 1.6;
+}
+
+/* ---- Final CTA ---------------------------------------------------------- */
+.zlp-rd .zlp-fcta {
+  margin: 30px auto 84px;
+  text-align: center;
+  border: 1px solid var(--zlp-line-strong);
+  border-radius: 24px;
+  padding: 64px 30px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--zlp-ink-800), var(--zlp-ink-850));
+}
+.zlp-rd .zlp-fcta h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  margin: 0;
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-fcta p {
+  color: var(--zlp-text-2);
+  margin: 16px auto 0;
+  max-width: 30rem;
+}
+.zlp-rd .zlp-fcta .zlp-hero-cta {
+  justify-content: center;
+  margin-top: 28px;
+}
+
+/* ---- Footer ------------------------------------------------------------- */
+.zlp-rd.zlp-rd .zlp-footer {
+  border: 0;
+  border-top: 1px solid var(--zlp-line);
+  padding: 30px 0;
+  background: transparent;
+}
+.zlp-rd .zlp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  color: var(--zlp-text-3);
+  font-size: 13px;
+}
+.zlp-rd .zlp-foot-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.zlp-rd .zlp-foot-brand img {
+  height: 22px;
+  width: auto;
+  opacity: 0.9;
+}
+.zlp-rd .zlp-foot-links {
+  display: flex;
+  gap: 22px;
+}
+.zlp-rd .zlp-foot-links a {
+  color: var(--zlp-text-3);
+}
+.zlp-rd .zlp-foot-links a:hover {
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-social {
+  display: flex;
+  gap: 10px;
+}
+.zlp-rd .zlp-social a {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--zlp-text-2);
+  background: var(--zlp-surface);
+  transition: 0.25s var(--zlp-ease);
+}
+.zlp-rd .zlp-social a:hover {
+  color: var(--zlp-text);
+  border-color: var(--zlp-line-strong);
+  background: var(--zlp-surface-2);
+  transform: translateY(-1px);
+}
+.zlp-rd .zlp-social a svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- Responsive (Breakpoint_Set, R8) ----------------------------------- */
+@media (max-width: 960px) {
+  .zlp-rd .zlp-hero-grid,
+  .zlp-rd .zlp-loop,
+  .zlp-rd .zlp-qs {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .zlp-rd .zlp-trust-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px 0;
+  }
+  .zlp-rd .zlp-model-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .zlp-rd .zlp-dashboard {
+    grid-template-columns: 1fr;
+  }
+  .zlp-rd .zlp-dash-aside {
+    border-right: none;
+    border-bottom: 1px solid var(--zlp-line);
+  }
+  .zlp-rd .zlp-dash-aside nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .zlp-rd .zlp-nav-links {
+    display: none;
+  }
+  .zlp-rd .zlp-hero {
+    padding: 56px 0 36px;
+  }
+}
+@media (max-width: 620px) {
+  .zlp-rd .zlp-trust-grid {
+    grid-template-columns: 1fr;
+  }
+  .zlp-rd .zlp-trust-item {
+    border-left: none;
+    padding-left: 0;
+  }
+  .zlp-rd .zlp-model-row,
+  .zlp-rd .zlp-delta-grid {
+    grid-template-columns: 1fr;
+  }
+  .zlp-rd .zlp-diff {
+    grid-template-columns: 1fr;
   }
 }

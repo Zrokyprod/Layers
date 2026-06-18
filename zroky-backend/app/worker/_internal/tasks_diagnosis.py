@@ -153,7 +153,7 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                 sync_alerts_from_jobs(session, tenant_id, [job])
                 session.commit()
 
-                # Deliver alert to tenant's connected Slack / Teams channels.
+                # Deliver alert to the tenant's connected Slack channel.
                 # Fires only when there are real diagnoses (not healthy traces).
                 if diagnosis_categories:
                     from app.services.notification_dispatch import dispatch_alert_to_tenant_channels

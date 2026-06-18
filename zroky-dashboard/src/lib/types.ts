@@ -665,7 +665,6 @@ export interface RetentionDataErasureResponse {
 export interface NotificationSettingsResponse {
   email_enabled: boolean;
   slack_enabled: boolean;
-  teams_enabled: boolean;
   browser_enabled: boolean;
   terminal_enabled: boolean;
   updated_at: string;
@@ -698,20 +697,6 @@ export interface SlackInstallStartResponse {
 }
 
 export interface SlackTestMessageResponse {
-  ok: boolean;
-  message: string;
-}
-
-export interface TeamsInstallStatusResponse {
-  connected: boolean;
-  channel_name: string | null;
-  connector_type: string | null;
-  installed_by_user: string | null;
-  installed_at: string | null;
-  updated_at: string | null;
-}
-
-export interface TeamsTestMessageResponse {
   ok: boolean;
   message: string;
 }

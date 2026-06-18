@@ -1,8 +1,8 @@
-"""Sync-safe alert delivery to tenant Slack / Teams channels.
+"""Sync-safe alert delivery to tenant Slack channels.
 
 Called from Celery tasks (synchronous context). Uses httpx.post() directly
-rather than the async helpers in slack_integration / teams_integration so it
-can be invoked without an event loop.
+rather than the async helpers in slack_integration so it can be invoked without
+an event loop.
 """
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from app.services.slack_judgment import (
     build_replay_failed_alert_payload,
     build_replay_verified_alert_payload,
 )
-from app.services.teams_integration import get_teams_install, decrypt_teams_webhook_url
 
 logger = logging.getLogger(__name__)
 
@@ -261,14 +260,14 @@ def dispatch_alert_to_tenant_channels(
     Synchronous and exception-safe — a delivery failure never propagates to
     the calling Celery task.
 
-    Returns a dict recording which channels were successfully notified:
-        {"slack": True, "teams": False, ...}
+    Returns a dict recording whether Slack was successfully notified:
+        {"slack": True}
     """
     if not categories:
-        return {"slack": False, "teams": False}
+        return {"slack": False}
 
     msg = _build_message(categories, agent_name, diagnosis_id)
-    result: dict[str, bool] = {"slack": False, "teams": False}
+    result: dict[str, bool] = {"slack": False}
 
     # ── Slack ──────────────────────────────────────────────────────────────────
     try:
@@ -293,24 +292,5 @@ def dispatch_alert_to_tenant_channels(
                     )
     except Exception as exc:  # noqa: BLE001
         logger.error("notification_dispatch: Slack lookup failed tenant=%s: %s", tenant_id, exc)
-
-    # ── Teams ──────────────────────────────────────────────────────────────────
-    try:
-        teams_install = get_teams_install(db, tenant_id)
-        if teams_install:
-            webhook_url = decrypt_teams_webhook_url(teams_install.webhook_url_encrypted)
-            if webhook_url:
-                result["teams"] = _post_sync(
-                    webhook_url,
-                    {"text": msg},
-                )
-                if result["teams"]:
-                    logger.info(
-                        "notification_dispatch: Teams delivered tenant=%s categories=%s",
-                        tenant_id,
-                        categories,
-                    )
-    except Exception as exc:  # noqa: BLE001
-        logger.error("notification_dispatch: Teams lookup failed tenant=%s: %s", tenant_id, exc)
 
     return result

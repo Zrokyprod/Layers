@@ -12,7 +12,7 @@ export default function IntegrationsPage() {
         <div>
           <span className="eyebrow">Reliability connections</span>
           <h1>Integrations</h1>
-          <p>Is this agent safe to scale? Verify provider keys, PR gates, capture delivery, and team notification channels.</p>
+          <p>Is this agent safe to scale? Verify provider keys, PR gates, capture delivery, and notification channels.</p>
         </div>
       </section>
 
@@ -41,9 +41,9 @@ export default function IntegrationsPage() {
         <article className="panel settings-summary-card">
           <Plug aria-hidden="true" />
           <span>Notifications</span>
-          <strong>Slack / Teams</strong>
-          <small>Route failure, replay, CI, and policy events to operating channels.</small>
-          <Link href="/integrations" className="btn btn-soft btn-sm">Refresh status</Link>
+          <strong>Slack</strong>
+          <small>Route failure, replay, CI, and policy events to the operating channel.</small>
+          <Link href="/settings/integrations/slack" className="btn btn-soft btn-sm">Manage Slack</Link>
         </article>
       </section>
 

@@ -2,25 +2,22 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, GitPullRequest, MessageSquare, RefreshCw, Send } from "lucide-react";
+import { CheckCircle2, GitPullRequest, MessageSquare, RefreshCw } from "lucide-react";
 
 import {
   disconnectGithubRepoConnection,
   getGithubConnectionStatus,
   getSlackInstallStatus,
-  getTeamsInstallStatus,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type {
   GithubConnectionStatusResponse,
   SlackInstallStatusResponse,
-  TeamsInstallStatusResponse,
 } from "@/lib/types";
 
 type IntegrationState = {
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
-  teams: TeamsInstallStatusResponse | null;
 };
 
 function integrationStatus(connected: boolean) {
@@ -33,26 +30,24 @@ function isProblemMessage(value: string): boolean {
 }
 
 export default function IntegrationsSettingsPage() {
-  const [state, setState] = useState<IntegrationState>({ github: null, slack: null, teams: null });
+  const [state, setState] = useState<IntegrationState>({ github: null, slack: null });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
-    const [githubResult, slackResult, teamsResult] = await Promise.allSettled([
+    const [githubResult, slackResult] = await Promise.allSettled([
       getGithubConnectionStatus(),
       getSlackInstallStatus(),
-      getTeamsInstallStatus(),
     ]);
 
     setState({
       github: githubResult.status === "fulfilled" ? githubResult.value : null,
       slack: slackResult.status === "fulfilled" ? slackResult.value : null,
-      teams: teamsResult.status === "fulfilled" ? teamsResult.value : null,
     });
 
-    const failures = [githubResult, slackResult, teamsResult].filter((result) => result.status === "rejected");
+    const failures = [githubResult, slackResult].filter((result) => result.status === "rejected");
     if (failures.length > 0) {
       setMessage("Some integration status checks could not load. Verify backend connectivity and admin access.");
     }
@@ -65,8 +60,7 @@ export default function IntegrationsSettingsPage() {
 
   const githubConnected = Boolean(state.github?.connected);
   const slackConnected = Boolean(state.slack?.connected);
-  const teamsConnected = Boolean(state.teams?.connected);
-  const readyCount = [githubConnected, slackConnected, teamsConnected].filter(Boolean).length;
+  const readyCount = [githubConnected, slackConnected].filter(Boolean).length;
 
   function onStartGithubConnect() {
     window.location.href = "/api/zroky/v1/settings/github/connect/start";
@@ -118,15 +112,9 @@ export default function IntegrationsSettingsPage() {
           <small>{state.slack?.channel_name ? `#${state.slack.channel_name}` : "OAuth install required before alerts deliver."}</small>
         </article>
         <article className="panel settings-summary-card">
-          <Send aria-hidden="true" />
-          <span>Microsoft Teams</span>
-          <strong>{teamsConnected ? "Connected" : "Not connected"}</strong>
-          <small>{state.teams?.channel_name || "Webhook storage required before alerts deliver."}</small>
-        </article>
-        <article className="panel settings-summary-card">
           <CheckCircle2 aria-hidden="true" />
           <span>Ready</span>
-          <strong>{readyCount}/3</strong>
+          <strong>{readyCount}/2</strong>
           <small>Connected integrations can create PRs or deliver alerts.</small>
         </article>
       </section>
@@ -221,41 +209,6 @@ export default function IntegrationsSettingsPage() {
           </div>
         </article>
 
-        <article className="panel settings-integration-card">
-          <header className="panel-header">
-            <div className="settings-card-title-row">
-              <Send aria-hidden="true" />
-              <div>
-                <h3>Microsoft Teams</h3>
-                <p>Incoming webhook storage, channel label, disconnect, and test-message support.</p>
-              </div>
-            </div>
-            <span className={teamsConnected ? "pill pill-green" : "pill"}>
-              {integrationStatus(teamsConnected)}
-            </span>
-          </header>
-
-          <div className="list">
-            <div className="list-row">
-              <div className="list-main">
-                <strong>Channel</strong>
-                <span>{state.teams?.channel_name || "Not configured"}</span>
-              </div>
-            </div>
-            <div className="list-row">
-              <div className="list-main">
-                <strong>Connector</strong>
-                <span>{state.teams?.connector_type ?? "Not connected"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="actions">
-            <Link href="/settings/integrations/teams" className="btn btn-primary">
-              Manage Teams
-            </Link>
-          </div>
-        </article>
       </section>
 
     </div>

@@ -50,11 +50,6 @@ class Project(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
-    teams_install: Mapped["TenantTeamsInstall | None"] = relationship(
-        back_populates="project",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
 
     __table_args__ = (
         Index("ix_projects_owner_ref", "owner_ref"),
@@ -279,35 +274,6 @@ class TenantSlackInstall(Base):
         UniqueConstraint("tenant_id", name="ux_tenant_slack_install_tenant"),
         Index("ix_tenant_slack_install_team_id", "team_id"),
         Index("ix_tenant_slack_install_channel_id", "channel_id"),
-    )
-
-
-class TenantTeamsInstall(Base):
-    __tablename__ = "tenant_teams_install"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    tenant_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    webhook_url_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
-    channel_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    connector_type: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'webhook'"))
-    installed_by_user: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    installed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        UTCDateTime,
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    project: Mapped[Project] = relationship(back_populates="teams_install")
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", name="ux_tenant_teams_install_tenant"),
-        Index("ix_tenant_teams_install_updated_at", "updated_at"),
     )
 
 

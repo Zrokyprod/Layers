@@ -305,7 +305,7 @@
           "pro.team_workflow": true,
           "pro.advanced_goldens": true,
           "enterprise.private_replay_worker": true,
-          "enterprise.sso": true,
+          "enterprise.sso": false,
           "enterprise.audit_logs": true,
           "enterprise.custom_retention": true,
           "enterprise.provider_key_vault": true,
@@ -324,7 +324,7 @@
           "digest.audience": "executive",
           "compliance.export_enabled": true,
           "selfhost.enabled": true,
-          "sso.enabled": true,
+          "sso.enabled": false,
           "seats.included": -1
         }
       }

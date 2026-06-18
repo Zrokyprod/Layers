@@ -41,7 +41,7 @@ describe("PublicLanding", () => {
   it("renders the reliability control-plane story and primary actions", () => {
     const { container } = render(<PublicLanding />);
 
-    expect(screen.getByRole("heading", { name: "Fix failed agent runs before they ship again" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Catch AI agent failures before your users do." })).toBeInTheDocument();
     expect(screen.getByText(/capture the exact run, replay the fix/i)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Start workspace" }).some((link) => link.getAttribute("href") === "/signup")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Sign in" }).some((link) => link.getAttribute("href") === "/login")).toBe(true);

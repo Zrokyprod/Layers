@@ -28,6 +28,14 @@ body:has(.app-shell) {
   grid-template-columns: 208px minmax(0, 1fr);
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed .sidebar.sidebar-hidden {
+  display: none !important;
+}
+
 .app-shell .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
@@ -255,11 +263,11 @@ body:has(.app-shell) {
 }
 
 .app-shell .content-inner {
-  align-self: center;
+  align-self: stretch;
   width: 100%;
-  max-width: 1260px;
+  max-width: none;
   gap: 10px;
-  padding: 16px 18px 28px;
+  padding: 16px 14px 28px;
 }
 
 .app-shell .topbar-breadcrumb {
@@ -6717,6 +6725,13 @@ body:has(.app-shell) {
   color: var(--dashboard-text) !important;
 }
 
+.app-shell:has(.settings-project-page) .content-inner {
+  align-self: stretch !important;
+  max-width: none !important;
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+}
+
 .app-shell .settings-hero {
   overflow: hidden !important;
   border-color: var(--dashboard-border) !important;
@@ -6839,325 +6854,206 @@ body:has(.app-shell) {
   color: var(--dashboard-bg) !important;
 }
 
-.app-shell .settings-project-cockpit {
+.app-shell .settings-project-console {
   display: grid !important;
-  gap: 14px !important;
-  border-color: var(--dashboard-border) !important;
-  background:
-    linear-gradient(135deg, var(--dashboard-surface-soft), var(--dashboard-surface) 62%),
-    var(--dashboard-surface) !important;
-  color: var(--dashboard-text) !important;
-  box-shadow: var(--shadow-soft) !important;
-}
-
-.app-shell .settings-project-cockpit-header {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
-  gap: 14px !important;
-  align-items: start !important;
-}
-
-.app-shell .settings-project-cockpit-status {
-  display: grid !important;
-  justify-items: end !important;
-  gap: 8px !important;
-  min-width: 0 !important;
-}
-
-.app-shell .settings-project-cockpit-status small {
-  color: var(--dashboard-muted) !important;
-  font-size: 0.72rem !important;
-  font-weight: 760 !important;
-  letter-spacing: 0 !important;
-}
-
-.app-shell .settings-project-cockpit h2 {
-  margin: 10px 0 0 !important;
-  color: var(--dashboard-text) !important;
-  font-size: 1.75rem !important;
-  font-weight: 720 !important;
-  line-height: 1.12 !important;
-  letter-spacing: 0 !important;
-}
-
-.app-shell .settings-project-cockpit p {
-  max-width: 720px !important;
-  margin: 8px 0 0 !important;
-  color: var(--dashboard-text-soft) !important;
-  line-height: 1.5 !important;
-  letter-spacing: 0 !important;
-}
-
-.app-shell .settings-project-facts {
-  display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 10px !important;
-}
-
-.app-shell .settings-project-facts > div {
-  display: grid !important;
-  align-content: start !important;
-  gap: 6px !important;
-  min-width: 0 !important;
-  border: 1px solid var(--dashboard-border) !important;
-  border-radius: 8px !important;
-  background: var(--dashboard-surface-inset) !important;
-  padding: 12px 13px !important;
-}
-
-.app-shell .settings-project-facts span,
-.app-shell .settings-project-action-grid .settings-workspace-card small {
-  color: var(--dashboard-muted) !important;
-  font-size: 0.72rem !important;
-  line-height: 1.35 !important;
-  letter-spacing: 0 !important;
-}
-
-.app-shell .settings-project-facts small {
-  min-width: 0 !important;
-  color: var(--dashboard-muted) !important;
-  font-size: 0.68rem !important;
-  font-weight: 700 !important;
-  line-height: 1.25 !important;
-  letter-spacing: 0 !important;
-}
-
-.app-shell .settings-project-facts strong,
-.app-shell .settings-project-action-grid .settings-workspace-card strong {
-  min-width: 0 !important;
-  color: var(--dashboard-text) !important;
-  line-height: 1.2 !important;
-  letter-spacing: 0 !important;
-}
-
-.app-shell .settings-project-facts strong {
-  display: block !important;
-  overflow: hidden !important;
-  font-size: 0.92rem !important;
-  font-weight: 820 !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-}
-
-.app-shell .settings-project-action-grid {
-  display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 12px !important;
-}
-
-.app-shell .settings-project-action-grid .settings-workspace-card {
-  display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) auto !important;
-  gap: 10px !important;
-  align-items: center !important;
-  min-height: 88px !important;
-  padding: 14px !important;
-  border-color: var(--dashboard-border) !important;
-  background: var(--settings-panel-bg) !important;
-  text-decoration: none !important;
-  transition: var(--transition-base) !important;
-}
-
-.app-shell .settings-project-action-grid .settings-workspace-card:hover,
-.app-shell .settings-project-action-grid .settings-workspace-card:focus-visible {
-  border-color: var(--dashboard-border-strong) !important;
-  background: var(--dashboard-accent-soft) !important;
-  color: var(--dashboard-text) !important;
-}
-
-.app-shell .settings-project-action-grid .settings-workspace-card > svg:first-child {
-  width: 18px !important;
-  height: 18px !important;
-  color: var(--dashboard-accent) !important;
-}
-
-.app-shell .settings-project-action-grid .settings-workspace-card > svg:last-child {
-  width: 15px !important;
-  height: 15px !important;
-  color: var(--dashboard-muted) !important;
-}
-
-.app-shell .settings-project-action-grid .settings-workspace-card span {
-  display: grid !important;
-  gap: 3px !important;
-  min-width: 0 !important;
-}
-
-.app-shell .settings-project-directory {
-  display: grid !important;
-  gap: 14px !important;
-  border-color: var(--dashboard-border) !important;
-  background: var(--settings-panel-bg) !important;
-  color: var(--dashboard-text) !important;
-  box-shadow: var(--shadow-soft) !important;
-}
-
-.app-shell .settings-project-directory .panel-header h3 {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-
-.app-shell .settings-project-directory .panel-header h3 svg {
-  width: 17px !important;
-  height: 17px !important;
-  color: var(--dashboard-accent) !important;
-}
-
-.app-shell .settings-project-list {
-  display: grid !important;
-  gap: 10px !important;
-}
-
-.app-shell .settings-project-row {
-  display: grid !important;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(260px, 1.8fr) auto !important;
-  align-items: center !important;
-  gap: 14px !important;
-  min-width: 0 !important;
-  padding: 14px !important;
-  border: 1px solid var(--dashboard-border) !important;
-  border-radius: 8px !important;
-  background: var(--dashboard-surface-inset) !important;
-  color: var(--dashboard-text) !important;
-  transition: var(--transition-base) !important;
-}
-
-.app-shell .settings-project-row:hover {
-  border-color: var(--dashboard-border-strong) !important;
-  background: var(--dashboard-surface-soft) !important;
-}
-
-.app-shell .settings-project-row-main,
-.app-shell .settings-project-row-meta {
-  display: grid !important;
-  min-width: 0 !important;
-  gap: 5px !important;
-}
-
-.app-shell .settings-project-row-main strong {
-  overflow: hidden !important;
-  color: var(--dashboard-text) !important;
-  font-size: 0.95rem !important;
-  font-weight: 820 !important;
-  letter-spacing: 0 !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-}
-
-.app-shell .settings-project-row-main span,
-.app-shell .settings-project-row-meta span {
-  min-width: 0 !important;
-  overflow: hidden !important;
-  color: var(--dashboard-muted) !important;
-  font-size: 0.76rem !important;
-  font-weight: 720 !important;
-  letter-spacing: 0 !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-}
-
-.app-shell .settings-project-row-meta {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-}
-
-.app-shell .settings-project-row-action {
-  display: flex !important;
-  justify-content: flex-end !important;
-}
-
-.app-shell .settings-project-utility-panel {
-  border-color: var(--dashboard-border) !important;
-  background: var(--settings-panel-bg) !important;
-}
-
-.app-shell .settings-project-registry {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.36fr) !important;
-  align-items: start !important;
   gap: 14px !important;
   width: 100% !important;
+  color: var(--dashboard-text) !important;
 }
 
+.app-shell .settings-project-command,
 .app-shell .settings-project-list-panel,
 .app-shell .settings-project-details-panel {
   display: grid !important;
   min-width: 0 !important;
-  border: 1px solid var(--dashboard-border) !important;
-  border-radius: 8px !important;
-  background: var(--dashboard-surface) !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
   color: var(--dashboard-text) !important;
-  box-shadow: var(--shadow-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .settings-project-command {
+  gap: 10px !important;
+  padding: 0 0 12px !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.08) !important;
+}
+
+.app-shell .settings-project-registry {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.46fr) !important;
+  align-items: start !important;
+  gap: 0 !important;
+  width: 100% !important;
+  min-height: calc(100dvh - 168px) !important;
 }
 
 .app-shell .settings-project-list-panel {
-  gap: 12px !important;
-  padding: 14px !important;
+  gap: 10px !important;
+  padding: 0 18px 0 0 !important;
 }
 
-.app-shell .settings-project-toolbar {
+.app-shell .settings-project-toolbar,
+.app-shell .settings-project-section-head,
+.app-shell .settings-project-details-panel header {
   display: flex !important;
-  align-items: center !important;
+  align-items: flex-start !important;
   justify-content: space-between !important;
-  gap: 12px !important;
+  gap: 14px !important;
 }
 
 .app-shell .settings-project-toolbar h2 {
   margin: 0 !important;
-  color: var(--dashboard-text) !important;
-  font-size: 1.18rem !important;
-  line-height: 1.2 !important;
+  color: #f8fafc !important;
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: 1.46rem !important;
+  font-weight: 720 !important;
+  line-height: 1.1 !important;
   letter-spacing: 0 !important;
 }
 
 .app-shell .settings-project-toolbar p {
-  margin: 4px 0 0 !important;
-  color: var(--dashboard-muted) !important;
-  font-size: 0.78rem !important;
-  font-weight: 720 !important;
+  max-width: 720px !important;
+  margin: 6px 0 0 !important;
+  color: #9aa4b2 !important;
+  font-size: 0.84rem !important;
+  font-weight: 560 !important;
+  line-height: 1.45 !important;
   letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-context > div {
+  display: grid !important;
+  align-content: start !important;
+  align-items: start !important;
+  min-width: 0 !important;
+  gap: 4px !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.app-shell .settings-project-warning svg,
+.app-shell .settings-project-state svg,
+.app-shell .settings-project-empty svg {
+  width: 15px !important;
+  height: 15px !important;
+  flex: 0 0 auto !important;
+}
+
+.app-shell .settings-project-warning {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 38px !important;
+  border: 1px solid var(--dashboard-warning-border) !important;
+  border-radius: 8px !important;
+  background: var(--dashboard-warning-soft) !important;
+  padding: 9px 10px !important;
+  color: var(--dashboard-warning-text) !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+}
+
+.app-shell .settings-project-section-head {
+  align-items: center !important;
+  min-height: 42px !important;
+}
+
+.app-shell .settings-project-section-head div,
+.app-shell .settings-project-details-panel header > div {
+  display: grid !important;
+  min-width: 0 !important;
+  gap: 3px !important;
+}
+
+.app-shell .settings-project-section-head span,
+.app-shell .settings-project-details-panel header span,
+.app-shell .settings-project-context span,
+.app-shell .settings-project-details-list dt {
+  color: #667085 !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.64rem !important;
+  font-weight: 760 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell .settings-project-section-head strong,
+.app-shell .settings-project-context strong {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: #f8fafc !important;
+  font-size: 0.88rem !important;
+  font-weight: 780 !important;
+  line-height: 1.25 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-section-head small {
+  max-width: 44ch !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: #7b8492 !important;
+  font-size: 0.72rem !important;
+  font-weight: 680 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }
 
 .app-shell .settings-project-table {
   display: grid !important;
   min-width: 0 !important;
   overflow: hidden !important;
-  border: 1px solid var(--dashboard-border) !important;
-  border-radius: 8px !important;
-  background: var(--dashboard-surface-inset) !important;
+  border: 0 !important;
+  border-top: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
 }
 
 .app-shell .settings-project-table-head,
 .app-shell .settings-project-table-row {
   display: grid !important;
-  grid-template-columns: minmax(220px, 1.35fr) minmax(90px, 0.5fr) minmax(90px, 0.5fr) minmax(150px, 0.65fr) !important;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(96px, 0.48fr) minmax(118px, 0.54fr) minmax(148px, 0.62fr) !important;
   align-items: center !important;
   gap: 12px !important;
 }
 
 .app-shell .settings-project-table-head {
-  min-height: 38px !important;
-  padding: 0 14px !important;
-  border-bottom: 1px solid var(--dashboard-border) !important;
-  color: var(--dashboard-muted) !important;
-  font-size: 0.68rem !important;
-  font-weight: 820 !important;
+  min-height: 34px !important;
+  padding: 0 8px !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.08) !important;
+  background: transparent !important;
+  color: #667085 !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.62rem !important;
+  font-weight: 760 !important;
   letter-spacing: 0 !important;
   text-transform: uppercase !important;
 }
 
 .app-shell .settings-project-table-row {
   width: 100% !important;
-  min-height: 68px !important;
-  padding: 0 14px !important;
+  min-height: 66px !important;
+  padding: 0 8px !important;
   border: 0 !important;
-  border-bottom: 1px solid var(--dashboard-border) !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.075) !important;
   background: transparent !important;
-  color: var(--dashboard-text-soft) !important;
+  color: #aab4c2 !important;
   font: inherit !important;
   text-align: left !important;
   cursor: pointer !important;
-  transition: var(--transition-base) !important;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast) !important;
 }
 
 .app-shell .settings-project-table-row:last-child {
@@ -7165,14 +7061,20 @@ body:has(.app-shell) {
 }
 
 .app-shell .settings-project-table-row:hover,
-.app-shell .settings-project-table-row:focus-visible,
-.app-shell .settings-project-table-row.is-selected {
-  background: var(--dashboard-surface-soft) !important;
-  color: var(--dashboard-text) !important;
+.app-shell .settings-project-table-row:focus-visible {
+  background: rgba(248, 250, 252, 0.045) !important;
+  color: #f8fafc !important;
+  outline: none !important;
 }
 
 .app-shell .settings-project-table-row.is-selected {
-  box-shadow: inset 3px 0 0 var(--dashboard-accent) !important;
+  background:
+    linear-gradient(90deg, rgba(248, 250, 252, 0.11), rgba(248, 250, 252, 0.035) 42%, transparent),
+    rgba(248, 250, 252, 0.02) !important;
+  color: #f8fafc !important;
+  box-shadow:
+    inset 3px 0 0 #f8fafc,
+    inset 0 1px 0 rgba(248, 250, 252, 0.04) !important;
 }
 
 .app-shell .settings-project-table-row > span {
@@ -7180,13 +7082,13 @@ body:has(.app-shell) {
   overflow: hidden !important;
   color: inherit !important;
   font-size: 0.82rem !important;
-  font-weight: 740 !important;
+  font-weight: 700 !important;
   letter-spacing: 0 !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
 }
 
-.app-shell .settings-project-table-row > span:first-child {
+.app-shell .settings-project-name-cell {
   display: grid !important;
   gap: 4px !important;
 }
@@ -7194,9 +7096,11 @@ body:has(.app-shell) {
 .app-shell .settings-project-table-row strong {
   min-width: 0 !important;
   overflow: hidden !important;
-  color: var(--dashboard-text) !important;
-  font-size: 0.9rem !important;
-  line-height: 1.25 !important;
+  color: #f8fafc !important;
+  font-family: var(--font-manrope), var(--font-inter), system-ui, sans-serif !important;
+  font-size: 0.92rem !important;
+  font-weight: 820 !important;
+  line-height: 1.22 !important;
   letter-spacing: 0 !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -7205,101 +7109,226 @@ body:has(.app-shell) {
 .app-shell .settings-project-table-row small {
   min-width: 0 !important;
   overflow: hidden !important;
-  color: var(--dashboard-muted) !important;
-  font-size: 0.7rem !important;
-  font-weight: 720 !important;
+  color: #667085 !important;
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
   letter-spacing: 0 !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
 }
 
+.app-shell .settings-project-state {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  min-height: 26px !important;
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 999px !important;
+  background: rgba(248, 250, 252, 0.035) !important;
+  padding: 0 9px !important;
+  color: #94a3b8 !important;
+  font-size: 0.72rem !important;
+  font-weight: 760 !important;
+}
+
+.app-shell .settings-project-state.is-active {
+  border-color: rgba(59, 214, 139, 0.32) !important;
+  background: rgba(59, 214, 139, 0.09) !important;
+  color: #7ee0ad !important;
+}
+
 .app-shell .settings-project-details-panel {
-  gap: 14px !important;
-  padding: 14px !important;
+  position: sticky !important;
+  top: 74px !important;
+  gap: 12px !important;
+  padding: 0 0 0 18px !important;
+  border-left: 1px solid rgba(248, 250, 252, 0.1) !important;
 }
 
 .app-shell .settings-project-details-panel header {
-  display: grid !important;
-  justify-items: start !important;
-  gap: 8px !important;
-}
-
-.app-shell .settings-project-details-panel header span {
-  color: var(--dashboard-muted) !important;
-  font-size: 0.68rem !important;
-  font-weight: 820 !important;
-  letter-spacing: 0 !important;
-  text-transform: uppercase !important;
+  align-items: center !important;
+  padding-bottom: 10px !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.08) !important;
 }
 
 .app-shell .settings-project-details-panel h3 {
+  min-width: 0 !important;
+  max-width: 100% !important;
   margin: 0 !important;
-  color: var(--dashboard-text) !important;
-  font-size: 1.1rem !important;
-  line-height: 1.25 !important;
+  overflow: hidden !important;
+  color: #f8fafc !important;
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: 1.08rem !important;
+  font-weight: 720 !important;
+  line-height: 1.18 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
   letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-context {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  padding: 10px 0 !important;
+  border-top: 1px solid rgba(248, 250, 252, 0.08) !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.08) !important;
+}
+
+.app-shell .settings-project-context strong {
+  font-size: 0.8rem !important;
 }
 
 .app-shell .settings-project-details-list {
   display: grid !important;
   gap: 0 !important;
   margin: 0 !important;
-  border: 1px solid var(--dashboard-border) !important;
-  border-radius: 8px !important;
-  overflow: hidden !important;
+  border: 0 !important;
+  border-top: 1px solid rgba(248, 250, 252, 0.08) !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.08) !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
 }
 
 .app-shell .settings-project-details-list div {
   display: grid !important;
-  gap: 4px !important;
-  padding: 10px 12px !important;
-  border-bottom: 1px solid var(--dashboard-border) !important;
-  background: var(--dashboard-surface-inset) !important;
+  gap: 5px !important;
+  padding: 10px 0 !important;
+  border-bottom: 1px solid rgba(248, 250, 252, 0.075) !important;
 }
 
 .app-shell .settings-project-details-list div:last-child {
   border-bottom: 0 !important;
 }
 
-.app-shell .settings-project-details-list dt {
-  color: var(--dashboard-muted) !important;
-  font-size: 0.68rem !important;
-  font-weight: 820 !important;
-  letter-spacing: 0 !important;
-  text-transform: uppercase !important;
-}
-
 .app-shell .settings-project-details-list dd {
   min-width: 0 !important;
   margin: 0 !important;
   overflow-wrap: anywhere !important;
-  color: var(--dashboard-text) !important;
-  font-size: 0.82rem !important;
-  font-weight: 740 !important;
+  color: #dbe4ef !important;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
   letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-active-button {
+  width: 100% !important;
+  justify-content: center !important;
 }
 
 .app-shell .settings-project-delete {
   display: grid !important;
   gap: 10px !important;
-  margin-top: 4px !important;
-  padding-top: 14px !important;
-  border-top: 1px solid var(--dashboard-border) !important;
+  margin-top: 2px !important;
+  border: 1px solid rgba(201, 75, 95, 0.28) !important;
+  border-radius: 8px !important;
+  background: rgba(132, 40, 55, 0.11) !important;
+  padding: 12px !important;
 }
 
 .app-shell .settings-project-delete strong {
-  color: var(--dashboard-danger-text) !important;
+  color: #f3a0ae !important;
   font-size: 0.9rem !important;
+  font-weight: 820 !important;
   letter-spacing: 0 !important;
 }
 
 .app-shell .settings-project-delete p,
 .app-shell .settings-project-delete small {
   margin: 4px 0 0 !important;
-  color: var(--dashboard-muted) !important;
+  color: #aeb7c4 !important;
   font-size: 0.74rem !important;
   line-height: 1.45 !important;
   letter-spacing: 0 !important;
+}
+
+.app-shell .settings-project-delete label {
+  color: #f3a0ae !important;
+  font-size: 0.74rem !important;
+  font-weight: 780 !important;
+}
+
+.app-shell .settings-project-delete input {
+  width: 100% !important;
+  min-height: 38px !important;
+  border: 1px solid rgba(248, 250, 252, 0.14) !important;
+  border-radius: 8px !important;
+  background: rgba(2, 6, 12, 0.58) !important;
+  color: #f8fafc !important;
+  padding: 0 10px !important;
+}
+
+.app-shell .settings-project-delete input::placeholder {
+  color: #667085 !important;
+}
+
+.app-shell .settings-project-delete input:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.66 !important;
+}
+
+.app-shell .settings-project-empty {
+  display: grid !important;
+  place-items: center !important;
+  gap: 8px !important;
+  min-height: 196px !important;
+  padding: 24px !important;
+  color: #8c96a5 !important;
+  text-align: center !important;
+}
+
+.app-shell .settings-project-empty svg {
+  color: #667085 !important;
+}
+
+.app-shell .settings-project-empty strong {
+  color: #f8fafc !important;
+  font-size: 0.94rem !important;
+}
+
+.app-shell .settings-project-empty span {
+  max-width: 34ch !important;
+  color: #8c96a5 !important;
+  font-size: 0.78rem !important;
+  line-height: 1.45 !important;
+}
+
+.app-shell .settings-project-skeleton {
+  display: grid !important;
+  gap: 10px !important;
+  border-color: rgba(248, 250, 252, 0.1) !important;
+  background: rgba(10, 14, 21, 0.96) !important;
+  padding: 14px !important;
+}
+
+.app-shell .settings-project-skeleton > div {
+  display: grid !important;
+  grid-template-columns: 1.3fr 0.5fr 0.5fr !important;
+  gap: 10px !important;
+}
+
+.app-shell .settings-project-skeleton span {
+  display: block !important;
+  height: 38px !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(90deg, rgba(248, 250, 252, 0.035), rgba(248, 250, 252, 0.075), rgba(248, 250, 252, 0.035)) !important;
+  background-size: 220% 100% !important;
+  animation: settings-project-pulse 1.2s ease-in-out infinite !important;
+}
+
+@keyframes settings-project-pulse {
+  0% {
+    background-position: 110% 0;
+  }
+
+  100% {
+    background-position: -110% 0;
+  }
 }
 
 .app-shell .settings-partial-warning {
@@ -7701,13 +7730,27 @@ body:has(.app-shell) {
 
 @media (max-width: 980px) {
   .app-shell .settings-summary-grid,
-  .app-shell .settings-project-facts,
-  .app-shell .settings-project-registry,
-  .app-shell .settings-project-action-grid,
   .app-shell .settings-readiness-grid,
   .app-shell .settings-integration-grid,
   .app-shell .settings-gate-map {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell .settings-project-registry {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+    min-height: 0 !important;
+  }
+
+  .app-shell .settings-project-list-panel {
+    padding-right: 0 !important;
+  }
+
+  .app-shell .settings-project-details-panel {
+    position: static !important;
+    padding: 16px 0 0 !important;
+    border-left: 0 !important;
+    border-top: 1px solid rgba(248, 250, 252, 0.1) !important;
   }
 }
 
@@ -7752,8 +7795,6 @@ body:has(.app-shell) {
   }
 
   .app-shell .settings-summary-grid,
-  .app-shell .settings-project-facts,
-  .app-shell .settings-project-action-grid,
   .app-shell .settings-readiness-grid,
   .app-shell .settings-integration-grid,
   .app-shell .settings-gate-map,
@@ -7762,13 +7803,59 @@ body:has(.app-shell) {
     grid-template-columns: 1fr !important;
   }
 
-  .app-shell .settings-project-table {
-    overflow-x: auto !important;
+  .app-shell .settings-project-command {
+    padding: 0 0 12px !important;
   }
 
-  .app-shell .settings-project-table-head,
+  .app-shell .settings-project-list-panel {
+    padding: 0 !important;
+  }
+
+  .app-shell .settings-project-details-panel {
+    padding: 14px 0 0 !important;
+  }
+
+  .app-shell .settings-project-toolbar,
+  .app-shell .settings-project-section-head {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  .app-shell .settings-project-toolbar .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .app-shell .settings-project-context {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .settings-project-table {
+    overflow-x: visible !important;
+  }
+
+  .app-shell .settings-project-table-head {
+    display: none !important;
+  }
+
   .app-shell .settings-project-table-row {
-    min-width: 680px !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 13px !important;
+  }
+
+  .app-shell .settings-project-table-row > span,
+  .app-shell .settings-project-table-row strong,
+  .app-shell .settings-project-table-row small,
+  .app-shell .settings-project-section-head small,
+  .app-shell .settings-project-details-panel h3 {
+    white-space: normal !important;
+  }
+
+  .app-shell .settings-project-state {
+    width: max-content !important;
   }
 
   .app-shell .settings-inline-form,

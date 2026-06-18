@@ -135,7 +135,7 @@ const NAV_ITEMS: NavItem[] = [
     id: "integrations",
     href: "/integrations",
     label: "Integrations",
-    subtitle: "Provider, GitHub, Slack, Teams, and capture connection health.",
+    subtitle: "Provider, GitHub, Slack, and capture connection health.",
     Icon: Plug,
     visibleInNav: true,
   },
@@ -462,7 +462,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const accountMenuOpen = openMenu === "account";
 
   const {
-    closeSidebar,
+    sidebarOpen,
+    toggleSidebar,
     setLastVisitedPage,
     selectedProject,
     setSelectedProject,
@@ -491,7 +492,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       setCompactShell(isCompact);
       if (isCompact) {
         setCompactSidebarOpen(false);
-        closeSidebar();
       }
     };
 
@@ -502,7 +502,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       window.clearTimeout(hydrationGuard);
       mobileShell.removeEventListener("change", syncMobileSidebar);
     };
-  }, [closeSidebar, pathname]);
+  }, [pathname]);
 
   const myProjects = useMemo(() => myProjectsQuery.data ?? [], [myProjectsQuery.data]);
   const myProjectIdsKey = myProjects.map((project) => project.project_id).join("|");
@@ -628,7 +628,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     budgetStatus?.status === "critical" ? "is-critical" : budgetStatus?.status === "warning" ? "is-warning" : "is-ok";
   const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);
   const currentRoute = getRouteMeta(pathname);
-  const sidebarVisible = compactShell ? compactSidebarOpen : true;
+  const sidebarVisible = compactShell ? compactSidebarOpen : sidebarOpen;
 
   const badges: Record<string, number> = {};
   if (issuesCount > 0) badges.issues = issuesCount;
@@ -661,7 +661,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     setOpenMenu(null);
     if (compactShell) {
       setCompactSidebarOpen((open) => !open);
+      return;
     }
+    toggleSidebar();
   }
 
   function applyDatePreset(presetId: DatePresetId) {
@@ -711,7 +713,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <div className={`app-shell ${sidebarVisible ? "" : "sidebar-collapsed"}`}>
       {/* Sidebar */}
-      <aside className={`sidebar ${sidebarVisible ? "" : "hidden lg:flex"}`}>
+      <aside className={`sidebar ${sidebarVisible ? "" : "sidebar-hidden"}`}>
         <Link href="/home" className="sidebar-logo" aria-label="Zroky dashboard home">
           <Image
             src="/zroky-sidebar-logo-transparent.png"

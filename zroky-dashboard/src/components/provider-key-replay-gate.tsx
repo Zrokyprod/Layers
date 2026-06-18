@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
-import { KeyRound, ShieldCheck } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { createProviderKey } from "@/lib/api";
+import { createProviderKey, getBillingMe } from "@/lib/api";
+import { formatPlanLabel, hasPlanEntitlement } from "@/components/feature-gate";
 import { PROVIDER_KEY_OPTIONS, PROVIDER_KEY_QUERY_KEY } from "@/lib/provider-key-gate";
-import { normalizeProviderValue, providerLabel } from "@/lib/provider-registry";
+import { isKnownProvider, normalizeProviderValue, providerLabel } from "@/lib/provider-registry";
 
 type ProviderKeyReplayGateProps = {
   expectedProvider?: string | null;
@@ -25,7 +26,17 @@ export function ProviderKeyReplayGate({
   showUseStub = true,
 }: ProviderKeyReplayGateProps) {
   const queryClient = useQueryClient();
-  const normalizedExpectedProvider = normalizeProviderValue(expectedProvider);
+  const billingQuery = useQuery({
+    queryKey: ["billing", "me", "provider-key-replay-gate"],
+    queryFn: ({ signal }) => getBillingMe(signal),
+    staleTime: 60_000,
+  });
+  const rawExpectedProvider = normalizeProviderValue(expectedProvider);
+  const normalizedExpectedProvider = rawExpectedProvider
+    ? isKnownProvider(rawExpectedProvider)
+      ? rawExpectedProvider
+      : "custom"
+    : null;
   const defaultProvider = PROVIDER_KEY_OPTIONS.some((option) => option.value === normalizedExpectedProvider)
     ? normalizedExpectedProvider!
     : "openai";
@@ -34,6 +45,13 @@ export function ProviderKeyReplayGate({
   const [plaintextKey, setPlaintextKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const canManageProviderVault = hasPlanEntitlement(
+    billingQuery.data?.plan_template,
+    "enterprise.provider_key_vault",
+  );
+  const planCheckUnavailable = Boolean(billingQuery.error) || (!billingQuery.isLoading && !billingQuery.data);
+  const canShowSecretForm = !billingQuery.isLoading && !planCheckUnavailable && canManageProviderVault;
+  const planLabel = formatPlanLabel(billingQuery.data?.plan_code);
 
   useEffect(() => {
     setProvider(defaultProvider);
@@ -41,6 +59,10 @@ export function ProviderKeyReplayGate({
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canShowSecretForm) {
+      setError("Provider key vault must be available before saving provider secrets.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -83,50 +105,87 @@ export function ProviderKeyReplayGate({
         ) : null}
       </header>
 
-      <form className="provider-key-gate-form" onSubmit={onSubmit}>
-        <label className="detail-field">
-          <span className="detail-field-label">Provider</span>
-          <select className="input" value={provider} onChange={(event) => setProvider(event.target.value)} disabled={saving}>
-            {PROVIDER_KEY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="detail-field">
-          <span className="detail-field-label">Label</span>
-          <input className="input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="production" disabled={saving} />
-        </label>
-        <label className="detail-field provider-key-gate-key-field">
-          <span className="detail-field-label">API key</span>
-          <input
-            className="input"
-            type="password"
-            value={plaintextKey}
-            onChange={(event) => setPlaintextKey(event.target.value)}
-            placeholder="Paste provider API key"
-            disabled={saving}
-          />
-        </label>
-
-        {error ? <p className="field-error provider-key-gate-error">{error}</p> : null}
-
-        <div className="provider-key-gate-actions">
-          <button type="submit" className="btn btn-primary" disabled={saving || plaintextKey.trim().length < 8}>
-            <ShieldCheck aria-hidden="true" />
-            {saving ? "Saving..." : "Save key and run replay"}
-          </button>
-          {showUseStub && onUseStub ? (
-            <button type="button" className="btn btn-soft" onClick={onUseStub} disabled={saving}>
-              Use stub replay
-            </button>
-          ) : null}
-          <Link href="/settings/providers" className="btn btn-soft">
-            Open provider settings
-          </Link>
+      {!canShowSecretForm ? (
+        <div className="settings-config-warning provider-vault-lock" role="status">
+          <LockKeyhole aria-hidden="true" />
+          <div>
+            <strong>
+              {billingQuery.isLoading
+                ? "Checking provider vault access."
+                : planCheckUnavailable
+                  ? "Plan check unavailable."
+                  : `Provider key vault is not included in ${planLabel}.`}
+            </strong>
+            <span>
+              {billingQuery.isLoading
+                ? "Zroky will not show the secret field until the plan allows provider-key storage."
+                : planCheckUnavailable
+                  ? "Open provider settings after the plan check is available. Stub replay can run without a provider key."
+                  : "Upgrade before pasting provider secrets. Capture and stub replay continue without provider keys."}
+            </span>
+          </div>
+          <div className="provider-key-gate-actions">
+            {showUseStub && onUseStub ? (
+              <button type="button" className="btn btn-soft" onClick={onUseStub} disabled={saving}>
+                Use stub replay
+              </button>
+            ) : null}
+            {!billingQuery.isLoading && !planCheckUnavailable ? (
+              <Link href="/settings/billing?upgrade_hint=enterprise.provider_key_vault" className="btn btn-primary">
+                Upgrade plan
+              </Link>
+            ) : null}
+            <Link href="/settings/providers" className="btn btn-soft">
+              Open provider settings
+            </Link>
+          </div>
         </div>
-      </form>
+      ) : (
+        <form className="provider-key-gate-form" onSubmit={onSubmit}>
+          <label className="detail-field">
+            <span className="detail-field-label">Provider</span>
+            <select className="input" value={provider} onChange={(event) => setProvider(event.target.value)} disabled={saving}>
+              {PROVIDER_KEY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="detail-field">
+            <span className="detail-field-label">Label</span>
+            <input className="input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="production" disabled={saving} />
+          </label>
+          <label className="detail-field provider-key-gate-key-field">
+            <span className="detail-field-label">API key</span>
+            <input
+              className="input"
+              type="password"
+              value={plaintextKey}
+              onChange={(event) => setPlaintextKey(event.target.value)}
+              placeholder="Paste provider API key"
+              disabled={saving}
+            />
+          </label>
+
+          {error ? <p className="field-error provider-key-gate-error">{error}</p> : null}
+
+          <div className="provider-key-gate-actions">
+            <button type="submit" className="btn btn-primary" disabled={saving || plaintextKey.trim().length < 8}>
+              <ShieldCheck aria-hidden="true" />
+              {saving ? "Saving..." : "Save key and run replay"}
+            </button>
+            {showUseStub && onUseStub ? (
+              <button type="button" className="btn btn-soft" onClick={onUseStub} disabled={saving}>
+                Use stub replay
+              </button>
+            ) : null}
+            <Link href="/settings/providers" className="btn btn-soft">
+              Open provider settings
+            </Link>
+          </div>
+        </form>
+      )}
     </section>
   );
 }

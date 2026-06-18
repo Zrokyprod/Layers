@@ -12,7 +12,6 @@ from app.db.models import Project, ProjectDashboardConfig
 DEFAULT_NOTIFICATIONS = {
     "email_enabled": True,
     "slack_enabled": False,
-    "teams_enabled": False,
     "browser_enabled": True,
     "terminal_enabled": True,
 }
@@ -117,7 +116,6 @@ def set_notification_settings(config: ProjectDashboardConfig, settings: dict[str
     payload = {
         "email_enabled": bool(settings.get("email_enabled", True)),
         "slack_enabled": bool(settings.get("slack_enabled", False)),
-        "teams_enabled": bool(settings.get("teams_enabled", False)),
         "browser_enabled": bool(settings.get("browser_enabled", True)),
         "terminal_enabled": bool(settings.get("terminal_enabled", True)),
     }

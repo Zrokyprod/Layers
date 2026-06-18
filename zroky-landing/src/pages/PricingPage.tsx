@@ -167,7 +167,7 @@ const usageRules = [
   {
     icon: Lock,
     title: 'Caps protect both sides',
-    body: 'Self-serve plans use explicit replay and CI limits. Teams get alerts before limits, then upgrade or pause new release-safety execution.',
+    body: 'Self-serve plans use explicit replay and CI limits. Organizations get alerts before limits, then upgrade or pause new release-safety execution.',
   },
 ];
 

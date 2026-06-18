@@ -69,8 +69,6 @@
   SlackInstallStartResponse,
   SlackInstallStatusResponse,
   SlackTestMessageResponse,
-  TeamsInstallStatusResponse,
-  TeamsTestMessageResponse,
   EvaluationSettingsResponse,
   ChangePasswordResponse,
   SecurityStatusResponse,
@@ -114,7 +112,7 @@ type ParsedErrorDetail = {
   code: string | null;
 };
 
-const defaultClientTimeoutMs = 12_000;
+const defaultClientTimeoutMs = 30_000;
 const replayQuotaTimeoutMs = defaultClientTimeoutMs;
 const judgeHealthTimeoutMs = 4_000;
 
@@ -976,7 +974,6 @@ export function getNotifications(signal?: AbortSignal): Promise<NotificationSett
 export function updateNotifications(body: {
   email_enabled: boolean;
   slack_enabled: boolean;
-  teams_enabled: boolean;
   browser_enabled: boolean;
   terminal_enabled: boolean;
 }): Promise<NotificationSettingsResponse> {
@@ -1021,33 +1018,6 @@ export function disconnectSlackInstall(): Promise<SlackInstallStatusResponse> {
 
 export function sendSlackTestMessage(text?: string): Promise<SlackTestMessageResponse> {
   return request<SlackTestMessageResponse>("/v1/integrations/slack/test", {
-    method: "POST",
-    body: { text },
-  });
-}
-
-export function getTeamsInstallStatus(signal?: AbortSignal): Promise<TeamsInstallStatusResponse> {
-  return request<TeamsInstallStatusResponse>("/v1/integrations/teams/status", { signal });
-}
-
-export function upsertTeamsInstall(body: {
-  webhook_url: string;
-  channel_name?: string | null;
-}): Promise<TeamsInstallStatusResponse> {
-  return request<TeamsInstallStatusResponse>("/v1/integrations/teams/install", {
-    method: "PUT",
-    body,
-  });
-}
-
-export function disconnectTeamsInstall(): Promise<TeamsInstallStatusResponse> {
-  return request<TeamsInstallStatusResponse>("/v1/integrations/teams/install", {
-    method: "DELETE",
-  });
-}
-
-export function sendTeamsTestMessage(text?: string): Promise<TeamsTestMessageResponse> {
-  return request<TeamsTestMessageResponse>("/v1/integrations/teams/test", {
     method: "POST",
     body: { text },
   });

@@ -173,7 +173,8 @@ def test_default_boolean_entitlements_by_tier() -> None:
     assert pro["pro.ci_gate_blocking"] is True
     assert pro["enterprise.sso"] is False
 
-    assert all(enterprise[key] is True for key in ENTITLEMENT_KEYS)
+    assert enterprise["enterprise.sso"] is False
+    assert all(enterprise[key] is True for key in ENTITLEMENT_KEYS if key != "enterprise.sso")
 
 
 def test_legacy_aliases_resolve_to_launch_plans() -> None:

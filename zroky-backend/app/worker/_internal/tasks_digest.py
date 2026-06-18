@@ -176,7 +176,7 @@ def notify_fix_watch_recurrences() -> dict:
                 )
                 send_slack_message(slack_msg)
 
-                # Also deliver directly to the tenant's own Slack / Teams channel.
+                # Also deliver directly to the tenant's own Slack channel.
                 from app.services.notification_dispatch import dispatch_alert_to_tenant_channels
                 dispatch_alert_to_tenant_channels(
                     db=session,

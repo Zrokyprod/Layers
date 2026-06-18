@@ -724,6 +724,57 @@
         }
       }
     },
+    "/v1/auth/google/session-callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Oauth Session Callback",
+        "operationId": "google_oauth_session_callback_v1_auth_google_session_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/me": {
       "get": {
         "tags": [
@@ -3729,128 +3780,6 @@
         }
       }
     },
-    "/v1/integrations/teams/status": {
-      "get": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Get Teams Status",
-        "operationId": "get_teams_status_v1_integrations_teams_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsInstallStatusResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/integrations/teams/install": {
-      "put": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Upsert Teams Install",
-        "operationId": "upsert_teams_install_v1_integrations_teams_install_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TeamsInstallRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsInstallStatusResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Disconnect Teams",
-        "operationId": "disconnect_teams_v1_integrations_teams_install_delete",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsInstallStatusResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/integrations/teams/test": {
-      "post": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Send Teams Test Message",
-        "operationId": "send_teams_test_message_v1_integrations_teams_test_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TeamsTestMessageRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsTestMessageResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/notifications": {
       "get": {
         "tags": [
@@ -5809,6 +5738,81 @@
                     "$ref": "#/components/schemas/ProjectResponse"
                   },
                   "title": "Response List Projects V1 Projects Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}": {
+      "delete": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Delete Project",
+        "operationId": "delete_project_v1_projects__project_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
                 }
               }
             }
@@ -11746,6 +11750,100 @@
         }
       }
     },
+    "/v1/owner/billing/payment-recovery": {
+      "get": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Billing Payment Recovery",
+        "operationId": "owner_billing_payment_recovery_v1_owner_billing_payment_recovery_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Owner Billing Payment Recovery V1 Owner Billing Payment Recovery Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/owner/billing/payments/reconcile": {
+      "post": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Reconcile Pending Razorpay Payments",
+        "operationId": "owner_reconcile_pending_razorpay_payments_v1_owner_billing_payments_reconcile_post",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Owner Reconcile Pending Razorpay Payments V1 Owner Billing Payments Reconcile Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/owner/billing/payments/confirm": {
       "post": {
         "tags": [
@@ -14257,6 +14355,57 @@
         "responses": {
           "302": {
             "description": "Redirect to dashboard OAuth handoff callback."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/session-callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Oauth Session Callback",
+        "operationId": "google_oauth_session_callback_api_v1_auth_google_session_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -17276,128 +17425,6 @@
         }
       }
     },
-    "/api/v1/integrations/teams/status": {
-      "get": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Get Teams Status",
-        "operationId": "get_teams_status_api_v1_integrations_teams_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsInstallStatusResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/integrations/teams/install": {
-      "put": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Upsert Teams Install",
-        "operationId": "upsert_teams_install_api_v1_integrations_teams_install_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TeamsInstallRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsInstallStatusResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Disconnect Teams",
-        "operationId": "disconnect_teams_api_v1_integrations_teams_install_delete",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsInstallStatusResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/integrations/teams/test": {
-      "post": {
-        "tags": [
-          "integrations"
-        ],
-        "summary": "Send Teams Test Message",
-        "operationId": "send_teams_test_message_api_v1_integrations_teams_test_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TeamsTestMessageRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeamsTestMessageResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
@@ -19356,6 +19383,81 @@
                     "$ref": "#/components/schemas/ProjectResponse"
                   },
                   "title": "Response List Projects Api V1 Projects Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}": {
+      "delete": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Delete Project",
+        "operationId": "delete_project_api_v1_projects__project_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectResponse"
                 }
               }
             }
@@ -25293,6 +25395,100 @@
         }
       }
     },
+    "/api/v1/owner/billing/payment-recovery": {
+      "get": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Billing Payment Recovery",
+        "operationId": "owner_billing_payment_recovery_api_v1_owner_billing_payment_recovery_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Owner Billing Payment Recovery Api V1 Owner Billing Payment Recovery Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/owner/billing/payments/reconcile": {
+      "post": {
+        "tags": [
+          "owner"
+        ],
+        "summary": "Owner Reconcile Pending Razorpay Payments",
+        "operationId": "owner_reconcile_pending_razorpay_payments_api_v1_owner_billing_payments_reconcile_post",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Owner Reconcile Pending Razorpay Payments Api V1 Owner Billing Payments Reconcile Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/owner/billing/payments/confirm": {
       "post": {
         "tags": [
@@ -30569,9 +30765,9 @@
           "plan_code": {
             "type": "string",
             "title": "Plan Code",
-            "description": "Self-serve plan code: 'pilot' | 'pro' | 'plus'. 'enterprise' is sales-led; 'free' has no checkout.",
+            "description": "Self-serve plan code: 'starter' | 'pro'. Legacy 'pilot' maps to 'starter' and 'plus' maps to 'pro'. 'enterprise' is sales-led; 'free' has no checkout.",
             "examples": [
-              "pro"
+              "starter"
             ]
           },
           "customer_email": {
@@ -38763,11 +38959,6 @@
             "type": "boolean",
             "title": "Slack Enabled"
           },
-          "teams_enabled": {
-            "type": "boolean",
-            "title": "Teams Enabled",
-            "default": false
-          },
           "browser_enabled": {
             "type": "boolean",
             "title": "Browser Enabled"
@@ -38801,11 +38992,6 @@
           "slack_enabled": {
             "type": "boolean",
             "title": "Slack Enabled"
-          },
-          "teams_enabled": {
-            "type": "boolean",
-            "title": "Teams Enabled",
-            "default": false
           },
           "browser_enabled": {
             "type": "boolean",
@@ -41201,6 +41387,21 @@
         ],
         "title": "ProjectCreateRequest"
       },
+      "ProjectDeleteRequest": {
+        "properties": {
+          "confirm_project_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Confirm Project Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirm_project_name"
+        ],
+        "title": "ProjectDeleteRequest"
+      },
       "ProjectInvitationCreateRequest": {
         "properties": {
           "email": {
@@ -43399,6 +43600,10 @@
           "plan_code": {
             "type": "string",
             "title": "Plan Code"
+          },
+          "real_comparison_enabled": {
+            "type": "boolean",
+            "title": "Real Comparison Enabled"
           }
         },
         "type": "object",
@@ -43407,7 +43612,8 @@
           "used",
           "limit",
           "resets_at",
-          "plan_code"
+          "plan_code",
+          "real_comparison_enabled"
         ],
         "title": "ReplayQuotaResponse"
       },
@@ -46303,135 +46509,6 @@
           "by_cluster"
         ],
         "title": "SummaryResponse"
-      },
-      "TeamsInstallRequest": {
-        "properties": {
-          "webhook_url": {
-            "type": "string",
-            "title": "Webhook Url"
-          },
-          "channel_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Channel Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "webhook_url"
-        ],
-        "title": "TeamsInstallRequest"
-      },
-      "TeamsInstallStatusResponse": {
-        "properties": {
-          "connected": {
-            "type": "boolean",
-            "title": "Connected"
-          },
-          "channel_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Channel Name"
-          },
-          "connector_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Connector Type"
-          },
-          "installed_by_user": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Installed By User"
-          },
-          "installed_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Installed At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "connected"
-        ],
-        "title": "TeamsInstallStatusResponse"
-      },
-      "TeamsTestMessageRequest": {
-        "properties": {
-          "text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Text"
-          }
-        },
-        "type": "object",
-        "title": "TeamsTestMessageRequest"
-      },
-      "TeamsTestMessageResponse": {
-        "properties": {
-          "ok": {
-            "type": "boolean",
-            "title": "Ok"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          }
-        },
-        "type": "object",
-        "required": [
-          "ok",
-          "message"
-        ],
-        "title": "TeamsTestMessageResponse"
       },
       "TenantFeatureFlagsResponse": {
         "properties": {

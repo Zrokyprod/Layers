@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
 const devDefaultBaseUrl = "http://127.0.0.1:8000";
-const defaultTimeoutMs = 10_000;
+const defaultTimeoutMs = 30_000;
 
 type RouteContext = {
   params: Promise<{

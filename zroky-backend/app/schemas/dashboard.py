@@ -779,7 +779,6 @@ class RetentionDataErasureResponse(BaseModel):
 class NotificationSettingsUpdateRequest(BaseModel):
     email_enabled: bool
     slack_enabled: bool
-    teams_enabled: bool = False
     browser_enabled: bool
     terminal_enabled: bool
 
@@ -787,7 +786,6 @@ class NotificationSettingsUpdateRequest(BaseModel):
 class NotificationSettingsResponse(BaseModel):
     email_enabled: bool
     slack_enabled: bool
-    teams_enabled: bool = False
     browser_enabled: bool
     terminal_enabled: bool
     updated_at: datetime

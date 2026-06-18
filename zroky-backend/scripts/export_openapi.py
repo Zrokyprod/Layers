@@ -110,6 +110,23 @@ def _patch_heavy_deps() -> None:
     bcrypt_mod.checkpw = MagicMock(return_value=True)
     sys.modules["bcrypt"] = bcrypt_mod
 
+    # razorpay (optional billing SDK; only import-time symbols are needed)
+    razorpay_mod = types.ModuleType("razorpay")
+    razorpay_errors = types.ModuleType("razorpay.errors")
+    razorpay_errors.BadRequestError = type("BadRequestError", (Exception,), {})
+    razorpay_errors.GatewayError = type("GatewayError", (Exception,), {})
+    razorpay_errors.ServerError = type("ServerError", (Exception,), {})
+
+    class _MockRazorpayClient:
+        def __init__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.order = MagicMock()
+            self.payment = MagicMock()
+
+    razorpay_mod.Client = _MockRazorpayClient
+    razorpay_mod.errors = razorpay_errors
+    sys.modules["razorpay"] = razorpay_mod
+    sys.modules["razorpay.errors"] = razorpay_errors
+
     # prometheus_client
     prom_mod = types.ModuleType("prometheus_client")
     prom_mod.Counter = MagicMock

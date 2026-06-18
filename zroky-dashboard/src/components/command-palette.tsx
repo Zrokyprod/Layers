@@ -23,7 +23,7 @@ function useCommandItems(): CommandItem[] {
     { id: "ci-gates", label: "Go to CI Gates", description: "Deploy safety verdicts, failed Goldens, and protected-flow gates", action: () => router.push("/ci-gates") },
     { id: "policies", label: "Go to Policies", description: "Runtime limits, approval rules, allowed tools, and kill switch state", action: () => router.push("/policies") },
     { id: "approvals", label: "Go to Approvals", description: "Paused risky actions, policy hits, and approval audit trail", action: () => router.push("/approvals") },
-    { id: "integrations", label: "Go to Integrations", description: "Provider, GitHub, Slack, Teams, and capture connection health", action: () => router.push("/integrations") },
+    { id: "integrations", label: "Go to Integrations", description: "Provider, GitHub, Slack, and capture connection health", action: () => router.push("/integrations") },
     { id: "home", label: "Open Command Center", description: "Default dashboard home", shortcut: "Ctrl+H", action: () => router.push("/home") },
     { id: "settings-evaluation", label: "Settings → Evaluation", description: "Calibration and judge controls live in settings", action: () => router.push("/settings/evaluation") },
     { id: "settings-evaluation-calibration", label: "Settings → Evaluation → Calibration", description: "Open calibration controls in settings", action: () => router.push("/settings/evaluation?workspace=calibration") },
@@ -34,7 +34,6 @@ function useCommandItems(): CommandItem[] {
     { id: "settings-team", label: "Settings → Members", description: "Invite and remove members", action: () => router.push("/settings/team") },
     { id: "settings-providers", label: "Settings → Providers", description: "Provider keys vault for replay", action: () => router.push("/settings/providers") },
     { id: "integrations-slack", label: "Integrations → Slack", description: "Connect Slack reliability events", action: () => router.push("/settings/integrations/slack") },
-    { id: "integrations-teams", label: "Integrations → Microsoft Teams", description: "Connect Teams reliability events", action: () => router.push("/settings/integrations/teams") },
     { id: "account-profile", label: "Account → Profile", description: "Identity, password, sessions, and account deletion", action: () => router.push("/account") },
   ];
 }
