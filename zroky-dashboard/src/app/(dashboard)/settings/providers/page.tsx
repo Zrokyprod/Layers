@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -28,7 +28,6 @@ import { formatDateTime } from "@/lib/format";
 import {
   PRIMARY_PROVIDER_VALUES,
   PROVIDER_KEY_OPTIONS,
-  normalizeProviderValue,
   providerDescription,
   providerLabel,
 } from "@/lib/provider-registry";
@@ -198,14 +197,6 @@ export default function ProvidersPage() {
     }
   }
 
-  const allProviders = useMemo(() => {
-    return Array.from(new Set([
-      ...PRIMARY_PROVIDER_VALUES,
-      ...PROVIDER_KEY_OPTIONS.map((provider) => provider.value),
-      ...items.map((item) => normalizeProviderValue(item.provider) ?? item.provider),
-    ]));
-  }, [items]);
-
   function getItem(provider: string): ProviderVerificationItem | undefined {
     return items.find((item) => item.provider === provider);
   }
@@ -225,7 +216,6 @@ export default function ProvidersPage() {
   const canManageProviderVault = hasPlanEntitlement(billing?.plan_template, "enterprise.provider_key_vault");
   const providerVaultUnavailable = !billingLoading && !billingError && !canManageProviderVault;
   const providerSaveDisabled = billingLoading || Boolean(billingError);
-  const secondaryProviders = allProviders.filter((provider) => !PRIMARY_PROVIDER_VALUES.includes(provider as typeof PRIMARY_PROVIDER_VALUES[number]));
 
   function renderProviderCard(provider: string, variant: "primary" | "secondary") {
     const item = getItem(provider);
@@ -530,20 +520,6 @@ export default function ProvidersPage() {
           </div>
         )}
       </section>
-
-      {!loading && !error && secondaryProviders.length > 0 ? (
-        <section className="panel providers-card-section providers-secondary-section">
-          <header className="panel-header">
-            <div>
-              <h2>Other provider checks</h2>
-              <p>These providers remain available for teams with custom routing or less common model stacks.</p>
-            </div>
-          </header>
-          <div className="providers-list">
-            {secondaryProviders.map((provider) => renderProviderCard(provider, "secondary"))}
-          </div>
-        </section>
-      ) : null}
 
       {revokeTarget ? (
         <div
