@@ -87,7 +87,7 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
       "30 day retention",
       "Unlimited seats",
       "50 mocked-tool replay runs/mo",
-      "250 Golden traces",
+      "250 fixture traces",
       "Non-blocking CI preview",
       "Provider key vault",
     ],
@@ -104,7 +104,7 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
       "500 real LLM replay runs/mo",
       "500 mocked-tool replay runs/mo",
       "100 live-sandbox replay runs/mo",
-      "2,500 Golden traces",
+      "2,500 fixture traces",
       "Blocking CI gates",
       "Provider key vault and audit log",
     ],
@@ -197,7 +197,7 @@ function upgradeHintMessage(value: string | null): string | null {
     return "Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity.";
   }
   if (value === "pilot.goldens_basic") {
-    return "Goldens require a plan with release-safety entitlements.";
+    return "Contracts require a plan with release-safety entitlements.";
   }
   if (value) {
     return "This feature needs a higher plan or an enabled entitlement.";
@@ -503,8 +503,8 @@ function BillingSettingsContent() {
             </div>
             <div className="kpi-card">
               <div className="kpi-value">{formatUsageMeter(billingUsage?.goldens)}</div>
-              <div className="kpi-label">Golden traces</div>
-              <small>{usageDetail("Goldens", billingUsage?.goldens)}</small>
+              <div className="kpi-label">Fixture traces</div>
+              <small>{usageDetail("Fixtures", billingUsage?.goldens)}</small>
             </div>
             <div className="kpi-card">
               <div className="kpi-value">{billingUsage?.metering_health.state ?? "loading"}</div>

@@ -33,6 +33,10 @@ describe('ZrokyApiClient', () => {
           git_sha: 'sha-1',
           status: 'pending',
           summary_url: '/v1/regression-ci/runs/run-1',
+          runner_required: true,
+          fixture_url: '/v1/regression-ci/runs/run-1/fixture',
+          run_token: 'token',
+          contract_version_ids: ['contract-version-1'],
         },
       });
 
@@ -42,6 +46,7 @@ describe('ZrokyApiClient', () => {
       });
 
       expect(res.run_id).toBe('run-1');
+      expect(res.runner_required).toBe(true);
       expect(mockPostJson).toHaveBeenCalledWith(
         'https://api.test/v1/regression-ci/run',
         expect.objectContaining({ git_sha: 'sha-1' }),
@@ -74,6 +79,60 @@ describe('ZrokyApiClient', () => {
       mockGetJson.mockResolvedValue({ statusCode: 404, result: null });
       await expect(client.getRun('run-1')).rejects.toThrow(
         'Poll failed: HTTP 404',
+      );
+    });
+  });
+
+  describe('repository runner API', () => {
+    it('downloads fixture with the run token', async () => {
+      mockGetJson.mockResolvedValue({
+        statusCode: 200,
+        result: {
+          schema_version: 'zroky_fixture_bundle_v1',
+          run_id: 'run-1',
+          project_id: 'proj-abc',
+          contract_version_ids: ['cv-1'],
+          contracts: [],
+          fixtures: [],
+        },
+      });
+
+      const res = await client.getFixture('/v1/regression-ci/runs/run-1/fixture', 'token-1');
+      expect(res.run_id).toBe('run-1');
+      expect(mockGetJson).toHaveBeenCalledWith(
+        'https://api.test/v1/regression-ci/runs/run-1/fixture',
+        { 'X-Zroky-Run-Token': 'token-1' },
+      );
+    });
+
+    it('uploads evidence with the run token', async () => {
+      mockPostJson.mockResolvedValue({
+        statusCode: 200,
+        result: {
+          run_id: 'run-1',
+          status: 'pass',
+          verdict: 'pass',
+          trial_count: 10,
+          required_trials: 10,
+          critical_violation_count: 0,
+        },
+      });
+
+      const evidence = {
+        candidate_sha: 'sha-1',
+        agent_release: { agent_name: 'Refund' },
+        trials: Array.from({ length: 10 }, () => ({ status: 'pass' })),
+        trace: {},
+        business_outcome: {},
+        state_diff: {},
+        errors: [],
+      };
+      const res = await client.uploadEvidence('run-1', 'token-1', evidence);
+      expect(res.status).toBe('pass');
+      expect(mockPostJson).toHaveBeenCalledWith(
+        'https://api.test/v1/regression-ci/runs/run-1/evidence',
+        evidence,
+        { 'X-Zroky-Run-Token': 'token-1' },
       );
     });
   });

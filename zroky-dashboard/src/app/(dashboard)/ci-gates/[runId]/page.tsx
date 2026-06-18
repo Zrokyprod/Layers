@@ -150,7 +150,7 @@ function GoldenEvidenceList({ items, empty }: { items: Record<string, unknown>[]
   return (
     <div className="ci-flow-list">
       {items.map((item, index) => {
-        const name = stringField(item, "golden_name") ?? stringField(item, "name") ?? "Golden";
+        const name = stringField(item, "golden_name") ?? stringField(item, "name") ?? "Contract evidence";
         const traceId = stringField(item, "golden_trace_id") ?? stringField(item, "trace_id");
         const assertion = stringField(item, "assertion") ?? stringField(item, "status") ?? "failed";
         const replayMode = stringField(item, "replay_mode") ?? "unknown";
@@ -381,18 +381,18 @@ export default function CiGateDetailPage() {
           <section className="ci-card">
             <header className="ci-section-header">
               <div>
-                <h2>Golden gate evidence</h2>
-                <p>Exact Goldens and proof gaps behind this CI verdict.</p>
+                <h2>Contract gate evidence</h2>
+                <p>Exact Contracts, fixtures, and proof gaps behind this CI verdict.</p>
               </div>
             </header>
             <div className="ci-evidence-stack">
               <div>
                 <h3>Blocking failures</h3>
-                <GoldenEvidenceList items={failedGoldens} empty="No blocking Golden failures reported." />
+                <GoldenEvidenceList items={failedGoldens} empty="No blocking Contract failures reported." />
               </div>
               <div>
                 <h3>Warning-only failures</h3>
-                <GoldenEvidenceList items={warnGoldens} empty="No warning-only Golden failures reported." />
+                <GoldenEvidenceList items={warnGoldens} empty="No warning-only Contract failures reported." />
               </div>
               <div>
                 <h3>Not verified reasons</h3>
@@ -411,7 +411,7 @@ export default function CiGateDetailPage() {
             <header className="ci-section-header">
               <div>
                 <h2>Failed protected flows</h2>
-                <p>Protected Golden flows that regressed or need review.</p>
+                <p>Protected Contract flows that regressed or need review.</p>
               </div>
             </header>
             <FlowList flows={flows} />
@@ -499,7 +499,7 @@ export default function CiGateDetailPage() {
                 <RotateCcw aria-hidden="true" />
                 View replay
               </Link>
-              {setId ? <Link href={`/goldens/${setId}`} className="btn btn-soft">View Golden set</Link> : null}
+              {setId ? <Link href={`/goldens/${setId}`} className="btn btn-soft">View fixture set</Link> : null}
               {externalPrUrl ? (
                 <a href={externalPrUrl} className="btn btn-soft" target="_blank" rel="noreferrer">
                   <ExternalLink aria-hidden="true" />

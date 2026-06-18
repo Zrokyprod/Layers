@@ -2008,6 +2008,63 @@ export function generateRecommendations(
   return request("/v1/recommendations/generate", { method: "POST", signal });
 }
 
+// ── Regression Contracts (Paid P0) ──────────────────────────────────────────
+
+export interface RegressionContractVersionView {
+  id: string;
+  contract_id: string;
+  version_number: number;
+  spec_version: string;
+  spec_json: Record<string, unknown>;
+  fixture_set_id: string | null;
+  baseline_release_id: string | null;
+  trial_policy: Record<string, unknown>;
+  evaluator_bundle_version: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
+export interface RegressionContractView {
+  id: string;
+  project_id: string;
+  source_issue_id: string | null;
+  name: string;
+  description: string | null;
+  severity: "low" | "medium" | "high" | "critical";
+  status: "draft" | "active" | "quarantined" | "retired";
+  active_version_id: string | null;
+  owner_id: string | null;
+  created_at: string;
+  updated_at: string;
+  versions: RegressionContractVersionView[];
+}
+
+export interface ImportGoldensResponse {
+  imported_count: number;
+  versions: RegressionContractVersionView[];
+}
+
+export function listRegressionContracts(
+  params: { status?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<RegressionContractView[]> {
+  return request<RegressionContractView[]>("/v1/contracts", {
+    query: {
+      ...(params.status ? { status: params.status } : {}),
+      limit: String(params.limit ?? 100),
+    },
+    signal,
+  });
+}
+
+export function importGoldenContracts(signal?: AbortSignal): Promise<ImportGoldensResponse> {
+  return request<ImportGoldensResponse>("/v1/contracts/import-goldens", {
+    method: "POST",
+    signal,
+  });
+}
+
 // ── Golden Sets (Pilot) ──────────────────────────────────────────────────────
 
 export interface GoldenSetView {

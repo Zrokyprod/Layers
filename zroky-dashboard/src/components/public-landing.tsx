@@ -43,7 +43,7 @@ const logoSrc = "/logo.png?v=landing-white";
 const proofPills: { label: string; verdict: Verdict | "neutral" }[] = [
   { label: "Trace captured", verdict: "neutral" },
   { label: "Replay required", verdict: "review" },
-  { label: "Golden pending", verdict: "review" },
+  { label: "Contract pending", verdict: "review" },
   { label: "CI unprotected", verdict: "block" },
 ];
 
@@ -95,8 +95,8 @@ const loopSteps: LoopStep[] = [
     index: 3,
     title: "Promote",
     verdict: "pass",
-    summary: summarize("A passing replay becomes a golden regression contract."),
-    detail: { body: "A passing replay becomes a golden regression contract." },
+    summary: summarize("A passing replay becomes a regression contract."),
+    detail: { body: "A passing replay becomes a regression contract." },
   },
   {
     key: "gate",
@@ -128,8 +128,8 @@ const moduleViews: Module[] = [
   { key: "trace", label: "Trace", summary: "Span timeline", detail: { body: "Prompt, model, tool call, failure, and owner in one run.", heading: "tool.error → timeout" } },
   { key: "calls", label: "Calls", summary: "Live call queue", detail: { body: "Recent agent calls with model, tool, latency, and cost.", heading: "7.8s · $0.0234" } },
   { key: "replay", label: "Replay", summary: "Original vs fixed run", detail: { body: "Replay proves the tool call and answer changed.", heading: "Called get_refund_status(order_id)" } },
-  { key: "goldens", label: "Goldens", summary: "Refund status protected flow", detail: { body: "Passed replay promoted into a regression contract.", heading: "Tool-call required" } },
-  { key: "ci", label: "CI Gates", summary: "PR #43 blocked", detail: { body: "Golden gate caught a repeated refund regression.", heading: "Blocked regression" } },
+  { key: "goldens", label: "Contracts", summary: "Refund status protected flow", detail: { body: "Passed replay promoted into a regression contract.", heading: "Tool-call required" } },
+  { key: "ci", label: "CI Gates", summary: "PR #43 blocked", detail: { body: "Contract gate caught a repeated refund regression.", heading: "Blocked regression" } },
   { key: "readiness", label: "Readiness", summary: "82% release ready", detail: { body: "Open replay gaps and failed gates before deploy.", heading: "2 failing gates" } },
 ];
 
@@ -162,7 +162,7 @@ const architectureNodes = [
   ["zroky-ai SDK / API", "Capture runs, traces, outputs"],
   ["Trace store", "Traces, events, metadata"],
   ["Replay engine", "Deterministic replay and diff"],
-  ["Golden registry", "Contracts from passed replays"],
+  ["Contract registry", "Contracts from passed replays"],
   ["CI gate", "Block regressions before merge"],
 ];
 const controlChips = [
@@ -271,7 +271,7 @@ export function PublicLanding() {
               */}
               <p className="zlp-visually-hidden">Fix failed agent runs before they ship again</p>
               <p className="zlp-lead">
-                Capture the exact run, replay the fix, promote a golden, and block regressions in CI — with proof,
+                Capture the exact run, replay the fix, promote a Contract, and block regressions in CI - with proof,
                 not vibes.
               </p>
               <div className="zlp-hero-cta">
@@ -320,7 +320,7 @@ export function PublicLanding() {
                 <div className="zlp-runcard">
                   <span className="zlp-vbadge">
                     <CheckCircle2 aria-hidden="true" />
-                    VERIFIED · golden
+                    VERIFIED / contract
                   </span>
                   <div className="zlp-rc-title">refund_agent · status_lookup</div>
                   <div className="zlp-rc-sub zlp-mono">
@@ -561,7 +561,7 @@ export function PublicLanding() {
                     </span>
                     <div>
                       <strong>PR #43 · Update refund flow</strong>
-                      <span>zroky/golden-gate — blocked regression</span>
+                      <span>zroky/contract-gate - blocked regression</span>
                     </div>
                   </div>
                   <div className="zlp-pr pass">
@@ -570,7 +570,7 @@ export function PublicLanding() {
                     </span>
                     <div>
                       <strong>PR #42 · Improve policy wording</strong>
-                      <span>2 goldens run — 0 failed</span>
+                      <span>2 contracts run - 0 failed</span>
                     </div>
                   </div>
                   <p className="zlp-mono zlp-gate-note">Borderline runs get &quot;review&quot; — never a false block.</p>
@@ -682,7 +682,7 @@ export function PublicLanding() {
                 Dashboard
               </span>
               <h2 className="zlp-disp">The dashboard zooms into the part that matters.</h2>
-              <p>Every module is one click from the failing run — issues, trace, calls, replay, goldens, CI gates, and readiness.</p>
+              <p>Every module is one click from the failing run - incidents, replay, Contracts, CI, and settings.</p>
             </div>
 
             {/* Island mount point: ModuleSwitcher (task 9.2). Server renders the

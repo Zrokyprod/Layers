@@ -308,10 +308,10 @@ export default function GoldenDetailPage() {
   if (!set || setQuery.error) {
     return (
       <section className="panel">
-        <p className="notif-error">{setQuery.error?.message ?? "Golden set unavailable."}</p>
+        <p className="notif-error">{setQuery.error?.message ?? "Fixture set unavailable."}</p>
         <Link href="/goldens" className="btn btn-soft">
           <ArrowLeft aria-hidden="true" />
-          Back to Goldens
+          Back to Fixtures
         </Link>
       </section>
     );
@@ -332,7 +332,7 @@ export default function GoldenDetailPage() {
     <div className="goldens-mvp golden-detail-mvp">
       <Link href="/goldens" className="detail-back-link">
         <ArrowLeft aria-hidden="true" />
-        Back to Goldens
+        Back to Fixtures
       </Link>
 
       <section className="gm-hero gd-hero">
@@ -355,8 +355,8 @@ export default function GoldenDetailPage() {
         </aside>
       </section>
 
-      <section className="gm-kpi-grid" aria-label="Golden set metadata">
-        <MetadataCard label="Trace count" value={set.trace_count} helper="Protected traces" />
+      <section className="gm-kpi-grid" aria-label="Fixture set metadata">
+        <MetadataCard label="Trace count" value={set.trace_count} helper="Fixture traces" />
         <MetadataCard label="Last pass rate" value={passRate} helper="Recent runs" />
         <MetadataCard label="Blocks CI" value={blocksCiEligible ? "Yes" : "No"} helper={ciLabel} />
         <MetadataCard label="Needs review" value={needsReviewCount} helper={health} />
@@ -668,7 +668,7 @@ export default function GoldenDetailPage() {
           <section className="gd-card">
             <header className="gm-section-header">
               <div>
-                <h2>Golden health</h2>
+                <h2>Fixture health</h2>
                 <p>Current protection state for this flow.</p>
               </div>
             </header>
@@ -684,7 +684,7 @@ export default function GoldenDetailPage() {
               {health !== "Healthy" ? (
                 <div className="gd-warning">
                   <AlertTriangle aria-hidden="true" />
-                  <span>Draft, flaky, drift-suspected, or empty Goldens should be reviewed before blocking CI.</span>
+                  <span>Draft, flaky, drift-suspected, or empty fixtures should be reviewed before blocking CI.</span>
                 </div>
               ) : null}
               <button
@@ -694,7 +694,7 @@ export default function GoldenDetailPage() {
                 onClick={() => runMutation.mutate()}
               >
                 {runMutation.isPending ? <Loader2 aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
-                {runMutation.isPending ? "Running..." : "Run Golden set"}
+                {runMutation.isPending ? "Running..." : "Run fixture set"}
               </button>
               <button
                 type="button"

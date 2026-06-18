@@ -15,6 +15,7 @@ from app.api.routes.ask import router as ask_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.calls import router as calls_router
 from app.api.routes.capture import router as capture_router
+from app.api.routes.contracts import router as contracts_router
 from app.api.routes.diagnoses import router as diagnoses_router
 from app.api.routes.digest import router as digest_router
 from app.api.routes.export import router as export_router
@@ -90,6 +91,7 @@ api_router.include_router(projects_router, tags=["projects"])
 api_router.include_router(issues_router, tags=["issues"])  # public problem API backed by Anomaly
 api_router.include_router(anomalies_router, tags=["internal"], include_in_schema=False)  # deprecated alias
 api_router.include_router(goldens_router, tags=["goldens"])  # Pilot tier (Module 4.1)
+api_router.include_router(contracts_router, tags=["contracts"])  # Paid P0 canonical regression contracts
 api_router.include_router(replay_router, tags=["replay"])  # legacy single-fix replay jobs
 api_router.include_router(replay_runs_router, tags=["replay-runs"])  # Pilot tier (Module 4.2)
 api_router.include_router(replay_dispatch_router, tags=["replay-dispatch"])  # Pilot tier (Module 9 — GitHub Action)

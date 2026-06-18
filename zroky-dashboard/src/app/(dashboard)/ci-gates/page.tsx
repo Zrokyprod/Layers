@@ -441,8 +441,8 @@ export default function CiGatesPage() {
           <div className="ci-empty">
             <ShieldCheck aria-hidden="true" />
             <strong>No CI gate runs yet</strong>
-            <p>Run Goldens from GitHub CI to block regressions before merge.</p>
-            <Link href="/goldens" className="btn btn-primary">View Goldens</Link>
+            <p>Run active Contracts from GitHub CI to block regressions before merge.</p>
+            <Link href="/contracts" className="btn btn-primary">View Contracts</Link>
           </div>
         ) : filteredRuns.length === 0 ? (
           <div className="ci-empty">

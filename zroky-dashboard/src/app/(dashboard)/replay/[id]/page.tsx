@@ -358,7 +358,7 @@ function verdictDescription(run: ReplayRunDetailItem, confidence: ReplayConfiden
     return "This replay only regraded recorded behavior. It cannot verify a fix.";
   }
   if (confidence === "not_verified") {
-    return "Replay completed, but the result is not trusted enough for CI or Golden creation.";
+    return "Replay completed, but the result is not trusted enough for CI or Contract fixture creation.";
   }
   if (confidence === "fix_failed") {
     return "Candidate replay did not prove the failure is fixed.";
@@ -547,7 +547,7 @@ function CreateGoldenPanel({
       let targetSet: GoldenSetView | null = goldenSetsQuery.data?.items.find((set) => set.id === selectedSetId) ?? null;
       const name = newSetName.trim();
       if (!targetSet) {
-        if (!name) throw new Error("Select a Golden Set or create a new one.");
+        if (!name) throw new Error("Select a fixture set or create a new one.");
         targetSet = await createGoldenSet({
           name,
           description: `Created from verified replay ${run.id}`,
@@ -572,15 +572,15 @@ function CreateGoldenPanel({
       void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
       void queryClient.invalidateQueries({ queryKey: ["golden-traces", targetSet.id] });
     },
-    onError: (error) => setMessage(error instanceof Error ? error.message : "Create Golden failed."),
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Create fixture failed."),
   });
 
   return (
-    <section className="panel replay-lab-cta-card" aria-label="Golden eligibility">
+    <section className="panel replay-lab-cta-card" aria-label="Contract fixture eligibility">
       <header className="panel-header">
         <div>
-          <h3>Golden eligibility</h3>
-          <p>Only verified non-stub replay fixes can be converted into expected production behavior.</p>
+          <h3>Contract fixture eligibility</h3>
+          <p>Only verified non-stub replay fixes can be converted into fixture evidence for Contracts.</p>
         </div>
         <span className={`alert-cat-badge ${canCreateGolden ? "badge-green" : "badge-yellow"}`}>
           {canCreateGolden ? "Eligible" : "Not eligible yet"}
@@ -591,8 +591,8 @@ function CreateGoldenPanel({
         <div className="replay-lab-golden-ready">
           <CheckCircle2 aria-hidden="true" />
           <div>
-            <strong>This replay can become a Golden.</strong>
-            <span>It will protect this flow in future CI runs.</span>
+            <strong>This replay can become a Contract fixture.</strong>
+            <span>It can protect this flow in future CI runs once a Contract is approved.</span>
           </div>
         </div>
       ) : null}
@@ -601,12 +601,12 @@ function CreateGoldenPanel({
         <div className="detail-warning">
           <strong>
             <AlertTriangle aria-hidden="true" />
-            Run trusted replay before creating a Golden.
+            Run trusted replay before creating a Contract fixture.
           </strong>
           <span>
             {run.replay_mode === STUB_REPLAY_MODE
-              ? "Stub replay is sanity-only. Run real comparison replay before converting this result into a Golden."
-              : "Golden creation is enabled only after verification_status is verified_fix and passing replay traces have source calls."}
+              ? "Stub replay is sanity-only. Run real comparison replay before converting this result into a fixture."
+              : "Fixture creation is enabled only after verification_status is verified_fix and passing replay traces have source calls."}
           </span>
         </div>
       ) : null}
@@ -614,7 +614,7 @@ function CreateGoldenPanel({
       {canCreateGolden ? (
         <div className="detail-form-grid">
           <label className="detail-field">
-            <span className="detail-field-label">Golden Set</span>
+            <span className="detail-field-label">Fixture Set</span>
             <select
               className="input"
               value={selectedSetId}
@@ -630,7 +630,7 @@ function CreateGoldenPanel({
             </select>
           </label>
           <label className="detail-field">
-            <span className="detail-field-label">New Golden Set name</span>
+            <span className="detail-field-label">New Fixture Set name</span>
             <input
               className="input"
               value={newSetName}
@@ -646,7 +646,7 @@ function CreateGoldenPanel({
             disabled={createMutation.isPending}
           >
             <ShieldCheck aria-hidden="true" />
-            {createMutation.isPending ? "Creating..." : "Create Golden"}
+            {createMutation.isPending ? "Creating..." : "Create Fixture"}
           </button>
         </div>
       ) : null}
@@ -820,7 +820,7 @@ export default function ReplayRunDetailPage() {
   const sourceId = sourceContextId(run, selectedTrace);
   const isSafeVerifiedFix = confidence === "verified_fix";
   const isUntrustedState = !isSafeVerifiedFix;
-  const trustWarning = "This replay state is not trusted enough to create a Golden or block CI. Run trusted replay first.";
+  const trustWarning = "This replay state is not trusted enough to create a Contract fixture or block CI. Run trusted replay first.";
   const originalInput = detail ? extractPromptText(detail.payload) : null;
   const originalOutput = detail ? extractResponseText(detail.payload) : null;
   const originalToolBehavior = detail ? extractToolBehavior(detail.payload) : null;
@@ -852,7 +852,7 @@ export default function ReplayRunDetailPage() {
             </span>
           </div>
           <h1>Replay</h1>
-          <p>Replay failed agent calls, compare candidate behavior, and verify fixes before creating Goldens.</p>
+          <p>Replay failed agent calls, compare candidate behavior, and verify fixes before creating Contract fixtures.</p>
           <div className="detail-meta-row">
             <span className="mono">{run.id}</span>
             <span>{replayModeLabel(run.replay_mode)}</span>
@@ -885,7 +885,7 @@ export default function ReplayRunDetailPage() {
       <section className="panel replay-lab-stage-map" aria-label="Replay proof stages">
         <ProofStage
           label="Source"
-          value={selectedTrace?.call_id_replayed ? "captured call" : "golden trace"}
+          value={selectedTrace?.call_id_replayed ? "captured call" : "fixture trace"}
           active={Boolean(selectedTrace)}
         />
         <ProofStage
@@ -906,7 +906,7 @@ export default function ReplayRunDetailPage() {
           warn={!isSafeVerifiedFix}
         />
         <ProofStage
-          label="Golden"
+          label="Contract"
           value={isSafeVerifiedFix ? "eligible" : "blocked"}
           active={isSafeVerifiedFix}
           warn={!isSafeVerifiedFix}
@@ -975,7 +975,7 @@ export default function ReplayRunDetailPage() {
           <DetailField title="Source type">
             <strong>{sourceType}</strong>
           </DetailField>
-          <DetailField title={sourceType === "issue" ? "Source issue" : sourceType === "call" ? "Source call" : "Source Golden"}>
+          <DetailField title={sourceType === "issue" ? "Source issue" : sourceType === "call" ? "Source call" : "Source fixture"}>
             {sourceHref ? (
               <Link href={sourceHref} className="replay-lab-source-link mono">
                 {sourceId ?? sourceTitle}
@@ -1218,7 +1218,7 @@ export default function ReplayRunDetailPage() {
           {confidence === "verified_fix" ? (
             <span className="replay-lab-verdict-copy is-safe">
               <CheckCircle2 aria-hidden="true" />
-              Verified fix. Create Golden is available.
+              Verified fix. Create Fixture is available.
             </span>
           ) : null}
           {isUntrustedState ? (

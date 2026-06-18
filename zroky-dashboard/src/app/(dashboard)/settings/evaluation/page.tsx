@@ -296,7 +296,7 @@ function EvaluationSettingsContent() {
         <header className="panel-header">
           <div>
             <h3>Evaluation Controls</h3>
-            <p>Persisted judge and calibration defaults used by replay, goldens, and CI checks.</p>
+            <p>Persisted judge and calibration defaults used by replay, Contracts, and CI checks.</p>
           </div>
           {settings?.updated_at && <span className="hint">Updated {formatDateTime(settings.updated_at)}</span>}
         </header>
@@ -387,8 +387,8 @@ function EvaluationSettingsContent() {
           </div>
           <div className="settings-gate-map-item">
             <FlaskConical aria-hidden="true" />
-            <strong>Goldens</strong>
-            <span>Replay calibration samples can promote trustworthy traces into golden sets.</span>
+            <strong>Contracts</strong>
+            <span>Replay calibration samples can promote trustworthy traces into fixture-backed Contracts.</span>
           </div>
           <div className="settings-gate-map-item">
             <GitBranch aria-hidden="true" />
@@ -416,7 +416,7 @@ function EvaluationSettingsContent() {
             active={activeWorkspace === "calibration"}
             href="/settings/evaluation?workspace=calibration"
             title="Calibration"
-            description="Golden sets, judge accuracy, calibration runs, and score overview."
+            description="Fixture sets, judge accuracy, calibration runs, and score overview."
           />
           <WorkspaceCard
             active={activeWorkspace === "judge"}

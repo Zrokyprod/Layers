@@ -56,8 +56,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "failure-inbox",
     href: "/home",
-    label: "Home",
-    subtitle: "Capture health, failure queue, replay proof, Goldens, CI gates, and next actions.",
+    label: "Overview",
+    subtitle: "Capture health, open incidents, replay proof, contracts, CI gates, and next actions.",
     Icon: Inbox,
     badgeKey: "agents",
     visibleInNav: true,
@@ -69,7 +69,7 @@ const NAV_ITEMS: NavItem[] = [
     subtitle: "Agent safety coverage, open failures, replay proof, Golden coverage, CI coverage, and policy status.",
     Icon: Bot,
     badgeKey: "agents",
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "traces",
@@ -77,12 +77,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Traces",
     subtitle: "Execution evidence for agent inputs, tools, RAG, memory, policies, outcomes, and versions.",
     Icon: GitBranch,
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "issues",
     href: "/issues",
-    label: "Failures",
+    label: "Incidents",
     subtitle: "Clustered production failures with impact, owners, and release decisions.",
     Icon: AlertTriangle,
     badgeKey: "issues",
@@ -91,7 +91,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "replay",
     href: "/replay",
-    label: "Replay",
+    label: "Replays",
     subtitle: "Replay production failures and verify whether a fix is trusted, failed, or not verified.",
     Icon: RotateCcw,
     requiredEntitlement: "pilot.replay_stub",
@@ -99,9 +99,9 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "goldens",
-    href: "/goldens",
-    label: "Goldens",
-    subtitle: "Promoted release guards and regression coverage before merge.",
+    href: "/contracts",
+    label: "Contracts",
+    subtitle: "Regression contracts, fixture evidence, activation proof, and blocking coverage.",
     Icon: Shield,
     requiredEntitlement: "pilot.goldens_basic",
     visibleInNav: true,
@@ -109,7 +109,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "ci-gates",
     href: "/ci-gates",
-    label: "CI Gates",
+    label: "CI",
     subtitle: "Regression CI gate controls for pull request safety.",
     Icon: GitPullRequest,
     requiredEntitlement: "pilot.goldens_basic",
@@ -121,7 +121,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Policies",
     subtitle: "Runtime limits, approval-required actions, allowed tools, and kill switch state.",
     Icon: ShieldAlert,
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "approvals",
@@ -129,7 +129,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Approvals",
     subtitle: "Runtime policy hits, paused risky actions, and human approval decisions.",
     Icon: LockKeyhole,
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "integrations",
@@ -137,13 +137,13 @@ const NAV_ITEMS: NavItem[] = [
     label: "Integrations",
     subtitle: "Provider, GitHub, Slack, and capture connection health.",
     Icon: Plug,
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "settings",
     href: "/settings",
     label: "Settings",
-    subtitle: "Project, providers, billing, notifications, and team controls.",
+    subtitle: "Project, keys, providers, billing, integrations, notifications, and team controls.",
     Icon: Settings2,
     visibleInNav: true,
   },
@@ -166,9 +166,16 @@ const DASHBOARD_ROUTES = [
   {
     id: "home",
     href: "/home",
-    label: "Home",
+    label: "Overview",
     subtitle: "Production failure queue, replay gaps, CI gates, and review actions.",
     Icon: Bot,
+  },
+  {
+    id: "golden-fixtures",
+    href: "/goldens",
+    label: "Fixtures",
+    subtitle: "Backward-compatible Golden fixture evidence under Contracts.",
+    Icon: Shield,
   },
   {
     id: "calls",
@@ -945,7 +952,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             aria-label="Search (Command Palette)"
           >
             <Search className="topbar-search-icon" size={14} aria-hidden="true" />
-            <span className="topbar-search-hint">Search agents, traces, failures...</span>
+            <span className="topbar-search-hint">Search incidents, replays, contracts...</span>
             <kbd className="topbar-search-kbd">⌘K</kbd>
           </button>
 

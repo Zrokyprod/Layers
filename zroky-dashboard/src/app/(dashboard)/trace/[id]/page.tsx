@@ -676,14 +676,14 @@ export default function TraceDetailPage() {
             </button>
           </div>
           <div className="trace-detail-panel-card">
-            <span>Golden eligibility</span>
+            <span>Contract fixture eligibility</span>
             <strong>Not eligible from raw trace</strong>
-            <p>Run trusted replay before creating a Golden.</p>
+            <p>Run trusted replay before creating a Contract fixture.</p>
           </div>
           <div className="trace-detail-panel-card">
             <span>Trust rule</span>
             <strong><ShieldCheck aria-hidden="true" /> Raw trace is evidence only</strong>
-            <p>Create Golden must come from verified replay proof, not raw trace data.</p>
+            <p>Contract fixtures must come from verified replay proof, not raw trace data.</p>
           </div>
         </aside>
       </section>

@@ -44,6 +44,10 @@ inputs:
     description: 'Fail the GitHub check if trusted Golden proof is unavailable'
     required: false
     default: 'true'
+  config_path:
+    description: 'Path to zroky.yaml repository replay config'
+    required: false
+    default: 'zroky.yaml'
 
 outputs:
   run_id:

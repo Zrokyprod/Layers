@@ -45,6 +45,32 @@ class ZrokyApiClient {
         }
         return res.result;
     }
+    async getFixture(fixtureUrl, runToken) {
+        const url = fixtureUrl.startsWith('http') ? fixtureUrl : `${this.baseUrl}${fixtureUrl}`;
+        const res = await this.client.getJson(url, {
+            'X-Zroky-Run-Token': runToken,
+        });
+        if (res.statusCode !== 200) {
+            throw new Error(`Fixture download failed: HTTP ${res.statusCode} - ${JSON.stringify(res.result)}`);
+        }
+        if (!res.result) {
+            throw new Error('Fixture download failed: empty response body');
+        }
+        return res.result;
+    }
+    async uploadEvidence(runId, runToken, body) {
+        const url = `${this.baseUrl}/v1/regression-ci/runs/${encodeURIComponent(runId)}/evidence`;
+        const res = await this.client.postJson(url, body, {
+            'X-Zroky-Run-Token': runToken,
+        });
+        if (res.statusCode !== 200) {
+            throw new Error(`Evidence upload failed: HTTP ${res.statusCode} - ${JSON.stringify(res.result)}`);
+        }
+        if (!res.result) {
+            throw new Error('Evidence upload failed: empty response body');
+        }
+        return res.result;
+    }
 }
 exports.ZrokyApiClient = ZrokyApiClient;
 //# sourceMappingURL=api.js.map

@@ -56,7 +56,7 @@ function CreateSetPanel({ enabled, onCreated }: { enabled: boolean; onCreated: (
   });
 
   return (
-    <section className="panel gm-create-panel" aria-label="Create Golden set">
+    <section className="panel gm-create-panel" aria-label="Create fixture set">
       <header className="gm-section-header">
         <div>
           <h2>Create set</h2>
@@ -68,7 +68,7 @@ function CreateSetPanel({ enabled, onCreated }: { enabled: boolean; onCreated: (
         <label>
           <span>Name</span>
           <input
-            aria-label="Golden set name"
+            aria-label="Fixture set name"
             className="input"
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -79,7 +79,7 @@ function CreateSetPanel({ enabled, onCreated }: { enabled: boolean; onCreated: (
         <label>
           <span>Description</span>
           <input
-            aria-label="Golden set description"
+            aria-label="Fixture set description"
             className="input"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
@@ -223,7 +223,7 @@ export default function GoldensPage() {
   }, [filter, runs, search, sets]);
   const runFirstMutation = useMutation({
     mutationFn: () => {
-      if (!firstRunnableSet) throw new Error("No Golden set available.");
+      if (!firstRunnableSet) throw new Error("No fixture set available.");
       return runGoldenSet(firstRunnableSet.id, { trigger: "manual" });
     },
     onSuccess: (created) => {
@@ -238,10 +238,10 @@ export default function GoldensPage() {
         <div>
           <div className="gm-eyebrow">
             <BookOpen aria-hidden="true" />
-            Verified memory
+            Contract fixtures
           </div>
-          <h1>Goldens</h1>
-          <p>Verified production behaviors protected from future regressions.</p>
+          <h1>Fixtures</h1>
+          <p>Verified production behaviors used as Contract evidence and replay fixtures.</p>
         </div>
         <div className="gm-hero-actions">
           <label className="gm-run-select">
@@ -268,7 +268,7 @@ export default function GoldensPage() {
             onClick={() => runFirstMutation.mutate()}
           >
             {runFirstMutation.isPending ? <Loader2 aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
-            {runFirstMutation.isPending ? "Running..." : "Run Golden set"}
+            {runFirstMutation.isPending ? "Running..." : "Run fixture set"}
             <ArrowRight aria-hidden="true" />
           </button>
           <button
@@ -285,10 +285,10 @@ export default function GoldensPage() {
       </section>
 
       {showLockedBanner ? (
-        <section className="gm-notice" aria-label="Goldens locked">
+        <section className="gm-notice" aria-label="Fixtures locked">
           <AlertTriangle aria-hidden="true" />
           <div>
-            <strong>Goldens locked</strong>
+            <strong>Fixtures locked</strong>
             <p>Upgrade to Starter to create protected flows from verified replay evidence.</p>
           </div>
           <Link href="/settings/billing" className="btn btn-soft">Upgrade</Link>
@@ -296,10 +296,10 @@ export default function GoldensPage() {
       ) : null}
 
       {showEntitlementWarning ? (
-        <section className="gm-notice gm-notice-muted" aria-label="Goldens entitlement unavailable">
+        <section className="gm-notice gm-notice-muted" aria-label="Fixtures entitlement unavailable">
           <AlertTriangle aria-hidden="true" />
           <div>
-            <strong>Goldens entitlement unavailable</strong>
+            <strong>Fixtures entitlement unavailable</strong>
             <p>Refresh workspace plan or contact admin.</p>
           </div>
         </section>
@@ -307,10 +307,10 @@ export default function GoldensPage() {
 
       {showCreate && !showEntitlementWarning ? <CreateSetPanel enabled={canUseGoldens} onCreated={() => setShowCreate(false)} /> : null}
 
-      <section className="fi-kpi-grid gm-kpi-grid" aria-label="Golden KPI summary">
+      <section className="fi-kpi-grid gm-kpi-grid" aria-label="Fixture KPI summary">
         <KpiCard
           icon={<BookOpen aria-hidden="true" />}
-          label="Active Goldens"
+          label="Active fixtures"
           value={String(activeGoldens)}
           helper="Loaded protected traces"
           active={filter === "all"}
@@ -336,13 +336,13 @@ export default function GoldensPage() {
           icon={<Sparkles aria-hidden="true" />}
           label="Last pass rate"
           value={lastPassRate}
-          helper="Recent Golden runs"
+          helper="Recent fixture runs"
         />
       </section>
 
       <section className="gm-table-section">
         <SectionHeader
-          title="Golden sets"
+          title="Fixture sets"
           description="Protected flows, run status, and CI blocking visibility."
           action={
             <div className="gm-table-tools">
@@ -352,7 +352,7 @@ export default function GoldensPage() {
                   className="input"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search Golden sets..."
+                  placeholder="Search fixture sets..."
                 />
               </label>
               <span className="gm-trust-copy">
@@ -361,7 +361,7 @@ export default function GoldensPage() {
               </span>
               <span className="gm-trust-copy">
                 <Sparkles aria-hidden="true" />
-                Only verified replay fixes can become active Goldens.
+                Only verified replay fixes can become active Contracts.
               </span>
             </div>
           }
@@ -370,15 +370,15 @@ export default function GoldensPage() {
         {setsQuery.isLoading ? (
           <div className="gm-empty">
             <Loader2 aria-hidden="true" />
-            <strong>Loading Golden sets...</strong>
+            <strong>Loading fixture sets...</strong>
           </div>
         ) : sets.length === 0 ? (
           <div className="gm-empty">
             <BookOpen aria-hidden="true" />
-            <strong>No Goldens yet</strong>
-            <p>Create a Golden from a verified replay to protect that flow in future CI runs.</p>
+            <strong>No fixtures yet</strong>
+            <p>Create a fixture from a verified replay, then approve a Contract to protect that flow in future CI runs.</p>
             {showEntitlementWarning ? (
-              <p>Replay and Golden creation require an active Starter or Pro entitlement.</p>
+              <p>Replay and fixture creation require an active Starter or Pro entitlement.</p>
             ) : canUseGoldens ? (
               <Link href="/replay" className="btn btn-primary">Go to Replay</Link>
             ) : null}
@@ -386,7 +386,7 @@ export default function GoldensPage() {
         ) : filteredSets.length === 0 ? (
           <div className="gm-empty">
             <Search aria-hidden="true" />
-            <strong>No matching Goldens</strong>
+            <strong>No matching fixtures</strong>
             <p>Clear search or switch KPI filters.</p>
           </div>
         ) : (
@@ -394,7 +394,7 @@ export default function GoldensPage() {
             <table className="gm-table">
               <thead>
                 <tr>
-                  <th>Golden set</th>
+                  <th>Fixture set</th>
                   <th>Traces</th>
                   <th>Last run</th>
                   <th>CI blocking</th>

@@ -37,8 +37,10 @@ Architecture notes:
 """
 import json
 import logging
+import hashlib
+import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -51,8 +53,17 @@ from app.api.dependencies.entitlements import require_entitlement
 from app.api.dependencies.authorization import ROLE_RANK
 from app.api.dependencies.tenant import TenantContext, require_tenant_context, require_tenant_id
 from app.core.limiter import limiter
-from app.db.models import CiGateOverride, GoldenSet, ReplayRun
+from app.db.models import (
+    CiGateOverride,
+    GoldenSet,
+    GoldenTrace,
+    RegressionContract,
+    RegressionContractRunResult,
+    RegressionContractVersion,
+    ReplayRun,
+)
 from app.db.session import SessionLocal, get_db_session
+from app.services.regression_contracts import json_object
 from app.services.regression_ci.blast_radius import ChangedFile
 from app.services.regression_ci.models import (
     BlastRadius,
@@ -67,6 +78,7 @@ from app.services.regression_ci.orchestrator import (
     run_regression_ci,
 )
 from app.services.regression_ci.pr_comment import format_markdown
+from app.services.release_identity import resolve_release_identity
 
 router = APIRouter(
     prefix="/v1/regression-ci",
@@ -104,7 +116,14 @@ class RegressionCIRunRequest(BaseModel):
     require for audit / dashboard linking — runs without a SHA can't be
     tied back to a commit so we reject them at the schema layer)."""
 
-    git_sha: str = Field(..., min_length=4, max_length=64)
+    git_sha: Optional[str] = Field(None, min_length=4, max_length=64)
+    repository: Optional[str] = Field(None, min_length=1, max_length=255)
+    pull_request_number: Optional[int] = Field(None, ge=1)
+    head_sha: Optional[str] = Field(None, min_length=4, max_length=64)
+    base_sha: Optional[str] = Field(None, min_length=4, max_length=64)
+    workflow_run_id: Optional[str] = Field(None, min_length=1, max_length=64)
+    workflow_attempt: Optional[int] = Field(None, ge=1)
+    contract_version_ids: list[str] = Field(default_factory=list)
     pr_body: Optional[str] = Field(None, max_length=65_536)
     zroky_yaml: Optional[str] = Field(None, max_length=16_384)
     changed_files: list[ChangedFilePayload] = Field(default_factory=list)
@@ -122,6 +141,10 @@ class RegressionCIRunResponse(BaseModel):
     git_sha: str
     status: str
     summary_url: str
+    fixture_url: Optional[str] = None
+    run_token: Optional[str] = None
+    contract_version_ids: list[str] = Field(default_factory=list)
+    runner_required: bool = False
 
 
 class RegressionCIRunDetailResponse(BaseModel):
@@ -131,6 +154,9 @@ class RegressionCIRunDetailResponse(BaseModel):
     run_id: str
     project_id: str
     git_sha: Optional[str]
+    head_sha: Optional[str] = None
+    repository: Optional[str] = None
+    pull_request_number: Optional[int] = None
     status: str
     created_at: datetime
     started_at: Optional[datetime]
@@ -156,6 +182,26 @@ class RegressionCIOverrideResponse(BaseModel):
     status: str
     effective_status: str
     override: dict[str, Any]
+
+
+class RegressionCIEvidenceRequest(BaseModel):
+    candidate_sha: str = Field(..., min_length=4, max_length=64)
+    agent_release: dict[str, Any]
+    trials: list[dict[str, Any]]
+    trace: dict[str, Any]
+    business_outcome: dict[str, Any]
+    state_diff: dict[str, Any]
+    errors: list[Any] = Field(default_factory=list)
+
+
+class RegressionCIEvidenceResponse(BaseModel):
+    run_id: str
+    status: str
+    verdict: str
+    trial_count: int
+    required_trials: int
+    critical_violation_count: int
+    not_verified_reasons: list[str] = Field(default_factory=list)
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -206,6 +252,199 @@ def _build_summary_url(run_id: str) -> str:
     """Absolute path to the run-detail GET. Returned to GitHub Action so
     it can use it as the PR check `details_url`."""
     return f"/v1/regression-ci/runs/{run_id}"
+
+
+def _build_fixture_url(run_id: str) -> str:
+    return f"/v1/regression-ci/runs/{run_id}/fixture"
+
+
+def _hash_run_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _new_run_token() -> tuple[str, str]:
+    token = secrets.token_urlsafe(32)
+    return token, _hash_run_token(token)
+
+
+def _verify_run_token(row: ReplayRun, request: Request) -> None:
+    token = (request.headers.get("X-Zroky-Run-Token") or "").strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Run token required")
+    if not row.run_token_hash or not secrets.compare_digest(_hash_run_token(token), row.run_token_hash):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid run token")
+    expires_at = row.run_token_expires_at
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Run token expired")
+
+
+def _contract_version_ids(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed if str(item).strip()]
+
+
+def _active_contract_version_ids(db: Session, *, project_id: str) -> list[str]:
+    rows = db.execute(
+        select(RegressionContract.active_version_id)
+        .where(
+            RegressionContract.project_id == project_id,
+            RegressionContract.status == "active",
+            RegressionContract.active_version_id.is_not(None),
+        )
+        .order_by(RegressionContract.updated_at.desc(), RegressionContract.id.desc())
+    ).scalars()
+    return [str(row) for row in rows if row]
+
+
+def _load_contract_versions(
+    db: Session,
+    *,
+    project_id: str,
+    version_ids: list[str],
+) -> list[RegressionContractVersion]:
+    if not version_ids:
+        return []
+    return list(
+        db.execute(
+            select(RegressionContractVersion)
+            .where(
+                RegressionContractVersion.project_id == project_id,
+                RegressionContractVersion.id.in_(version_ids),
+            )
+            .order_by(RegressionContractVersion.created_at.asc(), RegressionContractVersion.id.asc())
+        ).scalars()
+    )
+
+
+def _trial_policy(row: RegressionContractVersion) -> dict[str, int]:
+    policy = json_object(row.trial_policy_json)
+    return {
+        "required_trials": max(10, int(policy.get("required_trials") or 10)),
+        "critical_violation_tolerance": int(policy.get("critical_violation_tolerance") or 0),
+    }
+
+
+def _mark_superseded_runs(
+    db: Session,
+    *,
+    project_id: str,
+    repository: str | None,
+    pull_request_number: int | None,
+    head_sha: str,
+    superseding_run_id: str,
+    now: datetime,
+) -> None:
+    if not repository or pull_request_number is None:
+        return
+    rows = db.execute(
+        select(ReplayRun).where(
+            ReplayRun.project_id == project_id,
+            ReplayRun.repository == repository,
+            ReplayRun.pull_request_number == pull_request_number,
+            ReplayRun.id != superseding_run_id,
+            ReplayRun.head_sha.is_not(None),
+            ReplayRun.head_sha != head_sha,
+            ReplayRun.superseded_by_run_id.is_(None),
+        )
+    ).scalars()
+    for row in rows:
+        row.superseded_by_run_id = superseding_run_id
+        if row.status in {"pending", "running"}:
+            row.status = "not_verified"
+            row.completed_at = now
+            row.summary_json = json.dumps(
+                {
+                    "schema_version": "repository_replay_v1",
+                    "run_id": row.id,
+                    "project_id": project_id,
+                    "git_sha": row.git_sha,
+                    "head_sha": row.head_sha,
+                    "verdict": "not_verified",
+                    "not_verified_reasons": ["superseded_by_new_head_sha"],
+                    "superseded_by_run_id": superseding_run_id,
+                },
+                separators=(",", ":"),
+            )
+        db.add(row)
+
+
+def _critical_violation_count(errors: list[Any]) -> int:
+    total = 0
+    for item in errors:
+        if not isinstance(item, dict):
+            continue
+        severity = str(item.get("severity") or item.get("level") or "").strip().lower()
+        kind = str(item.get("type") or item.get("code") or "").strip().lower()
+        if severity == "critical" or kind == "critical_violation":
+            try:
+                total += int(item.get("count") or 1)
+            except (TypeError, ValueError):
+                total += 1
+    return total
+
+
+def _runner_error_present(errors: list[Any]) -> bool:
+    for item in errors:
+        if isinstance(item, str) and item.strip():
+            return True
+        if not isinstance(item, dict):
+            continue
+        severity = str(item.get("severity") or item.get("level") or "").strip().lower()
+        kind = str(item.get("type") or item.get("code") or "").strip().lower()
+        if severity in {"error", "fatal", "runner"}:
+            return True
+        if kind in {"runner_error", "setup_error", "timeout", "invalid_output"}:
+            return True
+    return False
+
+
+def _resolve_candidate_release(
+    db: Session,
+    *,
+    tenant_id: str,
+    evidence: RegressionCIEvidenceRequest,
+):
+    agent_release = dict(evidence.agent_release or {})
+    versions = dict(agent_release.get("versions") or {}) if isinstance(agent_release.get("versions"), dict) else {}
+    for key in (
+        "application_version",
+        "app_version",
+        "deployment_id",
+        "prompt_version",
+        "model_parameters_hash",
+        "model_config_hash",
+        "tool_schema_hash",
+        "tool_schema_version",
+        "retrieval_version",
+        "rag_version",
+    ):
+        if agent_release.get(key) is not None and key not in versions:
+            versions[key] = agent_release[key]
+    versions.setdefault("code_sha", evidence.candidate_sha)
+    payload = {
+        "environment": agent_release.get("environment") or "ci",
+        "versions": versions,
+        "metadata": agent_release,
+    }
+    model_name = agent_release.get("model_name") or agent_release.get("model")
+    return resolve_release_identity(
+        db,
+        project_id=tenant_id,
+        payload=payload,
+        provider=agent_release.get("model_provider") or agent_release.get("provider"),
+        model=model_name,
+        agent_name=agent_release.get("agent_name") or agent_release.get("name") or "repository-runner",
+        is_production=False,
+    )
 
 
 def _coerce_override(
@@ -510,69 +749,119 @@ def post_run(
     """
     # Validate override up-front (raises 422 on bad category).
     _coerce_override(body.operator_override)
+    resolved_head_sha = (body.head_sha or body.git_sha or "").strip()
+    if not resolved_head_sha:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="head_sha is required; git_sha is accepted as a backwards-compatible alias.",
+        )
 
     # Ensure the FK target exists.
     _ensure_synthetic_golden_set(db, project_id=tenant_id)
 
     run_id = str(uuid4())
     now = datetime.now(timezone.utc)
+    requested_contract_ids = [item.strip() for item in body.contract_version_ids if item.strip()]
+    contract_version_ids = requested_contract_ids or _active_contract_version_ids(db, project_id=tenant_id)
+    if contract_version_ids:
+        selected_versions = _load_contract_versions(
+            db,
+            project_id=tenant_id,
+            version_ids=contract_version_ids,
+        )
+        if len(selected_versions) != len(set(contract_version_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="One or more contract_version_ids are not available for this project.",
+            )
+        contract_version_ids = [version.id for version in selected_versions]
+    runner_required = bool(contract_version_ids)
+    run_token: str | None = None
+    run_token_hash: str | None = None
+    if runner_required:
+        run_token, run_token_hash = _new_run_token()
 
     queued_run = ReplayRun(
         id=run_id,
         project_id=tenant_id,
         golden_set_id=_synthetic_golden_set_id(tenant_id),
         trigger="github",
-        git_sha=body.git_sha,
+        git_sha=body.git_sha or resolved_head_sha,
+        repository=body.repository,
+        pull_request_number=body.pull_request_number,
+        head_sha=resolved_head_sha,
+        base_sha=body.base_sha,
+        workflow_run_id=body.workflow_run_id,
+        workflow_attempt=body.workflow_attempt,
+        contract_version_ids_json=json.dumps(contract_version_ids, separators=(",", ":")) if contract_version_ids else None,
+        runner_required=runner_required,
+        run_token_hash=run_token_hash,
+        run_token_expires_at=now + timedelta(hours=1) if run_token_hash else None,
         status="pending",
         created_at=now,
         summary_json=None,
     )
     db.add(queued_run)
+    db.flush()
+    _mark_superseded_runs(
+        db,
+        project_id=tenant_id,
+        repository=body.repository,
+        pull_request_number=body.pull_request_number,
+        head_sha=resolved_head_sha,
+        superseding_run_id=run_id,
+        now=now,
+    )
     db.commit()
 
     request_payload = body.model_dump(mode="json")
 
-    try:
-        from app.worker.tasks import process_regression_ci_run
+    if not runner_required:
+        try:
+            from app.worker.tasks import process_regression_ci_run
 
-        process_regression_ci_run.apply_async(
-            args=[tenant_id, run_id, request_payload],
-            queue="diagnosis_pattern",
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception(
-            "regression_ci.dispatch.enqueue_failed tenant=%s run=%s",
-            tenant_id,
-            run_id,
-        )
-        error_summary = {
-            "schema_version": "v1",
-            "run_id": run_id,
-            "project_id": tenant_id,
-            "verdict": "error",
-            "notes": [f"celery_enqueue_failed:{type(exc).__name__}"],
-        }
-        queued_run.status = "error"
-        queued_run.completed_at = datetime.now(timezone.utc)
-        queued_run.summary_json = json.dumps(error_summary)
-        db.add(queued_run)
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Regression CI queue unavailable. Retry after the worker broker is healthy.",
-        ) from exc
+            process_regression_ci_run.apply_async(
+                args=[tenant_id, run_id, request_payload],
+                queue="diagnosis_pattern",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "regression_ci.dispatch.enqueue_failed tenant=%s run=%s",
+                tenant_id,
+                run_id,
+            )
+            error_summary = {
+                "schema_version": "v1",
+                "run_id": run_id,
+                "project_id": tenant_id,
+                "verdict": "error",
+                "notes": [f"celery_enqueue_failed:{type(exc).__name__}"],
+            }
+            queued_run.status = "error"
+            queued_run.completed_at = datetime.now(timezone.utc)
+            queued_run.summary_json = json.dumps(error_summary)
+            db.add(queued_run)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Regression CI queue unavailable. Retry after the worker broker is healthy.",
+            ) from exc
 
     logger.info(
         "regression_ci.dispatch tenant=%s run=%s sha=%s files=%d",
-        tenant_id, run_id, body.git_sha, len(body.changed_files),
+        tenant_id, run_id, resolved_head_sha, len(body.changed_files),
     )
 
     return RegressionCIRunResponse(
         run_id=run_id,
         project_id=tenant_id,
-        git_sha=body.git_sha,
+        git_sha=body.git_sha or resolved_head_sha,
         status="queued",
         summary_url=_build_summary_url(run_id),
+        fixture_url=_build_fixture_url(run_id) if runner_required else None,
+        run_token=run_token,
+        contract_version_ids=contract_version_ids,
+        runner_required=runner_required,
     )
 
 
@@ -642,6 +931,9 @@ def get_run(
         run_id=row.id,
         project_id=row.project_id,
         git_sha=row.git_sha,
+        head_sha=row.head_sha,
+        repository=row.repository,
+        pull_request_number=row.pull_request_number,
         status=row.status,
         created_at=row.created_at,
         started_at=row.started_at,
@@ -653,6 +945,197 @@ def get_run(
         override=override,
         report=report_dict,
         pr_comment_markdown=pr_comment,
+    )
+
+
+@router.get("/runs/{run_id}/fixture")
+@limiter.limit("120/minute")
+def get_run_fixture(
+    request: Request,
+    run_id: str,
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> dict[str, Any]:
+    row = db.execute(
+        select(ReplayRun).where(
+            ReplayRun.id == run_id,
+            ReplayRun.project_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    if not row.runner_required:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Repository runner is not required for this run")
+    _verify_run_token(row, request)
+
+    version_ids = _contract_version_ids(row.contract_version_ids_json)
+    versions = _load_contract_versions(db, project_id=tenant_id, version_ids=version_ids)
+    fixture_set_ids = sorted({version.fixture_set_id for version in versions if version.fixture_set_id})
+    traces = []
+    if fixture_set_ids:
+        traces = list(
+            db.execute(
+                select(GoldenTrace).where(
+                    GoldenTrace.project_id == tenant_id,
+                    GoldenTrace.golden_set_id.in_(fixture_set_ids),
+                )
+            ).scalars()
+        )
+
+    return {
+        "schema_version": "zroky_fixture_bundle_v1",
+        "run_id": row.id,
+        "project_id": row.project_id,
+        "repository": row.repository,
+        "pull_request_number": row.pull_request_number,
+        "head_sha": row.head_sha or row.git_sha,
+        "base_sha": row.base_sha,
+        "contract_version_ids": [version.id for version in versions],
+        "contracts": [
+            {
+                "contract_id": version.contract_id,
+                "contract_version_id": version.id,
+                "version_number": version.version_number,
+                "spec_version": version.spec_version,
+                "spec": json_object(version.spec_json),
+                "fixture_set_id": version.fixture_set_id,
+                "baseline_release_id": version.baseline_release_id,
+                "trial_policy": json_object(version.trial_policy_json),
+                "evaluator_bundle_version": version.evaluator_bundle_version,
+            }
+            for version in versions
+        ],
+        "fixtures": [
+            {
+                "fixture_id": trace.id,
+                "fixture_set_id": trace.golden_set_id,
+                "call_id": trace.call_id,
+                "status": trace.status,
+                "expected_output_text": trace.expected_output_text,
+                "source_output_text": trace.source_output_text,
+                "source_evidence": json_object(trace.source_evidence_json),
+                "criteria": json_object(trace.criteria_json),
+                "weight": float(trace.weight or 1),
+            }
+            for trace in traces
+        ],
+    }
+
+
+@router.post("/runs/{run_id}/evidence", response_model=RegressionCIEvidenceResponse)
+@limiter.limit("120/minute")
+def upload_run_evidence(
+    request: Request,
+    run_id: str,
+    body: RegressionCIEvidenceRequest = Body(...),
+    tenant_id: str = Depends(require_tenant_id),
+    db: Session = Depends(get_db_session),
+) -> RegressionCIEvidenceResponse:
+    row = db.execute(
+        select(ReplayRun).where(
+            ReplayRun.id == run_id,
+            ReplayRun.project_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    if not row.runner_required:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Repository runner evidence is not expected")
+    _verify_run_token(row, request)
+
+    versions = _load_contract_versions(
+        db,
+        project_id=tenant_id,
+        version_ids=_contract_version_ids(row.contract_version_ids_json),
+    )
+    required_trials = max((_trial_policy(version)["required_trials"] for version in versions), default=10)
+    tolerance = max((_trial_policy(version)["critical_violation_tolerance"] for version in versions), default=0)
+    trial_count = len(body.trials)
+    critical_count = _critical_violation_count(body.errors)
+    expected_sha = (row.head_sha or row.git_sha or "").strip()
+    not_verified: list[str] = []
+    if not versions:
+        not_verified.append("active_contract_versions_missing")
+    if expected_sha and body.candidate_sha != expected_sha:
+        not_verified.append("candidate_sha_mismatch")
+    if trial_count < required_trials:
+        not_verified.append("required_trials_not_completed")
+
+    if _runner_error_present(body.errors):
+        verdict = "error"
+    elif not_verified:
+        verdict = "not_verified"
+    elif critical_count > tolerance:
+        verdict = "fail"
+    else:
+        verdict = "pass"
+
+    identity = _resolve_candidate_release(db, tenant_id=tenant_id, evidence=body)
+    now = datetime.now(timezone.utc)
+    for version in versions:
+        existing = db.execute(
+            select(RegressionContractRunResult).where(
+                RegressionContractRunResult.project_id == tenant_id,
+                RegressionContractRunResult.replay_run_id == row.id,
+                RegressionContractRunResult.contract_version_id == version.id,
+            )
+        ).scalar_one_or_none()
+        result = existing or RegressionContractRunResult(
+            id=str(uuid4()),
+            project_id=tenant_id,
+            replay_run_id=row.id,
+            contract_id=version.contract_id,
+            contract_version_id=version.id,
+            created_at=now,
+        )
+        result.candidate_release_id = identity.agent_release_id
+        result.candidate_sha = body.candidate_sha
+        result.status = verdict
+        result.trial_count = trial_count
+        result.required_trials = required_trials
+        result.critical_violation_count = critical_count
+        result.evaluator_bundle_version = version.evaluator_bundle_version
+        result.evidence_json = json.dumps(body.model_dump(mode="json"), separators=(",", ":"), default=str)
+        result.completed_at = now
+        db.add(result)
+
+    row.candidate_release_id = identity.agent_release_id
+    row.status = verdict
+    row.started_at = row.started_at or now
+    row.completed_at = now
+    row.summary_json = json.dumps(
+        {
+            "schema_version": "repository_replay_v1",
+            "run_id": row.id,
+            "project_id": row.project_id,
+            "git_sha": row.git_sha,
+            "head_sha": row.head_sha,
+            "repository": row.repository,
+            "pull_request_number": row.pull_request_number,
+            "verdict": verdict,
+            "runner": "repository",
+            "contract_version_ids": [version.id for version in versions],
+            "trial_count": trial_count,
+            "required_trials": required_trials,
+            "critical_violation_count": critical_count,
+            "not_verified_reasons": not_verified,
+            "errors": body.errors,
+            "candidate_sha": body.candidate_sha,
+        },
+        separators=(",", ":"),
+        default=str,
+    )
+    db.add(row)
+    db.commit()
+
+    return RegressionCIEvidenceResponse(
+        run_id=row.id,
+        status=row.status,
+        verdict=verdict,
+        trial_count=trial_count,
+        required_trials=required_trials,
+        critical_violation_count=critical_count,
+        not_verified_reasons=not_verified,
     )
 
 

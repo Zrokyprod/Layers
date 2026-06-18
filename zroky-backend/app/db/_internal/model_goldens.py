@@ -120,6 +120,22 @@ class ReplayRun(Base):
     )
     trigger: Mapped[str] = mapped_column(String(16), nullable=False)
     git_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    repository: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pull_request_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    head_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    base_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    workflow_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    workflow_attempt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contract_version_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    runner_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    run_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    run_token_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    superseded_by_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    candidate_release_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_releases.id", ondelete="SET NULL"), nullable=True
+    )
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'pending'")
     )
@@ -148,6 +164,8 @@ class ReplayRun(Base):
         ),
         Index("ix_replay_runs_project_created", "project_id", "created_at"),
         Index("ix_replay_runs_project_status", "project_id", "status"),
+        Index("ix_replay_runs_project_head_sha", "project_id", "head_sha"),
+        Index("ix_replay_runs_project_pr_created", "project_id", "repository", "pull_request_number", "created_at"),
         Index("ix_replay_runs_golden_set_id", "golden_set_id"),
     )
 

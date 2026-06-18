@@ -19,7 +19,17 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Call, Project, ReplayRun
+from app.db.models import (
+    Agent,
+    AgentRelease,
+    Call,
+    Environment,
+    GoldenSet,
+    Project,
+    RegressionContract,
+    RegressionContractVersion,
+    ReplayRun,
+)
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 
@@ -85,6 +95,58 @@ def _seed_project_and_calls(session, project_id: str, n: int = 5):
     session.commit()
 
 
+def _seed_active_contract(session, project_id: str) -> str:
+    env = Environment(id=str(uuid4()), project_id=project_id, name="production", type="production")
+    agent = Agent(id=str(uuid4()), project_id=project_id, name="Refund Agent", slug="refund-agent")
+    release = AgentRelease(
+        id=str(uuid4()),
+        project_id=project_id,
+        agent_id=agent.id,
+        environment_id=env.id,
+        git_sha="broken-sha",
+        prompt_version="refund-v1",
+        tool_schema_hash="refund-tools-v1",
+        release_fingerprint=uuid4().hex,
+    )
+    fixture = GoldenSet(id=str(uuid4()), project_id=project_id, name="Refund fixtures", blocks_ci=True)
+    contract = RegressionContract(
+        id=str(uuid4()),
+        project_id=project_id,
+        name="refund-status-required",
+        severity="critical",
+        status="active",
+    )
+    version = RegressionContractVersion(
+        id=str(uuid4()),
+        contract_id=contract.id,
+        project_id=project_id,
+        version_number=1,
+        spec_json=json.dumps(
+            {
+                "schema": "regression_contract_v1",
+                "assertions": [{"must_call": "get_refund_status"}],
+                "proof": {
+                    "baseline_reproduced": True,
+                    "candidate_verified": True,
+                    "required_trials": 10,
+                    "critical_violations": 0,
+                    "fixture_pinned": True,
+                    "evaluator_bundle_pinned": True,
+                    "candidate_sha": "fix-sha",
+                },
+            }
+        ),
+        fixture_set_id=fixture.id,
+        baseline_release_id=release.id,
+        trial_policy_json=json.dumps({"required_trials": 10, "critical_violation_tolerance": 0}),
+        evaluator_bundle_version="default-v1",
+    )
+    contract.active_version_id = version.id
+    session.add_all([env, agent, release, fixture, contract, version])
+    session.commit()
+    return version.id
+
+
 class TestPostRun:
     def test_returns_202_creates_run_and_enqueues_celery(self, client, _stub_regression_ci_task):
         sf = client._session_factory
@@ -106,6 +168,103 @@ class TestPostRun:
         assert task["args"][0] == "proj-post"
         assert task["args"][1] == data["run_id"]
         assert task["args"][2]["git_sha"] == "abc123"
+
+    def test_active_contract_returns_repository_runner_fields_and_skips_celery(self, client, _stub_regression_ci_task):
+        sf = client._session_factory
+        with sf() as s:
+            _seed_project_and_calls(s, "proj-runner")
+            version_id = _seed_active_contract(s, "proj-runner")
+
+        resp = client.post(
+            "/v1/regression-ci/run",
+            headers={"X-Project-Id": "proj-runner"},
+            json={
+                "head_sha": "head123",
+                "repository": "acme/refunds",
+                "pull_request_number": 42,
+                "base_sha": "base123",
+                "workflow_run_id": "987",
+                "workflow_attempt": 2,
+            },
+        )
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["runner_required"] is True
+        assert data["fixture_url"].endswith("/fixture")
+        assert data["run_token"]
+        assert data["contract_version_ids"] == [version_id]
+        assert len(_stub_regression_ci_task) == 0
+
+        with sf() as s:
+            run = s.get(ReplayRun, data["run_id"])
+            assert run.repository == "acme/refunds"
+            assert run.pull_request_number == 42
+            assert run.head_sha == "head123"
+            assert run.base_sha == "base123"
+            assert run.workflow_run_id == "987"
+            assert run.workflow_attempt == 2
+            assert run.runner_required is True
+
+    def test_repository_runner_evidence_is_fail_closed_for_fewer_trials(self, client, _stub_regression_ci_task):
+        sf = client._session_factory
+        with sf() as s:
+            _seed_project_and_calls(s, "proj-evidence")
+            version_id = _seed_active_contract(s, "proj-evidence")
+
+        run_resp = client.post(
+            "/v1/regression-ci/run",
+            headers={"X-Project-Id": "proj-evidence"},
+            json={"head_sha": "fix-sha", "repository": "acme/refunds", "pull_request_number": 7},
+        )
+        assert run_resp.status_code == 202
+        run = run_resp.json()
+
+        fixture = client.get(
+            run["fixture_url"],
+            headers={
+                "X-Project-Id": "proj-evidence",
+                "X-Zroky-Run-Token": run["run_token"],
+            },
+        )
+        assert fixture.status_code == 200
+        assert fixture.json()["contract_version_ids"] == [version_id]
+
+        evidence = client.post(
+            f"/v1/regression-ci/runs/{run['run_id']}/evidence",
+            headers={
+                "X-Project-Id": "proj-evidence",
+                "X-Zroky-Run-Token": run["run_token"],
+            },
+            json={
+                "candidate_sha": "fix-sha",
+                "agent_release": {
+                    "agent_name": "Refund Agent",
+                    "environment": "ci",
+                    "model_provider": "openai",
+                    "model_name": "gpt-4o",
+                    "prompt_version": "refund-v2",
+                    "tool_schema_hash": "refund-tools-v1",
+                },
+                "trials": [{"status": "pass"} for _ in range(9)],
+                "trace": {"tool_calls": ["get_refund_status"]},
+                "business_outcome": {"status": "ok"},
+                "state_diff": {},
+                "errors": [],
+            },
+        )
+        assert evidence.status_code == 200
+        body = evidence.json()
+        assert body["status"] == "not_verified"
+        assert body["required_trials"] == 10
+        assert body["not_verified_reasons"] == ["required_trials_not_completed"]
+
+        detail = client.get(
+            f"/v1/regression-ci/runs/{run['run_id']}",
+            headers={"X-Project-Id": "proj-evidence"},
+        )
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "not_verified"
+        assert detail.json()["report"]["verdict"] == "not_verified"
 
     def test_git_sha_required(self, client):
         resp = client.post(

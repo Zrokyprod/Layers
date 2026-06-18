@@ -815,8 +815,8 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
                   View calls
                   <ArrowRight aria-hidden="true" />
                 </Link>
-                <Link href="/goldens" className="btn btn-soft">
-                  Promote golden
+                <Link href="/contracts" className="btn btn-soft">
+                  Promote contract
                 </Link>
               </div>
             </div>

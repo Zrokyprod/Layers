@@ -4250,7 +4250,7 @@ body:has(.app-shell) {
   }
 
   .app-shell .goldens-mvp .gm-table td:nth-child(1)::before {
-    content: "Golden set";
+    content: "Fixture set";
   }
 
   .app-shell .goldens-mvp .gm-table td:nth-child(2)::before {

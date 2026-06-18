@@ -275,7 +275,7 @@ function CallsPageContent() {
               Evidence drill-down
             </div>
             <h1>Call Evidence</h1>
-            <p>Supporting call-level evidence for traces, failures, replay proof, Goldens, CI gates, and cost-risk investigations.</p>
+            <p>Supporting call-level evidence for traces, incidents, replay proof, Contracts, CI gates, and cost-risk investigations.</p>
           </div>
           <div className="calls-hero-actions">
             <button type="button" className="btn btn-soft" onClick={handleExport} title="Download current filter as CSV">

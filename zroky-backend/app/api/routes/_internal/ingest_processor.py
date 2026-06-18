@@ -27,6 +27,7 @@ from app.services.cost_buckets import enrich_payload_with_cost_buckets
 from app.services.ingest_protection import IngestRateLimitDecision, evaluate_ingest_rate_limit
 from app.services.privacy import mask_error_message, mask_payload
 from app.services.redis_client import get_redis_client
+from app.services.release_identity import resolve_release_identity
 from app.services.trace_graph import upsert_trace_graph_for_call
 from app.worker.tasks import process_diagnosis
 
@@ -334,6 +335,18 @@ def process_ingest_batch_for_tenant(
             payload=payload,
             custom_patterns=custom_pii_patterns,
         )
+        identity = resolve_release_identity(
+            db,
+            project_id=tenant_id,
+            payload=payload,
+            provider=call.provider,
+            model=call.model,
+            agent_name=call.agent_name,
+            is_production=call.is_production,
+        )
+        call.environment_id = identity.environment_id
+        call.agent_id = identity.agent_id
+        call.agent_release_id = identity.agent_release_id
         job = DiagnosisJob(
             tenant_id=tenant_id,
             diagnosis_id=diagnosis_id,
@@ -423,5 +436,4 @@ def process_ingest_batch_for_tenant(
         metering_failed=metering_failed,
         metering_warnings=metering_warnings,
     )
-
 

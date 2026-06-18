@@ -73,7 +73,7 @@ export function actionLabel(status: CiGateStatus): string {
 
 export function verdictSubtitle(status: CiGateStatus): string {
   if (status === "pass") return "Trusted replay completed under threshold.";
-  if (status === "warn") return "Only warning-only Golden evidence failed; blocking Goldens passed.";
+  if (status === "warn") return "Only warning-only evidence failed; blocking Contracts passed.";
   if (status === "fail") return "Regression CI blocked this change.";
   if (status === "error") return "The run encountered an infrastructure or provider error.";
   if (status === "not_verified") return NOT_VERIFIED_COPY;

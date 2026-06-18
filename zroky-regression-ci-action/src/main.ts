@@ -7,6 +7,8 @@ import * as github from '@actions/github';
 import { ZrokyApiClient, ChangedFile } from './api';
 import { pollUntilTerminal } from './poll';
 import { postOrUpdateComment } from './comment';
+import { loadZrokyConfig } from './config';
+import { buildRunnerErrorEvidence, executeRepositoryRunner } from './runner';
 
 async function run(): Promise<void> {
   try {
@@ -21,6 +23,8 @@ async function run(): Promise<void> {
     const postComment = core.getBooleanInput('post_pr_comment');
     const failOnRegression = core.getBooleanInput('fail_on_regression');
     const failOnNotVerified = core.getBooleanInput('fail_on_not_verified');
+    const configPath = core.getInput('config_path') || 'zroky.yaml';
+    const zrokyConfig = await loadZrokyConfig(configPath);
 
     // ── derive PR metadata ────────────────────────────────────────────────
     const ctx = github.context;
@@ -31,7 +35,10 @@ async function run(): Promise<void> {
     }
 
     const gitSha: string = pr.head.sha;
+    const baseSha: string = pr.base.sha;
     const prBody: string = pr.body || '';
+    const repository = `${ctx.repo.owner}/${ctx.repo.repo}`;
+    const workflowAttempt = parseInt(process.env.GITHUB_RUN_ATTEMPT || '1', 10);
 
     // Build changed-files list from the payload (Action must run after checkout).
     const changedFiles: ChangedFile[] = [];
@@ -60,7 +67,15 @@ async function run(): Promise<void> {
     const client = new ZrokyApiClient(baseUrl, apiKey, projectId);
     const dispatch = await client.dispatchRun({
       git_sha: gitSha,
+      head_sha: gitSha,
+      base_sha: baseSha,
+      repository,
+      pull_request_number: pr.number,
+      workflow_run_id: String(ctx.runId),
+      workflow_attempt: Number.isFinite(workflowAttempt) ? workflowAttempt : 1,
       pr_body: prBody,
+      zroky_yaml: zrokyConfig.raw,
+      contract_version_ids: contractVersionIdsFromConfig(zrokyConfig.contracts?.include || []),
       changed_files: changedFiles,
       threshold,
       sample_window_days: sampleWindowDays,
@@ -68,6 +83,39 @@ async function run(): Promise<void> {
 
     core.info(`Dispatched regression-ci run ${dispatch.run_id} for ${gitSha}`);
     core.setOutput('run_id', dispatch.run_id);
+
+    if (dispatch.runner_required) {
+      if (!dispatch.fixture_url || !dispatch.run_token) {
+        throw new Error('Repository replay was requested but fixture_url or run_token was missing.');
+      }
+      const fixture = await client.getFixture(dispatch.fixture_url, dispatch.run_token);
+      const runnerCommand = zrokyConfig.runner?.command;
+      if (!runnerCommand) {
+        await client.uploadEvidence(
+          dispatch.run_id,
+          dispatch.run_token,
+          buildRunnerErrorEvidence(
+            gitSha,
+            'setup_error',
+            'runner.command is required in zroky.yaml when repository replay is active',
+          ),
+        );
+      } else {
+        const evidence = await executeRepositoryRunner({
+          command: runnerCommand,
+          timeoutSeconds: zrokyConfig.runner?.timeoutSeconds || timeout,
+          fixture,
+          runId: dispatch.run_id,
+          candidateSha: gitSha,
+          contractVersionIds: dispatch.contract_version_ids || [],
+        });
+        const evidenceResult = await client.uploadEvidence(dispatch.run_id, dispatch.run_token, evidence);
+        core.info(
+          `Uploaded repository replay evidence: verdict=${evidenceResult.verdict}, ` +
+            `trials=${evidenceResult.trial_count}/${evidenceResult.required_trials}`,
+        );
+      }
+    }
 
     // ── poll ──────────────────────────────────────────────────────────────
     const result = await pollUntilTerminal(client, dispatch.run_id, {
@@ -98,7 +146,7 @@ async function run(): Promise<void> {
 
     if (failOnNotVerified && detail.status === 'not_verified') {
       core.setFailed(
-        'Regression CI could not prove safety with trusted Goldens. ' +
+        'Regression CI could not prove safety with active Contracts. ' +
           'See the PR comment or dashboard for missing proof.',
       );
       return;
@@ -114,7 +162,7 @@ async function run(): Promise<void> {
     }
 
     if (detail.status === 'warn') {
-      core.warning('Regression CI produced warning-only Golden evidence.');
+      core.warning('Regression CI produced warning-only evidence.');
       return;
     }
 
@@ -126,6 +174,10 @@ async function run(): Promise<void> {
       core.setFailed(String(error));
     }
   }
+}
+
+function contractVersionIdsFromConfig(include: string[]): string[] {
+  return include.filter((item) => /^[0-9a-fA-F-]{32,36}$/.test(item));
 }
 
 run();

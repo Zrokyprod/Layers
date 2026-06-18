@@ -14,17 +14,11 @@ interface CommandItem {
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
   return [
-    { id: "command-center", label: "Go to Command Center", description: "Open capture health, failures, replay gaps, Goldens, CI gates, and policy status", shortcut: "Ctrl+A", action: () => router.push("/home") },
-    { id: "agents", label: "Go to Agents", description: "Agent safety coverage, replay proof, and open failure status", action: () => router.push("/agents") },
-    { id: "traces", label: "Go to Traces", description: "Execution evidence across inputs, tools, RAG, memory, policy, outcome, and versions", action: () => router.push("/trace") },
-    { id: "issues", label: "Go to Failures", description: "Grouped production failures with root cause and action context", shortcut: "Ctrl+I", action: () => router.push("/issues") },
-    { id: "replay", label: "Go to Replay", description: "Verify fixes against production-derived traces before deploying", action: () => router.push("/replay") },
-    { id: "goldens", label: "Go to Goldens", description: "Production-derived regression contracts and CI blocking coverage", action: () => router.push("/goldens") },
-    { id: "ci-gates", label: "Go to CI Gates", description: "Deploy safety verdicts, failed Goldens, and protected-flow gates", action: () => router.push("/ci-gates") },
-    { id: "policies", label: "Go to Policies", description: "Runtime limits, approval rules, allowed tools, and kill switch state", action: () => router.push("/policies") },
-    { id: "approvals", label: "Go to Approvals", description: "Paused risky actions, policy hits, and approval audit trail", action: () => router.push("/approvals") },
-    { id: "integrations", label: "Go to Integrations", description: "Provider, GitHub, Slack, and capture connection health", action: () => router.push("/integrations") },
-    { id: "home", label: "Open Command Center", description: "Default dashboard home", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "overview", label: "Go to Overview", description: "Capture health, incidents, replay proof, contracts, and CI gates", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "issues", label: "Go to Incidents", description: "Grouped production failures with root cause and action context", shortcut: "Ctrl+I", action: () => router.push("/issues") },
+    { id: "replay", label: "Go to Replays", description: "Verify fixes against production-derived traces before deploying", action: () => router.push("/replay") },
+    { id: "contracts", label: "Go to Contracts", description: "Regression contracts, fixtures, approval proof, and blocking coverage", action: () => router.push("/contracts") },
+    { id: "ci-gates", label: "Go to CI", description: "Deploy safety verdicts, contract failures, and protected-flow gates", action: () => router.push("/ci-gates") },
     { id: "settings-evaluation", label: "Settings → Evaluation", description: "Calibration and judge controls live in settings", action: () => router.push("/settings/evaluation") },
     { id: "settings-evaluation-calibration", label: "Settings → Evaluation → Calibration", description: "Open calibration controls in settings", action: () => router.push("/settings/evaluation?workspace=calibration") },
     { id: "settings-evaluation-judge", label: "Settings → Evaluation → Judge", description: "Open judge controls in settings", action: () => router.push("/settings/evaluation?workspace=judge") },

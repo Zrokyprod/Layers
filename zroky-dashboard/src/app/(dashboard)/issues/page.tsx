@@ -149,7 +149,7 @@ function issueNextAction(issue: IssueItem): IssueNextAction {
 
 function issueNextActionLabel(action: IssueNextAction): string {
   if (action === "run_replay") return "Run replay";
-  if (action === "promote_golden") return "Promote Golden";
+  if (action === "promote_golden") return "Promote Contract";
   if (action === "run_ci_gate") return "Run CI gate";
   if (action === "open_ci_gate") return "Open CI gate";
   return "Assign / resolve";
@@ -158,7 +158,7 @@ function issueNextActionLabel(action: IssueNextAction): string {
 function issueNextActionHref(issue: IssueItem): string {
   const action = issueNextAction(issue);
   if (action === "open_ci_gate" && issue.proof?.ci_gate?.run_id) return `/ci-gates/${issue.proof.ci_gate.run_id}`;
-  if (action === "promote_golden" && issue.sample_call_id) return `/goldens?call_id=${encodeURIComponent(issue.sample_call_id)}`;
+  if (action === "promote_golden" && issue.sample_call_id) return `/contracts?call_id=${encodeURIComponent(issue.sample_call_id)}`;
   return `/issues/${issue.id}`;
 }
 
@@ -343,7 +343,7 @@ export default function IssuesPage() {
       return (
         <Link href={`/goldens?call_id=${encodeURIComponent(issue.sample_call_id)}`} className="btn btn-primary btn-sm im-btn-primary">
           <ShieldCheck aria-hidden="true" />
-          Create Golden
+          Promote Contract
         </Link>
       );
     }
@@ -376,7 +376,7 @@ export default function IssuesPage() {
             <AlertTriangle aria-hidden="true" />
             Grouped failures
           </div>
-          <h1>Failures</h1>
+          <h1>Incidents</h1>
           <p>Grouped production failures detected across your agents.</p>
         </div>
         <button
@@ -428,7 +428,7 @@ export default function IssuesPage() {
           icon={<RotateCcw aria-hidden="true" />}
           label="Replay gaps"
           value={formatCount(replayGapCount)}
-          helper="Need trusted replay before Golden or CI protection."
+          helper="Need trusted replay before Contract or CI protection."
           active={filters.replayProof === "no_trusted_replay"}
           onClick={() => setFilters((prev) => ({ ...prev, replayProof: "no_trusted_replay" }))}
         />
@@ -444,7 +444,7 @@ export default function IssuesPage() {
           icon={<DollarSign aria-hidden="true" />}
           label="Loaded impact"
           value={formatUsd(loadedIssueImpactUsd)}
-          helper={`${formatCount(goldenCandidateCount)} verified fixes can become Goldens.`}
+          helper={`${formatCount(goldenCandidateCount)} verified fixes can become Contracts.`}
         />
       </section>
 

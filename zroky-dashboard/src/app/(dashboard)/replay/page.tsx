@@ -59,7 +59,7 @@ const STATUSES = ["", "pending", "running", "pass", "fail", "error"] as const;
 const LAUNCH_SOURCES = [
   { value: "issue", label: "Issue", helper: "Best for proving a diagnosed production failure." },
   { value: "call", label: "Call", helper: "Replay one captured failed call directly." },
-  { value: "golden", label: "Golden Set", helper: "Run a regression pack against current config." },
+  { value: "golden", label: "Fixture Set", helper: "Run fixture evidence against current config." },
   { value: "ci", label: "PR / CI", helper: "Create a live regression gate tied to a commit SHA." },
 ] as const;
 
@@ -571,7 +571,7 @@ function ReplayPageContent() {
   });
   const goldenRunMutation = useMutation({
     mutationFn: (mode: ReplayMode) => {
-      if (!selectedGoldenId) throw new Error("Select a Golden Set with at least one trace.");
+      if (!selectedGoldenId) throw new Error("Select a fixture set with at least one trace.");
       return runGoldenSet(selectedGoldenId, {
         trigger: "manual",
         replay_mode: mode,
@@ -580,7 +580,7 @@ function ReplayPageContent() {
       });
     },
     onSuccess: afterGoldenRun,
-    onError: (error) => setLaunchMessage(error instanceof Error ? error.message : "Golden replay failed."),
+    onError: (error) => setLaunchMessage(error instanceof Error ? error.message : "Fixture replay failed."),
   });
   const ciRunMutation = useMutation({
     mutationFn: () => {
@@ -714,8 +714,8 @@ function ReplayPageContent() {
             </div>
             <h1>Replay</h1>
             <p>
-              Launch trusted replay from an Issue, Call, Golden Set, or commit SHA. Zroky reproduces the failure, compares the
-              candidate behavior, and tells you if the fix is safe enough for Golden memory or CI.
+              Launch trusted replay from an issue, failed call, fixture set, or commit SHA. Zroky reproduces the failure, compares the
+              candidate behavior, and tells you if the fix is safe enough for a Contract or CI.
             </p>
           </div>
           <div className="replay-hero-actions">
@@ -723,13 +723,13 @@ function ReplayPageContent() {
               Start replay
               <ArrowRight aria-hidden="true" />
             </a>
-            <Link href="/goldens" className="btn btn-soft">
-              View Goldens
+            <Link href="/contracts" className="btn btn-soft">
+              View Contracts
             </Link>
           </div>
         </div>
         <div className="replay-proof-ladder" aria-label="Replay proof ladder">
-          {["source captured", "failure reproduced", "candidate replayed", "judge verified", "golden ready", "CI gate"].map((step, index) => (
+          {["source captured", "failure reproduced", "candidate replayed", "judge verified", "contract ready", "CI gate"].map((step, index) => (
             <span key={step} className={index < 3 ? "is-hot" : ""}>
               {step}
             </span>
@@ -847,12 +847,12 @@ function ReplayPageContent() {
 
             {launchSource === "golden" ? (
               <SourcePicker<GoldenSetView>
-                label="Golden Set"
+                label="Fixture Set"
                 searchValue={goldenSearch}
-                searchPlaceholder="Search Golden Set name or id..."
+                searchPlaceholder="Search fixture set name or id..."
                 items={filteredGoldenSets}
                 selectedId={selectedGoldenId}
-                emptyLabel={goldenSets.length ? "No Golden Sets match this search." : "No Golden Sets loaded."}
+                emptyLabel={goldenSets.length ? "No fixture sets match this search." : "No fixture sets loaded."}
                 getId={(set) => set.id}
                 getTitle={(set) => set.name}
                 getMeta={(set) => `${set.trace_count} traces - ${set.blocks_ci ? "blocks CI" : "does not block CI"}`}
@@ -939,7 +939,7 @@ function ReplayPageContent() {
                   : launchSource === "call"
                     ? selectedCall ? optionCallLabel(selectedCall) : selectedCallId || "No call"
                     : launchSource === "golden"
-                      ? selectedGolden?.name || selectedGoldenId || "No Golden Set"
+                      ? selectedGolden?.name || selectedGoldenId || "No fixture set"
                       : gitSha.trim() || "No SHA"
               }
               helper={
@@ -963,7 +963,7 @@ function ReplayPageContent() {
             />
             <SourceCard title="Proof strength" value={replayModeLabel(replayMode)} helper={replayModeProof(replayMode)} />
             <SourceCard
-              title={launchSource === "issue" ? "Sample call" : launchSource === "call" ? "Call id" : "Golden coverage"}
+              title={launchSource === "issue" ? "Sample call" : launchSource === "call" ? "Call id" : "Fixture coverage"}
               value={
                 launchSource === "issue"
                   ? selectedIssue?.sample_call_id ?? "No sample call"
@@ -1022,7 +1022,7 @@ function ReplayPageContent() {
         </div>
         <input
           type="text"
-          placeholder="Filter by Golden Set ID..."
+          placeholder="Filter by fixture set ID..."
           value={goldenSetId}
           onChange={(event) => {
             setGoldenSetId(event.target.value);
@@ -1042,7 +1042,7 @@ function ReplayPageContent() {
         <section className="empty replay-empty">
           <History aria-hidden="true" />
           <strong>No replay runs yet.</strong>
-          <span>Prove a discovered failure: launch a replay from an Issue, Call, Golden Set, or CI commit above — Zroky reproduces the failure and scores how faithfully the fix holds.</span>
+          <span>Prove a discovered failure: launch a replay from an issue, failed call, fixture set, or CI commit above - Zroky reproduces the failure and scores how faithfully the fix holds.</span>
           <Link href="/home" className="btn btn-soft" style={{ marginTop: 6 }}>
             Go to Command Center
             <ArrowRight aria-hidden="true" />

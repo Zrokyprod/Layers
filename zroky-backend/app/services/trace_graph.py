@@ -259,6 +259,9 @@ def upsert_trace_graph_for_call(
     span.parent_span_id = parent_span_id
     span.call_id = call.id
     span.event_id = call.event_id
+    span.environment_id = call.environment_id
+    span.agent_id = call.agent_id
+    span.agent_release_id = call.agent_release_id
     span.span_type = _derive_span_type(call, payload)
     span.span_name = _bounded_text(payload.get("span_name"), max_length=255)
     span.span_index = payload.get("span_index") if isinstance(payload.get("span_index"), int) else payload.get("step_index")

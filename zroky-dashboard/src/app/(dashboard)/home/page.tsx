@@ -93,7 +93,7 @@ const refreshIntervalMs = 30_000;
 const loadSourceLabels: Record<InboxLoadKey, string> = {
   issues: "Issues",
   replayRuns: "Replay runs",
-  goldenSets: "Goldens",
+  goldenSets: "Contracts",
   billing: "Billing",
   quota: "Replay quota",
   summary: "Analytics",
@@ -263,9 +263,9 @@ function filterIssuesForFocus(items: IssueItem[], focus: InboxQueueFocus): Issue
 
 function queueFocusDescription(focus: InboxQueueFocus): string {
   if (focus === "critical_high") return "Showing critical and high severity issues.";
-  if (focus === "replay_gap") return "Showing issues that cannot become Goldens or block CI yet.";
+  if (focus === "replay_gap") return "Showing issues that cannot become Contracts or block CI yet.";
   if (focus === "impact") return "Showing issues with cost impact, sorted by spend exposure.";
-  if (focus === "verified") return "Showing issues with verified fixes ready for Golden coverage.";
+  if (focus === "verified") return "Showing issues with verified fixes ready for Contract coverage.";
   return "Sorted by severity, impact, and replay trust gaps.";
 }
 
@@ -645,7 +645,7 @@ export default function HomePage() {
           ? {
               eyebrow: "Protection gap",
               title: `${formatCount(needsTrustedReplayCount)} unprotected production failure${needsTrustedReplayCount === 1 ? "" : "s"}`,
-              summary: "Run replay proof before promoting the flow into Goldens or CI gates.",
+              summary: "Run replay proof before promoting the flow into Contracts or CI gates.",
               tone: "warning" as const,
               action: renderIssueAction(firstUnprotectedIssue, { replayLabel: "Run replay", viewLabel: "Open issue" }),
             }
@@ -722,9 +722,9 @@ export default function HomePage() {
     }
     if (action === "open_goldens") {
       return (
-        <Link href="/goldens" className="btn btn-primary btn-sm fi-btn-primary">
+        <Link href="/contracts" className="btn btn-primary btn-sm fi-btn-primary">
           <ShieldCheck aria-hidden="true" />
-          Open Goldens
+          Open Contracts
         </Link>
       );
     }
@@ -839,8 +839,8 @@ export default function HomePage() {
       status: latestReplayRun?.status ?? (caps.canReplay ? "pending" : "locked"),
     },
     {
-      label: "Latest golden update",
-      title: latestGoldenSet?.name ?? "No golden set",
+      label: "Latest contract update",
+      title: latestGoldenSet?.name ?? "No contract set",
       detail: latestGoldenSet ? `${formatCount(latestGoldenSet.trace_count)} traces` : "Waiting for verified replay",
       status: latestGoldenSet?.blocks_ci ? "protected" : latestGoldenSet ? "review" : "waiting",
     },
@@ -855,7 +855,7 @@ export default function HomePage() {
     { label: "Traces", value: formatCount(capturedCallCount), helper: `${captureLabel}`, tone: captureHasProblem ? "warning" : capturedCallCount > 0 ? "success" : "neutral" },
     { label: "Issues", value: `${formatCount(openIssuesCount)} open`, helper: `${formatCount(needsTrustedReplayCount)} need replay`, tone: openIssuesCount > 0 ? "warning" : "success" },
     { label: "Replay", value: `${formatCount(replayPassRate)}% pass`, helper: `${formatCount(replayFailCount)} failing`, tone: replayFailCount > 0 || needsTrustedReplayCount > 0 ? "warning" : "success" },
-    { label: "Goldens", value: `${formatCount(protectedGoldenCount)} protected`, helper: `${formatCount(goldensNeedingReview.length)} need review`, tone: goldensNeedingReview.length > 0 ? "warning" : protectedGoldenCount > 0 ? "success" : "neutral" },
+    { label: "Contracts", value: `${formatCount(protectedGoldenCount)} protected`, helper: `${formatCount(goldensNeedingReview.length)} need review`, tone: goldensNeedingReview.length > 0 ? "warning" : protectedGoldenCount > 0 ? "success" : "neutral" },
     { label: "CI gates", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocking` : "healthy", helper: caps.canCi ? "gate checks active" : "upgrade required", tone: failedCiRuns.length > 0 ? "danger" : caps.canCi ? "success" : "neutral" },
   ];
 
@@ -863,7 +863,7 @@ export default function HomePage() {
     <div className="fi-screen" aria-busy={loading || refreshing}>
       <section className="fi-hero fi-command-hero" data-tone={heroSignal.tone}>
         <div className="fi-hero-main">
-          <h1>Home</h1>
+          <h1>Overview</h1>
           <div className="fi-hero-signal" aria-live="polite">
             <span className="fi-hero-eyebrow">{heroSignal.eyebrow}</span>
             <strong>{heroSignal.title}</strong>
@@ -1064,7 +1064,7 @@ export default function HomePage() {
           ) : (
             <>
               <section className="fi-section fi-recent-evidence" aria-label="Recent evidence">
-                <SectionHeader title="Recent evidence" description="Latest traces, failures, replay, and Golden updates." />
+                <SectionHeader title="Recent evidence" description="Latest traces, incidents, replay, and Contract updates." />
                 <div className="fi-evidence-list">
                   {recentEvidenceRows.map((row) => (
                     <div className="fi-evidence-row" key={row.label}>

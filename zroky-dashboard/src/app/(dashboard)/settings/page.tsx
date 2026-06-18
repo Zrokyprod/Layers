@@ -253,7 +253,7 @@ export default function SettingsPage() {
             <div className="settings-project-toolbar">
               <div>
                 <h2>Projects</h2>
-                <p>Manage the exact project context used for capture, replay, goldens, and CI gates.</p>
+                <p>Manage the exact project context used for capture, replay, Contracts, and CI gates.</p>
               </div>
               <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
                 <RefreshCw aria-hidden="true" />

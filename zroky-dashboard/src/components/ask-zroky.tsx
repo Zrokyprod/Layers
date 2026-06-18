@@ -121,7 +121,7 @@ function buildWorkflowActions(turn: ChatTurn): AskWorkflowAction[] {
     if (kind === "open_issue" && issueId) actions.push({ kind, label: "Open Issue", href: `/issues/${encodeURIComponent(issueId)}` });
     if (kind === "open_call" && callId) actions.push({ kind, label: "Open Call", href: `/calls/${encodeURIComponent(callId)}` });
     if (kind === "open_trace" && traceId) actions.push({ kind, label: "Open Trace", href: `/trace/${encodeURIComponent(traceId)}` });
-    if (kind === "promote_golden" && replayId) actions.push({ kind, label: "Promote Golden" });
+    if (kind === "promote_golden" && replayId) actions.push({ kind, label: "Promote Contract" });
     if (kind === "promote_golden" && !replayId && !seen.has("create_replay") && (issueId || callId)) {
       seen.add("create_replay");
       actions.push({ kind: "create_replay", label: "Create Replay First" });

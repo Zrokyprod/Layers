@@ -5,11 +5,13 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.api.routes import ingest as ingest_routes
 from app.db.base import Base
+from app.db.models import AgentRelease, Call, TraceSpan
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.privacy import hash_identifier
@@ -45,6 +47,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("app.api.routes.ingest.process_diagnosis.delay", _mock_delay)
 
     with TestClient(app) as test_client:
+        test_client._session_factory = testing_session_local  # type: ignore[attr-defined]
         yield test_client
 
     app.dependency_overrides.clear()
@@ -571,6 +574,53 @@ def test_rich_ingest_event_creates_masked_trace_graph(client: TestClient) -> Non
     assert "sk-proj-" not in rendered
     assert "[REDACTED_EMAIL]" in rendered
     assert "[REDACTED_KEY]" in rendered
+
+
+def test_ingest_lazily_creates_environment_agent_and_release_identity(client: TestClient) -> None:
+    headers = {"X-Project-Id": "proj-release-identity"}
+    event = _event("release-identity-call")
+    event.update(
+        {
+            "environment": "production",
+            "trace_id": "release-identity-trace",
+            "versions": {
+                "code_sha": "abc123",
+                "deployment_id": "deploy-9",
+                "prompt_version": "refund-v8",
+                "tool_schema_version": "refund-tools-v2",
+                "rag_version": "refund-index-v4",
+            },
+        }
+    )
+
+    response = client.post("/api/v1/ingest", headers=headers, json={"events": [event]})
+    assert response.status_code == 202
+
+    sf = client._session_factory  # type: ignore[attr-defined]
+    with sf() as session:
+        call = session.get(Call, "release-identity-call")
+        assert call is not None
+        assert call.environment_id
+        assert call.agent_id
+        assert call.agent_release_id
+
+        release = session.get(AgentRelease, call.agent_release_id)
+        assert release is not None
+        assert release.git_sha == "abc123"
+        assert release.application_version == "deploy-9"
+        assert release.prompt_version == "refund-v8"
+        assert release.tool_schema_hash == "refund-tools-v2"
+        assert release.retrieval_version == "refund-index-v4"
+
+        span = session.execute(
+            select(TraceSpan).where(
+                TraceSpan.project_id == "proj-release-identity",
+                TraceSpan.call_id == "release-identity-call",
+            )
+        ).scalar_one()
+        assert span.environment_id == call.environment_id
+        assert span.agent_id == call.agent_id
+        assert span.agent_release_id == call.agent_release_id
 
 
 def test_missing_trace_id_becomes_one_node_trace(client: TestClient) -> None:

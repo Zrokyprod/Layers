@@ -56,6 +56,15 @@ class Call(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), nullable=False)
     event_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    environment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("environments.id", ondelete="SET NULL"), nullable=True
+    )
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+    agent_release_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_releases.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, server_default=func.now()
     )
@@ -103,6 +112,8 @@ class Call(Base):
         Index("ix_calls_project_provider", "project_id", "provider"),
         Index("ix_calls_project_provider_model_created", "project_id", "provider", "model", "created_at"),
         Index("ix_calls_project_agent_created", "project_id", "agent_name", "created_at"),
+        Index("ix_calls_project_environment_created", "project_id", "environment_id", "created_at"),
+        Index("ix_calls_project_agent_release_created", "project_id", "agent_release_id", "created_at"),
         Index("ix_calls_project_user_created", "project_id", "user_id", "created_at"),
         Index("ix_calls_project_call_type_created", "project_id", "call_type", "created_at"),
         Index("ix_calls_project_exchange_rate_timestamp", "project_id", "exchange_rate_timestamp"),
@@ -122,6 +133,15 @@ class TraceSpan(Base):
         String(64),
         ForeignKey("calls.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    environment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("environments.id", ondelete="SET NULL"), nullable=True
+    )
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )
+    agent_release_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_releases.id", ondelete="SET NULL"), nullable=True
     )
     event_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     span_type: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'other'"))
@@ -166,6 +186,8 @@ class TraceSpan(Base):
         Index("ix_trace_spans_project_trace_index", "project_id", "trace_id", "span_index"),
         Index("ix_trace_spans_project_type_created", "project_id", "span_type", "created_at"),
         Index("ix_trace_spans_project_call", "project_id", "call_id"),
+        Index("ix_trace_spans_project_environment", "project_id", "environment_id"),
+        Index("ix_trace_spans_project_agent_release", "project_id", "agent_release_id"),
         Index("ix_trace_spans_project_parent", "project_id", "parent_span_id"),
     )
 

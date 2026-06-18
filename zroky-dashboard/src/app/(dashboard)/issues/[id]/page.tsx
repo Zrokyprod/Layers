@@ -157,20 +157,20 @@ function replayBlocker(issue: IssueItem): string {
   if (!issue.sample_call_id) return "Trusted replay needs a representative sample call.";
   if (hasVerifiedFix(issue)) return "Trusted replay verified the fix.";
   const label = replayLabel(issue.replay_coverage_status);
-  return `${label} is not trusted enough for Goldens or CI gates.`;
+  return `${label} is not trusted enough for Contracts or CI gates.`;
 }
 
 function goldenBlocker(issue: IssueItem, canGoldens: boolean): string {
-  if (hasActiveGolden(issue)) return "Active Golden guard is linked to this issue.";
-  if (!hasVerifiedFix(issue)) return "Needs trusted replay before Golden promotion.";
-  if (!issue.sample_call_id) return "Needs a sample call before Golden promotion.";
-  if (!canGoldens) return "Current plan does not unlock Goldens.";
-  return "Ready to promote this verified scenario into a Golden guard.";
+  if (hasActiveGolden(issue)) return "Active Contract is linked to this issue.";
+  if (!hasVerifiedFix(issue)) return "Needs trusted replay before Contract promotion.";
+  if (!issue.sample_call_id) return "Needs a sample call before Contract promotion.";
+  if (!canGoldens) return "Current plan does not unlock Contracts.";
+  return "Ready to promote this verified scenario into a Contract.";
 }
 
 function ciBlocker(issue: IssueItem, canCi: boolean): string {
   if (hasCiGateRun(issue)) return "A replay-backed CI gate run is linked to this issue.";
-  if (!hasActiveGolden(issue)) return "Promote this verified issue to an active Golden before CI can block regressions.";
+  if (!hasActiveGolden(issue)) return "Promote this verified issue to an active Contract before CI can block regressions.";
   if (!canCi) return "Current plan does not unlock CI gates.";
   if (!issue.deploy_pr_url) return "Ready for CI, but no deployment PR is linked yet.";
   return "Ready to run a replay-backed CI gate for the linked PR.";
@@ -181,10 +181,10 @@ function costInterpretation(issue: IssueItem): string {
     return "CI gate proof exists. Repeat spend is now guarded by replay before merge.";
   }
   if (hasActiveGolden(issue)) {
-    return "Golden proof exists. Run the CI gate to turn this into a release blocker.";
+    return "Contract proof exists. Run the CI gate to turn this into a release blocker.";
   }
   if (hasVerifiedFix(issue)) {
-    return "Verified replay exists. Promote the scenario to Golden and CI to prevent repeat spend.";
+    return "Verified replay exists. Promote the scenario to Contract and CI to prevent repeat spend.";
   }
   if (issueImpactUsd(issue) != null) {
     return "This is current loaded exposure, not projected savings. Verify the fix before treating it as avoided cost.";
@@ -241,11 +241,11 @@ function primaryActionForIssue(
 
 function primaryActionLabel(action: PrimaryAction): string {
   if (action === "run_replay") return "Run trusted replay";
-  if (action === "promote_golden") return "Promote to Golden";
+  if (action === "promote_golden") return "Promote to Contract";
   if (action === "run_ci_gate") return "Run CI gate";
   if (action === "open_ci_gate") return "Open CI gate";
   if (action === "upgrade_replay") return "Upgrade for replay";
-  if (action === "upgrade_goldens") return "Upgrade for Goldens";
+  if (action === "upgrade_goldens") return "Upgrade for Contracts";
   if (action === "upgrade_ci") return "Upgrade for CI gates";
   if (action === "blocked_missing_sample") return "Sample call required";
   if (action === "link_pr") return "Link deployment PR";
@@ -253,12 +253,12 @@ function primaryActionLabel(action: PrimaryAction): string {
 }
 
 function primaryActionReason(action: PrimaryAction, issue: IssueItem, canCi: boolean): string {
-  if (action === "run_replay") return "Replay the exact failed scenario before any Golden or CI gate can be trusted.";
-  if (action === "promote_golden") return "The fix is verified. Create the active Golden guard now.";
+  if (action === "run_replay") return "Replay the exact failed scenario before any Contract or CI gate can be trusted.";
+  if (action === "promote_golden") return "The fix is verified. Create the active Contract now.";
   if (action === "run_ci_gate") return ciBlocker(issue, canCi);
   if (action === "open_ci_gate") return "CI proof is already linked. Review the replay-backed gate result.";
   if (action === "upgrade_replay") return "Replay is locked on the current plan.";
-  if (action === "upgrade_goldens") return "Golden promotion is locked on the current plan.";
+  if (action === "upgrade_goldens") return "Contract promotion is locked on the current plan.";
   if (action === "upgrade_ci") return "CI gates are locked on the current plan.";
   if (action === "blocked_missing_sample") return replayBlocker(issue);
   if (action === "link_pr") return "Add the deployment PR URL in triage so this issue can run as a CI gate.";
@@ -522,9 +522,9 @@ export default function IssueDetailPage() {
     try {
       const response = await promoteIssueToGolden(issue.id, { blocks_ci: true });
       setIssue(response.issue);
-      setSuccessMessage("Golden guard created and linked to this issue.");
+      setSuccessMessage("Contract created and linked to this issue.");
     } catch (goldenError) {
-      setActionError(goldenError instanceof Error ? goldenError.message : "Failed to promote issue to Golden.");
+      setActionError(goldenError instanceof Error ? goldenError.message : "Failed to promote issue to Contract.");
     } finally {
       setBusyAction(null);
     }
@@ -691,7 +691,7 @@ export default function IssueDetailPage() {
     },
     {
       icon: <ShieldCheck aria-hidden="true" />,
-      label: "Golden",
+      label: "Contract",
       value: activeGolden ? "Active" : canPromoteGolden ? "Ready" : "Blocked",
       helper: goldenBlocker(issue, caps.canGoldens),
       state: activeGolden ? ("good" as const) : canPromoteGolden ? ("warn" as const) : ("blocked" as const),
@@ -736,7 +736,7 @@ export default function IssueDetailPage() {
           disabled={busyAction === "promote_golden"}
         >
           <ShieldCheck aria-hidden="true" />
-          {busyAction === "promote_golden" ? "Promoting..." : "Promote to Golden"}
+          {busyAction === "promote_golden" ? "Promoting..." : "Promote to Contract"}
         </button>
       );
     }
@@ -971,7 +971,7 @@ export default function IssueDetailPage() {
 
           <section className="imd-card">
             <SectionHeader
-              title="Replay, Golden, and CI readiness"
+              title="Replay, Contract, and CI readiness"
               description="This is the trust path from one failed run to a release gate."
             />
             <div className="imd-readiness-grid">
@@ -991,18 +991,18 @@ export default function IssueDetailPage() {
               />
               <ReadinessCard
                 icon={<ShieldCheck aria-hidden="true" />}
-                title="Golden readiness"
-                status={activeGolden ? "Active Golden linked" : canPromoteGolden ? "Ready for Golden" : "Not ready"}
+                title="Contract readiness"
+                status={activeGolden ? "Active Contract linked" : canPromoteGolden ? "Ready for Contract" : "Not ready"}
                 state={activeGolden ? "good" : canPromoteGolden ? "warn" : "blocked"}
                 detail={goldenBlocker(issue, caps.canGoldens)}
                 action={
                   activeGolden && issue.proof?.golden?.golden_set_id ? (
                     <Link href={`/goldens/${issue.proof.golden.golden_set_id}`} className="btn btn-soft btn-sm im-btn-secondary">
-                      Open Golden
+                      Open fixture
                     </Link>
                   ) : canPromoteGolden ? (
                     <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onPromoteGolden()} disabled={busyAction === "promote_golden"}>
-                      {busyAction === "promote_golden" ? "Promoting..." : "Promote Golden"}
+                      {busyAction === "promote_golden" ? "Promoting..." : "Promote Contract"}
                     </button>
                   ) : null
                 }
@@ -1074,7 +1074,7 @@ export default function IssueDetailPage() {
                 <strong>{linkedCiGate ? "CI gate linked" : canRunCiGate ? "CI-ready" : "Not CI-ready"}</strong>
               </div>
               <div>
-                <span>Golden proof</span>
+                <span>Contract proof</span>
                 <strong>{issue.proof?.golden?.golden_trace_id ? issue.proof.golden.status ?? "Linked" : "Not promoted"}</strong>
               </div>
               <div>

@@ -41,6 +41,8 @@ const github = __importStar(require("@actions/github"));
 const api_1 = require("./api");
 const poll_1 = require("./poll");
 const comment_1 = require("./comment");
+const config_1 = require("./config");
+const runner_1 = require("./runner");
 async function run() {
     try {
         // ── inputs ────────────────────────────────────────────────────────────
@@ -54,6 +56,8 @@ async function run() {
         const postComment = core.getBooleanInput('post_pr_comment');
         const failOnRegression = core.getBooleanInput('fail_on_regression');
         const failOnNotVerified = core.getBooleanInput('fail_on_not_verified');
+        const configPath = core.getInput('config_path') || 'zroky.yaml';
+        const zrokyConfig = await (0, config_1.loadZrokyConfig)(configPath);
         // ── derive PR metadata ────────────────────────────────────────────────
         const ctx = github.context;
         const payload = ctx.payload;
@@ -62,7 +66,10 @@ async function run() {
             throw new Error('This action must be triggered by a pull_request event.');
         }
         const gitSha = pr.head.sha;
+        const baseSha = pr.base.sha;
         const prBody = pr.body || '';
+        const repository = `${ctx.repo.owner}/${ctx.repo.repo}`;
+        const workflowAttempt = parseInt(process.env.GITHUB_RUN_ATTEMPT || '1', 10);
         // Build changed-files list from the payload (Action must run after checkout).
         const changedFiles = [];
         // GitHub does not include file-level diff hunks in the pull_request payload.
@@ -88,13 +95,44 @@ async function run() {
         const client = new api_1.ZrokyApiClient(baseUrl, apiKey, projectId);
         const dispatch = await client.dispatchRun({
             git_sha: gitSha,
+            head_sha: gitSha,
+            base_sha: baseSha,
+            repository,
+            pull_request_number: pr.number,
+            workflow_run_id: String(ctx.runId),
+            workflow_attempt: Number.isFinite(workflowAttempt) ? workflowAttempt : 1,
             pr_body: prBody,
+            zroky_yaml: zrokyConfig.raw,
+            contract_version_ids: contractVersionIdsFromConfig(zrokyConfig.contracts?.include || []),
             changed_files: changedFiles,
             threshold,
             sample_window_days: sampleWindowDays,
         });
         core.info(`Dispatched regression-ci run ${dispatch.run_id} for ${gitSha}`);
         core.setOutput('run_id', dispatch.run_id);
+        if (dispatch.runner_required) {
+            if (!dispatch.fixture_url || !dispatch.run_token) {
+                throw new Error('Repository replay was requested but fixture_url or run_token was missing.');
+            }
+            const fixture = await client.getFixture(dispatch.fixture_url, dispatch.run_token);
+            const runnerCommand = zrokyConfig.runner?.command;
+            if (!runnerCommand) {
+                await client.uploadEvidence(dispatch.run_id, dispatch.run_token, (0, runner_1.buildRunnerErrorEvidence)(gitSha, 'setup_error', 'runner.command is required in zroky.yaml when repository replay is active'));
+            }
+            else {
+                const evidence = await (0, runner_1.executeRepositoryRunner)({
+                    command: runnerCommand,
+                    timeoutSeconds: zrokyConfig.runner?.timeoutSeconds || timeout,
+                    fixture,
+                    runId: dispatch.run_id,
+                    candidateSha: gitSha,
+                    contractVersionIds: dispatch.contract_version_ids || [],
+                });
+                const evidenceResult = await client.uploadEvidence(dispatch.run_id, dispatch.run_token, evidence);
+                core.info(`Uploaded repository replay evidence: verdict=${evidenceResult.verdict}, ` +
+                    `trials=${evidenceResult.trial_count}/${evidenceResult.required_trials}`);
+            }
+        }
         // ── poll ──────────────────────────────────────────────────────────────
         const result = await (0, poll_1.pollUntilTerminal)(client, dispatch.run_id, {
             intervalSeconds: pollInterval,
@@ -116,7 +154,7 @@ async function run() {
             return;
         }
         if (failOnNotVerified && detail.status === 'not_verified') {
-            core.setFailed('Regression CI could not prove safety with trusted Goldens. ' +
+            core.setFailed('Regression CI could not prove safety with active Contracts. ' +
                 'See the PR comment or dashboard for missing proof.');
             return;
         }
@@ -127,7 +165,7 @@ async function run() {
             return;
         }
         if (detail.status === 'warn') {
-            core.warning('Regression CI produced warning-only Golden evidence.');
+            core.warning('Regression CI produced warning-only evidence.');
             return;
         }
         core.info('Regression CI passed — no regressions detected.');
@@ -140,6 +178,9 @@ async function run() {
             core.setFailed(String(error));
         }
     }
+}
+function contractVersionIdsFromConfig(include) {
+    return include.filter((item) => /^[0-9a-fA-F-]{32,36}$/.test(item));
 }
 run();
 //# sourceMappingURL=main.js.map
