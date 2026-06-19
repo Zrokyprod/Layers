@@ -410,3 +410,43 @@ jobs:
             exit 1
           fi
           grep -q "single product and implementation source of truth" README.md
+
+  paid-launch-readiness:
+    name: Paid Launch Readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - backend
+      - money-path-evidence
+      - dashboard
+      - admin
+      - gateway
+      - replay-worker
+      - python-sdk
+      - js-sdk
+      - regression-ci-action
+      - docs-source-truth
+    if: ${{ always() }}
+
+    steps:
+      - name: Require all paid launch jobs to pass
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failures = {
+              name: metadata.get("result")
+              for name, metadata in needs.items()
+              if metadata.get("result") != "success"
+          }
+          if failures:
+              for name, result in sorted(failures.items()):
+                  print(f"{name}: {result}")
+              sys.exit(1)
+          print("All paid launch readiness jobs passed.")
+          PY
