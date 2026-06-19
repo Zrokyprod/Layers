@@ -189,7 +189,7 @@ describe("CI Gate detail MVP", () => {
     expect(screen.queryByText("Trusted replay completed under threshold.")).not.toBeInTheDocument();
   });
 
-  it("renders Golden gate evidence and active override state", async () => {
+  it("renders Contract gate evidence and active override state", async () => {
     mockDetail(
       replayRun({ status: "fail" }),
       ciDetail({
@@ -197,7 +197,7 @@ describe("CI Gate detail MVP", () => {
         effective_status: "pass",
         failed_goldens: [
           {
-            golden_name: "Refund policy Golden",
+            golden_name: "Refund policy Contract",
             golden_trace_id: "gt_1",
             assertion: "tool_sequence",
             replay_mode: "mocked_tool",
@@ -206,13 +206,13 @@ describe("CI Gate detail MVP", () => {
         ],
         warn_goldens: [
           {
-            golden_name: "Support tone Golden",
+            golden_name: "Support tone Contract",
             golden_trace_id: "gt_2",
             status: "fail",
             replay_mode: "real_llm",
           },
         ],
-        not_verified_reasons: ["blocking Golden gt_3 has no replay evidence"],
+        not_verified_reasons: ["blocking Contract gt_3 has no replay evidence"],
         override: {
           original_status: "fail",
           effective_status: "pass",
@@ -223,11 +223,11 @@ describe("CI Gate detail MVP", () => {
 
     render(<CiGateDetailPage />);
 
-    expect(await screen.findByText("Golden gate evidence")).toBeInTheDocument();
-    expect(screen.getByText("Refund policy Golden")).toBeInTheDocument();
+    expect(await screen.findByText("Contract gate evidence")).toBeInTheDocument();
+    expect(screen.getByText("Refund policy Contract")).toBeInTheDocument();
     expect(screen.getByText(/Restore policy lookup/)).toBeInTheDocument();
-    expect(screen.getByText("Support tone Golden")).toBeInTheDocument();
-    expect(screen.getByText("blocking Golden gt_3 has no replay evidence")).toBeInTheDocument();
+    expect(screen.getByText("Support tone Contract")).toBeInTheDocument();
+    expect(screen.getByText("blocking Contract gt_3 has no replay evidence")).toBeInTheDocument();
     expect(screen.getByText(/Override active: effective status pass/)).toBeInTheDocument();
   });
 
@@ -237,7 +237,7 @@ describe("CI Gate detail MVP", () => {
     render(<CiGateDetailPage />);
 
     expect((await screen.findByRole("link", { name: "View replay" })).getAttribute("href")).toBe("/replay/run_ci_1");
-    expect(screen.getByRole("link", { name: "View Golden set" }).getAttribute("href")).toBe("/goldens/golden_1");
+    expect(screen.getByRole("link", { name: "View fixture set" }).getAttribute("href")).toBe("/goldens/golden_1");
     expect(screen.getByRole("link", { name: "Open PR" }).getAttribute("href")).toBe("https://github.com/acme/app/pull/42");
   });
 

@@ -17,6 +17,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    supports_alter_constraints = bind.dialect.name != "sqlite"
+
     op.create_table(
         "environments",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -194,18 +197,34 @@ def upgrade() -> None:
     )
 
     for table_name in ("calls", "trace_spans"):
-        op.add_column(
-            table_name,
-            sa.Column("environment_id", sa.String(length=36), sa.ForeignKey("environments.id", ondelete="SET NULL"), nullable=True),
-        )
-        op.add_column(
-            table_name,
-            sa.Column("agent_id", sa.String(length=36), sa.ForeignKey("agents.id", ondelete="SET NULL"), nullable=True),
-        )
-        op.add_column(
-            table_name,
-            sa.Column("agent_release_id", sa.String(length=36), sa.ForeignKey("agent_releases.id", ondelete="SET NULL"), nullable=True),
-        )
+        op.add_column(table_name, sa.Column("environment_id", sa.String(length=36), nullable=True))
+        op.add_column(table_name, sa.Column("agent_id", sa.String(length=36), nullable=True))
+        op.add_column(table_name, sa.Column("agent_release_id", sa.String(length=36), nullable=True))
+        if supports_alter_constraints:
+            op.create_foreign_key(
+                f"fk_{table_name}_environment_id_environments",
+                table_name,
+                "environments",
+                ["environment_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
+            op.create_foreign_key(
+                f"fk_{table_name}_agent_id_agents",
+                table_name,
+                "agents",
+                ["agent_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
+            op.create_foreign_key(
+                f"fk_{table_name}_agent_release_id_agent_releases",
+                table_name,
+                "agent_releases",
+                ["agent_release_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
 
     op.create_index("ix_calls_project_environment_created", "calls", ["project_id", "environment_id", "created_at"])
     op.create_index("ix_calls_project_agent_release_created", "calls", ["project_id", "agent_release_id", "created_at"])
@@ -223,10 +242,16 @@ def upgrade() -> None:
     op.add_column("replay_runs", sa.Column("run_token_hash", sa.String(length=64), nullable=True))
     op.add_column("replay_runs", sa.Column("run_token_expires_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("replay_runs", sa.Column("superseded_by_run_id", sa.String(length=36), nullable=True))
-    op.add_column(
-        "replay_runs",
-        sa.Column("candidate_release_id", sa.String(length=36), sa.ForeignKey("agent_releases.id", ondelete="SET NULL"), nullable=True),
-    )
+    op.add_column("replay_runs", sa.Column("candidate_release_id", sa.String(length=36), nullable=True))
+    if supports_alter_constraints:
+        op.create_foreign_key(
+            "fk_replay_runs_candidate_release_id_agent_releases",
+            "replay_runs",
+            "agent_releases",
+            ["candidate_release_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
     op.create_index("ix_replay_runs_project_head_sha", "replay_runs", ["project_id", "head_sha"])
     op.create_index(
         "ix_replay_runs_project_pr_created",
@@ -236,8 +261,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    supports_alter_constraints = bind.dialect.name != "sqlite"
+
     op.drop_index("ix_replay_runs_project_pr_created", table_name="replay_runs")
     op.drop_index("ix_replay_runs_project_head_sha", table_name="replay_runs")
+    if supports_alter_constraints:
+        op.drop_constraint("fk_replay_runs_candidate_release_id_agent_releases", "replay_runs", type_="foreignkey")
     for column in (
         "candidate_release_id",
         "superseded_by_run_id",
@@ -259,6 +289,10 @@ def downgrade() -> None:
     op.drop_index("ix_calls_project_agent_release_created", table_name="calls")
     op.drop_index("ix_calls_project_environment_created", table_name="calls")
     for table_name in ("trace_spans", "calls"):
+        if supports_alter_constraints:
+            op.drop_constraint(f"fk_{table_name}_agent_release_id_agent_releases", table_name, type_="foreignkey")
+            op.drop_constraint(f"fk_{table_name}_agent_id_agents", table_name, type_="foreignkey")
+            op.drop_constraint(f"fk_{table_name}_environment_id_environments", table_name, type_="foreignkey")
         op.drop_column(table_name, "agent_release_id")
         op.drop_column(table_name, "agent_id")
         op.drop_column(table_name, "environment_id")

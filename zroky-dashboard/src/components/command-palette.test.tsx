@@ -60,18 +60,23 @@ describe("CommandPalette", () => {
 
     window.dispatchEvent(new CustomEvent("open-command-palette"));
 
-    expect(await screen.findByText("Go to Command Center")).toBeInTheDocument();
-    expect(screen.getByText("Go to Agents")).toBeInTheDocument();
-    expect(screen.getByText("Go to Traces")).toBeInTheDocument();
-    expect(screen.getByText("Go to Failures")).toBeInTheDocument();
-    expect(screen.getByText("Go to Replay")).toBeInTheDocument();
-    expect(screen.getByText("Go to Goldens")).toBeInTheDocument();
-    expect(screen.getByText("Go to CI Gates")).toBeInTheDocument();
-    expect(screen.getByText("Go to Policies")).toBeInTheDocument();
-    expect(screen.getByText("Go to Approvals")).toBeInTheDocument();
-    expect(screen.getByText("Go to Integrations")).toBeInTheDocument();
+    expect(await screen.findByText("Go to Overview")).toBeInTheDocument();
+    expect(screen.getByText("Go to Incidents")).toBeInTheDocument();
+    expect(screen.getByText("Go to Replays")).toBeInTheDocument();
+    expect(screen.getByText("Go to Contracts")).toBeInTheDocument();
+    expect(screen.getByText("Go to CI")).toBeInTheDocument();
     expect(screen.getByText("Go to Settings")).toBeInTheDocument();
+    expect(screen.getByText("Settings → API Keys")).toBeInTheDocument();
+    expect(screen.getByText("Settings → Providers")).toBeInTheDocument();
+    expect(screen.getByText("Integrations → Slack")).toBeInTheDocument();
 
+    expect(screen.queryByText("Go to Agents")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Traces")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Failures")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Goldens")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Policies")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Approvals")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Integrations")).not.toBeInTheDocument();
     expect(screen.queryByText("Ask Zroky")).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Cost")).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Alerts")).not.toBeInTheDocument();

@@ -186,7 +186,7 @@ function mockGoldens({
   });
 }
 
-describe("GoldensPage MVP list", () => {
+describe("Fixtures compatibility page MVP list", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGoldens();
@@ -195,17 +195,17 @@ describe("GoldensPage MVP list", () => {
   it("renders header, CTAs, KPI cards, trust copy, and required columns", () => {
     render(<GoldensPage />);
 
-    expect(screen.getByRole("heading", { name: "Goldens" })).toBeInTheDocument();
-    expect(screen.getByText("Verified production behaviors protected from future regressions.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run Golden set" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Fixtures" })).toBeInTheDocument();
+    expect(screen.getByText("Verified production behaviors used as Contract evidence and replay fixtures.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run fixture set" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create set" })).toBeInTheDocument();
-    for (const label of ["Active Goldens", "Blocking CI", "Need review", "Last pass rate"]) {
+    for (const label of ["Active fixtures", "Blocking CI", "Need review", "Last pass rate"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getByText("Only verified replay fixes can become active Goldens.")).toBeInTheDocument();
+    expect(screen.getByText("Only verified replay fixes can become active Contracts.")).toBeInTheDocument();
 
     const table = screen.getByRole("table");
-    for (const heading of ["Golden set", "Traces", "Last run", "CI blocking", "Health", "Action"]) {
+    for (const heading of ["Fixture set", "Traces", "Last run", "CI blocking", "Health", "Action"]) {
       expect(within(table).getByRole("columnheader", { name: heading })).toBeInTheDocument();
     }
   });
@@ -229,8 +229,8 @@ describe("GoldensPage MVP list", () => {
 
     render(<GoldensPage />);
 
-    expect(screen.getByText("No Goldens yet")).toBeInTheDocument();
-    expect(screen.getByText("Create a Golden from a verified replay to protect that flow in future CI runs.")).toBeInTheDocument();
+    expect(screen.getByText("No fixtures yet")).toBeInTheDocument();
+    expect(screen.getByText("Create a fixture from a verified replay, then approve a Contract to protect that flow in future CI runs.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to Replay" }).getAttribute("href")).toBe("/replay");
   });
 
@@ -239,19 +239,19 @@ describe("GoldensPage MVP list", () => {
       mockGoldens({ planTemplate: {}, planCode });
       const { unmount } = render(<GoldensPage />);
 
-      expect(screen.getByText("Goldens locked")).toBeInTheDocument();
+      expect(screen.getByText("Fixtures locked")).toBeInTheDocument();
       expect(screen.getByText("Upgrade to Starter to create protected flows from verified replay evidence.")).toBeInTheDocument();
 
       unmount();
     }
   });
 
-  it("does not show the locked banner for paid Goldens plans", () => {
+  it("does not show the locked banner for paid fixture plans", () => {
     for (const planCode of ["pilot", "starter", "pro", "plus", "enterprise"]) {
       mockGoldens({ planTemplate: {}, planCode });
       const { unmount } = render(<GoldensPage />);
 
-      expect(screen.queryByText("Goldens locked")).not.toBeInTheDocument();
+      expect(screen.queryByText("Fixtures locked")).not.toBeInTheDocument();
       expect(screen.queryByText("Upgrade to Starter to create protected flows from verified replay evidence.")).not.toBeInTheDocument();
 
       unmount();
@@ -264,7 +264,7 @@ describe("GoldensPage MVP list", () => {
     render(<GoldensPage />);
 
     expect(screen.queryByText("Upgrade to Starter to create protected flows from verified replay evidence.")).not.toBeInTheDocument();
-    expect(screen.getByText("Goldens entitlement unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Fixtures entitlement unavailable")).toBeInTheDocument();
     expect(screen.getByText("Refresh workspace plan or contact admin.")).toBeInTheDocument();
   });
 
@@ -273,7 +273,7 @@ describe("GoldensPage MVP list", () => {
 
     render(<GoldensPage />);
 
-    const runButton = screen.getByRole("button", { name: "Run Golden set" }) as HTMLButtonElement;
+    const runButton = screen.getByRole("button", { name: "Run fixture set" }) as HTMLButtonElement;
     const createButton = screen.getByRole("button", { name: "Create set" }) as HTMLButtonElement;
     expect(runButton.disabled).toBe(true);
     expect(createButton.disabled).toBe(true);
@@ -287,19 +287,19 @@ describe("GoldensPage MVP list", () => {
     render(<GoldensPage />);
 
     expect(screen.queryByRole("link", { name: "Go to Replay" })).not.toBeInTheDocument();
-    expect(screen.getByText("Replay and Golden creation require an active Starter or Pro entitlement.")).toBeInTheDocument();
+    expect(screen.getByText("Replay and fixture creation require an active Starter or Pro entitlement.")).toBeInTheDocument();
   });
 
-  it("keeps normal CTAs for Pro with valid Goldens entitlement", () => {
+  it("keeps normal CTAs for Pro with valid fixture entitlement", () => {
     mockGoldens({ planTemplate: { "pilot.goldens_basic": true, "pro.ci_gate_blocking": true }, planCode: "pro" });
 
     render(<GoldensPage />);
 
-    expect((screen.getByRole("button", { name: "Run Golden set" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Run fixture set" }) as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: "Create set" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("runs a Golden set from row action", async () => {
+  it("runs a fixture set from row action", async () => {
     render(<GoldensPage />);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Run" })[0]);
@@ -308,20 +308,20 @@ describe("GoldensPage MVP list", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/replay/run_new"));
   });
 
-  it("runs the selected Golden set from the header and opens Replay proof", async () => {
+  it("runs the selected fixture set from the header and opens Replay proof", async () => {
     render(<GoldensPage />);
 
     fireEvent.change(screen.getByLabelText("Run set"), { target: { value: "golden_1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Run Golden set" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run fixture set" }));
 
     await waitFor(() => expect(api.runGoldenSet).toHaveBeenCalledWith("golden_1", { trigger: "manual" }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/replay/run_new"));
   });
 
-  it("filters Golden sets by search and KPI cards", () => {
+  it("filters fixture sets by search and KPI cards", () => {
     render(<GoldensPage />);
 
-    fireEvent.change(screen.getByPlaceholderText("Search Golden sets..."), { target: { value: "regression" } });
+    fireEvent.change(screen.getByPlaceholderText("Search fixture sets..."), { target: { value: "regression" } });
 
     expect(screen.queryByText("Refund protected flow")).not.toBeInTheDocument();
     expect(screen.getByText("Refund regression set")).toBeInTheDocument();

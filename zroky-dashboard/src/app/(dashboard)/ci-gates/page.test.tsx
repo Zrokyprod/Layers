@@ -282,8 +282,8 @@ describe("CI Gates list MVP", () => {
     render(<CiGatesPage />);
 
     expect(await screen.findByText("No CI gate runs yet")).toBeInTheDocument();
-    expect(screen.getByText("Run Goldens from GitHub CI to block regressions before merge.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View Goldens" }).getAttribute("href")).toBe("/goldens");
+    expect(screen.getByText("Run active Contracts from GitHub CI to block regressions before merge.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View Contracts" }).getAttribute("href")).toBe("/contracts");
   });
 
   it("degrades when replay run context fails instead of showing a global page failure", async () => {
