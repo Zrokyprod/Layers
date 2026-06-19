@@ -40259,3 +40259,9 @@ body:has(.app-shell),
 .app-shell .plan-usage-total {
   color: #757d72;
 }
+
+.app-shell .org-popover.shell-popover-up {
+  left: 0;
+  right: auto;
+  width: min(360px, calc(100vw - 24px));
+}
