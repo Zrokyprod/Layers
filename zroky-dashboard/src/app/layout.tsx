@@ -1,16 +1,9 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
+import { JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import "./premium-overrides.css";
 
 import { Providers } from "@/components/providers";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-  weight: ["400", "500", "600", "700", "800", "900"],
-});
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -38,7 +31,7 @@ export const metadata: Metadata = {
     default: "Zroky",
     template: "%s | Zroky",
   },
-  description: "A reliability dashboard for AI agents, issues, replay proof, drift, cost, and release gates.",
+  description: "Incident contracts, repository replay proof, and fail-closed release gates for AI agents.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -58,7 +51,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${jetbrainsMono.variable} ${manrope.variable} ${spaceGrotesk.variable}`}
+      className={`${jetbrainsMono.variable} ${manrope.variable} ${spaceGrotesk.variable}`}
     >
       <body>
         <Providers>{children}</Providers>

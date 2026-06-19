@@ -292,7 +292,7 @@ describe("ReplayRunDetailPage MVP", () => {
     renderRun(baseRun());
 
     expect(screen.getByRole("heading", { name: "Replay" })).toBeInTheDocument();
-    expect(screen.getByText("Replay failed agent calls, compare candidate behavior, and verify fixes before creating Goldens.")).toBeInTheDocument();
+    expect(screen.getByText("Replay failed agent calls, compare candidate behavior, and verify fixes before creating Contract fixtures.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Replay setup" })).toBeInTheDocument();
     expect(screen.getByText("What this replay is proving")).toBeInTheDocument();
     expect(screen.getAllByText("Checkout payment timeout").length).toBeGreaterThan(0);
@@ -303,7 +303,7 @@ describe("ReplayRunDetailPage MVP", () => {
     expect(screen.getByRole("heading", { name: "Candidate Replay" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Verification Result" })).toBeInTheDocument();
     expect(screen.getByText("Verification verdict")).toBeInTheDocument();
-    expect(screen.getByText("Candidate replay passed with real comparison.")).toBeInTheDocument();
+    expect(screen.getByText("Candidate replay passed with Prompt/model comparison.")).toBeInTheDocument();
     expect(screen.getByText("Tool behavior corrected")).toBeInTheDocument();
     expect(screen.getByText("Charge customer order 42.")).toBeInTheDocument();
     expect(screen.getAllByText("Payment failed with timeout.").length).toBeGreaterThan(0);
@@ -312,7 +312,7 @@ describe("ReplayRunDetailPage MVP", () => {
     expect(screen.getAllByText("gpt-4.1").length).toBeGreaterThan(0);
   });
 
-  it("shows stub replay as sanity-only and disables Create Golden", () => {
+  it("shows fixture validation as wiring-only and disables Create Fixture", () => {
     renderRun(baseRun({
       replay_mode: "stub",
       executor_replay_mode: "stub",
@@ -325,14 +325,14 @@ describe("ReplayRunDetailPage MVP", () => {
     }));
 
     expect(screen.getAllByText("stub_only").length).toBeGreaterThan(0);
-    expect(screen.getByText("Stub replay is sanity-only and cannot display as verified.")).toBeInTheDocument();
+    expect(screen.getByText("Fixture validation is wiring-only and cannot display as verified.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run trusted replay" })).toBeInTheDocument();
-    expect(screen.getByText("Run trusted replay before creating a Golden.")).toBeInTheDocument();
-    const goldenRegion = screen.getByLabelText("Golden eligibility");
-    expect(within(goldenRegion).queryByRole("button", { name: "Create Golden" })).not.toBeInTheDocument();
+    expect(screen.getByText("Run trusted replay before creating a Contract fixture.")).toBeInTheDocument();
+    const fixtureRegion = screen.getByLabelText("Contract fixture eligibility");
+    expect(within(fixtureRegion).queryByRole("button", { name: "Create Fixture" })).not.toBeInTheDocument();
   });
 
-  it("shows not_verified as untrusted and hides Create Golden", () => {
+  it("shows not_verified as untrusted and hides Create Fixture", () => {
     renderRun(baseRun({
       status: "pass",
       summary: {
@@ -343,20 +343,20 @@ describe("ReplayRunDetailPage MVP", () => {
     }));
 
     expect(screen.getAllByText("not_verified").length).toBeGreaterThan(0);
-    expect(screen.getByText("This replay state is not trusted enough to create a Golden or block CI. Run trusted replay first.")).toBeInTheDocument();
+    expect(screen.getByText("This replay state is not trusted enough to create a Contract fixture or block CI. Run trusted replay first.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run trusted replay" })).toBeInTheDocument();
-    expect(screen.queryByText("Verified fix. Create Golden is available.")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create Golden" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Verified fix. Create Fixture is available.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Fixture" })).not.toBeInTheDocument();
   });
 
-  it("enables Create Golden for verified non-stub fixes", () => {
+  it("enables Create Fixture for verified non-stub fixes", () => {
     renderRun(baseRun());
 
-    expect(screen.getByText("Verified fix. Create Golden is available.")).toBeInTheDocument();
-    expect(screen.getByText("This replay can become a Golden.")).toBeInTheDocument();
-    expect(screen.getByText("It will protect this flow in future CI runs.")).toBeInTheDocument();
-    const createGoldenRegion = screen.getByLabelText("Golden eligibility");
-    expect((within(createGoldenRegion).getByRole("button", { name: "Create Golden" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("Verified fix. Create Fixture is available.")).toBeInTheDocument();
+    expect(screen.getByText("This replay can become a Contract fixture.")).toBeInTheDocument();
+    expect(screen.getByText("It can protect this flow in future CI runs once a Contract is approved.")).toBeInTheDocument();
+    const createFixtureRegion = screen.getByLabelText("Contract fixture eligibility");
+    expect((within(createFixtureRegion).getByRole("button", { name: "Create Fixture" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("shows the proof ladder and enables CI gate for verified fixes", () => {
@@ -369,7 +369,7 @@ describe("ReplayRunDetailPage MVP", () => {
     expect((screen.getByRole("button", { name: "Run CI gate" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("reruns the current Golden Set with the current replay configuration", async () => {
+  it("reruns the current fixture set with the current replay configuration", async () => {
     renderRun(baseRun());
 
     fireEvent.click(screen.getByRole("button", { name: "Rerun replay" }));
@@ -382,14 +382,14 @@ describe("ReplayRunDetailPage MVP", () => {
     }));
   });
 
-  it("creates a Golden from verified replay proof", async () => {
+  it("creates a Fixture from verified replay proof", async () => {
     renderRun(baseRun());
 
-    const createGoldenRegion = screen.getByLabelText("Golden eligibility");
-    fireEvent.change(within(createGoldenRegion).getByPlaceholderText("Verified regression memory"), {
+    const createFixtureRegion = screen.getByLabelText("Contract fixture eligibility");
+    fireEvent.change(within(createFixtureRegion).getByPlaceholderText("Verified regression memory"), {
       target: { value: "Verified regression memory" },
     });
-    fireEvent.click(within(createGoldenRegion).getByRole("button", { name: "Create Golden" }));
+    fireEvent.click(within(createFixtureRegion).getByRole("button", { name: "Create Fixture" }));
 
     await waitFor(() => expect(api.createGoldenSet).toHaveBeenCalledWith({
       name: "Verified regression memory",
@@ -454,7 +454,7 @@ describe("ReplayRunDetailPage MVP", () => {
 
     expect(screen.getAllByText("fix_failed").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Run trusted replay" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create Golden" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Fixture" })).not.toBeInTheDocument();
   });
 
   it("shows the recommended next replay mode for inconclusive missing tool proof", () => {
@@ -469,7 +469,7 @@ describe("ReplayRunDetailPage MVP", () => {
     }));
 
     expect(screen.getAllByText("inconclusive").length).toBeGreaterThan(0);
-    expect(screen.getByText("Recommended next replay mode: mocked-tool")).toBeInTheDocument();
+    expect(screen.getByText("Recommended next replay mode: Repository replay")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run trusted replay" })).toBeInTheDocument();
   });
 

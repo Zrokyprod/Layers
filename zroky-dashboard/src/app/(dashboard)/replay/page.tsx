@@ -353,7 +353,7 @@ function RunRow({ run }: { run: ReplayRunItem }) {
         {(run.replay_mode_warning || isStub) && (
           <p className="replay-warning">
             <TriangleAlert aria-hidden="true" />
-            {isStub ? "Stub replay is a sanity check, not a verified fix." : run.replay_mode_warning}
+            {isStub ? "Fixture validation checks wiring only; it is not a verified fix." : run.replay_mode_warning}
           </p>
         )}
       </div>
@@ -748,7 +748,7 @@ function ReplayPageContent() {
           icon={<CheckCircle2 aria-hidden="true" />}
           label="Verified fixes"
           value={runStats.verified.toLocaleString()}
-          helper="Non-stub runs with proof"
+          helper="Repository or managed replay with proof"
         />
         <KpiCard
           icon={<Clock3 aria-hidden="true" />}
@@ -785,7 +785,7 @@ function ReplayPageContent() {
         <header className="panel-header">
           <div>
             <h3>Start replay</h3>
-            <p>Select a real source, choose proof strength, and launch a live run. Stub stays marked as sanity-only.</p>
+            <p>Repository replay is the paid proof path. Managed provider replay stays secondary for prompt and model comparison.</p>
           </div>
           <span className="alert-cat-badge badge-gray">{replayModeProof(replayMode)}</span>
         </header>
@@ -1072,11 +1072,11 @@ function ReplayPageContent() {
           <TriangleAlert aria-hidden="true" />
           <strong>Replay honesty rule</strong>
         </div>
-        <p>Stub replay is a cheap sanity check. A fix is only verified when a non-stub replay proves original failure reproduction and candidate fix pass.</p>
+        <p>Fixture validation is wiring-only. A fix is only verified when repository replay, managed provider replay, sandbox replay, or shadow comparison proves original failure reproduction and candidate fix pass.</p>
         <div className="replay-honesty-grid">
-          <span><CheckCircle2 aria-hidden="true" /> real_llm: real comparison</span>
-          <span><GitBranch aria-hidden="true" /> CI gate: commit-linked regression run</span>
-          <span><XCircle aria-hidden="true" /> stub: sanity only</span>
+          <span><CheckCircle2 aria-hidden="true" /> Repository replay: customer CI command</span>
+          <span><GitBranch aria-hidden="true" /> CI gate: exact head SHA</span>
+          <span><XCircle aria-hidden="true" /> Fixture validation: wiring only</span>
         </div>
       </section>
     </div>

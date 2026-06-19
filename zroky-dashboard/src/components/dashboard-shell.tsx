@@ -66,7 +66,7 @@ const NAV_ITEMS: NavItem[] = [
     id: "agents",
     href: "/agents",
     label: "Agents",
-    subtitle: "Agent safety coverage, open failures, replay proof, Golden coverage, CI coverage, and policy status.",
+    subtitle: "Agent safety coverage, open incidents, replay proof, Contract coverage, and CI gate health.",
     Icon: Bot,
     badgeKey: "agents",
     visibleInNav: false,
@@ -174,7 +174,7 @@ const DASHBOARD_ROUTES = [
     id: "golden-fixtures",
     href: "/goldens",
     label: "Fixtures",
-    subtitle: "Backward-compatible Golden fixture evidence under Contracts.",
+    subtitle: "Backward-compatible fixture evidence under Contracts.",
     Icon: Shield,
   },
   {

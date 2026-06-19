@@ -12,6 +12,7 @@ describe("replay mode strictness", () => {
   it("defaults new verification workflows to real_llm, not stub", () => {
     expect(DEFAULT_VERIFICATION_REPLAY_MODE).toBe("real_llm");
     expect(REPLAY_MODE_OPTIONS[0].value).toBe(DEFAULT_VERIFICATION_REPLAY_MODE);
+    expect(REPLAY_MODE_OPTIONS[0].label).toBe("Managed provider replay");
   });
 
   it("never treats stub replay as a verified fix", () => {

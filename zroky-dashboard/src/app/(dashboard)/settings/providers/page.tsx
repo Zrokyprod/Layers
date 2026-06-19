@@ -35,9 +35,9 @@ import type { BillingMeResponse, ProviderKeyResponse, ProviderVerificationItem }
 
 const replayProviderFlow = [
   "Capture without key",
-  "Stub replay",
+  "Fixture validation",
   "Save provider key",
-  "Provider-backed replay",
+  "Managed provider replay",
   "CI gate",
 ];
 
@@ -275,7 +275,7 @@ export default function ProvidersPage() {
             BYOK replay
           </span>
           <h1>Save provider keys only when replay needs real provider access.</h1>
-          <p>Capture and stub replay stay keyless. Vault keys are encrypted and used only by provider-backed replay paths enabled for this workspace.</p>
+          <p>Capture and fixture validation stay keyless. Vault keys are encrypted and used only by managed provider replay paths enabled for this workspace.</p>
         </div>
         <div className="providers-hero-actions">
           <Link href="/replay" className="btn btn-primary">
@@ -336,7 +336,7 @@ export default function ProvidersPage() {
           <header className="panel-header">
             <div>
               <h2>Save provider key</h2>
-              <p>Only save a key when provider-backed replay is enabled for this workspace. Capture, traces, issues, and stub replay do not need it.</p>
+              <p>Only save a key when managed provider replay is enabled for this workspace. Capture, traces, issues, and fixture validation do not need it.</p>
             </div>
           </header>
 
@@ -365,7 +365,7 @@ export default function ProvidersPage() {
               <LockKeyhole aria-hidden="true" />
               <div>
                 <strong>Provider key vault is not included in {formatPlanLabel(billing?.plan_code)}.</strong>
-                <span>Upgrade before pasting provider secrets. Free capture and stub replay continue without provider keys.</span>
+                <span>Upgrade before pasting provider secrets. Free capture and fixture validation continue without provider keys.</span>
               </div>
               <Link href="/settings/billing?upgrade_hint=enterprise.provider_key_vault" className="btn btn-primary btn-sm">
                 Upgrade plan
@@ -424,9 +424,9 @@ export default function ProvidersPage() {
             Key rule
           </span>
           <h2>Do not add provider keys for capture.</h2>
-          <p>Provider keys are for provider-backed replay and evaluation workers only. Your normal capture path remains project-key based.</p>
+          <p>Provider keys are for managed provider replay and evaluation workers only. Your normal capture path remains project-key based.</p>
           <div className="providers-rule-list">
-            {["Signup and login", "SDK/Gateway capture", "Trace and issue browsing", "Stub replay"].map((item) => (
+            {["Signup and login", "SDK/Gateway capture", "Trace and issue browsing", "Fixture validation"].map((item) => (
               <span key={item}>
                 <CheckCircle2 aria-hidden="true" />
                 {item}
@@ -473,7 +473,7 @@ export default function ProvidersPage() {
         {keysLoading ? (
           <div className="loading" />
         ) : providerKeys.length === 0 ? (
-          <div className="empty">No provider keys saved yet. Capture still works; connect a key when verified replay is needed.</div>
+          <div className="empty">No provider keys saved yet. Capture and repository replay still work; connect a key only when managed provider replay is needed.</div>
         ) : (
           <div className="table-wrap">
             <table className="settings-table">

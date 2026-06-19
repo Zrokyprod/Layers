@@ -113,12 +113,12 @@ describe("ProvidersPage", () => {
     render(<ProvidersPage />);
 
     expect(await screen.findByRole("heading", { name: "Save provider keys only when replay needs real provider access." })).toBeInTheDocument();
-    expect(screen.getByText("Capture and stub replay stay keyless. Vault keys are encrypted and used only by provider-backed replay paths enabled for this workspace.")).toBeInTheDocument();
+    expect(screen.getByText("Capture and fixture validation stay keyless. Vault keys are encrypted and used only by managed provider replay paths enabled for this workspace.")).toBeInTheDocument();
     expect(screen.getByText("Capture without key")).toBeInTheDocument();
-    expect(screen.getAllByText("Stub replay").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Fixture validation").length).toBeGreaterThan(0);
     expect(screen.getByText("CI gate")).toBeInTheDocument();
     expect(screen.getByText("Do not add provider keys for capture.")).toBeInTheDocument();
-    expect(await screen.findByText("No provider keys saved yet. Capture still works; connect a key when verified replay is needed.")).toBeInTheDocument();
+    expect(await screen.findByText("No provider keys saved yet. Capture and repository replay still work; connect a key only when managed provider replay is needed.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open Replay/ }).getAttribute("href")).toBe("/replay");
   });
 

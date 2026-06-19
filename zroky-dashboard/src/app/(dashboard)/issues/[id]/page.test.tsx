@@ -292,7 +292,7 @@ describe("IssueDetailPage MVP investigation layout", () => {
     for (const heading of [
       "Executive diagnosis",
       "Evidence workbench",
-      "Replay, Golden, and CI readiness",
+      "Replay, Contract, and CI readiness",
       "Cost impact",
     ]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
@@ -326,44 +326,44 @@ describe("IssueDetailPage MVP investigation layout", () => {
     await screen.findByRole("heading", { name: "Checkout loop" });
     expect(screen.getAllByText("Not verified").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /Run trusted replay/i }).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Create Golden")).toBeNull();
+    expect(screen.queryByText("Promote to Contract")).toBeNull();
   });
 
-  it("promotes a verified fix to an active Golden", async () => {
+  it("promotes a verified fix to an active Contract", async () => {
     mockDetail({ replay_coverage_status: "verified_fix" });
 
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
-    fireEvent.click(screen.getByRole("button", { name: /Promote to Golden/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Promote to Contract/i }));
 
     await waitFor(() => expect(api.promoteIssueToGolden).toHaveBeenCalledWith("issue_1", { blocks_ci: true }));
-    expect(await screen.findByText("Golden guard created and linked to this issue.")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /Open Golden/i })[0].getAttribute("href")).toBe("/goldens/golden_1");
+    expect(await screen.findByText("Contract created and linked to this issue.")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Open fixture/i })[0].getAttribute("href")).toBe("/goldens/golden_1");
   });
 
-  it.each(["stub_only", "not_verified"])("does not show Golden promotion for %s", async (status) => {
+  it.each(["stub_only", "not_verified"])("does not show Contract promotion for %s", async (status) => {
     mockDetail({ replay_coverage_status: status });
 
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
-    expect(screen.queryByText("Create Golden")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Promote to Golden/i })).toBeNull();
-    expect(screen.getAllByText("Needs trusted replay before Golden promotion.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Promote to Contract")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Promote to Contract/i })).toBeNull();
+    expect(screen.getAllByText("Needs trusted replay before Contract promotion.").length).toBeGreaterThan(0);
   });
 
-  it("does not show Golden promotion when verified_fix has no sample call", async () => {
+  it("does not show Contract promotion when verified_fix has no sample call", async () => {
     mockDetail({ replay_coverage_status: "verified_fix", sample_call_id: null });
 
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
-    expect(screen.queryByText("Create Golden")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Promote to Golden/i })).toBeNull();
+    expect(screen.queryByText("Promote to Contract")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Promote to Contract/i })).toBeNull();
   });
 
-  it("runs a CI gate when an active Golden and PR are linked", async () => {
+  it("runs a CI gate when an active Contract and PR are linked", async () => {
     mockDetail(
       {
         replay_coverage_status: "verified_fix",

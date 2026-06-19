@@ -13,7 +13,7 @@ export function replayLabel(status: string | null | undefined): string {
       return "Verified fix";
     case "sanity_replay_passed":
     case "stub_only":
-      return "Stub only";
+      return "Fixture validation only";
     case "real_replay_missing_tool_proof":
     case "tool_snapshot_missing":
       return "Missing tool proof";

@@ -116,7 +116,7 @@ function ContractPreview({ trace }: { trace: GoldenTraceView | null }) {
     ? criteria.golden_contract_v1 as Record<string, unknown>
     : null;
   if (!contract) {
-    return <p className="notif-meta">No structured Golden contract captured yet. Use criteria JSON to add golden_contract_v1.</p>;
+    return <p className="notif-meta">No structured Contract assertions captured yet. Use criteria JSON to add golden_contract_v1.</p>;
   }
   const linkedProof = contract.linked_proof && typeof contract.linked_proof === "object" && !Array.isArray(contract.linked_proof)
     ? contract.linked_proof as Record<string, unknown>
@@ -137,13 +137,13 @@ function ContractPreview({ trace }: { trace: GoldenTraceView | null }) {
 }
 
 function HistoryList({ items }: { items: GoldenHistoryItem[] }) {
-  if (items.length === 0) return <p className="notif-meta">No Golden history captured yet.</p>;
+  if (items.length === 0) return <p className="notif-meta">No fixture history captured yet.</p>;
   return (
     <div className="gd-run-list">
       {items.slice(0, 8).map((item) => (
         <div key={item.id}>
           <span className="alert-cat-badge badge-gray">{item.action}</span>
-          <strong>{item.reason ?? item.golden_trace_id ?? item.golden_set_id ?? "Golden change"}</strong>
+          <strong>{item.reason ?? item.golden_trace_id ?? item.golden_set_id ?? "Fixture change"}</strong>
           <span>{formatDateTime(item.created_at)}</span>
         </div>
       ))}
@@ -362,7 +362,7 @@ export default function GoldenDetailPage() {
         <MetadataCard label="Needs review" value={needsReviewCount} helper={health} />
       </section>
 
-      <section className="gd-proof-ladder" aria-label="Golden proof ladder">
+      <section className="gd-proof-ladder" aria-label="Fixture proof ladder">
         <div className={selectedTrace?.call_id ? "is-ready" : ""}>
           <span>Source</span>
           <strong>{selectedTrace?.call_id ? "Call linked" : "Manual trace"}</strong>
@@ -387,7 +387,7 @@ export default function GoldenDetailPage() {
             <header className="gm-section-header">
               <div>
                 <h2>Protected traces</h2>
-                <p>Expected behavior and latest replay proof for this Golden set.</p>
+                <p>Expected behavior and latest replay proof for this fixture set.</p>
               </div>
               <button type="button" className="btn btn-soft btn-sm" onClick={() => setAddTraceOpen((value) => !value)}>
                 <Plus aria-hidden="true" />
@@ -395,7 +395,7 @@ export default function GoldenDetailPage() {
               </button>
             </header>
             {addTraceOpen ? (
-              <div className="gd-inline-form" aria-label="Add Golden trace">
+              <div className="gd-inline-form" aria-label="Add fixture trace">
                 <label>
                   <span>Call ID</span>
                   <input
@@ -469,7 +469,7 @@ export default function GoldenDetailPage() {
               <div className="gm-empty">
                 <BookOpenIcon />
                 <strong>This set has no protected traces yet.</strong>
-                <p>Create a Golden from a verified replay.</p>
+                <p>Create a fixture from a verified replay.</p>
               </div>
             ) : (
               <div className="gm-table-wrap">
@@ -551,7 +551,7 @@ export default function GoldenDetailPage() {
           <section className="gd-card">
             <header className="gm-section-header">
               <div>
-                <h2>Golden contract</h2>
+                <h2>Contract assertions</h2>
                 <p>Structured assertions used by replay and CI gates.</p>
               </div>
             </header>
@@ -579,11 +579,11 @@ export default function GoldenDetailPage() {
             <header className="gm-section-header">
               <div>
                 <h2>Run history</h2>
-                <p>Recent Golden set replay runs.</p>
+                <p>Recent fixture set replay runs.</p>
               </div>
             </header>
             {runs.length === 0 ? (
-              <p className="notif-meta">No Golden set runs yet.</p>
+              <p className="notif-meta">No fixture set runs yet.</p>
             ) : (
               <div className="gd-run-list">
                 {runs.map((run) => (
@@ -601,7 +601,7 @@ export default function GoldenDetailPage() {
             <header className="gm-section-header">
               <div>
                 <h2>Change history</h2>
-                <p>Audit trail for Golden contract and blocking changes.</p>
+                <p>Audit trail for contract assertions and blocking changes.</p>
               </div>
             </header>
             {historyQuery.isLoading ? <p className="notif-meta">Loading history...</p> : <HistoryList items={historyQuery.data?.items ?? []} />}
@@ -613,7 +613,7 @@ export default function GoldenDetailPage() {
             <header className="gm-section-header">
               <div>
                 <h2>Set controls</h2>
-                <p>Edit metadata or remove this Golden set.</p>
+                <p>Edit metadata or remove this fixture set.</p>
               </div>
               <button type="button" className="btn btn-soft btn-sm" onClick={() => setEditOpen((value) => !value)}>
                 <Edit3 aria-hidden="true" />
@@ -621,7 +621,7 @@ export default function GoldenDetailPage() {
               </button>
             </header>
             {editOpen ? (
-              <div className="gd-side-stack" aria-label="Edit Golden set">
+              <div className="gd-side-stack" aria-label="Edit fixture set">
                 <label className="gd-control-field">
                   <span>Name</span>
                   <input className="input" value={editName} onChange={(event) => setEditName(event.target.value)} />

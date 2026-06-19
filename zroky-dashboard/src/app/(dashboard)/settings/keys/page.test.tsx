@@ -109,7 +109,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("Create key")).toBeInTheDocument();
     expect(screen.getByText("Run SDK/Gateway")).toBeInTheDocument();
     expect(screen.getByText("First trace")).toBeInTheDocument();
-    expect(screen.getByText("Stub replay")).toBeInTheDocument();
+    expect(screen.getByText("Fixture validation")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Create project key" })).toBeInTheDocument();
     expect(screen.getByText("Provider keys are not needed for capture.")).toBeInTheDocument();
     expect(screen.getByText("Add them later only when verified replay needs live model calls.")).toBeInTheDocument();

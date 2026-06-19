@@ -364,7 +364,7 @@ describe("ReplayPage command center", () => {
     expect(screen.getByRole("heading", { name: "Start replay" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Issue/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Call/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Golden Set/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Fixture Set/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /PR \/ CI/ })).toBeInTheDocument();
     expect(screen.getByText("Protected spend")).toBeInTheDocument();
     expect(screen.getByText("Run run_1")).toBeInTheDocument();
@@ -406,7 +406,7 @@ describe("ReplayPage command center", () => {
     expect(await screen.findByText("Connect the matching provider key.")).toBeInTheDocument();
     expect(hooks.issueMutate).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Use stub replay" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use fixture validation" }));
 
     expect(hooks.issueMutate).toHaveBeenCalledWith({
       issueId: "issue_1",
@@ -426,9 +426,9 @@ describe("ReplayPage command center", () => {
     render(<ReplayPage />);
 
     await waitFor(() => {
-      expect((screen.getByRole("button", { name: /stubsanity only/ }) as HTMLButtonElement).className).toContain("is-active");
+      expect((screen.getByRole("button", { name: /Fixture validationWiring only/ }) as HTMLButtonElement).className).toContain("is-active");
     });
-    expect((screen.getByRole("button", { name: /real_llmreal comparison/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Managed provider replayPrompt\/model comparison/ }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
 
@@ -460,7 +460,7 @@ describe("ReplayPage command center", () => {
   it("sends the selected replay mode to Issue replay", async () => {
     render(<ReplayPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /mocked-tool/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Repository replay/ }));
     fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
 
     await waitFor(() => expect(hooks.issueMutate).toHaveBeenCalledWith({
@@ -469,10 +469,10 @@ describe("ReplayPage command center", () => {
     }));
   });
 
-  it("runs the selected Golden Set through the live replay endpoint", async () => {
+  it("runs the selected Fixture Set through the live replay endpoint", async () => {
     render(<ReplayPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Golden Set/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Fixture Set/ }));
     fireEvent.click(screen.getByRole("button", { name: "Start replay" }));
 
     await waitFor(() => expect(api.runGoldenSet).toHaveBeenCalledWith("golden_1", {

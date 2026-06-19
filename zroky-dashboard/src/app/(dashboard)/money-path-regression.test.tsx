@@ -340,7 +340,7 @@ describe("money-path dashboard regression proof", () => {
   it("renders the money-path issue in Command Center with verified replay state", async () => {
     render(<IssuesPage />);
 
-    expect(await screen.findByRole("heading", { name: "Failures" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Incidents" })).toBeInTheDocument();
     const row = screen.getByText("Refund status tool skipped").closest("tr");
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText("Verified fix")).toBeInTheDocument();
@@ -350,7 +350,7 @@ describe("money-path dashboard regression proof", () => {
     );
   });
 
-  it("renders issue proof panel from replay to Golden to failed CI gate", async () => {
+  it("renders issue proof panel from replay to Contract to failed CI gate", async () => {
     navigation.params = { id: moneyPathIds.issueId };
 
     render(<IssueDetailPage />);
@@ -358,9 +358,9 @@ describe("money-path dashboard regression proof", () => {
     expect(await screen.findByRole("heading", { name: "Refund status tool skipped" })).toBeInTheDocument();
     expect(screen.getByLabelText("Issue proof ladder")).toBeInTheDocument();
     expect(screen.getAllByText("Trusted").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Active Golden linked").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Active Contract linked").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Gate linked").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: /Open Golden/i })[0].getAttribute("href")).toBe(
+    expect(screen.getAllByRole("link", { name: /Open fixture/i })[0].getAttribute("href")).toBe(
       `/goldens/${moneyPathIds.goldenSetId}`,
     );
     expect(screen.getAllByRole("link", { name: /Open CI gate/i })[0].getAttribute("href")).toBe(
@@ -381,10 +381,10 @@ describe("money-path dashboard regression proof", () => {
     expect(screen.getAllByText("Fail").length).toBeGreaterThan(0);
   });
 
-  it("renders the Golden set as CI-blocking and needing review after the failed Golden run", () => {
+  it("renders the fixture set as CI-blocking and needing review after the failed fixture run", () => {
     render(<GoldensPage />);
 
-    expect(screen.getByRole("heading", { name: "Goldens" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Fixtures" })).toBeInTheDocument();
     const row = screen.getByText("Refund status protected flow").closest("tr");
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText("Protects refund status lookups from generic policy-only answers.")).toBeInTheDocument();
@@ -395,7 +395,7 @@ describe("money-path dashboard regression proof", () => {
     );
   });
 
-  it("renders Golden detail with source call, active trace, and failed latest replay", () => {
+  it("renders fixture detail with source call, active trace, and failed latest replay", () => {
     navigation.params = { id: moneyPathIds.goldenSetId };
 
     render(<GoldenDetailPage />);
@@ -418,7 +418,7 @@ describe("money-path dashboard regression proof", () => {
     expect(screen.getByText("PR #43 - Refund tool guard regression")).toBeInTheDocument();
     expect(screen.getByText("break/refund-tool-call")).toBeInTheDocument();
     expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
-    expect(screen.getByText("Mocked tool replay")).toBeInTheDocument();
+    expect(screen.getByText("Repository replay")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review" }).getAttribute("href")).toBe(
       `/ci-gates/${moneyPathIds.ciRunId}`,
     );
@@ -436,7 +436,7 @@ describe("money-path dashboard regression proof", () => {
     expect(screen.getByRole("link", { name: "View replay" }).getAttribute("href")).toBe(
       `/replay/${moneyPathIds.ciRunId}`,
     );
-    expect(screen.getByRole("link", { name: "View Golden set" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "View fixture set" }).getAttribute("href")).toBe(
       `/goldens/${moneyPathIds.goldenSetId}`,
     );
     expect(screen.getByRole("link", { name: "Open PR" }).getAttribute("href")).toBe(moneyPathIds.prUrl);

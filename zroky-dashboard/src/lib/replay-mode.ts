@@ -4,11 +4,11 @@ export const DEFAULT_VERIFICATION_REPLAY_MODE: ReplayMode = "real_llm";
 export const STUB_REPLAY_MODE: ReplayMode = "stub";
 
 export const REPLAY_MODE_OPTIONS: { value: ReplayMode; label: string; proof: string }[] = [
-  { value: "real_llm", label: "real_llm", proof: "real comparison" },
-  { value: "mocked-tool", label: "mocked-tool", proof: "frozen tool outputs required" },
-  { value: "live-sandbox", label: "live-sandbox", proof: "sandbox worker required" },
-  { value: "shadow", label: "shadow", proof: "side-by-side comparison" },
-  { value: "stub", label: "stub", proof: "sanity only" },
+  { value: "real_llm", label: "Managed provider replay", proof: "Prompt/model comparison" },
+  { value: "mocked-tool", label: "Repository replay", proof: "Recorded tool fixture" },
+  { value: "live-sandbox", label: "Sandbox replay", proof: "Isolated tools" },
+  { value: "shadow", label: "Shadow comparison", proof: "Baseline vs candidate" },
+  { value: "stub", label: "Fixture validation", proof: "Wiring only" },
 ];
 
 export function replayModeLabel(mode: string): string {

@@ -255,7 +255,7 @@ describe("Trace detail MVP", () => {
     expect(within(panel).getByRole("button", { name: "Run replay" })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Copy trace ID" })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Export raw JSON" })).toBeInTheDocument();
-    expect(within(panel).getByText("Golden eligibility")).toBeInTheDocument();
+    expect(within(panel).getByText("Contract fixture eligibility")).toBeInTheDocument();
   });
 
   it("renders timeline steps, input/output, and failed tool behavior", async () => {
@@ -304,7 +304,7 @@ describe("Trace detail MVP", () => {
     expect(screen.getByText("No diagnosis generated yet.")).toBeInTheDocument();
   });
 
-  it("keeps raw JSON collapsed and never creates a Golden from raw trace", async () => {
+  it("keeps raw JSON collapsed and never creates a Contract fixture from raw trace", async () => {
     render(<TraceDetailPage />);
 
     await screen.findByRole("heading", { name: "Trace timeline" });
@@ -316,8 +316,8 @@ describe("Trace detail MVP", () => {
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('"trace_id": "trace_refund"')));
     fireEvent.click(screen.getByRole("button", { name: "Download" }));
     expect(URL.createObjectURL).toHaveBeenCalled();
-    expect(screen.getByText("Run trusted replay before creating a Golden.")).toBeInTheDocument();
-    expect(screen.queryByText("Create Golden")).not.toBeInTheDocument();
+    expect(screen.getByText("Run trusted replay before creating a Contract fixture.")).toBeInTheDocument();
+    expect(screen.queryByText("Create Fixture")).not.toBeInTheDocument();
   });
 
   it("runs replay from the root call when eligible", async () => {

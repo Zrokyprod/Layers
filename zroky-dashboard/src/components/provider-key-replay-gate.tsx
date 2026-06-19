@@ -91,7 +91,7 @@ export function ProviderKeyReplayGate({
             BYOK replay
           </div>
           <h3>Connect the matching provider key.</h3>
-          <p>Capture and stub replay work without this. Provider-backed replay needs an active key for the provider behind the selected run.</p>
+          <p>Capture and fixture validation work without this. Managed provider replay needs an active key for the provider behind the selected run.</p>
           {normalizedExpectedProvider ? (
             <p className="provider-key-gate-provider-note">
               Expected provider: <strong>{providerLabel(normalizedExpectedProvider)}</strong>
@@ -120,14 +120,14 @@ export function ProviderKeyReplayGate({
               {billingQuery.isLoading
                 ? "Zroky will not show the secret field until the plan allows provider-key storage."
                 : planCheckUnavailable
-                  ? "Open provider settings after the plan check is available. Stub replay can run without a provider key."
-                  : "Upgrade before pasting provider secrets. Capture and stub replay continue without provider keys."}
+                  ? "Open provider settings after the plan check is available. Fixture validation can run without a provider key."
+                  : "Upgrade before pasting provider secrets. Capture and fixture validation continue without provider keys."}
             </span>
           </div>
           <div className="provider-key-gate-actions">
             {showUseStub && onUseStub ? (
               <button type="button" className="btn btn-soft" onClick={onUseStub} disabled={saving}>
-                Use stub replay
+                Use fixture validation
               </button>
             ) : null}
             {!billingQuery.isLoading && !planCheckUnavailable ? (
@@ -177,7 +177,7 @@ export function ProviderKeyReplayGate({
             </button>
             {showUseStub && onUseStub ? (
               <button type="button" className="btn btn-soft" onClick={onUseStub} disabled={saving}>
-                Use stub replay
+                Use fixture validation
               </button>
             ) : null}
             <Link href="/settings/providers" className="btn btn-soft">

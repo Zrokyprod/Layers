@@ -86,7 +86,7 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
       "50K events/mo",
       "30 day retention",
       "Unlimited seats",
-      "50 mocked-tool replay runs/mo",
+      "50 repository replay runs/mo",
       "250 fixture traces",
       "Non-blocking CI preview",
       "Provider key vault",
@@ -101,14 +101,26 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
       "250K events/mo",
       "90 day retention",
       "Unlimited seats",
-      "500 real LLM replay runs/mo",
-      "500 mocked-tool replay runs/mo",
-      "100 live-sandbox replay runs/mo",
+      "500 managed provider replay runs/mo",
+      "500 repository replay runs/mo",
+      "100 sandbox replay runs/mo",
       "2,500 fixture traces",
       "Blocking CI gates",
       "Provider key vault and audit log",
     ],
     selfServe: true,
+  },
+  {
+    code: "enterprise",
+    name: "Enterprise",
+    monthlyCostUsd: null,
+    features: [
+      "Custom event and replay limits",
+      "Repository replay with fail-closed CI",
+      "Provider key vault for managed replay",
+      "Advanced audit and retention controls",
+    ],
+    selfServe: false,
   },
 ];
 
@@ -161,6 +173,14 @@ function catalogPlanCode(planCode: string | null | undefined): string {
   return normalized;
 }
 
+function planRank(planCode: string | null | undefined): number {
+  const code = catalogPlanCode(planCode);
+  if (code === "enterprise") return 3;
+  if (code === "pro") return 2;
+  if (code === "starter") return 1;
+  return 0;
+}
+
 function displayPlanCode(planCode: string | null | undefined): string {
   const normalized = (planCode ?? "").trim();
   return normalized ? normalized.toUpperCase() : "FREE";
@@ -211,6 +231,9 @@ function isProblemMessage(value: string): boolean {
 }
 
 function paymentStatusLabel(billing: BillingMeResponse | null): { label: string; detail: string } {
+  if (billing?.payment_provider === "manual" && billing.status === "active") {
+    return { label: "Manual activation", detail: "Plan access is active through a Zroky-administered billing record." };
+  }
   if (billing?.payment_subscription_ref) {
     return { label: "Confirmed", detail: "Razorpay payment is active for this billing period." };
   }
@@ -430,8 +453,8 @@ function BillingSettingsContent() {
       <section className="panel">
         <header className="panel-header">
           <div>
-            <h3>Plan &amp; Pricing</h3>
-            <p>Your current plan and Razorpay checkout upgrades.</p>
+            <h3>Plan controls</h3>
+            <p>Current entitlement template and available upgrades.</p>
           </div>
         </header>
 
@@ -451,6 +474,7 @@ function BillingSettingsContent() {
           <div className="billing-plans-grid">
             {PLAN_CATALOG.map((plan) => {
               const isCurrent = plan.code === currentCatalogCode;
+              const canChangeToPlan = !isCurrent && planRank(plan.code) > planRank(currentCatalogCode);
               return (
                 <div key={plan.code} className={`billing-plan-card${isCurrent ? " billing-plan-current" : ""}`}>
                   {isCurrent && <span className="pill pill-green billing-plan-badge">Current</span>}
@@ -464,14 +488,14 @@ function BillingSettingsContent() {
                       <li key={feature}>✓ {feature}</li>
                     ))}
                   </ul>
-                  {!isCurrent && (
+                  {canChangeToPlan && (
                     <button
                       type="button"
                       className="btn btn-primary billing-plan-btn"
                       onClick={() => void changePlan(plan.code)}
                       disabled={loading || checkoutBusy}
                     >
-                      {plan.selfServe ? (checkoutBusy ? "Opening checkout..." : `Pay with Razorpay for ${plan.name}`) : `Contact us for ${plan.name}`}
+                      {plan.selfServe ? (checkoutBusy ? "Opening checkout..." : `Pay with Razorpay for ${plan.name}`) : `Contact Zroky for ${plan.name}`}
                     </button>
                   )}
                 </div>

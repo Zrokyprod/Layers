@@ -137,11 +137,11 @@ export function replayProofLabel(run: ReplayRunItem, detail?: RegressionCIRunDet
     run.replay_mode ??
     "";
   const mode = rawMode.trim().toLowerCase().replaceAll("-", "_");
-  if (mode === "real_llm") return "Real LLM replay";
-  if (mode === "mocked_tool") return "Mocked tool replay";
+  if (mode === "real_llm") return "Managed provider replay";
+  if (mode === "mocked_tool") return "Repository replay";
   if (mode === "frozen_rag") return "Frozen RAG replay";
   if (mode === "sandbox" || mode === "live_sandbox") return "Sandbox replay";
-  if (mode === "shadow") return "Shadow replay";
+  if (mode === "shadow") return "Shadow comparison";
   return "No trusted replay";
 }
 

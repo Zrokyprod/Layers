@@ -61,7 +61,7 @@ function ContractsTable({ contracts }: { contracts: RegressionContractView[] }) 
       <div className="gm-empty">
         <ShieldCheck aria-hidden="true" />
         <strong>No contracts yet</strong>
-        <span>Import fixture-backed Golden contracts or create a draft from a confirmed incident.</span>
+        <span>Create one from a confirmed incident after baseline reproduction and candidate replay proof.</span>
       </div>
     );
   }
@@ -122,7 +122,7 @@ function FixturesTable({ fixtures }: { fixtures: GoldenSetView[] }) {
       <div className="gm-empty">
         <Database aria-hidden="true" />
         <strong>No fixtures yet</strong>
-        <span>Promote verified replay evidence into fixture sets before activating contracts.</span>
+        <span>Fixtures appear after replay captures pinned trace and tool evidence. They stay evidence-only until a Contract version is approved.</span>
       </div>
     );
   }
@@ -250,7 +250,7 @@ export default function ContractsPage() {
         <div className="gm-kpi-card">
           <span>Fixtures</span>
           <strong>{fixtures.length}</strong>
-          <small>Golden evidence sets</small>
+          <small>Fixture evidence sets</small>
         </div>
       </section>
 
@@ -266,7 +266,7 @@ export default function ContractsPage() {
         <div className="gm-notice-muted">
           <CheckCircle2 aria-hidden="true" />
           <strong>{importMutation.data.imported_count} contract version{importMutation.data.imported_count === 1 ? "" : "s"} imported.</strong>
-          <span>Imported versions stay draft until proof is pinned and an admin approves activation.</span>
+          <span>Imported versions stay draft until baseline, candidate SHA, fixture, evaluator, and admin approval are pinned.</span>
         </div>
       ) : null}
 

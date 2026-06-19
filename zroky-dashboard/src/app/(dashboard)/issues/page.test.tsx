@@ -187,7 +187,7 @@ describe("FailuresPage MVP list", () => {
 
     render(<IssuesPage />);
 
-    expect(await screen.findByRole("heading", { name: "Failures" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Incidents" })).toBeInTheDocument();
     expect(screen.getByText("Grouped production failures detected across your agents.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review replay gaps" })).toBeInTheDocument();
 
@@ -211,12 +211,11 @@ describe("FailuresPage MVP list", () => {
 
     const verifiedRow = rowForIssue("Refund fix verified");
     expect(within(verifiedRow).getByText("Verified fix")).toBeInTheDocument();
-    expect(within(verifiedRow).getByRole("link", { name: "Promote Golden" }).getAttribute("href")).toBe(
-      "/goldens?call_id=call_2",
-    );
-    expect(within(verifiedRow).getByRole("link", { name: /Create Golden/i }).getAttribute("href")).toBe(
-      "/goldens?call_id=call_2",
-    );
+    const promoteLinks = within(verifiedRow).getAllByRole("link", { name: "Promote Contract" });
+    expect(promoteLinks.map((link) => link.getAttribute("href"))).toEqual([
+      "/contracts?call_id=call_2",
+      "/contracts?call_id=call_2",
+    ]);
     expect(within(verifiedRow).getByRole("link", { name: /View issue/i })).toBeInTheDocument();
   });
 
@@ -257,14 +256,14 @@ describe("FailuresPage MVP list", () => {
 
   it.each([
     ["covered_failed", "Replay failed"],
-    ["sanity_replay_passed", "Stub only"],
+    ["sanity_replay_passed", "Fixture validation only"],
     ["real_replay_missing_tool_proof", "Missing tool proof"],
-    ["stub_only", "Stub only"],
+    ["stub_only", "Fixture validation only"],
     ["not_verified", "Not verified"],
     ["tool_snapshot_missing", "Missing tool proof"],
     ["inconclusive", "Inconclusive"],
     ["unknown", "No trusted replay"],
-  ])("renders replay proof label %s as %s and blocks Create Golden", async (status, label) => {
+  ])("renders replay proof label %s as %s and blocks Contract promotion", async (status, label) => {
     mockIssueList([issue({ replay_coverage_status: status, sample_call_id: "call_untrusted" })]);
 
     render(<IssuesPage />);
@@ -272,7 +271,7 @@ describe("FailuresPage MVP list", () => {
     await screen.findByText("Checkout loop");
     const row = rowForIssue("Checkout loop");
     expect(within(row).getByText(label)).toBeInTheDocument();
-    expect(within(row).queryByText("Create Golden")).toBeNull();
+    expect(within(row).queryByText("Promote Contract")).toBeNull();
     expect(within(row).getByRole("button", { name: /Replay/i })).toBeInTheDocument();
   });
 
@@ -288,7 +287,7 @@ describe("FailuresPage MVP list", () => {
     expect(within(row).getAllByRole("link", { name: /View issue/i }).length).toBeGreaterThan(0);
   });
 
-  it("does not offer Golden promotion again when an active Golden already exists without a linked PR", async () => {
+  it("does not offer Contract promotion again when an active Contract already exists without a linked PR", async () => {
     mockIssueList([
       issue({
         replay_coverage_status: "verified_fix",
@@ -327,7 +326,7 @@ describe("FailuresPage MVP list", () => {
 
     await screen.findByText("Checkout loop");
     const row = rowForIssue("Checkout loop");
-    expect(within(row).queryByRole("link", { name: /Create Golden/i })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("link", { name: /Promote Contract/i })).not.toBeInTheDocument();
     expect(within(row).getByRole("link", { name: "Assign / resolve" }).getAttribute("href")).toBe("/issues/issue_1");
   });
 
@@ -367,7 +366,7 @@ describe("FailuresPage MVP list", () => {
       }),
       issue({
         id: "issue_ci_ready",
-        title: "Golden ready for CI",
+        title: "Contract ready for CI",
         severity: "medium",
         replay_coverage_status: "verified_fix",
         deploy_pr_url: "https://github.com/acme/repo/pull/42",
@@ -445,12 +444,12 @@ describe("FailuresPage MVP list", () => {
       "Same cost more occurrences",
       "Same cost fewer occurrences",
       "Verified high impact",
-      "Golden ready for CI",
+      "Contract ready for CI",
       "CI already linked",
     ]);
 
     expect(
-      within(rowForIssue("Golden ready for CI"))
+      within(rowForIssue("Contract ready for CI"))
         .getAllByRole("link", { name: "Run CI gate" })
         .some((link) => link.getAttribute("href") === "/issues/issue_ci_ready"),
     ).toBe(true);

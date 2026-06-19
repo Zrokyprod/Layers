@@ -408,7 +408,7 @@ export function FirstRunOnboarding({
           </div>
           <div>
             <GitPullRequest aria-hidden="true" />
-            <span>Golden blocks regression</span>
+            <span>Contract blocks regression</span>
           </div>
         </div>
       </div>

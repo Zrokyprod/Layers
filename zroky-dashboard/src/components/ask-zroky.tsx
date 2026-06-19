@@ -368,7 +368,7 @@ export function AskZroky() {
     const promotableTraces = run.traces.filter((trace) => trace.status === "pass" && Boolean(trace.call_id_replayed));
 
     if (run.status !== "pass" || run.replay_mode_warning || !verifiedFix || promotableTraces.length === 0) {
-      throw new Error("Only verified, non-stub passing replays can be promoted to goldens.");
+      throw new Error("Only verified repository or managed replay results can be promoted to Contract fixtures.");
     }
 
     const sets = await listGoldenSets({ limit: 100 });

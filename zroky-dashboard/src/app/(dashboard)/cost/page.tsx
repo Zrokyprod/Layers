@@ -96,11 +96,11 @@ function titleCase(value: string | null | undefined): string {
 function normalizedMode(value: string | null | undefined): string {
   const normalized = (value ?? "").trim().toLowerCase().replaceAll("-", "_");
   const labels: Record<string, string> = {
-    live_sandbox: "Live sandbox",
-    mocked_tool: "Mocked tool",
-    real_llm: "Real LLM",
-    shadow: "Shadow",
-    stub: "Stub",
+    live_sandbox: "Sandbox replay",
+    mocked_tool: "Repository replay",
+    real_llm: "Managed provider replay",
+    shadow: "Shadow comparison",
+    stub: "Fixture validation",
   };
   return labels[normalized] ?? titleCase(normalized);
 }

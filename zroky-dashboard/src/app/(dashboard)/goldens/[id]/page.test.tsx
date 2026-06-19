@@ -292,7 +292,7 @@ describe("GoldenDetailPage MVP", () => {
   it("renders header, badges, metadata cards, and side panel", () => {
     render(<GoldenDetailPage />);
 
-    expect(screen.getByRole("link", { name: "Back to Goldens" }).getAttribute("href")).toBe("/goldens");
+    expect(screen.getByRole("link", { name: "Back to Fixtures" }).getAttribute("href")).toBe("/goldens");
     expect(screen.getByRole("heading", { name: "Refund protected flow" })).toBeInTheDocument();
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Blocks CI").length).toBeGreaterThan(0);
@@ -300,8 +300,8 @@ describe("GoldenDetailPage MVP", () => {
     for (const label of ["Trace count", "Last pass rate", "Blocks CI", "Needs review"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
-    expect(screen.getByRole("heading", { name: "Golden health" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run Golden set" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Fixture health" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run fixture set" })).toBeInTheDocument();
   });
 
   it("renders protected traces and expected behavior without raw JSON by default", () => {
@@ -327,7 +327,7 @@ describe("GoldenDetailPage MVP", () => {
     expect(screen.getByRole("link", { name: /verified_fix/i }).getAttribute("href")).toBe("/replay/run_1");
   });
 
-  it("renders structured Golden contract and change history", () => {
+  it("renders structured Contract assertions and change history", () => {
     mockDetail({
       traces: [
         goldenTrace({
@@ -346,7 +346,7 @@ describe("GoldenDetailPage MVP", () => {
 
     render(<GoldenDetailPage />);
 
-    expect(screen.getByRole("heading", { name: "Golden contract" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Contract assertions" })).toBeInTheDocument();
     expect(screen.getAllByText(/get_refund_status/).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Change history" })).toBeInTheDocument();
     expect(screen.getByText("golden_trace.created")).toBeInTheDocument();
@@ -359,7 +359,7 @@ describe("GoldenDetailPage MVP", () => {
     render(<GoldenDetailPage />);
 
     expect(screen.getByText("This set has no protected traces yet.")).toBeInTheDocument();
-    expect(screen.getByText("Create a Golden from a verified replay.")).toBeInTheDocument();
+    expect(screen.getByText("Create a fixture from a verified replay.")).toBeInTheDocument();
   });
 
   it("shows flaky and drift warnings but allows disabling existing CI blocking", async () => {
@@ -374,7 +374,7 @@ describe("GoldenDetailPage MVP", () => {
     render(<GoldenDetailPage />);
 
     expect(screen.getAllByText("Flaky").length).toBeGreaterThan(0);
-    expect(screen.getByText("Draft, flaky, drift-suspected, or empty Goldens should be reviewed before blocking CI.")).toBeInTheDocument();
+    expect(screen.getByText("Draft, flaky, drift-suspected, or empty fixtures should be reviewed before blocking CI.")).toBeInTheDocument();
     expect((screen.getByRole("button", { name: "Disable CI blocking" }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Disable CI blocking" }));
@@ -382,10 +382,10 @@ describe("GoldenDetailPage MVP", () => {
     await waitFor(() => expect(api.updateGoldenSet).toHaveBeenCalledWith("golden_1", { blocks_ci: false }));
   });
 
-  it("runs the Golden set through existing API", async () => {
+  it("runs the fixture set through existing API", async () => {
     render(<GoldenDetailPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Run Golden set" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run fixture set" }));
 
     await waitFor(() => expect(api.runGoldenSet).toHaveBeenCalledWith("golden_1", { trigger: "manual" }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/replay/run_new"));
@@ -413,7 +413,7 @@ describe("GoldenDetailPage MVP", () => {
     expect(screen.getByText("Second trusted evidence.")).toBeInTheDocument();
   });
 
-  it("adds a Golden trace with validated criteria JSON", async () => {
+  it("adds a fixture trace with validated criteria JSON", async () => {
     render(<GoldenDetailPage />);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Add trace" })[0]);
@@ -436,7 +436,7 @@ describe("GoldenDetailPage MVP", () => {
     );
   });
 
-  it("removes a Golden trace", async () => {
+  it("removes a fixture trace", async () => {
     render(<GoldenDetailPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
@@ -444,7 +444,7 @@ describe("GoldenDetailPage MVP", () => {
     await waitFor(() => expect(api.deleteGoldenTrace).toHaveBeenCalledWith("golden_1", "trace_1"));
   });
 
-  it("saves edited Golden set metadata", async () => {
+  it("saves edited fixture set metadata", async () => {
     render(<GoldenDetailPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
@@ -462,7 +462,7 @@ describe("GoldenDetailPage MVP", () => {
     );
   });
 
-  it("deletes the Golden set and returns to the list", async () => {
+  it("deletes the fixture set and returns to the list", async () => {
     render(<GoldenDetailPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Delete set" }));
@@ -477,6 +477,6 @@ describe("GoldenDetailPage MVP", () => {
 
     render(<GoldenDetailPage />);
 
-    expect((screen.getByRole("button", { name: "Run Golden set" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Run fixture set" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

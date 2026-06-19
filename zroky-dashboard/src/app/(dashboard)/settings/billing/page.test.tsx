@@ -98,7 +98,7 @@ describe("BillingPage", () => {
     expect(
       screen.getByText("Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity."),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Plan & Pricing")).toBeInTheDocument();
+    expect(await screen.findByText("Plan controls")).toBeInTheDocument();
     expect(screen.getAllByText("42 / 5,000").length).toBeGreaterThan(0);
   });
 
@@ -108,12 +108,12 @@ describe("BillingPage", () => {
     expect(await screen.findByText("Starter")).toBeInTheDocument();
     const starterCard = screen.getByText("Starter").closest(".billing-plan-card") as HTMLElement;
     expect(within(starterCard).getByText(/50K events\/mo/)).toBeInTheDocument();
-    expect(within(starterCard).getByText(/50 mocked-tool replay runs\/mo/)).toBeInTheDocument();
+    expect(within(starterCard).getByText(/50 repository replay runs\/mo/)).toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
     expect(screen.getByText("$199.00")).toBeInTheDocument();
     const proCard = screen.getByText("Pro").closest(".billing-plan-card") as HTMLElement;
     expect(within(proCard).getByText(/250K events\/mo/)).toBeInTheDocument();
-    expect(within(proCard).getByText(/500 real LLM replay runs\/mo/)).toBeInTheDocument();
+    expect(within(proCard).getByText(/500 managed provider replay runs\/mo/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pay with Razorpay for Starter" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });

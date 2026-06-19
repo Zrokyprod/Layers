@@ -319,7 +319,7 @@ function recommendedNextReplayMode(run: ReplayRunDetailItem): ReplayMode {
 function warningFor(run: ReplayRunDetailItem, trace: ReplayRunTraceItem | null): string | null {
   if (run.replay_mode_warning) return run.replay_mode_warning;
   if (run.replay_mode === STUB_REPLAY_MODE) {
-    return "Stub replay is sanity-only. It rechecks recorded behavior and cannot prove a candidate fix is safe.";
+    return "Fixture validation checks recorded wiring only and cannot prove a candidate fix is safe.";
   }
   if (run.summary.verification_status === "not_verified") {
     return "Replay finished, but verification did not prove a trusted fix.";
@@ -344,7 +344,7 @@ function toolBehaviorVerdict(value: unknown, confidence: ReplayConfidenceLevel):
 
 function verdictTitle(confidence: ReplayConfidenceLevel): string {
   if (confidence === "verified_fix") return "Verified fix";
-  if (confidence === "stub_only") return "Stub only";
+  if (confidence === "stub_only") return "Fixture validation only";
   if (confidence === "not_verified") return "Not verified";
   if (confidence === "fix_failed") return "Replay failed";
   return "Needs review";
@@ -580,7 +580,7 @@ function CreateGoldenPanel({
       <header className="panel-header">
         <div>
           <h3>Contract fixture eligibility</h3>
-          <p>Only verified non-stub replay fixes can be converted into fixture evidence for Contracts.</p>
+          <p>Only verified repository or managed replay fixes can be converted into fixture evidence for Contracts.</p>
         </div>
         <span className={`alert-cat-badge ${canCreateGolden ? "badge-green" : "badge-yellow"}`}>
           {canCreateGolden ? "Eligible" : "Not eligible yet"}
@@ -605,7 +605,7 @@ function CreateGoldenPanel({
           </strong>
           <span>
             {run.replay_mode === STUB_REPLAY_MODE
-              ? "Stub replay is sanity-only. Run real comparison replay before converting this result into a fixture."
+              ? "Fixture validation is wiring-only. Run repository replay or managed provider replay before converting this result into a fixture."
               : "Fixture creation is enabled only after verification_status is verified_fix and passing replay traces have source calls."}
           </span>
         </div>
@@ -678,7 +678,7 @@ function CiGatePanel({
 
   const ciMutation = useMutation({
     mutationFn: async () => {
-      if (!isSafeVerifiedFix) throw new Error("Run a verified non-stub replay before opening a CI gate.");
+      if (!isSafeVerifiedFix) throw new Error("Run verified repository or managed replay before opening a CI gate.");
       const sha = gitSha.trim();
       if (sha.length < 4) throw new Error("Enter a commit SHA before running a CI gate.");
       return runRegressionCI({ git_sha: sha, sample_window_days: 30 });
@@ -710,7 +710,7 @@ function CiGatePanel({
             <AlertTriangle aria-hidden="true" />
             CI gate blocked
           </strong>
-          <span>Only verified non-stub replay fixes can create a regression CI gate.</span>
+          <span>Only verified repository or managed replay fixes can create a regression CI gate.</span>
         </div>
       ) : null}
 
@@ -1181,7 +1181,7 @@ export default function ReplayRunDetailPage() {
                   {pct == null
                     ? "Replay fidelity is not available for this run — Zroky will not infer a score it cannot measure."
                     : confidence === "stub_only"
-                      ? "Stub replay only regraded recorded behavior. Fidelity reflects judge confidence, not a verified reproduction."
+                      ? "Fixture validation only regraded recorded behavior. Fidelity reflects judge confidence, not a verified reproduction."
                       : confidence === "verified_fix"
                         ? `Replay reproduced the scenario and the candidate passed with ${replayModeProof(run.replay_mode)}.`
                         : "Replay completed, but fidelity is not high enough to trust this as a verified fix."}
@@ -1230,7 +1230,7 @@ export default function ReplayRunDetailPage() {
           {confidence === "stub_only" ? (
             <span className="replay-lab-verdict-copy is-warn">
               <AlertTriangle aria-hidden="true" />
-              Stub replay is sanity-only and cannot display as verified.
+              Fixture validation is wiring-only and cannot display as verified.
             </span>
           ) : null}
           {isUntrustedState ? (

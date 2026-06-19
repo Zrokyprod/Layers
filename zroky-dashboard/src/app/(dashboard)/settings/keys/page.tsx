@@ -28,7 +28,7 @@ import {
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
 
 const defaultKeyName = "Production capture key";
-const capturePath = ["Create key", "Run SDK/Gateway", "First trace", "Stub replay"];
+const capturePath = ["Create key", "Run SDK/Gateway", "First trace", "Fixture validation"];
 
 export default function ApiKeysPage() {
   const projectQuery = useProjectSettings();

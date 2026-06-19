@@ -284,7 +284,7 @@ export function PublicLanding() {
                 </a>
               </div>
               <p className="zlp-hero-fine">
-                <b>5-min SDK install</b> · any framework · <b>a stub replay is never called &quot;verified.&quot;</b>
+                <b>5-min SDK install</b> · any framework · <b>fixture validation is never called &quot;verified.&quot;</b>
               </p>
               <div className="zlp-pill-line" aria-label="Reliability workflow preview">
                 {proofPills.map((pill) => {

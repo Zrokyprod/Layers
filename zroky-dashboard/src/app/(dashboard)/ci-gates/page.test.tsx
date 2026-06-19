@@ -219,8 +219,8 @@ describe("CI Gates list MVP", () => {
 
     render(<CiGatesPage />);
 
-    expect(await screen.findByText("Mocked tool replay")).toBeInTheDocument();
-    expect(screen.getAllByText("Real LLM replay").length).toBeGreaterThan(0);
+    expect(await screen.findByText("Repository replay")).toBeInTheDocument();
+    expect(screen.getAllByText("Managed provider replay").length).toBeGreaterThan(0);
     expect(screen.getByText("Sandbox replay")).toBeInTheDocument();
     expect(screen.getAllByText("No trusted replay").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Review" }).length).toBeGreaterThan(0);

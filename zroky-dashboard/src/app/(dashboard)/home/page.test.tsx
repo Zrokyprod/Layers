@@ -376,7 +376,7 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("Release blocked")).toBeInTheDocument();
     expect(screen.getByText("1 gate failing on regression-ci:proj_1.")).toBeInTheDocument();
@@ -586,20 +586,20 @@ describe("Command Center home", () => {
 
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Run replay").length).toBeGreaterThan(0);
-    expect(within(rowForIssueTitle("Answer drift")).getByText("Open Goldens")).toBeInTheDocument();
-    expect(within(rowForIssueTitle("Checkout loop")).queryByText("Open Goldens")).toBeNull();
+    expect(within(rowForIssueTitle("Answer drift")).getByText("Open Contracts")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).queryByText("Open Contracts")).toBeNull();
   });
 
   it.each([
     ["covered_failed", "Replay failed"],
-    ["sanity_replay_passed", "Stub only"],
+    ["sanity_replay_passed", "Fixture validation only"],
     ["real_replay_missing_tool_proof", "Missing tool proof"],
-    ["stub_only", "Stub only"],
+    ["stub_only", "Fixture validation only"],
     ["not_verified", "Not verified"],
     ["tool_snapshot_missing", "Missing tool proof"],
     ["inconclusive", "Inconclusive"],
     ["unknown_untrusted_state", "No trusted replay"],
-  ])("routes untrusted replay status %s to replay instead of Create Golden", async (status, label) => {
+  ])("routes untrusted replay status %s to replay instead of Contract promotion", async (status, label) => {
     mockInbox(
       {
         "pilot.root_cause_diagnosis": true,
@@ -618,7 +618,7 @@ describe("Command Center home", () => {
 
     await screen.findAllByText("Checkout loop");
     const row = rowForIssueTitle("Checkout loop");
-    expect(within(row).queryByText("Open Goldens")).toBeNull();
+    expect(within(row).queryByText("Open Contracts")).toBeNull();
     expect(within(row).getByRole("button", { name: /Run replay/i })).toBeInTheDocument();
     expect(within(row).getByText(label)).toBeInTheDocument();
   });

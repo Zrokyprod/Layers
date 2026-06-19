@@ -3,22 +3,22 @@
 @import "tailwindcss/utilities";
 
 :root {
-  --bg-canvas: #f6f7f9;
-  --bg-panel: #ffffff;
-  --bg-panel-soft: #f1f4f7;
-  --bg-panel-strong: #ffffff;
-  --bg-panel-elevated: #ffffff;
-  --text-primary: #101216;
-  --text-secondary: #4c5563;
-  --text-tertiary: #828b99;
+  --bg-canvas: #f7f6f2;
+  --bg-panel: #fffdfa;
+  --bg-panel-soft: #efeee7;
+  --bg-panel-strong: #fffefa;
+  --bg-panel-elevated: #fffefa;
+  --text-primary: #171713;
+  --text-secondary: #53534a;
+  --text-tertiary: #7c786c;
   --text-inverse: #ffffff;
-  --line-soft: #dce3eb;
-  --line-strong: #b8c4d0;
-  --accent: #635bff;
-  --accent-hover: #4f46e5;
-  --accent-pressed: #3730a3;
-  --accent-soft: rgba(99, 91, 255, 0.08);
-  --accent-glow: rgba(99, 91, 255, 0.14);
+  --line-soft: #e2ded3;
+  --line-strong: #c9c2b2;
+  --accent: #2f5f66;
+  --accent-hover: #244d53;
+  --accent-pressed: #17383d;
+  --accent-soft: rgba(47, 95, 102, 0.09);
+  --accent-glow: rgba(47, 95, 102, 0.14);
   --ok: #16a34a;
   --warn: #b7791f;
   --danger: #d9465f;
@@ -29,11 +29,11 @@
   --status-warning-soft: rgba(183, 121, 31, 0.18);
   --status-error: #d9465f;
   --status-error-bg: rgba(217, 70, 95, 0.10);
-  --radius-xl: 24px;
-  --radius-lg: 18px;
-  --radius-md: 12px;
-  --shadow-soft: 0 18px 55px -30px rgba(17, 24, 39, 0.22), 0 1px 1px rgba(17, 24, 39, 0.04);
-  --shadow-glow: 0 0 0 1px rgba(99, 91, 255, 0.14), 0 24px 90px rgba(99, 91, 255, 0.10);
+  --radius-xl: 14px;
+  --radius-lg: 10px;
+  --radius-md: 8px;
+  --shadow-soft: 0 14px 38px -34px rgba(23, 23, 19, 0.24), 0 1px 1px rgba(23, 23, 19, 0.03);
+  --shadow-glow: 0 0 0 1px rgba(47, 95, 102, 0.12), 0 18px 54px rgba(47, 95, 102, 0.08);
   --space-1: 8px;
   --space-2: 16px;
   --space-3: 24px;
@@ -56,24 +56,24 @@
   --transition-base: 220ms ease-out;
 
   /* shadcn/ui theme variables - light default */
-  --background: 0 0% 100%;
-  --foreground: 222 47% 7%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 7%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 7%;
-  --primary: 245 85% 61%;
+  --background: 48 22% 96%;
+  --foreground: 60 10% 8%;
+  --card: 40 60% 99%;
+  --card-foreground: 60 10% 8%;
+  --popover: 40 60% 99%;
+  --popover-foreground: 60 10% 8%;
+  --primary: 187 37% 29%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 210 20% 96%;
-  --secondary-foreground: 222 47% 7%;
-  --muted: 210 20% 96%;
-  --muted-foreground: 215 16% 47%;
-  --accent-foreground: 222 47% 7%;
+  --secondary: 45 20% 92%;
+  --secondary-foreground: 60 10% 8%;
+  --muted: 45 20% 92%;
+  --muted-foreground: 43 7% 46%;
+  --accent-foreground: 60 10% 8%;
   --destructive: 346 77% 56%;
   --destructive-foreground: 0 0% 100%;
-  --border: 214 18% 88%;
-  --input: 214 18% 88%;
-  --ring: 245 85% 61%;
+  --border: 40 17% 86%;
+  --input: 40 17% 86%;
+  --ring: 187 37% 29%;
   --radius: 0.5rem;
 }
 
@@ -193,10 +193,29 @@ body {
 body {
   color: var(--text-primary);
   background: var(--bg-canvas);
-  font-family: var(--font-inter, Inter, system-ui, -apple-system, sans-serif);
+  font-family: var(--font-manrope), "SF Pro Display", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+.module-hero h1,
+.gm-hero h1,
+.ci-hero h1,
+.im-hero h1,
+.imd-hero h1 {
+  font-family: var(--font-space-grotesk), var(--font-manrope), "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+p,
+small,
+span {
+  text-wrap: pretty;
 }
 
 a {

@@ -341,7 +341,7 @@ export default function IssuesPage() {
     }
     if (hasVerifiedFix(issue) && issue.sample_call_id && !hasActiveGolden(issue)) {
       return (
-        <Link href={`/goldens?call_id=${encodeURIComponent(issue.sample_call_id)}`} className="btn btn-primary btn-sm im-btn-primary">
+        <Link href={`/contracts?call_id=${encodeURIComponent(issue.sample_call_id)}`} className="btn btn-primary btn-sm im-btn-primary">
           <ShieldCheck aria-hidden="true" />
           Promote Contract
         </Link>
@@ -490,7 +490,7 @@ export default function IssuesPage() {
             <option value="">Any</option>
             <option value="no_trusted_replay">No trusted replay</option>
             <option value="verified_fix">Verified fix</option>
-            <option value="stub_only">Stub only</option>
+            <option value="stub_only">Fixture validation only</option>
             <option value="not_verified">Not verified</option>
             <option value="missing_tool_proof">Missing tool proof</option>
             <option value="replay_failed">Replay failed</option>
