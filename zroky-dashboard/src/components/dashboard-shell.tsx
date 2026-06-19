@@ -610,10 +610,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const planLabel = formatPlanLabel(planCode);
   const billingStatus = billingQuery.data?.status ?? (billingQuery.isLoading ? "loading" : "unavailable");
   const eventsQuota = numericEntitlement(planTemplate, "events.monthly_quota");
+  const eventsQuotaLabel = eventsQuota === -1 ? "Unlimited" : eventsQuota != null ? formatCompactNumber(eventsQuota) : null;
   const planPeriod = billingQuery.isLoading
     ? "Loading billing period"
-    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && eventsQuota != null
-      ? `${formatCompactNumber(eventsQuota)} events/month included`
+    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && eventsQuotaLabel
+      ? eventsQuota === -1
+        ? "Unlimited events included"
+        : `${eventsQuotaLabel} events/month included`
       : periodCopy(billingQuery.data?.current_period_end, billingQuery.data?.trial_end);
   const budgetStatus = budgetQuery.data;
   const hasBudgetLimit = typeof budgetStatus?.limit_usd === "number" && budgetStatus.limit_usd > 0;
@@ -622,15 +625,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     : 0;
   const planMetricMain = hasBudgetLimit
     ? formatMoney(budgetStatus!.spent_usd)
-    : eventsQuota != null
-      ? formatCompactNumber(eventsQuota)
+    : eventsQuotaLabel
+      ? eventsQuotaLabel
       : billingQuery.isLoading
         ? "Loading"
         : "Quota n/a";
   const planMetricTotal = hasBudgetLimit
     ? `/ ${formatMoney(budgetStatus!.limit_usd!)} budget`
     : eventsQuota != null
-      ? "events / month"
+      ? eventsQuota === -1
+        ? "events included"
+        : "events / month"
       : "usage unavailable";
   const planCardStatusClass =
     budgetStatus?.status === "critical" ? "is-critical" : budgetStatus?.status === "warning" ? "is-warning" : "is-ok";

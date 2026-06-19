@@ -447,6 +447,21 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
   });
 
+  it("renders unlimited event quota without exposing backend sentinel values", () => {
+    navState.planCode = "enterprise";
+    navState.planTemplate = {
+      ...navState.planTemplate,
+      "events.monthly_quota": -1,
+    };
+    navState.budgetDataAvailable = false;
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Unlimited")).toBeInTheDocument();
+    expect(screen.getByText("events included")).toBeInTheDocument();
+    expect(screen.queryByText("-1")).not.toBeInTheDocument();
+  });
+
   it("does not show Pro Plan when billing data is unavailable", () => {
     navState.billingDataAvailable = false;
 
