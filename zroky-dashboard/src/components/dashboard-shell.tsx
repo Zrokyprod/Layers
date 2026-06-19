@@ -13,11 +13,13 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  CreditCard,
   FolderOpen,
   GitBranch,
   GitPullRequest,
   Gauge,
   Inbox,
+  KeyRound,
   LockKeyhole,
   LogOut,
   Menu,
@@ -32,7 +34,7 @@ import {
 } from "lucide-react";
 
 import { clearAccessToken } from "@/lib/auth";
-import { getBillingMe, getBudgetStatus, listIssues, getReliabilityLeaderboard } from "@/lib/api";
+import { getBillingMe, getBudgetStatus, listIssues } from "@/lib/api";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
 import { useMe, useMyProjects, useProjectSettings } from "@/lib/hooks";
@@ -46,7 +48,7 @@ type NavItem = {
   label: string;
   subtitle: string;
   Icon: React.ComponentType<{ size?: number; className?: string }>;
-  badgeKey?: "issues" | "agents";
+  badgeKey?: "issues";
   requiredEntitlement?: string;
   placeholder?: boolean;
   visibleInNav?: boolean;
@@ -59,7 +61,6 @@ const NAV_ITEMS: NavItem[] = [
     label: "Overview",
     subtitle: "Capture health, open incidents, replay proof, contracts, CI gates, and next actions.",
     Icon: Inbox,
-    badgeKey: "agents",
     visibleInNav: true,
   },
   {
@@ -68,7 +69,6 @@ const NAV_ITEMS: NavItem[] = [
     label: "Agents",
     subtitle: "Agent safety coverage, open incidents, replay proof, Contract coverage, and CI gate health.",
     Icon: Bot,
-    badgeKey: "agents",
     visibleInNav: false,
   },
   {
@@ -150,6 +150,15 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const VISIBLE_NAV = NAV_ITEMS.filter((n) => n.visibleInNav);
+
+const SETTINGS_CHILD_LINKS = [
+  { href: "/settings", label: "Project", Icon: FolderOpen },
+  { href: "/settings/keys", label: "API keys", Icon: KeyRound },
+  { href: "/settings/providers", label: "Providers", Icon: Shield },
+  { href: "/settings/integrations", label: "Integrations", Icon: Plug },
+  { href: "/settings/billing", label: "Billing", Icon: CreditCard },
+  { href: "/settings/team", label: "Members", Icon: UserRound },
+];
 
 const DATE_PRESETS = [
   { id: "24h", label: "Last 24 hours", days: 1, helper: "Incidents and cost from the last day." },
@@ -580,14 +589,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     staleTime: 30_000,
   });
 
-  const agentsQuery = useQuery({
-    queryKey: ["shell-agents-count"],
-    queryFn: () => getReliabilityLeaderboard(200),
-    enabled: projectContextReady,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
-
   const billingQuery = useQuery({
     queryKey: ["billing", "me"],
     queryFn: ({ signal }) => getBillingMe(signal),
@@ -604,7 +605,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   });
 
   const issuesCount = issuesQuery.data?.items?.length ?? 0;
-  const agentsCount = Array.isArray(agentsQuery.data) ? agentsQuery.data.length : 0;
   const planTemplate = billingQuery.data?.plan_template;
   const planCode = billingQuery.data?.plan_code;
   const planLabel = formatPlanLabel(planCode);
@@ -637,15 +637,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         ? "events included"
         : "events / month"
       : "usage unavailable";
+  const showPlanUsageTrack = hasBudgetLimit;
   const planCardStatusClass =
     budgetStatus?.status === "critical" ? "is-critical" : budgetStatus?.status === "warning" ? "is-warning" : "is-ok";
   const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);
   const currentRoute = getRouteMeta(pathname);
+  const settingsNavActive = pathname === "/settings" || pathname.startsWith("/settings/");
   const sidebarVisible = compactShell ? compactSidebarOpen : sidebarOpen;
 
   const badges: Record<string, number> = {};
   if (issuesCount > 0) badges.issues = issuesCount;
-  if (agentsCount > 0) badges.agents = agentsCount;
 
   const orgName =
     selectedProjectMembership?.project_name?.trim() ||
@@ -740,7 +741,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </Link>
 
         <nav className="nav-links" aria-label="Primary">
-          <span className="nav-section-label">Main Menu</span>
+          <span className="nav-section-label">Reliability</span>
           {VISIBLE_NAV.filter((item) => item.id !== "settings").map((item) => {
             const { badgeKey } = item;
             const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
@@ -772,6 +773,25 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               />
             );
           })}
+          {settingsNavActive ? (
+            <div className="settings-subnav" role="group" aria-label="Settings sections">
+              {SETTINGS_CHILD_LINKS.map((item) => {
+                const Icon = item.Icon;
+                const active = item.href === "/settings" ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`settings-subnav-link${active ? " is-active" : ""}`}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <Icon size={13} aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
         </nav>
 
         <div className="sidebar-foot">
@@ -785,9 +805,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <span>{planMetricMain}</span>
               <span className="plan-usage-total">{planMetricTotal}</span>
             </div>
-            <div className="plan-usage-track">
-              <div className="plan-usage-fill" style={{ width: `${budgetPercent}%` }} />
-            </div>
+            {showPlanUsageTrack ? (
+              <div className="plan-usage-track">
+                <div className="plan-usage-fill" style={{ width: `${budgetPercent}%` }} />
+              </div>
+            ) : null}
             <span className="plan-usage-link">
               View billing <ArrowRight size={12} aria-hidden="true" />
             </span>

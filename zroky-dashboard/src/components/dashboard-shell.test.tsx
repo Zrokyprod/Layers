@@ -15,6 +15,7 @@ const navState = vi.hoisted(() => ({
   billingDataAvailable: true,
   billingLoading: false,
   budgetDataAvailable: true,
+  issueCount: 0,
   projectData: { project_id: "proj_1", name: "Acme Corp" } as { project_id: string; name: string } | undefined,
   projectLoading: false,
   myProjects: [
@@ -135,8 +136,9 @@ vi.mock("@tanstack/react-query", () => ({
         isLoading: false,
       };
     }
-    if (key === "shell-issues-count") return { data: { items: [] } };
-    if (key === "shell-agents-count") return { data: [] };
+    if (key === "shell-issues-count") {
+      return { data: { items: Array.from({ length: navState.issueCount }, (_, index) => ({ id: `issue_${index}` })) } };
+    }
     return { data: undefined };
   }),
   useQueryClient: () => queryClientState,
@@ -146,7 +148,6 @@ vi.mock("@/lib/api", () => ({
   getBillingMe: vi.fn(),
   getBudgetStatus: vi.fn(),
   listIssues: vi.fn(),
-  getReliabilityLeaderboard: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -219,6 +220,7 @@ describe("DashboardShell primary navigation", () => {
     navState.billingDataAvailable = true;
     navState.billingLoading = false;
     navState.budgetDataAvailable = true;
+    navState.issueCount = 0;
     navState.projectData = { project_id: "proj_1", name: "Acme Corp" };
     navState.projectLoading = false;
     navState.myProjects = [
@@ -265,6 +267,30 @@ describe("DashboardShell primary navigation", () => {
     ]);
     expect(screen.queryByText("Provider Drift")).toBeNull();
     expect(navItem("failure-inbox").getAttribute("href")).toBe("/home");
+  });
+
+  it("keeps Overview badge-free while showing incident counts only on Incidents", () => {
+    navState.issueCount = 3;
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(within(navItem("failure-inbox") as HTMLElement).queryByText("3")).toBeNull();
+    expect(within(navItem("issues") as HTMLElement).getByText("3")).toBeInTheDocument();
+  });
+
+  it("shows Settings child links only while Settings is active", () => {
+    const { rerender } = render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.queryByRole("group", { name: "Settings sections" })).not.toBeInTheDocument();
+
+    navState.pathname = "/settings/providers";
+    rerender(<DashboardShell>content</DashboardShell>);
+
+    const settingsSections = screen.getByRole("group", { name: "Settings sections" });
+    expect(within(settingsSections).getByRole("link", { name: /API keys/ }).getAttribute("href")).toBe("/settings/keys");
+    expect(within(settingsSections).getByRole("link", { name: /Providers/ }).getAttribute("href")).toBe("/settings/providers");
+    expect(within(settingsSections).getByRole("link", { name: /Integrations/ }).getAttribute("href")).toBe("/settings/integrations");
+    expect(within(settingsSections).getByRole("link", { name: /Billing/ }).getAttribute("href")).toBe("/settings/billing");
   });
 
   it("renders the dashboard logo image without the old text lockup", () => {
@@ -447,7 +473,7 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
   });
 
-  it("renders unlimited event quota without exposing backend sentinel values", () => {
+  it("renders unlimited event quota without exposing backend sentinel values or a meter", () => {
     navState.planCode = "enterprise";
     navState.planTemplate = {
       ...navState.planTemplate,
@@ -455,11 +481,12 @@ describe("DashboardShell primary navigation", () => {
     };
     navState.budgetDataAvailable = false;
 
-    render(<DashboardShell>content</DashboardShell>);
+    const { container } = render(<DashboardShell>content</DashboardShell>);
 
     expect(screen.getByText("Unlimited")).toBeInTheDocument();
     expect(screen.getByText("events included")).toBeInTheDocument();
     expect(screen.queryByText("-1")).not.toBeInTheDocument();
+    expect(container.querySelector(".plan-usage-track")).toBeNull();
   });
 
   it("does not show Pro Plan when billing data is unavailable", () => {

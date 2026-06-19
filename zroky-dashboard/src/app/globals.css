@@ -40141,3 +40141,121 @@ body:has(.app-shell),
     grid-template-columns: 1fr;
   }
 }
+
+/* Launch sidebar IA polish ------------------------------------------------ */
+.app-shell .sidebar > .nav-links {
+  gap: 5px !important;
+}
+
+.app-shell .nav-section-label {
+  margin: 10px 8px 4px;
+  color: #7a8177;
+  font-size: 0.64rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-shell .nav-section-label-spaced {
+  margin-top: 18px;
+}
+
+.app-shell .nav-link,
+.app-shell .nav-link-placeholder {
+  border-radius: 7px;
+  color: #626b60;
+  font-weight: 660;
+}
+
+.app-shell .nav-link:hover {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: #d7ddd3;
+  color: #20251f;
+  transform: translateX(1px);
+}
+
+.app-shell .nav-link-active {
+  background: #ffffff;
+  border-color: #d2d9cf;
+  color: #171b16;
+  box-shadow: 0 1px 2px rgba(31, 36, 29, 0.045);
+}
+
+.app-shell .nav-link-active::before {
+  background: #171b16;
+}
+
+.app-shell .nav-badge {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell .settings-subnav {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 6px 34px;
+  padding-left: 10px;
+  border-left: 1px solid #d9ddd6;
+}
+
+.app-shell .settings-subnav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: #747b71;
+  font-size: 0.74rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.app-shell .settings-subnav-link svg {
+  color: #8a9286;
+  flex: 0 0 auto;
+}
+
+.app-shell .settings-subnav-link:hover,
+.app-shell .settings-subnav-link.is-active {
+  background: rgba(255, 255, 255, 0.72);
+  color: #20251f;
+  transform: translateX(1px);
+}
+
+.app-shell .settings-subnav-link.is-active svg {
+  color: #20251f;
+}
+
+.app-shell .sidebar-foot {
+  gap: 8px;
+}
+
+.app-shell .plan-card {
+  gap: 7px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 1px 2px rgba(31, 36, 29, 0.035);
+}
+
+.app-shell .plan-card:hover {
+  background: #ffffff;
+  border-color: #cfd6cb;
+  transform: translateY(-1px);
+}
+
+.app-shell .plan-usage-label {
+  align-items: baseline;
+  gap: 6px;
+}
+
+.app-shell .plan-usage-label span:first-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell .plan-usage-total {
+  color: #757d72;
+}
