@@ -163,6 +163,17 @@ def create_contract_route(
     return _contract_response(row)
 
 
+@router.post("/import-goldens", response_model=ImportGoldensResponse)
+@limiter.limit("30/minute")
+def import_goldens_route(
+    request: Request,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> ImportGoldensResponse:
+    rows = import_golden_contracts(db, project_id=context.tenant_id, created_by=context.subject)
+    return ImportGoldensResponse(imported_count=len(rows), versions=[_version_response(row) for row in rows])
+
+
 @router.get("/{contract_id}", response_model=ContractResponse)
 @limiter.limit("120/minute")
 def get_contract_route(
@@ -215,7 +226,6 @@ def create_version_route(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
     return _version_response(row)
 
-
 @router.post("/{contract_id}/versions/{version_id}/activate", response_model=ContractVersionResponse)
 @limiter.limit("30/minute")
 def activate_version_route(
@@ -243,14 +253,3 @@ def activate_version_route(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract version not found")
     return _version_response(row)
-
-
-@router.post("/import-goldens", response_model=ImportGoldensResponse)
-@limiter.limit("30/minute")
-def import_goldens_route(
-    request: Request,
-    context: TenantContext = Depends(require_tenant_context),
-    db: Session = Depends(get_db_session),
-) -> ImportGoldensResponse:
-    rows = import_golden_contracts(db, project_id=context.tenant_id, created_by=context.subject)
-    return ImportGoldensResponse(imported_count=len(rows), versions=[_version_response(row) for row in rows])
