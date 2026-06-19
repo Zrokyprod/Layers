@@ -101,6 +101,7 @@ def test_contract_version_activation_requires_pinned_manual_proof(client: TestCl
         headers=headers,
     )
     assert blocked.status_code == 409
+    assert "incident_confirmation_required" in blocked.json()["detail"]["blockers"]
     assert "baseline_reproduction_required" in blocked.json()["detail"]["blockers"]
 
     proven_version = client.post(
@@ -114,6 +115,7 @@ def test_contract_version_activation_requires_pinned_manual_proof(client: TestCl
                 "schema": "regression_contract_v1",
                 "assertions": [{"must_call": "get_refund_status"}],
                 "proof": {
+                    "incident_confirmed": True,
                     "baseline_reproduced": True,
                     "candidate_verified": True,
                     "required_trials": 10,

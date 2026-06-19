@@ -37,11 +37,11 @@ inputs:
     required: false
     default: 'true'
   fail_on_regression:
-    description: 'Fail the GitHub check if regressions are detected'
+    description: 'Deprecated: paid P0 checks are fail-closed and fail on every non-pass verdict'
     required: false
     default: 'true'
   fail_on_not_verified:
-    description: 'Fail the GitHub check if trusted Golden proof is unavailable'
+    description: 'Deprecated: paid P0 checks are fail-closed and fail when Contract proof is unavailable'
     required: false
     default: 'true'
   config_path:

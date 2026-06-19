@@ -87,14 +87,18 @@ function ContractsTable({ contracts }: { contracts: RegressionContractView[] }) 
               <tr key={contract.id} className="gm-table-row">
                 <td>
                   <div className="gm-set-cell">
-                    <strong>{contract.name}</strong>
+                    <Link href={`/contracts/${contract.id}`}>
+                      <strong>{contract.name}</strong>
+                    </Link>
                     <span>{contract.description || contract.id}</span>
                   </div>
                 </td>
                 <td><span className={`alert-cat-badge ${severityClass(contract.severity)}`}>{contract.severity}</span></td>
                 <td><span className={`alert-cat-badge ${statusClass(contract.status)}`}>{contract.status}</span></td>
                 <td>{version ? `v${version.version_number}` : "None"}</td>
-                <td>{proofLabel(contract, version)}</td>
+                <td>
+                  <Link href={`/contracts/${contract.id}`}>{proofLabel(contract, version)}</Link>
+                </td>
                 <td>
                   {version?.fixture_set_id ? (
                     <Link href={`/goldens/${version.fixture_set_id}`}>Open fixture</Link>

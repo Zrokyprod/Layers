@@ -43,6 +43,7 @@ const poll_1 = require("./poll");
 const comment_1 = require("./comment");
 const config_1 = require("./config");
 const runner_1 = require("./runner");
+const fail_closed_1 = require("./fail-closed");
 async function run() {
     try {
         // ── inputs ────────────────────────────────────────────────────────────
@@ -54,8 +55,6 @@ async function run() {
         const pollInterval = parseInt(core.getInput('poll_interval_seconds') || '5', 10);
         const timeout = parseInt(core.getInput('timeout_seconds') || '300', 10);
         const postComment = core.getBooleanInput('post_pr_comment');
-        const failOnRegression = core.getBooleanInput('fail_on_regression');
-        const failOnNotVerified = core.getBooleanInput('fail_on_not_verified');
         const configPath = core.getInput('config_path') || 'zroky.yaml';
         const zrokyConfig = await (0, config_1.loadZrokyConfig)(configPath);
         // ── derive PR metadata ────────────────────────────────────────────────
@@ -149,23 +148,9 @@ async function run() {
             await (0, comment_1.postOrUpdateComment)(detail.pr_comment_markdown);
         }
         // ── fail the check? ───────────────────────────────────────────────────
-        if (detail.status === 'error') {
-            core.setFailed('Regression CI run encountered an error. See dashboard for details.');
-            return;
-        }
-        if (failOnNotVerified && detail.status === 'not_verified') {
-            core.setFailed('Regression CI could not prove safety with active Contracts. ' +
-                'See the PR comment or dashboard for missing proof.');
-            return;
-        }
-        if (failOnRegression && detail.status === 'fail') {
-            const rate = detail.report?.regression_rate ?? 'unknown';
-            core.setFailed(`Regression CI detected regressions (rate=${rate}). ` +
-                `See the PR comment or dashboard for details.`);
-            return;
-        }
-        if (detail.status === 'warn') {
-            core.warning('Regression CI produced warning-only evidence.');
+        const failureMessage = (0, fail_closed_1.failClosedMessage)(detail);
+        if (failureMessage) {
+            core.setFailed(failureMessage);
             return;
         }
         core.info('Regression CI passed — no regressions detected.');

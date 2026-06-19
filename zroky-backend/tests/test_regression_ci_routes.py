@@ -126,6 +126,7 @@ def _seed_active_contract(session, project_id: str) -> str:
                 "schema": "regression_contract_v1",
                 "assertions": [{"must_call": "get_refund_status"}],
                 "proof": {
+                    "incident_confirmed": True,
                     "baseline_reproduced": True,
                     "candidate_verified": True,
                     "required_trials": 10,

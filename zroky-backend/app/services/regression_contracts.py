@@ -203,6 +203,8 @@ def activation_blockers(version: RegressionContractVersion) -> list[str]:
     required_trials = int(policy["required_trials"])
     critical_tolerance = int(policy["critical_violation_tolerance"])
 
+    if not proof.get("incident_confirmed"):
+        blockers.append("incident_confirmation_required")
     if not version.fixture_set_id:
         blockers.append("fixture_set_required")
     if not version.baseline_release_id:

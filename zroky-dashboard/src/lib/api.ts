@@ -2058,6 +2058,15 @@ export function listRegressionContracts(
   });
 }
 
+export function getRegressionContract(
+  contractId: string,
+  signal?: AbortSignal,
+): Promise<RegressionContractView> {
+  return request<RegressionContractView>(`/v1/contracts/${encodeURIComponent(contractId)}`, {
+    signal,
+  });
+}
+
 export function importGoldenContracts(signal?: AbortSignal): Promise<ImportGoldensResponse> {
   return request<ImportGoldensResponse>("/v1/contracts/import-goldens", {
     method: "POST",
