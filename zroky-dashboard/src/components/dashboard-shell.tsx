@@ -312,7 +312,7 @@ function NavFeatureGate({
     Boolean(item.requiredEntitlement) &&
     !entitlementLoading &&
     !hasFeatureAccess(planTemplate, planCode, item.requiredEntitlement);
-  const disabled = item.placeholder || disabledByPlan || !item.href;
+  const disabled = item.placeholder || !item.href;
   const label = (
     <>
       <span className="nav-link-main">
@@ -358,8 +358,9 @@ function NavFeatureGate({
   return (
     <Link
       href={href}
-      className={navClass(pathname, href)}
+      className={`${navClass(pathname, href)}${disabledByPlan ? " nav-link-locked" : ""}`}
       data-nav-id={item.id}
+      title={disabledByPlan ? `${item.label} requires ${item.requiredEntitlement}.` : undefined}
     >
       {label}
     </Link>
