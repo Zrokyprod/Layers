@@ -31,6 +31,7 @@ describe("guardDashboardRoute", () => {
     const approvals = guardDashboardRoute(request("https://app.zroky.com/approvals"));
     const policies = guardDashboardRoute(request("https://app.zroky.com/policies"));
     const integrations = guardDashboardRoute(request("https://app.zroky.com/integrations"));
+    const contracts = guardDashboardRoute(request("https://app.zroky.com/contracts/contract_1?tab=proof"));
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fhome");
@@ -42,5 +43,9 @@ describe("guardDashboardRoute", () => {
     expect(policies.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fpolicies");
     expect(integrations.status).toBe(307);
     expect(integrations.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fintegrations");
+    expect(contracts.status).toBe(307);
+    expect(contracts.headers.get("location")).toBe(
+      "https://app.zroky.com/login?next=%2Fcontracts%2Fcontract_1%3Ftab%3Dproof",
+    );
   });
 });

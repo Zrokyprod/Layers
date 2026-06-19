@@ -9,6 +9,7 @@ const PROTECTED_PREFIXES = [
   "/approvals",
   "/calls",
   "/ci-gates",
+  "/contracts",
   "/cost",
   "/goldens",
   "/home",
@@ -50,7 +51,13 @@ export function guardDashboardRoute(request: NextRequest): NextResponse {
 
   const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   if (token) {
-    return NextResponse.next();
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-zroky-request-path", `${pathname}${search}`);
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
 
   const loginUrl = new URL("/login", request.url);
