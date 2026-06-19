@@ -15,19 +15,30 @@ if (!process.env.VERCEL) {
 }
 
 const repoRoot = dirname(appRoot);
-const rootNextDir = resolve(repoRoot, ".next");
 
 if (repoRoot === appRoot || !existsSync(nextDir)) {
   process.exit(0);
 }
 
-if (existsSync(rootNextDir)) {
-  const rootNextStat = lstatSync(rootNextDir);
-  if (!rootNextStat.isSymbolicLink()) {
-    process.exit(0);
+function exposeToRepoRoot(name) {
+  const source = resolve(appRoot, name);
+  const target = resolve(repoRoot, name);
+
+  if (!existsSync(source)) {
+    return;
   }
-  rmSync(rootNextDir, { force: true });
+
+  if (existsSync(target)) {
+    const targetStat = lstatSync(target);
+    if (!targetStat.isSymbolicLink()) {
+      return;
+    }
+    rmSync(target, { force: true });
+  }
+
+  symlinkSync(source, target, "dir");
 }
 
 mkdirSync(repoRoot, { recursive: true });
-symlinkSync(nextDir, rootNextDir, "dir");
+exposeToRepoRoot(".next");
+exposeToRepoRoot("node_modules");
