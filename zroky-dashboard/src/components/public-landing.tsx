@@ -263,7 +263,7 @@ export function PublicLanding() {
                 AI agent reliability control plane
               </span>
               <h1 id="zroky-hero-title" className="zlp-disp">
-                Catch AI agent failures <span className="zlp-mut">before your users do.</span>
+                Catch AI agent regressions <span className="zlp-mut">before your users do.</span>
               </h1>
               {/*
                 Smoke/contract compatibility: keep the legacy hero string present
