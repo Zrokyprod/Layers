@@ -58,6 +58,6 @@ setup("seed deterministic demo and save authenticated state", async ({ page }) =
   if (await seededProjectButton.waitFor({ state: "visible", timeout: 10_000 }).then(() => true).catch(() => false)) {
     await seededProjectButton.click();
   }
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({ timeout: 20_000 });
   await page.context().storageState({ path: authStatePath });
 });

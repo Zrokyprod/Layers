@@ -9,9 +9,9 @@ test.describe("settings and account", () => {
     test.setTimeout(180_000);
 
     const pages = [
-      { path: "/settings", labels: ["Project", "Data"] },
+      { path: "/settings", labels: ["Settings", "Projects", "capture keys"] },
       { path: "/settings/keys", labels: ["API Keys", "Create project key"] },
-      { path: "/settings/providers", labels: ["Provider key vault", "fake-provider"] },
+      { path: "/settings/providers", labels: ["BYOK replay", "Provider key vault", "OpenAI"] },
       { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
       { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },
       { path: "/settings/evaluation", labels: ["Evaluation", "Calibration"] },

@@ -11,7 +11,7 @@ type ReliabilityRoute = {
 const RELIABILITY_ROUTES: ReliabilityRoute[] = [
   {
     path: "/home",
-    heading: "Home",
+    heading: "Overview",
     labels: [
       "Highest priority",
       "What needs action now?",
@@ -23,7 +23,7 @@ const RELIABILITY_ROUTES: ReliabilityRoute[] = [
   },
   {
     path: "/issues",
-    heading: "Failures",
+    heading: "Incidents",
     labels: ["Loaded failures", "Replay gaps", "Verified fixes", "Loaded impact", "Issue queue"],
   },
   {
@@ -32,9 +32,9 @@ const RELIABILITY_ROUTES: ReliabilityRoute[] = [
     labels: ["Replay proof engine", "Visible runs", "Verified fixes", "Live queue", "Protected spend", "Start replay"],
   },
   {
-    path: "/goldens",
-    heading: "Goldens",
-    labels: ["Active Goldens", "Blocking CI", "Need review", "Last pass rate", "Golden sets"],
+    path: "/contracts",
+    heading: "Contracts",
+    labels: ["Regression contracts", "Active", "Draft", "Fixtures", "Import fixtures"],
   },
   {
     path: "/ci-gates",
@@ -53,8 +53,8 @@ function reliabilityDetailRoutes(): ReliabilityRoute[] {
         "Recommended next action",
         "Executive diagnosis",
         "Evidence workbench",
-        "Replay, Golden, and CI readiness",
-        "Active Golden linked",
+        "Replay, Contract, and CI readiness",
+        "Active Contract linked",
         "CI gate readiness",
       ],
     },
@@ -64,19 +64,14 @@ function reliabilityDetailRoutes(): ReliabilityRoute[] {
       labels: ["Replay setup", "Original Failure", "Candidate Replay", "Verification Result", "RF-1001"],
     },
     {
-      path: `/goldens/${seed.golden_set_id}`,
-      heading: "Refund status protected flow",
-      labels: ["Trace count", "Last pass rate", "Expected behavior", "Golden contract", "Golden health"],
-    },
-    {
       path: `/ci-gates/${seed.ci_run_id}`,
       heading: `Run ${seed.ci_run_id}`,
       labels: [
         "Regression rate",
-        "Golden gate evidence",
+        "Contract gate evidence",
         "Regression CI blocked this change.",
         "Replay evidence",
-        "View Golden set",
+        "Contract",
       ],
     },
   ];
