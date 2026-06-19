@@ -424,14 +424,16 @@ describe("DashboardShell primary navigation", () => {
     expect(storeState.setSelectedProject).not.toHaveBeenCalled();
   });
 
-  it("disables gated nav entries when the plan template lacks entitlement", () => {
+  it("keeps gated nav entries clickable while showing the locked badge", () => {
     navState.planTemplate = {};
     navState.planCode = "free";
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(navItem("replay").getAttribute("aria-disabled")).toBe("true");
-    expect(navItem("goldens").getAttribute("aria-disabled")).toBe("true");
+    expect(navItem("replay").getAttribute("aria-disabled")).toBeNull();
+    expect(navItem("replay").getAttribute("href")).toBe("/replay");
+    expect(navItem("goldens").getAttribute("aria-disabled")).toBeNull();
+    expect(navItem("goldens").getAttribute("href")).toBe("/contracts");
     expect(within(navItem("replay") as HTMLElement).getByText("locked")).toBeInTheDocument();
     expect(within(navItem("goldens") as HTMLElement).getByText("locked")).toBeInTheDocument();
   });
