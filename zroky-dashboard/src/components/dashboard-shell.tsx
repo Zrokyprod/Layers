@@ -880,7 +880,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <div className="shell-popover shell-popover-up org-popover" role="menu" aria-label="Project menu">
                 <div className="shell-popover-head">
                   <span>Projects</span>
-                  <strong>{projectSelectionRequired ? "Select a project" : orgName}</strong>
+                  <strong>{projectSelectionRequired ? "Select a project" : "Project switcher"}</strong>
                   <small>{projectLimitStatus}</small>
                 </div>
                 {myProjects.length > 0 ? (
