@@ -538,7 +538,11 @@ describe("DashboardShell primary navigation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open project menu" }));
 
-    expect(screen.getByRole("menu", { name: "Project menu" })).toBeInTheDocument();
+    const projectMenu = screen.getByRole("menu", { name: "Project menu" });
+    expect(projectMenu).toBeInTheDocument();
+    expect(projectMenu.closest(".sidebar")).toBeNull();
+    expect(projectMenu.classList.contains("shell-popover-portal")).toBe(true);
+    expect((projectMenu as HTMLElement).style.position).toBe("fixed");
     expect(screen.getByRole("menuitem", { name: /Manage projects/ }).getAttribute("href")).toBe("/projects");
     expect(screen.getByRole("menuitem", { name: /New project/ }).getAttribute("href")).toBe("/projects");
     expect(screen.queryByRole("menuitem", { name: /Project settings/ })).not.toBeInTheDocument();
