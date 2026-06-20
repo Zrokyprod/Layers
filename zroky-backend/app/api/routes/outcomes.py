@@ -34,6 +34,15 @@ from app.services.outcome_attribution import (
     normalise_salesforce_event,
     normalise_zendesk_ticket,
 )
+from app.services.outcome_reconciliation import (
+    ApiRecordConnector,
+    VALID_VERDICTS,
+    get_reconciliation,
+    get_reconciliation_summary,
+    list_reconciliations,
+    reconcile_outcome,
+    reconciliation_to_dict,
+)
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
 logger = logging.getLogger(__name__)
@@ -111,6 +120,68 @@ class ReplaySavingsResponse(BaseModel):
     message: str
 
 
+class OutcomeReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(None, max_length=64)
+    connector_type: str = Field(default="api_record", max_length=64)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    actual: dict[str, Any] | None = None
+    actual_record_found: bool | None = None
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("connector_type")
+    @classmethod
+    def _normalise_connector_type(cls, value: str) -> str:
+        return value.strip().lower() or "api_record"
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
+class OutcomeReconciliationView(BaseModel):
+    id: str
+    project_id: str
+    call_id: str | None
+    trace_id: str | None
+    runtime_policy_decision_id: str | None
+    action_type: str | None
+    connector_type: str
+    system_ref: str | None
+    verdict: str
+    reason: str | None
+    amount_usd: float | None
+    currency: str | None
+    claimed: dict[str, Any]
+    actual: dict[str, Any] | None
+    comparison: dict[str, Any]
+    idempotency_key: str | None
+    metadata: dict[str, Any] | None
+    checked_at: datetime
+    created_at: datetime
+
+
+class OutcomeReconciliationListResponse(BaseModel):
+    items: list[OutcomeReconciliationView]
+    total_in_page: int
+
+
+class OutcomeReconciliationSummaryResponse(BaseModel):
+    window_days: int
+    total: int
+    matched: int
+    mismatched: int
+    not_verified: int
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -159,6 +230,10 @@ def _serialize_summary(s: OutcomeSummary) -> SummaryResponse:
     )
 
 
+def _serialize_reconciliation(row) -> OutcomeReconciliationView:
+    return OutcomeReconciliationView(**reconciliation_to_dict(row))
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -197,6 +272,110 @@ def get_summary(
     """Attribution summary: total cost + by-type + by-cluster (agent × detector)."""
     s = get_attribution_summary(db, project_id=tenant_id, days=days)
     return _serialize_summary(s)
+
+
+@router.post("/reconciliation", response_model=OutcomeReconciliationView, status_code=201)
+@limiter.limit("120/minute")
+def create_reconciliation(
+    request: Request,
+    body: OutcomeReconciliationIngest,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Reconcile an agent's claimed outcome against system-of-record evidence."""
+    row = reconcile_outcome(
+        db,
+        project_id=tenant_id,
+        claimed=body.claimed,
+        connector=ApiRecordConnector(
+            record=body.actual,
+            record_found=body.actual_record_found,
+            connector_type=body.connector_type,
+        ),
+        call_id=body.call_id,
+        trace_id=body.trace_id,
+        runtime_policy_decision_id=body.runtime_policy_decision_id,
+        action_type=body.action_type,
+        system_ref=body.system_ref,
+        amount_usd=body.amount_usd,
+        currency=body.currency,
+        match_fields=body.match_fields,
+        idempotency_key=body.idempotency_key,
+        metadata=body.metadata,
+    )
+    return _serialize_reconciliation(row)
+
+
+@router.get("/reconciliation", response_model=OutcomeReconciliationListResponse)
+@limiter.limit("60/minute")
+def list_reconciliation_checks(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+    verdict: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> OutcomeReconciliationListResponse:
+    """List recent outcome reconciliation checks for the current project."""
+    if verdict is not None and verdict not in VALID_VERDICTS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"verdict must be one of: {', '.join(sorted(VALID_VERDICTS))}",
+        )
+    rows = list_reconciliations(db, project_id=tenant_id, verdict=verdict, limit=limit)
+    return OutcomeReconciliationListResponse(
+        items=[_serialize_reconciliation(row) for row in rows],
+        total_in_page=len(rows),
+    )
+
+
+@router.get("/reconciliation/summary", response_model=OutcomeReconciliationSummaryResponse)
+@limiter.limit("30/minute")
+def get_reconciliation_kpis(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+    days: int = Query(default=30, ge=1, le=365),
+) -> OutcomeReconciliationSummaryResponse:
+    """Summary of matched, mismatched, and not_verified outcome checks."""
+    summary = get_reconciliation_summary(db, project_id=tenant_id, days=days)
+    return OutcomeReconciliationSummaryResponse(
+        window_days=summary.window_days,
+        total=summary.total,
+        matched=summary.matched,
+        mismatched=summary.mismatched,
+        not_verified=summary.not_verified,
+    )
+
+
+@router.get("/reconciliation/by-call/{call_id}", response_model=OutcomeReconciliationListResponse)
+@limiter.limit("60/minute")
+def get_reconciliations_for_call(
+    request: Request,
+    call_id: str,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationListResponse:
+    """List reconciliation checks linked to a specific Zroky call."""
+    rows = list_reconciliations(db, project_id=tenant_id, call_id=call_id, limit=100)
+    return OutcomeReconciliationListResponse(
+        items=[_serialize_reconciliation(row) for row in rows],
+        total_in_page=len(rows),
+    )
+
+
+@router.get("/reconciliation/{check_id}", response_model=OutcomeReconciliationView)
+@limiter.limit("60/minute")
+def get_reconciliation_check(
+    request: Request,
+    check_id: str,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Read one outcome reconciliation check."""
+    row = get_reconciliation(db, project_id=tenant_id, check_id=check_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Outcome reconciliation check not found.")
+    return _serialize_reconciliation(row)
 
 
 @router.get("/by-call/{call_id}", response_model=list[OutcomeTypeView])

@@ -195,6 +195,113 @@ def test_check_runtime_policy_fails_closed_on_transport_error(monkeypatch):
     zroky.shutdown()
     _reset_sdk()
 
+
+def test_guard_posts_policy_check_and_returns_allowed_decision(monkeypatch):
+    _reset_sdk()
+    posted: dict[str, object] = {}
+
+    class _Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "id": "decision_guard_allow",
+                "allowed": True,
+                "status": "allowed",
+                "reasons": ["runtime policy checks passed"],
+            }
+
+    def _fake_post(url, *, headers, json, timeout):
+        posted["url"] = url
+        posted["headers"] = headers
+        posted["json"] = json
+        posted["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr("zroky._runtime_policy.httpx.post", _fake_post)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(
+            api_key="zk_live_test",
+            project="proj_runtime",
+            ingest_url="https://api.zroky.com/v1/ingest",
+        )
+
+    decision = zroky.guard(
+        action_type="refund",
+        tool_name="refund_payment",
+        tool_args={"order_id": "ord_123", "amount": 42.5, "currency": "USD"},
+        trace_id="trace-guard",
+        external_action=True,
+        business_impact={"summary": "Issue approved refund", "estimated_value_usd": 42.5},
+    )
+
+    assert decision["id"] == "decision_guard_allow"
+    assert decision["allowed"] is True
+    assert posted["url"] == "https://api.zroky.com/v1/runtime-policy/check"
+    assert posted["headers"]["x-api-key"] == "zk_live_test"  # type: ignore[index]
+    assert posted["headers"]["x-project-id"] == "proj_runtime"  # type: ignore[index]
+    assert posted["json"]["action_type"] == "refund"  # type: ignore[index]
+    assert posted["json"]["tool_name"] == "refund_payment"  # type: ignore[index]
+    assert posted["json"]["tool_args"]["order_id"] == "ord_123"  # type: ignore[index]
+    assert posted["json"]["business_impact"]["estimated_value_usd"] == 42.5  # type: ignore[index]
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_guard_raises_on_hold_for_approval(monkeypatch):
+    _reset_sdk()
+
+    class _Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "id": "decision_guard_hold",
+                "allowed": False,
+                "status": "pending_approval",
+                "requires_approval": True,
+                "reasons": ["sensitive action requires human approval"],
+            }
+
+    monkeypatch.setattr("zroky._runtime_policy.httpx.post", lambda *args, **kwargs: _Response())
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_runtime")
+
+    with pytest.raises(ZrokyRuntimePolicyBlocked) as error:
+        zroky.guard(
+            action_type="refund",
+            tool_name="refund_payment",
+            tool_args={"order_id": "ord_hold", "amount": 9000},
+            business_impact_summary="High-value refund",
+        )
+
+    assert error.value.decision["id"] == "decision_guard_hold"
+    assert error.value.decision["status"] == "pending_approval"
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_guard_fails_closed_on_transport_error(monkeypatch):
+    _reset_sdk()
+
+    def _raise(*_args, **_kwargs):
+        import httpx
+
+        raise httpx.ConnectError("backend down")
+
+    monkeypatch.setattr("zroky._runtime_policy.httpx.post", _raise)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_runtime")
+
+    with pytest.raises(ZrokyRuntimePolicyError):
+        zroky.guard(action_type="delete", tool_name="delete_customer")
+
+    zroky.shutdown()
+    _reset_sdk()
+
+
 def test_agent_context_sets_agent_name(monkeypatch):
     _reset_sdk()
     monkeypatch.setenv("ZROKY_API_KEY", "test-key")

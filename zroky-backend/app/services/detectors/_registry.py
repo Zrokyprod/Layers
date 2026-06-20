@@ -39,6 +39,7 @@ def _builtin_detectors() -> dict[str, Callable]:
         detect_tool_selection_failure,
     )
     from app.services.detectors.unsafe_action import detect as detect_unsafe_action
+    from app.services.detectors.outcome_mismatch import detect as detect_outcome_mismatch
     from app.services.detectors.task_outcome_failure import detect as detect_task_outcome_failure
     from app.services.detectors.latency_anomaly import detect as detect_latency_anomaly
     from app.services.detectors.repeated_output import detect_entry as detect_repeated_output_entry
@@ -63,6 +64,7 @@ def _builtin_detectors() -> dict[str, Callable]:
         "tool_call_failure": detect_tool_call_failure,
         "tool_argument_mismatch": detect_tool_argument_mismatch,
         "unsafe_action": detect_unsafe_action,
+        "outcome_mismatch": detect_outcome_mismatch,
         "task_outcome_failure": detect_task_outcome_failure,
         "latency_anomaly": detect_latency_anomaly,
         "repeated_output": detect_repeated_output_entry,

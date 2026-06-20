@@ -31,6 +31,7 @@ from app.services.detectors.output_truncated import detect as detect_output_trun
 from app.services.detectors.schema_violation import detect as detect_schema_violation  # noqa: E402
 from app.services.detectors.tool_failures import detect_tool_call_failure, detect_tool_selection_failure, detect_tool_argument_mismatch  # noqa: E402
 from app.services.detectors.unsafe_action import detect as detect_unsafe_action  # noqa: E402
+from app.services.detectors.outcome_mismatch import detect as detect_outcome_mismatch  # noqa: E402
 from app.services.detectors.task_outcome_failure import detect as detect_task_outcome_failure  # noqa: E402
 from app.services.detectors.latency_anomaly import detect as detect_latency_anomaly  # noqa: E402
 from app.services.detectors.repeated_output import detect as detect_repeated_output  # noqa: E402
@@ -58,6 +59,7 @@ __all__ = [
     "detect_tool_selection_failure",
     "detect_tool_argument_mismatch",
     "detect_unsafe_action",
+    "detect_outcome_mismatch",
     "detect_task_outcome_failure",
     "detect_latency_anomaly",
     "detect_repeated_output",

@@ -24,6 +24,7 @@ tool_selection_failure = "app.services.detectors.tool_failures:detect_tool_selec
 tool_call_failure = "app.services.detectors.tool_failures:detect_tool_call_failure"
 tool_argument_mismatch = "app.services.detectors.tool_failures:detect_tool_argument_mismatch"
 unsafe_action = "app.services.detectors.unsafe_action:detect"
+outcome_mismatch = "app.services.detectors.outcome_mismatch:detect"
 task_outcome_failure = "app.services.detectors.task_outcome_failure:detect"
 latency_anomaly = "app.services.detectors.latency_anomaly:detect"
 repeated_output = "app.services.detectors.repeated_output:detect_entry"

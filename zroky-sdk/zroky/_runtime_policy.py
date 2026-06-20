@@ -161,3 +161,70 @@ def check_runtime_policy(
         )
 
     return decision
+
+
+def guard(
+    *,
+    action_type: str,
+    tool_name: str | None = None,
+    tool_args: dict[str, Any] | list[Any] | str | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+    call_id: str | None = None,
+    agent_name: str | None = None,
+    role: str | None = None,
+    tool_call_count: int | None = None,
+    retry_count: int | None = None,
+    estimated_cost_usd: float | None = None,
+    input_text: str | None = None,
+    user_input: str | None = None,
+    output_text: str | None = None,
+    external_action: bool | None = None,
+    prompt_injection_detected: bool | None = None,
+    pii_detected: bool | None = None,
+    approval_id: str | None = None,
+    business_impact: dict[str, Any] | str | None = None,
+    business_impact_summary: str | None = None,
+    impact_usd: float | None = None,
+    customer_id: str | None = None,
+    account_id: str | None = None,
+    order_id: str | None = None,
+    resource_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Synchronously enforce the runtime policy gate before side effects.
+
+    ``guard`` is the public action-accountability primitive: call it immediately
+    before money-touching or irreversible tool execution. It fails closed on
+    transport/control-plane errors and raises ``ZrokyRuntimePolicyBlocked`` for
+    block or hold-for-approval decisions.
+    """
+    return check_runtime_policy(
+        action_type=action_type,
+        tool_name=tool_name,
+        tool_args=tool_args,
+        trace_id=trace_id,
+        span_id=span_id,
+        call_id=call_id,
+        agent_name=agent_name,
+        role=role,
+        tool_call_count=tool_call_count,
+        retry_count=retry_count,
+        estimated_cost_usd=estimated_cost_usd,
+        input_text=input_text,
+        user_input=user_input,
+        output_text=output_text,
+        external_action=external_action,
+        prompt_injection_detected=prompt_injection_detected,
+        pii_detected=pii_detected,
+        approval_id=approval_id,
+        business_impact=business_impact,
+        business_impact_summary=business_impact_summary,
+        impact_usd=impact_usd,
+        customer_id=customer_id,
+        account_id=account_id,
+        order_id=order_id,
+        resource_id=resource_id,
+        metadata=metadata,
+        raise_on_block=True,
+    )
