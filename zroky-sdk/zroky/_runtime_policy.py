@@ -14,7 +14,11 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from zroky._errors import ZrokyRuntimePolicyBlocked, ZrokyRuntimePolicyError
+from zroky._errors import (
+    ZrokyRuntimePolicyApprovalRequired,
+    ZrokyRuntimePolicyBlocked,
+    ZrokyRuntimePolicyError,
+)
 from zroky._internal.pii import mask_value
 
 _REQUEST_TIMEOUT_S = 8.0
@@ -33,6 +37,10 @@ def _runtime_policy_url(ingest_url: str) -> str:
             return urlunsplit((parsed.scheme, parsed.netloc, runtime_path, "", ""))
 
     return urlunsplit((parsed.scheme, parsed.netloc, "/v1/runtime-policy/check", "", ""))
+
+
+def _requires_approval(decision: dict[str, Any]) -> bool:
+    return bool(decision.get("requires_approval")) or decision.get("status") == "pending_approval"
 
 
 def check_runtime_policy(
@@ -67,7 +75,8 @@ def check_runtime_policy(
 ) -> dict[str, Any]:
     """Return the backend runtime policy decision for a pending agent action.
 
-    When ``raise_on_block`` is true, any non-allow decision raises
+    When ``raise_on_block`` is true, hold-for-approval decisions raise
+    ``ZrokyRuntimePolicyApprovalRequired`` and other non-allow decisions raise
     ``ZrokyRuntimePolicyBlocked``. Transport errors and non-2xx responses raise
     ``ZrokyRuntimePolicyError`` so callers fail closed.
     """
@@ -155,6 +164,11 @@ def check_runtime_policy(
     if not allowed and raise_on_block:
         reasons = decision.get("reasons") if isinstance(decision.get("reasons"), list) else []
         reason_text = ", ".join(str(item) for item in reasons) or "runtime policy blocked action"
+        if _requires_approval(decision):
+            raise ZrokyRuntimePolicyApprovalRequired(
+                f"[ZROKY] Runtime policy requires approval: {reason_text}",
+                decision=decision,
+            )
         raise ZrokyRuntimePolicyBlocked(
             f"[ZROKY] Runtime policy blocked action: {reason_text}",
             decision=decision,
@@ -196,8 +210,9 @@ def guard(
 
     ``guard`` is the public action-accountability primitive: call it immediately
     before money-touching or irreversible tool execution. It fails closed on
-    transport/control-plane errors and raises ``ZrokyRuntimePolicyBlocked`` for
-    block or hold-for-approval decisions.
+    transport/control-plane errors, raises ``ZrokyRuntimePolicyApprovalRequired``
+    for hold-for-approval decisions, and raises ``ZrokyRuntimePolicyBlocked``
+    for explicit blocks.
     """
     return check_runtime_policy(
         action_type=action_type,

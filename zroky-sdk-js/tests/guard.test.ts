@@ -6,6 +6,7 @@ import { afterEach, describe, it } from "node:test";
 import {
   guard,
   init,
+  ZrokyRuntimePolicyApprovalRequired,
   ZrokyRuntimePolicyBlocked,
   ZrokyRuntimePolicyError,
 } from "../src";
@@ -21,6 +22,22 @@ function recordFetches(decision: Record<string, unknown>): FetchCall[] {
   const calls: FetchCall[] = [];
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ input, init });
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => decision,
+    } as Response);
+  }) as typeof fetch;
+  return calls;
+}
+
+function recordFetchSequence(decisions: Record<string, unknown>[]): FetchCall[] {
+  const calls: FetchCall[] = [];
+  let index = 0;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ input, init });
+    const decision = decisions[index] ?? decisions[decisions.length - 1];
+    index += 1;
     return Promise.resolve({
       ok: true,
       status: 200,
@@ -91,6 +108,10 @@ describe("guard", () => {
       status: "pending_approval",
       requires_approval: true,
       reasons: ["sensitive action requires human approval"],
+      approval_queue_item: {
+        id: "decision_guard_hold",
+        expires_at: "2026-06-20T12:30:00Z",
+      },
     });
 
     await assert.rejects(
@@ -105,12 +126,70 @@ describe("guard", () => {
           { projectId: "proj_123", apiKey: "zk_test" },
         ),
       (error: unknown) => {
+        assert.ok(error instanceof ZrokyRuntimePolicyApprovalRequired);
         assert.ok(error instanceof ZrokyRuntimePolicyBlocked);
+        assert.equal(error.approvalId, "decision_guard_hold");
+        assert.equal(error.expiresAt, "2026-06-20T12:30:00Z");
         assert.equal(error.decision.id, "decision_guard_hold");
         assert.equal(error.decision.status, "pending_approval");
         return true;
       },
     );
+  });
+
+  it("retries with approval id after a held action is approved", async () => {
+    const calls = recordFetchSequence([
+      {
+        id: "decision_guard_hold",
+        allowed: false,
+        status: "pending_approval",
+        requires_approval: true,
+        reasons: ["sensitive action requires human approval"],
+      },
+      {
+        id: "decision_guard_allowed",
+        allowed: true,
+        status: "allowed",
+        reasons: ["human approval decision_guard_hold accepted"],
+      },
+    ]);
+    const config = { projectId: "proj_123", apiKey: "zk_test" };
+    let approvalId = "";
+
+    await assert.rejects(
+      () =>
+        guard(
+          {
+            actionType: "refund",
+            toolName: "refund_payment",
+            toolArgs: { order_id: "ord_hold", amount: 9000 },
+            externalAction: true,
+          },
+          config,
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof ZrokyRuntimePolicyApprovalRequired);
+        approvalId = error.approvalId ?? "";
+        return true;
+      },
+    );
+
+    const allowed = await guard(
+      {
+        actionType: "refund",
+        toolName: "refund_payment",
+        toolArgs: { order_id: "ord_hold", amount: 9000 },
+        externalAction: true,
+        approvalId,
+      },
+      config,
+    );
+
+    assert.equal(allowed.id, "decision_guard_allowed");
+    const firstBody = JSON.parse(calls[0].init?.body as string) as Record<string, unknown>;
+    const secondBody = JSON.parse(calls[1].init?.body as string) as Record<string, unknown>;
+    assert.equal(firstBody.approval_id, undefined);
+    assert.equal(secondBody.approval_id, "decision_guard_hold");
   });
 
   it("fails closed on transport errors", async () => {

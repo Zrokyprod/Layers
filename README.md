@@ -292,6 +292,73 @@ Approval view must show:
 - approve/reject controls
 - audit trail
 
+SDK contract:
+
+- `guard()` runs immediately before the irreversible tool call
+- `allowed=true` means the action may execute
+- `ZrokyRuntimePolicyApprovalRequired` means the action is held and must not execute yet
+- the exception exposes Python `approval_id` / TypeScript `approvalId`
+- after a human approves, retry the same guarded action with that approval id
+- rejected, expired, mismatched, or already-consumed approvals fail closed
+
+Python:
+
+```python
+try:
+    zroky.guard(
+        action_type="refund",
+        tool_name="refund_payment",
+        tool_args={"order_id": "ord_123", "amount": 42.5},
+        external_action=True,
+    )
+except zroky.ZrokyRuntimePolicyApprovalRequired as hold:
+    approval_id = hold.approval_id
+    # Store approval_id and stop. Do not call refund_payment until approved.
+    raise
+
+# After approval in Zroky:
+zroky.guard(
+    action_type="refund",
+    tool_name="refund_payment",
+    tool_args={"order_id": "ord_123", "amount": 42.5},
+    external_action=True,
+    approval_id=approval_id,
+)
+```
+
+TypeScript:
+
+```ts
+import { guard, ZrokyRuntimePolicyApprovalRequired } from "@zroky-ai/sdk";
+
+let approvalId: string | undefined;
+
+try {
+  await guard({
+    actionType: "refund",
+    toolName: "refund_payment",
+    toolArgs: { order_id: "ord_123", amount: 42.5 },
+    externalAction: true,
+  });
+} catch (error) {
+  if (error instanceof ZrokyRuntimePolicyApprovalRequired) {
+    approvalId = error.approvalId;
+    // Store approvalId and stop. Do not call refund_payment until approved.
+    throw error;
+  }
+  throw error;
+}
+
+// After approval in Zroky:
+await guard({
+  actionType: "refund",
+  toolName: "refund_payment",
+  toolArgs: { order_id: "ord_123", amount: 42.5 },
+  externalAction: true,
+  approvalId,
+});
+```
+
 ### Phase 8: Owner Evidence
 
 Goal: owner can see agents becoming safer over time.

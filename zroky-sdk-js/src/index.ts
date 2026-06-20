@@ -4,7 +4,12 @@
 export { wrap } from "./wrap";
 export { trace, traceRun } from "./trace";
 export { init } from "./config";
-export { guard, ZrokyRuntimePolicyBlocked, ZrokyRuntimePolicyError } from "./guard";
+export {
+  guard,
+  ZrokyRuntimePolicyApprovalRequired,
+  ZrokyRuntimePolicyBlocked,
+  ZrokyRuntimePolicyError,
+} from "./guard";
 export { outcome } from "./outcome";
 export { promptFingerprint } from "./fingerprint";
 export { captureHandoff, captureMemory, capturePolicyDecision, captureRetrieval, captureToolCall } from "./spans";

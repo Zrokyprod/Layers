@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import zroky
-from zroky._errors import ZrokyRuntimePolicyBlocked, ZrokyRuntimePolicyError
+from zroky._errors import (
+    ZrokyRuntimePolicyApprovalRequired,
+    ZrokyRuntimePolicyBlocked,
+    ZrokyRuntimePolicyError,
+)
 from zroky._internal.config import load_config
 from zroky._internal.models import ErrorCode
 from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint
@@ -159,19 +163,24 @@ def test_check_runtime_policy_raises_on_block(monkeypatch):
         @staticmethod
         def json():
             return {
+                "id": "decision_check_hold",
                 "allowed": False,
                 "status": "pending_approval",
                 "requires_approval": True,
                 "reasons": ["sensitive action requires human approval"],
+                "expires_at": "2026-06-20T12:00:00Z",
             }
 
     monkeypatch.setattr("zroky._runtime_policy.httpx.post", lambda *args, **kwargs: _Response())
     with patch("zroky._internal.queue.IngestClient"):
         zroky.init(api_key="zk_live_test", project="proj_runtime")
 
-    with pytest.raises(ZrokyRuntimePolicyBlocked) as error:
+    with pytest.raises(ZrokyRuntimePolicyApprovalRequired) as error:
         zroky.check_runtime_policy(action_type="refund", tool_name="refund_payment")
 
+    assert isinstance(error.value, ZrokyRuntimePolicyBlocked)
+    assert error.value.approval_id == "decision_check_hold"
+    assert error.value.expires_at == "2026-06-20T12:00:00Z"
     assert error.value.decision["status"] == "pending_approval"
     zroky.shutdown()
     _reset_sdk()
@@ -263,13 +272,17 @@ def test_guard_raises_on_hold_for_approval(monkeypatch):
                 "status": "pending_approval",
                 "requires_approval": True,
                 "reasons": ["sensitive action requires human approval"],
+                "approval_queue_item": {
+                    "id": "decision_guard_hold",
+                    "expires_at": "2026-06-20T12:30:00Z",
+                },
             }
 
     monkeypatch.setattr("zroky._runtime_policy.httpx.post", lambda *args, **kwargs: _Response())
     with patch("zroky._internal.queue.IngestClient"):
         zroky.init(api_key="zk_live_test", project="proj_runtime")
 
-    with pytest.raises(ZrokyRuntimePolicyBlocked) as error:
+    with pytest.raises(ZrokyRuntimePolicyApprovalRequired) as error:
         zroky.guard(
             action_type="refund",
             tool_name="refund_payment",
@@ -277,8 +290,70 @@ def test_guard_raises_on_hold_for_approval(monkeypatch):
             business_impact_summary="High-value refund",
         )
 
+    assert isinstance(error.value, ZrokyRuntimePolicyBlocked)
+    assert error.value.approval_id == "decision_guard_hold"
+    assert error.value.expires_at == "2026-06-20T12:30:00Z"
     assert error.value.decision["id"] == "decision_guard_hold"
     assert error.value.decision["status"] == "pending_approval"
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_guard_retries_with_approval_id_after_hold(monkeypatch):
+    _reset_sdk()
+    posted: list[dict[str, object]] = []
+    responses = [
+        {
+            "id": "decision_guard_hold",
+            "allowed": False,
+            "status": "pending_approval",
+            "requires_approval": True,
+            "reasons": ["sensitive action requires human approval"],
+        },
+        {
+            "id": "decision_guard_allowed",
+            "allowed": True,
+            "status": "allowed",
+            "reasons": ["human approval decision_guard_hold accepted"],
+        },
+    ]
+
+    class _Response:
+        status_code = 200
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_post(_url, *, headers, json, timeout):
+        posted.append(json)
+        return _Response(responses.pop(0))
+
+    monkeypatch.setattr("zroky._runtime_policy.httpx.post", _fake_post)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_runtime")
+
+    with pytest.raises(ZrokyRuntimePolicyApprovalRequired) as error:
+        zroky.guard(
+            action_type="refund",
+            tool_name="refund_payment",
+            tool_args={"order_id": "ord_hold", "amount": 9000},
+            external_action=True,
+        )
+
+    allowed = zroky.guard(
+        action_type="refund",
+        tool_name="refund_payment",
+        tool_args={"order_id": "ord_hold", "amount": 9000},
+        external_action=True,
+        approval_id=error.value.approval_id,
+    )
+
+    assert allowed["id"] == "decision_guard_allowed"
+    assert posted[0].get("approval_id") is None
+    assert posted[1]["approval_id"] == "decision_guard_hold"
     zroky.shutdown()
     _reset_sdk()
 
@@ -365,7 +440,10 @@ def test_classify_error_uses_provider_status_code():
     class ProviderRateLimitError(Exception):
         status_code = 429
 
-    assert zroky._classify_error(ProviderRateLimitError("provider rejected request")) == ErrorCode.RATE_LIMIT
+    assert (
+        zroky._classify_error(ProviderRateLimitError("provider rejected request"))
+        == ErrorCode.RATE_LIMIT
+    )
 
 
 def test_record_failure_includes_structured_failure_reason(monkeypatch):

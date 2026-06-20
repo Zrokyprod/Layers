@@ -53,3 +53,31 @@ class ZrokyRuntimePolicyError(RuntimeError):
 
 class ZrokyRuntimePolicyBlocked(ZrokyRuntimePolicyError):
     """Raised when the runtime policy gate blocks or pauses an agent action."""
+
+
+class ZrokyRuntimePolicyApprovalRequired(ZrokyRuntimePolicyBlocked):
+    """Raised when the runtime policy gate pauses an action for approval."""
+
+    def __init__(self, message: str, *, decision: dict[str, Any]) -> None:
+        super().__init__(message, decision=decision)
+        self.approval_id = self._approval_id_from(decision)
+        self.expires_at = self._expires_at_from(decision)
+
+    @staticmethod
+    def _approval_id_from(decision: dict[str, Any]) -> str | None:
+        queue_item = decision.get("approval_queue_item")
+        if isinstance(queue_item, dict) and queue_item.get("id"):
+            return str(queue_item["id"])
+        if decision.get("id"):
+            return str(decision["id"])
+        return None
+
+    @staticmethod
+    def _expires_at_from(decision: dict[str, Any]) -> str | None:
+        value = decision.get("expires_at")
+        if value is not None:
+            return str(value)
+        queue_item = decision.get("approval_queue_item")
+        if isinstance(queue_item, dict) and queue_item.get("expires_at") is not None:
+            return str(queue_item["expires_at"])
+        return None

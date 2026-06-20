@@ -40,6 +40,8 @@ export interface RuntimePolicyDecision {
   allowed?: boolean;
   status?: string;
   requires_approval?: boolean;
+  approval_queue_item?: RuntimePolicyDecision | null;
+  expires_at?: string | null;
   reasons?: unknown;
   [key: string]: unknown;
 }
@@ -61,6 +63,18 @@ export class ZrokyRuntimePolicyBlocked extends ZrokyRuntimePolicyError {
   }
 }
 
+export class ZrokyRuntimePolicyApprovalRequired extends ZrokyRuntimePolicyBlocked {
+  approvalId?: string;
+  expiresAt?: string;
+
+  constructor(message: string, decision: RuntimePolicyDecision) {
+    super(message, decision);
+    this.name = "ZrokyRuntimePolicyApprovalRequired";
+    this.approvalId = approvalIdFromDecision(decision);
+    this.expiresAt = expiresAtFromDecision(decision);
+  }
+}
+
 function hasPiiChange(before: unknown, after: unknown): boolean {
   return JSON.stringify(before) !== JSON.stringify(after);
 }
@@ -73,6 +87,29 @@ function reasonText(decision: RuntimePolicyDecision): string {
   const reasons = Array.isArray(decision.reasons) ? decision.reasons : [];
   const rendered = reasons.map((item) => String(item)).filter(Boolean).join(", ");
   return rendered || "runtime policy did not allow action";
+}
+
+function approvalIdFromDecision(decision: RuntimePolicyDecision): string | undefined {
+  const queueItem = decision.approval_queue_item;
+  if (queueItem && typeof queueItem.id === "string" && queueItem.id.length > 0) {
+    return queueItem.id;
+  }
+  return typeof decision.id === "string" && decision.id.length > 0 ? decision.id : undefined;
+}
+
+function expiresAtFromDecision(decision: RuntimePolicyDecision): string | undefined {
+  if (typeof decision.expires_at === "string" && decision.expires_at.length > 0) {
+    return decision.expires_at;
+  }
+  const queueItem = decision.approval_queue_item;
+  if (queueItem && typeof queueItem.expires_at === "string" && queueItem.expires_at.length > 0) {
+    return queueItem.expires_at;
+  }
+  return undefined;
+}
+
+function requiresApproval(decision: RuntimePolicyDecision): boolean {
+  return decision.requires_approval === true || decision.status === "pending_approval";
 }
 
 export async function guard(
@@ -204,6 +241,12 @@ export async function guard(
   }
 
   if (decision.allowed !== true) {
+    if (requiresApproval(decision)) {
+      throw new ZrokyRuntimePolicyApprovalRequired(
+        `[ZROKY] Runtime policy requires approval: ${reasonText(decision)}`,
+        decision,
+      );
+    }
     throw new ZrokyRuntimePolicyBlocked(
       `[ZROKY] Runtime policy blocked action: ${reasonText(decision)}`,
       decision,

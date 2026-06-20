@@ -42,6 +42,7 @@ from zroky._internal import validation as _validation  # noqa: F401
 # Re-export errors so callers can do: from zroky import ZrokyPreflightError
 from zroky._errors import (  # noqa: F401
     ZrokyPreflightError,
+    ZrokyRuntimePolicyApprovalRequired,
     ZrokyRuntimePolicyBlocked,
     ZrokyRuntimePolicyError,
 )
