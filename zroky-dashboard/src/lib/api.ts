@@ -1142,6 +1142,49 @@ export interface LedgerRefundConnectorTestResponse {
   connector: LedgerRefundConnectorStatusResponse;
 }
 
+export interface CustomerRecordConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "customer_record_api" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CustomerRecordConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface CustomerRecordConnectorTestPayload {
+  customer_id: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface CustomerRecordConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: CustomerRecordConnectorStatusResponse;
+}
+
 export function getLedgerRefundConnectorStatus(
   signal?: AbortSignal,
 ): Promise<LedgerRefundConnectorStatusResponse> {
@@ -1168,6 +1211,40 @@ export function testLedgerRefundConnector(
 ): Promise<LedgerRefundConnectorTestResponse> {
   return request<LedgerRefundConnectorTestResponse>(
     "/v1/integrations/system-of-record/ledger-refund/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getCustomerRecordConnectorStatus(
+  signal?: AbortSignal,
+): Promise<CustomerRecordConnectorStatusResponse> {
+  return request<CustomerRecordConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/customer-record/status",
+    { signal },
+  );
+}
+
+export function saveCustomerRecordConnectorConfig(
+  body: CustomerRecordConnectorConfigPayload,
+): Promise<CustomerRecordConnectorStatusResponse> {
+  return request<CustomerRecordConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/customer-record/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testCustomerRecordConnector(
+  body: CustomerRecordConnectorTestPayload,
+): Promise<CustomerRecordConnectorTestResponse> {
+  return request<CustomerRecordConnectorTestResponse>(
+    "/v1/integrations/system-of-record/customer-record/test",
     {
       method: "POST",
       body,

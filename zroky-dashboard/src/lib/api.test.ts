@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   approveRuntimePolicyDecision,
   getBillingMe,
+  getCustomerRecordConnectorStatus,
   getLedgerRefundConnectorStatus,
   getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
@@ -10,8 +11,10 @@ import {
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
   rejectRuntimePolicyDecision,
+  saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
   setRuntimePolicyKillSwitch,
+  testCustomerRecordConnector,
   testLedgerRefundConnector,
 } from "@/lib/api";
 
@@ -459,6 +462,150 @@ describe("ledger refund connector API client", () => {
           refund_id: "rf_1",
           claimed: { refund_id: "rf_1", amount_usd: 42.5 },
           match_fields: ["refund_id", "amount_usd"],
+        }),
+      }),
+    );
+  });
+});
+
+describe("customer record connector API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("reads saved connector status", async () => {
+    const payload = {
+      connected: true,
+      connector_type: "customer_record_api",
+      base_url: "https://crm.example.com/api",
+      path_template: "/customers/{customer_id}",
+      record_path: "data",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: null,
+      created_at: "2026-06-21T00:00:00Z",
+      updated_at: "2026-06-21T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCustomerRecordConnectorStatus()).resolves.toMatchObject({
+      connected: true,
+      connector_type: "customer_record_api",
+      bearer_token_last4: "oken",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/customer-record/status",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("saves connector config without transforming the secret", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          connected: true,
+          connector_type: "customer_record_api",
+          base_url: "https://crm.example.com/api",
+          path_template: "/customers/{customer_id}",
+          record_path: "data",
+          query: null,
+          has_bearer_token: true,
+          bearer_token_last4: "oken",
+          last_tested_at: null,
+          created_at: null,
+          updated_at: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveCustomerRecordConnectorConfig({
+      base_url: "https://crm.example.com/api",
+      path_template: "/customers/{customer_id}",
+      record_path: "data",
+      bearer_token: "crm-secret-token",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/customer-record/config",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          base_url: "https://crm.example.com/api",
+          path_template: "/customers/{customer_id}",
+          record_path: "data",
+          bearer_token: "crm-secret-token",
+        }),
+      }),
+    );
+  });
+
+  it("runs a saved connector test", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          check: {
+            id: "check_crm_1",
+            project_id: "proj_1",
+            call_id: null,
+            trace_id: null,
+            runtime_policy_decision_id: null,
+            action_type: "customer_record_update",
+            connector_type: "customer_record_api",
+            system_ref: "crm:cus_1",
+            verdict: "matched",
+            reason: "all_compared_fields_matched",
+            amount_usd: null,
+            currency: null,
+            claimed: {},
+            actual: {},
+            comparison: {},
+            idempotency_key: null,
+            metadata: null,
+            checked_at: "2026-06-21T00:00:00Z",
+            created_at: "2026-06-21T00:00:00Z",
+          },
+          connector: {
+            connected: true,
+            connector_type: "customer_record_api",
+            base_url: "https://crm.example.com/api",
+            path_template: "/customers/{customer_id}",
+            record_path: "data",
+            query: null,
+            has_bearer_token: true,
+            bearer_token_last4: "oken",
+            last_tested_at: "2026-06-21T00:00:00Z",
+            created_at: null,
+            updated_at: null,
+          },
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await testCustomerRecordConnector({
+      customer_id: "cus_1",
+      claimed: { customer_id: "cus_1", email: "owner@example.com" },
+      match_fields: ["customer_id", "email"],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/customer-record/test",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          customer_id: "cus_1",
+          claimed: { customer_id: "cus_1", email: "owner@example.com" },
+          match_fields: ["customer_id", "email"],
         }),
       }),
     );

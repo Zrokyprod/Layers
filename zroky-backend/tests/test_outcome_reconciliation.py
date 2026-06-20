@@ -23,6 +23,7 @@ from app.services.outcome_reconciliation import (
 )
 from app.services.system_of_record_connectors import (
     ConnectorConfigError,
+    CustomerRecordApiConnector,
     LedgerRefundApiConnector,
 )
 
@@ -432,6 +433,97 @@ def test_ledger_refund_reconciliation_api_fetches_system_record_and_redacts_secr
                 "currency",
             ]
             assert "ledger-secret-token" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_customer_record_reconciliation_api_fetches_crm_record_and_redacts_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "customer_record_api.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_customer_record", role="admin", subject="user-crm"
+        )
+
+    def fake_fetch(self: CustomerRecordApiConnector) -> SourceRecord:
+        assert self.bearer_token == "crm-secret-token"
+        return SourceRecord(
+            record={
+                "customer_id": self.customer_id,
+                "email": "OWNER@EXAMPLE.COM",
+                "status": "active",
+                "account_id": "acct_1001",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "customer_record_api",
+                "request_url": "https://crm.example/customers/cus_1001",
+                "http_status": 200,
+                "customer_id": self.customer_id,
+            },
+        )
+
+    monkeypatch.setattr(CustomerRecordApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/customer-record",
+                json={
+                    "call_id": "call_crm_update",
+                    "trace_id": "trace_crm_update",
+                    "customer_id": "cus_1001",
+                    "claimed": {
+                        "customer_id": "cus_1001",
+                        "email": "owner@example.com",
+                        "status": "ACTIVE",
+                        "account_id": "acct_1001",
+                    },
+                    "connector": {
+                        "base_url": "https://crm.example",
+                        "bearer_token": "crm-secret-token",
+                    },
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "customer_record_api"
+            assert body["system_ref"] == "crm:cus_1001"
+            assert body["reason"] == "all_compared_fields_matched"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert body["metadata"]["match_fields"] == [
+                "customer_id",
+                "email",
+                "account_id",
+                "status",
+            ]
+            assert "crm-secret-token" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)

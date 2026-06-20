@@ -13,14 +13,18 @@ from app.db.session import get_db_session, get_db_session_read
 from app.services.dashboard_config import ensure_project_exists
 from app.services.outcome_reconciliation import reconcile_outcome, reconciliation_to_dict
 from app.services.system_of_record_connector_config import (
+    CUSTOMER_RECORD_CONNECTOR_TYPE,
+    LEDGER_REFUND_CONNECTOR_TYPE,
     EnvelopeFormatError,
     InvalidSystemOfRecordConnectorError,
     VaultCipherUnavailable,
+    build_customer_record_connector,
     build_ledger_refund_connector,
     decrypt_connector_bearer_token,
     get_connector_config,
     mark_connector_tested,
     serialize_connector_config,
+    upsert_customer_record_connector_config,
     upsert_ledger_refund_connector_config,
 )
 
@@ -87,8 +91,76 @@ class LedgerRefundConnectorTestResponse(BaseModel):
     connector: LedgerRefundConnectorStatusResponse
 
 
-def _status_response(row) -> LedgerRefundConnectorStatusResponse:
-    return LedgerRefundConnectorStatusResponse(**serialize_connector_config(row))
+class CustomerRecordConnectorStatusResponse(BaseModel):
+    connected: bool
+    connector_type: str
+    base_url: str | None = None
+    path_template: str | None = None
+    record_path: str | None = None
+    query: dict[str, Any] | None = None
+    has_bearer_token: bool
+    bearer_token_last4: str | None = None
+    last_tested_at: Any | None = None
+    created_at: Any | None = None
+    updated_at: Any | None = None
+
+
+class CustomerRecordConnectorConfigRequest(BaseModel):
+    base_url: str = Field(..., max_length=2048)
+    path_template: str = Field(default="/customers/{customer_id}", max_length=512)
+    record_path: str | None = Field(default=None, max_length=255)
+    query: dict[str, str | int | float | bool] | None = None
+    bearer_token: str | None = Field(default=None, max_length=4096)
+    clear_bearer_token: bool = False
+
+    @field_validator("bearer_token")
+    @classmethod
+    def _normalize_token(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if len(cleaned) < 8:
+            raise ValueError("bearer_token must be at least 8 characters")
+        return cleaned
+
+
+class CustomerRecordConnectorTestRequest(BaseModel):
+    customer_id: str = Field(..., min_length=1, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="customer_record_update", max_length=64)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
+class CustomerRecordConnectorTestResponse(BaseModel):
+    ok: bool
+    check: dict[str, Any]
+    connector: CustomerRecordConnectorStatusResponse
+
+
+def _ledger_status_response(row) -> LedgerRefundConnectorStatusResponse:
+    return LedgerRefundConnectorStatusResponse(
+        **serialize_connector_config(row, connector_type=LEDGER_REFUND_CONNECTOR_TYPE)
+    )
+
+
+def _customer_status_response(row) -> CustomerRecordConnectorStatusResponse:
+    return CustomerRecordConnectorStatusResponse(
+        **serialize_connector_config(row, connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE)
+    )
 
 
 def _claim_text(claimed: dict[str, Any], key: str) -> str | None:
@@ -109,6 +181,28 @@ def _match_fields(claimed: dict[str, Any], explicit: list[str] | None) -> list[s
         if field in claimed
     ]
     return fields or ["refund_id"]
+
+
+def _customer_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["customer_id"]
+    fields = [
+        field
+        for field in (
+            "customer_id",
+            "email",
+            "account_id",
+            "status",
+            "lifecycle_stage",
+            "plan",
+            "tier",
+        )
+        if field in claimed
+    ]
+    return fields or ["customer_id"]
 
 
 def _map_config_error(exc: Exception) -> HTTPException:
@@ -139,7 +233,7 @@ def get_ledger_refund_connector_status(
     db: Session = Depends(get_db_session_read),
 ) -> LedgerRefundConnectorStatusResponse:
     row = get_connector_config(db, project_id=tenant_id)
-    return _status_response(row)
+    return _ledger_status_response(row)
 
 
 @router.put(
@@ -175,7 +269,7 @@ def save_ledger_refund_connector_config(
         )
     except (InvalidSystemOfRecordConnectorError, VaultCipherUnavailable) as exc:
         raise _map_config_error(exc) from exc
-    return _status_response(row)
+    return _ledger_status_response(row)
 
 
 @router.post(
@@ -248,5 +342,129 @@ def test_ledger_refund_connector(
     return LedgerRefundConnectorTestResponse(
         ok=row.verdict == "matched",
         check=reconciliation_to_dict(row),
-        connector=_status_response(updated_config),
+        connector=_ledger_status_response(updated_config),
+    )
+
+
+@router.get(
+    "/customer-record/status",
+    response_model=CustomerRecordConnectorStatusResponse,
+)
+@limiter.limit("60/minute")
+def get_customer_record_connector_status(
+    request: Request,
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session_read),
+) -> CustomerRecordConnectorStatusResponse:
+    row = get_connector_config(
+        db, project_id=tenant_id, connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE
+    )
+    return _customer_status_response(row)
+
+
+@router.put(
+    "/customer-record/config",
+    response_model=CustomerRecordConnectorStatusResponse,
+)
+@limiter.limit("12/minute")
+def save_customer_record_connector_config(
+    request: Request,
+    body: CustomerRecordConnectorConfigRequest = Body(...),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> CustomerRecordConnectorStatusResponse:
+    if context.role not in {"admin", "owner"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant admin role is required.",
+        )
+    ensure_project_exists(db, context.tenant_id)
+    settings = get_settings()
+    try:
+        row = upsert_customer_record_connector_config(
+            db,
+            project_id=context.tenant_id,
+            base_url=body.base_url,
+            path_template=body.path_template,
+            record_path=body.record_path,
+            query=body.query,
+            bearer_token=body.bearer_token,
+            clear_bearer_token=body.clear_bearer_token,
+            updated_by_subject=context.subject,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+    except (InvalidSystemOfRecordConnectorError, VaultCipherUnavailable) as exc:
+        raise _map_config_error(exc) from exc
+    return _customer_status_response(row)
+
+
+@router.post(
+    "/customer-record/test",
+    response_model=CustomerRecordConnectorTestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/minute")
+def test_customer_record_connector(
+    request: Request,
+    body: CustomerRecordConnectorTestRequest = Body(...),
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
+) -> CustomerRecordConnectorTestResponse:
+    config = get_connector_config(
+        db, project_id=tenant_id, connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer record connector is not configured.",
+        )
+
+    customer_id = body.customer_id.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("customer_id", customer_id)
+    settings = get_settings()
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_customer_record_connector(
+            config,
+            customer_id=customer_id,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "customer_record_update",
+            system_ref=f"crm:{customer_id}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_customer_match_fields(claimed, body.match_fields),
+            idempotency_key=body.idempotency_key,
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "customer_record_api",
+                "connector_config_id": config.id,
+                "customer_id": customer_id,
+                "source": "saved_connector_test",
+            },
+        )
+        updated_config = mark_connector_tested(db, config, tested_at=row.checked_at)
+    except (
+        InvalidSystemOfRecordConnectorError,
+        VaultCipherUnavailable,
+        EnvelopeFormatError,
+        ValueError,
+    ) as exc:
+        raise _map_config_error(exc) from exc
+
+    return CustomerRecordConnectorTestResponse(
+        ok=row.verdict == "matched",
+        check=reconciliation_to_dict(row),
+        connector=_customer_status_response(updated_config),
     )

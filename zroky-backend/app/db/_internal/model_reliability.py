@@ -153,7 +153,7 @@ class SystemOfRecordConnectorConfig(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "connector_type IN ('ledger_refund_api')",
+            "connector_type IN ('ledger_refund_api','customer_record_api')",
             name="ck_sor_connector_type",
         ),
         UniqueConstraint(

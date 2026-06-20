@@ -15,7 +15,10 @@ from app.db.models import Project
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.outcome_reconciliation import SourceRecord
-from app.services.system_of_record_connectors import LedgerRefundApiConnector
+from app.services.system_of_record_connectors import (
+    CustomerRecordApiConnector,
+    LedgerRefundApiConnector,
+)
 
 
 def _sqlite_session_factory(path: Path):
@@ -137,6 +140,105 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
         get_settings.cache_clear()
 
 
+def test_customer_record_connector_config_status_and_test_run_redact_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890")
+    get_settings.cache_clear()
+    engine, session_factory = _sqlite_session_factory(tmp_path / "sor_crm_connector.db")
+    _seed_project(session_factory, "proj_sor_crm")
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_sor_crm", role="admin", subject="user-sor"
+        )
+
+    def fake_fetch(self: CustomerRecordApiConnector) -> SourceRecord:
+        assert self.base_url == "https://crm.example.com/api"
+        assert self.path_template == "/customers/{customer_id}"
+        assert self.record_path == "data"
+        assert self.bearer_token == "crm-secret-token"
+        return SourceRecord(
+            record={
+                "customer_id": self.customer_id,
+                "email": "owner@example.com",
+                "status": "active",
+                "account_id": "acct_1001",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "customer_record_api",
+                "request_url": f"https://crm.example.com/api/customers/{self.customer_id}",
+                "http_status": 200,
+                "record_path": "data",
+                "customer_id": self.customer_id,
+            },
+        )
+
+    monkeypatch.setattr(CustomerRecordApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            empty = client.get("/v1/integrations/system-of-record/customer-record/status")
+            assert empty.status_code == 200
+            assert empty.json()["connected"] is False
+            assert empty.json()["connector_type"] == "customer_record_api"
+
+            saved = client.put(
+                "/v1/integrations/system-of-record/customer-record/config",
+                json={
+                    "base_url": "https://crm.example.com/api",
+                    "path_template": "/customers/{customer_id}",
+                    "record_path": "data",
+                    "bearer_token": "crm-secret-token",
+                },
+            )
+            assert saved.status_code == 200
+            saved_body = saved.json()
+            assert saved_body["connected"] is True
+            assert saved_body["has_bearer_token"] is True
+            assert saved_body["bearer_token_last4"] == "oken"
+            assert "crm-secret-token" not in json.dumps(saved_body)
+
+            tested = client.post(
+                "/v1/integrations/system-of-record/customer-record/test",
+                json={
+                    "customer_id": "cus_1001",
+                    "claimed": {
+                        "customer_id": "cus_1001",
+                        "email": "owner@example.com",
+                        "status": "active",
+                        "account_id": "acct_1001",
+                    },
+                },
+            )
+            assert tested.status_code == 201
+            body = tested.json()
+            assert body["ok"] is True
+            assert body["check"]["verdict"] == "matched"
+            assert body["check"]["system_ref"] == "crm:cus_1001"
+            assert body["check"]["metadata"]["source"] == "saved_connector_test"
+            assert body["check"]["metadata"]["connector"]["http_status"] == 200
+            assert body["connector"]["last_tested_at"] is not None
+            assert "crm-secret-token" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
 def test_ledger_refund_connector_rejects_unsafe_saved_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -169,6 +271,49 @@ def test_ledger_refund_connector_rejects_unsafe_saved_config(
                 json={
                     "base_url": "http://ledger.example.com/api",
                     "path_template": "/refunds/{refund_id}",
+                },
+            )
+            assert response.status_code == 422
+            assert "must use https" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_customer_record_connector_rejects_unsafe_saved_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890")
+    get_settings.cache_clear()
+    engine, session_factory = _sqlite_session_factory(tmp_path / "sor_crm_bad_config.db")
+    _seed_project(session_factory, "proj_sor_crm_bad")
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_sor_crm_bad", role="admin", subject="user-sor"
+        )
+
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            response = client.put(
+                "/v1/integrations/system-of-record/customer-record/config",
+                json={
+                    "base_url": "http://crm.example.com/api",
+                    "path_template": "/customers/{customer_id}",
                 },
             )
             assert response.status_code == 422
