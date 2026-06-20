@@ -40263,5 +40263,5 @@ body:has(.app-shell),
 .app-shell .org-popover.shell-popover-up {
   left: 0;
   right: auto;
-  width: min(360px, calc(100vw - 24px));
+  width: min(312px, calc(100vw - 24px));
 }

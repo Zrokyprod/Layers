@@ -625,7 +625,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
       const gutter = 12;
       const rect = trigger.getBoundingClientRect();
-      const width = Math.min(360, window.innerWidth - gutter * 2);
+      const width = Math.min(312, window.innerWidth - gutter * 2);
       const left = Math.min(Math.max(rect.left, gutter), window.innerWidth - width - gutter);
       const bottom = Math.max(gutter, window.innerHeight - rect.top + 8);
       const maxHeight = Math.max(180, rect.top - gutter * 2);
