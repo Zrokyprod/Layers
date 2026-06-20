@@ -14,6 +14,8 @@ import {
   createOrUpdateCalibrationLabel,
   deleteCalibrationLabel,
   getOutcomeSummary,
+  getOutcomeReconciliationSummary,
+  listOutcomeReconciliations,
   getReplaySavings,
   ingestOutcome,
   listAblationJobs,
@@ -29,6 +31,9 @@ import {
   type LabelView,
   type LabelCreate,
   type OutcomeSummaryResponse,
+  type OutcomeReconciliationListResponse,
+  type OutcomeReconciliationSummaryResponse,
+  type OutcomeReconciliationVerdict,
   type ReplaySavingsResponse,
   type OutcomeIngestPayload,
   type OutcomeView,
@@ -718,6 +723,33 @@ export function useOutcomeSummary(
     queryKey: ["outcomes", "summary", days],
     queryFn: ({ signal }) => getOutcomeSummary(days, signal),
     staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useOutcomeReconciliationSummary(
+  days = 30,
+  options?: Partial<UseQueryOptions<OutcomeReconciliationSummaryResponse, Error>>,
+) {
+  return useQuery<OutcomeReconciliationSummaryResponse, Error>({
+    queryKey: ["outcomes", "reconciliation", "summary", days],
+    queryFn: ({ signal }) => getOutcomeReconciliationSummary(days, signal),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    ...options,
+  });
+}
+
+export function useOutcomeReconciliations(
+  verdict: OutcomeReconciliationVerdict | "all" = "all",
+  limit = 50,
+  options?: Partial<UseQueryOptions<OutcomeReconciliationListResponse, Error>>,
+) {
+  return useQuery<OutcomeReconciliationListResponse, Error>({
+    queryKey: ["outcomes", "reconciliation", "list", verdict, limit],
+    queryFn: ({ signal }) => listOutcomeReconciliations({ verdict, limit }, signal),
+    staleTime: 15_000,
+    refetchInterval: verdict === "mismatched" || verdict === "not_verified" ? 15_000 : 30_000,
     ...options,
   });
 }

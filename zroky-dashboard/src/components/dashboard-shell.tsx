@@ -31,6 +31,7 @@ import {
   Settings2,
   Shield,
   ShieldAlert,
+  ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
@@ -88,6 +89,14 @@ const NAV_ITEMS: NavItem[] = [
     subtitle: "Clustered production failures with impact, owners, and release decisions.",
     Icon: AlertTriangle,
     badgeKey: "issues",
+    visibleInNav: true,
+  },
+  {
+    id: "outcomes",
+    href: "/outcomes",
+    label: "Outcomes",
+    subtitle: "System-of-record verification for high-stakes agent actions.",
+    Icon: ShieldCheck,
     visibleInNav: true,
   },
   {
@@ -767,7 +776,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         const root = query.queryKey[0];
         return (
           typeof root === "string" &&
-          ["calls", "cost", "loops", "traces", "reliability", "shell-issues-count", "shell-agents-count"].includes(root)
+          [
+            "calls",
+            "cost",
+            "loops",
+            "outcomes",
+            "traces",
+            "reliability",
+            "shell-issues-count",
+            "shell-agents-count",
+          ].includes(root)
         );
       },
     });

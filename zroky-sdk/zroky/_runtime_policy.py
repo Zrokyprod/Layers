@@ -14,7 +14,11 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from zroky._errors import ZrokyRuntimePolicyBlocked, ZrokyRuntimePolicyError
+from zroky._errors import (
+    ZrokyRuntimePolicyApprovalRequired,
+    ZrokyRuntimePolicyBlocked,
+    ZrokyRuntimePolicyError,
+)
 from zroky._internal.pii import mask_value
 
 _REQUEST_TIMEOUT_S = 8.0
@@ -33,6 +37,10 @@ def _runtime_policy_url(ingest_url: str) -> str:
             return urlunsplit((parsed.scheme, parsed.netloc, runtime_path, "", ""))
 
     return urlunsplit((parsed.scheme, parsed.netloc, "/v1/runtime-policy/check", "", ""))
+
+
+def _requires_approval(decision: dict[str, Any]) -> bool:
+    return bool(decision.get("requires_approval")) or decision.get("status") == "pending_approval"
 
 
 def check_runtime_policy(
@@ -67,7 +75,8 @@ def check_runtime_policy(
 ) -> dict[str, Any]:
     """Return the backend runtime policy decision for a pending agent action.
 
-    When ``raise_on_block`` is true, any non-allow decision raises
+    When ``raise_on_block`` is true, hold-for-approval decisions raise
+    ``ZrokyRuntimePolicyApprovalRequired`` and other non-allow decisions raise
     ``ZrokyRuntimePolicyBlocked``. Transport errors and non-2xx responses raise
     ``ZrokyRuntimePolicyError`` so callers fail closed.
     """
@@ -155,9 +164,82 @@ def check_runtime_policy(
     if not allowed and raise_on_block:
         reasons = decision.get("reasons") if isinstance(decision.get("reasons"), list) else []
         reason_text = ", ".join(str(item) for item in reasons) or "runtime policy blocked action"
+        if _requires_approval(decision):
+            raise ZrokyRuntimePolicyApprovalRequired(
+                f"[ZROKY] Runtime policy requires approval: {reason_text}",
+                decision=decision,
+            )
         raise ZrokyRuntimePolicyBlocked(
             f"[ZROKY] Runtime policy blocked action: {reason_text}",
             decision=decision,
         )
 
     return decision
+
+
+def guard(
+    *,
+    action_type: str,
+    tool_name: str | None = None,
+    tool_args: dict[str, Any] | list[Any] | str | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+    call_id: str | None = None,
+    agent_name: str | None = None,
+    role: str | None = None,
+    tool_call_count: int | None = None,
+    retry_count: int | None = None,
+    estimated_cost_usd: float | None = None,
+    input_text: str | None = None,
+    user_input: str | None = None,
+    output_text: str | None = None,
+    external_action: bool | None = None,
+    prompt_injection_detected: bool | None = None,
+    pii_detected: bool | None = None,
+    approval_id: str | None = None,
+    business_impact: dict[str, Any] | str | None = None,
+    business_impact_summary: str | None = None,
+    impact_usd: float | None = None,
+    customer_id: str | None = None,
+    account_id: str | None = None,
+    order_id: str | None = None,
+    resource_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Synchronously enforce the runtime policy gate before side effects.
+
+    ``guard`` is the public action-accountability primitive: call it immediately
+    before money-touching or irreversible tool execution. It fails closed on
+    transport/control-plane errors, raises ``ZrokyRuntimePolicyApprovalRequired``
+    for hold-for-approval decisions, and raises ``ZrokyRuntimePolicyBlocked``
+    for explicit blocks.
+    """
+    return check_runtime_policy(
+        action_type=action_type,
+        tool_name=tool_name,
+        tool_args=tool_args,
+        trace_id=trace_id,
+        span_id=span_id,
+        call_id=call_id,
+        agent_name=agent_name,
+        role=role,
+        tool_call_count=tool_call_count,
+        retry_count=retry_count,
+        estimated_cost_usd=estimated_cost_usd,
+        input_text=input_text,
+        user_input=user_input,
+        output_text=output_text,
+        external_action=external_action,
+        prompt_injection_detected=prompt_injection_detected,
+        pii_detected=pii_detected,
+        approval_id=approval_id,
+        business_impact=business_impact,
+        business_impact_summary=business_impact_summary,
+        impact_usd=impact_usd,
+        customer_id=customer_id,
+        account_id=account_id,
+        order_id=order_id,
+        resource_id=resource_id,
+        metadata=metadata,
+        raise_on_block=True,
+    )

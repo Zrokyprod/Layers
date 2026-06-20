@@ -19,7 +19,13 @@ from app.api.routes._internal.owner_money_path import (
     VERIFIED_REPLAY_STATUSES,
     _json_object,
 )
-from app.db.models import GoldenSet, GoldenTrace, ReplayRun, RuntimePolicyDecision
+from app.db.models import (
+    GoldenSet,
+    GoldenTrace,
+    OutcomeReconciliationCheck,
+    ReplayRun,
+    RuntimePolicyDecision,
+)
 
 
 STALE_PRODUCT_DOC_PATHS = (
@@ -29,6 +35,7 @@ STALE_PRODUCT_DOC_PATHS = (
     ".kiro/specs/unknown-failure-discovery/requirements.md",
     ".kiro/specs/unknown-failure-discovery/tasks.md",
 )
+
 
 def _evidence(
     label: str,
@@ -89,12 +96,16 @@ def _replay_trust_counts(
     if not project_ids:
         return counts
 
-    runs = db.execute(
-        select(ReplayRun).where(
-            ReplayRun.project_id.in_(project_ids),
-            ReplayRun.created_at >= since,
+    runs = (
+        db.execute(
+            select(ReplayRun).where(
+                ReplayRun.project_id.in_(project_ids),
+                ReplayRun.created_at >= since,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for run in runs:
         summary = _json_object(run.summary_json)
         replay_mode = str(
@@ -201,12 +212,16 @@ def _runtime_policy_counts(
     }
     if not project_ids:
         return counts
-    rows = db.execute(
-        select(RuntimePolicyDecision).where(
-            RuntimePolicyDecision.project_id.in_(project_ids),
-            RuntimePolicyDecision.created_at >= since,
+    rows = (
+        db.execute(
+            select(RuntimePolicyDecision).where(
+                RuntimePolicyDecision.project_id.in_(project_ids),
+                RuntimePolicyDecision.created_at >= since,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for row in rows:
         if row.status in counts:
             counts[row.status] += 1
@@ -220,6 +235,44 @@ def _runtime_policy_counts(
     return counts
 
 
+def _outcome_reconciliation_counts(
+    db: Session,
+    *,
+    project_ids: list[str],
+    since: datetime,
+) -> dict[str, int]:
+    counts = {
+        "total": 0,
+        "matched": 0,
+        "mismatched": 0,
+        "not_verified": 0,
+        "linked_calls": 0,
+        "linked_runtime_policy": 0,
+    }
+    if not project_ids:
+        return counts
+
+    rows = (
+        db.execute(
+            select(OutcomeReconciliationCheck).where(
+                OutcomeReconciliationCheck.project_id.in_(project_ids),
+                OutcomeReconciliationCheck.checked_at >= since,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        counts["total"] += 1
+        if row.verdict in {"matched", "mismatched", "not_verified"}:
+            counts[row.verdict] += 1
+        if row.call_id:
+            counts["linked_calls"] += 1
+        if row.runtime_policy_decision_id:
+            counts["linked_runtime_policy"] += 1
+    return counts
+
+
 def _repo_root_for_source_truth() -> Path | None:
     candidates = [
         Path.cwd(),
@@ -227,7 +280,9 @@ def _repo_root_for_source_truth() -> Path | None:
         Path(__file__).resolve().parents[5],
     ]
     for candidate in candidates:
-        if (candidate / "README.md").exists() and (candidate / "zroky-backend").exists():
+        if (candidate / "README.md").exists() and (
+            candidate / "zroky-backend"
+        ).exists():
             return candidate
     return None
 
@@ -251,14 +306,16 @@ def _source_truth_status() -> tuple[str, list[str], list[OwnerLaunchGateEvidence
     readme = root / "README.md"
     text = readme.read_text(encoding="utf-8", errors="replace")
     has_marker = "single product and implementation source of truth" in text
-    stale_docs = [
-        rel
-        for rel in STALE_PRODUCT_DOC_PATHS
-        if (root / rel).exists()
-    ]
+    stale_docs = [rel for rel in STALE_PRODUCT_DOC_PATHS if (root / rel).exists()]
     evidence = [
-        _evidence("README.md", "present", status="pass" if has_marker else "not_verified"),
-        _evidence("stale planning docs", len(stale_docs), status="fail" if stale_docs else "pass"),
+        _evidence(
+            "README.md", "present", status="pass" if has_marker else "not_verified"
+        ),
+        _evidence(
+            "stale planning docs",
+            len(stale_docs),
+            status="fail" if stale_docs else "pass",
+        ),
     ]
     if stale_docs:
         return "fail", [f"stale_doc:{rel}" for rel in stale_docs], evidence
@@ -282,6 +339,9 @@ def build_launch_readiness(
     ci_counts = _ci_run_counts(db, project_ids=project_ids, since=since_7d)
     golden_counts = _behavioral_golden_counts(db, project_ids=project_ids)
     runtime_counts = _runtime_policy_counts(db, project_ids=project_ids, since=since_7d)
+    reconciliation_counts = _outcome_reconciliation_counts(
+        db, project_ids=project_ids, since=since_7d
+    )
     source_status, source_blockers, source_evidence = _source_truth_status()
 
     gates: list[OwnerLaunchReadinessGate] = []
@@ -310,10 +370,18 @@ def build_launch_readiness(
             blockers=capture_blockers + capture_missing,
             evidence=[
                 _evidence("captures_24h", platform.captures_24h),
-                _evidence("tenants_without_recent_capture", platform.tenants_without_recent_capture),
-                _evidence("gateway_unhealthy_tenants", platform.gateway_unhealthy_tenants),
+                _evidence(
+                    "tenants_without_recent_capture",
+                    platform.tenants_without_recent_capture,
+                ),
+                _evidence(
+                    "gateway_unhealthy_tenants", platform.gateway_unhealthy_tenants
+                ),
                 _evidence("gateway_loss_tenants", platform.gateway_loss_tenants),
-                _evidence("gateway_backpressure_tenants", platform.gateway_backpressure_tenants),
+                _evidence(
+                    "gateway_backpressure_tenants",
+                    platform.gateway_backpressure_tenants,
+                ),
             ],
             verification_commands=[
                 "python -m pytest tests/test_ingest.py tests/test_capture_health.py",
@@ -355,7 +423,10 @@ def build_launch_readiness(
             blockers=failure_missing,
             evidence=[
                 _evidence("open_grouped_failures", platform.issues_open),
-                _evidence("tenants_with_failures", sum(1 for row in tenants if row.open_issue_count > 0)),
+                _evidence(
+                    "tenants_with_failures",
+                    sum(1 for row in tenants if row.open_issue_count > 0),
+                ),
             ],
             verification_commands=[
                 "python -m pytest tests/test_failure_intelligence.py tests/test_issues.py",
@@ -383,8 +454,12 @@ def build_launch_readiness(
             summary="Replay must report pass/fail/not_verified/error honestly; stub replay can never be trusted proof.",
             blockers=replay_blockers + replay_missing,
             evidence=[
-                _evidence("trusted_verified_replays_7d", replay_counts["trusted_verified"]),
-                _evidence("stub_marked_verified", replay_counts["stub_marked_verified"]),
+                _evidence(
+                    "trusted_verified_replays_7d", replay_counts["trusted_verified"]
+                ),
+                _evidence(
+                    "stub_marked_verified", replay_counts["stub_marked_verified"]
+                ),
                 _evidence("not_verified_replays_7d", replay_counts["not_verified"]),
                 _evidence("replay_errors_7d", replay_counts["errors"]),
                 _evidence("stale_replay_jobs", platform.replay_jobs_stale),
@@ -412,8 +487,12 @@ def build_launch_readiness(
             evidence=[
                 _evidence("active_goldens", golden_counts["active"]),
                 _evidence("blocking_goldens", golden_counts["blocking"]),
-                _evidence("blocking_behavioral_goldens", golden_counts["blocking_behavioral"]),
-                _evidence("blocking_text_only_goldens", golden_counts["blocking_text_only"]),
+                _evidence(
+                    "blocking_behavioral_goldens", golden_counts["blocking_behavioral"]
+                ),
+                _evidence(
+                    "blocking_text_only_goldens", golden_counts["blocking_text_only"]
+                ),
             ],
             verification_commands=[
                 "python -m pytest tests/test_goldens.py",
@@ -476,6 +555,43 @@ def build_launch_readiness(
         )
     )
 
+    outcome_blockers: list[str] = []
+    if reconciliation_counts["mismatched"] > 0:
+        outcome_blockers.append("outcome_mismatch_detected")
+    outcome_missing: list[str] = []
+    if reconciliation_counts["total"] <= 0:
+        outcome_missing.append("outcome_reconciliation_missing")
+    if reconciliation_counts["not_verified"] > 0:
+        outcome_missing.append("outcome_not_verified")
+    if reconciliation_counts["matched"] <= 0:
+        outcome_missing.append("matched_outcome_proof_missing")
+    gates.append(
+        _gate(
+            code="outcome_verification",
+            title="Outcome Verification",
+            status=_status_for(blockers=outcome_blockers, missing=outcome_missing),
+            summary="Money-touching actions must be reconciled against the system of record; green output alone is not proof.",
+            blockers=outcome_blockers + outcome_missing,
+            evidence=[
+                _evidence("reconciliation_checks_7d", reconciliation_counts["total"]),
+                _evidence("matched_7d", reconciliation_counts["matched"]),
+                _evidence("mismatched_7d", reconciliation_counts["mismatched"]),
+                _evidence("not_verified_7d", reconciliation_counts["not_verified"]),
+                _evidence(
+                    "checks_linked_to_calls_7d", reconciliation_counts["linked_calls"]
+                ),
+                _evidence(
+                    "checks_linked_to_runtime_policy_7d",
+                    reconciliation_counts["linked_runtime_policy"],
+                ),
+            ],
+            verification_commands=[
+                "python -m pytest tests/test_outcome_reconciliation.py",
+                "npm test -- src/app/(dashboard)/outcomes/page.test.tsx",
+            ],
+        )
+    )
+
     billing_blockers = list(platform.billing_launch_blockers or [])
     gates.append(
         _gate(
@@ -486,15 +602,21 @@ def build_launch_readiness(
             blockers=billing_blockers,
             evidence=[
                 _evidence("billing_launch_blockers", len(billing_blockers)),
-                _evidence("metering_failure_tenants", platform.metering_failure_tenants),
-                _evidence("event_counter_failure_count", platform.event_counter_failure_count),
+                _evidence(
+                    "metering_failure_tenants", platform.metering_failure_tenants
+                ),
+                _evidence(
+                    "event_counter_failure_count", platform.event_counter_failure_count
+                ),
                 _evidence(
                     "billing_provider_verification",
                     platform.billing_provider_verification.state,
                     detail=platform.billing_provider_verification.detail,
                 ),
                 _evidence("tenants_with_quota_risk", platform.tenants_with_quota_risk),
-                _evidence("tenants_with_billing_risk", platform.tenants_with_billing_risk),
+                _evidence(
+                    "tenants_with_billing_risk", platform.tenants_with_billing_risk
+                ),
             ],
             verification_commands=[
                 "python -m pytest tests/test_billing_v2.py tests/test_owner_money_path_health.py",
@@ -502,7 +624,9 @@ def build_launch_readiness(
         )
     )
 
-    getting_value_tenants = sum(1 for row in tenants if row.value_status == "getting_value")
+    getting_value_tenants = sum(
+        1 for row in tenants if row.value_status == "getting_value"
+    )
     owner_value_blockers = [
         code
         for code in platform.launch_blockers
@@ -520,14 +644,20 @@ def build_launch_readiness(
         _gate(
             code="owner_value_proof",
             title="Owner Value Proof",
-            status=_status_for(blockers=owner_value_blockers, missing=owner_value_missing),
+            status=_status_for(
+                blockers=owner_value_blockers, missing=owner_value_missing
+            ),
             summary="Owner must see who is getting reliability value and where money path is blocked.",
             blockers=owner_value_blockers + owner_value_missing,
             evidence=[
                 _evidence("getting_value_tenants", getting_value_tenants),
                 _evidence("blocked_regressions_7d", platform.blocked_regressions_7d),
                 _evidence("verified_fixes_7d", platform.verified_fixes_7d),
-                _evidence("deployment_smoke", platform.last_deployed_smoke.status, detail=platform.last_deployed_smoke.detail),
+                _evidence(
+                    "deployment_smoke",
+                    platform.last_deployed_smoke.status,
+                    detail=platform.last_deployed_smoke.detail,
+                ),
                 _evidence("launch_blockers", len(platform.launch_blockers)),
             ],
             verification_commands=[
@@ -547,7 +677,7 @@ def build_launch_readiness(
             blockers=source_blockers,
             evidence=source_evidence,
             verification_commands=[
-                "git ls-files \"*.md\"",
+                'git ls-files "*.md"',
                 "python scripts/check_docs_drift.py",
             ],
         )

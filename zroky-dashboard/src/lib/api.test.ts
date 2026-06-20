@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   approveRuntimePolicyDecision,
   getBillingMe,
+  getOutcomeReconciliation,
+  getOutcomeReconciliationSummary,
   listRuntimePolicyApprovals,
+  listOutcomeReconciliations,
   rejectRuntimePolicyDecision,
   setRuntimePolicyKillSwitch,
 } from "@/lib/api";
@@ -197,6 +200,87 @@ describe("runtime policy API client", () => {
         method: "POST",
         body: JSON.stringify({ enabled: true }),
       }),
+    );
+  });
+});
+
+describe("outcome reconciliation API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("reads reconciliation summary for a window", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ window_days: 30, total: 3, matched: 1, mismatched: 1, not_verified: 1 }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getOutcomeReconciliationSummary(30)).resolves.toMatchObject({ total: 3 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/summary?days=30",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("lists reconciliation checks with optional verdict filters", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total_in_page: 0 }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listOutcomeReconciliations({ verdict: "mismatched", limit: 25 });
+    await listOutcomeReconciliations({ verdict: "all", limit: 50 });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/zroky/v1/outcomes/reconciliation?verdict=mismatched&limit=25",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/zroky/v1/outcomes/reconciliation?limit=50",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("reads one reconciliation check by id", async () => {
+    const check = {
+      id: "check_1",
+      project_id: "proj_1",
+      call_id: null,
+      trace_id: null,
+      runtime_policy_decision_id: null,
+      action_type: "refund",
+      connector_type: "ledger_api",
+      system_ref: "ledger:rf_1",
+      verdict: "matched",
+      reason: "all_compared_fields_matched",
+      amount_usd: 42.5,
+      currency: "USD",
+      claimed: {},
+      actual: {},
+      comparison: {},
+      idempotency_key: null,
+      metadata: null,
+      checked_at: "2026-06-20T00:00:00Z",
+      created_at: "2026-06-20T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(check), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getOutcomeReconciliation("check_1")).resolves.toMatchObject({ id: "check_1" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/check_1",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 });

@@ -15,6 +15,7 @@ const PROTECTED_PREFIXES = [
   "/home",
   "/integrations",
   "/issues",
+  "/outcomes",
   "/policies",
   "/projects",
   "/replay",

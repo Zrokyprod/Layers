@@ -21292,6 +21292,119 @@ body:has(.app-shell) {
   color: var(--text-muted);
 }
 
+.outcome-verification-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.outcome-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outcome-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(100%, 360px);
+}
+
+.outcome-search-field span {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.outcome-search-field div {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.outcome-search-field svg {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.outcome-search-field input {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.outcome-check-list {
+  display: grid;
+  gap: 14px;
+}
+
+.outcome-check-card {
+  display: grid;
+  gap: 16px;
+  border-left: 4px solid var(--border-subtle);
+}
+
+.outcome-check-card.tone-danger {
+  border-left-color: var(--dashboard-danger);
+}
+
+.outcome-check-card.tone-warning {
+  border-left-color: var(--dashboard-warning);
+}
+
+.outcome-check-card.tone-success {
+  border-left-color: var(--dashboard-success);
+}
+
+.outcome-check-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.outcome-check-header h3 {
+  margin: 4px 0;
+  font-size: 1rem;
+}
+
+.outcome-check-header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.outcome-meta-grid dd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+}
+
+.status-matched,
+.app-shell .status-matched {
+  color: var(--dashboard-success);
+  border-color: rgba(94, 224, 160, 0.34);
+  background: var(--status-success-bg, #ecfbf4);
+}
+
+.status-mismatched,
+.app-shell .status-mismatched {
+  color: var(--dashboard-danger);
+  border-color: rgba(255, 107, 132, 0.34);
+  background: var(--status-danger-bg, #fff0f3);
+}
+
 @media (max-width: 860px) {
   .approval-meta-grid,
   .approval-evidence-grid {
@@ -21299,9 +21412,16 @@ body:has(.app-shell) {
   }
 
   .approval-actions,
-  .approval-card-header {
+  .approval-card-header,
+  .outcome-check-header,
+  .outcome-filter-bar,
+  .outcome-search-field {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .outcome-search-field div {
+    min-width: 0;
   }
 }
 

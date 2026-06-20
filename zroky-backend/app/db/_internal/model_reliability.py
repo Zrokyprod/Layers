@@ -55,6 +55,62 @@ class OutcomeEvent(Base):
     )
 
 
+class OutcomeReconciliationCheck(Base):
+    """Claimed-vs-actual outcome check against a system of record."""
+
+    __tablename__ = "outcome_reconciliation_checks"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    call_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("calls.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    runtime_policy_decision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("runtime_policy_decisions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    connector_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default=text("'api_record'")
+    )
+    system_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    verdict: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    amount_usd: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    claimed_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    actual_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comparison_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "verdict IN ('matched','mismatched','not_verified')",
+            name="ck_outcome_reconciliation_verdict",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "idempotency_key",
+            name="ux_outcome_reconciliation_project_idempotency",
+        ),
+        Index("ix_outcome_reconciliation_project_checked", "project_id", "checked_at"),
+        Index("ix_outcome_reconciliation_project_verdict_checked", "project_id", "verdict", "checked_at"),
+        Index("ix_outcome_reconciliation_call", "call_id"),
+        Index("ix_outcome_reconciliation_trace", "project_id", "trace_id"),
+    )
+
+
 class AblationJob(Base):
     """Root-cause analysis job for a single failing call.
 

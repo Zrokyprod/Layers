@@ -109,6 +109,7 @@ Invoke-BackendPytestStep -Name "behavioral Goldens" -TestPaths @(
 Invoke-BackendPytestStep -Name "regression CI routes" -TestPaths @("tests/test_regression_ci_routes.py")
 Invoke-BackendPytestStep -Name "regression CI orchestrator" -TestPaths @("tests/test_regression_ci_orchestrator.py")
 Invoke-BackendPytestStep -Name "runtime policy gate" -TestPaths @("tests/test_runtime_policy_gate.py")
+Invoke-BackendPytestStep -Name "outcome reconciliation" -TestPaths @("tests/test_outcome_reconciliation.py")
 Invoke-BackendPytestStep -Name "billing and quota" -TestPaths @(
   "tests/test_billing_v2.py::TestBillingPlans::test_all_plans_have_same_keys",
   "tests/test_billing_v2.py::TestRazorpayCheckoutRoute::test_create_order_computes_plan_amount_and_tracks_pending_request",
@@ -143,6 +144,7 @@ Invoke-ReadinessStep `
     "src/components/command-palette.test.tsx",
     "src/lib/route-auth-guard.test.ts",
     "src/lib/replay-mode.test.ts",
+    "src/app/(dashboard)/outcomes/page.test.tsx",
     "src/app/(dashboard)/settings/billing/page.test.tsx",
     "src/app/(dashboard)/goldens/page.test.tsx",
     "src/app/(dashboard)/ci-gates/page.test.tsx",

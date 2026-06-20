@@ -42,6 +42,7 @@ from zroky._internal import validation as _validation  # noqa: F401
 # Re-export errors so callers can do: from zroky import ZrokyPreflightError
 from zroky._errors import (  # noqa: F401
     ZrokyPreflightError,
+    ZrokyRuntimePolicyApprovalRequired,
     ZrokyRuntimePolicyBlocked,
     ZrokyRuntimePolicyError,
 )
@@ -60,7 +61,7 @@ from zroky._call import (  # noqa: F401
     trace_run,
 )
 
-from zroky._runtime_policy import check_runtime_policy  # noqa: F401
+from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
 
 # Re-export outcome() — Cost-of-Failure Attribution
 from zroky._outcome import outcome  # noqa: F401

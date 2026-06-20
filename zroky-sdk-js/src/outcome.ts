@@ -22,6 +22,7 @@
  */
 
 import type { ZrokyConfig } from "./types";
+import { nodeEnv, resolveApiBase } from "./api";
 
 export interface OutcomeOptions {
   /** Business event type: refund_issued | ticket_escalated | human_handoff | churn | compliance_fine | retry_cost | custom */
@@ -43,17 +44,6 @@ export function _setOutcomeConfig(config: ZrokyConfig): void {
   _config = config;
 }
 
-function resolveApiBase(endpoint: string | undefined): string {
-  const normalized = (endpoint ?? "https://api.zroky.com").replace(/\/+$/, "");
-  if (normalized.endsWith("/api/v1/ingest")) {
-    return normalized.slice(0, -"/v1/ingest".length);
-  }
-  if (normalized.endsWith("/v1/ingest")) {
-    return normalized.slice(0, -"/v1/ingest".length);
-  }
-  return normalized;
-}
-
 /**
  * Attach a business-outcome cost to a Zroky call.
  * Fire-and-forget — never throws, never blocks the caller.
@@ -61,10 +51,9 @@ function resolveApiBase(endpoint: string | undefined): string {
 export function outcome(callId: string, opts: OutcomeOptions): void {
   if (!_config || _config.disabled) return;
 
-  type NodeEnv = { process?: { env: Record<string, string | undefined> } };
-  const nodeEnv = (globalThis as NodeEnv).process?.env;
-  const apiKey = _config.apiKey ?? nodeEnv?.["ZROKY_API_KEY"];
-  const projectId = _config.projectId ?? nodeEnv?.["ZROKY_PROJECT_ID"];
+  const env = nodeEnv();
+  const apiKey = _config.apiKey ?? env?.["ZROKY_API_KEY"];
+  const projectId = _config.projectId ?? env?.["ZROKY_PROJECT_ID"];
   if (!apiKey || !projectId) return;
 
   const endpoint = resolveApiBase(_config.endpoint);

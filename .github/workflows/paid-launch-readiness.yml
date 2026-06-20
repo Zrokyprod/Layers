@@ -89,6 +89,9 @@ jobs:
           - id: runtime-policy
             name: runtime policy gate
             tests: tests/test_runtime_policy_gate.py
+          - id: outcome-reconciliation
+            name: outcome reconciliation
+            tests: tests/test_outcome_reconciliation.py
           - id: billing
             name: billing and quota
             tests: >-
@@ -208,6 +211,7 @@ jobs:
             "src/lib/route-auth-guard.test.ts" \
             "src/app/(dashboard)/layout.test.tsx" \
             "src/lib/replay-mode.test.ts" \
+            "src/app/(dashboard)/outcomes/page.test.tsx" \
             "src/app/(dashboard)/contracts/[id]/page.test.tsx" \
             "src/app/(dashboard)/settings/billing/page.test.tsx" \
             "src/app/(dashboard)/goldens/page.test.tsx" \

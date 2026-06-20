@@ -20,6 +20,7 @@ from app.db.models import (
     GoldenSet,
     GoldenTrace,
     Issue,
+    OutcomeReconciliationCheck,
     Project,
     ProjectAlert,
     ProviderKeyVault,
@@ -42,7 +43,9 @@ def client(tmp_path: Path):
         future=True,
     )
     Base.metadata.create_all(bind=engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
 
     def override_db():
         session = session_factory()
@@ -60,7 +63,9 @@ def client(tmp_path: Path):
         engine.dispose()
 
 
-def _set_owner_auth(monkeypatch: pytest.MonkeyPatch, token: str = "owner-token") -> dict[str, str]:
+def _set_owner_auth(
+    monkeypatch: pytest.MonkeyPatch, token: str = "owner-token"
+) -> dict[str, str]:
     monkeypatch.setenv("REQUIRE_PROVISIONING_TOKEN", "false")
     monkeypatch.setenv("PROVISIONING_TOKEN", token)
     get_settings.cache_clear()
@@ -89,7 +94,9 @@ def _call(
         status="completed",
         pricing_version=pricing_version,
         pricing_source=pricing_source,
-        pricing_last_updated_at=pricing_last_updated_at if pricing_last_updated_at is not None else created_at,
+        pricing_last_updated_at=pricing_last_updated_at
+        if pricing_last_updated_at is not None
+        else created_at,
         cost_confidence=cost_confidence,
         payload_json="{}",
         metadata_json=json.dumps({"source": "test"}),
@@ -107,8 +114,12 @@ def test_owner_money_path_health_aggregates_real_backend_state(
     with session_factory() as db:
         db.add_all(
             [
-                Project(id="proj_good", name="Good Tenant", owner_ref="good", is_active=True),
-                Project(id="proj_gap", name="Gap Tenant", owner_ref="gap", is_active=True),
+                Project(
+                    id="proj_good", name="Good Tenant", owner_ref="good", is_active=True
+                ),
+                Project(
+                    id="proj_gap", name="Gap Tenant", owner_ref="gap", is_active=True
+                ),
                 Subscription(
                     id="sub_good",
                     org_id="proj_good",
@@ -367,7 +378,11 @@ def test_owner_money_path_health_reports_deployment_smoke_evidence(
     now = datetime.now(UTC)
 
     with session_factory() as db:
-        db.add(Project(id="proj_smoke", name="Smoke Tenant", owner_ref="smoke", is_active=True))
+        db.add(
+            Project(
+                id="proj_smoke", name="Smoke Tenant", owner_ref="smoke", is_active=True
+            )
+        )
         db.add(
             _call(
                 "proj_smoke",
@@ -431,7 +446,14 @@ def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proo
     now = datetime.now(UTC)
 
     with session_factory() as db:
-        db.add(Project(id="proj_launch", name="Launch Tenant", owner_ref="launch", is_active=True))
+        db.add(
+            Project(
+                id="proj_launch",
+                name="Launch Tenant",
+                owner_ref="launch",
+                is_active=True,
+            )
+        )
         db.add(
             Subscription(
                 id="sub_launch",
@@ -521,7 +543,11 @@ def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proo
                         "golden_contract_v1": {
                             "final_output_assertion": {"contains": "policy checked"},
                             "tool_sequence": ["lookup_policy", "refund_customer"],
-                            "tool_args": {"refund_customer": {"requires": ["customer_id", "amount"]}},
+                            "tool_args": {
+                                "refund_customer": {
+                                    "requires": ["customer_id", "amount"]
+                                }
+                            },
                             "policy_checks": ["refund_policy_approved"],
                             "rag_grounding": {"required": True},
                             "business_outcome": {"status": "success"},
@@ -569,6 +595,49 @@ def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proo
                 created_at=now - timedelta(minutes=5),
             )
         )
+        db.add(
+            OutcomeReconciliationCheck(
+                id="orc_launch",
+                project_id="proj_launch",
+                call_id="call_launch",
+                trace_id="trace_launch",
+                runtime_policy_decision_id="rpd_launch",
+                action_type="refund",
+                connector_type="ledger_api",
+                system_ref="ledger:rf_launch",
+                verdict="matched",
+                reason="all_compared_fields_matched",
+                amount_usd=42.5,
+                currency="USD",
+                claimed_json=json.dumps(
+                    {"refund_id": "rf_launch", "amount_usd": 42.5, "currency": "USD"},
+                    separators=(",", ":"),
+                ),
+                actual_json=json.dumps(
+                    {
+                        "refund_id": "rf_launch",
+                        "amount_usd": "42.50",
+                        "currency": "usd",
+                    },
+                    separators=(",", ":"),
+                ),
+                comparison_json=json.dumps(
+                    {
+                        "verdict": "matched",
+                        "compared_fields": [
+                            {
+                                "field": "amount_usd",
+                                "claimed": 42.5,
+                                "actual": "42.50",
+                                "matched": True,
+                            }
+                        ],
+                    },
+                    separators=(",", ":"),
+                ),
+                checked_at=now - timedelta(minutes=4),
+            )
+        )
         db.commit()
 
     response = test_client.get("/v1/owner/launch-readiness", headers=owner_headers)
@@ -590,6 +659,7 @@ def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proo
         "behavioral_goldens",
         "durable_ci_gate",
         "runtime_risk_stop",
+        "outcome_verification",
         "billing_quota",
         "owner_value_proof",
         "single_source_of_truth",
@@ -597,6 +667,7 @@ def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proo
     assert all(gate["status"] == "pass" for gate in gates.values())
     assert gates["behavioral_goldens"]["evidence"][2]["value"] == 1
     assert gates["runtime_risk_stop"]["evidence"][0]["value"] == 1
+    assert gates["outcome_verification"]["evidence"][1]["value"] == 1
     assert any(
         "verify_paid_launch_readiness.ps1" in command
         for command in payload["verification_commands"]
@@ -612,10 +683,10 @@ def test_owner_launch_readiness_blocks_on_fake_stub_replay_and_text_only_golden(
     now = datetime.now(UTC)
 
     with session_factory() as db:
-        db.add(Project(id="proj_bad", name="Bad Tenant", owner_ref="bad", is_active=True))
         db.add(
-            _call("proj_bad", "call_bad", created_at=now - timedelta(minutes=10))
+            Project(id="proj_bad", name="Bad Tenant", owner_ref="bad", is_active=True)
         )
+        db.add(_call("proj_bad", "call_bad", created_at=now - timedelta(minutes=10)))
         db.add(
             Issue(
                 id="issue_bad",
@@ -674,6 +745,60 @@ def test_owner_launch_readiness_blocks_on_fake_stub_replay_and_text_only_golden(
                 created_at=now,
             )
         )
+        db.add_all(
+            [
+                OutcomeReconciliationCheck(
+                    id="orc_bad_mismatch",
+                    project_id="proj_bad",
+                    call_id="call_bad",
+                    trace_id="trace_bad",
+                    action_type="refund",
+                    connector_type="ledger_api",
+                    system_ref="ledger:rf_bad",
+                    verdict="mismatched",
+                    reason="field_mismatch",
+                    amount_usd=99,
+                    currency="USD",
+                    claimed_json=json.dumps(
+                        {"refund_id": "rf_bad", "amount_usd": 99}, separators=(",", ":")
+                    ),
+                    actual_json=json.dumps(
+                        {"refund_id": "rf_bad", "amount_usd": 12}, separators=(",", ":")
+                    ),
+                    comparison_json=json.dumps(
+                        {
+                            "mismatches": [
+                                {"field": "amount_usd", "claimed": 99, "actual": 12}
+                            ]
+                        },
+                        separators=(",", ":"),
+                    ),
+                    checked_at=now,
+                ),
+                OutcomeReconciliationCheck(
+                    id="orc_bad_missing_record",
+                    project_id="proj_bad",
+                    call_id="call_bad",
+                    trace_id="trace_bad",
+                    action_type="payment",
+                    connector_type="ledger_api",
+                    system_ref="ledger:pay_missing",
+                    verdict="not_verified",
+                    reason="system_of_record_missing",
+                    amount_usd=40,
+                    currency="USD",
+                    claimed_json=json.dumps(
+                        {"payment_id": "pay_missing", "amount_usd": 40},
+                        separators=(",", ":"),
+                    ),
+                    actual_json=None,
+                    comparison_json=json.dumps(
+                        {"reason": "system_of_record_missing"}, separators=(",", ":")
+                    ),
+                    checked_at=now,
+                ),
+            ]
+        )
         db.commit()
 
     response = test_client.get("/v1/owner/launch-readiness", headers=owner_headers)
@@ -687,6 +812,9 @@ def test_owner_launch_readiness_blocks_on_fake_stub_replay_and_text_only_golden(
     assert "stub_replay_marked_verified" in gates["honest_replay_proof"]["blockers"]
     assert gates["behavioral_goldens"]["status"] == "fail"
     assert "blocking_text_only_goldens" in gates["behavioral_goldens"]["blockers"]
+    assert gates["outcome_verification"]["status"] == "fail"
+    assert "outcome_mismatch_detected" in gates["outcome_verification"]["blockers"]
+    assert "outcome_not_verified" in gates["outcome_verification"]["blockers"]
 
 
 def test_owner_money_path_health_reports_gateway_capture_durability_blockers(
@@ -698,8 +826,21 @@ def test_owner_money_path_health_reports_gateway_capture_durability_blockers(
     now = datetime.now(UTC)
 
     with session_factory() as db:
-        db.add(Project(id="proj_gateway_loss", name="Gateway Loss", owner_ref="loss", is_active=True))
-        db.add(_call("proj_gateway_loss", "call_gateway_loss", created_at=now - timedelta(minutes=5)))
+        db.add(
+            Project(
+                id="proj_gateway_loss",
+                name="Gateway Loss",
+                owner_ref="loss",
+                is_active=True,
+            )
+        )
+        db.add(
+            _call(
+                "proj_gateway_loss",
+                "call_gateway_loss",
+                created_at=now - timedelta(minutes=5),
+            )
+        )
         db.add(
             GatewayCaptureHealth(
                 id="gch_loss",
