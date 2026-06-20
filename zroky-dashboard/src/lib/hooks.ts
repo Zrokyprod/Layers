@@ -113,6 +113,7 @@ import {
   createReplayRunFromCall,
   createReplayRunFromIssue,
   listRuntimePolicyApprovals,
+  getRuntimePolicyEvidencePack,
   approveRuntimePolicyDecision,
   rejectRuntimePolicyDecision,
   setRuntimePolicyKillSwitch,
@@ -125,6 +126,7 @@ import {
   type RuntimePolicyDecisionStatus,
   type RuntimePolicyListResponse,
   type RuntimePolicyDecisionResponse,
+  type RuntimePolicyEvidencePackResponse,
   type RuntimePolicyKillSwitchResponse,
   type JudgeHealthResponse,
 } from "./api";
@@ -1012,6 +1014,20 @@ export function useRuntimePolicyApprovals(
     queryFn: ({ signal }) => listRuntimePolicyApprovals(status, signal),
     staleTime: 10_000,
     refetchInterval: status === "pending_approval" ? 15_000 : false,
+    ...options,
+  });
+}
+
+export function useRuntimePolicyEvidencePack(
+  decisionId: string | null,
+  options?: Partial<UseQueryOptions<RuntimePolicyEvidencePackResponse>>,
+) {
+  return useQuery<RuntimePolicyEvidencePackResponse>({
+    queryKey: ["runtime-policy", "evidence", decisionId],
+    queryFn: ({ signal }) => getRuntimePolicyEvidencePack(decisionId ?? "", signal),
+    enabled: Boolean(decisionId),
+    staleTime: 30_000,
+    retry: false,
     ...options,
   });
 }
