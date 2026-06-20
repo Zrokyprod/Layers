@@ -17,6 +17,9 @@ BACKEND_DIR = ROOT / "zroky-backend"
 FIXTURE_PATH = (
     ROOT / "demos" / "design-partner-install-kit" / "refund_agent_fixture.json"
 )
+HANDOFF_GUIDE_PATH = (
+    ROOT / "demos" / "design-partner-install-kit" / "README.md"
+)
 
 PROJECT_HEADER = "X-Project-Id"
 API_KEY_HEADER = "x-api-key"
@@ -181,6 +184,7 @@ def _summarise(
     summary = {
         "mode": mode,
         "project_id": args.project_id or fixture["project_id"],
+        "scenario": "refund_outcome_proof_v1",
         "agent_name": runtime_decision.get("agent_name"),
         "call_id": call_id,
         "trace_id": runtime_decision.get("trace_id"),
@@ -221,10 +225,40 @@ def _summarise(
                 secrets,
             ),
         },
+        "handoff": {
+            "guide": HANDOFF_GUIDE_PATH.relative_to(ROOT).as_posix(),
+            "package": "design_partner_refund_v1",
+            "pass_criteria": [
+                "captured_call_linked",
+                "unsafe_action_stopped",
+                "matched_outcome_shown",
+                "evidence_hash_visible",
+                "evidence_pack_passed",
+                "secrets_redacted",
+            ],
+            "customer_artifacts": [
+                {
+                    "flag": "--write-summary",
+                    "default_path": "artifacts/design-partner-summary.json",
+                    "contains": "redacted customer-facing proof summary",
+                },
+                {
+                    "flag": "--write-evidence",
+                    "default_path": "artifacts/design-partner-evidence.json",
+                    "contains": "redacted audit evidence pack",
+                },
+            ],
+            "failure_policy": (
+                "Any false proof value, mismatched outcome, not_verified evidence, "
+                "or missing evidence hash blocks partner handoff."
+            ),
+        },
         "next_live_command": (
             "python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.ai "
             "--api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api "
-            "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json"
+            "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json "
+            "--write-summary artifacts/design-partner-live-summary.json "
+            "--write-evidence artifacts/design-partner-live-evidence.json"
         ),
     }
     return _redact(summary, secrets)
@@ -239,8 +273,8 @@ def _validate_summary(summary: dict[str, Any]) -> None:
         )
 
 
-def _write_evidence(
-    path_text: str | None, evidence_pack: dict[str, Any], secrets: list[str]
+def _write_json_artifact(
+    path_text: str | None, payload: dict[str, Any], secrets: list[str]
 ) -> None:
     if not path_text:
         return
@@ -248,10 +282,22 @@ def _write_evidence(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
-            _redact(evidence_pack, secrets), indent=2, sort_keys=True, default=str
+            _redact(payload, secrets), indent=2, sort_keys=True, default=str
         ),
         encoding="utf-8",
     )
+
+
+def _write_evidence(
+    path_text: str | None, evidence_pack: dict[str, Any], secrets: list[str]
+) -> None:
+    _write_json_artifact(path_text, evidence_pack, secrets)
+
+
+def _write_summary(
+    path_text: str | None, summary: dict[str, Any], secrets: list[str]
+) -> None:
+    _write_json_artifact(path_text, summary, secrets)
 
 
 def _restore_env(snapshot: dict[str, str | None]) -> None:
@@ -619,6 +665,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--write-evidence", help="Write the full evidence pack JSON to this path."
     )
     parser.add_argument(
+        "--write-summary",
+        help="Write the redacted customer-facing proof summary JSON to this path.",
+    )
+    parser.add_argument(
         "--api-base-url", help="Zroky API base URL. Omit for local demo mode."
     )
     parser.add_argument("--api-key", help="Zroky API key for x-api-key authentication.")
@@ -694,6 +744,7 @@ def main(argv: list[str] | None = None) -> int:
         args.ledger_bearer_token or "",
     ]
     _validate_summary(summary)
+    _write_summary(args.write_summary, summary, secrets)
     _write_evidence(args.write_evidence, evidence_pack, secrets)
     _print_summary(summary, as_json=args.json)
     return 0

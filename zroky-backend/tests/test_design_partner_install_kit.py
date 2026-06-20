@@ -11,6 +11,7 @@ SCRIPT_PATH = ROOT / "scripts" / "run_design_partner_install_kit.py"
 FIXTURE_PATH = (
     ROOT / "demos" / "design-partner-install-kit" / "refund_agent_fixture.json"
 )
+HANDOFF_README_PATH = ROOT / "demos" / "design-partner-install-kit" / "README.md"
 
 
 def _load_script() -> ModuleType:
@@ -38,6 +39,21 @@ def test_design_partner_fixture_has_no_missing_install_inputs() -> None:
     )
 
 
+def test_design_partner_handoff_readme_covers_customer_run_contract() -> None:
+    readme = HANDOFF_README_PATH.read_text(encoding="utf-8")
+
+    assert "python scripts/run_design_partner_install_kit.py --json" in readme
+    assert "--write-summary artifacts/design-partner-summary.json" in readme
+    assert "--write-evidence artifacts/design-partner-evidence.json" in readme
+    assert "--api-base-url https://api.zroky.ai" in readme
+    assert "runtime_policy.allowed" in readme
+    assert "outcome_reconciliation.verdict" in readme
+    assert "evidence_pack.evidence_hash" in readme
+    assert "secrets_redacted" in readme
+    assert "not_verified" in readme
+    assert "ledger-demo-token-not-persisted" not in readme
+
+
 def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
     capsys,
 ) -> None:
@@ -47,6 +63,7 @@ def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
 
     output = json.loads(capsys.readouterr().out)
     assert output["mode"] == "local_demo"
+    assert output["scenario"] == "refund_outcome_proof_v1"
     assert output["call_id"] == "dp-call-refund-1001"
     assert output["trace_id"] == "dp-trace-refund-1001"
     assert output["runtime_policy"]["allowed"] is False
@@ -63,19 +80,41 @@ def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
         "evidence_pack_passed": True,
         "secrets_redacted": True,
     }
+    assert output["handoff"]["guide"] == "demos/design-partner-install-kit/README.md"
+    assert output["handoff"]["package"] == "design_partner_refund_v1"
+    assert set(output["handoff"]["pass_criteria"]) == set(output["proof"].keys())
+    assert "--write-summary artifacts/design-partner-live-summary.json" in output[
+        "next_live_command"
+    ]
     assert "ledger-demo-token-not-persisted" not in json.dumps(output)
 
 
-def test_design_partner_install_kit_writes_redacted_evidence_json(
+def test_design_partner_install_kit_writes_redacted_handoff_artifacts(
     tmp_path: Path,
     capsys,
 ) -> None:
     module = _load_script()
+    summary_path = tmp_path / "handoff" / "summary.json"
     evidence_path = tmp_path / "evidence" / "pack.json"
 
-    assert module.main(["--json", "--write-evidence", str(evidence_path)]) == 0
+    assert module.main(
+        [
+            "--json",
+            "--write-summary",
+            str(summary_path),
+            "--write-evidence",
+            str(evidence_path),
+        ]
+    ) == 0
 
     capsys.readouterr()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["scenario"] == "refund_outcome_proof_v1"
+    assert summary["handoff"]["customer_artifacts"][0]["flag"] == "--write-summary"
+    assert summary["proof"]["secrets_redacted"] is True
+    assert len(summary["evidence_pack"]["evidence_hash"]) == 64
+    assert "ledger-demo-token-not-persisted" not in json.dumps(summary)
+
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     assert evidence["schema_version"] == "runtime_policy_evidence.v1"
     assert evidence["verification_status"] == "pass"
