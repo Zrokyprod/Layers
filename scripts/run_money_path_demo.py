@@ -1279,6 +1279,71 @@ def _prove_runtime_policy_stop(client: Any, api_headers: dict[str, str]) -> dict
     }
 
 
+def _seed_matched_outcome_verification(
+    session_local: Any,
+    *,
+    runtime_policy_decision_id: str,
+) -> None:
+    from app.db.models import OutcomeReconciliationCheck
+
+    now = datetime.now(timezone.utc)
+    with session_local() as session:
+        session.add(
+            OutcomeReconciliationCheck(
+                id="orc-demo-refund-matched",
+                project_id=PROJECT_ID,
+                call_id=CALL_ID,
+                trace_id=TRACE_ID,
+                runtime_policy_decision_id=runtime_policy_decision_id,
+                action_type="refund",
+                connector_type="ledger_api",
+                system_ref="RF-1001",
+                verdict="matched",
+                reason="ledger refund status matched the captured support trace",
+                amount_usd=42.18,
+                currency="USD",
+                claimed_json=json.dumps(
+                    {
+                        "refund_id": "RF-1001",
+                        "order_id": "ORD-1001",
+                        "amount_usd": 42.18,
+                        "status": "issued",
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                actual_json=json.dumps(
+                    {
+                        "refund_id": "RF-1001",
+                        "order_id": "ORD-1001",
+                        "amount_usd": 42.18,
+                        "status": "issued",
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                comparison_json=json.dumps(
+                    {
+                        "refund_id": {"matched": True},
+                        "amount_usd": {"matched": True},
+                        "status": {"matched": True},
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                idempotency_key="orc-demo-refund-matched",
+                metadata_json=json.dumps(
+                    {"source": "money_path_demo", "launch_readiness": True},
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                checked_at=now,
+                created_at=now,
+            )
+        )
+        session.commit()
+
+
 def _collect_release_evidence(
     client: Any,
     api_headers: dict[str, str],
@@ -1428,6 +1493,10 @@ def _run_flow(
         blocked_ci_demo=blocked_ci_demo,
     )
     runtime_policy = _prove_runtime_policy_stop(client, api_headers)
+    _seed_matched_outcome_verification(
+        session_local,
+        runtime_policy_decision_id=runtime_policy["runtime_policy_decision_id"],
+    )
     release_evidence = _collect_release_evidence(
         client,
         api_headers,
