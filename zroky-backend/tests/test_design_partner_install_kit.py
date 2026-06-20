@@ -11,7 +11,7 @@ SCRIPT_PATH = ROOT / "scripts" / "run_design_partner_install_kit.py"
 FIXTURE_PATH = (
     ROOT / "demos" / "design-partner-install-kit" / "refund_agent_fixture.json"
 )
-HANDOFF_README_PATH = ROOT / "demos" / "design-partner-install-kit" / "README.md"
+HANDOFF_GUIDE_PATH = ROOT / "demos" / "design-partner-install-kit" / "HANDOFF.txt"
 
 
 def _load_script() -> ModuleType:
@@ -39,19 +39,19 @@ def test_design_partner_fixture_has_no_missing_install_inputs() -> None:
     )
 
 
-def test_design_partner_handoff_readme_covers_customer_run_contract() -> None:
-    readme = HANDOFF_README_PATH.read_text(encoding="utf-8")
+def test_design_partner_handoff_guide_covers_customer_run_contract() -> None:
+    guide = HANDOFF_GUIDE_PATH.read_text(encoding="utf-8")
 
-    assert "python scripts/run_design_partner_install_kit.py --json" in readme
-    assert "--write-summary artifacts/design-partner-summary.json" in readme
-    assert "--write-evidence artifacts/design-partner-evidence.json" in readme
-    assert "--api-base-url https://api.zroky.ai" in readme
-    assert "runtime_policy.allowed" in readme
-    assert "outcome_reconciliation.verdict" in readme
-    assert "evidence_pack.evidence_hash" in readme
-    assert "secrets_redacted" in readme
-    assert "not_verified" in readme
-    assert "ledger-demo-token-not-persisted" not in readme
+    assert "python scripts/run_design_partner_install_kit.py --json" in guide
+    assert "--write-summary artifacts/design-partner-summary.json" in guide
+    assert "--write-evidence artifacts/design-partner-evidence.json" in guide
+    assert "--api-base-url https://api.zroky.ai" in guide
+    assert "runtime_policy.allowed" in guide
+    assert "outcome_reconciliation.verdict" in guide
+    assert "evidence_pack.evidence_hash" in guide
+    assert "secrets_redacted" in guide
+    assert "not_verified" in guide
+    assert "ledger-demo-token-not-persisted" not in guide
 
 
 def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
@@ -80,7 +80,7 @@ def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
         "evidence_pack_passed": True,
         "secrets_redacted": True,
     }
-    assert output["handoff"]["guide"] == "demos/design-partner-install-kit/README.md"
+    assert output["handoff"]["guide"] == "demos/design-partner-install-kit/HANDOFF.txt"
     assert output["handoff"]["package"] == "design_partner_refund_v1"
     assert set(output["handoff"]["pass_criteria"]) == set(output["proof"].keys())
     assert "--write-summary artifacts/design-partner-live-summary.json" in output[

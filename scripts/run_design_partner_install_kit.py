@@ -18,7 +18,7 @@ FIXTURE_PATH = (
     ROOT / "demos" / "design-partner-install-kit" / "refund_agent_fixture.json"
 )
 HANDOFF_GUIDE_PATH = (
-    ROOT / "demos" / "design-partner-install-kit" / "README.md"
+    ROOT / "demos" / "design-partner-install-kit" / "HANDOFF.txt"
 )
 
 PROJECT_HEADER = "X-Project-Id"

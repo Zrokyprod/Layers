@@ -500,7 +500,7 @@ python scripts/run_design_partner_install_kit.py --json --write-summary artifact
 Customer handoff guide:
 
 ```text
-demos/design-partner-install-kit/README.md
+demos/design-partner-install-kit/HANDOFF.txt
 ```
 
 Live partner smoke:
