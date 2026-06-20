@@ -16,7 +16,8 @@ import {
   AuthShell,
 } from "@/components/auth-shell";
 import { loginWithPassword } from "@/lib/api";
-import { storeAuthSession } from "@/lib/auth";
+import { setPendingPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
+import { buildSignupHref, buildVerifyEmailHref, safeAppPath } from "@/lib/onboarding-intent";
 import { loginSchema, type LoginFormData } from "@/lib/schemas";
 
 function authErrorMessage(code: string | null): string {
@@ -37,6 +38,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const visibleError = error || authErrorMessage(searchParams.get("error"));
+  const nextPath = safeAppPath(searchParams.get("next"), "/home");
 
   const {
     register,
@@ -51,19 +53,19 @@ function LoginForm() {
     try {
       const res = await loginWithPassword(data.email, data.password);
       await storeAuthSession(res);
-      const next = searchParams.get("next");
       if (!res.email_verified) {
-        router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+        router.push(buildVerifyEmailHref(data.email, nextPath));
         return;
       }
-      router.push(next && next.startsWith("/") ? next : "/home");
+      router.push(nextPath);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Invalid email or password");
     }
   });
 
   const handleOAuthLogin = (provider: "github" | "google") => {
-    window.location.href = `/api/zroky/v1/auth/${provider}/start`;
+    setPendingPostAuthRedirectPath(nextPath);
+    window.location.assign(`/api/zroky/v1/auth/${provider}/start`);
   };
 
   return (
@@ -71,7 +73,7 @@ function LoginForm() {
       eyebrow="Existing workspace"
       title="Sign in to Zroky"
       subtitle="Access traces, replays, and release gates."
-      footer={<Link href="/signup" className="auth-link">Don&apos;t have an account? Sign up</Link>}
+      footer={<Link href={buildSignupHref(nextPath)} className="auth-link">Don&apos;t have an account? Sign up</Link>}
     >
       {visibleError && <div className="auth-banner auth-banner-error">{visibleError}</div>}
       <div className="auth-oauth-stack">

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { AuthCard, AuthShell } from "@/components/auth-shell";
 import { completeOAuthHandoff } from "@/lib/api";
-import { getPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
+import { resolvePostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
 
 function OAuthCallbackHandler() {
   const router = useRouter();
@@ -29,7 +29,7 @@ function OAuthCallbackHandler() {
       try {
         const tokens = await completeOAuthHandoff(handoffId);
         await storeAuthSession(tokens);
-        router.replace(getPostAuthRedirectPath("/home"));
+        router.replace(resolvePostAuthRedirectPath("/home"));
       } catch {
         router.replace("/login?error=oauth_failed");
       }

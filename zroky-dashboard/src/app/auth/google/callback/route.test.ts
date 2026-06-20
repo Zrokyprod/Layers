@@ -43,6 +43,37 @@ describe("/auth/google/callback", () => {
     });
   });
 
+  it("redirects to pending protected-agent setup after a successful Google callback", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          access_expires_in_seconds: 3600,
+          refresh_expires_in_seconds: 7200,
+        }),
+      ),
+    );
+    const pendingNext = encodeURIComponent("/settings/keys?intent=protect-agent&plan=pro");
+    const request = new NextRequest(
+      "https://app.zroky.com/auth/google/callback?state=oauth-state&code=oauth-code",
+      {
+        headers: {
+          cookie: `zroky_post_auth_redirect=${pendingNext}`,
+        },
+      },
+    );
+
+    const response = await GET(request);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://app.zroky.com/settings/keys?intent=protect-agent&plan=pro",
+    );
+    expect(response.headers.get("set-cookie")).toContain("zroky_post_auth_redirect=");
+  });
+
   it("redirects provider errors back to login", async () => {
     const request = new NextRequest(
       "https://app.zroky.com/auth/google/callback?error=access_denied",

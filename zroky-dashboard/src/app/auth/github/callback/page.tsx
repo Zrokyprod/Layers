@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { AuthCard, AuthShell } from "@/components/auth-shell";
 import { completeGithubLogin } from "@/lib/api";
-import { getPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
+import { resolvePostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
 
 function CallbackContent() {
   const router = useRouter();
@@ -35,7 +35,7 @@ function CallbackContent() {
         if (cancelled) {
           return;
         }
-        router.replace(getPostAuthRedirectPath("/home"));
+        router.replace(resolvePostAuthRedirectPath("/home"));
         router.refresh();
       } catch (callbackError) {
         if (cancelled) {
