@@ -40501,6 +40501,236 @@ body:has(.app-shell),
   font-size: 11px;
 }
 
+/* ---- Pricing / risk value ---------------------------------------------- */
+.zlp-rd .zlp-pricing {
+  scroll-margin-top: 82px;
+}
+.zlp-rd .zlp-pricing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.78fr);
+  gap: 28px;
+  align-items: stretch;
+  border: 1px solid var(--zlp-line-strong);
+  border-radius: var(--zlp-radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014)),
+    var(--zlp-ink-850);
+  padding: clamp(22px, 4vw, 42px);
+  overflow: hidden;
+}
+.zlp-rd .zlp-pricing-hero h2 {
+  max-width: 13ch;
+  margin: 22px 0 0;
+  color: var(--zlp-text);
+  font-size: clamp(2.1rem, 4.5vw, 3.8rem);
+  font-weight: 700;
+  line-height: 0.98;
+}
+.zlp-rd .zlp-pricing-hero p {
+  max-width: 38rem;
+  margin: 20px 0 0;
+  color: var(--zlp-text-2);
+  font-size: 1.04rem;
+  line-height: 1.7;
+}
+.zlp-rd .zlp-risk-ledger {
+  display: grid;
+  gap: 10px;
+}
+.zlp-rd .zlp-risk-ledger > div {
+  min-height: 118px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 14px;
+  background: var(--zlp-surface);
+  padding: 16px;
+}
+.zlp-rd .zlp-risk-ledger span,
+.zlp-rd .zlp-plan-head b {
+  color: var(--zlp-text-3);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.zlp-rd .zlp-risk-ledger strong {
+  display: block;
+  margin-top: 10px;
+  color: var(--zlp-text);
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.zlp-rd .zlp-risk-ledger small {
+  display: block;
+  margin-top: 9px;
+  color: var(--zlp-text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.zlp-rd .zlp-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.zlp-rd .zlp-plan {
+  display: flex;
+  min-height: 352px;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 16px;
+  background: var(--zlp-surface);
+  padding: 18px;
+  transition: 0.25s var(--zlp-ease);
+}
+.zlp-rd .zlp-plan:hover {
+  border-color: var(--zlp-line-strong);
+  background: var(--zlp-surface-2);
+  transform: translateY(-1px);
+}
+.zlp-rd .zlp-plan.featured {
+  border-color: var(--zlp-text-3);
+  background: rgba(255, 255, 255, 0.07);
+}
+.zlp-rd .zlp-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+}
+.zlp-rd .zlp-plan-head > span {
+  color: var(--zlp-text);
+  font-size: 15px;
+  font-weight: 700;
+}
+.zlp-rd .zlp-plan > strong {
+  color: var(--zlp-text);
+  font-size: clamp(2.1rem, 3vw, 2.9rem);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.zlp-rd .zlp-plan > p {
+  min-height: 72px;
+  color: var(--zlp-text-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.zlp-rd .zlp-plan ul {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.zlp-rd .zlp-plan li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--zlp-text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.zlp-rd .zlp-plan li svg {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--zlp-pass);
+  flex-shrink: 0;
+}
+.zlp-rd .zlp-plan .zlp-btn {
+  justify-content: center;
+  width: 100%;
+  margin-top: auto;
+}
+.zlp-rd .zlp-agent-risk {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 26px;
+  margin-top: 30px;
+  align-items: start;
+}
+.zlp-rd .zlp-agent-risk h3 {
+  margin: 20px 0 0;
+  color: var(--zlp-text);
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1.05;
+}
+.zlp-rd .zlp-agent-risk > div > p {
+  margin: 16px 0 0;
+  color: var(--zlp-text-2);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.zlp-rd .zlp-agent-risk-list {
+  display: grid;
+  gap: 10px;
+}
+.zlp-rd .zlp-agent-risk-list article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 14px;
+  background: var(--zlp-surface);
+  padding: 14px;
+}
+.zlp-rd .zlp-agent-risk-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--zlp-line);
+  border-radius: 10px;
+  background: var(--zlp-ink-800);
+  color: var(--zlp-text);
+}
+.zlp-rd .zlp-agent-risk-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.zlp-rd .zlp-agent-risk-list strong {
+  display: block;
+  color: var(--zlp-text);
+  font-size: 14px;
+}
+.zlp-rd .zlp-agent-risk-list small {
+  display: block;
+  margin-top: 4px;
+  color: var(--zlp-text-3);
+  font-size: 12px;
+}
+.zlp-rd .zlp-agent-risk-list p {
+  margin: 8px 0 0;
+  color: var(--zlp-text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.zlp-rd .zlp-pricing-proof {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid var(--zlp-line);
+  border-radius: 14px;
+  background: var(--zlp-surface);
+  padding: 14px 16px;
+}
+.zlp-rd .zlp-pricing-proof svg {
+  width: 20px;
+  height: 20px;
+  color: var(--zlp-pass);
+  flex-shrink: 0;
+}
+.zlp-rd .zlp-pricing-proof p {
+  margin: 0;
+  color: var(--zlp-text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 /* ---- Comparison --------------------------------------------------------- */
 .zlp-rd .zlp-cmp {
   margin-top: 34px;
@@ -40711,7 +40941,9 @@ body:has(.app-shell),
 @media (max-width: 960px) {
   .zlp-rd .zlp-hero-grid,
   .zlp-rd .zlp-loop,
-  .zlp-rd .zlp-qs {
+  .zlp-rd .zlp-qs,
+  .zlp-rd .zlp-pricing-hero,
+  .zlp-rd .zlp-agent-risk {
     grid-template-columns: 1fr;
     gap: 32px;
   }
@@ -40721,6 +40953,9 @@ body:has(.app-shell),
   }
   .zlp-rd .zlp-model-row {
     grid-template-columns: 1fr 1fr;
+  }
+  .zlp-rd .zlp-plan-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .zlp-rd .zlp-dashboard {
     grid-template-columns: 1fr;
@@ -40749,8 +40984,19 @@ body:has(.app-shell),
     padding-left: 0;
   }
   .zlp-rd .zlp-model-row,
-  .zlp-rd .zlp-delta-grid {
+  .zlp-rd .zlp-delta-grid,
+  .zlp-rd .zlp-plan-grid {
     grid-template-columns: 1fr;
+  }
+  .zlp-rd .zlp-pricing-hero,
+  .zlp-rd .zlp-plan {
+    padding: 16px;
+  }
+  .zlp-rd .zlp-pricing-hero h2 {
+    max-width: none;
+  }
+  .zlp-rd .zlp-plan {
+    min-height: 0;
   }
   .zlp-rd .zlp-diff {
     grid-template-columns: 1fr;

@@ -47,6 +47,12 @@ describe("PublicLanding", () => {
     expect(screen.getAllByRole("link", { name: "Sign in" }).some((link) => link.getAttribute("href") === "/login")).toBe(true);
     expect(screen.getByText("One reliability layer across your model stack.")).toBeInTheDocument();
     expect(screen.getByText("The dashboard zooms into the part that matters.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Run your money-touching agents unattended - safely." })).toBeInTheDocument();
+    expect(screen.getByText("Price Zroky against the action it protects: stop the costly operation before it commits, then prove the real-world outcome in the system of record.")).toBeInTheDocument();
+    expect(screen.getByText("Not just refunds. Protect every agent that mutates reality.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Protect a high-risk agent/i }).getAttribute("href")).toBe(
+      "/signup?source=pricing&intent=protect-agent&plan=pro"
+    );
     expect(screen.getByText("A fix is not accepted until the replay proves it.")).toBeInTheDocument();
     expect(screen.queryByText(/Latest captured trace/i)).not.toBeInTheDocument();
     expect(screen.getByText("© 2026 Zroky")).toBeInTheDocument();

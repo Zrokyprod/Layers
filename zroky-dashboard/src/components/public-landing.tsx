@@ -2,12 +2,17 @@ import Link from "next/link";
 import {
   AlignLeft,
   ArrowRight,
+  Banknote,
   Check,
   CheckCircle2,
   Copy,
+  Database,
+  FileCheck2,
+  MailCheck,
   Plus,
   RotateCcw,
   Search,
+  Server,
   Shield,
   Star,
   XCircle,
@@ -171,6 +176,86 @@ const controlChips = [
   ["Roles & access", "Granular permissions"],
   ["Audit log", "All actions tracked"],
   ["Retention", "Configurable TTL"],
+];
+
+// ---------------------------------------------------------------------------
+// Pricing / risk-value content.
+// ---------------------------------------------------------------------------
+const riskValueMetrics = [
+  {
+    label: "protected action value",
+    value: "$250K/mo",
+    detail: "Monthly value handled by one high-stakes agent.",
+  },
+  {
+    label: "one bad action",
+    value: "$8K+",
+    detail: "Direct loss, reconciliation, customer trust, and audit drag.",
+  },
+  {
+    label: "self-serve gate",
+    value: "$199/mo",
+    detail: "A starting price below the cost of one material mistake.",
+  },
+];
+
+const pricingPlans = [
+  {
+    name: "Free",
+    price: "$0",
+    fit: "Prove capture on one agent before asking the team to delegate.",
+    bullets: ["Trace capture", "Issue grouping", "Basic replay evidence"],
+    href: "/signup?source=pricing&intent=protect-agent&plan=free",
+  },
+  {
+    name: "Starter",
+    price: "$49/mo",
+    fit: "Protect the first serious workflow while a human still reviews risky actions.",
+    bullets: ["Non-blocking CI", "Golden traces", "Mocked-tool replay"],
+    href: "/signup?source=pricing&intent=protect-agent&plan=starter",
+  },
+  {
+    name: "Pro",
+    price: "$199/mo",
+    fit: "Run production agents with runtime gates, outcome proof, and exportable evidence.",
+    bullets: ["Blocking CI", "Evidence packs", "Ledger and CRM proof"],
+    href: "/signup?source=pricing&intent=protect-agent&plan=pro",
+    featured: true,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    fit: "Add private execution, custom retention, connectors, procurement, and audit terms.",
+    bullets: ["Private replay", "Custom connectors", "Audit commitments"],
+    href: "/contact?source=pricing&intent=enterprise",
+  },
+];
+
+const protectedAgentRows = [
+  {
+    Icon: Banknote,
+    agent: "Payment and refund agents",
+    risk: "Refunds, payouts, reversals, credits",
+    proof: "Hold or block before commit; reconcile the ledger after.",
+  },
+  {
+    Icon: Database,
+    agent: "CRM and data mutation agents",
+    risk: "Record merges, account updates, ownership changes",
+    proof: "Compare the claimed update against the CRM record and hash the evidence.",
+  },
+  {
+    Icon: Server,
+    agent: "DevOps and release agents",
+    risk: "Deploys, rollbacks, config edits, infra changes",
+    proof: "Gate repeat failures in CI and keep replayable proof with the PR.",
+  },
+  {
+    Icon: MailCheck,
+    agent: "Lifecycle and outreach agents",
+    risk: "Mass email, customer notifications, ticket replies",
+    proof: "Check mandate before send and verify delivery outcome after send.",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -731,6 +816,97 @@ export function PublicLanding() {
                   </div>
                 </div>
               </section>
+            </div>
+          </div>
+        </section>
+
+        {/* ---- Pricing / risk value ----------------------------------- */}
+        <section className="zlp-blk zlp-pricing" id="pricing" aria-labelledby="zroky-pricing-title">
+          <div className="zlp-wrap">
+            <div className="zlp-pricing-hero zlp-elevated">
+              <div>
+                <span className="zlp-eyebrow">
+                  <span className="zlp-dot" aria-hidden="true" />
+                  Risk-value pricing
+                </span>
+                <h2 id="zroky-pricing-title" className="zlp-disp">
+                  Run your money-touching agents unattended - safely.
+                </h2>
+                <p>
+                  Price Zroky against the action it protects: stop the costly operation before it commits,
+                  then prove the real-world outcome in the system of record.
+                </p>
+              </div>
+              <div className="zlp-risk-ledger" aria-label="Risk value example">
+                {riskValueMetrics.map((metric) => (
+                  <div key={metric.label}>
+                    <span className="zlp-mono">{metric.label}</span>
+                    <strong className="zlp-disp">{metric.value}</strong>
+                    <small>{metric.detail}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="zlp-plan-grid" aria-label="Pricing plans">
+              {pricingPlans.map((plan) => (
+                <article key={plan.name} className={`zlp-plan${plan.featured ? " featured" : ""}`}>
+                  <div className="zlp-plan-head">
+                    <span>{plan.name}</span>
+                    {plan.featured ? <b className="zlp-mono">Recommended</b> : null}
+                  </div>
+                  <strong className="zlp-disp">{plan.price}</strong>
+                  <p>{plan.fit}</p>
+                  <ul>
+                    {plan.bullets.map((bullet) => (
+                      <li key={bullet}>
+                        <Check aria-hidden="true" />
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href={plan.href} className={plan.featured ? "zlp-btn zlp-btn-primary" : "zlp-btn zlp-btn-ghost"}>
+                    {plan.featured ? "Protect a high-risk agent" : plan.name === "Enterprise" ? "Talk to Zroky" : "Start here"}
+                    <ArrowRight aria-hidden="true" />
+                  </Link>
+                </article>
+              ))}
+            </div>
+
+            <div className="zlp-agent-risk">
+              <div>
+                <span className="zlp-eyebrow">
+                  <span className="zlp-dot" aria-hidden="true" />
+                  Highest-pain agents
+                </span>
+                <h3 className="zlp-disp">Not just refunds. Protect every agent that mutates reality.</h3>
+                <p>
+                  Start where the error cost is obvious. Expand to any autonomous agent that changes money,
+                  customer records, production systems, or customer communications.
+                </p>
+              </div>
+              <div className="zlp-agent-risk-list">
+                {protectedAgentRows.map(({ Icon, agent, risk, proof }) => (
+                  <article key={agent}>
+                    <span className="zlp-agent-risk-icon">
+                      <Icon aria-hidden="true" />
+                    </span>
+                    <div>
+                      <strong>{agent}</strong>
+                      <small>{risk}</small>
+                      <p>{proof}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="zlp-pricing-proof">
+              <FileCheck2 aria-hidden="true" />
+              <p>
+                Paid handoff proof: runtime decision, policy snapshot, approval audit, outcome reconciliation,
+                and evidence hash are all exportable for buyer review.
+              </p>
             </div>
           </div>
         </section>
