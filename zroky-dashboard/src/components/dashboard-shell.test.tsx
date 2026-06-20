@@ -287,10 +287,12 @@ describe("DashboardShell primary navigation", () => {
     rerender(<DashboardShell>content</DashboardShell>);
 
     const settingsSections = screen.getByRole("group", { name: "Settings sections" });
+    expect(within(settingsSections).queryByRole("link", { name: /Project/ })).not.toBeInTheDocument();
     expect(within(settingsSections).getByRole("link", { name: /API keys/ }).getAttribute("href")).toBe("/settings/keys");
     expect(within(settingsSections).getByRole("link", { name: /Providers/ }).getAttribute("href")).toBe("/settings/providers");
     expect(within(settingsSections).getByRole("link", { name: /Integrations/ }).getAttribute("href")).toBe("/settings/integrations");
     expect(within(settingsSections).getByRole("link", { name: /Billing/ }).getAttribute("href")).toBe("/settings/billing");
+    expect(within(settingsSections).getByRole("link", { name: /Members/ }).getAttribute("href")).toBe("/settings/team");
   });
 
   it("renders the dashboard logo image without the old text lockup", () => {
@@ -340,7 +342,7 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(screen.getAllByText("Workspace unavailable").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Project unavailable").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Account").length).toBeGreaterThan(0);
     expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
     expect(screen.queryByText("sanket@acme.com")).not.toBeInTheDocument();
@@ -371,10 +373,11 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open workspace menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open project menu" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Beta Lab/ }));
 
     expect(storeState.setSelectedProject).toHaveBeenCalledWith("proj_2");
+    expect(routerState.push).toHaveBeenCalledWith("/projects/proj_2");
     expect(queryClientState.invalidateQueries).toHaveBeenCalledWith({
       predicate: expect.any(Function),
     });
@@ -533,10 +536,12 @@ describe("DashboardShell primary navigation", () => {
   it("opens real workspace and route menus from shell controls", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open workspace menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open project menu" }));
 
-    expect(screen.getByRole("menu", { name: "Workspace menu" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Project settings/ }).getAttribute("href")).toBe("/settings");
+    expect(screen.getByRole("menu", { name: "Project menu" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Manage projects/ }).getAttribute("href")).toBe("/projects");
+    expect(screen.getByRole("menuitem", { name: /New project/ }).getAttribute("href")).toBe("/projects");
+    expect(screen.queryByRole("menuitem", { name: /Project settings/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open dashboard navigation menu" }));
 
@@ -596,7 +601,7 @@ describe("DashboardShell primary navigation", () => {
     expect(topbar?.contains(accountButton)).toBe(true);
 
     const planLink = screen.getByLabelText("Open billing and usage");
-    const workspaceButton = screen.getByRole("button", { name: "Open workspace menu" });
+    const workspaceButton = screen.getByRole("button", { name: "Open project menu" });
     expect(planLink.compareDocumentPosition(workspaceButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

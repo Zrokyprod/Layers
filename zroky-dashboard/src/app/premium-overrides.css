@@ -7331,6 +7331,174 @@ body:has(.app-shell) {
   }
 }
 
+/* Module 10c: Projects resource surface */
+.app-shell .projects-page {
+  gap: 12px !important;
+}
+
+.app-shell .projects-page .settings-project-command,
+.app-shell .projects-page .settings-project-list-panel,
+.app-shell .projects-page .settings-project-details-panel {
+  border-color: rgba(248, 250, 252, 0.1) !important;
+}
+
+.app-shell .projects-console {
+  gap: 12px !important;
+}
+
+.app-shell .projects-limit-strip {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  min-height: 46px !important;
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 250, 252, 0.035) !important;
+  padding: 10px 12px !important;
+}
+
+.app-shell .projects-limit-strip span,
+.app-shell .projects-limit-strip small,
+.app-shell .projects-create-panel label {
+  color: #7b8492 !important;
+  font-size: 0.72rem !important;
+  font-weight: 720 !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .projects-limit-strip span,
+.app-shell .projects-create-panel label {
+  text-transform: uppercase !important;
+}
+
+.app-shell .projects-limit-strip strong {
+  color: #f8fafc !important;
+  font-size: 0.86rem !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .projects-create-panel {
+  display: grid !important;
+  gap: 8px !important;
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 250, 252, 0.025) !important;
+  padding: 12px !important;
+}
+
+.app-shell .projects-create-panel > div {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 1fr) auto !important;
+  gap: 8px !important;
+}
+
+.app-shell .projects-create-panel input {
+  width: 100% !important;
+  min-height: 38px !important;
+  border: 1px solid rgba(248, 250, 252, 0.12) !important;
+  border-radius: 8px !important;
+  background: rgba(2, 6, 12, 0.36) !important;
+  color: #f8fafc !important;
+  padding: 0 10px !important;
+  font-size: 0.82rem !important;
+  font-weight: 680 !important;
+}
+
+.app-shell .projects-create-panel input::placeholder {
+  color: #667085 !important;
+}
+
+.app-shell .projects-create-panel input:focus {
+  border-color: rgba(248, 250, 252, 0.28) !important;
+  outline: none !important;
+}
+
+.app-shell .projects-list-panel {
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 250, 252, 0.022) !important;
+  padding: 12px !important;
+}
+
+.app-shell .projects-table {
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 8px !important;
+}
+
+.app-shell .projects-table-row {
+  text-decoration: none !important;
+}
+
+.app-shell .projects-back-link {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  width: max-content !important;
+  max-width: 100% !important;
+  min-height: 32px !important;
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 250, 252, 0.035) !important;
+  color: #aab4c2 !important;
+  padding: 0 10px !important;
+  font-size: 0.78rem !important;
+  font-weight: 760 !important;
+  text-decoration: none !important;
+}
+
+.app-shell .projects-back-link:hover,
+.app-shell .projects-back-link:focus-visible {
+  border-color: rgba(248, 250, 252, 0.18) !important;
+  color: #f8fafc !important;
+  outline: none !important;
+}
+
+.app-shell .projects-detail-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.42fr) !important;
+  gap: 12px !important;
+  min-height: 0 !important;
+}
+
+.app-shell .projects-detail-grid .settings-project-details-panel {
+  position: static !important;
+  gap: 12px !important;
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 250, 252, 0.022) !important;
+  padding: 14px !important;
+}
+
+.app-shell .projects-detail-main {
+  min-height: 0 !important;
+}
+
+.app-shell .projects-not-found {
+  border: 1px solid rgba(248, 250, 252, 0.1) !important;
+  border-radius: 8px !important;
+  background: rgba(248, 250, 252, 0.025) !important;
+}
+
+.app-shell .shell-menu-item.is-muted-action {
+  color: #aab4c2 !important;
+}
+
+@media (max-width: 760px) {
+  .app-shell .projects-limit-strip,
+  .app-shell .projects-create-panel > div,
+  .app-shell .projects-detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .projects-create-panel .btn,
+  .app-shell .projects-create-panel input {
+    width: 100% !important;
+  }
+}
+
 .app-shell .settings-partial-warning {
   border-color: var(--dashboard-warning-border) !important;
   background: var(--dashboard-warning-soft) !important;

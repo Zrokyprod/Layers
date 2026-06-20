@@ -264,6 +264,32 @@ def test_project_delete_blocks_only_active_project(client_ctx: TestClient) -> No
     assert response.json()["detail"] == "Create or switch to another active project before deleting your only project."
 
 
+def test_current_user_project_create_respects_plan_limit(
+    client_ctx: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(entitlements_resolver, "resolve_all", lambda db, org_id: {"max_projects": 3})
+    token = _seed_two_project_user(client_ctx._session_factory)  # type: ignore[attr-defined]
+
+    created = client_ctx.post(
+        "/v1/auth/me/projects",
+        headers=_headers(token, "proj_alpha"),
+        json={"name": "Gamma Agent"},
+    )
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["project_name"] == "Gamma Agent"
+    assert created_body["role"] == "owner"
+
+    blocked = client_ctx.post(
+        "/v1/auth/me/projects",
+        headers=_headers(token, "proj_alpha"),
+        json={"name": "Delta Agent"},
+    )
+    assert blocked.status_code == 402
+    assert blocked.json()["detail"] == "Project limit reached for this plan (3/3). Upgrade to add more projects."
+
+
 def test_project_path_rejects_selected_project_mismatch(client_ctx: TestClient) -> None:
     token = _seed_two_project_user(client_ctx._session_factory)  # type: ignore[attr-defined]
 

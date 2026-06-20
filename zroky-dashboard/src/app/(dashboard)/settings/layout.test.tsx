@@ -40,17 +40,10 @@ describe("SettingsLayout", () => {
       </SettingsLayout>,
     );
 
-    for (const label of [
-      "Project",
-      "API keys",
-      "Providers",
-      "Members",
-      "Plan & Billing",
-      "Evaluation",
-      "Integrations",
-    ]) {
+    for (const label of ["API keys", "Providers", "Members", "Plan & Billing", "Evaluation", "Integrations"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("link", { name: "Project" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
   });
 

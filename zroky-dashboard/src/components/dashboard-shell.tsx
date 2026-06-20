@@ -24,6 +24,7 @@ import {
   LogOut,
   Menu,
   Plug,
+  Plus,
   RotateCcw,
   Search,
   Settings2,
@@ -141,9 +142,9 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "settings",
-    href: "/settings",
+    href: "/settings/keys",
     label: "Settings",
-    subtitle: "Project, keys, providers, billing, integrations, notifications, and team controls.",
+    subtitle: "Keys, providers, billing, integrations, notifications, and team controls.",
     Icon: Settings2,
     visibleInNav: true,
   },
@@ -152,7 +153,6 @@ const NAV_ITEMS: NavItem[] = [
 const VISIBLE_NAV = NAV_ITEMS.filter((n) => n.visibleInNav);
 
 const SETTINGS_CHILD_LINKS = [
-  { href: "/settings", label: "Project", Icon: FolderOpen },
   { href: "/settings/keys", label: "API keys", Icon: KeyRound },
   { href: "/settings/providers", label: "Providers", Icon: Shield },
   { href: "/settings/integrations", label: "Integrations", Icon: Plug },
@@ -172,6 +172,13 @@ type ShellMenu = "workspace" | "route" | "date" | "env" | "account";
 
 const DASHBOARD_ROUTES = [
   ...NAV_ITEMS,
+  {
+    id: "projects",
+    href: "/projects",
+    label: "Projects",
+    subtitle: "Project list, subscription limit, active context, and deletion controls.",
+    Icon: FolderOpen,
+  },
   {
     id: "home",
     href: "/home",
@@ -218,7 +225,11 @@ const DASHBOARD_ROUTES = [
 
 function getRouteMeta(pathname: string): NavItem | null {
   return (
-    DASHBOARD_ROUTES.find((r) => pathname === r.href || pathname.startsWith(`${r.href}/`)) ?? null
+    DASHBOARD_ROUTES.find((r) => {
+      if (!r.href) return false;
+      const prefix = routePrefixForHref(r.href);
+      return pathname === prefix || pathname.startsWith(`${prefix}/`);
+    }) ?? null
   );
 }
 
@@ -283,6 +294,12 @@ function numericEntitlement(planTemplate: Record<string, unknown> | undefined, k
   return null;
 }
 
+function projectLimitCopy(projectCount: number, maxProjects: number | null): string {
+  if (maxProjects === -1) return `${projectCount} projects - unlimited`;
+  if (maxProjects == null) return `${projectCount} projects`;
+  return `${projectCount} / ${maxProjects} projects used`;
+}
+
 function dateRangeLabel(
   dateRange: { from: Date | null; to: Date | null },
   activePreset: DatePresetId,
@@ -295,8 +312,15 @@ function dateRangeLabel(
   return "Last 7 days";
 }
 
+function routePrefixForHref(href: string): string {
+  if (href.startsWith("/settings")) return "/settings";
+  if (href.startsWith("/projects")) return "/projects";
+  return href;
+}
+
 function navClass(pathname: string, href: string): string {
-  return pathname === href || pathname.startsWith(`${href}/`)
+  const prefix = routePrefixForHref(href);
+  return pathname === prefix || pathname.startsWith(`${prefix}/`)
     ? "nav-link nav-link-active"
     : "nav-link";
 }
@@ -420,12 +444,12 @@ function ProjectContextGate({
   const title = noProjects
     ? "No active project found"
     : requiresSelection
-      ? "Select a project to load this workspace"
-      : "Loading workspace context";
+      ? "Select a project to load this dashboard"
+      : "Loading project context";
   const body = noProjects
     ? "Ask an owner to add your account to a project before dashboard modules can load data."
     : requiresSelection
-      ? "Dashboard data is scoped by project. Choose the workspace you want to inspect."
+      ? "Dashboard data is scoped by project. Choose the project you want to inspect."
       : "Preparing project-scoped data before loading dashboard modules.";
 
   return (
@@ -637,6 +661,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         ? "events included"
         : "events / month"
       : "usage unavailable";
+  const maxProjects = numericEntitlement(planTemplate, "max_projects");
+  const projectLimitReached = maxProjects !== null && maxProjects !== -1 && myProjects.length >= maxProjects;
+  const projectLimitStatus = projectLimitCopy(myProjects.length, maxProjects);
   const showPlanUsageTrack = hasBudgetLimit;
   const planCardStatusClass =
     budgetStatus?.status === "critical" ? "is-critical" : budgetStatus?.status === "warning" ? "is-warning" : "is-ok";
@@ -654,11 +681,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     (projectSelectionRequired
       ? "Select project"
       : myProjectsQuery.isLoading || projectQuery.isLoading
-        ? "Loading workspace"
-        : "Workspace unavailable");
-  const orgProjectId = selectedProjectMembership?.project_id ?? projectQuery.data?.project_id ?? selectedProject ?? null;
-  const orgProjectIdLabel = compactIdentifier(orgProjectId);
-  const orgRoleLabel = selectedProjectMembership ? formatRoleLabel(selectedProjectMembership.role) : null;
+        ? "Loading project"
+        : "Project unavailable");
   const envDisplay = envLabel.charAt(0).toUpperCase() + envLabel.slice(1);
   const accountEmail = meQuery.data?.email?.trim() || null;
   const accountName =
@@ -710,6 +734,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     void queryClient.invalidateQueries({
       predicate: (query) => query.queryKey[0] !== "me",
     });
+  }
+
+  function openProjectDetails(projectId: string) {
+    if (projectId !== selectedProject) {
+      setSelectedProject(projectId);
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] !== "me",
+      });
+    }
+    setOpenMenu(null);
+    router.push(`/projects/${encodeURIComponent(projectId)}`);
   }
 
   function openCommandPalette() {
@@ -819,7 +854,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               className={`org-widget${openMenu === "workspace" ? " org-widget-active" : ""}`}
-              aria-label="Open workspace menu"
+              aria-label="Open project menu"
               aria-haspopup="menu"
               aria-expanded={openMenu === "workspace"}
               onClick={() => toggleMenu("workspace")}
@@ -841,16 +876,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </button>
 
             {openMenu === "workspace" ? (
-              <div className="shell-popover shell-popover-up org-popover" role="menu" aria-label="Workspace menu">
+              <div className="shell-popover shell-popover-up org-popover" role="menu" aria-label="Project menu">
                 <div className="shell-popover-head">
-                  <span>Active project</span>
+                  <span>Projects</span>
                   <strong>{projectSelectionRequired ? "Select a project" : orgName}</strong>
-                  {!projectSelectionRequired ? (
-                    <small>
-                      {envDisplay}
-                      {orgRoleLabel ? ` - ${orgRoleLabel}` : ""}
-                    </small>
-                  ) : null}
+                  <small>{projectLimitStatus}</small>
                 </div>
                 {myProjects.length > 0 ? (
                   myProjects.map((project) => {
@@ -863,7 +893,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                         className={`shell-menu-item${isSelected ? " is-active" : ""}`}
                         role="menuitem"
                         aria-current={isSelected ? "true" : undefined}
-                        onClick={() => switchProject(project.project_id)}
+                        onClick={() => openProjectDetails(project.project_id)}
                       >
                         <FolderOpen size={15} aria-hidden="true" />
                         <span>
@@ -888,11 +918,23 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     </span>
                   </div>
                 )}
-                <Link href="/settings" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
+                <Link
+                  href={projectLimitReached ? "/settings/billing" : "/projects"}
+                  className={`shell-menu-item${projectLimitReached ? " is-muted-action" : ""}`}
+                  role="menuitem"
+                  onClick={() => setOpenMenu(null)}
+                >
+                  {projectLimitReached ? <CreditCard size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
+                  <span>
+                    <strong>{projectLimitReached ? "Upgrade to add more" : "New project"}</strong>
+                    <small>{projectLimitReached ? projectLimitStatus : "Create within your plan limit."}</small>
+                  </span>
+                </Link>
+                <Link href="/projects" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
                   <Settings2 size={15} aria-hidden="true" />
                   <span>
-                    <strong>Project settings</strong>
-                    <small>Providers, team, billing, and keys.</small>
+                    <strong>Manage projects</strong>
+                    <small>Open details, switch context, or delete.</small>
                   </span>
                 </Link>
                 <Link href="/settings/team" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
@@ -902,13 +944,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     <small>Invite or remove project members.</small>
                   </span>
                 </Link>
-                <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
-                  <FolderOpen size={15} aria-hidden="true" />
-                  <span>
-                    <strong>Project ID</strong>
-                    <small title={orgProjectId ?? undefined}>{orgProjectIdLabel}</small>
-                  </span>
-                </div>
               </div>
             ) : null}
           </div>
@@ -947,7 +982,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <div className="shell-popover topbar-popover route-popover" role="menu" aria-label="Dashboard navigation">
                 <div className="shell-popover-head">
                   <span>Jump to module</span>
-                  <strong>{currentRoute?.subtitle ?? "Open a dashboard workspace."}</strong>
+                  <strong>{currentRoute?.subtitle ?? "Open a dashboard module."}</strong>
                 </div>
                 {VISIBLE_NAV.map((item) => {
                   const Icon = item.Icon;
