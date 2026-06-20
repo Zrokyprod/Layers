@@ -219,7 +219,7 @@ const pricingPlans = [
     price: "$199/mo",
     fit: "Run production agents with runtime gates, outcome proof, and exportable evidence.",
     bullets: ["Blocking CI", "Evidence packs", "Ledger and CRM proof"],
-    href: "/signup?source=pricing&intent=protect-agent&plan=pro",
+    href: "/pilot?source=pricing&plan=pro",
     featured: true,
   },
   {
@@ -907,6 +907,10 @@ export function PublicLanding() {
                 Paid handoff proof: runtime decision, policy snapshot, approval audit, outcome reconciliation,
                 and evidence hash are all exportable for buyer review.
               </p>
+              <Link href="/pilot?source=pricing&intent=handoff" className="zlp-pricing-proof-link">
+                Open pilot handoff
+                <ArrowRight aria-hidden="true" />
+              </Link>
             </div>
           </div>
         </section>

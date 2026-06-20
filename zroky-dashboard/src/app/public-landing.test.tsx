@@ -51,7 +51,10 @@ describe("PublicLanding", () => {
     expect(screen.getByText("Price Zroky against the action it protects: stop the costly operation before it commits, then prove the real-world outcome in the system of record.")).toBeInTheDocument();
     expect(screen.getByText("Not just refunds. Protect every agent that mutates reality.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Protect a high-risk agent/i }).getAttribute("href")).toBe(
-      "/signup?source=pricing&intent=protect-agent&plan=pro"
+      "/pilot?source=pricing&plan=pro"
+    );
+    expect(screen.getByRole("link", { name: /Open pilot handoff/i }).getAttribute("href")).toBe(
+      "/pilot?source=pricing&intent=handoff"
     );
     expect(screen.getByText("A fix is not accepted until the replay proves it.")).toBeInTheDocument();
     expect(screen.queryByText(/Latest captured trace/i)).not.toBeInTheDocument();
