@@ -53,6 +53,20 @@ const readiness: OwnerLaunchReadiness = {
       evidence: [{ label: "risk_stopped_7d", value: 0, status: null, detail: null }],
       verification_commands: ["python -m pytest tests/test_runtime_policy_gate.py"],
     },
+    {
+      code: "outcome_verification",
+      title: "Outcome Verification",
+      status: "fail",
+      summary: "Money-touching actions must reconcile against the system of record.",
+      blockers: ["outcome_mismatch_detected", "outcome_not_verified"],
+      evidence: [
+        { label: "reconciliation_checks_7d", value: 2, status: null, detail: null },
+        { label: "matched_7d", value: 0, status: null, detail: null },
+        { label: "mismatched_7d", value: 1, status: null, detail: null },
+        { label: "not_verified_7d", value: 1, status: null, detail: null },
+      ],
+      verification_commands: ["python -m pytest tests/test_outcome_reconciliation.py"],
+    },
   ],
 };
 
@@ -85,6 +99,9 @@ describe("OwnerLaunchReadinessPage", () => {
     expect(within(gateRegion).getByText("stub_replay_marked_verified")).toBeInTheDocument();
     expect(within(gateRegion).getByText("Runtime Risk Stop")).toBeInTheDocument();
     expect(within(gateRegion).getByText("runtime_risk_stop_evidence_missing")).toBeInTheDocument();
+    expect(within(gateRegion).getByText("Outcome Verification")).toBeInTheDocument();
+    expect(within(gateRegion).getByText("outcome_mismatch_detected")).toBeInTheDocument();
+    expect(within(gateRegion).getByText("outcome_not_verified")).toBeInTheDocument();
     expect(screen.getByText("powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1")).toBeInTheDocument();
   });
 

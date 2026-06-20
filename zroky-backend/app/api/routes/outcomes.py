@@ -8,13 +8,12 @@ Surface:
   POST /v1/outcomes/webhooks/zendesk     — Zendesk ticket.created / ticket.updated
   POST /v1/outcomes/webhooks/salesforce  — Salesforce Opportunity stage-change
 """
-from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -52,7 +51,9 @@ logger = logging.getLogger(__name__)
 
 
 class OutcomeIngest(BaseModel):
-    call_id: str | None = Field(None, description="Zroky call_id to attribute this outcome to.")
+    call_id: str | None = Field(
+        None, description="Zroky call_id to attribute this outcome to."
+    )
     outcome_type: str = Field(
         ...,
         description=(
@@ -60,14 +61,22 @@ class OutcomeIngest(BaseModel):
             "human_handoff | churn | compliance_fine | retry_cost | custom"
         ),
     )
-    amount_usd: float = Field(..., ge=0, description="Monetary cost of this outcome in USD.")
-    occurred_at: datetime | None = Field(None, description="When the event happened (defaults to now).")
-    external_ref: str | None = Field(None, description="Your own reference ID (order_id, ticket_id, …).")
+    amount_usd: float = Field(
+        ..., ge=0, description="Monetary cost of this outcome in USD."
+    )
+    occurred_at: datetime | None = Field(
+        None, description="When the event happened (defaults to now)."
+    )
+    external_ref: str | None = Field(
+        None, description="Your own reference ID (order_id, ticket_id, …)."
+    )
     idempotency_key: str | None = Field(
         None,
         description="Dedup key — same key + project always returns the same row.",
     )
-    metadata: dict[str, Any] | None = Field(None, description="Arbitrary key-value context.")
+    metadata: dict[str, Any] | None = Field(
+        None, description="Arbitrary key-value context."
+    )
 
     @field_validator("outcome_type")
     @classmethod
@@ -241,7 +250,7 @@ def _serialize_reconciliation(row) -> OutcomeReconciliationView:
 @limiter.limit("120/minute")
 def create_outcome(
     request: Request,
-    body: OutcomeIngest,
+    body: OutcomeIngest = Body(...),
     db: Session = Depends(get_db_session),
     tenant_id: str = Depends(require_tenant_id),
 ) -> OutcomeView:
@@ -274,11 +283,13 @@ def get_summary(
     return _serialize_summary(s)
 
 
-@router.post("/reconciliation", response_model=OutcomeReconciliationView, status_code=201)
+@router.post(
+    "/reconciliation", response_model=OutcomeReconciliationView, status_code=201
+)
 @limiter.limit("120/minute")
 def create_reconciliation(
     request: Request,
-    body: OutcomeReconciliationIngest,
+    body: OutcomeReconciliationIngest = Body(...),
     db: Session = Depends(get_db_session),
     tenant_id: str = Depends(require_tenant_id),
 ) -> OutcomeReconciliationView:
@@ -328,7 +339,9 @@ def list_reconciliation_checks(
     )
 
 
-@router.get("/reconciliation/summary", response_model=OutcomeReconciliationSummaryResponse)
+@router.get(
+    "/reconciliation/summary", response_model=OutcomeReconciliationSummaryResponse
+)
 @limiter.limit("30/minute")
 def get_reconciliation_kpis(
     request: Request,
@@ -347,7 +360,10 @@ def get_reconciliation_kpis(
     )
 
 
-@router.get("/reconciliation/by-call/{call_id}", response_model=OutcomeReconciliationListResponse)
+@router.get(
+    "/reconciliation/by-call/{call_id}",
+    response_model=OutcomeReconciliationListResponse,
+)
 @limiter.limit("60/minute")
 def get_reconciliations_for_call(
     request: Request,
@@ -374,7 +390,9 @@ def get_reconciliation_check(
     """Read one outcome reconciliation check."""
     row = get_reconciliation(db, project_id=tenant_id, check_id=check_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="Outcome reconciliation check not found.")
+        raise HTTPException(
+            status_code=404, detail="Outcome reconciliation check not found."
+        )
     return _serialize_reconciliation(row)
 
 
