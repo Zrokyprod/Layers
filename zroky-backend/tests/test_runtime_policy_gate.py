@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -9,7 +11,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.db.base import Base
-from app.db.models import RuntimePolicyAuditEvent, RuntimePolicyDecision, TraceSpan
+from app.db.models import (
+    OutcomeReconciliationCheck,
+    RuntimePolicyAuditEvent,
+    RuntimePolicyDecision,
+    TraceSpan,
+)
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.pilot import DEFAULT_POLICY, upsert_policy
@@ -304,3 +311,93 @@ def test_approval_queue_is_project_scoped(client: TestClient) -> None:
         decisions = session.execute(select(RuntimePolicyDecision)).scalars().all()
         assert len(decisions) == 1
         assert decisions[0].project_id == "proj_runtime_a"
+
+
+def test_evidence_pack_links_approval_audit_and_outcome(client: TestClient) -> None:
+    pending = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-evidence",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "agent_name": "refund-agent",
+            "tool_args": {"order_id": "ord_evidence", "amount": 42.5, "currency": "USD"},
+            "external_action": True,
+            "business_impact_summary": "Refund customer order",
+        },
+    ).json()
+    approved = client.post(
+        f"/v1/runtime-policy/approvals/{pending['id']}/approve",
+        json={"reason": "Order cancellation confirmed."},
+    )
+    assert approved.status_code == 200
+    allowed = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-evidence",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "agent_name": "refund-agent",
+            "tool_args": {"order_id": "ord_evidence", "amount": 42.5, "currency": "USD"},
+            "external_action": True,
+            "approval_id": pending["id"],
+            "business_impact_summary": "Refund customer order",
+        },
+    ).json()
+    assert allowed["status"] == "allowed"
+
+    session_factory = client._session_factory  # type: ignore[attr-defined]
+    with session_factory() as session:
+        session.add(
+            OutcomeReconciliationCheck(
+                id="orc_evidence_matched",
+                project_id="proj_runtime_a",
+                call_id=None,
+                trace_id="trace-evidence",
+                runtime_policy_decision_id=allowed["id"],
+                action_type="refund",
+                connector_type="ledger_api",
+                system_ref="refund_ledger_123",
+                verdict="matched",
+                reason="ledger refund matched requested amount",
+                amount_usd=42.5,
+                currency="USD",
+                claimed_json=json.dumps({"order_id": "ord_evidence", "amount": 42.5}),
+                actual_json=json.dumps({"order_id": "ord_evidence", "amount": 42.5}),
+                comparison_json=json.dumps({"amount": {"matched": True}}),
+                idempotency_key="orc-evidence-1",
+                checked_at=datetime.now(timezone.utc),
+            )
+        )
+        session.commit()
+
+    evidence = client.get(f"/v1/runtime-policy/decisions/{pending['id']}/evidence")
+    assert evidence.status_code == 200
+    body = evidence.json()
+    assert body["schema_version"] == "runtime_policy_evidence.v1"
+    assert body["decision"]["id"] == pending["id"]
+    assert body["verification_status"] == "pass"
+    assert body["hash_algorithm"] == "sha256"
+    assert len(body["evidence_hash"]) == 64
+    assert body["hash_payload_excludes"] == ["generated_at"]
+    assert {row["id"] for row in body["related_decisions"]} == {allowed["id"]}
+    assert {event["event_type"] for event in body["audit_log"]} == {
+        "approval_requested",
+        "approved",
+        "approval_consumed",
+        "allowed",
+    }
+    assert body["outcome_reconciliation"][0]["id"] == "orc_evidence_matched"
+    assert body["outcome_reconciliation"][0]["runtime_policy_decision_id"] == allowed["id"]
+    assert {span["policy"]["decision_id"] for span in body["trace_policy_spans"]} == {
+        pending["id"],
+        allowed["id"],
+    }
+
+    repeated = client.get(f"/v1/runtime-policy/decisions/{pending['id']}/evidence")
+    assert repeated.status_code == 200
+    assert repeated.json()["evidence_hash"] == body["evidence_hash"]
+
+    _set_tenant(client, tenant_id="proj_runtime_b")
+    foreign = client.get(f"/v1/runtime-policy/decisions/{pending['id']}/evidence")
+    assert foreign.status_code == 404

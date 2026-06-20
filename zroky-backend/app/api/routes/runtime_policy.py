@@ -12,6 +12,7 @@ from app.api.dependencies.authorization import ROLE_RANK
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.db.models import RuntimePolicyDecision
 from app.db.session import get_db_session
+from app.services.evidence_pack import build_runtime_policy_evidence_pack
 from app.services.pilot import PolicyValidationError, get_or_create_policy, parse_policy_json, upsert_policy
 from app.services.runtime_policy import (
     evaluate_runtime_policy,
@@ -128,6 +129,23 @@ class RuntimePolicyKillSwitchResponse(BaseModel):
     project_id: str
     enabled: bool
     policy: dict[str, Any]
+
+
+class RuntimePolicyEvidencePackResponse(BaseModel):
+    schema_version: str
+    project_id: str
+    decision_id: str
+    verification_status: str
+    decision: dict[str, Any]
+    related_decisions: list[dict[str, Any]]
+    audit_log: list[dict[str, Any]]
+    trace_policy_spans: list[dict[str, Any]]
+    outcome_reconciliation: list[dict[str, Any]]
+    call: dict[str, Any] | None
+    generated_at: str
+    hash_algorithm: str
+    evidence_hash: str
+    hash_payload_excludes: list[str]
 
 
 def _require_role(context: TenantContext, minimum: str) -> None:
@@ -255,6 +273,26 @@ def list_approvals(
         items=[_decision_to_response(row, audit_events=audit.get(row.id, [])) for row in rows],
         total_in_page=len(rows),
     )
+
+
+@router.get("/decisions/{decision_id}/evidence", response_model=RuntimePolicyEvidencePackResponse)
+def get_runtime_policy_decision_evidence(
+    decision_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RuntimePolicyEvidencePackResponse:
+    _require_role(context, "viewer")
+    pack = build_runtime_policy_evidence_pack(
+        db,
+        project_id=context.tenant_id,
+        decision_id=decision_id,
+    )
+    if pack is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Runtime policy decision evidence was not found.",
+        )
+    return RuntimePolicyEvidencePackResponse(**pack)
 
 
 @router.post("/approvals/{decision_id}/approve", response_model=RuntimePolicyDecisionResponse)
