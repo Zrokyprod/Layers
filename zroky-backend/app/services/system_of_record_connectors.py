@@ -11,8 +11,9 @@ import ipaddress
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import quote, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -75,6 +76,10 @@ def _render_path_template(template: str, values: Mapping[str, Any]) -> str:
     cleaned = _clean_text(template)
     if not cleaned.startswith("/"):
         raise ConnectorConfigError("ledger connector path_template must start with '/'")
+    if "\\" in cleaned:
+        raise ConnectorConfigError(
+            "ledger connector path_template must not include backslashes"
+        )
     if "://" in cleaned:
         raise ConnectorConfigError(
             "ledger connector path_template must be a relative path"
@@ -83,7 +88,9 @@ def _render_path_template(template: str, values: Mapping[str, Any]) -> str:
         raise ConnectorConfigError(
             "ledger connector path_template must not include query or fragment values"
         )
-    if any(segment == ".." for segment in cleaned.split("/")):
+
+    decoded_template = unquote(cleaned).replace("\\", "/")
+    if any(segment == ".." for segment in decoded_template.split("/")):
         raise ConnectorConfigError(
             "ledger connector path_template must not include path traversal segments"
         )
@@ -102,6 +109,11 @@ def _render_path_template(template: str, values: Mapping[str, Any]) -> str:
         raise ConnectorConfigError(
             "ledger connector path_template contains an invalid placeholder"
         )
+    decoded_rendered = unquote(rendered).replace("\\", "/")
+    if any(segment == ".." for segment in decoded_rendered.split("/")):
+        raise ConnectorConfigError(
+            "ledger connector path_template must not include path traversal segments"
+        )
     return rendered
 
 
@@ -109,9 +121,18 @@ def _select_record(payload: Any, record_path: str | None) -> dict[str, Any] | No
     current = payload
     if record_path:
         for part in [item.strip() for item in record_path.split(".") if item.strip()]:
-            if not isinstance(current, Mapping) or part not in current:
-                return None
-            current = current[part]
+            if isinstance(current, Mapping):
+                if part not in current:
+                    return None
+                current = current[part]
+                continue
+            if isinstance(current, list) and part.isdigit():
+                index = int(part)
+                if index >= len(current):
+                    return None
+                current = current[index]
+                continue
+            return None
     if isinstance(current, Mapping):
         return dict(current)
     return None
@@ -141,6 +162,18 @@ def _metadata(
     if error:
         payload["error"] = error
     return payload
+
+
+def _cents_to_usd(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        amount = Decimal(str(value).strip())
+        if not amount.is_finite():
+            return None
+        return float(amount / Decimal("100"))
+    except (InvalidOperation, OverflowError, ValueError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -274,16 +307,33 @@ def _normalise_refund_record(
     if "refund_id" not in normalized and refund_id:
         normalized["refund_id"] = refund_id
     if "amount_usd" not in normalized:
-        for candidate in ("amount", "amountUSD", "amount_usd_cents"):
+        for candidate in (
+            "amount",
+            "amountUSD",
+            "amountUsd",
+            "amount_usd_cents",
+            "amount_cents",
+            "amountCents",
+        ):
             value = normalized.get(candidate)
             if value is None:
                 continue
-            normalized["amount_usd"] = (
-                float(value) / 100 if candidate == "amount_usd_cents" else value
-            )
+            if candidate in {"amount_usd_cents", "amount_cents", "amountCents"}:
+                cents_value = _cents_to_usd(value)
+                if cents_value is None:
+                    continue
+                normalized["amount_usd"] = cents_value
+            else:
+                normalized["amount_usd"] = value
             break
     if isinstance(normalized.get("currency"), str):
         normalized["currency"] = normalized["currency"].upper()
+    if "status" not in normalized:
+        for candidate in ("state", "refund_status", "refundStatus"):
+            value = normalized.get(candidate)
+            if value is not None and _clean_text(value):
+                normalized["status"] = value
+                break
     return normalized
 
 
