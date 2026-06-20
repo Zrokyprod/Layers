@@ -29977,6 +29977,44 @@ button.gm-kpi-card {
   gap: 8px;
 }
 
+.app-shell .settings-connector-form,
+.app-shell .settings-connector-test {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 12px;
+}
+
+.app-shell .settings-connector-form-grid,
+.app-shell .settings-connector-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-shell .settings-connector-form label,
+.app-shell .settings-connector-test label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-shell .settings-connector-form label span,
+.app-shell .settings-connector-test label span {
+  color: var(--text-tertiary);
+  font-size: 0.68rem;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.app-shell .settings-connector-form input,
+.app-shell .settings-connector-test input {
+  min-width: 0;
+}
+
 .app-shell .settings-connector-payload {
   max-height: 230px;
   min-width: 0;
@@ -30548,6 +30586,8 @@ button.gm-kpi-card {
   .app-shell .settings-summary-grid,
   .app-shell .settings-integration-grid,
   .app-shell .settings-connector-facts,
+  .app-shell .settings-connector-form-grid,
+  .app-shell .settings-connector-test-grid,
   .app-shell .settings-readiness-grid,
   .app-shell .settings-gate-map {
     grid-template-columns: 1fr;

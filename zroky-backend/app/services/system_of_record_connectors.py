@@ -164,6 +164,38 @@ def _metadata(
     return payload
 
 
+def validate_ledger_refund_api_config(
+    *,
+    base_url: str,
+    path_template: str = "/refunds/{refund_id}",
+    record_path: str | None = None,
+    allow_private_hosts: bool = False,
+) -> dict[str, str | None]:
+    """Validate and normalize a ledger refund connector without issuing I/O."""
+    normalized_base_url = _safe_base_url(
+        base_url, allow_private_hosts=allow_private_hosts
+    ).rstrip("/")
+    normalized_path_template = _clean_text(path_template) or "/refunds/{refund_id}"
+    _render_path_template(
+        normalized_path_template, {"refund_id": "zroky_config_check"}
+    )
+    normalized_record_path = _clean_text(record_path) if record_path else None
+    if normalized_record_path:
+        if ".." in normalized_record_path or "\\" in normalized_record_path:
+            raise ConnectorConfigError(
+                "ledger connector record_path must not include traversal segments"
+            )
+        if len(normalized_record_path) > 255:
+            raise ConnectorConfigError(
+                "ledger connector record_path must be at most 255 characters"
+            )
+    return {
+        "base_url": normalized_base_url,
+        "path_template": normalized_path_template,
+        "record_path": normalized_record_path or None,
+    }
+
+
 def _cents_to_usd(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None

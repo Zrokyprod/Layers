@@ -7,8 +7,11 @@ import IntegrationsSettingsPage from "./page";
 const api = vi.hoisted(() => ({
   disconnectGithubRepoConnection: vi.fn(),
   getGithubConnectionStatus: vi.fn(),
+  getLedgerRefundConnectorStatus: vi.fn(),
   getSlackInstallStatus: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
+  saveLedgerRefundConnectorConfig: vi.fn(),
+  testLedgerRefundConnector: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -62,6 +65,69 @@ describe("IntegrationsSettingsPage", () => {
       installed_at: null,
       updated_at: null,
     });
+    api.getLedgerRefundConnectorStatus.mockResolvedValue({
+      connected: true,
+      connector_type: "ledger_refund_api",
+      base_url: "https://ledger.example.com/api",
+      path_template: "/refunds/{refund_id}",
+      record_path: "data.0",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: "2026-06-20T09:00:00Z",
+      created_at: "2026-06-20T08:00:00Z",
+      updated_at: "2026-06-20T08:30:00Z",
+    });
+    api.saveLedgerRefundConnectorConfig.mockResolvedValue({
+      connected: true,
+      connector_type: "ledger_refund_api",
+      base_url: "https://ledger.example.com/api",
+      path_template: "/refunds/{refund_id}",
+      record_path: "data.0",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: "2026-06-20T09:00:00Z",
+      created_at: "2026-06-20T08:00:00Z",
+      updated_at: "2026-06-20T08:30:00Z",
+    });
+    api.testLedgerRefundConnector.mockResolvedValue({
+      ok: true,
+      connector: {
+        connected: true,
+        connector_type: "ledger_refund_api",
+        base_url: "https://ledger.example.com/api",
+        path_template: "/refunds/{refund_id}",
+        record_path: "data.0",
+        query: null,
+        has_bearer_token: true,
+        bearer_token_last4: "oken",
+        last_tested_at: "2026-06-20T09:05:00Z",
+        created_at: "2026-06-20T08:00:00Z",
+        updated_at: "2026-06-20T09:05:00Z",
+      },
+      check: {
+        id: "check_ledger_test",
+        project_id: "proj_1",
+        call_id: null,
+        trace_id: null,
+        runtime_policy_decision_id: null,
+        action_type: "refund",
+        connector_type: "ledger_refund_api",
+        system_ref: "ledger:RF-1001",
+        verdict: "matched",
+        reason: "all_compared_fields_matched",
+        amount_usd: 42.5,
+        currency: "USD",
+        claimed: { refund_id: "RF-1001", amount_usd: 42.5, currency: "USD", status: "posted" },
+        actual: { refund_id: "RF-1001", amount_usd: 42.5, currency: "USD", status: "posted" },
+        comparison: { compared_fields: [], mismatches: [] },
+        idempotency_key: null,
+        metadata: { connector_kind: "ledger_refund_api" },
+        checked_at: "2026-06-20T09:05:00Z",
+        created_at: "2026-06-20T09:05:00Z",
+      },
+    });
     api.listOutcomeReconciliations.mockResolvedValue({
       total_in_page: 1,
       items: [
@@ -105,8 +171,9 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getAllByText("@zroky").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Reconnect GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Slack" })).toBeInTheDocument();
-    expect(screen.getByText((_content, element) => element?.textContent === "2/3")).toBeInTheDocument();
+    expect(screen.getByText("2/3")).toBeInTheDocument();
     expect(api.getSlackInstallStatus).toHaveBeenCalledTimes(1);
+    expect(api.getLedgerRefundConnectorStatus).toHaveBeenCalledTimes(1);
     expect(api.listOutcomeReconciliations).toHaveBeenCalledWith({ limit: 25 });
   });
 
@@ -118,6 +185,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getByText("https://ledger.***/...")).toBeInTheDocument();
     expect(screen.getByText("200")).toBeInTheDocument();
     expect(screen.getByText("data.0")).toBeInTheDocument();
+    expect(screen.getByText("Stored token ending oken")).toBeInTheDocument();
     expect(screen.getByText("ledger:rf_999")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("ledger-secret-token");
   });
@@ -155,7 +223,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(await screen.findByRole("heading", { name: "Ledger refund connector" })).toBeInTheDocument();
     expect(screen.getAllByText("Not verified").length).toBeGreaterThan(0);
     expect(screen.getByText("No response yet")).toBeInTheDocument();
-    expect(screen.getByText("data or data.0")).toBeInTheDocument();
+    expect(screen.getByText("data.0")).toBeInTheDocument();
   });
 
   it("copies the ledger refund reconciliation payload", async () => {
@@ -171,5 +239,51 @@ describe("IntegrationsSettingsPage", () => {
     );
     expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("$LEDGER_TOKEN"));
     expect(await screen.findByText("Ledger refund reconciliation payload copied.")).toBeInTheDocument();
+  });
+
+  it("saves ledger refund connector config without rendering the token", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    fireEvent.change(await screen.findByLabelText("Bearer token"), {
+      target: { value: "new-ledger-secret-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save connector" }));
+
+    await waitFor(() =>
+      expect(api.saveLedgerRefundConnectorConfig).toHaveBeenCalledWith({
+        base_url: "https://ledger.example.com/api",
+        path_template: "/refunds/{refund_id}",
+        record_path: "data.0",
+        bearer_token: "new-ledger-secret-token",
+      }),
+    );
+    expect(await screen.findByText("Ledger refund connector saved.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("new-ledger-secret-token");
+  });
+
+  it("runs saved connector reconciliation from the dashboard", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    fireEvent.change(await screen.findByLabelText("Refund ID"), {
+      target: { value: "RF-1001" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run test reconciliation" }));
+
+    await waitFor(() =>
+      expect(api.testLedgerRefundConnector).toHaveBeenCalledWith({
+        refund_id: "RF-1001",
+        claimed: {
+          refund_id: "RF-1001",
+          amount_usd: 42.5,
+          currency: "USD",
+          status: "posted",
+        },
+        amount_usd: 42.5,
+        currency: "USD",
+        match_fields: ["refund_id", "amount_usd", "currency", "status"],
+      }),
+    );
+    expect(await screen.findByText("Ledger refund test recorded matched.")).toBeInTheDocument();
+    expect(screen.getByText("ledger:RF-1001")).toBeInTheDocument();
   });
 });

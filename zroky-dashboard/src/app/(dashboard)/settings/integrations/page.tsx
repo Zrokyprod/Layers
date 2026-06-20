@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { FormEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle2,
@@ -8,14 +9,20 @@ import {
   DatabaseZap,
   GitPullRequest,
   MessageSquare,
+  PlayCircle,
   RefreshCw,
+  Save,
 } from "lucide-react";
 
 import {
   disconnectGithubRepoConnection,
   getGithubConnectionStatus,
+  getLedgerRefundConnectorStatus,
   getSlackInstallStatus,
   listOutcomeReconciliations,
+  saveLedgerRefundConnectorConfig,
+  testLedgerRefundConnector,
+  type LedgerRefundConnectorStatusResponse,
   type OutcomeReconciliationView,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -27,7 +34,30 @@ import type {
 type IntegrationState = {
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
+  ledgerConfig: LedgerRefundConnectorStatusResponse | null;
   outcomeChecks: OutcomeReconciliationView[];
+};
+
+type LedgerConnectorForm = {
+  baseUrl: string;
+  pathTemplate: string;
+  recordPath: string;
+  bearerToken: string;
+  testRefundId: string;
+  testAmountUsd: string;
+  testCurrency: string;
+  testStatus: string;
+};
+
+const defaultLedgerForm: LedgerConnectorForm = {
+  baseUrl: "",
+  pathTemplate: "/refunds/{refund_id}",
+  recordPath: "data",
+  bearerToken: "",
+  testRefundId: "",
+  testAmountUsd: "42.50",
+  testCurrency: "USD",
+  testStatus: "posted",
 };
 
 function integrationStatus(connected: boolean) {
@@ -115,27 +145,58 @@ function ledgerRefundPayloadSnippet() {
   }'`;
 }
 
+function formFromLedgerConfig(
+  config: LedgerRefundConnectorStatusResponse | null,
+  previous: LedgerConnectorForm,
+): LedgerConnectorForm {
+  if (!config?.connected) return previous;
+  return {
+    ...previous,
+    baseUrl: config.base_url ?? previous.baseUrl,
+    pathTemplate: config.path_template ?? previous.pathTemplate,
+    recordPath: config.record_path ?? previous.recordPath,
+    bearerToken: "",
+  };
+}
+
+function optionalText(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
 export default function IntegrationsSettingsPage() {
-  const [state, setState] = useState<IntegrationState>({ github: null, slack: null, outcomeChecks: [] });
+  const [state, setState] = useState<IntegrationState>({
+    github: null,
+    slack: null,
+    ledgerConfig: null,
+    outcomeChecks: [],
+  });
+  const [ledgerForm, setLedgerForm] = useState<LedgerConnectorForm>(defaultLedgerForm);
   const [loading, setLoading] = useState(true);
+  const [savingLedger, setSavingLedger] = useState(false);
+  const [testingLedger, setTestingLedger] = useState(false);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
-    const [githubResult, slackResult, outcomeResult] = await Promise.allSettled([
+    const [githubResult, slackResult, ledgerConfigResult, outcomeResult] = await Promise.allSettled([
       getGithubConnectionStatus(),
       getSlackInstallStatus(),
+      getLedgerRefundConnectorStatus(),
       listOutcomeReconciliations({ limit: 25 }),
     ]);
+    const ledgerConfig = ledgerConfigResult.status === "fulfilled" ? ledgerConfigResult.value : null;
 
     setState({
       github: githubResult.status === "fulfilled" ? githubResult.value : null,
       slack: slackResult.status === "fulfilled" ? slackResult.value : null,
+      ledgerConfig,
       outcomeChecks: outcomeResult.status === "fulfilled" ? outcomeResult.value.items : [],
     });
+    setLedgerForm((prev) => formFromLedgerConfig(ledgerConfig, prev));
 
-    const failures = [githubResult, slackResult, outcomeResult].filter((result) => result.status === "rejected");
+    const failures = [githubResult, slackResult, ledgerConfigResult, outcomeResult].filter((result) => result.status === "rejected");
     if (failures.length > 0) {
       setMessage("Some integration status checks could not load. Verify backend connectivity and admin access.");
     }
@@ -148,17 +209,23 @@ export default function IntegrationsSettingsPage() {
 
   const githubConnected = Boolean(state.github?.connected);
   const slackConnected = Boolean(state.slack?.connected);
+  const ledgerConnected = Boolean(state.ledgerConfig?.connected);
   const ledgerRefundChecks = state.outcomeChecks.filter(isLedgerRefundCheck);
   const latestLedgerRefundCheck = ledgerRefundChecks[0] ?? null;
   const ledgerMetadata = connectorMetadata(latestLedgerRefundCheck);
   const ledgerVerified = latestLedgerRefundCheck?.verdict === "matched";
-  const readyCount = [githubConnected, slackConnected, ledgerVerified].filter(Boolean).length;
+  const readyCount = [githubConnected, slackConnected, ledgerConnected && ledgerVerified].filter(Boolean).length;
   const ledgerHttpStatus = textValue(ledgerMetadata.http_status);
-  const ledgerRecordPath = textValue(ledgerMetadata.record_path);
-  const ledgerRequestUrl = maskedConnectorUrl(ledgerMetadata.request_url);
+  const ledgerRecordPath = state.ledgerConfig?.record_path ?? textValue(ledgerMetadata.record_path);
+  const ledgerRequestUrl = maskedConnectorUrl(state.ledgerConfig?.base_url ?? ledgerMetadata.request_url);
   const ledgerLastChecked = latestLedgerRefundCheck?.checked_at
     ? formatDateTime(latestLedgerRefundCheck.checked_at)
-    : "Waiting for first check";
+    : state.ledgerConfig?.last_tested_at
+      ? formatDateTime(state.ledgerConfig.last_tested_at)
+      : "Waiting for first check";
+  const tokenStatus = state.ledgerConfig?.has_bearer_token
+    ? `Stored token ending ${state.ledgerConfig.bearer_token_last4 ?? "****"}`
+    : "No bearer token stored";
 
   function onStartGithubConnect() {
     window.location.href = "/api/zroky/v1/settings/github/connect/start";
@@ -170,6 +237,67 @@ export default function IntegrationsSettingsPage() {
       setMessage("Ledger refund reconciliation payload copied.");
     } catch {
       setMessage("Copy failed. Select the payload and copy it manually.");
+    }
+  }
+
+  function updateLedgerForm(field: keyof LedgerConnectorForm, value: string) {
+    setLedgerForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function onSaveLedgerConnector(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setSavingLedger(true);
+    try {
+      const updated = await saveLedgerRefundConnectorConfig({
+        base_url: ledgerForm.baseUrl.trim(),
+        path_template: ledgerForm.pathTemplate.trim() || "/refunds/{refund_id}",
+        record_path: optionalText(ledgerForm.recordPath),
+        bearer_token: optionalText(ledgerForm.bearerToken),
+      });
+      setState((prev) => ({ ...prev, ledgerConfig: updated }));
+      setLedgerForm((prev) => formFromLedgerConfig(updated, { ...prev, bearerToken: "" }));
+      setMessage("Ledger refund connector saved.");
+    } catch (saveError) {
+      setMessage(saveError instanceof Error ? saveError.message : "Failed to save ledger refund connector.");
+    } finally {
+      setSavingLedger(false);
+    }
+  }
+
+  async function onTestLedgerConnector(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setTestingLedger(true);
+    const refundId = ledgerForm.testRefundId.trim();
+    const amountText = ledgerForm.testAmountUsd.trim();
+    const amountUsd = amountText ? Number(amountText) : null;
+    const claimed: Record<string, unknown> = { refund_id: refundId };
+    if (amountUsd !== null && Number.isFinite(amountUsd)) claimed.amount_usd = amountUsd;
+    if (ledgerForm.testCurrency.trim()) claimed.currency = ledgerForm.testCurrency.trim().toUpperCase();
+    if (ledgerForm.testStatus.trim()) claimed.status = ledgerForm.testStatus.trim();
+
+    try {
+      const result = await testLedgerRefundConnector({
+        refund_id: refundId,
+        claimed,
+        amount_usd: amountUsd !== null && Number.isFinite(amountUsd) ? amountUsd : null,
+        currency: ledgerForm.testCurrency.trim() ? ledgerForm.testCurrency.trim().toUpperCase() : null,
+        match_fields: Object.keys(claimed),
+      });
+      setState((prev) => ({
+        ...prev,
+        ledgerConfig: result.connector,
+        outcomeChecks: [
+          result.check,
+          ...prev.outcomeChecks.filter((item) => item.id !== result.check.id),
+        ].slice(0, 25),
+      }));
+      setMessage(`Ledger refund test recorded ${result.check.verdict}.`);
+    } catch (testError) {
+      setMessage(testError instanceof Error ? testError.message : "Failed to run ledger refund test.");
+    } finally {
+      setTestingLedger(false);
     }
   }
 
@@ -226,9 +354,9 @@ export default function IntegrationsSettingsPage() {
         </article>
         <article className="panel settings-summary-card">
           <DatabaseZap aria-hidden="true" />
-          <span>Outcome proof</span>
-          <strong>{connectorStatus(latestLedgerRefundCheck)}</strong>
-          <small>{latestLedgerRefundCheck ? `Last checked ${ledgerLastChecked}` : "No ledger refund proof has run yet."}</small>
+            <span>Outcome proof</span>
+          <strong>{ledgerConnected ? connectorStatus(latestLedgerRefundCheck) : "Not configured"}</strong>
+          <small>{ledgerConnected ? `Last checked ${ledgerLastChecked}` : "Save a connector before running proof."}</small>
         </article>
       </section>
 
@@ -331,8 +459,8 @@ export default function IntegrationsSettingsPage() {
                 <p>System-of-record proof for refund agents and money-touching workflows.</p>
               </div>
             </div>
-            <span className={connectorPillClass(latestLedgerRefundCheck)}>
-              {connectorStatus(latestLedgerRefundCheck)}
+            <span className={ledgerConnected ? connectorPillClass(latestLedgerRefundCheck) : "pill"}>
+              {ledgerConnected ? connectorStatus(latestLedgerRefundCheck) : "Not configured"}
             </span>
           </header>
 
@@ -350,10 +478,101 @@ export default function IntegrationsSettingsPage() {
               <strong>{ledgerRecordPath ?? "data or data.0"}</strong>
             </div>
             <div>
-              <span>Last verdict</span>
-              <strong>{latestLedgerRefundCheck?.verdict ?? "not_verified"}</strong>
+              <span>Token</span>
+              <strong>{tokenStatus}</strong>
             </div>
           </div>
+
+          <form className="settings-connector-form" onSubmit={(event) => void onSaveLedgerConnector(event)}>
+            <div className="settings-connector-form-grid">
+              <label>
+                <span>Base URL</span>
+                <input
+                  value={ledgerForm.baseUrl}
+                  onChange={(event) => updateLedgerForm("baseUrl", event.target.value)}
+                  placeholder="https://ledger.example.com/api"
+                  required
+                />
+              </label>
+              <label>
+                <span>Path template</span>
+                <input
+                  value={ledgerForm.pathTemplate}
+                  onChange={(event) => updateLedgerForm("pathTemplate", event.target.value)}
+                  placeholder="/refunds/{refund_id}"
+                  required
+                />
+              </label>
+              <label>
+                <span>Record path</span>
+                <input
+                  value={ledgerForm.recordPath}
+                  onChange={(event) => updateLedgerForm("recordPath", event.target.value)}
+                  placeholder="data"
+                />
+              </label>
+              <label>
+                <span>Bearer token</span>
+                <input
+                  type="password"
+                  value={ledgerForm.bearerToken}
+                  onChange={(event) => updateLedgerForm("bearerToken", event.target.value)}
+                  placeholder={state.ledgerConfig?.has_bearer_token ? "Paste to rotate stored token" : "Optional bearer token"}
+                />
+              </label>
+            </div>
+            <div className="actions">
+              <button type="submit" className="btn btn-primary" disabled={savingLedger || !ledgerForm.baseUrl.trim()}>
+                <Save aria-hidden="true" />
+                {savingLedger ? "Saving..." : "Save connector"}
+              </button>
+            </div>
+          </form>
+
+          <form className="settings-connector-test" onSubmit={(event) => void onTestLedgerConnector(event)}>
+            <div className="settings-connector-test-grid">
+              <label>
+                <span>Refund ID</span>
+                <input
+                  value={ledgerForm.testRefundId}
+                  onChange={(event) => updateLedgerForm("testRefundId", event.target.value)}
+                  placeholder="RF-1001"
+                  required
+                />
+              </label>
+              <label>
+                <span>Amount USD</span>
+                <input
+                  inputMode="decimal"
+                  value={ledgerForm.testAmountUsd}
+                  onChange={(event) => updateLedgerForm("testAmountUsd", event.target.value)}
+                  placeholder="42.50"
+                />
+              </label>
+              <label>
+                <span>Currency</span>
+                <input
+                  value={ledgerForm.testCurrency}
+                  onChange={(event) => updateLedgerForm("testCurrency", event.target.value)}
+                  placeholder="USD"
+                />
+              </label>
+              <label>
+                <span>Status</span>
+                <input
+                  value={ledgerForm.testStatus}
+                  onChange={(event) => updateLedgerForm("testStatus", event.target.value)}
+                  placeholder="posted"
+                />
+              </label>
+            </div>
+            <div className="actions">
+              <button type="submit" className="btn btn-soft" disabled={!ledgerConnected || testingLedger || !ledgerForm.testRefundId.trim()}>
+                <PlayCircle aria-hidden="true" />
+                {testingLedger ? "Running..." : "Run test reconciliation"}
+              </button>
+            </div>
+          </form>
 
           <div className="list settings-connector-proof">
             <div className="list-row">
@@ -364,8 +583,8 @@ export default function IntegrationsSettingsPage() {
             </div>
             <div className="list-row">
               <div className="list-main">
-                <strong>Last check</strong>
-                <span>{ledgerLastChecked}</span>
+                <strong>Last verdict</strong>
+                <span>{latestLedgerRefundCheck?.verdict ?? "not_verified"}</span>
               </div>
             </div>
           </div>

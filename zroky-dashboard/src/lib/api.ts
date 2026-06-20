@@ -1099,6 +1099,83 @@ export function sendSlackTestMessage(text?: string): Promise<SlackTestMessageRes
   });
 }
 
+export interface LedgerRefundConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "ledger_refund_api" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface LedgerRefundConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface LedgerRefundConnectorTestPayload {
+  refund_id: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface LedgerRefundConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: LedgerRefundConnectorStatusResponse;
+}
+
+export function getLedgerRefundConnectorStatus(
+  signal?: AbortSignal,
+): Promise<LedgerRefundConnectorStatusResponse> {
+  return request<LedgerRefundConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/ledger-refund/status",
+    { signal },
+  );
+}
+
+export function saveLedgerRefundConnectorConfig(
+  body: LedgerRefundConnectorConfigPayload,
+): Promise<LedgerRefundConnectorStatusResponse> {
+  return request<LedgerRefundConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/ledger-refund/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testLedgerRefundConnector(
+  body: LedgerRefundConnectorTestPayload,
+): Promise<LedgerRefundConnectorTestResponse> {
+  return request<LedgerRefundConnectorTestResponse>(
+    "/v1/integrations/system-of-record/ledger-refund/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
 export function getPricingValidation(signal?: AbortSignal): Promise<PricingValidationResponse> {
   return request<PricingValidationResponse>("/v1/settings/pricing-validation", { signal });
 }
