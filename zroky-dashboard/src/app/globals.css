@@ -36337,6 +36337,128 @@ button.gm-kpi-card {
   font-weight: 760;
 }
 
+.pilot-handoff-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border: 1px solid rgba(11, 11, 12, 0.14);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 20px;
+}
+
+.pilot-handoff-banner strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.pilot-handoff-banner p {
+  margin-top: 8px;
+}
+
+.pilot-handoff-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.pilot-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.pilot-proof-grid article,
+.pilot-command-list article {
+  border: 1px solid rgba(11, 11, 12, 0.12);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.pilot-proof-grid svg {
+  width: 22px;
+  height: 22px;
+  color: #1d7a52;
+}
+
+.pilot-proof-grid strong {
+  display: block;
+  margin-top: 12px;
+}
+
+.pilot-proof-grid p {
+  margin-top: 8px;
+}
+
+.pilot-command-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pilot-command-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(11, 11, 12, 0.72);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pilot-command-list span svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pilot-command-list code {
+  display: block;
+  margin-top: 12px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: #111214;
+  padding: 14px;
+  color: #f4f5f2;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.pilot-check-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pilot-check-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(11, 11, 12, 0.12);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.pilot-check-list svg {
+  width: 17px;
+  height: 17px;
+  color: #1d7a52;
+  flex-shrink: 0;
+}
+
+.pilot-check-list code {
+  overflow-wrap: anywhere;
+  color: #0b0b0c;
+  font-size: 0.86rem;
+}
+
 @keyframes zlp-focus-pop {
   0%,
   100% {
@@ -40730,6 +40852,34 @@ body:has(.app-shell),
   font-size: 13px;
   line-height: 1.55;
 }
+.zlp-rd .zlp-pricing-proof-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  border: 1px solid var(--zlp-line);
+  border-radius: 999px;
+  padding: 9px 12px;
+  color: var(--zlp-text);
+  font-size: 12px;
+  font-weight: 760;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+.zlp-rd .zlp-pricing-proof-link:hover {
+  border-color: var(--zlp-line-strong);
+  background: var(--zlp-surface-2);
+  transform: translateY(-1px);
+}
+.zlp-rd .zlp-pricing-proof-link svg {
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+}
 
 /* ---- Comparison --------------------------------------------------------- */
 .zlp-rd .zlp-cmp {
@@ -40995,11 +41145,30 @@ body:has(.app-shell),
   .zlp-rd .zlp-pricing-hero h2 {
     max-width: none;
   }
+  .zlp-rd .zlp-pricing-proof {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .zlp-rd .zlp-pricing-proof-link {
+    margin-left: 0;
+  }
   .zlp-rd .zlp-plan {
     min-height: 0;
   }
   .zlp-rd .zlp-diff {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .pilot-handoff-banner,
+  .pilot-proof-grid,
+  .pilot-check-list {
+    grid-template-columns: 1fr;
+  }
+
+  .pilot-handoff-actions {
+    justify-content: flex-start;
   }
 }
 
