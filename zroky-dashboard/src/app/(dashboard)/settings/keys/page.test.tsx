@@ -12,6 +12,10 @@ const hooks = vi.hoisted(() => ({
   useRotateProjectApiKey: vi.fn(),
 }));
 
+const navigation = vi.hoisted(() => ({
+  query: "",
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -26,6 +30,10 @@ vi.mock("next/link", () => ({
       {children}
     </a>
   ),
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(navigation.query),
 }));
 
 vi.mock("@/lib/hooks", () => hooks);
@@ -72,6 +80,7 @@ const clipboardWrite = vi.fn();
 describe("ApiKeysPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.query = "";
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: clipboardWrite },
@@ -118,6 +127,33 @@ describe("ApiKeysPage", () => {
     expect(screen.getByRole("link", { name: "Provider settings" }).getAttribute("href")).toBe("/settings/providers");
     expect(screen.getByText((content) => content.includes("traceRun"))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes("zroky.trace_run"))).toBeInTheDocument();
+  });
+
+  it("surfaces the protected agent setup intent with mandate and SDK copy actions", async () => {
+    navigation.query = "intent=protect-agent&plan=pro&source=pricing";
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByRole("heading", { name: "First protected agent setup" })).toBeInTheDocument();
+    expect(screen.getByText("Plan intent: Pro")).toBeInTheDocument();
+    expect(screen.getByText("Source: Pricing")).toBeInTheDocument();
+    expect(screen.getByText("5 starter mandates")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create project key" }).getAttribute("href")).toBe("#create-project-key");
+    expect(screen.getByRole("tab", { name: "Refund / payment" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("refund-ops-agent")).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('name: "issue_refund"'))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "DevOps / release" }));
+
+    expect(screen.getByText("release-ops-agent")).toBeInTheDocument();
+    expect(screen.getByText("CI deployment and incident status")).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('name: "deploy_change"'))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy mandate" }));
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("release-ops-agent")));
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy SDK wrapper" }));
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining('name: "deploy_change"')));
   });
 
   it("creates a project key with the expected payload and shows the one-time copy panel", async () => {

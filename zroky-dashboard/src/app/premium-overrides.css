@@ -8143,6 +8143,87 @@ body:has(.app-shell) {
   color: var(--dashboard-text-soft) !important;
 }
 
+.app-shell .keys-protected-setup-panel {
+  display: grid !important;
+  gap: 14px !important;
+  border-color: rgba(20, 184, 166, 0.28) !important;
+  background:
+    linear-gradient(180deg, rgba(20, 184, 166, 0.08), rgba(20, 184, 166, 0.018)),
+    var(--dashboard-surface) !important;
+}
+
+.app-shell .keys-protected-meta,
+.app-shell .keys-copy-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.app-shell .keys-protected-meta span {
+  border: 1px solid var(--dashboard-border) !important;
+  border-radius: 999px !important;
+  background: var(--dashboard-surface-inset) !important;
+  color: var(--dashboard-text-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .keys-agent-tabs {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.app-shell .keys-agent-tab {
+  min-width: 0 !important;
+  border: 1px solid var(--dashboard-border) !important;
+  border-radius: 8px !important;
+  background: var(--dashboard-surface-inset) !important;
+  color: var(--dashboard-text-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .keys-agent-tab:hover,
+.app-shell .keys-agent-tab.is-active {
+  border-color: rgba(20, 184, 166, 0.45) !important;
+  background: rgba(20, 184, 166, 0.12) !important;
+  color: var(--dashboard-text) !important;
+}
+
+.app-shell .keys-protected-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) !important;
+  gap: 14px !important;
+}
+
+.app-shell .keys-protected-block,
+.app-shell .keys-mandate-facts > div {
+  border-color: var(--dashboard-border) !important;
+  background: var(--dashboard-surface-inset) !important;
+  color: var(--dashboard-text-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .keys-protected-block h3,
+.app-shell .keys-mandate-facts dd,
+.app-shell .keys-mandate-lists strong {
+  color: var(--dashboard-text) !important;
+}
+
+.app-shell .keys-protected-block p,
+.app-shell .keys-mandate-lists ul {
+  color: var(--dashboard-text-soft) !important;
+}
+
+.app-shell .keys-mandate-facts dt {
+  color: var(--dashboard-muted) !important;
+}
+
+.app-shell .keys-protected-block pre {
+  border-color: var(--dashboard-border) !important;
+  background: rgba(0, 0, 0, 0.34) !important;
+  color: var(--dashboard-text) !important;
+}
+
 .app-shell .keys-hero-copy h1,
 .app-shell .providers-hero-copy h1 {
   max-width: 780px !important;
@@ -8481,11 +8562,15 @@ body:has(.app-shell) {
   }
 
   .app-shell .keys-capture-path,
+  .app-shell .keys-agent-tabs,
   .app-shell .keys-command-grid,
   .app-shell .providers-flow-rail,
   .app-shell .keys-primary-grid,
   .app-shell .providers-primary-grid,
   .app-shell .keys-snippet-grid,
+  .app-shell .keys-protected-grid,
+  .app-shell .keys-mandate-facts,
+  .app-shell .keys-mandate-lists,
   .app-shell .providers-card-grid,
   .app-shell .billing-plans-grid,
   .app-shell .settings-gate-map,
