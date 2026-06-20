@@ -390,6 +390,16 @@ body:has(.app-shell) {
   box-shadow: 0 14px 34px rgba(30, 40, 58, 0.14);
 }
 
+.app-shell .shell-popover-portal {
+  z-index: 1000;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-shell .shell-popover-portal.shell-popover-up {
+  right: auto;
+}
+
 .fi-screen {
   --fi-bg: #eff1ee;
   --fi-surface: #ffffff;

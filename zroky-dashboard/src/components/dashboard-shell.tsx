@@ -3,7 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -492,12 +493,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const envLabel = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
+  const appShellRef = useRef<HTMLDivElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const workspaceButtonRef = useRef<HTMLButtonElement>(null);
+  const workspacePopoverRef = useRef<HTMLDivElement>(null);
   const routeMenuRef = useRef<HTMLDivElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
   const envMenuRef = useRef<HTMLDivElement>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
+  const [workspacePopoverStyle, setWorkspacePopoverStyle] = useState<CSSProperties | null>(null);
   const [activeDatePreset, setActiveDatePreset] = useState<DatePresetId>("7d");
   const [compactShell, setCompactShell] = useState(false);
   const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
@@ -584,6 +589,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       const target = event.target as Node;
       const isInsideMenu = [
         workspaceMenuRef,
+        workspacePopoverRef,
         routeMenuRef,
         dateMenuRef,
         envMenuRef,
@@ -603,6 +609,44 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openMenu]);
+
+  useLayoutEffect(() => {
+    if (openMenu !== "workspace") {
+      setWorkspacePopoverStyle(null);
+      return;
+    }
+
+    function syncWorkspacePopover() {
+      if (typeof window === "undefined") return;
+      const trigger = workspaceButtonRef.current;
+      if (!trigger) return;
+
+      const gutter = 12;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(360, window.innerWidth - gutter * 2);
+      const left = Math.min(Math.max(rect.left, gutter), window.innerWidth - width - gutter);
+      const bottom = Math.max(gutter, window.innerHeight - rect.top + 8);
+      const maxHeight = Math.max(180, rect.top - gutter * 2);
+
+      setWorkspacePopoverStyle({
+        position: "fixed",
+        left,
+        right: "auto",
+        top: "auto",
+        bottom,
+        width,
+        maxHeight,
+      });
+    }
+
+    syncWorkspacePopover();
+    window.addEventListener("resize", syncWorkspacePopover);
+    window.addEventListener("scroll", syncWorkspacePopover, true);
+    return () => {
+      window.removeEventListener("resize", syncWorkspacePopover);
+      window.removeEventListener("scroll", syncWorkspacePopover, true);
     };
   }, [openMenu]);
 
@@ -760,8 +804,85 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
+  const workspacePopoverTarget =
+    typeof document === "undefined" ? null : appShellRef.current ?? document.body;
+  const workspacePopover = openMenu === "workspace" && workspacePopoverStyle ? (
+    <div
+      ref={workspacePopoverRef}
+      className="shell-popover shell-popover-up shell-popover-portal org-popover"
+      role="menu"
+      aria-label="Project menu"
+      style={workspacePopoverStyle}
+    >
+      <div className="shell-popover-head">
+        <span>Projects</span>
+        <strong>{projectSelectionRequired ? "Select a project" : "Project switcher"}</strong>
+        <small>{projectLimitStatus}</small>
+      </div>
+      {myProjects.length > 0 ? (
+        myProjects.map((project) => {
+          const isSelected = project.project_id === selectedProject;
+          const projectRoleLabel = formatRoleLabel(project.role);
+          return (
+            <button
+              key={project.project_id}
+              type="button"
+              className={`shell-menu-item${isSelected ? " is-active" : ""}`}
+              role="menuitem"
+              aria-current={isSelected ? "true" : undefined}
+              onClick={() => openProjectDetails(project.project_id)}
+            >
+              <FolderOpen size={15} aria-hidden="true" />
+              <span>
+                <strong>{project.project_name}</strong>
+                <small>
+                  <span className="org-menu-project-id" title={project.project_id}>
+                    {compactIdentifier(project.project_id)}
+                  </span>
+                  <span className="org-role-badge">{projectRoleLabel}</span>
+                </small>
+              </span>
+              {isSelected ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
+            </button>
+          );
+        })
+      ) : (
+        <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
+          <AlertTriangle size={15} aria-hidden="true" />
+          <span>
+            <strong>{myProjectsQuery.isLoading ? "Loading projects" : "No active projects"}</strong>
+            <small>{myProjectsQuery.isLoading ? "Fetching your memberships." : "Ask an admin to add you to a project."}</small>
+          </span>
+        </div>
+      )}
+      <Link
+        href={projectLimitReached ? "/settings/billing" : "/projects"}
+        className={`shell-menu-item${projectLimitReached ? " is-muted-action" : ""}`}
+        role="menuitem"
+        onClick={() => setOpenMenu(null)}
+      >
+        {projectLimitReached ? <CreditCard size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
+        <span>
+          <strong>{projectLimitReached ? "Upgrade to add more" : "New project"}</strong>
+        </span>
+      </Link>
+      <Link href="/projects" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
+        <Settings2 size={15} aria-hidden="true" />
+        <span>
+          <strong>Manage projects</strong>
+        </span>
+      </Link>
+      <Link href="/settings/team" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
+        <UserRound size={15} aria-hidden="true" />
+        <span>
+          <strong>Team access</strong>
+        </span>
+      </Link>
+    </div>
+  ) : null;
+
   return (
-    <div className={`app-shell ${sidebarVisible ? "" : "sidebar-collapsed"}`}>
+    <div ref={appShellRef} className={`app-shell ${sidebarVisible ? "" : "sidebar-collapsed"}`}>
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarVisible ? "" : "sidebar-hidden"}`}>
         <Link href="/home" className="sidebar-logo" aria-label="Zroky dashboard home">
@@ -853,6 +974,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
           <div className="org-menu" ref={workspaceMenuRef}>
             <button
+              ref={workspaceButtonRef}
               type="button"
               className={`org-widget${openMenu === "workspace" ? " org-widget-active" : ""}`}
               aria-label="Open project menu"
@@ -875,75 +997,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </span>
               <ChevronDown size={13} className="org-chevron" />
             </button>
-
-            {openMenu === "workspace" ? (
-              <div className="shell-popover shell-popover-up org-popover" role="menu" aria-label="Project menu">
-                <div className="shell-popover-head">
-                  <span>Projects</span>
-                  <strong>{projectSelectionRequired ? "Select a project" : "Project switcher"}</strong>
-                  <small>{projectLimitStatus}</small>
-                </div>
-                {myProjects.length > 0 ? (
-                  myProjects.map((project) => {
-                    const isSelected = project.project_id === selectedProject;
-                    const projectRoleLabel = formatRoleLabel(project.role);
-                    return (
-                      <button
-                        key={project.project_id}
-                        type="button"
-                        className={`shell-menu-item${isSelected ? " is-active" : ""}`}
-                        role="menuitem"
-                        aria-current={isSelected ? "true" : undefined}
-                        onClick={() => openProjectDetails(project.project_id)}
-                      >
-                        <FolderOpen size={15} aria-hidden="true" />
-                        <span>
-                          <strong>{project.project_name}</strong>
-                          <small>
-                            <span className="org-menu-project-id" title={project.project_id}>
-                              {compactIdentifier(project.project_id)}
-                            </span>
-                            <span className="org-role-badge">{projectRoleLabel}</span>
-                          </small>
-                        </span>
-                        {isSelected ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
-                    <AlertTriangle size={15} aria-hidden="true" />
-                    <span>
-                      <strong>{myProjectsQuery.isLoading ? "Loading projects" : "No active projects"}</strong>
-                      <small>{myProjectsQuery.isLoading ? "Fetching your memberships." : "Ask an admin to add you to a project."}</small>
-                    </span>
-                  </div>
-                )}
-                <Link
-                  href={projectLimitReached ? "/settings/billing" : "/projects"}
-                  className={`shell-menu-item${projectLimitReached ? " is-muted-action" : ""}`}
-                  role="menuitem"
-                  onClick={() => setOpenMenu(null)}
-                >
-                  {projectLimitReached ? <CreditCard size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
-                  <span>
-                    <strong>{projectLimitReached ? "Upgrade to add more" : "New project"}</strong>
-                  </span>
-                </Link>
-                <Link href="/projects" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
-                  <Settings2 size={15} aria-hidden="true" />
-                  <span>
-                    <strong>Manage projects</strong>
-                  </span>
-                </Link>
-                <Link href="/settings/team" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
-                  <UserRound size={15} aria-hidden="true" />
-                  <span>
-                    <strong>Team access</strong>
-                  </span>
-                </Link>
-              </div>
-            ) : null}
+            {workspacePopover && workspacePopoverTarget ? createPortal(workspacePopover, workspacePopoverTarget) : null}
           </div>
 
         </div>
