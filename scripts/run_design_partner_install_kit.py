@@ -21,6 +21,18 @@ FIXTURE_PATH = (
 PROJECT_HEADER = "X-Project-Id"
 API_KEY_HEADER = "x-api-key"
 AUTH_SECRET = "design-partner-install-kit-secret"
+LOCAL_ENV_KEYS = (
+    "TESTING",
+    "DATABASE_URL",
+    "DATABASE_READ_REPLICA_URL",
+    "AUTH_JWT_SECRET",
+    "ALLOW_PROJECT_HEADER_CONTEXT",
+    "LOG_LEVEL",
+    "ENABLE_READY_REDIS_CHECK",
+    "INGEST_ENFORCE_RATE_LIMIT",
+    "BILLING_ENFORCE_QUOTA",
+    "OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS",
+)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -242,7 +254,16 @@ def _write_evidence(
     )
 
 
-def _configure_local_env(db_path: Path) -> None:
+def _restore_env(snapshot: dict[str, str | None]) -> None:
+    for key, value in snapshot.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
+def _configure_local_env(db_path: Path) -> dict[str, str | None]:
+    snapshot = {key: os.environ.get(key) for key in LOCAL_ENV_KEYS}
     os.environ.update(
         {
             "TESTING": "true",
@@ -257,6 +278,7 @@ def _configure_local_env(db_path: Path) -> None:
             "OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS": "false",
         }
     )
+    return snapshot
 
 
 def _seed_local_call(
@@ -383,95 +405,120 @@ def _run_local_demo(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     with tempfile.TemporaryDirectory(prefix="zroky-design-partner-kit-") as temp_dir:
         db_path = Path(temp_dir) / "install_kit.db"
-        _configure_local_env(db_path)
+        env_snapshot = _configure_local_env(db_path)
         previous_disable_level = logging.root.manager.disable
-        logging.disable(logging.CRITICAL)
-        sys.path.insert(0, str(BACKEND_DIR))
-
-        from fastapi.testclient import TestClient
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import sessionmaker
-
-        from app.api.dependencies.tenant import TenantContext, require_tenant_context
-        from app.core.config import get_settings
-        from app.db.base import Base
-        from app.db.session import get_db_session, get_db_session_read
-        from app.main import app
-        from app.services.entitlements_resolver import invalidate_all
-
-        get_settings.cache_clear()
-        invalidate_all()
-
-        engine = create_engine(
-            f"sqlite:///{db_path.as_posix()}",
-            connect_args={"check_same_thread": False},
-            future=True,
-        )
-        session_local = sessionmaker(
-            bind=engine,
-            autoflush=False,
-            autocommit=False,
-            future=True,
-        )
-        Base.metadata.create_all(bind=engine)
-        _seed_local_call(session_local, fixture, args)
-
-        def override_get_db_session() -> Any:
-            session = session_local()
-            try:
-                yield session
-            finally:
-                session.close()
-
-        def override_tenant_context() -> TenantContext:
-            return TenantContext(
-                tenant_id=args.project_id or fixture["project_id"],
-                role="admin",
-                subject="design-partner-install-kit",
-            )
-
-        app.dependency_overrides[get_db_session] = override_get_db_session
-        app.dependency_overrides[get_db_session_read] = override_get_db_session
-        app.dependency_overrides[require_tenant_context] = override_tenant_context
-        restore_ledger = _install_local_ledger_stub(fixture)
-
+        engine: Any = None
+        base_metadata: Any = None
+        app_ref: Any = None
+        restore_ledger: Any = None
+        invalidate_all_fn: Any = None
+        settings_cache_clear: Any = None
         try:
-            with TestClient(app) as client:
-                runtime_decision = _assert_response(
-                    client.post(
-                        "/v1/runtime-policy/check",
-                        json=_runtime_policy_payload(fixture, args),
-                    ),
-                    200,
-                    "runtime policy check",
+            logging.disable(logging.CRITICAL)
+            sys.path.insert(0, str(BACKEND_DIR))
+
+            from fastapi.testclient import TestClient
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+
+            from app.api.dependencies.tenant import (
+                TenantContext,
+                require_tenant_context,
+            )
+            from app.core.config import get_settings
+            from app.db.base import Base
+            from app.db.session import get_db_session, get_db_session_read
+            from app.main import app
+            from app.services.entitlements_resolver import invalidate_all
+
+            app_ref = app
+            base_metadata = Base.metadata
+            invalidate_all_fn = invalidate_all
+            settings_cache_clear = get_settings.cache_clear
+            settings_cache_clear()
+            invalidate_all_fn()
+
+            engine = create_engine(
+                f"sqlite:///{db_path.as_posix()}",
+                connect_args={"check_same_thread": False},
+                future=True,
+            )
+            session_local = sessionmaker(
+                bind=engine,
+                autoflush=False,
+                autocommit=False,
+                future=True,
+            )
+            base_metadata.create_all(bind=engine)
+            _seed_local_call(session_local, fixture, args)
+
+            def override_get_db_session() -> Any:
+                session = session_local()
+                try:
+                    yield session
+                finally:
+                    session.close()
+
+            def override_tenant_context() -> TenantContext:
+                return TenantContext(
+                    tenant_id=args.project_id or fixture["project_id"],
+                    role="admin",
+                    subject="design-partner-install-kit",
                 )
-                reconciliation = _assert_response(
-                    client.post(
-                        "/v1/outcomes/reconciliation/ledger-refund",
-                        json=_reconciliation_payload(
-                            fixture,
-                            args,
-                            runtime_policy_decision_id=runtime_decision["id"],
+
+            app_ref.dependency_overrides[get_db_session] = override_get_db_session
+            app_ref.dependency_overrides[get_db_session_read] = override_get_db_session
+            app_ref.dependency_overrides[require_tenant_context] = (
+                override_tenant_context
+            )
+            restore_ledger = _install_local_ledger_stub(fixture)
+
+            try:
+                with TestClient(app_ref) as client:
+                    runtime_decision = _assert_response(
+                        client.post(
+                            "/v1/runtime-policy/check",
+                            json=_runtime_policy_payload(fixture, args),
                         ),
-                    ),
-                    201,
-                    "ledger refund reconciliation",
-                )
-                evidence_pack = _assert_response(
-                    client.get(
-                        f"/v1/runtime-policy/decisions/{runtime_decision['id']}/evidence"
-                    ),
-                    200,
-                    "runtime policy evidence pack",
-                )
+                        200,
+                        "runtime policy check",
+                    )
+                    reconciliation = _assert_response(
+                        client.post(
+                            "/v1/outcomes/reconciliation/ledger-refund",
+                            json=_reconciliation_payload(
+                                fixture,
+                                args,
+                                runtime_policy_decision_id=runtime_decision["id"],
+                            ),
+                        ),
+                        201,
+                        "ledger refund reconciliation",
+                    )
+                    evidence_pack = _assert_response(
+                        client.get(
+                            f"/v1/runtime-policy/decisions/{runtime_decision['id']}/evidence"
+                        ),
+                        200,
+                        "runtime policy evidence pack",
+                    )
+            finally:
+                if restore_ledger is not None:
+                    restore_ledger()
+                if app_ref is not None:
+                    app_ref.dependency_overrides.clear()
+                if engine is not None and base_metadata is not None:
+                    base_metadata.drop_all(bind=engine)
+                    engine.dispose()
+                if invalidate_all_fn is not None:
+                    invalidate_all_fn()
+                if settings_cache_clear is not None:
+                    settings_cache_clear()
         finally:
-            restore_ledger()
-            app.dependency_overrides.clear()
-            Base.metadata.drop_all(bind=engine)
-            engine.dispose()
-            invalidate_all()
-            get_settings.cache_clear()
             logging.disable(previous_disable_level)
+            _restore_env(env_snapshot)
+            if settings_cache_clear is not None:
+                settings_cache_clear()
 
     secrets = [fixture["ledger"].get("bearer_token") or ""]
     summary = _summarise(
