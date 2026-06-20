@@ -4,6 +4,7 @@ This is intentionally separate from ``outcome_attribution``. Attribution answers
 "what did a failure cost?" Reconciliation answers "did the claimed real-world
 action actually happen correctly?"
 """
+
 from __future__ import annotations
 
 import json
@@ -47,6 +48,7 @@ DEFAULT_MATCH_FIELDS = (
 class SourceRecord:
     record: dict[str, Any] | None
     record_found: bool | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class SystemOfRecordConnector(Protocol):
@@ -180,7 +182,11 @@ def _values_equal(claimed: Any, actual: Any) -> bool:
 def _default_fields(claimed: Mapping[str, Any], actual: Mapping[str, Any]) -> list[str]:
     claimed_keys = {path.split(".")[-1] for path in _flatten(claimed)}
     actual_keys = {path.split(".")[-1] for path in _flatten(actual)}
-    return [field for field in DEFAULT_MATCH_FIELDS if field in claimed_keys or field in actual_keys]
+    return [
+        field
+        for field in DEFAULT_MATCH_FIELDS
+        if field in claimed_keys or field in actual_keys
+    ]
 
 
 def compare_claim_to_actual(
@@ -303,6 +309,8 @@ def reconcile_outcome(
         match_fields=match_fields,
     )
     metadata_payload = _as_dict(metadata)
+    if source.metadata:
+        metadata_payload.setdefault("connector", _as_dict(source.metadata))
     if match_fields:
         metadata_payload.setdefault("match_fields", match_fields)
 
@@ -313,7 +321,8 @@ def reconcile_outcome(
         trace_id=_bounded(trace_id, max_length=128),
         runtime_policy_decision_id=_bounded(runtime_policy_decision_id, max_length=36),
         action_type=_bounded(action_type, max_length=64),
-        connector_type=_bounded(connector.connector_type, max_length=64) or "api_record",
+        connector_type=_bounded(connector.connector_type, max_length=64)
+        or "api_record",
         system_ref=_bounded(system_ref, max_length=255),
         verdict=comparison.verdict,
         reason=_bounded(comparison.reason, max_length=255),
@@ -345,7 +354,9 @@ def list_reconciliations(
     )
     if verdict:
         if verdict not in VALID_VERDICTS:
-            raise ValueError(f"verdict must be one of: {', '.join(sorted(VALID_VERDICTS))}")
+            raise ValueError(
+                f"verdict must be one of: {', '.join(sorted(VALID_VERDICTS))}"
+            )
         query = query.where(OutcomeReconciliationCheck.verdict == verdict)
     if call_id:
         query = query.where(OutcomeReconciliationCheck.call_id == call_id)
@@ -381,7 +392,10 @@ def get_reconciliation_summary(
 ) -> ReconciliationSummary:
     since = _now() - timedelta(days=days)
     rows = db.execute(
-        select(OutcomeReconciliationCheck.verdict, func.count(OutcomeReconciliationCheck.id))
+        select(
+            OutcomeReconciliationCheck.verdict,
+            func.count(OutcomeReconciliationCheck.id),
+        )
         .where(
             OutcomeReconciliationCheck.project_id == project_id,
             OutcomeReconciliationCheck.checked_at >= since,

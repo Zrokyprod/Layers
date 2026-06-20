@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tenant import require_tenant_id
+from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.session import get_db_session
 from app.services.outcome_attribution import (
@@ -41,6 +42,10 @@ from app.services.outcome_reconciliation import (
     list_reconciliations,
     reconcile_outcome,
     reconciliation_to_dict,
+)
+from app.services.system_of_record_connectors import (
+    ConnectorConfigError,
+    LedgerRefundApiConnector,
 )
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
@@ -156,6 +161,36 @@ class OutcomeReconciliationIngest(BaseModel):
         return value.upper() if value else value
 
 
+class LedgerRefundConnectorIngest(BaseModel):
+    base_url: str = Field(..., max_length=2048)
+    path_template: str = Field(default="/refunds/{refund_id}", max_length=512)
+    bearer_token: str | None = Field(default=None, min_length=8, max_length=4096)
+    record_path: str | None = Field(default=None, max_length=255)
+    query: dict[str, str | int | float | bool] | None = None
+    timeout_seconds: float | None = Field(default=None, ge=0.1, le=30)
+
+
+class LedgerRefundReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="refund", max_length=64)
+    refund_id: str | None = Field(None, max_length=255)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+    connector: LedgerRefundConnectorIngest
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
 class OutcomeReconciliationView(BaseModel):
     id: str
     project_id: str
@@ -243,6 +278,60 @@ def _serialize_reconciliation(row) -> OutcomeReconciliationView:
     return OutcomeReconciliationView(**reconciliation_to_dict(row))
 
 
+def _optional_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _claim_text(claimed: dict[str, Any], key: str) -> str | None:
+    value = claimed.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _refund_id(body: LedgerRefundReconciliationIngest) -> str:
+    refund_id = (body.refund_id or _claim_text(body.claimed, "refund_id") or "").strip()
+    if not refund_id:
+        raise HTTPException(
+            status_code=422,
+            detail="refund_id is required for ledger refund reconciliation.",
+        )
+    return refund_id
+
+
+def _ledger_refund_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["refund_id"]
+    fields = [
+        field
+        for field in ("refund_id", "amount_usd", "currency", "status")
+        if field in claimed
+    ]
+    return fields or ["refund_id"]
+
+
+def _ledger_refund_idempotency_key(
+    body: LedgerRefundReconciliationIngest,
+    *,
+    refund_id: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"ledger_refund:{scope}:{refund_id}"
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -314,6 +403,67 @@ def create_reconciliation(
         idempotency_key=body.idempotency_key,
         metadata=body.metadata,
     )
+    return _serialize_reconciliation(row)
+
+
+@router.post(
+    "/reconciliation/ledger-refund",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_ledger_refund_reconciliation(
+    request: Request,
+    body: LedgerRefundReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Fetch a refund from a ledger API and reconcile it against the agent claim."""
+    refund_id = _refund_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("refund_id", refund_id)
+
+    settings = get_settings()
+    timeout = (
+        body.connector.timeout_seconds or settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS
+    )
+    connector = LedgerRefundApiConnector(
+        base_url=body.connector.base_url,
+        refund_id=refund_id,
+        bearer_token=body.connector.bearer_token,
+        path_template=body.connector.path_template,
+        query=body.connector.query,
+        record_path=body.connector.record_path,
+        timeout_seconds=timeout,
+        allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+    )
+
+    try:
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "refund",
+            system_ref=body.system_ref or f"ledger:{refund_id}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(claimed.get("amount_usd")),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_ledger_refund_match_fields(claimed, body.match_fields),
+            idempotency_key=_ledger_refund_idempotency_key(body, refund_id=refund_id),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "ledger_refund_api",
+                "refund_id": refund_id,
+            },
+        )
+    except ConnectorConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     return _serialize_reconciliation(row)
 
 

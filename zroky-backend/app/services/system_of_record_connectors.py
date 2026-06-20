@@ -1,0 +1,328 @@
+"""System-of-record connectors for outcome verification.
+
+The first production connector is intentionally narrow: read one refund row
+from a customer's ledger/refund API, then let outcome_reconciliation compare
+claimed-vs-actual. Connector failures never become a false pass.
+"""
+
+from __future__ import annotations
+
+import ipaddress
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
+from urllib.parse import quote, urlencode, urljoin, urlsplit, urlunsplit
+
+import httpx
+
+from app.services.outcome_reconciliation import SourceRecord
+
+
+class ConnectorConfigError(ValueError):
+    """Raised when connector config is unsafe or incomplete."""
+
+
+_TEMPLATE_RE = re.compile(r"{([a-zA-Z_][a-zA-Z0-9_]*)}")
+_BLOCKED_HOSTS = {"localhost", "localhost.localdomain"}
+
+
+def _clean_text(value: Any) -> str:
+    return str(value).strip()
+
+
+def _is_blocked_host(host: str) -> bool:
+    normalized = host.strip().lower().strip("[]")
+    if normalized in _BLOCKED_HOSTS:
+        return True
+    try:
+        parsed = ipaddress.ip_address(normalized)
+    except ValueError:
+        return False
+    return (
+        parsed.is_loopback
+        or parsed.is_private
+        or parsed.is_link_local
+        or parsed.is_multicast
+        or parsed.is_reserved
+        or parsed.is_unspecified
+    )
+
+
+def _safe_base_url(base_url: str, *, allow_private_hosts: bool = False) -> str:
+    cleaned = _clean_text(base_url).rstrip("/") + "/"
+    parsed = urlsplit(cleaned)
+    if parsed.scheme != "https":
+        raise ConnectorConfigError("ledger connector base_url must use https")
+    if not parsed.netloc or not parsed.hostname:
+        raise ConnectorConfigError("ledger connector base_url must include a host")
+    if parsed.username or parsed.password:
+        raise ConnectorConfigError(
+            "ledger connector base_url must not include credentials"
+        )
+    if parsed.query or parsed.fragment:
+        raise ConnectorConfigError(
+            "ledger connector base_url must not include query or fragment values"
+        )
+    if not allow_private_hosts and _is_blocked_host(parsed.hostname):
+        raise ConnectorConfigError(
+            "ledger connector base_url must not target a private or local host"
+        )
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
+def _render_path_template(template: str, values: Mapping[str, Any]) -> str:
+    cleaned = _clean_text(template)
+    if not cleaned.startswith("/"):
+        raise ConnectorConfigError("ledger connector path_template must start with '/'")
+    if "://" in cleaned:
+        raise ConnectorConfigError(
+            "ledger connector path_template must be a relative path"
+        )
+    if "?" in cleaned or "#" in cleaned:
+        raise ConnectorConfigError(
+            "ledger connector path_template must not include query or fragment values"
+        )
+    if any(segment == ".." for segment in cleaned.split("/")):
+        raise ConnectorConfigError(
+            "ledger connector path_template must not include path traversal segments"
+        )
+
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        value = values.get(key)
+        if value is None or _clean_text(value) == "":
+            raise ConnectorConfigError(
+                f"ledger connector path_template missing value for {key}"
+            )
+        return quote(_clean_text(value), safe="")
+
+    rendered = _TEMPLATE_RE.sub(replace, cleaned)
+    if "{" in rendered or "}" in rendered:
+        raise ConnectorConfigError(
+            "ledger connector path_template contains an invalid placeholder"
+        )
+    return rendered
+
+
+def _select_record(payload: Any, record_path: str | None) -> dict[str, Any] | None:
+    current = payload
+    if record_path:
+        for part in [item.strip() for item in record_path.split(".") if item.strip()]:
+            if not isinstance(current, Mapping) or part not in current:
+                return None
+            current = current[part]
+    if isinstance(current, Mapping):
+        return dict(current)
+    return None
+
+
+def _without_query(url: str) -> str:
+    parsed = urlsplit(url)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
+def _metadata(
+    *,
+    connector_type: str,
+    request_url: str,
+    http_status: int | None = None,
+    record_path: str | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "connector_type": connector_type,
+        "request_url": _without_query(request_url),
+    }
+    if http_status is not None:
+        payload["http_status"] = http_status
+    if record_path:
+        payload["record_path"] = record_path
+    if error:
+        payload["error"] = error
+    return payload
+
+
+@dataclass(frozen=True)
+class HttpJsonRecordConnector:
+    """Fetch a JSON record from a customer-hosted system-of-record adapter."""
+
+    base_url: str
+    path_template: str
+    path_values: Mapping[str, Any]
+    query: Mapping[str, Any] | None = None
+    bearer_token: str | None = None
+    record_path: str | None = None
+    connector_type: str = "http_json_record"
+    timeout_seconds: float = 5.0
+    allow_private_hosts: bool = False
+    transport: httpx.BaseTransport | None = field(default=None, repr=False)
+
+    def _url(self) -> str:
+        base_url = _safe_base_url(
+            self.base_url, allow_private_hosts=self.allow_private_hosts
+        )
+        path = _render_path_template(self.path_template, self.path_values)
+        url = urljoin(base_url, path.lstrip("/"))
+        query = {
+            str(key): str(value)
+            for key, value in (self.query or {}).items()
+            if value is not None and str(key).strip()
+        }
+        if query:
+            url = f"{url}?{urlencode(query)}"
+        return url
+
+    def fetch(self) -> SourceRecord:
+        url = self._url()
+        headers = {"Accept": "application/json"}
+        if self.bearer_token and self.bearer_token.strip():
+            headers["Authorization"] = f"Bearer {self.bearer_token.strip()}"
+
+        try:
+            with httpx.Client(
+                timeout=self.timeout_seconds, transport=self.transport
+            ) as client:
+                response = client.get(url, headers=headers)
+        except httpx.RequestError as exc:
+            return SourceRecord(
+                record=None,
+                record_found=None,
+                metadata=_metadata(
+                    connector_type=self.connector_type,
+                    request_url=url,
+                    record_path=self.record_path,
+                    error=exc.__class__.__name__,
+                ),
+            )
+
+        status = response.status_code
+        if status == 404:
+            return SourceRecord(
+                record=None,
+                record_found=False,
+                metadata=_metadata(
+                    connector_type=self.connector_type,
+                    request_url=url,
+                    http_status=status,
+                    record_path=self.record_path,
+                ),
+            )
+        if status < 200 or status >= 300:
+            return SourceRecord(
+                record=None,
+                record_found=None,
+                metadata=_metadata(
+                    connector_type=self.connector_type,
+                    request_url=url,
+                    http_status=status,
+                    record_path=self.record_path,
+                    error="http_error",
+                ),
+            )
+        if not response.content:
+            return SourceRecord(
+                record=None,
+                record_found=None,
+                metadata=_metadata(
+                    connector_type=self.connector_type,
+                    request_url=url,
+                    http_status=status,
+                    record_path=self.record_path,
+                    error="empty_response",
+                ),
+            )
+        try:
+            payload = response.json()
+        except ValueError:
+            return SourceRecord(
+                record=None,
+                record_found=None,
+                metadata=_metadata(
+                    connector_type=self.connector_type,
+                    request_url=url,
+                    http_status=status,
+                    record_path=self.record_path,
+                    error="invalid_json",
+                ),
+            )
+
+        record = _select_record(payload, self.record_path)
+        return SourceRecord(
+            record=record,
+            record_found=True if record is not None else None,
+            metadata=_metadata(
+                connector_type=self.connector_type,
+                request_url=url,
+                http_status=status,
+                record_path=self.record_path,
+                error=None if record is not None else "record_path_missing",
+            ),
+        )
+
+
+def _normalise_refund_record(
+    record: Mapping[str, Any], *, refund_id: str
+) -> dict[str, Any]:
+    normalized = dict(record)
+    if "refund_id" not in normalized:
+        for candidate in ("id", "refundId", "refundID", "external_id"):
+            value = normalized.get(candidate)
+            if value is not None and _clean_text(value):
+                normalized["refund_id"] = value
+                break
+    if "refund_id" not in normalized and refund_id:
+        normalized["refund_id"] = refund_id
+    if "amount_usd" not in normalized:
+        for candidate in ("amount", "amountUSD", "amount_usd_cents"):
+            value = normalized.get(candidate)
+            if value is None:
+                continue
+            normalized["amount_usd"] = (
+                float(value) / 100 if candidate == "amount_usd_cents" else value
+            )
+            break
+    if isinstance(normalized.get("currency"), str):
+        normalized["currency"] = normalized["currency"].upper()
+    return normalized
+
+
+@dataclass(frozen=True)
+class LedgerRefundApiConnector:
+    """Read one refund from a ledger/refund API."""
+
+    base_url: str
+    refund_id: str
+    bearer_token: str | None = None
+    path_template: str = "/refunds/{refund_id}"
+    query: Mapping[str, Any] | None = None
+    record_path: str | None = None
+    timeout_seconds: float = 5.0
+    allow_private_hosts: bool = False
+    transport: httpx.BaseTransport | None = field(default=None, repr=False)
+    connector_type: str = "ledger_refund_api"
+
+    def fetch(self) -> SourceRecord:
+        connector = HttpJsonRecordConnector(
+            base_url=self.base_url,
+            path_template=self.path_template,
+            path_values={"refund_id": self.refund_id},
+            query=self.query,
+            bearer_token=self.bearer_token,
+            record_path=self.record_path,
+            timeout_seconds=self.timeout_seconds,
+            allow_private_hosts=self.allow_private_hosts,
+            transport=self.transport,
+            connector_type=self.connector_type,
+        )
+        source = connector.fetch()
+        record = (
+            _normalise_refund_record(source.record, refund_id=self.refund_id)
+            if source.record is not None
+            else None
+        )
+        return SourceRecord(
+            record=record,
+            record_found=source.record_found,
+            metadata={**(source.metadata or {}), "refund_id": self.refund_id},
+        )
