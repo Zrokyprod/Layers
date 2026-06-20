@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import tempfile
+import warnings
 from datetime import datetime, timezone
 from collections.abc import Mapping
 from pathlib import Path
@@ -14,12 +15,22 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = ROOT / "zroky-backend"
-FIXTURE_PATH = (
+REFUND_FIXTURE_PATH = (
     ROOT / "demos" / "design-partner-install-kit" / "refund_agent_fixture.json"
+)
+CUSTOMER_RECORD_FIXTURE_PATH = (
+    ROOT
+    / "demos"
+    / "design-partner-install-kit"
+    / "customer_record_agent_fixture.json"
 )
 HANDOFF_GUIDE_PATH = (
     ROOT / "demos" / "design-partner-install-kit" / "HANDOFF.txt"
 )
+SCENARIO_FIXTURES = {
+    "refund": REFUND_FIXTURE_PATH,
+    "customer-record": CUSTOMER_RECORD_FIXTURE_PATH,
+}
 
 PROJECT_HEADER = "X-Project-Id"
 API_KEY_HEADER = "x-api-key"
@@ -86,6 +97,50 @@ def _headers(args: argparse.Namespace) -> dict[str, str]:
     return headers
 
 
+def _fixture_scenario(fixture: dict[str, Any]) -> str:
+    scenario = str(fixture.get("scenario") or "").lower()
+    if "customer_record" in scenario or "crm" in scenario or "crm" in fixture:
+        return "customer-record"
+    return "refund"
+
+
+def _fixture_package(fixture: dict[str, Any]) -> str:
+    package = str(fixture.get("package") or "").strip()
+    if package:
+        return package
+    return (
+        "design_partner_crm_v1"
+        if _fixture_scenario(fixture) == "customer-record"
+        else "design_partner_refund_v1"
+    )
+
+
+def _claimed_value(claimed: dict[str, Any], key: str, fallback: Any = None) -> Any:
+    value = claimed.get(key)
+    return fallback if value is None else value
+
+
+def _customer_id(fixture: dict[str, Any], args: argparse.Namespace) -> str:
+    claimed = fixture["claimed_outcome"]
+    return str(
+        args.customer_id
+        or _claimed_value(claimed, "customer_id")
+        or _claimed_value(claimed, "id")
+        or ""
+    )
+
+
+def _connector_secrets(fixture: dict[str, Any], args: argparse.Namespace) -> list[str]:
+    return [
+        fixture.get("ledger", {}).get("bearer_token") or "",
+        fixture.get("crm", {}).get("bearer_token") or "",
+        args.api_key or "",
+        args.bearer_token or "",
+        args.ledger_bearer_token or "",
+        args.crm_bearer_token or "",
+    ]
+
+
 def _runtime_policy_payload(
     fixture: dict[str, Any], args: argparse.Namespace
 ) -> dict[str, Any]:
@@ -93,8 +148,34 @@ def _runtime_policy_payload(
     trace = fixture["trace"]
     risky_action = fixture["risky_action"]
     claim = fixture["claimed_outcome"]
-    amount = args.amount_usd if args.amount_usd is not None else claim["amount_usd"]
-    refund_id = args.refund_id or claim["refund_id"]
+    amount = (
+        args.amount_usd
+        if args.amount_usd is not None
+        else _claimed_value(claim, "amount_usd", risky_action.get("impact_usd"))
+    )
+    tool_args = dict(risky_action.get("tool_args") or {})
+    if _fixture_scenario(fixture) == "customer-record":
+        customer_id = _customer_id(fixture, args)
+        tool_args.update(
+            {
+                "customer_id": customer_id,
+                "email": args.email or _claimed_value(claim, "email"),
+                "account_id": args.account_id or _claimed_value(claim, "account_id"),
+                "status": args.customer_status
+                or args.status
+                or _claimed_value(claim, "status"),
+            }
+        )
+    else:
+        refund_id = args.refund_id or claim["refund_id"]
+        tool_args.update(
+            {
+                "refund_id": refund_id,
+                "order_id": claim.get("order_id"),
+                "amount_usd": amount,
+                "currency": args.currency or claim.get("currency", "USD"),
+            }
+        )
     return {
         "trace_id": args.trace_id or trace["trace_id"],
         "call_id": args.call_id or trace["call_id"],
@@ -103,23 +184,36 @@ def _runtime_policy_payload(
         "environment": args.environment,
         "action_type": risky_action["action_type"],
         "tool_name": risky_action["tool_name"],
-        "tool_args": {
-            "refund_id": refund_id,
-            "order_id": claim.get("order_id"),
-            "amount_usd": amount,
-            "currency": args.currency or claim.get("currency", "USD"),
-        },
+        "tool_args": tool_args,
         "external_action": True,
         "business_impact_summary": risky_action["business_impact_summary"],
         "impact_usd": amount,
+        "customer_id": tool_args.get("customer_id"),
+        "account_id": tool_args.get("account_id"),
+        "order_id": tool_args.get("order_id"),
         "metadata": {
-            "install_kit": "design_partner_refund_v1",
+            "install_kit": _fixture_package(fixture),
             "agent_type": agent["type"],
         },
     }
 
 
 def _reconciliation_payload(
+    fixture: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    runtime_policy_decision_id: str,
+) -> dict[str, Any]:
+    if _fixture_scenario(fixture) == "customer-record":
+        return _customer_record_reconciliation_payload(
+            fixture, args, runtime_policy_decision_id=runtime_policy_decision_id
+        )
+    return _ledger_reconciliation_payload(
+        fixture, args, runtime_policy_decision_id=runtime_policy_decision_id
+    )
+
+
+def _ledger_reconciliation_payload(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
@@ -161,6 +255,73 @@ def _reconciliation_payload(
     }
 
 
+def _customer_record_reconciliation_payload(
+    fixture: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    runtime_policy_decision_id: str,
+) -> dict[str, Any]:
+    trace = fixture["trace"]
+    claim = dict(fixture["claimed_outcome"])
+    crm = fixture["crm"]
+    customer_id = _customer_id(fixture, args)
+    claim.update(
+        {
+            "customer_id": customer_id,
+            "email": args.email or claim.get("email"),
+            "account_id": args.account_id or claim.get("account_id"),
+            "status": args.customer_status or args.status or claim.get("status"),
+        }
+    )
+    return {
+        "call_id": args.call_id or trace["call_id"],
+        "trace_id": args.trace_id or trace["trace_id"],
+        "runtime_policy_decision_id": runtime_policy_decision_id,
+        "action_type": "customer_record_update",
+        "customer_id": customer_id,
+        "claimed": claim,
+        "match_fields": ["customer_id", "email", "account_id", "status"],
+        "amount_usd": args.amount_usd,
+        "currency": args.currency,
+        "metadata": {
+            "install_kit": _fixture_package(fixture),
+            "partner_run_id": args.partner_run_id,
+        },
+        "connector": {
+            "base_url": args.crm_base_url or crm["base_url"],
+            "path_template": args.crm_path_template or crm["path_template"],
+            "record_path": args.crm_record_path or crm["record_path"],
+            "bearer_token": args.crm_bearer_token or crm.get("bearer_token"),
+        },
+    }
+
+
+def _next_live_command(fixture: dict[str, Any]) -> str:
+    if _fixture_scenario(fixture) == "customer-record":
+        return (
+            "python scripts/run_design_partner_install_kit.py --scenario customer-record "
+            "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+            "--crm-base-url https://crm.example.com/api "
+            "--crm-bearer-token <crm_token> --customer-id <customer_id> --json "
+            "--write-summary artifacts/design-partner-crm-live-summary.json "
+            "--write-evidence artifacts/design-partner-crm-live-evidence.json"
+        )
+    return (
+        "python scripts/run_design_partner_install_kit.py --scenario refund "
+        "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+        "--ledger-base-url https://ledger.example.com/api "
+        "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json "
+        "--write-summary artifacts/design-partner-refund-live-summary.json "
+        "--write-evidence artifacts/design-partner-refund-live-evidence.json"
+    )
+
+
+def _artifact_prefix(fixture: dict[str, Any]) -> str:
+    if _fixture_scenario(fixture) == "customer-record":
+        return "design-partner-crm"
+    return "design-partner-refund"
+
+
 def _summarise(
     fixture: dict[str, Any],
     args: argparse.Namespace,
@@ -175,6 +336,7 @@ def _summarise(
     connector_metadata = metadata.get("connector") or {}
     evidence_outcomes = evidence_pack.get("outcome_reconciliation") or []
     evidence_call = evidence_pack.get("call") or {}
+    artifact_prefix = _artifact_prefix(fixture)
     call_id = (
         runtime_decision.get("call_id")
         or evidence_call.get("id")
@@ -184,7 +346,7 @@ def _summarise(
     summary = {
         "mode": mode,
         "project_id": args.project_id or fixture["project_id"],
-        "scenario": "refund_outcome_proof_v1",
+        "scenario": fixture.get("scenario") or "refund_outcome_proof_v1",
         "agent_name": runtime_decision.get("agent_name"),
         "call_id": call_id,
         "trace_id": runtime_decision.get("trace_id"),
@@ -227,7 +389,7 @@ def _summarise(
         },
         "handoff": {
             "guide": HANDOFF_GUIDE_PATH.relative_to(ROOT).as_posix(),
-            "package": "design_partner_refund_v1",
+            "package": _fixture_package(fixture),
             "pass_criteria": [
                 "captured_call_linked",
                 "unsafe_action_stopped",
@@ -239,12 +401,12 @@ def _summarise(
             "customer_artifacts": [
                 {
                     "flag": "--write-summary",
-                    "default_path": "artifacts/design-partner-summary.json",
+                    "default_path": f"artifacts/{artifact_prefix}-summary.json",
                     "contains": "redacted customer-facing proof summary",
                 },
                 {
                     "flag": "--write-evidence",
-                    "default_path": "artifacts/design-partner-evidence.json",
+                    "default_path": f"artifacts/{artifact_prefix}-evidence.json",
                     "contains": "redacted audit evidence pack",
                 },
             ],
@@ -253,13 +415,7 @@ def _summarise(
                 "or missing evidence hash blocks partner handoff."
             ),
         },
-        "next_live_command": (
-            "python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.ai "
-            "--api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api "
-            "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json "
-            "--write-summary artifacts/design-partner-live-summary.json "
-            "--write-evidence artifacts/design-partner-live-evidence.json"
-        ),
+        "next_live_command": _next_live_command(fixture),
     }
     return _redact(summary, secrets)
 
@@ -335,8 +491,28 @@ def _seed_local_call(
     agent = fixture["agent"]
     trace = fixture["trace"]
     claim = fixture["claimed_outcome"]
+    risky_action = fixture["risky_action"]
     call_id = args.call_id or trace["call_id"]
     trace_id = args.trace_id or trace["trace_id"]
+    tool_args = dict(risky_action.get("tool_args") or {})
+    if _fixture_scenario(fixture) == "customer-record":
+        tool_args.update(
+            {
+                "customer_id": _customer_id(fixture, args),
+                "email": args.email or claim.get("email"),
+                "account_id": args.account_id or claim.get("account_id"),
+                "status": args.customer_status or args.status or claim.get("status"),
+            }
+        )
+    else:
+        tool_args.update(
+            {
+                "refund_id": args.refund_id or claim["refund_id"],
+                "amount_usd": args.amount_usd
+                if args.amount_usd is not None
+                else claim["amount_usd"],
+            }
+        )
     now = datetime.now(timezone.utc)
     with session_local() as session:
         session.add(
@@ -363,13 +539,8 @@ def _seed_local_call(
                     {
                         "tool_calls": [
                             {
-                                "name": "refund_payment",
-                                "args": {
-                                    "refund_id": args.refund_id or claim["refund_id"],
-                                    "amount_usd": args.amount_usd
-                                    if args.amount_usd is not None
-                                    else claim["amount_usd"],
-                                },
+                                "name": risky_action["tool_name"],
+                                "args": tool_args,
                             }
                         ],
                     },
@@ -446,6 +617,69 @@ def _install_local_ledger_stub(fixture: dict[str, Any]) -> Any:
     return restore
 
 
+def _install_local_customer_record_stub(fixture: dict[str, Any]) -> Any:
+    from app.services.outcome_reconciliation import SourceRecord
+    from app.services.system_of_record_connectors import CustomerRecordApiConnector
+
+    original_fetch = CustomerRecordApiConnector.fetch
+    expected_customer_id = fixture["claimed_outcome"]["customer_id"]
+    crm = fixture["crm"]
+    record = dict(crm["response"]["data"])
+    record.setdefault("customer_id", record.get("id", expected_customer_id))
+
+    def fake_fetch(self: Any) -> SourceRecord:
+        request_url = (
+            f"{str(self.base_url).rstrip('/')}/"
+            f"{str(self.path_template).lstrip('/').replace('{customer_id}', self.customer_id)}"
+        )
+        if self.customer_id != expected_customer_id:
+            return SourceRecord(
+                record=None,
+                record_found=False,
+                metadata={
+                    "connector_type": "customer_record_api",
+                    "request_url": request_url,
+                    "http_status": 404,
+                    "customer_id": self.customer_id,
+                    "adapter": "design_partner_local_stub",
+                },
+            )
+        return SourceRecord(
+            record=record,
+            record_found=True,
+            metadata={
+                "connector_type": "customer_record_api",
+                "request_url": request_url,
+                "http_status": 200,
+                "record_path": crm["record_path"],
+                "customer_id": self.customer_id,
+                "adapter": "design_partner_local_stub",
+            },
+        )
+
+    CustomerRecordApiConnector.fetch = fake_fetch
+
+    def restore() -> None:
+        CustomerRecordApiConnector.fetch = original_fetch
+
+    return restore
+
+
+def _install_local_connector_stub(fixture: dict[str, Any]) -> Any:
+    if _fixture_scenario(fixture) == "customer-record":
+        return _install_local_customer_record_stub(fixture)
+    return _install_local_ledger_stub(fixture)
+
+
+def _reconciliation_endpoint_and_label(fixture: dict[str, Any]) -> tuple[str, str]:
+    if _fixture_scenario(fixture) == "customer-record":
+        return (
+            "/v1/outcomes/reconciliation/customer-record",
+            "customer record reconciliation",
+        )
+    return "/v1/outcomes/reconciliation/ledger-refund", "ledger refund reconciliation"
+
+
 def _run_local_demo(
     fixture: dict[str, Any], args: argparse.Namespace
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -456,12 +690,16 @@ def _run_local_demo(
         engine: Any = None
         base_metadata: Any = None
         app_ref: Any = None
-        restore_ledger: Any = None
+        restore_connector: Any = None
         invalidate_all_fn: Any = None
         settings_cache_clear: Any = None
         try:
             logging.disable(logging.CRITICAL)
             sys.path.insert(0, str(BACKEND_DIR))
+            warnings.filterwarnings(
+                "ignore",
+                message="Using `httpx` with `starlette.testclient` is deprecated.*",
+            )
 
             from fastapi.testclient import TestClient
             from sqlalchemy import create_engine
@@ -517,7 +755,10 @@ def _run_local_demo(
             app_ref.dependency_overrides[require_tenant_context] = (
                 override_tenant_context
             )
-            restore_ledger = _install_local_ledger_stub(fixture)
+            restore_connector = _install_local_connector_stub(fixture)
+            reconciliation_endpoint, reconciliation_label = (
+                _reconciliation_endpoint_and_label(fixture)
+            )
 
             try:
                 with TestClient(app_ref) as client:
@@ -531,7 +772,7 @@ def _run_local_demo(
                     )
                     reconciliation = _assert_response(
                         client.post(
-                            "/v1/outcomes/reconciliation/ledger-refund",
+                            reconciliation_endpoint,
                             json=_reconciliation_payload(
                                 fixture,
                                 args,
@@ -539,7 +780,7 @@ def _run_local_demo(
                             ),
                         ),
                         201,
-                        "ledger refund reconciliation",
+                        reconciliation_label,
                     )
                     evidence_pack = _assert_response(
                         client.get(
@@ -549,8 +790,8 @@ def _run_local_demo(
                         "runtime policy evidence pack",
                     )
             finally:
-                if restore_ledger is not None:
-                    restore_ledger()
+                if restore_connector is not None:
+                    restore_connector()
                 if app_ref is not None:
                     app_ref.dependency_overrides.clear()
                 if engine is not None and base_metadata is not None:
@@ -566,7 +807,7 @@ def _run_local_demo(
             if settings_cache_clear is not None:
                 settings_cache_clear()
 
-    secrets = [fixture["ledger"].get("bearer_token") or ""]
+    secrets = _connector_secrets(fixture, args)
     summary = _summarise(
         fixture,
         args,
@@ -588,15 +829,30 @@ def _run_live(
         raise RuntimeError(
             "Provide --api-key or --bearer-token for live mode authentication."
         )
-    if not args.ledger_base_url:
-        raise RuntimeError("--ledger-base-url is required for live mode.")
-    if not args.ledger_bearer_token:
-        raise RuntimeError("--ledger-bearer-token is required for live mode.")
+    if _fixture_scenario(fixture) == "customer-record":
+        if not args.crm_base_url:
+            raise RuntimeError("--crm-base-url is required for customer-record live mode.")
+        if not args.crm_bearer_token:
+            raise RuntimeError(
+                "--crm-bearer-token is required for customer-record live mode."
+            )
+        if not args.customer_id:
+            raise RuntimeError("--customer-id is required for customer-record live mode.")
+    else:
+        if not args.ledger_base_url:
+            raise RuntimeError("--ledger-base-url is required for refund live mode.")
+        if not args.ledger_bearer_token:
+            raise RuntimeError("--ledger-bearer-token is required for refund live mode.")
+        if not args.refund_id:
+            raise RuntimeError("--refund-id is required for refund live mode.")
 
     import httpx
 
     headers = _headers(args)
     timeout = args.timeout_seconds
+    reconciliation_endpoint, reconciliation_label = _reconciliation_endpoint_and_label(
+        fixture
+    )
     with httpx.Client(
         base_url=args.api_base_url.rstrip("/"), timeout=timeout
     ) as client:
@@ -611,7 +867,7 @@ def _run_live(
         )
         reconciliation = _assert_response(
             client.post(
-                "/v1/outcomes/reconciliation/ledger-refund",
+                reconciliation_endpoint,
                 headers=headers,
                 json=_reconciliation_payload(
                     fixture,
@@ -620,7 +876,7 @@ def _run_live(
                 ),
             ),
             201,
-            "ledger refund reconciliation",
+            reconciliation_label,
         )
         evidence_pack = _assert_response(
             client.get(
@@ -631,11 +887,7 @@ def _run_live(
             "runtime policy evidence pack",
         )
 
-    secrets = [
-        args.api_key or "",
-        args.bearer_token or "",
-        args.ledger_bearer_token or "",
-    ]
+    secrets = _connector_secrets(fixture, args)
     summary = _summarise(
         fixture,
         args,
@@ -651,7 +903,7 @@ def _run_live(
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run a design-partner install proof: runtime policy stop, ledger refund "
+            "Run a design-partner install proof: runtime policy stop, system-of-record "
             "outcome verification, and downloadable evidence hash."
         )
     )
@@ -659,7 +911,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--json", action="store_true", help="Print machine-readable JSON."
     )
     parser.add_argument(
-        "--fixture", default=str(FIXTURE_PATH), help="Scenario fixture JSON."
+        "--scenario",
+        choices=sorted(SCENARIO_FIXTURES),
+        default="refund",
+        help="Proof scenario to run when --fixture is omitted.",
+    )
+    parser.add_argument(
+        "--fixture",
+        help="Scenario fixture JSON. Overrides --scenario when provided.",
     )
     parser.add_argument(
         "--write-evidence", help="Write the full evidence pack JSON to this path."
@@ -691,13 +950,33 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--ledger-record-path",
         help="Dot path to the refund object, default from fixture.",
     )
+    parser.add_argument(
+        "--crm-base-url", help="HTTPS base URL for the partner CRM/customer API."
+    )
+    parser.add_argument(
+        "--crm-bearer-token", help="Bearer token for the partner CRM/customer API."
+    )
+    parser.add_argument(
+        "--crm-path-template",
+        help="CRM path template, default /customers/{customer_id}.",
+    )
+    parser.add_argument(
+        "--crm-record-path",
+        help="Dot path to the customer object, default from fixture.",
+    )
     parser.add_argument("--refund-id", help="Refund id to verify.")
+    parser.add_argument("--customer-id", help="Customer id to verify in CRM.")
     parser.add_argument("--call-id", help="Zroky call id to link evidence.")
     parser.add_argument("--trace-id", help="Zroky trace id to link evidence.")
     parser.add_argument("--agent-name", help="Agent name shown in policy evidence.")
     parser.add_argument("--amount-usd", type=float, help="Claimed refund amount.")
     parser.add_argument("--currency", default=None, help="Claimed currency, e.g. USD.")
     parser.add_argument("--status", default=None, help="Claimed refund status.")
+    parser.add_argument("--email", default=None, help="Claimed CRM email.")
+    parser.add_argument("--account-id", default=None, help="Claimed CRM account id.")
+    parser.add_argument(
+        "--customer-status", default=None, help="Claimed CRM customer status."
+    )
     parser.add_argument(
         "--environment", default="production", help="Runtime environment label."
     )
@@ -732,17 +1011,13 @@ def _print_summary(summary: dict[str, Any], *, as_json: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    fixture = _load_json(Path(args.fixture))
+    fixture_path = Path(args.fixture) if args.fixture else SCENARIO_FIXTURES[args.scenario]
+    fixture = _load_json(fixture_path)
     if args.api_base_url:
         summary, evidence_pack = _run_live(fixture, args)
     else:
         summary, evidence_pack = _run_local_demo(fixture, args)
-    secrets = [
-        fixture.get("ledger", {}).get("bearer_token") or "",
-        args.api_key or "",
-        args.bearer_token or "",
-        args.ledger_bearer_token or "",
-    ]
+    secrets = _connector_secrets(fixture, args)
     _validate_summary(summary)
     _write_summary(args.write_summary, summary, secrets)
     _write_evidence(args.write_evidence, evidence_pack, secrets)
