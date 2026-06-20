@@ -7643,6 +7643,34 @@ body:has(.app-shell) {
   box-shadow: var(--shadow-soft) !important;
 }
 
+.app-shell .settings-connector-card {
+  display: grid !important;
+  gap: 13px !important;
+}
+
+.app-shell .settings-connector-facts {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.app-shell .settings-connector-facts > div,
+.app-shell .settings-connector-payload {
+  border-color: var(--dashboard-border) !important;
+  background: var(--dashboard-surface-inset) !important;
+  color: var(--dashboard-text-soft) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .settings-connector-facts span {
+  color: var(--dashboard-muted) !important;
+}
+
+.app-shell .settings-connector-facts strong,
+.app-shell .settings-connector-payload {
+  color: var(--dashboard-text) !important;
+}
+
 .app-shell .settings-control-panel .panel-header,
 .app-shell .settings-integration-card .panel-header,
 .app-shell .settings-hero-panel .panel-header,
@@ -8579,6 +8607,7 @@ body:has(.app-shell) {
   .app-shell .team-invite-form,
   .app-shell .settings-shell .page-stack > .grid-two,
   .app-shell .settings-shell .settings-integrations-page .grid-two,
+  .app-shell .settings-connector-facts,
   .app-shell .settings-integration-grid {
     grid-template-columns: 1fr !important;
   }
