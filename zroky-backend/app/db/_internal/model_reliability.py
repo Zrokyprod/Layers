@@ -111,6 +111,66 @@ class OutcomeReconciliationCheck(Base):
     )
 
 
+class SystemOfRecordConnectorConfig(Base):
+    """Tenant-scoped connector config for outcome verification."""
+
+    __tablename__ = "system_of_record_connector_configs"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connector_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    path_template: Mapped[str] = mapped_column(
+        String(512), nullable=False, server_default=text("'/refunds/{refund_id}'")
+    )
+    record_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    query_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bearer_token_ciphertext: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    bearer_token_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    bearer_token_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    kms_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_tested_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "connector_type IN ('ledger_refund_api')",
+            name="ck_sor_connector_type",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "connector_type",
+            name="ux_sor_connector_project_type",
+        ),
+        Index(
+            "ix_sor_connector_project_type_active",
+            "project_id",
+            "connector_type",
+            "is_active",
+        ),
+        Index("ix_sor_connector_project_updated", "project_id", "updated_at"),
+    )
+
+
 class AblationJob(Base):
     """Root-cause analysis job for a single failing call.
 

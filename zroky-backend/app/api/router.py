@@ -25,6 +25,9 @@ from app.api.routes.github_webhooks import router as github_webhooks_router
 from app.api.routes.ingest import router as ingest_router
 from app.api.routes.internal import router as internal_router
 from app.api.routes.integrations import router as integrations_router
+from app.api.routes.system_of_record_integrations import (
+    router as system_of_record_integrations_router,
+)
 from app.api.routes.live import router as live_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.projects import router as projects_router
@@ -79,6 +82,7 @@ api_router.include_router(analytics_router, tags=["analytics"])
 api_router.include_router(ask_router, tags=["ask"])  # Ask Zroky — natural-language Q&A
 api_router.include_router(alerts_router, tags=["alerts"])
 api_router.include_router(integrations_router, tags=["integrations"])
+api_router.include_router(system_of_record_integrations_router, tags=["integrations"])
 api_router.include_router(notifications_router, tags=["notifications"])
 api_router.include_router(settings_router, tags=["settings"])
 api_router.include_router(providers_router, tags=["providers"])

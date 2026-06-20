@@ -3,13 +3,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   approveRuntimePolicyDecision,
   getBillingMe,
+  getLedgerRefundConnectorStatus,
   getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
   getOutcomeReconciliationSummary,
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
   rejectRuntimePolicyDecision,
+  saveLedgerRefundConnectorConfig,
   setRuntimePolicyKillSwitch,
+  testLedgerRefundConnector,
 } from "@/lib/api";
 
 vi.mock("@/lib/auth", () => ({
@@ -315,6 +318,149 @@ describe("outcome reconciliation API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/zroky/v1/outcomes/reconciliation/check_1",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+});
+
+describe("ledger refund connector API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("reads saved connector status", async () => {
+    const payload = {
+      connected: true,
+      connector_type: "ledger_refund_api",
+      base_url: "https://ledger.example.com/api",
+      path_template: "/refunds/{refund_id}",
+      record_path: "data",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: null,
+      created_at: "2026-06-21T00:00:00Z",
+      updated_at: "2026-06-21T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getLedgerRefundConnectorStatus()).resolves.toMatchObject({
+      connected: true,
+      bearer_token_last4: "oken",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/ledger-refund/status",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("saves connector config without transforming the secret", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          connected: true,
+          connector_type: "ledger_refund_api",
+          base_url: "https://ledger.example.com/api",
+          path_template: "/refunds/{refund_id}",
+          record_path: "data",
+          query: null,
+          has_bearer_token: true,
+          bearer_token_last4: "oken",
+          last_tested_at: null,
+          created_at: null,
+          updated_at: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveLedgerRefundConnectorConfig({
+      base_url: "https://ledger.example.com/api",
+      path_template: "/refunds/{refund_id}",
+      record_path: "data",
+      bearer_token: "ledger-secret-token",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/ledger-refund/config",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          base_url: "https://ledger.example.com/api",
+          path_template: "/refunds/{refund_id}",
+          record_path: "data",
+          bearer_token: "ledger-secret-token",
+        }),
+      }),
+    );
+  });
+
+  it("runs a saved connector test", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          check: {
+            id: "check_1",
+            project_id: "proj_1",
+            call_id: null,
+            trace_id: null,
+            runtime_policy_decision_id: null,
+            action_type: "refund",
+            connector_type: "ledger_refund_api",
+            system_ref: "ledger:rf_1",
+            verdict: "matched",
+            reason: "all_compared_fields_matched",
+            amount_usd: 42.5,
+            currency: "USD",
+            claimed: {},
+            actual: {},
+            comparison: {},
+            idempotency_key: null,
+            metadata: null,
+            checked_at: "2026-06-21T00:00:00Z",
+            created_at: "2026-06-21T00:00:00Z",
+          },
+          connector: {
+            connected: true,
+            connector_type: "ledger_refund_api",
+            base_url: "https://ledger.example.com/api",
+            path_template: "/refunds/{refund_id}",
+            record_path: "data",
+            query: null,
+            has_bearer_token: true,
+            bearer_token_last4: "oken",
+            last_tested_at: "2026-06-21T00:00:00Z",
+            created_at: null,
+            updated_at: null,
+          },
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await testLedgerRefundConnector({
+      refund_id: "rf_1",
+      claimed: { refund_id: "rf_1", amount_usd: 42.5 },
+      match_fields: ["refund_id", "amount_usd"],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/ledger-refund/test",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          refund_id: "rf_1",
+          claimed: { refund_id: "rf_1", amount_usd: 42.5 },
+          match_fields: ["refund_id", "amount_usd"],
+        }),
+      }),
     );
   });
 });

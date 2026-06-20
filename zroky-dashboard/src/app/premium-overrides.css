@@ -7655,6 +7655,8 @@ body:has(.app-shell) {
 }
 
 .app-shell .settings-connector-facts > div,
+.app-shell .settings-connector-form,
+.app-shell .settings-connector-test,
 .app-shell .settings-connector-payload {
   border-color: var(--dashboard-border) !important;
   background: var(--dashboard-surface-inset) !important;
@@ -7663,6 +7665,11 @@ body:has(.app-shell) {
 }
 
 .app-shell .settings-connector-facts span {
+  color: var(--dashboard-muted) !important;
+}
+
+.app-shell .settings-connector-form label span,
+.app-shell .settings-connector-test label span {
   color: var(--dashboard-muted) !important;
 }
 
@@ -8608,6 +8615,8 @@ body:has(.app-shell) {
   .app-shell .settings-shell .page-stack > .grid-two,
   .app-shell .settings-shell .settings-integrations-page .grid-two,
   .app-shell .settings-connector-facts,
+  .app-shell .settings-connector-form-grid,
+  .app-shell .settings-connector-test-grid,
   .app-shell .settings-integration-grid {
     grid-template-columns: 1fr !important;
   }
