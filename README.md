@@ -494,13 +494,19 @@ python scripts/run_money_path_demo.py --json
 Run the design-partner install proof before handing a pilot to a real customer:
 
 ```bash
-python scripts/run_design_partner_install_kit.py --json --write-evidence artifacts/design-partner-evidence.json
+python scripts/run_design_partner_install_kit.py --json --write-summary artifacts/design-partner-summary.json --write-evidence artifacts/design-partner-evidence.json
+```
+
+Customer handoff guide:
+
+```text
+demos/design-partner-install-kit/HANDOFF.txt
 ```
 
 Live partner smoke:
 
 ```bash
-python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json
+python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-live-summary.json --write-evidence artifacts/design-partner-live-evidence.json
 ```
 
 Validate filled production environment files before real launch:
