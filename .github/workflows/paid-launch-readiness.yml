@@ -175,6 +175,13 @@ jobs:
           mkdir -p "$TMPDIR"
           python scripts/run_money_path_demo.py --json
 
+      - name: Prove design-partner install kit
+        env:
+          TMPDIR: ${{ runner.temp }}/zroky-design-partner-kit
+        run: |
+          mkdir -p "$TMPDIR"
+          python scripts/run_design_partner_install_kit.py --json
+
       - name: Prove blocking Golden stops regression
         env:
           TMPDIR: ${{ runner.temp }}/zroky-money-path-blocked
