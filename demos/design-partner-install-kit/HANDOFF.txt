@@ -1,16 +1,16 @@
 # Zroky Design-Partner Install Kit
 
-This kit gives a design partner one runnable proof that Zroky can protect an
+This kit gives a design partner two runnable proofs that Zroky can protect an
 autonomous agent action end to end:
 
-1. Capture a high-stakes refund action from an agent trace.
+1. Capture a high-stakes action from an agent trace.
 2. Stop the unsafe action at runtime with a policy decision.
-3. Reconcile the agent's claimed refund against a ledger system of record.
+3. Reconcile the agent's claimed result against a real system of record.
 4. Export a redacted evidence pack with a stable evidence hash.
 
 The kit is intentionally narrow. It proves the paid-launch loop for one
-money-touching action before expanding to CRM, DevOps, access, or procurement
-connectors.
+money-touching action and one customer-record action before expanding to DevOps,
+access, procurement, email, or ticketing connectors.
 
 ## What The Partner Should Believe
 
@@ -18,9 +18,9 @@ A successful run means:
 
 - Zroky saw the action before it committed.
 - Zroky blocked or held the risky action instead of silently allowing it.
-- Zroky checked the real ledger outcome, not just the agent's text output.
+- Zroky checked the real ledger or CRM outcome, not just the agent's text output.
 - Zroky produced an audit-ready evidence hash.
-- No API key or ledger token was printed into the handoff artifacts.
+- No API key, ledger token, or CRM token was printed into the handoff artifacts.
 
 It does not mean the whole deployment is production-ready. Live launch still
 requires production secrets, billing/webhook smoke, worker readiness, and
@@ -28,10 +28,16 @@ gateway recovery proof.
 
 ## Local Proof
 
-Run this first before touching partner systems:
+Run the refund proof first before touching partner systems:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --json --write-summary artifacts/design-partner-summary.json --write-evidence artifacts/design-partner-evidence.json
+python scripts/run_design_partner_install_kit.py --scenario refund --json --write-summary artifacts/design-partner-refund-summary.json --write-evidence artifacts/design-partner-refund-evidence.json
+```
+
+Then run the CRM/customer-record proof:
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario customer-record --json --write-summary artifacts/design-partner-crm-summary.json --write-evidence artifacts/design-partner-crm-evidence.json
 ```
 
 Expected summary:
@@ -45,8 +51,10 @@ Expected summary:
 
 Artifacts:
 
-- `artifacts/design-partner-summary.json`: redacted customer-facing proof summary.
-- `artifacts/design-partner-evidence.json`: redacted raw evidence pack for audit.
+- `artifacts/design-partner-refund-summary.json`: redacted refund proof summary.
+- `artifacts/design-partner-refund-evidence.json`: redacted refund evidence pack.
+- `artifacts/design-partner-crm-summary.json`: redacted CRM proof summary.
+- `artifacts/design-partner-crm-evidence.json`: redacted CRM evidence pack.
 
 ## Live Partner Smoke
 
@@ -54,7 +62,14 @@ Use this after the partner has a Zroky project, API credential, and a ledger API
 record that can be safely queried:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-live-summary.json --write-evidence artifacts/design-partner-live-evidence.json
+python scripts/run_design_partner_install_kit.py --scenario refund --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-live-summary.json --write-evidence artifacts/design-partner-refund-live-evidence.json
+```
+
+Use this after the partner has a CRM/customer API record that can be safely
+queried:
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario customer-record --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-live-summary.json --write-evidence artifacts/design-partner-crm-live-evidence.json
 ```
 
 Use `--bearer-token` instead of `--api-key` when the partner authenticates with
@@ -70,9 +85,13 @@ bound to a single project.
 | `--ledger-base-url` | No | Yes | HTTPS ledger API base URL. |
 | `--ledger-bearer-token` | No | Yes | Ledger auth token. Redacted from artifacts. |
 | `--refund-id` | No | Yes | Existing refund id to verify in the ledger. |
+| `--crm-base-url` | No | Yes for CRM | HTTPS CRM/customer API base URL. |
+| `--crm-bearer-token` | No | Yes for CRM | CRM auth token. Redacted from artifacts. |
+| `--customer-id` | No | Yes for CRM | Existing customer id to verify in CRM. |
 | `--amount-usd` | No | Optional | Use when the partner refund amount differs from the fixture. |
 | `--currency` | No | Optional | Defaults to the fixture currency. |
 | `--status` | No | Optional | Defaults to the fixture status. |
+| `--email`, `--account-id`, `--customer-status` | No | Optional | Use when CRM claimed fields differ from the fixture. |
 
 ## Pass Criteria
 
@@ -99,24 +118,24 @@ missing.
 | `secrets_redacted=false` | A secret leaked into summary or evidence. | Stop the handoff, rotate the leaked token, and fix redaction before rerun. |
 | HTTP 401/403 | Zroky or ledger auth failed. | Check API key, bearer token, project id, and ledger scopes. |
 | HTTP 404 from ledger | Refund id was not found in the system of record. | Use a valid refund id or adjust the ledger path template. |
+| HTTP 404 from CRM | Customer id was not found in the system of record. | Use a valid customer id or adjust the CRM path template. |
 
 ## Buyer Demo Script
 
-1. Show the agent attempting a refund-like high-stakes action.
+1. Pick the partner's highest-stakes live-like scenario: refund or CRM/customer record.
 2. Run the install kit and point to `runtime_policy.allowed=false`.
 3. Show `outcome_reconciliation.verdict=matched`.
 4. Show the 64-character `evidence_hash`.
 5. Open the evidence JSON and show decision, policy snapshot, reconciliation,
    audit entries, and hash. Do not show raw secrets.
-6. Explain the next live step: connect the partner's real ledger/refund API and
+6. Explain the next live step: connect the partner's real ledger or CRM API and
    repeat the same proof against their system of record.
 
-## Expansion After Refund
+## Expansion After Refund And CRM
 
-After this refund proof passes with a real partner, add the next connector only
-when it has a committed design partner:
+After these proofs pass with a real partner, add the next connector only when it
+has a committed design partner:
 
-- CRM/customer-record connector
 - DevOps/deploy connector
 - IT/access connector
 - Procurement/expense connector
