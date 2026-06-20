@@ -20,12 +20,17 @@ from app.services.provider_key_cipher import (
 )
 from app.services.system_of_record_connectors import (
     ConnectorConfigError,
+    CustomerRecordApiConnector,
     LedgerRefundApiConnector,
+    validate_customer_record_api_config,
     validate_ledger_refund_api_config,
 )
 
+CUSTOMER_RECORD_CONNECTOR_TYPE = "customer_record_api"
 LEDGER_REFUND_CONNECTOR_TYPE = "ledger_refund_api"
-VALID_CONNECTOR_TYPES = frozenset({LEDGER_REFUND_CONNECTOR_TYPE})
+VALID_CONNECTOR_TYPES = frozenset(
+    {CUSTOMER_RECORD_CONNECTOR_TYPE, LEDGER_REFUND_CONNECTOR_TYPE}
+)
 
 
 class InvalidSystemOfRecordConnectorError(ValueError):
@@ -155,6 +160,74 @@ def upsert_ledger_refund_connector_config(
     return row
 
 
+def upsert_customer_record_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    base_url: str,
+    path_template: str = "/customers/{customer_id}",
+    record_path: str | None = None,
+    query: Mapping[str, Any] | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    updated_by_subject: str | None = None,
+    allow_private_hosts: bool = False,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_customer_record_api_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+            allow_private_hosts=allow_private_hosts,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = _normalize_query(query)
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def decrypt_connector_bearer_token(
     row: SystemOfRecordConnectorConfig,
     *,
@@ -188,6 +261,26 @@ def build_ledger_refund_connector(
     )
 
 
+def build_customer_record_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    customer_id: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    allow_private_hosts: bool,
+) -> CustomerRecordApiConnector:
+    return CustomerRecordApiConnector(
+        base_url=row.base_url,
+        customer_id=customer_id,
+        bearer_token=bearer_token,
+        path_template=row.path_template or "/customers/{customer_id}",
+        query=_json_loads(row.query_json),
+        record_path=row.record_path,
+        timeout_seconds=timeout_seconds,
+        allow_private_hosts=allow_private_hosts,
+    )
+
+
 def mark_connector_tested(
     db: Session,
     row: SystemOfRecordConnectorConfig,
@@ -204,11 +297,14 @@ def mark_connector_tested(
 
 def serialize_connector_config(
     row: SystemOfRecordConnectorConfig | None,
+    *,
+    connector_type: str = LEDGER_REFUND_CONNECTOR_TYPE,
 ) -> dict[str, Any]:
+    connector_type = _normalize_connector_type(connector_type)
     if row is None:
         return {
             "connected": False,
-            "connector_type": LEDGER_REFUND_CONNECTOR_TYPE,
+            "connector_type": connector_type,
             "base_url": None,
             "path_template": None,
             "record_path": None,
@@ -235,14 +331,17 @@ def serialize_connector_config(
 
 
 __all__ = [
+    "CUSTOMER_RECORD_CONNECTOR_TYPE",
     "EnvelopeFormatError",
     "InvalidSystemOfRecordConnectorError",
     "LEDGER_REFUND_CONNECTOR_TYPE",
     "VaultCipherUnavailable",
+    "build_customer_record_connector",
     "build_ledger_refund_connector",
     "decrypt_connector_bearer_token",
     "get_connector_config",
     "mark_connector_tested",
     "serialize_connector_config",
+    "upsert_customer_record_connector_config",
     "upsert_ledger_refund_connector_config",
 ]

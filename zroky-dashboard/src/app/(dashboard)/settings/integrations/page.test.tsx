@@ -6,11 +6,14 @@ import IntegrationsSettingsPage from "./page";
 
 const api = vi.hoisted(() => ({
   disconnectGithubRepoConnection: vi.fn(),
+  getCustomerRecordConnectorStatus: vi.fn(),
   getGithubConnectionStatus: vi.fn(),
   getLedgerRefundConnectorStatus: vi.fn(),
   getSlackInstallStatus: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
+  saveCustomerRecordConnectorConfig: vi.fn(),
   saveLedgerRefundConnectorConfig: vi.fn(),
+  testCustomerRecordConnector: vi.fn(),
   testLedgerRefundConnector: vi.fn(),
 }));
 
@@ -78,6 +81,19 @@ describe("IntegrationsSettingsPage", () => {
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
     });
+    api.getCustomerRecordConnectorStatus.mockResolvedValue({
+      connected: true,
+      connector_type: "customer_record_api",
+      base_url: "https://crm.example.com/api",
+      path_template: "/customers/{customer_id}",
+      record_path: "data",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: "2026-06-20T09:10:00Z",
+      created_at: "2026-06-20T08:00:00Z",
+      updated_at: "2026-06-20T08:30:00Z",
+    });
     api.saveLedgerRefundConnectorConfig.mockResolvedValue({
       connected: true,
       connector_type: "ledger_refund_api",
@@ -88,6 +104,19 @@ describe("IntegrationsSettingsPage", () => {
       has_bearer_token: true,
       bearer_token_last4: "oken",
       last_tested_at: "2026-06-20T09:00:00Z",
+      created_at: "2026-06-20T08:00:00Z",
+      updated_at: "2026-06-20T08:30:00Z",
+    });
+    api.saveCustomerRecordConnectorConfig.mockResolvedValue({
+      connected: true,
+      connector_type: "customer_record_api",
+      base_url: "https://crm.example.com/api",
+      path_template: "/customers/{customer_id}",
+      record_path: "data",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: "2026-06-20T09:10:00Z",
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
     });
@@ -126,6 +155,43 @@ describe("IntegrationsSettingsPage", () => {
         metadata: { connector_kind: "ledger_refund_api" },
         checked_at: "2026-06-20T09:05:00Z",
         created_at: "2026-06-20T09:05:00Z",
+      },
+    });
+    api.testCustomerRecordConnector.mockResolvedValue({
+      ok: true,
+      connector: {
+        connected: true,
+        connector_type: "customer_record_api",
+        base_url: "https://crm.example.com/api",
+        path_template: "/customers/{customer_id}",
+        record_path: "data",
+        query: null,
+        has_bearer_token: true,
+        bearer_token_last4: "oken",
+        last_tested_at: "2026-06-20T09:15:00Z",
+        created_at: "2026-06-20T08:00:00Z",
+        updated_at: "2026-06-20T09:15:00Z",
+      },
+      check: {
+        id: "check_customer_test",
+        project_id: "proj_1",
+        call_id: null,
+        trace_id: null,
+        runtime_policy_decision_id: null,
+        action_type: "customer_record_update",
+        connector_type: "customer_record_api",
+        system_ref: "crm:CUS-1001",
+        verdict: "matched",
+        reason: "all_compared_fields_matched",
+        amount_usd: null,
+        currency: null,
+        claimed: { customer_id: "CUS-1001", email: "owner@example.com", status: "active", account_id: "acct_1001" },
+        actual: { customer_id: "CUS-1001", email: "owner@example.com", status: "active", account_id: "acct_1001" },
+        comparison: { compared_fields: [], mismatches: [] },
+        idempotency_key: null,
+        metadata: { connector_kind: "customer_record_api" },
+        checked_at: "2026-06-20T09:15:00Z",
+        created_at: "2026-06-20T09:15:00Z",
       },
     });
     api.listOutcomeReconciliations.mockResolvedValue({
@@ -171,9 +237,10 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getAllByText("@zroky").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Reconnect GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Slack" })).toBeInTheDocument();
-    expect(screen.getByText("2/3")).toBeInTheDocument();
+    expect(screen.getByText("2/4")).toBeInTheDocument();
     expect(api.getSlackInstallStatus).toHaveBeenCalledTimes(1);
     expect(api.getLedgerRefundConnectorStatus).toHaveBeenCalledTimes(1);
+    expect(api.getCustomerRecordConnectorStatus).toHaveBeenCalledTimes(1);
     expect(api.listOutcomeReconciliations).toHaveBeenCalledWith({ limit: 25 });
   });
 
@@ -185,7 +252,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getByText("https://ledger.***/...")).toBeInTheDocument();
     expect(screen.getByText("200")).toBeInTheDocument();
     expect(screen.getByText("data.0")).toBeInTheDocument();
-    expect(screen.getByText("Stored token ending oken")).toBeInTheDocument();
+    expect(screen.getAllByText("Stored token ending oken").length).toBeGreaterThan(0);
     expect(screen.getByText("ledger:rf_999")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("ledger-secret-token");
   });
@@ -222,7 +289,7 @@ describe("IntegrationsSettingsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Ledger refund connector" })).toBeInTheDocument();
     expect(screen.getAllByText("Not verified").length).toBeGreaterThan(0);
-    expect(screen.getByText("No response yet")).toBeInTheDocument();
+    expect(screen.getAllByText("No response yet").length).toBeGreaterThan(0);
     expect(screen.getByText("data.0")).toBeInTheDocument();
   });
 
@@ -285,5 +352,109 @@ describe("IntegrationsSettingsPage", () => {
     );
     expect(await screen.findByText("Ledger refund test recorded matched.")).toBeInTheDocument();
     expect(screen.getByText("ledger:RF-1001")).toBeInTheDocument();
+  });
+
+  it("surfaces customer record connector without leaking secrets", async () => {
+    api.listOutcomeReconciliations.mockResolvedValue({
+      total_in_page: 1,
+      items: [
+        {
+          id: "check_customer_record",
+          project_id: "proj_1",
+          call_id: "call_crm_api",
+          trace_id: "trace_crm_api",
+          runtime_policy_decision_id: "decision_2",
+          action_type: "customer_record_update",
+          connector_type: "customer_record_api",
+          system_ref: "crm:cus_999",
+          verdict: "matched",
+          reason: "all_compared_fields_matched",
+          amount_usd: null,
+          currency: null,
+          claimed: { customer_id: "cus_999", email: "owner@example.com" },
+          actual: { customer_id: "cus_999", email: "owner@example.com" },
+          comparison: { compared_fields: [], mismatches: [] },
+          idempotency_key: "call_crm_api:cus_999",
+          metadata: {
+            connector_kind: "customer_record_api",
+            connector: {
+              request_url: "https://crm.example.com/api/customers/cus_999",
+              http_status: 200,
+              record_path: "data",
+              bearer_token: "crm-secret-token",
+            },
+          },
+          checked_at: "2026-06-20T09:10:00Z",
+          created_at: "2026-06-20T09:10:00Z",
+        },
+      ],
+    });
+
+    render(<IntegrationsSettingsPage />);
+
+    expect(await screen.findByRole("heading", { name: "Customer record connector" })).toBeInTheDocument();
+    expect(screen.getByText("https://crm.***/...")).toBeInTheDocument();
+    expect(screen.getByText("crm:cus_999")).toBeInTheDocument();
+    expect(screen.getAllByText("Stored token ending oken").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("crm-secret-token");
+  });
+
+  it("copies the customer record reconciliation payload", async () => {
+    const clipboardWrite = vi.spyOn(navigator.clipboard, "writeText");
+    render(<IntegrationsSettingsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy CRM API payload" }));
+
+    await waitFor(() =>
+      expect(clipboardWrite).toHaveBeenCalledWith(
+        expect.stringContaining("/v1/outcomes/reconciliation/customer-record"),
+      ),
+    );
+    expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("$CRM_TOKEN"));
+    expect(await screen.findByText("Customer record reconciliation payload copied.")).toBeInTheDocument();
+  });
+
+  it("saves customer record connector config without rendering the token", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    fireEvent.change(await screen.findByLabelText("CRM bearer token"), {
+      target: { value: "new-crm-secret-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save CRM connector" }));
+
+    await waitFor(() =>
+      expect(api.saveCustomerRecordConnectorConfig).toHaveBeenCalledWith({
+        base_url: "https://crm.example.com/api",
+        path_template: "/customers/{customer_id}",
+        record_path: "data",
+        bearer_token: "new-crm-secret-token",
+      }),
+    );
+    expect(await screen.findByText("Customer record connector saved.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("new-crm-secret-token");
+  });
+
+  it("runs saved customer record reconciliation from the dashboard", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    fireEvent.change(await screen.findByLabelText("Customer ID"), {
+      target: { value: "CUS-1001" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run CRM test reconciliation" }));
+
+    await waitFor(() =>
+      expect(api.testCustomerRecordConnector).toHaveBeenCalledWith({
+        customer_id: "CUS-1001",
+        claimed: {
+          customer_id: "CUS-1001",
+          email: "owner@example.com",
+          status: "active",
+          account_id: "acct_1001",
+        },
+        match_fields: ["customer_id", "email", "status", "account_id"],
+      }),
+    );
+    expect(await screen.findByText("Customer record test recorded matched.")).toBeInTheDocument();
+    expect(screen.getByText("crm:CUS-1001")).toBeInTheDocument();
   });
 });

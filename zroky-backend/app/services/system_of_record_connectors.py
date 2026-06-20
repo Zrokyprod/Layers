@@ -196,6 +196,38 @@ def validate_ledger_refund_api_config(
     }
 
 
+def validate_customer_record_api_config(
+    *,
+    base_url: str,
+    path_template: str = "/customers/{customer_id}",
+    record_path: str | None = None,
+    allow_private_hosts: bool = False,
+) -> dict[str, str | None]:
+    """Validate and normalize a CRM/customer-record connector without issuing I/O."""
+    normalized_base_url = _safe_base_url(
+        base_url, allow_private_hosts=allow_private_hosts
+    ).rstrip("/")
+    normalized_path_template = _clean_text(path_template) or "/customers/{customer_id}"
+    _render_path_template(
+        normalized_path_template, {"customer_id": "zroky_config_check"}
+    )
+    normalized_record_path = _clean_text(record_path) if record_path else None
+    if normalized_record_path:
+        if ".." in normalized_record_path or "\\" in normalized_record_path:
+            raise ConnectorConfigError(
+                "customer record connector record_path must not include traversal segments"
+            )
+        if len(normalized_record_path) > 255:
+            raise ConnectorConfigError(
+                "customer record connector record_path must be at most 255 characters"
+            )
+    return {
+        "base_url": normalized_base_url,
+        "path_template": normalized_path_template,
+        "record_path": normalized_record_path or None,
+    }
+
+
 def _cents_to_usd(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
@@ -369,6 +401,43 @@ def _normalise_refund_record(
     return normalized
 
 
+def _normalise_customer_record(
+    record: Mapping[str, Any], *, customer_id: str
+) -> dict[str, Any]:
+    normalized = dict(record)
+    if "customer_id" not in normalized:
+        for candidate in (
+            "id",
+            "customerId",
+            "customerID",
+            "contact_id",
+            "contactId",
+            "account_id",
+            "external_id",
+        ):
+            value = normalized.get(candidate)
+            if value is not None and _clean_text(value):
+                normalized["customer_id"] = value
+                break
+    if "customer_id" not in normalized and customer_id:
+        normalized["customer_id"] = customer_id
+    if isinstance(normalized.get("email"), str):
+        normalized["email"] = normalized["email"].strip().lower()
+    if "status" not in normalized:
+        for candidate in (
+            "state",
+            "customer_status",
+            "customerStatus",
+            "lifecycle_status",
+            "lifecycleStatus",
+        ):
+            value = normalized.get(candidate)
+            if value is not None and _clean_text(value):
+                normalized["status"] = value
+                break
+    return normalized
+
+
 @dataclass(frozen=True)
 class LedgerRefundApiConnector:
     """Read one refund from a ledger/refund API."""
@@ -407,4 +476,45 @@ class LedgerRefundApiConnector:
             record=record,
             record_found=source.record_found,
             metadata={**(source.metadata or {}), "refund_id": self.refund_id},
+        )
+
+
+@dataclass(frozen=True)
+class CustomerRecordApiConnector:
+    """Read one customer/contact/account record from a CRM API."""
+
+    base_url: str
+    customer_id: str
+    bearer_token: str | None = None
+    path_template: str = "/customers/{customer_id}"
+    query: Mapping[str, Any] | None = None
+    record_path: str | None = None
+    timeout_seconds: float = 5.0
+    allow_private_hosts: bool = False
+    transport: httpx.BaseTransport | None = field(default=None, repr=False)
+    connector_type: str = "customer_record_api"
+
+    def fetch(self) -> SourceRecord:
+        connector = HttpJsonRecordConnector(
+            base_url=self.base_url,
+            path_template=self.path_template,
+            path_values={"customer_id": self.customer_id},
+            query=self.query,
+            bearer_token=self.bearer_token,
+            record_path=self.record_path,
+            timeout_seconds=self.timeout_seconds,
+            allow_private_hosts=self.allow_private_hosts,
+            transport=self.transport,
+            connector_type=self.connector_type,
+        )
+        source = connector.fetch()
+        record = (
+            _normalise_customer_record(source.record, customer_id=self.customer_id)
+            if source.record is not None
+            else None
+        )
+        return SourceRecord(
+            record=record,
+            record_found=source.record_found,
+            metadata={**(source.metadata or {}), "customer_id": self.customer_id},
         )

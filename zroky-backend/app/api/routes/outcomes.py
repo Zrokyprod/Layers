@@ -45,6 +45,7 @@ from app.services.outcome_reconciliation import (
 )
 from app.services.system_of_record_connectors import (
     ConnectorConfigError,
+    CustomerRecordApiConnector,
     LedgerRefundApiConnector,
 )
 
@@ -191,6 +192,36 @@ class LedgerRefundReconciliationIngest(BaseModel):
         return value.upper() if value else value
 
 
+class CustomerRecordConnectorIngest(BaseModel):
+    base_url: str = Field(..., max_length=2048)
+    path_template: str = Field(default="/customers/{customer_id}", max_length=512)
+    bearer_token: str | None = Field(default=None, min_length=8, max_length=4096)
+    record_path: str | None = Field(default=None, max_length=255)
+    query: dict[str, str | int | float | bool] | None = None
+    timeout_seconds: float | None = Field(default=None, ge=0.1, le=30)
+
+
+class CustomerRecordReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="customer_record_update", max_length=64)
+    customer_id: str | None = Field(None, max_length=255)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+    connector: CustomerRecordConnectorIngest
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
 class OutcomeReconciliationView(BaseModel):
     id: str
     project_id: str
@@ -305,6 +336,21 @@ def _refund_id(body: LedgerRefundReconciliationIngest) -> str:
     return refund_id
 
 
+def _customer_id(body: CustomerRecordReconciliationIngest) -> str:
+    customer_id = (
+        body.customer_id
+        or _claim_text(body.claimed, "customer_id")
+        or _claim_text(body.claimed, "id")
+        or ""
+    ).strip()
+    if not customer_id:
+        raise HTTPException(
+            status_code=422,
+            detail="customer_id is required for customer record reconciliation.",
+        )
+    return customer_id
+
+
 def _ledger_refund_match_fields(
     claimed: dict[str, Any], explicit: list[str] | None
 ) -> list[str]:
@@ -319,6 +365,28 @@ def _ledger_refund_match_fields(
     return fields or ["refund_id"]
 
 
+def _customer_record_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["customer_id"]
+    fields = [
+        field
+        for field in (
+            "customer_id",
+            "email",
+            "account_id",
+            "status",
+            "lifecycle_stage",
+            "plan",
+            "tier",
+        )
+        if field in claimed
+    ]
+    return fields or ["customer_id"]
+
+
 def _ledger_refund_idempotency_key(
     body: LedgerRefundReconciliationIngest,
     *,
@@ -330,6 +398,19 @@ def _ledger_refund_idempotency_key(
         body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
     )
     return f"ledger_refund:{scope}:{refund_id}"
+
+
+def _customer_record_idempotency_key(
+    body: CustomerRecordReconciliationIngest,
+    *,
+    customer_id: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"customer_record:{scope}:{customer_id}"
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -459,6 +540,67 @@ def create_ledger_refund_reconciliation(
                 **(body.metadata or {}),
                 "connector_kind": "ledger_refund_api",
                 "refund_id": refund_id,
+            },
+        )
+    except ConnectorConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _serialize_reconciliation(row)
+
+
+@router.post(
+    "/reconciliation/customer-record",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_customer_record_reconciliation(
+    request: Request,
+    body: CustomerRecordReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Fetch a CRM/customer record and reconcile it against the agent claim."""
+    customer_id = _customer_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("customer_id", customer_id)
+
+    settings = get_settings()
+    timeout = (
+        body.connector.timeout_seconds or settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS
+    )
+    connector = CustomerRecordApiConnector(
+        base_url=body.connector.base_url,
+        customer_id=customer_id,
+        bearer_token=body.connector.bearer_token,
+        path_template=body.connector.path_template,
+        query=body.connector.query,
+        record_path=body.connector.record_path,
+        timeout_seconds=timeout,
+        allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+    )
+
+    try:
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "customer_record_update",
+            system_ref=body.system_ref or f"crm:{customer_id}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_customer_record_match_fields(claimed, body.match_fields),
+            idempotency_key=_customer_record_idempotency_key(
+                body, customer_id=customer_id
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "customer_record_api",
+                "customer_id": customer_id,
             },
         )
     except ConnectorConfigError as exc:

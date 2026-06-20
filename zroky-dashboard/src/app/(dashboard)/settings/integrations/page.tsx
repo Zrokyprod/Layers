@@ -16,12 +16,16 @@ import {
 
 import {
   disconnectGithubRepoConnection,
+  getCustomerRecordConnectorStatus,
   getGithubConnectionStatus,
   getLedgerRefundConnectorStatus,
   getSlackInstallStatus,
   listOutcomeReconciliations,
+  saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
+  testCustomerRecordConnector,
   testLedgerRefundConnector,
+  type CustomerRecordConnectorStatusResponse,
   type LedgerRefundConnectorStatusResponse,
   type OutcomeReconciliationView,
 } from "@/lib/api";
@@ -35,6 +39,7 @@ type IntegrationState = {
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
   ledgerConfig: LedgerRefundConnectorStatusResponse | null;
+  customerConfig: CustomerRecordConnectorStatusResponse | null;
   outcomeChecks: OutcomeReconciliationView[];
 };
 
@@ -58,6 +63,28 @@ const defaultLedgerForm: LedgerConnectorForm = {
   testAmountUsd: "42.50",
   testCurrency: "USD",
   testStatus: "posted",
+};
+
+type CustomerConnectorForm = {
+  baseUrl: string;
+  pathTemplate: string;
+  recordPath: string;
+  bearerToken: string;
+  testCustomerId: string;
+  testEmail: string;
+  testStatus: string;
+  testAccountId: string;
+};
+
+const defaultCustomerForm: CustomerConnectorForm = {
+  baseUrl: "",
+  pathTemplate: "/customers/{customer_id}",
+  recordPath: "data",
+  bearerToken: "",
+  testCustomerId: "",
+  testEmail: "owner@example.com",
+  testStatus: "active",
+  testAccountId: "acct_1001",
 };
 
 function integrationStatus(connected: boolean) {
@@ -87,6 +114,11 @@ function textValue(value: unknown): string | null {
 function isLedgerRefundCheck(item: OutcomeReconciliationView) {
   const metadata = isRecord(item.metadata) ? item.metadata : {};
   return item.connector_type === "ledger_refund_api" || metadata.connector_kind === "ledger_refund_api";
+}
+
+function isCustomerRecordCheck(item: OutcomeReconciliationView) {
+  const metadata = isRecord(item.metadata) ? item.metadata : {};
+  return item.connector_type === "customer_record_api" || metadata.connector_kind === "customer_record_api";
 }
 
 function connectorStatus(check: OutcomeReconciliationView | null) {
@@ -145,10 +177,49 @@ function ledgerRefundPayloadSnippet() {
   }'`;
 }
 
+function customerRecordPayloadSnippet() {
+  return `curl -X POST "$ZROKY_API_BASE/v1/outcomes/reconciliation/customer-record" \\
+  -H "x-api-key: $ZROKY_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "call_id": "call_crm_123",
+    "trace_id": "trace_crm_123",
+    "action_type": "customer_record_update",
+    "customer_id": "CUS-1001",
+    "claimed": {
+      "customer_id": "CUS-1001",
+      "email": "owner@example.com",
+      "status": "active",
+      "account_id": "acct_1001"
+    },
+    "match_fields": ["customer_id", "email", "status", "account_id"],
+    "connector": {
+      "base_url": "https://crm.example.com/api",
+      "path_template": "/customers/{customer_id}",
+      "record_path": "data",
+      "bearer_token": "$CRM_TOKEN"
+    }
+  }'`;
+}
+
 function formFromLedgerConfig(
   config: LedgerRefundConnectorStatusResponse | null,
   previous: LedgerConnectorForm,
 ): LedgerConnectorForm {
+  if (!config?.connected) return previous;
+  return {
+    ...previous,
+    baseUrl: config.base_url ?? previous.baseUrl,
+    pathTemplate: config.path_template ?? previous.pathTemplate,
+    recordPath: config.record_path ?? previous.recordPath,
+    bearerToken: "",
+  };
+}
+
+function formFromCustomerConfig(
+  config: CustomerRecordConnectorStatusResponse | null,
+  previous: CustomerConnectorForm,
+): CustomerConnectorForm {
   if (!config?.connected) return previous;
   return {
     ...previous,
@@ -169,34 +240,42 @@ export default function IntegrationsSettingsPage() {
     github: null,
     slack: null,
     ledgerConfig: null,
+    customerConfig: null,
     outcomeChecks: [],
   });
   const [ledgerForm, setLedgerForm] = useState<LedgerConnectorForm>(defaultLedgerForm);
+  const [customerForm, setCustomerForm] = useState<CustomerConnectorForm>(defaultCustomerForm);
   const [loading, setLoading] = useState(true);
   const [savingLedger, setSavingLedger] = useState(false);
   const [testingLedger, setTestingLedger] = useState(false);
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [testingCustomer, setTestingCustomer] = useState(false);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
-    const [githubResult, slackResult, ledgerConfigResult, outcomeResult] = await Promise.allSettled([
+    const [githubResult, slackResult, ledgerConfigResult, customerConfigResult, outcomeResult] = await Promise.allSettled([
       getGithubConnectionStatus(),
       getSlackInstallStatus(),
       getLedgerRefundConnectorStatus(),
+      getCustomerRecordConnectorStatus(),
       listOutcomeReconciliations({ limit: 25 }),
     ]);
     const ledgerConfig = ledgerConfigResult.status === "fulfilled" ? ledgerConfigResult.value : null;
+    const customerConfig = customerConfigResult.status === "fulfilled" ? customerConfigResult.value : null;
 
     setState({
       github: githubResult.status === "fulfilled" ? githubResult.value : null,
       slack: slackResult.status === "fulfilled" ? slackResult.value : null,
       ledgerConfig,
+      customerConfig,
       outcomeChecks: outcomeResult.status === "fulfilled" ? outcomeResult.value.items : [],
     });
     setLedgerForm((prev) => formFromLedgerConfig(ledgerConfig, prev));
+    setCustomerForm((prev) => formFromCustomerConfig(customerConfig, prev));
 
-    const failures = [githubResult, slackResult, ledgerConfigResult, outcomeResult].filter((result) => result.status === "rejected");
+    const failures = [githubResult, slackResult, ledgerConfigResult, customerConfigResult, outcomeResult].filter((result) => result.status === "rejected");
     if (failures.length > 0) {
       setMessage("Some integration status checks could not load. Verify backend connectivity and admin access.");
     }
@@ -210,21 +289,27 @@ export default function IntegrationsSettingsPage() {
   const githubConnected = Boolean(state.github?.connected);
   const slackConnected = Boolean(state.slack?.connected);
   const ledgerConnected = Boolean(state.ledgerConfig?.connected);
+  const customerConnected = Boolean(state.customerConfig?.connected);
   const ledgerRefundChecks = state.outcomeChecks.filter(isLedgerRefundCheck);
+  const customerRecordChecks = state.outcomeChecks.filter(isCustomerRecordCheck);
   const latestLedgerRefundCheck = ledgerRefundChecks[0] ?? null;
+  const latestCustomerRecordCheck = customerRecordChecks[0] ?? null;
   const ledgerMetadata = connectorMetadata(latestLedgerRefundCheck);
+  const customerMetadata = connectorMetadata(latestCustomerRecordCheck);
   const ledgerVerified = latestLedgerRefundCheck?.verdict === "matched";
-  const readyCount = [githubConnected, slackConnected, ledgerConnected && ledgerVerified].filter(Boolean).length;
+  const customerVerified = latestCustomerRecordCheck?.verdict === "matched";
+  const readyCount = [githubConnected, slackConnected, ledgerConnected && ledgerVerified, customerConnected && customerVerified].filter(Boolean).length;
   const ledgerHttpStatus = textValue(ledgerMetadata.http_status);
+  const customerHttpStatus = textValue(customerMetadata.http_status);
   const ledgerRecordPath = state.ledgerConfig?.record_path ?? textValue(ledgerMetadata.record_path);
+  const customerRecordPath = state.customerConfig?.record_path ?? textValue(customerMetadata.record_path);
   const ledgerRequestUrl = maskedConnectorUrl(state.ledgerConfig?.base_url ?? ledgerMetadata.request_url);
-  const ledgerLastChecked = latestLedgerRefundCheck?.checked_at
-    ? formatDateTime(latestLedgerRefundCheck.checked_at)
-    : state.ledgerConfig?.last_tested_at
-      ? formatDateTime(state.ledgerConfig.last_tested_at)
-      : "Waiting for first check";
+  const customerRequestUrl = maskedConnectorUrl(state.customerConfig?.base_url ?? customerMetadata.request_url);
   const tokenStatus = state.ledgerConfig?.has_bearer_token
     ? `Stored token ending ${state.ledgerConfig.bearer_token_last4 ?? "****"}`
+    : "No bearer token stored";
+  const customerTokenStatus = state.customerConfig?.has_bearer_token
+    ? `Stored token ending ${state.customerConfig.bearer_token_last4 ?? "****"}`
     : "No bearer token stored";
 
   function onStartGithubConnect() {
@@ -240,8 +325,21 @@ export default function IntegrationsSettingsPage() {
     }
   }
 
+  async function copyCustomerPayload() {
+    try {
+      await navigator.clipboard.writeText(customerRecordPayloadSnippet());
+      setMessage("Customer record reconciliation payload copied.");
+    } catch {
+      setMessage("Copy failed. Select the payload and copy it manually.");
+    }
+  }
+
   function updateLedgerForm(field: keyof LedgerConnectorForm, value: string) {
     setLedgerForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateCustomerForm(field: keyof CustomerConnectorForm, value: string) {
+    setCustomerForm((prev) => ({ ...prev, [field]: value }));
   }
 
   async function onSaveLedgerConnector(event: FormEvent<HTMLFormElement>) {
@@ -262,6 +360,27 @@ export default function IntegrationsSettingsPage() {
       setMessage(saveError instanceof Error ? saveError.message : "Failed to save ledger refund connector.");
     } finally {
       setSavingLedger(false);
+    }
+  }
+
+  async function onSaveCustomerConnector(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setSavingCustomer(true);
+    try {
+      const updated = await saveCustomerRecordConnectorConfig({
+        base_url: customerForm.baseUrl.trim(),
+        path_template: customerForm.pathTemplate.trim() || "/customers/{customer_id}",
+        record_path: optionalText(customerForm.recordPath),
+        bearer_token: optionalText(customerForm.bearerToken),
+      });
+      setState((prev) => ({ ...prev, customerConfig: updated }));
+      setCustomerForm((prev) => formFromCustomerConfig(updated, { ...prev, bearerToken: "" }));
+      setMessage("Customer record connector saved.");
+    } catch (saveError) {
+      setMessage(saveError instanceof Error ? saveError.message : "Failed to save customer record connector.");
+    } finally {
+      setSavingCustomer(false);
     }
   }
 
@@ -298,6 +417,38 @@ export default function IntegrationsSettingsPage() {
       setMessage(testError instanceof Error ? testError.message : "Failed to run ledger refund test.");
     } finally {
       setTestingLedger(false);
+    }
+  }
+
+  async function onTestCustomerConnector(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setTestingCustomer(true);
+    const customerId = customerForm.testCustomerId.trim();
+    const claimed: Record<string, unknown> = { customer_id: customerId };
+    if (customerForm.testEmail.trim()) claimed.email = customerForm.testEmail.trim().toLowerCase();
+    if (customerForm.testStatus.trim()) claimed.status = customerForm.testStatus.trim();
+    if (customerForm.testAccountId.trim()) claimed.account_id = customerForm.testAccountId.trim();
+
+    try {
+      const result = await testCustomerRecordConnector({
+        customer_id: customerId,
+        claimed,
+        match_fields: Object.keys(claimed),
+      });
+      setState((prev) => ({
+        ...prev,
+        customerConfig: result.connector,
+        outcomeChecks: [
+          result.check,
+          ...prev.outcomeChecks.filter((item) => item.id !== result.check.id),
+        ].slice(0, 25),
+      }));
+      setMessage(`Customer record test recorded ${result.check.verdict}.`);
+    } catch (testError) {
+      setMessage(testError instanceof Error ? testError.message : "Failed to run customer record test.");
+    } finally {
+      setTestingCustomer(false);
     }
   }
 
@@ -349,14 +500,14 @@ export default function IntegrationsSettingsPage() {
         <article className="panel settings-summary-card">
           <CheckCircle2 aria-hidden="true" />
           <span>Ready</span>
-          <strong>{readyCount}/3</strong>
+          <strong>{readyCount}/4</strong>
           <small>Connected integrations can create PRs, deliver alerts, or prove outcomes.</small>
         </article>
         <article className="panel settings-summary-card">
           <DatabaseZap aria-hidden="true" />
             <span>Outcome proof</span>
-          <strong>{ledgerConnected ? connectorStatus(latestLedgerRefundCheck) : "Not configured"}</strong>
-          <small>{ledgerConnected ? `Last checked ${ledgerLastChecked}` : "Save a connector before running proof."}</small>
+          <strong>{ledgerConnected || customerConnected ? `${Number(Boolean(ledgerVerified)) + Number(Boolean(customerVerified))}/2 verified` : "Not configured"}</strong>
+          <small>{ledgerConnected || customerConnected ? `Ledger ${connectorStatus(latestLedgerRefundCheck)} / CRM ${connectorStatus(latestCustomerRecordCheck)}` : "Save a connector before running proof."}</small>
         </article>
       </section>
 
@@ -597,6 +748,159 @@ export default function IntegrationsSettingsPage() {
             <button type="button" className="btn btn-soft" onClick={() => void copyLedgerPayload()}>
               <Copy aria-hidden="true" />
               Copy API payload
+            </button>
+            <Link href="/outcomes" className="btn btn-primary">
+              View outcome checks
+            </Link>
+          </div>
+        </article>
+
+        <article className="panel settings-integration-card settings-connector-card">
+          <header className="panel-header">
+            <div className="settings-card-title-row">
+              <DatabaseZap aria-hidden="true" />
+              <div>
+                <h3>Customer record connector</h3>
+                <p>System-of-record proof for CRM agents that update customer, account, or contact records.</p>
+              </div>
+            </div>
+            <span className={customerConnected ? connectorPillClass(latestCustomerRecordCheck) : "pill"}>
+              {customerConnected ? connectorStatus(latestCustomerRecordCheck) : "Not configured"}
+            </span>
+          </header>
+
+          <div className="settings-connector-facts" aria-label="Customer record connector status">
+            <div>
+              <span>Masked endpoint</span>
+              <strong>{customerRequestUrl}</strong>
+            </div>
+            <div>
+              <span>Last HTTP</span>
+              <strong>{customerHttpStatus ?? "No response yet"}</strong>
+            </div>
+            <div>
+              <span>Record path</span>
+              <strong>{customerRecordPath ?? "data or records.0"}</strong>
+            </div>
+            <div>
+              <span>Token</span>
+              <strong>{customerTokenStatus}</strong>
+            </div>
+          </div>
+
+          <form className="settings-connector-form" onSubmit={(event) => void onSaveCustomerConnector(event)}>
+            <div className="settings-connector-form-grid">
+              <label>
+                <span>CRM base URL</span>
+                <input
+                  value={customerForm.baseUrl}
+                  onChange={(event) => updateCustomerForm("baseUrl", event.target.value)}
+                  placeholder="https://crm.example.com/api"
+                  required
+                />
+              </label>
+              <label>
+                <span>CRM path template</span>
+                <input
+                  value={customerForm.pathTemplate}
+                  onChange={(event) => updateCustomerForm("pathTemplate", event.target.value)}
+                  placeholder="/customers/{customer_id}"
+                  required
+                />
+              </label>
+              <label>
+                <span>CRM record path</span>
+                <input
+                  value={customerForm.recordPath}
+                  onChange={(event) => updateCustomerForm("recordPath", event.target.value)}
+                  placeholder="data"
+                />
+              </label>
+              <label>
+                <span>CRM bearer token</span>
+                <input
+                  type="password"
+                  value={customerForm.bearerToken}
+                  onChange={(event) => updateCustomerForm("bearerToken", event.target.value)}
+                  placeholder={state.customerConfig?.has_bearer_token ? "Paste to rotate stored token" : "Optional bearer token"}
+                />
+              </label>
+            </div>
+            <div className="actions">
+              <button type="submit" className="btn btn-primary" disabled={savingCustomer || !customerForm.baseUrl.trim()}>
+                <Save aria-hidden="true" />
+                {savingCustomer ? "Saving..." : "Save CRM connector"}
+              </button>
+            </div>
+          </form>
+
+          <form className="settings-connector-test" onSubmit={(event) => void onTestCustomerConnector(event)}>
+            <div className="settings-connector-test-grid">
+              <label>
+                <span>Customer ID</span>
+                <input
+                  value={customerForm.testCustomerId}
+                  onChange={(event) => updateCustomerForm("testCustomerId", event.target.value)}
+                  placeholder="CUS-1001"
+                  required
+                />
+              </label>
+              <label>
+                <span>Email</span>
+                <input
+                  value={customerForm.testEmail}
+                  onChange={(event) => updateCustomerForm("testEmail", event.target.value)}
+                  placeholder="owner@example.com"
+                />
+              </label>
+              <label>
+                <span>Status</span>
+                <input
+                  value={customerForm.testStatus}
+                  onChange={(event) => updateCustomerForm("testStatus", event.target.value)}
+                  placeholder="active"
+                />
+              </label>
+              <label>
+                <span>Account ID</span>
+                <input
+                  value={customerForm.testAccountId}
+                  onChange={(event) => updateCustomerForm("testAccountId", event.target.value)}
+                  placeholder="acct_1001"
+                />
+              </label>
+            </div>
+            <div className="actions">
+              <button type="submit" className="btn btn-soft" disabled={!customerConnected || testingCustomer || !customerForm.testCustomerId.trim()}>
+                <PlayCircle aria-hidden="true" />
+                {testingCustomer ? "Running..." : "Run CRM test reconciliation"}
+              </button>
+            </div>
+          </form>
+
+          <div className="list settings-connector-proof">
+            <div className="list-row">
+              <div className="list-main">
+                <strong>System reference</strong>
+                <span>{latestCustomerRecordCheck?.system_ref ?? "Run the first reconciliation to link a CRM record."}</span>
+              </div>
+            </div>
+            <div className="list-row">
+              <div className="list-main">
+                <strong>Last verdict</strong>
+                <span>{latestCustomerRecordCheck?.verdict ?? "not_verified"}</span>
+              </div>
+            </div>
+          </div>
+
+          <pre className="settings-connector-payload" aria-label="Customer record reconciliation payload">
+            <code>{customerRecordPayloadSnippet()}</code>
+          </pre>
+
+          <div className="actions">
+            <button type="button" className="btn btn-soft" onClick={() => void copyCustomerPayload()}>
+              <Copy aria-hidden="true" />
+              Copy CRM API payload
             </button>
             <Link href="/outcomes" className="btn btn-primary">
               View outcome checks
