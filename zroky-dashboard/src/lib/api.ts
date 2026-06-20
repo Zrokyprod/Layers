@@ -1185,6 +1185,17 @@ export function listMyProjects(signal?: AbortSignal): Promise<CurrentUserProject
   return request<CurrentUserProjectResponse[]>("/v1/auth/me/projects", { signal });
 }
 
+export function createCurrentUserProject(
+  body: { name: string },
+  projectIdOverride?: string | null,
+): Promise<CurrentUserProjectResponse> {
+  return request<CurrentUserProjectResponse>("/v1/auth/me/projects", {
+    method: "POST",
+    body,
+    projectIdOverride,
+  });
+}
+
 export function updateMe(body: { display_name: string | null }): Promise<MeResponse> {
   return request<MeResponse>("/v1/auth/me", {
     method: "PATCH",

@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 _EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 _MIN_PW_LEN = 8
@@ -143,6 +143,18 @@ class CurrentUserProjectResponse(BaseModel):
     updated_at: datetime
 
 
+class CurrentUserProjectCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Project name must not be empty")
+        return normalized
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
@@ -175,5 +187,3 @@ class SecurityStatusResponse(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     confirm_email: str
-
-

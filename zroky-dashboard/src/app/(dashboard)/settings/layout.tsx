@@ -8,7 +8,6 @@ import {
   BellRing,
   KeyRound,
   Plug,
-  Settings as SettingsIcon,
   ShieldCheck,
   SlidersHorizontal,
   Users,
@@ -24,7 +23,6 @@ const SETTINGS_TABS: ReadonlyArray<{
   icon: LucideIcon;
   exact?: boolean;
 }> = [
-  { href: "/settings", label: "Project", description: "Active projects and deletion", icon: SettingsIcon, exact: true },
   { href: "/settings/keys", label: "API keys", description: "Capture credentials", icon: KeyRound },
   { href: "/settings/providers", label: "Providers", description: "Model provider keys", icon: Plug },
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },
@@ -48,7 +46,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               Settings
             </span>
             <h1>Settings</h1>
-            <p>Manage project scope, capture keys, providers, members, billing, and integrations.</p>
+            <p>Manage capture keys, providers, members, billing, evaluation, and integrations.</p>
           </div>
           <div className="settings-hero-current">
             <ActiveIcon aria-hidden="true" />

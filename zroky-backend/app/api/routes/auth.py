@@ -33,6 +33,7 @@ from app.api.routes._internal.auth_oauth_clients import (
 from app.api.routes._internal.auth_schemas import (
     AuthTokenResponse,
     ChangePasswordRequest,
+    CurrentUserProjectCreateRequest,
     CurrentUserProjectResponse,
     DeleteAccountRequest,
     ForgotPasswordRequest,
@@ -62,7 +63,7 @@ from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.models import Project, ProjectMembership, User, compute_email_hash
 from app.db.session import get_db_session as get_db
-from app.services import token_store
+from app.services import entitlements_resolver, token_store
 from app.services.email_sender import send_email
 from app.services.security import (
     decode_session_token,
@@ -115,6 +116,45 @@ def _ensure_default_project_membership(db: Session, user: User) -> bool:
     )
     db.flush()
     return True
+
+
+def _current_user_project_rows(db: Session, user: User) -> list[tuple[ProjectMembership, Project]]:
+    return list(
+        db.execute(
+            select(ProjectMembership, Project)
+            .join(Project, Project.id == ProjectMembership.project_id)
+            .where(
+                ProjectMembership.user_id == user.id,
+                ProjectMembership.is_active.is_(True),
+                Project.is_active.is_(True),
+            )
+            .order_by(Project.name.asc(), ProjectMembership.created_at.asc(), ProjectMembership.id.asc())
+        ).all()
+    )
+
+
+def _current_project_response(
+    membership: ProjectMembership,
+    project: Project,
+) -> CurrentUserProjectResponse:
+    return CurrentUserProjectResponse(
+        membership_id=membership.id,
+        project_id=membership.project_id,
+        project_name=project.name,
+        role=membership.role,
+        is_active=membership.is_active,
+        created_at=membership.created_at,
+        updated_at=membership.updated_at,
+    )
+
+
+def _resolve_project_limit(db: Session, *, org_project_id: str) -> int:
+    entitlements = entitlements_resolver.resolve_all(db, org_project_id)
+    raw_limit = entitlements.get("max_projects", 1)
+    try:
+        return int(raw_limit)
+    except (TypeError, ValueError):
+        return 1
 
 
 @router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
@@ -732,29 +772,67 @@ def list_current_user_projects(
     if _ensure_default_project_membership(db, user):
         db.commit()
 
-    rows = db.execute(
-        select(ProjectMembership, Project)
-        .join(Project, Project.id == ProjectMembership.project_id)
-        .where(
-            ProjectMembership.user_id == user.id,
-            ProjectMembership.is_active.is_(True),
-            Project.is_active.is_(True),
-        )
-        .order_by(Project.name.asc(), ProjectMembership.created_at.asc(), ProjectMembership.id.asc())
-    ).all()
+    rows = _current_user_project_rows(db, user)
 
-    return [
-        CurrentUserProjectResponse(
-            membership_id=membership.id,
-            project_id=membership.project_id,
-            project_name=project.name,
-            role=membership.role,
-            is_active=membership.is_active,
-            created_at=membership.created_at,
-            updated_at=membership.updated_at,
+    return [_current_project_response(membership, project) for membership, project in rows]
+
+
+@router.post("/me/projects", response_model=CurrentUserProjectResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
+def create_current_user_project(
+    request: Request,
+    body: CurrentUserProjectCreateRequest,
+    authorization: Annotated[str | None, Header()] = None,
+    x_project_id: Annotated[str | None, Header(alias="X-Project-Id")] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> CurrentUserProjectResponse:
+    user = _get_current_user(authorization=authorization, db=db)
+    if _ensure_default_project_membership(db, user):
+        db.commit()
+
+    rows = _current_user_project_rows(db, user)
+    selected_context_project_id = (x_project_id or "").strip()
+    project_ids = {project.id for _, project in rows}
+    if selected_context_project_id and selected_context_project_id not in project_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Selected project does not belong to the current user.",
         )
-        for membership, project in rows
-    ]
+
+    limit_project_id = selected_context_project_id or (rows[0][1].id if rows else "")
+    max_projects = _resolve_project_limit(db, org_project_id=limit_project_id)
+    active_project_count = len(rows)
+    if max_projects != -1 and active_project_count >= max_projects:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                f"Project limit reached for this plan "
+                f"({active_project_count}/{max_projects}). Upgrade to add more projects."
+            ),
+        )
+
+    project = Project(
+        id=generate_project_id(),
+        name=body.name,
+        owner_ref=user.subject,
+        is_active=True,
+    )
+    db.add(project)
+    db.flush()
+
+    membership = ProjectMembership(
+        project_id=project.id,
+        user_id=user.id,
+        role="owner",
+        is_active=True,
+    )
+    db.add(membership)
+    db.flush()
+    db.commit()
+    db.refresh(project)
+    db.refresh(membership)
+
+    return _current_project_response(membership, project)
 
 
 @router.patch("/me", response_model=MeResponse)
