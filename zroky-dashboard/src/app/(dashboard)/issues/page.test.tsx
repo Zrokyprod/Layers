@@ -188,26 +188,26 @@ describe("FailuresPage MVP list", () => {
     render(<IssuesPage />);
 
     expect(await screen.findByRole("heading", { name: "Incidents" })).toBeInTheDocument();
-    expect(screen.getByText("Grouped production failures detected across your agents.")).toBeInTheDocument();
+    expect(screen.getByText("Production failures that need replay proof, Contract activation, or CI protection.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review replay gaps" })).toBeInTheDocument();
 
-    const filterBar = screen.getByRole("region", { name: "Issue filters" });
+    const filterBar = screen.getByRole("region", { name: "Incident filters" });
     for (const label of ["Status", "Severity", "Failure code", "Agent", "Replay proof", "Search"]) {
       expect(within(filterBar).getByLabelText(label)).toBeInTheDocument();
     }
 
     const headers = within(screen.getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent);
-    expect(headers).toEqual(["Issue", "Severity", "Impact", "Replay proof", "Status", "Last seen", "Next action", "Action"]);
+    expect(headers).toEqual(["Incident", "Severity", "Impact", "Replay proof", "Status", "Last seen", "Next action", "Action"]);
 
     const checkoutRow = rowForIssue("Checkout loop");
     expect(
       within(checkoutRow).getByText("Loop Detected · Checkout Agent · 42 affected traces - 9 users · deployment_id:dep-42"),
     ).toBeInTheDocument();
     expect(within(checkoutRow).getByText("$12.00")).toBeInTheDocument();
-    expect(within(checkoutRow).getByText("No trusted replay")).toBeInTheDocument();
-    expect(within(checkoutRow).getByRole("link", { name: "Run replay" }).getAttribute("href")).toBe("/issues/issue_1");
+    expect(within(checkoutRow).getByText("Needs verified replay")).toBeInTheDocument();
+    expect(within(checkoutRow).getByRole("link", { name: "Verify replay" }).getAttribute("href")).toBe("/issues/issue_1");
     expect(within(checkoutRow).getByRole("button", { name: /Replay/i })).toBeInTheDocument();
-    expect(within(checkoutRow).getByRole("link", { name: /View issue/i })).toBeInTheDocument();
+    expect(within(checkoutRow).queryByRole("link", { name: /View issue/i })).not.toBeInTheDocument();
 
     const verifiedRow = rowForIssue("Refund fix verified");
     expect(within(verifiedRow).getByText("Verified fix")).toBeInTheDocument();
@@ -216,7 +216,7 @@ describe("FailuresPage MVP list", () => {
       "/contracts?call_id=call_2",
       "/contracts?call_id=call_2",
     ]);
-    expect(within(verifiedRow).getByRole("link", { name: /View issue/i })).toBeInTheDocument();
+    expect(within(verifiedRow).queryByRole("link", { name: /View issue/i })).not.toBeInTheDocument();
   });
 
   it("filters by status and severity through the existing list API", async () => {
@@ -248,7 +248,7 @@ describe("FailuresPage MVP list", () => {
     expect(await screen.findByText("Billing proof missing")).toBeInTheDocument();
     expect(screen.queryByText("Checkout loop")).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText("Search issues, agents, failure codes..."), {
+    fireEvent.change(screen.getByPlaceholderText("Search incidents, agents, failure codes..."), {
       target: { value: "billing" },
     });
     expect(screen.getByText("Billing proof missing")).toBeInTheDocument();
@@ -262,7 +262,7 @@ describe("FailuresPage MVP list", () => {
     ["not_verified", "Not verified"],
     ["tool_snapshot_missing", "Missing tool proof"],
     ["inconclusive", "Inconclusive"],
-    ["unknown", "No trusted replay"],
+    ["unknown", "Needs verified replay"],
   ])("renders replay proof label %s as %s and blocks Contract promotion", async (status, label) => {
     mockIssueList([issue({ replay_coverage_status: status, sample_call_id: "call_untrusted" })]);
 
@@ -275,7 +275,7 @@ describe("FailuresPage MVP list", () => {
     expect(within(row).getByRole("button", { name: /Replay/i })).toBeInTheDocument();
   });
 
-  it("falls back to View issue when no sample call is available", async () => {
+  it("falls back to View incident when no sample call is available", async () => {
     mockIssueList([issue({ sample_call_id: null })]);
 
     render(<IssuesPage />);
@@ -284,7 +284,7 @@ describe("FailuresPage MVP list", () => {
     const row = rowForIssue("Checkout loop");
     expect(within(row).queryByRole("button", { name: /Replay/i })).toBeNull();
     expect(within(row).getByRole("link", { name: "Assign / resolve" }).getAttribute("href")).toBe("/issues/issue_1");
-    expect(within(row).getAllByRole("link", { name: /View issue/i }).length).toBeGreaterThan(0);
+    expect(within(row).getByRole("link", { name: /View incident/i }).getAttribute("href")).toBe("/issues/issue_1");
   });
 
   it("does not offer Contract promotion again when an active Contract already exists without a linked PR", async () => {

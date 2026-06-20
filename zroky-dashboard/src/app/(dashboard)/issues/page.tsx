@@ -112,6 +112,11 @@ function issueProvider(issue: IssueItem): string | null {
   return issue.evidence_traces.find((trace) => trace.provider?.trim())?.provider ?? null;
 }
 
+function incidentReplayLabel(status: string | null | undefined): string {
+  const label = replayLabel(status);
+  return label === "No trusted replay" ? "Needs verified replay" : label;
+}
+
 function affectedTraceCount(issue: IssueItem): number {
   return issue.affected_trace_count ?? issue.blast_radius?.affected_traces ?? issue.occurrence_count;
 }
@@ -148,7 +153,7 @@ function issueNextAction(issue: IssueItem): IssueNextAction {
 }
 
 function issueNextActionLabel(action: IssueNextAction): string {
-  if (action === "run_replay") return "Run replay";
+  if (action === "run_replay") return "Verify replay";
   if (action === "promote_golden") return "Promote Contract";
   if (action === "run_ci_gate") return "Run CI gate";
   if (action === "open_ci_gate") return "Open CI gate";
@@ -188,7 +193,7 @@ function searchMatches(issue: IssueItem, query: string): boolean {
     issue.affected_agent,
     issue.affected_workflow,
     issue.status,
-    replayLabel(issue.replay_coverage_status),
+    incidentReplayLabel(issue.replay_coverage_status),
   ]
     .filter(Boolean)
     .join(" ")
@@ -242,7 +247,7 @@ export default function IssuesPage() {
         setCursor(data.next_cursor);
       } catch (loadError) {
         if ((loadError as { name?: string }).name === "AbortError") return;
-        setError(loadError instanceof Error ? loadError.message : "Failed to load issues.");
+        setError(loadError instanceof Error ? loadError.message : "Failed to load incidents.");
       } finally {
         setLoading(false);
       }
@@ -356,14 +361,14 @@ export default function IssuesPage() {
           disabled={busyIssueId === issue.id}
         >
           <RotateCcw aria-hidden="true" />
-          {busyIssueId === issue.id ? "Creating..." : "Replay"}
+          {busyIssueId === issue.id ? "Creating..." : "Run replay"}
         </button>
       );
     }
     return (
       <Link href={`/issues/${issue.id}`} className="btn btn-primary btn-sm im-btn-primary">
         <ArrowRight aria-hidden="true" />
-        View issue
+        View incident
       </Link>
     );
   }
@@ -374,10 +379,10 @@ export default function IssuesPage() {
         <div>
           <div className="im-eyebrow">
             <AlertTriangle aria-hidden="true" />
-            Grouped failures
+            Incident queue
           </div>
           <h1>Incidents</h1>
-          <p>Grouped production failures detected across your agents.</p>
+          <p>Production failures that need replay proof, Contract activation, or CI protection.</p>
         </div>
         <button
           type="button"
@@ -415,12 +420,12 @@ export default function IssuesPage() {
         />
       ) : null}
 
-      <section className="fi-kpi-grid im-kpi-grid" aria-label="Failure summary">
+      <section className="fi-kpi-grid im-kpi-grid" aria-label="Incident summary">
         <KpiCard
           icon={<AlertTriangle aria-hidden="true" />}
-          label="Loaded failures"
+          label="Loaded incidents"
           value={formatCount(visibleIssues.length)}
-          helper="Grouped failures visible under current filters."
+          helper="Incident groups visible under current filters."
           active={defaultFailureSummaryActive}
           onClick={() => setFilters(INITIAL_FILTERS)}
         />
@@ -428,7 +433,7 @@ export default function IssuesPage() {
           icon={<RotateCcw aria-hidden="true" />}
           label="Replay gaps"
           value={formatCount(replayGapCount)}
-          helper="Need trusted replay before Contract or CI protection."
+          helper="Need verified replay before Contract or CI protection."
           active={filters.replayProof === "no_trusted_replay"}
           onClick={() => setFilters((prev) => ({ ...prev, replayProof: "no_trusted_replay" }))}
         />
@@ -436,7 +441,7 @@ export default function IssuesPage() {
           icon={<ShieldCheck aria-hidden="true" />}
           label="Verified fixes"
           value={formatCount(verifiedFixCount)}
-          helper="Replay proof exists; promote eligible traces."
+          helper="Replay proof exists; promote eligible incidents."
           active={filters.replayProof === "verified_fix"}
           onClick={() => setFilters((prev) => ({ ...prev, replayProof: "verified_fix" }))}
         />
@@ -448,7 +453,7 @@ export default function IssuesPage() {
         />
       </section>
 
-      <section className="im-filter-panel" aria-label="Issue filters">
+      <section className="im-filter-panel" aria-label="Incident filters">
         <label>
           <span>Status</span>
           <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value as StatusFilter)}>
@@ -488,7 +493,7 @@ export default function IssuesPage() {
           <span>Replay proof</span>
           <select value={filters.replayProof} onChange={(event) => updateFilter("replayProof", event.target.value)}>
             <option value="">Any</option>
-            <option value="no_trusted_replay">No trusted replay</option>
+            <option value="no_trusted_replay">Needs verified replay</option>
             <option value="verified_fix">Verified fix</option>
             <option value="stub_only">Fixture validation only</option>
             <option value="not_verified">Not verified</option>
@@ -504,7 +509,7 @@ export default function IssuesPage() {
             <input
               value={filters.search}
               onChange={(event) => updateFilter("search", event.target.value)}
-              placeholder="Search issues, agents, failure codes..."
+              placeholder="Search incidents, agents, failure codes..."
             />
           </div>
         </label>
@@ -523,14 +528,18 @@ export default function IssuesPage() {
 
       <section className="im-table-section">
         <SectionHeader
-          title="Issue queue"
-          description={`${formatCount(visibleIssues.length)} grouped failures loaded. ${formatCount(replayGapCount)} need trusted replay.`}
+          title="Incident queue"
+          description={`${formatCount(visibleIssues.length)} incidents loaded. ${formatCount(replayGapCount)} need verified replay.`}
         />
 
         {loading && items.length === 0 ? (
-          <div className="im-loading" aria-label="Loading issues" />
+          <div className="im-loading" aria-label="Loading incidents" />
         ) : visibleIssues.length === 0 ? (
-          <EmptyQueue>No issues match these filters.</EmptyQueue>
+          <EmptyQueue>
+            {defaultFailureSummaryActive
+              ? "No active incidents yet. Once capture detects a failure, it will appear here."
+              : "No incidents match these filters. Clear filters to return to open incidents."}
+          </EmptyQueue>
         ) : (
           <div className="im-table-wrap">
             <table className="im-issues-table">
@@ -546,7 +555,7 @@ export default function IssuesPage() {
               </colgroup>
               <thead>
                 <tr>
-                  <th>Issue</th>
+                  <th>Incident</th>
                   <th>Severity</th>
                   <th>Impact</th>
                   <th>Replay proof</th>
@@ -576,7 +585,7 @@ export default function IssuesPage() {
                       <td>
                         <strong className="im-impact-value">{formatIssueImpact(issue)}</strong>
                       </td>
-                      <td>{replayLabel(issue.replay_coverage_status)}</td>
+                      <td>{incidentReplayLabel(issue.replay_coverage_status)}</td>
                       <td>
                         <span className="im-status-pill">{issue.status}</span>
                       </td>
@@ -589,9 +598,6 @@ export default function IssuesPage() {
                       <td>
                         <div className="im-row-actions">
                           {primaryAction(issue)}
-                          <Link href={`/issues/${issue.id}`} className="btn btn-soft btn-sm im-btn-secondary">
-                            View issue
-                          </Link>
                         </div>
                       </td>
                     </tr>

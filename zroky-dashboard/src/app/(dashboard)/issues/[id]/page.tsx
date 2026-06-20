@@ -125,6 +125,11 @@ function issueProvider(issue: IssueItem | null): string | null {
   return issue?.evidence_traces.find((trace) => trace.provider?.trim())?.provider ?? null;
 }
 
+function incidentReplayLabel(status: string | null | undefined): string {
+  const label = replayLabel(status);
+  return label === "No trusted replay" ? "Needs verified replay" : label;
+}
+
 function callProvider(issue: IssueItem | null, callId: string): string | null {
   if (!issue) return null;
   return (
@@ -154,23 +159,23 @@ function hasCiGateRun(issue: IssueItem): boolean {
 }
 
 function replayBlocker(issue: IssueItem): string {
-  if (!issue.sample_call_id) return "Trusted replay needs a representative sample call.";
-  if (hasVerifiedFix(issue)) return "Trusted replay verified the fix.";
-  const label = replayLabel(issue.replay_coverage_status);
-  return `${label} is not trusted enough for Contracts or CI gates.`;
+  if (!issue.sample_call_id) return "Verified replay needs a representative sample call.";
+  if (hasVerifiedFix(issue)) return "Verified replay proved the fix.";
+  const label = incidentReplayLabel(issue.replay_coverage_status);
+  return `${label} is not enough for Contracts or CI gates.`;
 }
 
 function goldenBlocker(issue: IssueItem, canGoldens: boolean): string {
-  if (hasActiveGolden(issue)) return "Active Contract is linked to this issue.";
-  if (!hasVerifiedFix(issue)) return "Needs trusted replay before Contract promotion.";
+  if (hasActiveGolden(issue)) return "Active Contract is linked to this incident.";
+  if (!hasVerifiedFix(issue)) return "Needs verified replay before Contract promotion.";
   if (!issue.sample_call_id) return "Needs a sample call before Contract promotion.";
   if (!canGoldens) return "Current plan does not unlock Contracts.";
   return "Ready to promote this verified scenario into a Contract.";
 }
 
 function ciBlocker(issue: IssueItem, canCi: boolean): string {
-  if (hasCiGateRun(issue)) return "A replay-backed CI gate run is linked to this issue.";
-  if (!hasActiveGolden(issue)) return "Promote this verified issue to an active Contract before CI can block regressions.";
+  if (hasCiGateRun(issue)) return "A replay-backed CI gate run is linked to this incident.";
+  if (!hasActiveGolden(issue)) return "Promote this verified incident to an active Contract before CI can block regressions.";
   if (!canCi) return "Current plan does not unlock CI gates.";
   if (!issue.deploy_pr_url) return "Ready for CI, but no deployment PR is linked yet.";
   return "Ready to run a replay-backed CI gate for the linked PR.";
@@ -240,7 +245,7 @@ function primaryActionForIssue(
 }
 
 function primaryActionLabel(action: PrimaryAction): string {
-  if (action === "run_replay") return "Run trusted replay";
+  if (action === "run_replay") return "Run verification replay";
   if (action === "promote_golden") return "Promote to Contract";
   if (action === "run_ci_gate") return "Run CI gate";
   if (action === "open_ci_gate") return "Open CI gate";
@@ -253,7 +258,7 @@ function primaryActionLabel(action: PrimaryAction): string {
 }
 
 function primaryActionReason(action: PrimaryAction, issue: IssueItem, canCi: boolean): string {
-  if (action === "run_replay") return "Replay the exact failed scenario before any Contract or CI gate can be trusted.";
+  if (action === "run_replay") return "Replay the exact failed scenario before any Contract or CI gate can block a release.";
   if (action === "promote_golden") return "The fix is verified. Create the active Contract now.";
   if (action === "run_ci_gate") return ciBlocker(issue, canCi);
   if (action === "open_ci_gate") return "CI proof is already linked. Review the replay-backed gate result.";
@@ -261,8 +266,8 @@ function primaryActionReason(action: PrimaryAction, issue: IssueItem, canCi: boo
   if (action === "upgrade_goldens") return "Contract promotion is locked on the current plan.";
   if (action === "upgrade_ci") return "CI gates are locked on the current plan.";
   if (action === "blocked_missing_sample") return replayBlocker(issue);
-  if (action === "link_pr") return "Add the deployment PR URL in triage so this issue can run as a CI gate.";
-  return "This issue no longer needs an active remediation action.";
+  if (action === "link_pr") return "Add the deployment PR URL in triage so this incident can run as a CI gate.";
+  return "This incident no longer needs an active remediation action.";
 }
 
 function severityBadge(issue: IssueItem) {
@@ -380,11 +385,11 @@ function ConfirmPanel({
   return (
     <div className="imd-confirm-panel" role="alert">
       <div>
-        <strong>{isResolve ? "Resolve this issue?" : "Ignore this issue?"}</strong>
+        <strong>{isResolve ? "Resolve this incident?" : "Ignore this incident?"}</strong>
         <p>
           {isResolve
             ? "Only resolve after the fix path is understood or verified."
-            : "Ignoring removes this issue from the active remediation queue."}
+            : "Ignoring removes this incident from the active remediation queue."}
         </p>
       </div>
       <div className="imd-row-actions">
@@ -436,7 +441,7 @@ export default function IssueDetailPage() {
       })
       .catch((loadError) => {
         if ((loadError as { name?: string }).name === "AbortError") return;
-        setError(loadError instanceof Error ? loadError.message : "Failed to load issue.");
+        setError(loadError instanceof Error ? loadError.message : "Failed to load incident.");
       })
       .finally(() => {
         if (!ctrl.signal.aborted) setLoading(false);
@@ -522,9 +527,9 @@ export default function IssueDetailPage() {
     try {
       const response = await promoteIssueToGolden(issue.id, { blocks_ci: true });
       setIssue(response.issue);
-      setSuccessMessage("Contract created and linked to this issue.");
+      setSuccessMessage("Contract created and linked to this incident.");
     } catch (goldenError) {
-      setActionError(goldenError instanceof Error ? goldenError.message : "Failed to promote issue to Contract.");
+      setActionError(goldenError instanceof Error ? goldenError.message : "Failed to promote incident to Contract.");
     } finally {
       setBusyAction(null);
     }
@@ -595,9 +600,9 @@ export default function IssueDetailPage() {
       const updated = await resolveIssue(issue.id, { resolution_source: "manual" });
       setIssue(updated);
       setConfirmAction(null);
-      setSuccessMessage("Issue resolved. It is no longer part of the active failure queue.");
+      setSuccessMessage("Incident resolved. It is no longer part of the active failure queue.");
     } catch (resolveError) {
-      setActionError(resolveError instanceof Error ? resolveError.message : "Failed to resolve issue.");
+      setActionError(resolveError instanceof Error ? resolveError.message : "Failed to resolve incident.");
     } finally {
       setBusyAction(null);
     }
@@ -612,9 +617,9 @@ export default function IssueDetailPage() {
       const updated = await ignoreIssue(issue.id);
       setIssue(updated);
       setConfirmAction(null);
-      setSuccessMessage("Issue ignored. It will not appear in the active remediation queue.");
+      setSuccessMessage("Incident ignored. It will not appear in the active remediation queue.");
     } catch (ignoreError) {
-      setActionError(ignoreError instanceof Error ? ignoreError.message : "Failed to ignore issue.");
+      setActionError(ignoreError instanceof Error ? ignoreError.message : "Failed to ignore incident.");
     } finally {
       setBusyAction(null);
     }
@@ -635,13 +640,13 @@ export default function IssueDetailPage() {
       setDeployDraft(updated.deploy_pr_url ?? "");
       setSuccessMessage("Triage saved.");
     } catch (triageError) {
-      setActionError(triageError instanceof Error ? triageError.message : "Failed to update issue triage.");
+      setActionError(triageError instanceof Error ? triageError.message : "Failed to update incident triage.");
     } finally {
       setBusyAction(null);
     }
   }
 
-  if (loading) return <div className="imd-loading" aria-label="Loading issue" />;
+  if (loading) return <div className="imd-loading" aria-label="Loading incident" />;
 
   if (error) {
     return (
@@ -650,7 +655,7 @@ export default function IssueDetailPage() {
           <p>{error}</p>
           <Link href="/issues" className="btn btn-soft btn-sm im-btn-secondary">
             <ArrowLeft aria-hidden="true" />
-            Back to issues
+            Back to incidents
           </Link>
         </section>
       </div>
@@ -685,7 +690,7 @@ export default function IssueDetailPage() {
     {
       icon: <RotateCcw aria-hidden="true" />,
       label: "Replay",
-      value: verifiedFix ? "Trusted" : replayLabel(issue.replay_coverage_status),
+      value: verifiedFix ? "Verified" : incidentReplayLabel(issue.replay_coverage_status),
       helper: replayBlocker(issue),
       state: verifiedFix ? ("good" as const) : hasSampleCall ? ("blocked" as const) : ("warn" as const),
     },
@@ -707,7 +712,7 @@ export default function IssueDetailPage() {
       icon: <CheckCircle2 aria-hidden="true" />,
       label: "Resolution",
       value: titleCase(issue.status),
-      helper: issue.status === "open" ? "Issue is still in the active queue." : "Issue has left the active queue.",
+      helper: issue.status === "open" ? "Incident is still in the active queue." : "Incident has left the active queue.",
       state: issue.status === "resolved" ? ("good" as const) : issue.status === "ignored" ? ("neutral" as const) : ("warn" as const),
     },
   ];
@@ -723,7 +728,7 @@ export default function IssueDetailPage() {
           disabled={busyAction === "issue_replay"}
         >
           <RotateCcw aria-hidden="true" />
-          {busyAction === "issue_replay" ? "Creating..." : "Run trusted replay"}
+          {busyAction === "issue_replay" ? "Creating..." : "Run verification replay"}
         </button>
       );
     }
@@ -787,7 +792,7 @@ export default function IssueDetailPage() {
     }
     return (
       <Link href="/issues" className="btn btn-soft btn-sm im-btn-secondary">
-        Back to queue
+        Back to incidents
       </Link>
     );
   }
@@ -796,7 +801,7 @@ export default function IssueDetailPage() {
     <div className="issue-detail-mvp">
       <Link href="/issues" className="imd-back-link">
         <ArrowLeft aria-hidden="true" />
-        Back to issues
+        Back to incidents
       </Link>
 
       {successMessage ? (
@@ -821,12 +826,12 @@ export default function IssueDetailPage() {
         />
       ) : null}
 
-      <section className="imd-hero imd-command-hero" aria-label="Issue command center">
+      <section className="imd-hero imd-command-hero" aria-label="Incident command center">
         <div className="imd-hero-grid">
           <div className="imd-hero-main">
             <div className="imd-badge-row">
               {severityBadge(issue)}
-              <span className="im-status-pill">{replayLabel(issue.replay_coverage_status)}</span>
+              <span className="im-status-pill">{incidentReplayLabel(issue.replay_coverage_status)}</span>
               <span className="im-status-pill">{issue.status}</span>
             </div>
             <h1>{issue.title}</h1>
@@ -843,7 +848,7 @@ export default function IssueDetailPage() {
           </aside>
         </div>
 
-        <div className="imd-proof-ladder" aria-label="Issue proof ladder">
+        <div className="imd-proof-ladder" aria-label="Incident proof ladder">
           {proofSteps.map((step) => (
             <ProofStep key={step.label} {...step} />
           ))}
@@ -865,7 +870,7 @@ export default function IssueDetailPage() {
           <section className="imd-card imd-diagnosis-card">
             <SectionHeader
               title="Executive diagnosis"
-              description="The shortest reliable explanation of the failure and why this issue matters."
+              description="The shortest reliable explanation of the failure and why this incident matters."
             />
             <div className="imd-diagnosis-grid">
               <DiagnosisBlock label="What happened" value={evidenceSummary(issue)} />
@@ -887,7 +892,7 @@ export default function IssueDetailPage() {
           <section className="imd-card">
             <SectionHeader
               title="Evidence workbench"
-              description="Trace-level evidence attached to this issue. Use this to replay or inspect the exact failure."
+              description="Trace-level evidence attached to this incident. Use this to replay or inspect the exact failure."
               action={<span>{formatCount(orderedEvidence.length)} traces</span>}
             />
             {orderedEvidence.length === 0 ? (
@@ -978,13 +983,13 @@ export default function IssueDetailPage() {
               <ReadinessCard
                 icon={<RotateCcw aria-hidden="true" />}
                 title="Replay proof"
-                status={verifiedFix ? "Trusted replay verified" : replayLabel(issue.replay_coverage_status)}
+                status={verifiedFix ? "Verified replay passed" : incidentReplayLabel(issue.replay_coverage_status)}
                 state={verifiedFix ? "good" : "blocked"}
                 detail={replayBlocker(issue)}
                 action={
                   isUntrustedReplay(issue) && caps.canReplay && issue.sample_call_id ? (
                     <button type="button" className="btn btn-soft btn-sm im-btn-secondary" onClick={() => void onReplayIssue()}>
-                      Run replay
+                      Run verification replay
                     </button>
                   ) : null
                 }
@@ -1067,7 +1072,7 @@ export default function IssueDetailPage() {
               </div>
               <div>
                 <span>Replay proof</span>
-                <strong>{replayLabel(issue.replay_coverage_status)}</strong>
+                <strong>{incidentReplayLabel(issue.replay_coverage_status)}</strong>
               </div>
               <div>
                 <span>Gate readiness</span>

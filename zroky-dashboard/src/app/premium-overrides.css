@@ -2794,8 +2794,8 @@ body:has(.app-shell) {
 .app-shell .issues-mvp .im-issues-table .im-col-action,
 .app-shell .issues-mvp .im-issues-table th:nth-child(8),
 .app-shell .issues-mvp .im-issues-table td:nth-child(8) {
-  width: 244px !important;
-  min-width: 244px !important;
+  width: 148px !important;
+  min-width: 148px !important;
 }
 
 .app-shell .issues-mvp .im-issues-table th {
@@ -3039,7 +3039,7 @@ body:has(.app-shell) {
   }
 
   .app-shell .issues-mvp .im-issues-table td:nth-child(1)::before {
-    content: "Issue";
+    content: "Incident";
   }
 
   .app-shell .issues-mvp .im-issues-table td:nth-child(2)::before {
