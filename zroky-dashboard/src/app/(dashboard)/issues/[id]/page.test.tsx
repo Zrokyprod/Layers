@@ -152,7 +152,7 @@ function issue(overrides: Partial<import("@/lib/types").IssueItem> = {}): import
     cost_impact_usd: 18,
     user_impact: "Checkout users could not complete payment.",
     replay_coverage_status: "not_covered",
-    recommended_next_action: "Replay the issue and verify the payment retry guard.",
+    recommended_next_action: "Replay the incident and verify the payment retry guard.",
     priority_score: 99,
     proof: proof(),
     ...overrides,
@@ -281,7 +281,7 @@ describe("IssueDetailPage MVP investigation layout", () => {
     expect(await screen.findByRole("heading", { name: "Checkout loop" })).toBeInTheDocument();
     expect(screen.getByText(/Loop Detected.*Checkout Agent.*Production/)).toBeInTheDocument();
     expect(screen.getByText("critical")).toBeInTheDocument();
-    expect(screen.getAllByText("No trusted replay").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Needs verified replay").length).toBeGreaterThan(0);
     expect(screen.getAllByText("open").length).toBeGreaterThan(0);
     for (const label of ["Occurrences", "Affected traces", "Affected users", "Impact", "First seen", "Last seen", "Suspected version"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
@@ -297,10 +297,10 @@ describe("IssueDetailPage MVP investigation layout", () => {
     ]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
-    expect(screen.getByLabelText("Issue proof ladder")).toBeInTheDocument();
+    expect(screen.getByLabelText("Incident proof ladder")).toBeInTheDocument();
     expect(screen.getByText("Agent repeated the same payment tool call.")).toBeInTheDocument();
     expect(screen.getByText("Recommended path")).toBeInTheDocument();
-    expect(screen.getByText("Replay the issue and verify the payment retry guard.")).toBeInTheDocument();
+    expect(screen.getByText("Replay the incident and verify the payment retry guard.")).toBeInTheDocument();
     expect(screen.getAllByText("The model retried the same tool call three times.").length).toBeGreaterThan(0);
     expect(screen.getByText("Status / owner")).toBeInTheDocument();
     expect(screen.getByText("CI gate readiness")).toBeInTheDocument();
@@ -318,14 +318,14 @@ describe("IssueDetailPage MVP investigation layout", () => {
     expect(screen.getByText("No structured evidence yet.")).toBeInTheDocument();
   });
 
-  it("shows Run trusted replay for untrusted replay states", async () => {
+  it("shows Run verification replay for untrusted replay states", async () => {
     mockDetail({ replay_coverage_status: "not_verified" });
 
     render(<IssueDetailPage />);
 
     await screen.findByRole("heading", { name: "Checkout loop" });
     expect(screen.getAllByText("Not verified").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /Run trusted replay/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Run verification replay/i }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Promote to Contract")).toBeNull();
   });
 
@@ -338,7 +338,7 @@ describe("IssueDetailPage MVP investigation layout", () => {
     fireEvent.click(screen.getByRole("button", { name: /Promote to Contract/i }));
 
     await waitFor(() => expect(api.promoteIssueToGolden).toHaveBeenCalledWith("issue_1", { blocks_ci: true }));
-    expect(await screen.findByText("Contract created and linked to this issue.")).toBeInTheDocument();
+    expect(await screen.findByText("Contract created and linked to this incident.")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Open fixture/i })[0].getAttribute("href")).toBe("/goldens/golden_1");
   });
 
@@ -350,7 +350,7 @@ describe("IssueDetailPage MVP investigation layout", () => {
     await screen.findByRole("heading", { name: "Checkout loop" });
     expect(screen.queryByText("Promote to Contract")).toBeNull();
     expect(screen.queryByRole("button", { name: /Promote to Contract/i })).toBeNull();
-    expect(screen.getAllByText("Needs trusted replay before Contract promotion.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Needs verified replay before Contract promotion.").length).toBeGreaterThan(0);
   });
 
   it("does not show Contract promotion when verified_fix has no sample call", async () => {
@@ -406,12 +406,12 @@ describe("IssueDetailPage MVP investigation layout", () => {
 
     await screen.findByRole("heading", { name: "Checkout loop" });
     fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
-    expect(screen.getByText("Resolve this issue?")).toBeInTheDocument();
+    expect(screen.getByText("Resolve this incident?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Confirm resolve" }));
     await waitFor(() => expect(api.resolveIssue).toHaveBeenCalledWith("issue_1", { resolution_source: "manual" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Ignore" }));
-    expect(screen.getByText("Ignore this issue?")).toBeInTheDocument();
+    expect(screen.getByText("Ignore this incident?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Confirm ignore" }));
     await waitFor(() => expect(api.ignoreIssue).toHaveBeenCalledWith("issue_1"));
   });

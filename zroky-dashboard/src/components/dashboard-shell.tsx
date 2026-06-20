@@ -503,6 +503,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<ShellMenu | null>(null);
   const [workspacePopoverStyle, setWorkspacePopoverStyle] = useState<CSSProperties | null>(null);
+  const [workspacePopoverTarget, setWorkspacePopoverTarget] = useState<HTMLElement | null>(null);
   const [activeDatePreset, setActiveDatePreset] = useState<DatePresetId>("7d");
   const [compactShell, setCompactShell] = useState(false);
   const [compactSidebarOpen, setCompactSidebarOpen] = useState(false);
@@ -529,6 +530,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setLastVisitedPage(pathname);
   }, [pathname, setLastVisitedPage]);
+
+  useEffect(() => {
+    setWorkspacePopoverTarget(appShellRef.current ?? document.body);
+  }, []);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -804,8 +809,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
-  const workspacePopoverTarget =
-    typeof document === "undefined" ? null : appShellRef.current ?? document.body;
   const workspacePopover = openMenu === "workspace" && workspacePopoverStyle ? (
     <div
       ref={workspacePopoverRef}

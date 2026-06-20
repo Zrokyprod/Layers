@@ -24747,7 +24747,7 @@ body:has(.app-shell) {
 }
 
 .im-issues-table .im-col-action {
-  width: 260px;
+  width: 156px;
 }
 
 .im-issues-table th {
@@ -24812,8 +24812,8 @@ body:has(.app-shell) {
 
 .im-issues-table th:nth-child(8),
 .im-issues-table td:nth-child(8) {
-  width: 260px;
-  min-width: 260px;
+  width: 156px;
+  min-width: 156px;
 }
 
 .im-issue-cell {
