@@ -143,6 +143,10 @@ class Settings(BaseSettings):
     CLICKHOUSE_ENABLED: bool = False
     CLICKHOUSE_SYNC_INTERVAL_SECONDS: int = 60
 
+    # Outcome verification connectors.
+    OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS: bool = False
+    OUTCOME_CONNECTOR_TIMEOUT_SECONDS: float = 5.0
+
     # â”€â”€ Replay worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Shared secret between the control plane and the customer-hosted replay worker.
     # When unset, /v1/replay/poll and /v1/replay/result always return 401.

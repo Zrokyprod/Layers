@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -13,9 +16,14 @@ from app.main import app
 from app.services.detectors.outcome_mismatch import detect_outcome_mismatch
 from app.services.outcome_reconciliation import (
     ApiRecordConnector,
+    SourceRecord,
     compare_claim_to_actual,
     get_reconciliation_summary,
     reconcile_outcome,
+)
+from app.services.system_of_record_connectors import (
+    ConnectorConfigError,
+    LedgerRefundApiConnector,
 )
 
 
@@ -51,6 +59,99 @@ def test_compare_claim_to_actual_has_honest_verdicts() -> None:
     assert not_verified.reason == "system_of_record_missing"
 
 
+def test_ledger_refund_connector_fetches_and_normalizes_record_without_storing_secret() -> (
+    None
+):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "id": "rf_123",
+                    "amount": "42.50",
+                    "currency": "usd",
+                    "status": "posted",
+                }
+            },
+        )
+
+    connector = LedgerRefundApiConnector(
+        base_url="https://ledger.example/api",
+        refund_id="rf_123",
+        bearer_token="ledger-secret-token",
+        record_path="data",
+        transport=httpx.MockTransport(handler),
+    )
+
+    source = connector.fetch()
+
+    assert requests[0].url == "https://ledger.example/api/refunds/rf_123"
+    assert requests[0].headers["authorization"] == "Bearer ledger-secret-token"
+    assert source.record_found is True
+    assert source.record == {
+        "id": "rf_123",
+        "amount": "42.50",
+        "currency": "USD",
+        "status": "posted",
+        "refund_id": "rf_123",
+        "amount_usd": "42.50",
+    }
+    assert source.metadata is not None
+    assert source.metadata["http_status"] == 200
+    assert "ledger-secret-token" not in json.dumps(source.metadata)
+
+
+def test_ledger_refund_connector_missing_record_and_unavailable_source_are_honest() -> (
+    None
+):
+    missing = LedgerRefundApiConnector(
+        base_url="https://ledger.example",
+        refund_id="rf_missing",
+        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+    ).fetch()
+    assert missing.record is None
+    assert missing.record_found is False
+    assert missing.metadata is not None
+    assert missing.metadata["http_status"] == 404
+
+    unavailable = LedgerRefundApiConnector(
+        base_url="https://ledger.example",
+        refund_id="rf_unknown",
+        transport=httpx.MockTransport(lambda _request: httpx.Response(503)),
+    ).fetch()
+    assert unavailable.record is None
+    assert unavailable.record_found is None
+    assert unavailable.metadata is not None
+    assert unavailable.metadata["error"] == "http_error"
+
+
+def test_ledger_refund_connector_rejects_private_hosts_by_default() -> None:
+    with pytest.raises(ConnectorConfigError):
+        LedgerRefundApiConnector(
+            base_url="https://127.0.0.1", refund_id="rf_123"
+        ).fetch()
+
+
+def test_ledger_refund_connector_rejects_unsafe_url_shapes() -> None:
+    for kwargs in (
+        {"base_url": "https://ledger.example/api?token=hidden"},
+        {"base_url": "https://ledger.example/api#fragment"},
+        {
+            "base_url": "https://ledger.example/api",
+            "path_template": "/../refunds/{refund_id}",
+        },
+        {
+            "base_url": "https://ledger.example/api",
+            "path_template": "/refunds/{refund_id}?expand=all",
+        },
+    ):
+        with pytest.raises(ConnectorConfigError):
+            LedgerRefundApiConnector(refund_id="rf_123", **kwargs).fetch()
+
+
 def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> None:
     engine = create_engine(
         f"sqlite:///{tmp_path / 'reconcile.db'}",
@@ -58,7 +159,9 @@ def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> N
         future=True,
     )
     Base.metadata.create_all(bind=engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
 
     try:
         with session_factory() as session:
@@ -71,7 +174,11 @@ def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> N
                 system_ref="ledger:rf_123",
                 claimed={"refund_id": "rf_123", "amount_usd": 42.5, "currency": "USD"},
                 connector=ApiRecordConnector(
-                    record={"refund_id": "rf_123", "amount_usd": "42.50", "currency": "usd"},
+                    record={
+                        "refund_id": "rf_123",
+                        "amount_usd": "42.50",
+                        "currency": "usd",
+                    },
                     record_found=True,
                     connector_type="ledger_api",
                 ),
@@ -86,7 +193,9 @@ def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> N
                 connector=ApiRecordConnector(record={"refund_id": "different"}),
                 idempotency_key="call_refund_1:rf_123",
             )
-            summary = get_reconciliation_summary(session, project_id="proj_reconcile", days=30)
+            summary = get_reconciliation_summary(
+                session, project_id="proj_reconcile", days=30
+            )
 
         assert first.id == second.id
         assert first.verdict == "matched"
@@ -106,7 +215,9 @@ def test_reconciliation_api_creates_mismatch_and_lists_by_call(tmp_path: Path) -
         future=True,
     )
     Base.metadata.create_all(bind=engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
 
     def override_db():
         session = session_factory()
@@ -116,7 +227,9 @@ def test_reconciliation_api_creates_mismatch_and_lists_by_call(tmp_path: Path) -
             session.close()
 
     def override_tenant():
-        return TenantContext(tenant_id="proj_reconcile_api", role="admin", subject="user-reconcile")
+        return TenantContext(
+            tenant_id="proj_reconcile_api", role="admin", subject="user-reconcile"
+        )
 
     app.dependency_overrides[get_db_session] = override_db
     app.dependency_overrides[get_db_session_read] = override_db
@@ -165,6 +278,161 @@ def test_reconciliation_api_creates_mismatch_and_lists_by_call(tmp_path: Path) -
         engine.dispose()
 
 
+def test_ledger_refund_reconciliation_api_fetches_system_record_and_redacts_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "ledger_refund_api.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_ledger_refund", role="admin", subject="user-ledger"
+        )
+
+    def fake_fetch(self: LedgerRefundApiConnector) -> SourceRecord:
+        assert self.bearer_token == "ledger-secret-token"
+        return SourceRecord(
+            record={
+                "refund_id": self.refund_id,
+                "amount_usd": "42.50",
+                "currency": "usd",
+                "status": "posted",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "ledger_refund_api",
+                "request_url": "https://ledger.example/refunds/rf_live",
+                "http_status": 200,
+                "refund_id": self.refund_id,
+            },
+        )
+
+    monkeypatch.setattr(LedgerRefundApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/ledger-refund",
+                json={
+                    "call_id": "call_live_refund",
+                    "trace_id": "trace_live_refund",
+                    "claimed": {
+                        "refund_id": "rf_live",
+                        "amount_usd": 42.5,
+                        "currency": "USD",
+                    },
+                    "connector": {
+                        "base_url": "https://ledger.example",
+                        "bearer_token": "ledger-secret-token",
+                    },
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "ledger_refund_api"
+            assert body["system_ref"] == "ledger:rf_live"
+            assert body["reason"] == "all_compared_fields_matched"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert body["metadata"]["match_fields"] == [
+                "refund_id",
+                "amount_usd",
+                "currency",
+            ]
+            assert "ledger-secret-token" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_ledger_refund_reconciliation_api_marks_missing_ledger_record_mismatched(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "ledger_refund_missing.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_ledger_missing", role="admin", subject="user-ledger"
+        )
+
+    monkeypatch.setattr(
+        LedgerRefundApiConnector,
+        "fetch",
+        lambda self: SourceRecord(
+            record=None,
+            record_found=False,
+            metadata={
+                "connector_type": "ledger_refund_api",
+                "request_url": "https://ledger.example/refunds/rf_missing",
+                "http_status": 404,
+                "refund_id": self.refund_id,
+            },
+        ),
+    )
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/ledger-refund",
+                json={
+                    "call_id": "call_missing_refund",
+                    "claimed": {"refund_id": "rf_missing", "amount_usd": 42.5},
+                    "connector": {"base_url": "https://ledger.example"},
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "mismatched"
+            assert body["reason"] == "system_of_record_record_missing"
+            assert body["metadata"]["connector"]["http_status"] == 404
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
 def test_outcome_mismatch_detector_fires_only_on_mismatched_reconciliation() -> None:
     result = detect_outcome_mismatch(
         {
@@ -181,4 +449,7 @@ def test_outcome_mismatch_detector_fires_only_on_mismatched_reconciliation() -> 
     assert result["category"] == "OUTCOME_MISMATCH"
     assert result["severity_hint"] == "critical"
 
-    assert detect_outcome_mismatch({"outcome_reconciliation": {"verdict": "not_verified"}}) is None
+    assert (
+        detect_outcome_mismatch({"outcome_reconciliation": {"verdict": "not_verified"}})
+        is None
+    )
