@@ -260,6 +260,7 @@ describe("DashboardShell primary navigation", () => {
     expect(primaryNavLabels()).toEqual([
       "Overview",
       "Incidents",
+      "Outcomes",
       "Replays",
       "Contracts",
       "CI",
@@ -319,6 +320,7 @@ describe("DashboardShell primary navigation", () => {
     const labels = primaryNavLabels();
     expect(labels).toContain("Contracts");
     expect(labels).toContain("CI");
+    expect(labels).toContain("Outcomes");
     expect(labels).not.toContain("Agents");
     expect(labels).not.toContain("Traces");
     expect(labels).not.toContain("Policies");
@@ -552,6 +554,7 @@ describe("DashboardShell primary navigation", () => {
 
     expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /Overview/ }).getAttribute("href")).toBe("/home");
+    expect(screen.getByRole("menuitem", { name: /Outcomes/ }).getAttribute("href")).toBe("/outcomes");
     expect(screen.getByRole("menuitem", { name: /Contracts/ }).getAttribute("href")).toBe("/contracts");
     expect(screen.queryByRole("menuitem", { name: /Traces/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Policies/ })).not.toBeInTheDocument();

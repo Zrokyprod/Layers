@@ -1753,6 +1753,43 @@ export interface OutcomeView {
   created_at: string;
 }
 
+export type OutcomeReconciliationVerdict = "matched" | "mismatched" | "not_verified";
+
+export interface OutcomeReconciliationView {
+  id: string;
+  project_id: string;
+  call_id: string | null;
+  trace_id: string | null;
+  runtime_policy_decision_id: string | null;
+  action_type: string | null;
+  connector_type: string;
+  system_ref: string | null;
+  verdict: OutcomeReconciliationVerdict;
+  reason: string | null;
+  amount_usd: number | null;
+  currency: string | null;
+  claimed: Record<string, unknown>;
+  actual: Record<string, unknown> | null;
+  comparison: Record<string, unknown>;
+  idempotency_key: string | null;
+  metadata: Record<string, unknown> | null;
+  checked_at: string;
+  created_at: string;
+}
+
+export interface OutcomeReconciliationListResponse {
+  items: OutcomeReconciliationView[];
+  total_in_page: number;
+}
+
+export interface OutcomeReconciliationSummaryResponse {
+  window_days: number;
+  total: number;
+  matched: number;
+  mismatched: number;
+  not_verified: number;
+}
+
 export function getOutcomeSummary(
   days = 30,
   signal?: AbortSignal,
@@ -1770,6 +1807,43 @@ export function getReplaySavings(
   return request<ReplaySavingsResponse>(`/v1/outcomes/replay/${encodeURIComponent(runId)}`, {
     signal,
   });
+}
+
+export function getOutcomeReconciliationSummary(
+  days = 30,
+  signal?: AbortSignal,
+): Promise<OutcomeReconciliationSummaryResponse> {
+  return request<OutcomeReconciliationSummaryResponse>("/v1/outcomes/reconciliation/summary", {
+    query: { days: String(days) },
+    signal,
+  });
+}
+
+export function listOutcomeReconciliations(
+  params: {
+    verdict?: OutcomeReconciliationVerdict | "all";
+    limit?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<OutcomeReconciliationListResponse> {
+  const verdict = params.verdict && params.verdict !== "all" ? params.verdict : undefined;
+  return request<OutcomeReconciliationListResponse>("/v1/outcomes/reconciliation", {
+    query: {
+      ...(verdict ? { verdict } : {}),
+      limit: String(params.limit ?? 50),
+    },
+    signal,
+  });
+}
+
+export function getOutcomeReconciliation(
+  checkId: string,
+  signal?: AbortSignal,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>(
+    `/v1/outcomes/reconciliation/${encodeURIComponent(checkId)}`,
+    { signal },
+  );
 }
 
 export function ingestOutcome(

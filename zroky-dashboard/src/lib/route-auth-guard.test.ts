@@ -31,6 +31,7 @@ describe("guardDashboardRoute", () => {
     const approvals = guardDashboardRoute(request("https://app.zroky.com/approvals"));
     const policies = guardDashboardRoute(request("https://app.zroky.com/policies"));
     const integrations = guardDashboardRoute(request("https://app.zroky.com/integrations"));
+    const outcomes = guardDashboardRoute(request("https://app.zroky.com/outcomes?verdict=mismatched"));
     const projects = guardDashboardRoute(request("https://app.zroky.com/projects/proj_1"));
     const contracts = guardDashboardRoute(request("https://app.zroky.com/contracts/contract_1?tab=proof"));
 
@@ -44,6 +45,10 @@ describe("guardDashboardRoute", () => {
     expect(policies.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fpolicies");
     expect(integrations.status).toBe(307);
     expect(integrations.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fintegrations");
+    expect(outcomes.status).toBe(307);
+    expect(outcomes.headers.get("location")).toBe(
+      "https://app.zroky.com/login?next=%2Foutcomes%3Fverdict%3Dmismatched",
+    );
     expect(projects.status).toBe(307);
     expect(projects.headers.get("location")).toBe("https://app.zroky.com/login?next=%2Fprojects%2Fproj_1");
     expect(contracts.status).toBe(307);
