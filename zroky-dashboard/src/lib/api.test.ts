@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   approveRuntimePolicyDecision,
   getBillingMe,
+  getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
   getOutcomeReconciliationSummary,
   listRuntimePolicyApprovals,
@@ -132,6 +133,39 @@ describe("runtime policy API client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/zroky/v1/runtime-policy/approvals?status=all",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("loads an evidence pack for a runtime policy decision", async () => {
+    const pack = {
+      schema_version: "runtime_policy_evidence.v1",
+      project_id: "proj_1",
+      decision_id: "decision_1",
+      verification_status: "pass",
+      decision: {},
+      related_decisions: [],
+      audit_log: [],
+      trace_policy_spans: [],
+      outcome_reconciliation: [],
+      call: null,
+      generated_at: "2026-06-20T00:00:00Z",
+      hash_algorithm: "sha256",
+      evidence_hash: "a".repeat(64),
+      hash_payload_excludes: ["generated_at"],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(pack), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getRuntimePolicyEvidencePack("decision_1")).resolves.toMatchObject({
+      decision_id: "decision_1",
+      evidence_hash: "a".repeat(64),
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/runtime-policy/decisions/decision_1/evidence",
       expect.objectContaining({ method: "GET" }),
     );
   });

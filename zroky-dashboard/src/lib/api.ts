@@ -175,6 +175,82 @@ export interface RuntimePolicyKillSwitchResponse {
   policy: Record<string, unknown>;
 }
 
+export interface RuntimePolicyEvidenceDecisionResponse {
+  id: string;
+  project_id: string;
+  trace_id: string | null;
+  call_id: string | null;
+  agent_name: string | null;
+  role: string | null;
+  action_type: string | null;
+  tool_name: string | null;
+  decision: string;
+  status: RuntimePolicyDecisionStatus;
+  allowed: boolean;
+  requires_approval: boolean;
+  reasons: string[];
+  request: Record<string, unknown>;
+  policy_snapshot: Record<string, unknown>;
+  intended_action: Record<string, unknown>;
+  trace_context: Record<string, unknown>;
+  policy_hit: Record<string, unknown>;
+  business_impact: Record<string, unknown>;
+  approval_scope_hash: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_reason: string | null;
+  consumed_at: string | null;
+  consumed_by_decision_id: string | null;
+}
+
+export interface RuntimePolicyEvidenceAuditEventResponse {
+  id: string;
+  decision_id: string;
+  event_type: string;
+  actor: string | null;
+  reason: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+export interface RuntimePolicyEvidenceCallResponse {
+  id: string;
+  event_id: string | null;
+  trace_id: string | null;
+  agent_name: string | null;
+  user_id: string | null;
+  call_type: string | null;
+  provider: string | null;
+  model: string | null;
+  status: string | null;
+  error_code: string | null;
+  latency_ms: number | null;
+  total_tokens: number | null;
+  cost_total: number;
+  cost_currency: string | null;
+  created_at: string | null;
+}
+
+export interface RuntimePolicyEvidencePackResponse {
+  schema_version: string;
+  project_id: string;
+  decision_id: string;
+  verification_status: "pass" | "warn" | "fail" | "not_verified" | string;
+  decision: RuntimePolicyEvidenceDecisionResponse;
+  related_decisions: RuntimePolicyEvidenceDecisionResponse[];
+  audit_log: RuntimePolicyEvidenceAuditEventResponse[];
+  trace_policy_spans: Record<string, unknown>[];
+  outcome_reconciliation: OutcomeReconciliationView[];
+  call: RuntimePolicyEvidenceCallResponse | null;
+  generated_at: string;
+  hash_algorithm: string;
+  evidence_hash: string;
+  hash_payload_excludes: string[];
+}
+
 export interface PilotPolicyPayload {
   tier1_enabled: boolean;
   tier1_actions: string[];
@@ -2642,6 +2718,16 @@ export function listRuntimePolicyApprovals(
     query: { status },
     signal,
   });
+}
+
+export function getRuntimePolicyEvidencePack(
+  decisionId: string,
+  signal?: AbortSignal,
+): Promise<RuntimePolicyEvidencePackResponse> {
+  return request<RuntimePolicyEvidencePackResponse>(
+    `/v1/runtime-policy/decisions/${encodeURIComponent(decisionId)}/evidence`,
+    { signal },
+  );
 }
 
 export function approveRuntimePolicyDecision(
