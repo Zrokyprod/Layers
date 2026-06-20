@@ -135,6 +135,12 @@ Invoke-ReadinessStep `
   -Arguments @("scripts/run_money_path_demo.py", "--json")
 
 Invoke-ReadinessStep `
+  -Name "Design-partner install kit" `
+  -WorkingDirectory $RootDir `
+  -Command "python" `
+  -Arguments @("scripts/run_design_partner_install_kit.py", "--json")
+
+Invoke-ReadinessStep `
   -Name "Dashboard reliability surfaces" `
   -WorkingDirectory (Join-Path $RootDir "zroky-dashboard") `
   -Command "npm" `

@@ -1,0 +1,46 @@
+{
+  "project_id": "demo-design-partner-refund",
+  "agent": {
+    "name": "refund-ops-agent",
+    "workflow": "refund-issue",
+    "type": "money_action_agent"
+  },
+  "trace": {
+    "call_id": "dp-call-refund-1001",
+    "trace_id": "dp-trace-refund-1001"
+  },
+  "risky_action": {
+    "action_type": "refund",
+    "tool_name": "refund_payment",
+    "external_action": true,
+    "business_impact_summary": "Would issue a customer refund before mandate and ledger verification.",
+    "impact_usd": 42.18
+  },
+  "claimed_outcome": {
+    "refund_id": "RF-DP-1001",
+    "order_id": "ORD-DP-1001",
+    "amount_usd": 42.18,
+    "currency": "USD",
+    "status": "posted"
+  },
+  "ledger": {
+    "base_url": "https://ledger.design-partner.local/api",
+    "path_template": "/refunds/{refund_id}",
+    "record_path": "data",
+    "bearer_token": "ledger-demo-token-not-persisted",
+    "response": {
+      "data": {
+        "id": "RF-DP-1001",
+        "order_id": "ORD-DP-1001",
+        "amount": "42.18",
+        "currency": "usd",
+        "status": "posted"
+      }
+    }
+  },
+  "expected": {
+    "runtime_allowed": false,
+    "outcome_verdict": "matched",
+    "evidence_verification_status": "pass"
+  }
+}
