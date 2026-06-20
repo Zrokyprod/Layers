@@ -1,10 +1,12 @@
 import type { AuthTokenResponse } from "@/lib/types";
+import { isSafeAppPath, POST_AUTH_REDIRECT_COOKIE, safeAppPath } from "@/lib/onboarding-intent";
 
 const AUTH_SESSION_STORAGE_KEY = "zroky_auth_session";
 const LS_ACCESS_TOKEN_KEY = "zroky_at";
 const LS_REFRESH_TOKEN_KEY = "zroky_rt";
 const LS_EMAIL_VERIFIED_KEY = "zroky_ev";
 const POST_AUTH_REDIRECT_STORAGE_KEY = "zroky_post_auth_redirect";
+const POST_AUTH_REDIRECT_COOKIE_MAX_AGE_SECONDS = 10 * 60;
 const DEFAULT_ACCESS_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 72;
 const DEFAULT_REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
@@ -14,16 +16,6 @@ export type BrowserAuthSession = {
   accessTokenExpiresAtEpochSeconds: number | null;
   refreshTokenExpiresAtEpochSeconds: number | null;
 };
-
-function isSafeAppPath(path: string): boolean {
-  if (!path.startsWith("/")) {
-    return false;
-  }
-  if (path.startsWith("//")) {
-    return false;
-  }
-  return true;
-}
 
 export function readAccessTokenFromBrowser(): string | null {
   return null;
@@ -185,6 +177,33 @@ export function hasPersistedSession(): boolean {
   );
 }
 
+function writePostAuthRedirectCookie(path: string): void {
+  document.cookie = [
+    `${POST_AUTH_REDIRECT_COOKIE}=${encodeURIComponent(path)}`,
+    "Path=/",
+    `Max-Age=${POST_AUTH_REDIRECT_COOKIE_MAX_AGE_SECONDS}`,
+    "SameSite=Lax",
+  ].join("; ");
+}
+
+function readPostAuthRedirectCookie(): string | null {
+  const match = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${POST_AUTH_REDIRECT_COOKIE}=`));
+  if (!match) return null;
+
+  try {
+    return decodeURIComponent(match.slice(POST_AUTH_REDIRECT_COOKIE.length + 1));
+  } catch {
+    return null;
+  }
+}
+
+function clearPostAuthRedirectCookie(): void {
+  document.cookie = `${POST_AUTH_REDIRECT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
 export function setPendingPostAuthRedirectPath(path: string): void {
   if (typeof window === "undefined") {
     return;
@@ -193,6 +212,7 @@ export function setPendingPostAuthRedirectPath(path: string): void {
     return;
   }
   window.sessionStorage.setItem(POST_AUTH_REDIRECT_STORAGE_KEY, path);
+  writePostAuthRedirectCookie(path);
 }
 
 export function consumePendingPostAuthRedirectPath(fallback = "/home"): string {
@@ -203,10 +223,18 @@ export function consumePendingPostAuthRedirectPath(fallback = "/home"): string {
   const stored = window.sessionStorage.getItem(POST_AUTH_REDIRECT_STORAGE_KEY);
   if (stored) {
     window.sessionStorage.removeItem(POST_AUTH_REDIRECT_STORAGE_KEY);
+    clearPostAuthRedirectCookie();
     if (isSafeAppPath(stored)) {
       return stored;
     }
   }
+
+  const cookieValue = readPostAuthRedirectCookie();
+  clearPostAuthRedirectCookie();
+  if (isSafeAppPath(cookieValue)) {
+    return cookieValue;
+  }
+
   return fallback;
 }
 
@@ -217,19 +245,7 @@ export function getPostAuthRedirectPath(fallback = "/home"): string {
 
   const params = new URLSearchParams(window.location.search);
   const next = params.get("next");
-  if (!next) {
-    return fallback;
-  }
-
-  if (!next.startsWith("/")) {
-    return fallback;
-  }
-
-  if (!isSafeAppPath(next)) {
-    return fallback;
-  }
-
-  return next;
+  return safeAppPath(next, fallback);
 }
 
 export function resolvePostAuthRedirectPath(fallback = "/home"): string {

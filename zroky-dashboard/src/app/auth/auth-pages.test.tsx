@@ -7,7 +7,7 @@ import LoginPage from "../login/page";
 import SignupPage from "../signup/page";
 import ResetPasswordPage from "../reset-password/page";
 import VerifyEmailPage from "../verify-email/page";
-import { loginWithPassword } from "@/lib/api";
+import { loginWithPassword, registerWithPassword, verifyEmail } from "@/lib/api";
 import { storeAuthSession } from "@/lib/auth";
 
 const navigation = vi.hoisted(() => ({
@@ -77,6 +77,8 @@ describe("auth pages", () => {
     navigation.replace.mockReset();
     navigation.refresh.mockReset();
     vi.mocked(loginWithPassword).mockReset();
+    vi.mocked(registerWithPassword).mockReset();
+    vi.mocked(verifyEmail).mockReset();
     vi.mocked(storeAuthSession).mockReset();
   });
 
@@ -133,6 +135,65 @@ describe("auth pages", () => {
     expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
   });
 
+  it("routes pricing signup intent to protected-agent setup after registration", async () => {
+    navigation.searchParams = new URLSearchParams("intent=protect-agent&plan=pro&source=pricing");
+    vi.mocked(registerWithPassword).mockResolvedValue({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      access_expires_in_seconds: 3600,
+      refresh_expires_in_seconds: 86400,
+      token_type: "bearer",
+      user_id: "user_1",
+      email: "buyer@example.com",
+      email_verified: true,
+    });
+
+    render(<SignupPage />);
+
+    expect(screen.getByText("Next step: project key setup for the agent you want Zroky to protect.")).toBeInTheDocument();
+    expect(screen.getByText("Next step opens project key setup")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Already have an account? Sign in" }).getAttribute("href")).toBe(
+      "/login?next=%2Fsettings%2Fkeys%3Fintent%3Dprotect-agent%26plan%3Dpro%26source%3Dpricing",
+    );
+
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "buyer@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    await waitFor(() => {
+      expect(storeAuthSession).toHaveBeenCalled();
+      expect(navigation.push).toHaveBeenCalledWith("/settings/keys?intent=protect-agent&plan=pro&source=pricing");
+    });
+  });
+
+  it("preserves pricing signup intent through email verification", async () => {
+    navigation.searchParams = new URLSearchParams("intent=protect-agent&plan=starter&source=pricing");
+    vi.mocked(registerWithPassword).mockResolvedValue({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      access_expires_in_seconds: 3600,
+      refresh_expires_in_seconds: 86400,
+      token_type: "bearer",
+      user_id: "user_1",
+      email: "pilot@example.com",
+      email_verified: false,
+    });
+
+    render(<SignupPage />);
+
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "pilot@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+    fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    await waitFor(() => {
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/verify-email?email=pilot%40example.com&next=%2Fsettings%2Fkeys%3Fintent%3Dprotect-agent%26plan%3Dstarter%26source%3Dpricing",
+      );
+    });
+  });
+
   it("renders forgot password copy", () => {
     render(<ForgotPasswordPage />);
 
@@ -156,5 +217,17 @@ describe("auth pages", () => {
 
     expect(screen.getByRole("heading", { name: "Check your email" })).toBeInTheDocument();
     expect(screen.getByText("Open the verification link.")).toBeInTheDocument();
+  });
+
+  it("continues to protected-agent setup after successful email verification", async () => {
+    navigation.searchParams = new URLSearchParams(
+      "token=verify-token&next=%2Fsettings%2Fkeys%3Fintent%3Dprotect-agent%26plan%3Dpro",
+    );
+    vi.mocked(verifyEmail).mockResolvedValue({ detail: "Email verified." });
+
+    render(<VerifyEmailPage />);
+
+    const continueLink = await screen.findByRole("link", { name: "Continue setup" });
+    expect(continueLink.getAttribute("href")).toBe("/settings/keys?intent=protect-agent&plan=pro");
   });
 });

@@ -21,7 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import pricingContract from '../data/pricing-plans.json';
-import { SIGN_UP_URL } from '../lib/links';
+import { buildSignUpUrl } from '../lib/links';
 
 type PlanCode = 'free' | 'starter' | 'pro' | 'enterprise';
 
@@ -71,6 +71,14 @@ const planIcons: Record<PlanCode, LucideIcon> = {
   pro: GitBranch,
   enterprise: Server,
 };
+
+function buildPricingSignUpUrl(plan: PlanCode, source = 'pricing') {
+  return buildSignUpUrl({
+    intent: 'protect-agent',
+    plan,
+    source,
+  });
+}
 
 function formatLimit(value: number, singular: string, plural = `${singular}s`) {
   if (value === UNLIMITED) {
@@ -159,7 +167,7 @@ const plans = allPlans
     desc: plan.description,
     icon: planIcons[plan.code],
     cta: plan.cta.label,
-    href: plan.cta.href === '/auth/register' ? SIGN_UP_URL : plan.cta.href,
+    href: plan.cta.href === '/auth/register' ? buildPricingSignUpUrl(plan.code) : plan.cta.href,
     featured: plan.featured,
     bullets: buildPlanBullets(plan),
     note: plan.note,
@@ -366,6 +374,7 @@ function SectionReveal({
 export default function PricingPage() {
   const reduceMotion = useReducedMotion();
   const enterpriseHref = enterprisePlan?.cta.href ?? 'mailto:sales@zroky.com?subject=Zroky%20Enterprise';
+  const heroSignUpUrl = buildPricingSignUpUrl('pro', 'pricing-hero');
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -394,7 +403,7 @@ export default function PricingPage() {
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href={SIGN_UP_URL} className="btn-primary">
+              <a href={heroSignUpUrl} className="btn-primary">
                 Start free
                 <ArrowRight className="h-4 w-4" />
               </a>

@@ -6,11 +6,14 @@ import { useSearchParams } from "next/navigation";
 
 import { AuthAssuranceList, AuthButton, AuthCard, AuthEmailNotice, AuthShell } from "@/components/auth-shell";
 import { resendVerification, verifyEmail } from "@/lib/api";
+import { buildLoginHref, safeAppPath } from "@/lib/onboarding-intent";
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const email = searchParams.get("email") ?? "";
+  const nextPath = safeAppPath(searchParams.get("next"), "/home");
+  const isSetupNext = nextPath.startsWith("/settings/keys");
   const [status, setStatus] = useState<"pending" | "loading" | "success" | "error">(token ? "loading" : "pending");
   const [message, setMessage] = useState("");
   const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -61,11 +64,11 @@ function VerifyEmailContent() {
         <AuthAssuranceList
           items={[
             "Verification protects workspace access",
-            "Resend is available if it expires",
+            isSetupNext ? "Next step opens project key setup" : "Resend is available if it expires",
           ]}
         />
         <p className="auth-small-copy">
-          Already verified? <Link href="/login" className="auth-link">Sign in</Link>
+          Already verified? <Link href={buildLoginHref(nextPath)} className="auth-link">Sign in</Link>
         </p>
       </>
     );
@@ -84,8 +87,8 @@ function VerifyEmailContent() {
     return (
       <>
         <div className="auth-banner auth-banner-success">{message}</div>
-        <Link href="/home" className="auth-button auth-button-primary">
-          Continue to dashboard
+        <Link href={nextPath} className="auth-button auth-button-primary">
+          {isSetupNext ? "Continue setup" : "Continue to dashboard"}
         </Link>
       </>
     );

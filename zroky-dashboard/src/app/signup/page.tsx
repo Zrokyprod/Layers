@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -17,12 +17,22 @@ import {
   AuthShell,
 } from "@/components/auth-shell";
 import { registerWithPassword } from "@/lib/api";
-import { storeAuthSession } from "@/lib/auth";
+import { setPendingPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
+import {
+  buildLoginHref,
+  buildVerifyEmailHref,
+  isProtectedAgentSignupIntent,
+  resolveSignupRedirectPath,
+} from "@/lib/onboarding-intent";
 import { registerSchema, type RegisterFormData } from "@/lib/schemas";
 
-export default function SignupPage() {
+function SignupForm() {
   const [error, setError] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const postSignupPath = resolveSignupRedirectPath(searchParams);
+  const protectedAgentIntent = isProtectedAgentSignupIntent(searchParams);
+  const signInHref = buildLoginHref(postSignupPath);
 
   const {
     register,
@@ -34,7 +44,8 @@ export default function SignupPage() {
   const password = useWatch({ control, name: "password", defaultValue: "" }) ?? "";
 
   const handleOAuth = (provider: "google" | "github") => {
-    window.location.href = `/api/zroky/v1/auth/${provider}/start`;
+    setPendingPostAuthRedirectPath(postSignupPath);
+    window.location.assign(`/api/zroky/v1/auth/${provider}/start`);
   };
 
   const onSubmit = handleSubmit(async (data) => {
@@ -43,9 +54,9 @@ export default function SignupPage() {
       const res = await registerWithPassword(data.email, data.password, data.confirm_password);
       await storeAuthSession(res);
       if (!res.email_verified) {
-        router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+        router.push(buildVerifyEmailHref(data.email, postSignupPath));
       } else {
-        router.push("/home");
+        router.push(postSignupPath);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
@@ -53,56 +64,80 @@ export default function SignupPage() {
   });
 
   return (
-    <AuthShell>
-      <AuthCard
-        eyebrow="New reliability workspace"
-        title="Create your Zroky workspace"
-        subtitle="Start capturing failed agent runs."
-        footer={<Link href="/login" className="auth-link">Already have an account? Sign in</Link>}
-      >
-        <div className="auth-oauth-stack">
-          <AuthProviderButton provider="google" onClick={() => handleOAuth("google")} />
-          <AuthProviderButton provider="github" onClick={() => handleOAuth("github")} />
+    <AuthCard
+      eyebrow={protectedAgentIntent ? "Protected agent setup" : "New reliability workspace"}
+      title="Create your Zroky workspace"
+      subtitle={
+        protectedAgentIntent
+          ? "Create a project key and connect your first protected agent after signup."
+          : "Start capturing failed agent runs."
+      }
+      footer={<Link href={signInHref} className="auth-link">Already have an account? Sign in</Link>}
+    >
+      {protectedAgentIntent && (
+        <div className="auth-banner auth-banner-info">
+          Next step: project key setup for the agent you want Zroky to protect.
         </div>
-        <AuthDivider>Or register with email</AuthDivider>
-        {error && <div className="auth-banner auth-banner-error">{error}</div>}
-        <form onSubmit={onSubmit} className="auth-form">
-          <AuthInput
-            label="Email address"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            error={errors.email?.message}
-            {...register("email")}
-          />
-          <AuthInput
-            label="Password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Minimum 8 characters"
-            error={errors.password?.message}
-            {...register("password")}
-          />
-          {password.length > 0 && <AuthPasswordChecklist password={password} />}
-          <AuthInput
-            label="Confirm password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Repeat your password"
-            error={errors.confirm_password?.message}
-            {...register("confirm_password")}
-          />
-          <AuthButton type="submit" loading={isSubmitting} loadingLabel="Creating account...">
-            Create account
-          </AuthButton>
-        </form>
-        <AuthAssuranceList
-          items={[
-            "Email verification protects workspace access",
-            "Replay and CI gates stay connected",
-          ]}
+      )}
+      <div className="auth-oauth-stack">
+        <AuthProviderButton provider="google" onClick={() => handleOAuth("google")} />
+        <AuthProviderButton provider="github" onClick={() => handleOAuth("github")} />
+      </div>
+      <AuthDivider>Or register with email</AuthDivider>
+      {error && <div className="auth-banner auth-banner-error">{error}</div>}
+      <form onSubmit={onSubmit} className="auth-form">
+        <AuthInput
+          label="Email address"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          error={errors.email?.message}
+          {...register("email")}
         />
-      </AuthCard>
+        <AuthInput
+          label="Password"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Minimum 8 characters"
+          error={errors.password?.message}
+          {...register("password")}
+        />
+        {password.length > 0 && <AuthPasswordChecklist password={password} />}
+        <AuthInput
+          label="Confirm password"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Repeat your password"
+          error={errors.confirm_password?.message}
+          {...register("confirm_password")}
+        />
+        <AuthButton type="submit" loading={isSubmitting} loadingLabel="Creating account...">
+          Create account
+        </AuthButton>
+      </form>
+      <AuthAssuranceList
+        items={
+          protectedAgentIntent
+            ? [
+                "Next step opens project key setup",
+                "Provider keys are not required for first capture",
+              ]
+            : [
+                "Email verification protects workspace access",
+                "Replay and CI gates stay connected",
+              ]
+        }
+      />
+    </AuthCard>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <AuthShell>
+      <Suspense fallback={<p className="hint">Loading...</p>}>
+        <SignupForm />
+      </Suspense>
     </AuthShell>
   );
 }

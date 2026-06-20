@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { POST_AUTH_REDIRECT_COOKIE, safeAppPath } from "@/lib/onboarding-intent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +76,19 @@ function setSessionCookies(response: NextResponse, tokens: AuthTokenResponse): v
   });
 }
 
+function pendingRedirectPath(request: NextRequest): string {
+  const rawCookie = request.cookies.get(POST_AUTH_REDIRECT_COOKIE)?.value ?? null;
+  if (!rawCookie) {
+    return "/home";
+  }
+
+  try {
+    return safeAppPath(decodeURIComponent(rawCookie), "/home");
+  } catch {
+    return "/home";
+  }
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const error = request.nextUrl.searchParams.get("error");
   if (error) {
@@ -121,8 +135,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return loginRedirect(request, "oauth_failed");
   }
 
-  const dashboardUrl = new URL("/home", request.url);
+  const dashboardUrl = new URL(pendingRedirectPath(request), request.url);
   const redirect = NextResponse.redirect(dashboardUrl, { status: 302 });
   setSessionCookies(redirect, tokens);
+  redirect.cookies.delete(POST_AUTH_REDIRECT_COOKIE);
   return redirect;
 }

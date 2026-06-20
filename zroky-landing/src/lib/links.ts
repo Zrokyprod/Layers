@@ -2,10 +2,19 @@ const rawDashboardUrl = import.meta.env.VITE_DASHBOARD_URL ?? 'https://app.zroky
 
 export const DASHBOARD_URL = rawDashboardUrl.replace(/\/$/, '');
 export const SIGN_IN_URL = `${DASHBOARD_URL}/login`;
-export const SIGN_UP_URL = `${DASHBOARD_URL}/signup`;
 export const FORGOT_PASSWORD_URL = `${DASHBOARD_URL}/forgot-password`;
 export const RESET_PASSWORD_URL = `${DASHBOARD_URL}/reset-password`;
 export const VERIFY_EMAIL_URL = `${DASHBOARD_URL}/verify-email`;
+
+export function buildSignUpUrl(params: Record<string, string | undefined> = {}) {
+  const url = new URL(`${DASHBOARD_URL}/signup`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+export const SIGN_UP_URL = buildSignUpUrl();
 
 const AUTH_ALIASES: Record<string, string> = {
   '/auth': '/login',
