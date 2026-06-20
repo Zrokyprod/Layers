@@ -295,8 +295,9 @@ function numericEntitlement(planTemplate: Record<string, unknown> | undefined, k
 }
 
 function projectLimitCopy(projectCount: number, maxProjects: number | null): string {
-  if (maxProjects === -1) return `${projectCount} projects - unlimited`;
-  if (maxProjects == null) return `${projectCount} projects`;
+  const projectLabel = projectCount === 1 ? "project" : "projects";
+  if (maxProjects === -1) return `${projectCount} ${projectLabel} - unlimited`;
+  if (maxProjects == null) return `${projectCount} ${projectLabel}`;
   return `${projectCount} / ${maxProjects} projects used`;
 }
 
@@ -927,21 +928,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   {projectLimitReached ? <CreditCard size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
                   <span>
                     <strong>{projectLimitReached ? "Upgrade to add more" : "New project"}</strong>
-                    <small>{projectLimitReached ? projectLimitStatus : "Create within your plan limit."}</small>
                   </span>
                 </Link>
                 <Link href="/projects" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
                   <Settings2 size={15} aria-hidden="true" />
                   <span>
                     <strong>Manage projects</strong>
-                    <small>Open details, switch context, or delete.</small>
                   </span>
                 </Link>
                 <Link href="/settings/team" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
                   <UserRound size={15} aria-hidden="true" />
                   <span>
                     <strong>Team access</strong>
-                    <small>Invite or remove project members.</small>
                   </span>
                 </Link>
               </div>
