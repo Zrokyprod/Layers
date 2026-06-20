@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -13,6 +14,7 @@ import {
   Plug,
   RotateCcw,
   Route,
+  ShieldCheck,
   Terminal,
 } from "lucide-react";
 
@@ -25,12 +27,19 @@ import {
   useRevokeProjectApiKey,
   useRotateProjectApiKey,
 } from "@/lib/hooks";
+import {
+  buildMandateStarter,
+  buildProtectedAgentSnippet,
+  humanizeIntent,
+  protectedAgentTemplates,
+} from "@/lib/protected-agent-setup";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
 
 const defaultKeyName = "Production capture key";
 const capturePath = ["Create key", "Run SDK/Gateway", "First trace", "Fixture validation"];
 
-export default function ApiKeysPage() {
+function ApiKeysContent() {
+  const searchParams = useSearchParams();
   const projectQuery = useProjectSettings();
   const projectId = projectQuery.data?.project_id ?? "";
   const keysQuery = useListProjectApiKeys(projectId);
@@ -45,6 +54,7 @@ export default function ApiKeysPage() {
   const [expiresInDays, setExpiresInDays] = useState("90");
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyResponse | null>(null);
   const [rotateTarget, setRotateTarget] = useState<ApiKeyResponse | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState(protectedAgentTemplates[0].id);
 
   const {
     register,
@@ -117,6 +127,13 @@ export default function ApiKeysPage() {
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const currentStepIndex = hasActiveKey ? 1 : 0;
   const snippetProjectId = projectId || "proj_...";
+  const protectedAgentIntent = searchParams.get("intent") === "protect-agent";
+  const planIntent = humanizeIntent(searchParams.get("plan"));
+  const sourceIntent = humanizeIntent(searchParams.get("source"));
+  const selectedAgent =
+    protectedAgentTemplates.find((template) => template.id === selectedAgentId) ?? protectedAgentTemplates[0];
+  const protectedMandateStarter = buildMandateStarter(selectedAgent);
+  const protectedAgentSnippet = buildProtectedAgentSnippet(selectedAgent, snippetProjectId);
   const jsSetupSnippet = `npm install @zroky-ai/sdk
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
@@ -194,6 +211,110 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
         </div>
       </section>
 
+      {protectedAgentIntent && (
+        <section className="panel keys-protected-setup-panel" aria-labelledby="protected-agent-setup-title">
+          <header className="keys-onboarding-header">
+            <div>
+              <span className="settings-section-kicker">
+                <ShieldCheck aria-hidden="true" />
+                Protected agent
+              </span>
+              <h2 id="protected-agent-setup-title">First protected agent setup</h2>
+              <p>
+                Choose the agent type, copy the matching mandate, create a project key, then run one captured action.
+              </p>
+              <div className="keys-protected-meta" aria-label="Signup intent context">
+                {planIntent && <span>Plan intent: {planIntent}</span>}
+                {sourceIntent && <span>Source: {sourceIntent}</span>}
+                <span>{protectedAgentTemplates.length} starter mandates</span>
+              </div>
+            </div>
+            <Link href="#create-project-key" className="btn btn-primary">
+              Create project key
+              <ArrowRight aria-hidden="true" />
+            </Link>
+          </header>
+
+          <div className="keys-agent-tabs" role="tablist" aria-label="Protected agent templates">
+            {protectedAgentTemplates.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                role="tab"
+                aria-selected={template.id === selectedAgent.id}
+                className={template.id === selectedAgent.id ? "keys-agent-tab is-active" : "keys-agent-tab"}
+                onClick={() => setSelectedAgentId(template.id)}
+              >
+                {template.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="keys-protected-grid">
+            <article className="keys-protected-block">
+              <div>
+                <h3>Mandate starter</h3>
+                <p>{selectedAgent.mandate}</p>
+              </div>
+              <dl className="keys-mandate-facts">
+                <div>
+                  <dt>Agent</dt>
+                  <dd>{selectedAgent.agentName}</dd>
+                </div>
+                <div>
+                  <dt>Outcome source</dt>
+                  <dd>{selectedAgent.systemOfRecord}</dd>
+                </div>
+              </dl>
+              <div className="keys-mandate-lists">
+                <div>
+                  <strong>Hold if</strong>
+                  <ul>
+                    {selectedAgent.holdConditions.map((condition) => (
+                      <li key={condition}>{condition}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <strong>Evidence required</strong>
+                  <ul>
+                    {selectedAgent.requiredEvidence.map((evidence) => (
+                      <li key={evidence}>{evidence}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="keys-copy-actions">
+                <button type="button" className="btn btn-soft" onClick={() => void copyKey(protectedMandateStarter)}>
+                  <Copy aria-hidden="true" />
+                  Copy mandate
+                </button>
+              </div>
+            </article>
+
+            <article className="keys-protected-block">
+              <div>
+                <h3>SDK action wrapper</h3>
+                <p>Wrap the first high-stakes tool call so Zroky can hold unsafe action and verify real outcome.</p>
+              </div>
+              <pre aria-label="Protected agent SDK snippet">
+                <code>{protectedAgentSnippet}</code>
+              </pre>
+              <div className="keys-copy-actions">
+                <button type="button" className="btn btn-soft" onClick={() => void copyKey(protectedAgentSnippet)}>
+                  <Copy aria-hidden="true" />
+                  Copy SDK wrapper
+                </button>
+                <Link href="/trace" className="btn btn-soft">
+                  Open traces
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </div>
+            </article>
+          </div>
+        </section>
+      )}
+
       {newKey && (
         <section className="panel keys-newkey-banner" aria-label="One-time project key">
           <div className="keys-copy-head">
@@ -261,7 +382,7 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
       )}
 
       <section className="keys-primary-grid">
-        <article className="panel keys-create-panel">
+        <article className="panel keys-create-panel" id="create-project-key">
           <header className="panel-header">
             <div>
               <h2>Create project key</h2>
@@ -527,5 +648,13 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
         </div>
       )}
     </div>
+  );
+}
+
+export default function ApiKeysPage() {
+  return (
+    <Suspense fallback={<div className="page-content keys-setup-page"><section className="panel"><div className="loading" /></section></div>}>
+      <ApiKeysContent />
+    </Suspense>
   );
 }
