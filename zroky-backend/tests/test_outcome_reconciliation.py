@@ -104,6 +104,62 @@ def test_ledger_refund_connector_fetches_and_normalizes_record_without_storing_s
     assert "ledger-secret-token" not in json.dumps(source.metadata)
 
 
+def test_ledger_refund_connector_handles_real_ledger_array_and_alias_shapes() -> None:
+    connector = LedgerRefundApiConnector(
+        base_url="https://ledger.example/api",
+        refund_id="rf_array",
+        record_path="data.0",
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "refundId": "rf_array",
+                            "order_id": "ord_1",
+                            "amount_cents": "4218",
+                            "currency": "usd",
+                            "state": "posted",
+                        }
+                    ]
+                },
+            )
+        ),
+    )
+
+    source = connector.fetch()
+
+    assert source.record_found is True
+    assert source.record is not None
+    assert source.record["refund_id"] == "rf_array"
+    assert source.record["amount_usd"] == 42.18
+    assert source.record["currency"] == "USD"
+    assert source.record["status"] == "posted"
+
+
+def test_ledger_refund_connector_ignores_malformed_cents_without_false_pass() -> None:
+    for malformed in ("not-a-number", "NaN"):
+        source = LedgerRefundApiConnector(
+            base_url="https://ledger.example/api",
+            refund_id=f"rf_bad_amount_{malformed}",
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    200,
+                    json={
+                        "refund_id": f"rf_bad_amount_{malformed}",
+                        "amount_cents": malformed,
+                        "currency": "usd",
+                    },
+                )
+            ),
+        ).fetch()
+
+        assert source.record_found is True
+        assert source.record is not None
+        assert source.record["refund_id"] == f"rf_bad_amount_{malformed}"
+        assert "amount_usd" not in source.record
+
+
 def test_ledger_refund_connector_missing_record_and_unavailable_source_are_honest() -> (
     None
 ):
@@ -147,9 +203,25 @@ def test_ledger_refund_connector_rejects_unsafe_url_shapes() -> None:
             "base_url": "https://ledger.example/api",
             "path_template": "/refunds/{refund_id}?expand=all",
         },
+        {
+            "base_url": "https://ledger.example/api",
+            "path_template": "/refunds/%2e%2e/secret/{refund_id}",
+        },
+        {
+            "base_url": "https://ledger.example/api",
+            "path_template": "/refunds\\{refund_id}",
+        },
     ):
         with pytest.raises(ConnectorConfigError):
             LedgerRefundApiConnector(refund_id="rf_123", **kwargs).fetch()
+
+
+def test_ledger_refund_connector_rejects_traversal_in_refund_id() -> None:
+    with pytest.raises(ConnectorConfigError):
+        LedgerRefundApiConnector(
+            base_url="https://ledger.example/api",
+            refund_id="../secret",
+        ).fetch()
 
 
 def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> None:
