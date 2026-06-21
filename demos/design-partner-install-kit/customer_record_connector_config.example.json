@@ -1,0 +1,38 @@
+{
+  "connector_type": "customer_record_api",
+  "config_endpoint": "/v1/integrations/system-of-record/customer-record/config",
+  "status_endpoint": "/v1/integrations/system-of-record/customer-record/status",
+  "test_endpoint": "/v1/integrations/system-of-record/customer-record/test",
+  "config_payload": {
+    "base_url": "https://crm.example.com/api",
+    "path_template": "/customers/{customer_id}",
+    "record_path": "data",
+    "bearer_token": "<crm_bearer_token>"
+  },
+  "test_payload": {
+    "customer_id": "CUS-DP-2001",
+    "claimed": {
+      "customer_id": "CUS-DP-2001",
+      "email": "owner@example.com",
+      "account_id": "ACCT-DP-2001",
+      "status": "active"
+    },
+    "match_fields": [
+      "customer_id",
+      "email",
+      "account_id",
+      "status"
+    ],
+    "metadata": {
+      "install_kit": "design_partner_crm_v1",
+      "partner_run_id": "<partner_run_id>"
+    }
+  },
+  "pass_criteria": {
+    "connector_health_status": "healthy",
+    "outcome_verdict": "matched",
+    "last_attempts": ">=1",
+    "last_error_code": null,
+    "last_retryable": null
+  }
+}
