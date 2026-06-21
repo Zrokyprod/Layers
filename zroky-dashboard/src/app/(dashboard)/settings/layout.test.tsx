@@ -57,7 +57,7 @@ describe("SettingsLayout", () => {
     );
 
     expect(screen.getByRole("link", { name: "Integrations" }).className).toContain("settings-tab-link-active");
-    expect(screen.getByText("GitHub and Slack")).toBeInTheDocument();
+    expect(screen.getByText("Repos, alerts, records")).toBeInTheDocument();
   });
 
   it("does not include personal account controls in workspace settings", () => {
