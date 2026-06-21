@@ -82,6 +82,7 @@ type ConnectorPreflightSummaryInput = {
   readiness: SystemOfRecordConnectorReadiness;
   guidance: string;
   readyForPilot: boolean;
+  fullProofCommand: string;
   latestCheck: OutcomeReconciliationView | null;
   failedAttempts: OutcomeReconciliationView[];
 };
@@ -442,6 +443,14 @@ function customerPreflightCommand(form: CustomerConnectorForm) {
   return `python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url ${commandValue(form.baseUrl, "https://crm.example.com/api")} --crm-bearer-token <crm_token> --customer-id ${commandValue(form.testCustomerId, "<customer_id>")} --json --write-summary artifacts/design-partner-crm-preflight-summary.json`;
 }
 
+function ledgerFullProofCommand(form: LedgerConnectorForm) {
+  return `python scripts/run_design_partner_install_kit.py --scenario refund --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url ${commandValue(form.baseUrl, "https://ledger.example.com/api")} --ledger-bearer-token <ledger_token> --refund-id ${commandValue(form.testRefundId, "<refund_id>")} --json --write-summary artifacts/design-partner-refund-live-summary.json --write-evidence artifacts/design-partner-refund-live-evidence.json`;
+}
+
+function customerFullProofCommand(form: CustomerConnectorForm) {
+  return `python scripts/run_design_partner_install_kit.py --scenario customer-record --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url ${commandValue(form.baseUrl, "https://crm.example.com/api")} --crm-bearer-token <crm_token> --customer-id ${commandValue(form.testCustomerId, "<customer_id>")} --json --write-summary artifacts/design-partner-crm-live-summary.json --write-evidence artifacts/design-partner-crm-live-evidence.json`;
+}
+
 function ledgerConnectorTemplate(form: LedgerConnectorForm) {
   const amount = Number(form.testAmountUsd.trim());
   const amountUsd = Number.isFinite(amount) ? amount : 42.18;
@@ -617,6 +626,7 @@ function buildConnectorPreflightSummary({
   readiness,
   guidance,
   readyForPilot,
+  fullProofCommand,
   latestCheck,
   failedAttempts,
 }: ConnectorPreflightSummaryInput) {
@@ -642,6 +652,7 @@ function buildConnectorPreflightSummary({
     latest_check: preflightCheckSummary(latestCheck),
     failed_attempts: failedAttempts.map(preflightCheckSummary),
     fix_guidance: guidance,
+    next_full_proof_command: fullProofCommand,
   };
 }
 
@@ -857,6 +868,8 @@ export default function IntegrationsSettingsPage() {
   });
   const ledgerPreflight = ledgerPreflightCommand(ledgerForm);
   const customerPreflight = customerPreflightCommand(customerForm);
+  const ledgerFullProof = ledgerFullProofCommand(ledgerForm);
+  const customerFullProof = customerFullProofCommand(customerForm);
   const ledgerReadyForPilot = connectorReadyForPilot(
     ledgerConnected,
     ledgerHealth,
@@ -924,6 +937,24 @@ export default function IntegrationsSettingsPage() {
     }
   }
 
+  async function copyLedgerFullProofCommand() {
+    try {
+      await navigator.clipboard.writeText(ledgerFullProof);
+      setMessage("Ledger refund full proof command copied.");
+    } catch {
+      setMessage("Copy failed. Select the full proof command and copy it manually.");
+    }
+  }
+
+  async function copyCustomerFullProofCommand() {
+    try {
+      await navigator.clipboard.writeText(customerFullProof);
+      setMessage("Customer record full proof command copied.");
+    } catch {
+      setMessage("Copy failed. Select the full proof command and copy it manually.");
+    }
+  }
+
   function downloadLedgerTemplate() {
     downloadJsonFile(ledgerConnectorTemplate(ledgerForm), "ledger_refund_connector_config.example.json");
     setMessage("Ledger refund connector template downloaded.");
@@ -949,6 +980,7 @@ export default function IntegrationsSettingsPage() {
         readiness: ledgerReadiness,
         guidance: ledgerGuidance,
         readyForPilot: ledgerReadyForPilot,
+        fullProofCommand: ledgerFullProof,
         latestCheck: latestLedgerRefundCheck,
         failedAttempts: ledgerFailedAttempts,
       }),
@@ -972,6 +1004,7 @@ export default function IntegrationsSettingsPage() {
         readiness: customerReadiness,
         guidance: customerGuidance,
         readyForPilot: customerReadyForPilot,
+        fullProofCommand: customerFullProof,
         latestCheck: latestCustomerRecordCheck,
         failedAttempts: customerFailedAttempts,
       }),
@@ -1639,17 +1672,27 @@ export default function IntegrationsSettingsPage() {
             <div className="settings-connector-handoff-header">
               <FileJson aria-hidden="true" />
               <div>
-                <h4>Pilot preflight handoff</h4>
+                <h4>Pilot proof handoff</h4>
                 <p>demos/design-partner-install-kit/ledger_refund_connector_config.example.json</p>
               </div>
             </div>
+            <p className="settings-connector-muted">Run preflight first; after readiness is ready, run full proof to write the audit evidence pack.</p>
+            <span className="eyebrow">Preflight command</span>
             <pre className="settings-connector-payload" aria-label="Ledger refund preflight command">
               <code>{ledgerPreflight}</code>
+            </pre>
+            <span className="eyebrow">Full proof command</span>
+            <pre className="settings-connector-payload" aria-label="Ledger refund full proof command">
+              <code>{ledgerFullProof}</code>
             </pre>
             <div className="actions">
               <button type="button" className="btn btn-soft" onClick={() => void copyLedgerPreflightCommand()}>
                 <Copy aria-hidden="true" />
                 Copy preflight command
+              </button>
+              <button type="button" className="btn btn-soft" onClick={() => void copyLedgerFullProofCommand()}>
+                <Copy aria-hidden="true" />
+                Copy full proof command
               </button>
               <button type="button" className="btn btn-soft" onClick={downloadLedgerTemplate}>
                 <Download aria-hidden="true" />
@@ -1855,17 +1898,27 @@ export default function IntegrationsSettingsPage() {
             <div className="settings-connector-handoff-header">
               <FileJson aria-hidden="true" />
               <div>
-                <h4>Pilot preflight handoff</h4>
+                <h4>Pilot proof handoff</h4>
                 <p>demos/design-partner-install-kit/customer_record_connector_config.example.json</p>
               </div>
             </div>
+            <p className="settings-connector-muted">Run preflight first; after readiness is ready, run full proof to write the audit evidence pack.</p>
+            <span className="eyebrow">Preflight command</span>
             <pre className="settings-connector-payload" aria-label="Customer record preflight command">
               <code>{customerPreflight}</code>
+            </pre>
+            <span className="eyebrow">Full proof command</span>
+            <pre className="settings-connector-payload" aria-label="Customer record full proof command">
+              <code>{customerFullProof}</code>
             </pre>
             <div className="actions">
               <button type="button" className="btn btn-soft" onClick={() => void copyCustomerPreflightCommand()}>
                 <Copy aria-hidden="true" />
                 Copy preflight command
+              </button>
+              <button type="button" className="btn btn-soft" onClick={() => void copyCustomerFullProofCommand()}>
+                <Copy aria-hidden="true" />
+                Copy full proof command
               </button>
               <button type="button" className="btn btn-soft" onClick={downloadCustomerTemplate}>
                 <Download aria-hidden="true" />

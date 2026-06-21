@@ -30087,7 +30087,8 @@ button.gm-kpi-card {
 }
 
 .app-shell .settings-connector-guidance p,
-.app-shell .settings-connector-handoff-header p {
+.app-shell .settings-connector-handoff-header p,
+.app-shell .settings-connector-muted {
   margin: 0;
   color: var(--text-secondary);
   font-size: 0.78rem;

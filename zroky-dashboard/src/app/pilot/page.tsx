@@ -116,7 +116,9 @@ const savedConnectorTests = [
 const passCriteria = [
   "captured_call_linked",
   "unsafe_action_stopped",
-  "connector_healthy",
+  "connector_configured",
+  "connector_health_verified",
+  "real_connector_ready",
   "saved_test_endpoint_used",
   "matched_outcome_shown",
   "evidence_hash_visible",
