@@ -28,9 +28,12 @@ import {
   useRotateProjectApiKey,
 } from "@/lib/hooks";
 import {
+  buildLiveSmokeCommand,
   buildMandateStarter,
   buildProtectedAgentSnippet,
   humanizeIntent,
+  pilotHandoffCriteria,
+  pilotHandoffSteps,
   protectedAgentTemplates,
 } from "@/lib/protected-agent-setup";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
@@ -130,10 +133,12 @@ function ApiKeysContent() {
   const protectedAgentIntent = searchParams.get("intent") === "protect-agent";
   const planIntent = humanizeIntent(searchParams.get("plan"));
   const sourceIntent = humanizeIntent(searchParams.get("source"));
+  const pilotHandoffIntent = searchParams.get("source") === "pilot";
   const selectedAgent =
     protectedAgentTemplates.find((template) => template.id === selectedAgentId) ?? protectedAgentTemplates[0];
   const protectedMandateStarter = buildMandateStarter(selectedAgent);
   const protectedAgentSnippet = buildProtectedAgentSnippet(selectedAgent, snippetProjectId);
+  const liveSmokeCommand = buildLiveSmokeCommand(selectedAgent);
   const jsSetupSnippet = `npm install @zroky-ai/sdk
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
@@ -249,6 +254,67 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
               </button>
             ))}
           </div>
+
+          {pilotHandoffIntent && (
+            <div className="keys-pilot-handoff" aria-label="Pilot handoff readiness">
+              <div className="keys-pilot-copy">
+                <span className="settings-section-kicker">
+                  <Route aria-hidden="true" />
+                  Pilot handoff
+                </span>
+                <h3>Pilot handoff readiness</h3>
+                <p>
+                  Before marking this verified, prove the action was captured, stopped or held, reconciled against{" "}
+                  {selectedAgent.systemOfRecord}, and exported with a usable evidence hash.
+                </p>
+              </div>
+              <ol className="keys-pilot-steps">
+                {pilotHandoffSteps.map((step) => (
+                  <li key={step}>
+                    <CheckCircle2 aria-hidden="true" />
+                    {step}
+                  </li>
+                ))}
+              </ol>
+              <article className="keys-pilot-card">
+                <h4>System-of-record connector</h4>
+                <ul>
+                  {selectedAgent.connectorInputs.map((input) => (
+                    <li key={input}>{input}</li>
+                  ))}
+                </ul>
+              </article>
+              <article className="keys-pilot-card">
+                <h4>Pass criteria</h4>
+                <ul>
+                  {pilotHandoffCriteria.map((criterion) => (
+                    <li key={criterion}>
+                      <code>{criterion}</code>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+              <article className="keys-pilot-card keys-pilot-live">
+                <h4>{liveSmokeCommand ? "Live smoke command" : "Connector gap before live smoke"}</h4>
+                {liveSmokeCommand ? (
+                  <>
+                    <pre aria-label="Design-partner live smoke command">
+                      <code>{liveSmokeCommand}</code>
+                    </pre>
+                    <button type="button" className="btn btn-soft btn-sm" onClick={() => void copyKey(liveSmokeCommand)}>
+                      <Copy aria-hidden="true" />
+                      Copy live smoke command
+                    </button>
+                  </>
+                ) : (
+                  <p>
+                    No packaged live-smoke runner exists for this agent type yet. Capture the action with the SDK
+                    wrapper, then add the connector that reads {selectedAgent.systemOfRecord}.
+                  </p>
+                )}
+              </article>
+            </div>
+          )}
 
           <div className="keys-protected-grid">
             <article className="keys-protected-block">

@@ -156,6 +156,30 @@ describe("ApiKeysPage", () => {
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining('name: "deploy_change"')));
   });
 
+  it("renders pilot handoff proof criteria and connector inputs after pilot signup", async () => {
+    navigation.query = "intent=protect-agent&plan=pro&source=pilot";
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByText("Pilot handoff readiness")).toBeInTheDocument();
+    expect(screen.getByText("Connect system of record")).toBeInTheDocument();
+    expect(screen.getByText("ledger/refund API base URL")).toBeInTheDocument();
+    expect(screen.getByText("unsafe_action_stopped")).toBeInTheDocument();
+    expect(screen.getByText("evidence_hash_visible")).toBeInTheDocument();
+    expect(screen.getByText(/--scenario refund/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy live smoke command" }));
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("--scenario refund")));
+
+    fireEvent.click(screen.getByRole("tab", { name: "CRM / data" }));
+    expect(screen.getByText("CRM/customer API base URL")).toBeInTheDocument();
+    expect(screen.getByText(/--scenario customer-record/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Procurement / spend" }));
+    expect(screen.getByText("ERP or purchase-order API")).toBeInTheDocument();
+    expect(screen.getByText("Connector gap before live smoke")).toBeInTheDocument();
+  });
+
   it("creates a project key with the expected payload and shows the one-time copy panel", async () => {
     createMutateAsync.mockResolvedValue(createdKey());
 

@@ -31526,6 +31526,101 @@ button.gm-kpi-card {
   color: var(--text-primary);
 }
 
+.app-shell .keys-pilot-handoff {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(220px, 0.75fr);
+  gap: 10px;
+  border: 1px solid rgba(20, 184, 166, 0.22);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.1), rgba(255, 255, 255, 0.025)),
+    rgba(0, 0, 0, 0.18);
+  padding: 12px;
+}
+
+.app-shell .keys-pilot-copy {
+  min-width: 0;
+}
+
+.app-shell .keys-pilot-copy h3,
+.app-shell .keys-pilot-card h4 {
+  margin: 8px 0 0;
+  color: var(--text-primary);
+  font-size: 0.96rem;
+  line-height: 1.25;
+}
+
+.app-shell .keys-pilot-copy p,
+.app-shell .keys-pilot-card p {
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.app-shell .keys-pilot-steps,
+.app-shell .keys-pilot-card ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-shell .keys-pilot-steps li,
+.app-shell .keys-pilot-card li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.app-shell .keys-pilot-steps li svg {
+  width: 14px;
+  height: 14px;
+  color: #5eead4;
+  margin-top: 1px;
+}
+
+.app-shell .keys-pilot-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.032);
+  padding: 11px;
+}
+
+.app-shell .keys-pilot-card code {
+  color: var(--text-primary);
+  font-family: var(--font-mono, "Berkeley Mono", "SFMono-Regular", Consolas, monospace);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.app-shell .keys-pilot-live {
+  grid-column: 1 / -1;
+}
+
+.app-shell .keys-pilot-live pre {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.34);
+  padding: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono, "Berkeley Mono", "SFMono-Regular", Consolas, monospace);
+  font-size: 0.71rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
 .app-shell .keys-protected-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -31947,6 +32042,7 @@ button.gm-kpi-card {
   .app-shell .keys-setup-hero,
   .app-shell .keys-primary-grid,
   .app-shell .keys-snippet-grid,
+  .app-shell .keys-pilot-handoff,
   .app-shell .keys-protected-grid {
     grid-template-columns: 1fr;
   }
@@ -31973,6 +32069,7 @@ button.gm-kpi-card {
 
   .app-shell .keys-capture-path,
   .app-shell .keys-agent-tabs,
+  .app-shell .keys-pilot-steps,
   .app-shell .keys-mandate-facts,
   .app-shell .keys-mandate-lists,
   .app-shell .keys-next-grid,
