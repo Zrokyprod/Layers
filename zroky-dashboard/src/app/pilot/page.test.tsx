@@ -63,7 +63,9 @@ describe("PilotPage", () => {
     expect(screen.getByText(/\/v1\/integrations\/system-of-record\/customer-record\/test/)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Configure connector" }).some((link) => link.getAttribute("href") === "/settings/integrations#customer-record-connector")).toBe(true);
     expect(screen.getByText("unsafe_action_stopped")).toBeInTheDocument();
-    expect(screen.getByText("connector_healthy")).toBeInTheDocument();
+    expect(screen.getByText("connector_configured")).toBeInTheDocument();
+    expect(screen.getByText("connector_health_verified")).toBeInTheDocument();
+    expect(screen.getByText("real_connector_ready")).toBeInTheDocument();
     expect(screen.getByText("saved_test_endpoint_used")).toBeInTheDocument();
     expect(screen.getByText("matched_outcome_shown")).toBeInTheDocument();
     expect(screen.getByText("evidence_hash_visible")).toBeInTheDocument();

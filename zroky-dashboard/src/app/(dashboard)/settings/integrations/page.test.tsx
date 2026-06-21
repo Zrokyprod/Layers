@@ -568,6 +568,13 @@ describe("IntegrationsSettingsPage", () => {
     expect(command.textContent).toContain("--ledger-base-url https://ledger.example.com/api");
     expect(command.textContent).not.toContain("ledger-secret-token");
 
+    const fullProofCommand = within(connectorCard as HTMLElement).getByLabelText("Ledger refund full proof command");
+    expect(fullProofCommand.textContent).toContain("--scenario refund --api-base-url https://api.zroky.ai");
+    expect(fullProofCommand.textContent).toContain("--write-evidence artifacts/design-partner-refund-live-evidence.json");
+    expect(fullProofCommand.textContent).toContain("--refund-id RF-PILOT-1");
+    expect(fullProofCommand.textContent).not.toContain("--preflight-only");
+    expect(fullProofCommand.textContent).not.toContain("ledger-secret-token");
+
     fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Copy preflight command" }));
 
     await waitFor(() =>
@@ -576,6 +583,15 @@ describe("IntegrationsSettingsPage", () => {
       ),
     );
     expect(await screen.findByText("Ledger refund preflight command copied.")).toBeInTheDocument();
+
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Copy full proof command" }));
+
+    await waitFor(() =>
+      expect(clipboardWrite).toHaveBeenCalledWith(
+        expect.stringContaining("--write-evidence artifacts/design-partner-refund-live-evidence.json"),
+      ),
+    );
+    expect(await screen.findByText("Ledger refund full proof command copied.")).toBeInTheDocument();
 
     fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Download template JSON" }));
 
@@ -631,7 +647,9 @@ describe("IntegrationsSettingsPage", () => {
         system_ref: "ledger:rf_999",
       },
       failed_attempts: [],
+      next_full_proof_command: expect.stringContaining("--write-evidence artifacts/design-partner-refund-live-evidence.json"),
     });
+    expect(String(payload.next_full_proof_command)).not.toContain("--preflight-only");
     expect(JSON.stringify(payload)).not.toContain("ledger-secret-token");
     expect(await screen.findByText("Ledger refund preflight summary downloaded.")).toBeInTheDocument();
   });
@@ -877,6 +895,13 @@ describe("IntegrationsSettingsPage", () => {
     expect(command.textContent).toContain("--crm-base-url https://crm.example.com/api");
     expect(command.textContent).not.toContain("crm-secret-token");
 
+    const fullProofCommand = within(connectorCard as HTMLElement).getByLabelText("Customer record full proof command");
+    expect(fullProofCommand.textContent).toContain("--scenario customer-record --api-base-url https://api.zroky.ai");
+    expect(fullProofCommand.textContent).toContain("--write-evidence artifacts/design-partner-crm-live-evidence.json");
+    expect(fullProofCommand.textContent).toContain("--customer-id CUS-PILOT-1");
+    expect(fullProofCommand.textContent).not.toContain("--preflight-only");
+    expect(fullProofCommand.textContent).not.toContain("crm-secret-token");
+
     fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Copy preflight command" }));
 
     await waitFor(() =>
@@ -885,6 +910,15 @@ describe("IntegrationsSettingsPage", () => {
       ),
     );
     expect(await screen.findByText("Customer record preflight command copied.")).toBeInTheDocument();
+
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Copy full proof command" }));
+
+    await waitFor(() =>
+      expect(clipboardWrite).toHaveBeenCalledWith(
+        expect.stringContaining("--write-evidence artifacts/design-partner-crm-live-evidence.json"),
+      ),
+    );
+    expect(await screen.findByText("Customer record full proof command copied.")).toBeInTheDocument();
 
     fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Download template JSON" }));
 

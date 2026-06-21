@@ -7686,7 +7686,8 @@ body:has(.app-shell) {
 }
 
 .app-shell .settings-connector-guidance p,
-.app-shell .settings-connector-handoff-header p {
+.app-shell .settings-connector-handoff-header p,
+.app-shell .settings-connector-muted {
   color: var(--dashboard-text-soft) !important;
 }
 
