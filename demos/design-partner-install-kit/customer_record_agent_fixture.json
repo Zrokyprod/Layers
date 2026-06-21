@@ -31,7 +31,7 @@
     "status": "active"
   },
   "crm": {
-    "base_url": "https://crm.design-partner.local/api",
+    "base_url": "https://crm.example.com/api",
     "path_template": "/customers/{customer_id}",
     "record_path": "data",
     "bearer_token": "crm-demo-token-not-persisted",
@@ -47,6 +47,9 @@
   "expected": {
     "runtime_allowed": false,
     "outcome_verdict": "matched",
-    "evidence_verification_status": "pass"
+    "evidence_verification_status": "pass",
+    "connector_health_status": "healthy",
+    "connector_last_attempts": 1,
+    "connector_retry_count": 0
   }
 }

@@ -24,7 +24,7 @@
     "status": "posted"
   },
   "ledger": {
-    "base_url": "https://ledger.design-partner.local/api",
+    "base_url": "https://ledger.example.com/api",
     "path_template": "/refunds/{refund_id}",
     "record_path": "data",
     "bearer_token": "ledger-demo-token-not-persisted",
@@ -41,6 +41,9 @@
   "expected": {
     "runtime_allowed": false,
     "outcome_verdict": "matched",
-    "evidence_verification_status": "pass"
+    "evidence_verification_status": "pass",
+    "connector_health_status": "healthy",
+    "connector_last_attempts": 1,
+    "connector_retry_count": 0
   }
 }
