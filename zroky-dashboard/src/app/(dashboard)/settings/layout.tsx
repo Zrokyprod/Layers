@@ -24,16 +24,21 @@ const SETTINGS_TABS: ReadonlyArray<{
   exact?: boolean;
 }> = [
   { href: "/settings/keys", label: "API keys", description: "Capture credentials", icon: KeyRound },
-  { href: "/settings/providers", label: "Providers", description: "Model provider keys", icon: Plug },
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },
   { href: "/settings/billing", label: "Plan & Billing", description: "Plan, usage, and budget", icon: CreditCard },
   { href: "/settings/evaluation", label: "Evaluation", description: "Judge calibration", icon: SlidersHorizontal },
   { href: "/settings/integrations", label: "Integrations", description: "Repos, alerts, records", icon: BellRing },
 ] as const;
 
+const HIDDEN_SETTINGS_TABS = [
+  { href: "/settings/providers", label: "Providers", description: "Managed replay vault", icon: Plug, exact: false },
+] as const;
+
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const activeTab = SETTINGS_TABS.find((tab) => isActivePath(pathname, tab.href, tab.exact)) ?? SETTINGS_TABS[0];
+  const activeTab =
+    [...SETTINGS_TABS, ...HIDDEN_SETTINGS_TABS].find((tab) => isActivePath(pathname, tab.href, tab.exact)) ??
+    SETTINGS_TABS[0];
   const ActiveIcon = activeTab.icon;
 
   return (
@@ -46,7 +51,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               Settings
             </span>
             <h1>Settings</h1>
-            <p>Manage capture keys, providers, members, billing, evaluation, and integrations.</p>
+            <p>Manage capture keys, members, billing, evaluation, and integrations.</p>
           </div>
           <div className="settings-hero-current">
             <ActiveIcon aria-hidden="true" />

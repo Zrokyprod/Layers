@@ -519,12 +519,9 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
           <div className="keys-provider-note">
             <Plug aria-hidden="true" />
             <div>
-              <strong>Provider keys are not needed for capture.</strong>
-              <span>Add them later only when verified replay needs live model calls.</span>
+              <strong>No model-provider setup is needed for capture.</strong>
+              <span>Use a project key first; advanced replay setup can come later when a protected workflow needs it.</span>
             </div>
-            <Link href="/settings/providers" className="btn btn-soft btn-sm">
-              Provider settings
-            </Link>
           </div>
         </article>
 

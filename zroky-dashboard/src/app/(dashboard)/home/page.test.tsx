@@ -15,7 +15,6 @@ const api = vi.hoisted(() => ({
   listGoldenSets: vi.fn(),
   listIssues: vi.fn(),
   listProjectApiKeys: vi.fn(),
-  listProviderKeys: vi.fn(),
   listReplayRuns: vi.fn(),
   resolveIssue: vi.fn(),
 }));
@@ -316,10 +315,6 @@ function mockInbox(
       created_at: now,
     },
   ]);
-  api.listProviderKeys.mockResolvedValue({
-    items: [],
-    total_in_page: 0,
-  });
 }
 
 function call(overrides: Partial<import("@/lib/types").CallListItem> = {}): import("@/lib/types").CallListItem {

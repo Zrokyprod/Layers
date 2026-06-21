@@ -152,6 +152,7 @@ describe("auth pages", () => {
 
     expect(screen.getByText("Next step: project key setup for the agent you want Zroky to protect.")).toBeInTheDocument();
     expect(screen.getByText("Next step opens project key setup")).toBeInTheDocument();
+    expect(screen.getByText("First capture works with a project key only")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Already have an account? Sign in" }).getAttribute("href")).toBe(
       "/login?next=%2Fsettings%2Fkeys%3Fintent%3Dprotect-agent%26plan%3Dpro%26source%3Dpricing",
     );

@@ -190,7 +190,6 @@ export function FirstRunOnboarding({
   projectKeyCount,
   capturedCallCount,
   captureStatus,
-  providerKeyCount,
   replayUnlocked,
   goldensUnlocked,
   ciUnlocked,
@@ -198,7 +197,6 @@ export function FirstRunOnboarding({
   projectKeyCount: number;
   capturedCallCount: number;
   captureStatus: "connected" | "stale" | "no_data" | "unknown";
-  providerKeyCount: number;
   replayUnlocked: boolean;
   goldensUnlocked: boolean;
   ciUnlocked: boolean;
@@ -272,10 +270,10 @@ export function FirstRunOnboarding({
       icon: <Route aria-hidden="true" />,
     },
     {
-      label: "Provider key",
-      value: providerKeyCount > 0 ? "Connected" : "Optional",
-      state: providerKeyCount > 0 ? "done" : "idle",
-      icon: <Terminal aria-hidden="true" />,
+      label: "Replay proof",
+      value: hasCapture && replayUnlocked ? "Ready" : replayUnlocked ? "Waiting" : "Locked",
+      state: hasCapture && replayUnlocked ? "current" : replayUnlocked ? "idle" : "locked",
+      icon: <ShieldCheck aria-hidden="true" />,
     },
     {
       label: "CI",

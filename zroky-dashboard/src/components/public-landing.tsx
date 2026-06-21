@@ -172,7 +172,7 @@ const architectureNodes = [
 ];
 const controlChips = [
   ["Redaction", "PII and secrets"],
-  ["Provider keys", "Customer managed"],
+  ["Evidence hash", "Tamper evident"],
   ["Roles & access", "Granular permissions"],
   ["Audit log", "All actions tracked"],
   ["Retention", "Configurable TTL"],
@@ -279,7 +279,7 @@ const faqItems = [
   },
   {
     q: "How is my data handled?",
-    a: "PII and secrets are redacted at capture, provider keys stay customer-managed, every action is in the audit log, and retention is a configurable TTL.",
+    a: "PII and secrets are redacted at capture, project keys can be rotated, every action is in the audit log, and retention is a configurable TTL.",
   },
   {
     q: "Will it false-block my PRs?",

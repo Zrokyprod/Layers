@@ -36,7 +36,6 @@ import {
   listGoldenSets,
   listIssues,
   listProjectApiKeys,
-  listProviderKeys,
   listReplayRuns,
   type GoldenSetView,
   type ReplayQuotaResponse,
@@ -54,7 +53,6 @@ import type {
   CallListItem,
   CaptureHealthResponse,
   IssueItem,
-  ProviderKeyResponse,
 } from "@/lib/types";
 
 type InboxData = {
@@ -67,7 +65,6 @@ type InboxData = {
   calls: CallListItem[];
   captureHealth: CaptureHealthResponse | null;
   apiKeys: ApiKeyResponse[];
-  providerKeys: ProviderKeyResponse[];
 };
 
 type IssueAction = "view" | "replay" | "open_goldens" | "upgrade";
@@ -100,7 +97,6 @@ const loadSourceLabels: Record<InboxLoadKey, string> = {
   calls: "Traces",
   captureHealth: "Capture health",
   apiKeys: "Project keys",
-  providerKeys: "Provider keys",
 };
 
 const GOLDEN_ELIGIBLE_REPLAY_STATUSES = new Set(["verified_fix"]);
@@ -412,7 +408,6 @@ export default function HomePage() {
     calls: [],
     captureHealth: null,
     apiKeys: [],
-    providerKeys: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -444,7 +439,6 @@ export default function HomePage() {
         settleLoad("calls", listCalls({ limit: 10, sort_by: "created_at", sort_order: "desc" }, signal)),
         settleLoad("captureHealth", getCaptureHealth(signal)),
         settleLoad("apiKeys", selectedProject ? listProjectApiKeys(selectedProject, signal) : Promise.resolve([])),
-        settleLoad("providerKeys", listProviderKeys({ include_revoked: false }, signal)),
       ]);
 
       if (signal?.aborted || results.every((result) => result.status === "rejected" && isAbortError(result.reason))) {
@@ -492,8 +486,6 @@ export default function HomePage() {
           updates.captureHealth = result.value as CaptureHealthResponse;
         } else if (result.key === "apiKeys") {
           updates.apiKeys = result.value as ApiKeyResponse[];
-        } else if (result.key === "providerKeys") {
-          updates.providerKeys = (result.value as { items: ProviderKeyResponse[] }).items;
         }
       }
 
@@ -576,7 +568,6 @@ export default function HomePage() {
   const failedCiRuns = data.replayRuns.filter(isFailedCiRun).slice(0, 6);
   const goldensNeedingReview = data.goldenSets.filter(needsGoldenReview).slice(0, 6);
   const activeProjectKeyCount = data.apiKeys.filter((key) => !key.revoked && !key.expired).length;
-  const activeProviderKeyCount = data.providerKeys.filter((key) => key.is_active && !key.revoked_at).length;
   const captureStatus = data.captureHealth?.status ?? "unknown";
   const capturedCallCount = Math.max(data.captureHealth?.calls_24h ?? 0, data.calls.length);
   const captureLabel = captureStatusLabel(captureStatus, capturedCallCount);
@@ -849,7 +840,7 @@ export default function HomePage() {
     { label: "Protected flows", value: formatCount(protectedGoldenCount), tone: protectedGoldenCount > 0 ? "success" : "neutral" },
     { label: "Unprotected failures", value: formatCount(needsTrustedReplayCount), tone: needsTrustedReplayCount > 0 ? "warning" : "success" },
     { label: "CI gate health", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocking` : "healthy", tone: failedCiRuns.length > 0 ? "danger" : "success" },
-    { label: "Provider key health", value: activeProviderKeyCount > 0 ? "healthy" : "optional", tone: activeProviderKeyCount > 0 ? "success" : "neutral" },
+    { label: "Evidence proof", value: protectedGoldenCount > 0 ? "ready" : "needs replay", tone: protectedGoldenCount > 0 ? "success" : "neutral" },
   ];
   const pipelineStages = [
     { label: "Traces", value: formatCount(capturedCallCount), helper: `${captureLabel}`, tone: captureHasProblem ? "warning" : capturedCallCount > 0 ? "success" : "neutral" },
@@ -930,7 +921,6 @@ export default function HomePage() {
           projectKeyCount={activeProjectKeyCount}
           capturedCallCount={capturedCallCount}
           captureStatus={captureStatus}
-          providerKeyCount={activeProviderKeyCount}
           replayUnlocked={caps.canReplay}
           goldensUnlocked={caps.canGoldens}
           ciUnlocked={caps.canCi}

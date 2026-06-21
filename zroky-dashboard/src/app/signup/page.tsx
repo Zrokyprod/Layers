@@ -120,7 +120,7 @@ function SignupForm() {
           protectedAgentIntent
             ? [
                 "Next step opens project key setup",
-                "Provider keys are not required for first capture",
+                "First capture works with a project key only",
               ]
             : [
                 "Email verification protects workspace access",

@@ -163,7 +163,7 @@ const NAV_ITEMS: NavItem[] = [
     id: "settings",
     href: "/settings/keys",
     label: "Settings",
-    subtitle: "Keys, providers, billing, integrations, notifications, and team controls.",
+    subtitle: "Keys, billing, integrations, notifications, and team controls.",
     Icon: Settings2,
     visibleInNav: true,
   },
@@ -173,7 +173,6 @@ const VISIBLE_NAV = NAV_ITEMS.filter((n) => n.visibleInNav);
 
 const SETTINGS_CHILD_LINKS = [
   { href: "/settings/keys", label: "API keys", Icon: KeyRound },
-  { href: "/settings/providers", label: "Providers", Icon: Shield },
   { href: "/settings/integrations", label: "Connectors", Icon: Plug },
   { href: "/settings/billing", label: "Billing", Icon: CreditCard },
   { href: "/settings/team", label: "Members", Icon: UserRound },

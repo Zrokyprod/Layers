@@ -40,11 +40,26 @@ describe("SettingsLayout", () => {
       </SettingsLayout>,
     );
 
-    for (const label of ["API keys", "Providers", "Members", "Plan & Billing", "Evaluation", "Integrations"]) {
+    for (const label of ["API keys", "Members", "Plan & Billing", "Evaluation", "Integrations"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("link", { name: "Providers" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Project" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
+  });
+
+  it("keeps direct provider settings usable without exposing a tab", () => {
+    navigation.pathname = "/settings/providers";
+
+    render(
+      <SettingsLayout>
+        <div>Provider vault content</div>
+      </SettingsLayout>,
+    );
+
+    expect(screen.queryByRole("link", { name: "Providers" })).not.toBeInTheDocument();
+    expect(screen.getByText("Providers")).toBeInTheDocument();
+    expect(screen.getByText("Managed replay vault")).toBeInTheDocument();
   });
 
   it("keeps Slack child routes active under Integrations", () => {

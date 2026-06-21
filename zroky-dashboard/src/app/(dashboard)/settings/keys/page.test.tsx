@@ -120,11 +120,11 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("First trace")).toBeInTheDocument();
     expect(screen.getByText("Fixture validation")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Create project key" })).toBeInTheDocument();
-    expect(screen.getByText("Provider keys are not needed for capture.")).toBeInTheDocument();
-    expect(screen.getByText("Add them later only when verified replay needs live model calls.")).toBeInTheDocument();
+    expect(screen.getByText("No model-provider setup is needed for capture.")).toBeInTheDocument();
+    expect(screen.getByText("Use a project key first; advanced replay setup can come later when a protected workflow needs it.")).toBeInTheDocument();
     expect(screen.getByText("No project keys yet. Create one to start capturing calls.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open traces" }).getAttribute("href")).toBe("/trace");
-    expect(screen.getByRole("link", { name: "Provider settings" }).getAttribute("href")).toBe("/settings/providers");
+    expect(screen.queryByRole("link", { name: "Provider settings" })).not.toBeInTheDocument();
     expect(screen.getByText((content) => content.includes("traceRun"))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes("zroky.trace_run"))).toBeInTheDocument();
   });

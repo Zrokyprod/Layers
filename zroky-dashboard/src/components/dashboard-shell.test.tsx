@@ -293,7 +293,7 @@ describe("DashboardShell primary navigation", () => {
     const settingsSections = screen.getByRole("group", { name: "Settings sections" });
     expect(within(settingsSections).queryByRole("link", { name: /Project/ })).not.toBeInTheDocument();
     expect(within(settingsSections).getByRole("link", { name: /API keys/ }).getAttribute("href")).toBe("/settings/keys");
-    expect(within(settingsSections).getByRole("link", { name: /Providers/ }).getAttribute("href")).toBe("/settings/providers");
+    expect(within(settingsSections).queryByRole("link", { name: /Providers/ })).not.toBeInTheDocument();
     expect(within(settingsSections).getByRole("link", { name: /Connectors/ }).getAttribute("href")).toBe("/settings/integrations");
     expect(within(settingsSections).getByRole("link", { name: /Billing/ }).getAttribute("href")).toBe("/settings/billing");
     expect(within(settingsSections).getByRole("link", { name: /Members/ }).getAttribute("href")).toBe("/settings/team");
