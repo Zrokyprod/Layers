@@ -89,6 +89,12 @@ describe("IntegrationsSettingsPage", () => {
       has_bearer_token: true,
       bearer_token_last4: "oken",
       last_tested_at: "2026-06-20T09:00:00Z",
+      health_status: "healthy",
+      last_verdict: "matched",
+      last_error: null,
+      last_http_status: 200,
+      last_attempts: 2,
+      last_checked_at: "2026-06-20T09:00:00Z",
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
     });
@@ -102,6 +108,12 @@ describe("IntegrationsSettingsPage", () => {
       has_bearer_token: true,
       bearer_token_last4: "oken",
       last_tested_at: "2026-06-20T09:10:00Z",
+      health_status: "not_verified",
+      last_verdict: null,
+      last_error: null,
+      last_http_status: null,
+      last_attempts: null,
+      last_checked_at: null,
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
     });
@@ -300,6 +312,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(heading).toBeInTheDocument();
     expect(heading.closest("article")?.getAttribute("id")).toBe("ledger-refund-connector");
     expect(screen.getAllByText("Verified").length).toBeGreaterThan(0);
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
     expect(screen.getByText("https://ledger.***/...")).toBeInTheDocument();
     expect(screen.getByText("200")).toBeInTheDocument();
     expect(screen.getByText("data.0")).toBeInTheDocument();

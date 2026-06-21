@@ -138,6 +138,75 @@ def test_ledger_refund_connector_handles_real_ledger_array_and_alias_shapes() ->
     assert source.record["status"] == "posted"
 
 
+def test_ledger_refund_connector_retries_transient_failure_and_records_metadata() -> (
+    None
+):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            raise httpx.ConnectError("temporary outage", request=request)
+        return httpx.Response(
+            200,
+            json={
+                "refund_id": "rf_retry",
+                "amount_usd": "42.50",
+                "currency": "usd",
+            },
+        )
+
+    connector = LedgerRefundApiConnector(
+        base_url="https://ledger.example/api",
+        refund_id="rf_retry",
+        bearer_token="ledger-secret-token",
+        timeout_seconds=1.25,
+        max_attempts=3,
+        transport=httpx.MockTransport(handler),
+    )
+
+    source = connector.fetch()
+
+    assert len(requests) == 2
+    assert source.record_found is True
+    assert source.record is not None
+    assert source.record["refund_id"] == "rf_retry"
+    assert source.metadata is not None
+    assert source.metadata["attempts"] == 2
+    assert source.metadata["retry_count"] == 1
+    assert source.metadata["max_attempts"] == 3
+    assert source.metadata["timeout_seconds"] == 1.25
+    assert source.metadata["transient_errors"] == ["ConnectError"]
+    assert "ledger-secret-token" not in json.dumps(source.metadata)
+
+
+def test_ledger_refund_connector_exhausts_retryable_status_without_false_pass() -> None:
+    attempts = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"error": "temporarily_unavailable"})
+
+    source = LedgerRefundApiConnector(
+        base_url="https://ledger.example/api",
+        refund_id="rf_retry_exhausted",
+        max_attempts=2,
+        transport=httpx.MockTransport(handler),
+    ).fetch()
+
+    assert attempts == 2
+    assert source.record is None
+    assert source.record_found is None
+    assert source.metadata is not None
+    assert source.metadata["http_status"] == 503
+    assert source.metadata["error"] == "http_error"
+    assert source.metadata["attempts"] == 2
+    assert source.metadata["retry_count"] == 1
+    assert source.metadata["retryable"] is True
+    assert source.metadata["transient_errors"] == ["http_503", "http_503"]
+
+
 def test_ledger_refund_connector_ignores_malformed_cents_without_false_pass() -> None:
     for malformed in ("not-a-number", "NaN"):
         source = LedgerRefundApiConnector(

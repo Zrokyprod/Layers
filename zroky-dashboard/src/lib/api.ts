@@ -1109,6 +1109,12 @@ export interface LedgerRefundConnectorStatusResponse {
   has_bearer_token: boolean;
   bearer_token_last4: string | null;
   last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_checked_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -1152,6 +1158,12 @@ export interface CustomerRecordConnectorStatusResponse {
   has_bearer_token: boolean;
   bearer_token_last4: string | null;
   last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_checked_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 }

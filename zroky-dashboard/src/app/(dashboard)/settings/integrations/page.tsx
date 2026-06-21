@@ -139,6 +139,13 @@ function connectorStatus(check: OutcomeReconciliationView | null) {
   return "Not verified";
 }
 
+function connectorHealthLabel(value: string | null | undefined) {
+  if (!value) return "Not verified";
+  if (value === "not_configured") return "Not configured";
+  if (value === "not_verified") return "Not verified";
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function connectorPillClass(check: OutcomeReconciliationView | null) {
   if (!check) return "pill";
   if (check.verdict === "matched") return "pill pill-green";
@@ -343,6 +350,8 @@ export default function IntegrationsSettingsPage() {
   const readyCount = [githubConnected, slackConnected, ledgerConnected && ledgerVerified, customerConnected && customerVerified].filter(Boolean).length;
   const ledgerHttpStatus = textValue(ledgerMetadata.http_status);
   const customerHttpStatus = textValue(customerMetadata.http_status);
+  const ledgerHealth = state.ledgerConfig?.health_status ?? (ledgerConnected ? "not_verified" : "not_configured");
+  const customerHealth = state.customerConfig?.health_status ?? (customerConnected ? "not_verified" : "not_configured");
   const ledgerRecordPath = state.ledgerConfig?.record_path ?? textValue(ledgerMetadata.record_path);
   const customerRecordPath = state.customerConfig?.record_path ?? textValue(customerMetadata.record_path);
   const ledgerRequestUrl = maskedConnectorUrl(state.ledgerConfig?.base_url ?? ledgerMetadata.request_url);
@@ -763,8 +772,16 @@ export default function IntegrationsSettingsPage() {
               <strong>{ledgerRequestUrl}</strong>
             </div>
             <div>
+              <span>Health</span>
+              <strong>{connectorHealthLabel(ledgerHealth)}</strong>
+            </div>
+            <div>
               <span>Last HTTP</span>
-              <strong>{ledgerHttpStatus ?? "No response yet"}</strong>
+              <strong>{ledgerHttpStatus ?? textValue(state.ledgerConfig?.last_http_status) ?? "No response yet"}</strong>
+            </div>
+            <div>
+              <span>Attempts</span>
+              <strong>{textValue(state.ledgerConfig?.last_attempts) ?? textValue(ledgerMetadata.attempts) ?? "No run yet"}</strong>
             </div>
             <div>
               <span>Record path</span>
@@ -919,8 +936,16 @@ export default function IntegrationsSettingsPage() {
               <strong>{customerRequestUrl}</strong>
             </div>
             <div>
+              <span>Health</span>
+              <strong>{connectorHealthLabel(customerHealth)}</strong>
+            </div>
+            <div>
               <span>Last HTTP</span>
-              <strong>{customerHttpStatus ?? "No response yet"}</strong>
+              <strong>{customerHttpStatus ?? textValue(state.customerConfig?.last_http_status) ?? "No response yet"}</strong>
+            </div>
+            <div>
+              <span>Attempts</span>
+              <strong>{textValue(state.customerConfig?.last_attempts) ?? textValue(customerMetadata.attempts) ?? "No run yet"}</strong>
             </div>
             <div>
               <span>Record path</span>

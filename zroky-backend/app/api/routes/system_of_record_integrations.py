@@ -6,12 +6,19 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.tenant import TenantContext, require_tenant_context, require_tenant_role
+from app.api.dependencies.tenant import (
+    TenantContext,
+    require_tenant_context,
+    require_tenant_role,
+)
 from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.db.session import get_db_session, get_db_session_read
 from app.services.dashboard_config import ensure_project_exists
-from app.services.outcome_reconciliation import reconcile_outcome, reconciliation_to_dict
+from app.services.outcome_reconciliation import (
+    reconcile_outcome,
+    reconciliation_to_dict,
+)
 from app.services.system_of_record_connector_config import (
     CUSTOMER_RECORD_CONNECTOR_TYPE,
     LEDGER_REFUND_CONNECTOR_TYPE,
@@ -22,6 +29,7 @@ from app.services.system_of_record_connector_config import (
     build_ledger_refund_connector,
     decrypt_connector_bearer_token,
     get_connector_config,
+    get_connector_health_snapshot,
     mark_connector_tested,
     serialize_connector_config,
     upsert_customer_record_connector_config,
@@ -41,6 +49,12 @@ class LedgerRefundConnectorStatusResponse(BaseModel):
     has_bearer_token: bool
     bearer_token_last4: str | None = None
     last_tested_at: Any | None = None
+    health_status: str = "not_configured"
+    last_verdict: str | None = None
+    last_error: str | None = None
+    last_http_status: int | None = None
+    last_attempts: int | None = None
+    last_checked_at: Any | None = None
     created_at: Any | None = None
     updated_at: Any | None = None
 
@@ -101,6 +115,12 @@ class CustomerRecordConnectorStatusResponse(BaseModel):
     has_bearer_token: bool
     bearer_token_last4: str | None = None
     last_tested_at: Any | None = None
+    health_status: str = "not_configured"
+    last_verdict: str | None = None
+    last_error: str | None = None
+    last_http_status: int | None = None
+    last_attempts: int | None = None
+    last_checked_at: Any | None = None
     created_at: Any | None = None
     updated_at: Any | None = None
 
@@ -151,15 +171,47 @@ class CustomerRecordConnectorTestResponse(BaseModel):
     connector: CustomerRecordConnectorStatusResponse
 
 
-def _ledger_status_response(row) -> LedgerRefundConnectorStatusResponse:
+def _ledger_status_response(
+    row,
+    *,
+    db: Session | None = None,
+    project_id: str | None = None,
+) -> LedgerRefundConnectorStatusResponse:
+    health = (
+        get_connector_health_snapshot(
+            db, project_id=project_id, connector_type=LEDGER_REFUND_CONNECTOR_TYPE
+        )
+        if row is not None and db is not None and project_id
+        else None
+    )
     return LedgerRefundConnectorStatusResponse(
-        **serialize_connector_config(row, connector_type=LEDGER_REFUND_CONNECTOR_TYPE)
+        **serialize_connector_config(
+            row,
+            connector_type=LEDGER_REFUND_CONNECTOR_TYPE,
+            health=health,
+        )
     )
 
 
-def _customer_status_response(row) -> CustomerRecordConnectorStatusResponse:
+def _customer_status_response(
+    row,
+    *,
+    db: Session | None = None,
+    project_id: str | None = None,
+) -> CustomerRecordConnectorStatusResponse:
+    health = (
+        get_connector_health_snapshot(
+            db, project_id=project_id, connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE
+        )
+        if row is not None and db is not None and project_id
+        else None
+    )
     return CustomerRecordConnectorStatusResponse(
-        **serialize_connector_config(row, connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE)
+        **serialize_connector_config(
+            row,
+            connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE,
+            health=health,
+        )
     )
 
 
@@ -233,7 +285,7 @@ def get_ledger_refund_connector_status(
     db: Session = Depends(get_db_session_read),
 ) -> LedgerRefundConnectorStatusResponse:
     row = get_connector_config(db, project_id=tenant_id)
-    return _ledger_status_response(row)
+    return _ledger_status_response(row, db=db, project_id=tenant_id)
 
 
 @router.put(
@@ -269,7 +321,7 @@ def save_ledger_refund_connector_config(
         )
     except (InvalidSystemOfRecordConnectorError, VaultCipherUnavailable) as exc:
         raise _map_config_error(exc) from exc
-    return _ledger_status_response(row)
+    return _ledger_status_response(row, db=db, project_id=context.tenant_id)
 
 
 @router.post(
@@ -302,6 +354,7 @@ def test_ledger_refund_connector(
             refund_id=refund_id,
             bearer_token=bearer_token,
             timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
             allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
         )
         row = reconcile_outcome(
@@ -342,7 +395,7 @@ def test_ledger_refund_connector(
     return LedgerRefundConnectorTestResponse(
         ok=row.verdict == "matched",
         check=reconciliation_to_dict(row),
-        connector=_ledger_status_response(updated_config),
+        connector=_ledger_status_response(updated_config, db=db, project_id=tenant_id),
     )
 
 
@@ -359,7 +412,7 @@ def get_customer_record_connector_status(
     row = get_connector_config(
         db, project_id=tenant_id, connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE
     )
-    return _customer_status_response(row)
+    return _customer_status_response(row, db=db, project_id=tenant_id)
 
 
 @router.put(
@@ -395,7 +448,7 @@ def save_customer_record_connector_config(
         )
     except (InvalidSystemOfRecordConnectorError, VaultCipherUnavailable) as exc:
         raise _map_config_error(exc) from exc
-    return _customer_status_response(row)
+    return _customer_status_response(row, db=db, project_id=context.tenant_id)
 
 
 @router.post(
@@ -430,6 +483,7 @@ def test_customer_record_connector(
             customer_id=customer_id,
             bearer_token=bearer_token,
             timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
             allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
         )
         row = reconcile_outcome(
@@ -466,5 +520,7 @@ def test_customer_record_connector(
     return CustomerRecordConnectorTestResponse(
         ok=row.verdict == "matched",
         check=reconciliation_to_dict(row),
-        connector=_customer_status_response(updated_config),
+        connector=_customer_status_response(
+            updated_config, db=db, project_id=tenant_id
+        ),
     )

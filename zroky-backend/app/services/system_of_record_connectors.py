@@ -26,6 +26,8 @@ class ConnectorConfigError(ValueError):
 
 _TEMPLATE_RE = re.compile(r"{([a-zA-Z_][a-zA-Z0-9_]*)}")
 _BLOCKED_HOSTS = {"localhost", "localhost.localdomain"}
+_RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+_MAX_CONNECTOR_ATTEMPTS = 4
 
 
 def _clean_text(value: Any) -> str:
@@ -143,6 +145,14 @@ def _without_query(url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
+def _bounded_max_attempts(value: int | None) -> int:
+    try:
+        attempts = int(value or 1)
+    except (TypeError, ValueError):
+        attempts = 1
+    return min(_MAX_CONNECTOR_ATTEMPTS, max(1, attempts))
+
+
 def _metadata(
     *,
     connector_type: str,
@@ -150,6 +160,11 @@ def _metadata(
     http_status: int | None = None,
     record_path: str | None = None,
     error: str | None = None,
+    attempts: int | None = None,
+    max_attempts: int | None = None,
+    timeout_seconds: float | None = None,
+    retryable: bool | None = None,
+    transient_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "connector_type": connector_type,
@@ -161,6 +176,17 @@ def _metadata(
         payload["record_path"] = record_path
     if error:
         payload["error"] = error
+    if attempts is not None:
+        payload["attempts"] = attempts
+        payload["retry_count"] = max(0, attempts - 1)
+    if max_attempts is not None:
+        payload["max_attempts"] = max_attempts
+    if timeout_seconds is not None:
+        payload["timeout_seconds"] = timeout_seconds
+    if retryable is not None:
+        payload["retryable"] = retryable
+    if transient_errors:
+        payload["transient_errors"] = transient_errors[:_MAX_CONNECTOR_ATTEMPTS]
     return payload
 
 
@@ -176,9 +202,7 @@ def validate_ledger_refund_api_config(
         base_url, allow_private_hosts=allow_private_hosts
     ).rstrip("/")
     normalized_path_template = _clean_text(path_template) or "/refunds/{refund_id}"
-    _render_path_template(
-        normalized_path_template, {"refund_id": "zroky_config_check"}
-    )
+    _render_path_template(normalized_path_template, {"refund_id": "zroky_config_check"})
     normalized_record_path = _clean_text(record_path) if record_path else None
     if normalized_record_path:
         if ".." in normalized_record_path or "\\" in normalized_record_path:
@@ -252,6 +276,7 @@ class HttpJsonRecordConnector:
     record_path: str | None = None
     connector_type: str = "http_json_record"
     timeout_seconds: float = 5.0
+    max_attempts: int = 2
     allow_private_hosts: bool = False
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
 
@@ -275,12 +300,45 @@ class HttpJsonRecordConnector:
         headers = {"Accept": "application/json"}
         if self.bearer_token and self.bearer_token.strip():
             headers["Authorization"] = f"Bearer {self.bearer_token.strip()}"
+        max_attempts = _bounded_max_attempts(self.max_attempts)
+        attempts = 0
+        transient_errors: list[str] = []
+        response: httpx.Response | None = None
 
         try:
             with httpx.Client(
                 timeout=self.timeout_seconds, transport=self.transport
             ) as client:
-                response = client.get(url, headers=headers)
+                for attempt in range(1, max_attempts + 1):
+                    attempts = attempt
+                    try:
+                        response = client.get(url, headers=headers)
+                    except httpx.RequestError as exc:
+                        error_name = exc.__class__.__name__
+                        transient_errors.append(error_name)
+                        if attempt < max_attempts:
+                            continue
+                        return SourceRecord(
+                            record=None,
+                            record_found=None,
+                            metadata=_metadata(
+                                connector_type=self.connector_type,
+                                request_url=url,
+                                record_path=self.record_path,
+                                error=error_name,
+                                attempts=attempts,
+                                max_attempts=max_attempts,
+                                timeout_seconds=self.timeout_seconds,
+                                retryable=True,
+                                transient_errors=transient_errors,
+                            ),
+                        )
+
+                    if response.status_code in _RETRYABLE_HTTP_STATUSES:
+                        transient_errors.append(f"http_{response.status_code}")
+                        if attempt < max_attempts:
+                            continue
+                    break
         except httpx.RequestError as exc:
             return SourceRecord(
                 record=None,
@@ -290,6 +348,27 @@ class HttpJsonRecordConnector:
                     request_url=url,
                     record_path=self.record_path,
                     error=exc.__class__.__name__,
+                    attempts=attempts or 1,
+                    max_attempts=max_attempts,
+                    timeout_seconds=self.timeout_seconds,
+                    retryable=True,
+                    transient_errors=transient_errors or [exc.__class__.__name__],
+                ),
+            )
+
+        if response is None:
+            return SourceRecord(
+                record=None,
+                record_found=None,
+                metadata=_metadata(
+                    connector_type=self.connector_type,
+                    request_url=url,
+                    record_path=self.record_path,
+                    error="request_not_attempted",
+                    attempts=attempts,
+                    max_attempts=max_attempts,
+                    timeout_seconds=self.timeout_seconds,
+                    retryable=False,
                 ),
             )
 
@@ -303,6 +382,11 @@ class HttpJsonRecordConnector:
                     request_url=url,
                     http_status=status,
                     record_path=self.record_path,
+                    attempts=attempts,
+                    max_attempts=max_attempts,
+                    timeout_seconds=self.timeout_seconds,
+                    retryable=False,
+                    transient_errors=transient_errors,
                 ),
             )
         if status < 200 or status >= 300:
@@ -315,6 +399,11 @@ class HttpJsonRecordConnector:
                     http_status=status,
                     record_path=self.record_path,
                     error="http_error",
+                    attempts=attempts,
+                    max_attempts=max_attempts,
+                    timeout_seconds=self.timeout_seconds,
+                    retryable=status in _RETRYABLE_HTTP_STATUSES,
+                    transient_errors=transient_errors,
                 ),
             )
         if not response.content:
@@ -327,6 +416,11 @@ class HttpJsonRecordConnector:
                     http_status=status,
                     record_path=self.record_path,
                     error="empty_response",
+                    attempts=attempts,
+                    max_attempts=max_attempts,
+                    timeout_seconds=self.timeout_seconds,
+                    retryable=False,
+                    transient_errors=transient_errors,
                 ),
             )
         try:
@@ -341,6 +435,11 @@ class HttpJsonRecordConnector:
                     http_status=status,
                     record_path=self.record_path,
                     error="invalid_json",
+                    attempts=attempts,
+                    max_attempts=max_attempts,
+                    timeout_seconds=self.timeout_seconds,
+                    retryable=False,
+                    transient_errors=transient_errors,
                 ),
             )
 
@@ -354,6 +453,11 @@ class HttpJsonRecordConnector:
                 http_status=status,
                 record_path=self.record_path,
                 error=None if record is not None else "record_path_missing",
+                attempts=attempts,
+                max_attempts=max_attempts,
+                timeout_seconds=self.timeout_seconds,
+                retryable=False,
+                transient_errors=transient_errors,
             ),
         )
 
@@ -449,6 +553,7 @@ class LedgerRefundApiConnector:
     query: Mapping[str, Any] | None = None
     record_path: str | None = None
     timeout_seconds: float = 5.0
+    max_attempts: int = 2
     allow_private_hosts: bool = False
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
     connector_type: str = "ledger_refund_api"
@@ -462,6 +567,7 @@ class LedgerRefundApiConnector:
             bearer_token=self.bearer_token,
             record_path=self.record_path,
             timeout_seconds=self.timeout_seconds,
+            max_attempts=self.max_attempts,
             allow_private_hosts=self.allow_private_hosts,
             transport=self.transport,
             connector_type=self.connector_type,
@@ -490,6 +596,7 @@ class CustomerRecordApiConnector:
     query: Mapping[str, Any] | None = None
     record_path: str | None = None
     timeout_seconds: float = 5.0
+    max_attempts: int = 2
     allow_private_hosts: bool = False
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
     connector_type: str = "customer_record_api"
@@ -503,6 +610,7 @@ class CustomerRecordApiConnector:
             bearer_token=self.bearer_token,
             record_path=self.record_path,
             timeout_seconds=self.timeout_seconds,
+            max_attempts=self.max_attempts,
             allow_private_hosts=self.allow_private_hosts,
             transport=self.transport,
             connector_type=self.connector_type,

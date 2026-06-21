@@ -42,7 +42,9 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890")
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890"
+    )
     get_settings.cache_clear()
     engine, session_factory = _sqlite_session_factory(tmp_path / "sor_connector.db")
     _seed_project(session_factory, "proj_sor_connector")
@@ -64,6 +66,7 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
         assert self.path_template == "/refunds/{refund_id}"
         assert self.record_path == "data"
         assert self.bearer_token == "ledger-secret-token"
+        assert self.max_attempts == 2
         return SourceRecord(
             record={
                 "refund_id": self.refund_id,
@@ -108,9 +111,12 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
             assert saved_body["bearer_token_last4"] == "oken"
             assert "ledger-secret-token" not in json.dumps(saved_body)
 
-            status = client.get("/v1/integrations/system-of-record/ledger-refund/status")
+            status = client.get(
+                "/v1/integrations/system-of-record/ledger-refund/status"
+            )
             assert status.status_code == 200
             assert status.json()["base_url"] == "https://ledger.example.com/api"
+            assert status.json()["health_status"] == "not_verified"
             assert "ledger-secret-token" not in json.dumps(status.json())
 
             tested = client.post(
@@ -131,6 +137,10 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
             assert body["check"]["verdict"] == "matched"
             assert body["check"]["metadata"]["source"] == "saved_connector_test"
             assert body["check"]["metadata"]["connector"]["http_status"] == 200
+            assert body["connector"]["health_status"] == "healthy"
+            assert body["connector"]["last_verdict"] == "matched"
+            assert body["connector"]["last_http_status"] == 200
+            assert body["connector"]["last_error"] is None
             assert body["connector"]["last_tested_at"] is not None
             assert "ledger-secret-token" not in json.dumps(body)
     finally:
@@ -144,7 +154,9 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890")
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890"
+    )
     get_settings.cache_clear()
     engine, session_factory = _sqlite_session_factory(tmp_path / "sor_crm_connector.db")
     _seed_project(session_factory, "proj_sor_crm")
@@ -157,15 +169,14 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
             session.close()
 
     def override_tenant():
-        return TenantContext(
-            tenant_id="proj_sor_crm", role="admin", subject="user-sor"
-        )
+        return TenantContext(tenant_id="proj_sor_crm", role="admin", subject="user-sor")
 
     def fake_fetch(self: CustomerRecordApiConnector) -> SourceRecord:
         assert self.base_url == "https://crm.example.com/api"
         assert self.path_template == "/customers/{customer_id}"
         assert self.record_path == "data"
         assert self.bearer_token == "crm-secret-token"
+        assert self.max_attempts == 2
         return SourceRecord(
             record={
                 "customer_id": self.customer_id,
@@ -190,7 +201,9 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
 
     try:
         with TestClient(app) as client:
-            empty = client.get("/v1/integrations/system-of-record/customer-record/status")
+            empty = client.get(
+                "/v1/integrations/system-of-record/customer-record/status"
+            )
             assert empty.status_code == 200
             assert empty.json()["connected"] is False
             assert empty.json()["connector_type"] == "customer_record_api"
@@ -230,6 +243,9 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
             assert body["check"]["system_ref"] == "crm:cus_1001"
             assert body["check"]["metadata"]["source"] == "saved_connector_test"
             assert body["check"]["metadata"]["connector"]["http_status"] == 200
+            assert body["connector"]["health_status"] == "healthy"
+            assert body["connector"]["last_verdict"] == "matched"
+            assert body["connector"]["last_http_status"] == 200
             assert body["connector"]["last_tested_at"] is not None
             assert "crm-secret-token" not in json.dumps(body)
     finally:
@@ -243,7 +259,9 @@ def test_ledger_refund_connector_rejects_unsafe_saved_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890")
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890"
+    )
     get_settings.cache_clear()
     engine, session_factory = _sqlite_session_factory(tmp_path / "sor_bad_config.db")
     _seed_project(session_factory, "proj_sor_bad")
@@ -256,9 +274,7 @@ def test_ledger_refund_connector_rejects_unsafe_saved_config(
             session.close()
 
     def override_tenant():
-        return TenantContext(
-            tenant_id="proj_sor_bad", role="admin", subject="user-sor"
-        )
+        return TenantContext(tenant_id="proj_sor_bad", role="admin", subject="user-sor")
 
     app.dependency_overrides[get_db_session] = override_db
     app.dependency_overrides[get_db_session_read] = override_db
@@ -282,13 +298,101 @@ def test_ledger_refund_connector_rejects_unsafe_saved_config(
         get_settings.cache_clear()
 
 
+def test_ledger_refund_connector_status_surfaces_degraded_health_after_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890"
+    )
+    get_settings.cache_clear()
+    engine, session_factory = _sqlite_session_factory(
+        tmp_path / "sor_connector_degraded.db"
+    )
+    _seed_project(session_factory, "proj_sor_degraded")
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_sor_degraded", role="admin", subject="user-sor"
+        )
+
+    def fake_fetch(self: LedgerRefundApiConnector) -> SourceRecord:
+        return SourceRecord(
+            record=None,
+            record_found=None,
+            metadata={
+                "connector_type": "ledger_refund_api",
+                "request_url": f"https://ledger.example.com/api/refunds/{self.refund_id}",
+                "record_path": "data",
+                "error": "ReadTimeout",
+                "attempts": 2,
+                "max_attempts": 2,
+                "retryable": True,
+                "refund_id": self.refund_id,
+            },
+        )
+
+    monkeypatch.setattr(LedgerRefundApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            saved = client.put(
+                "/v1/integrations/system-of-record/ledger-refund/config",
+                json={
+                    "base_url": "https://ledger.example.com/api",
+                    "path_template": "/refunds/{refund_id}",
+                    "record_path": "data",
+                    "bearer_token": "ledger-secret-token",
+                },
+            )
+            assert saved.status_code == 200
+
+            tested = client.post(
+                "/v1/integrations/system-of-record/ledger-refund/test",
+                json={
+                    "refund_id": "rf_timeout",
+                    "claimed": {"refund_id": "rf_timeout", "amount_usd": 42.5},
+                },
+            )
+
+            assert tested.status_code == 201
+            body = tested.json()
+            assert body["ok"] is False
+            assert body["check"]["verdict"] == "not_verified"
+            assert body["check"]["metadata"]["connector"]["error"] == "ReadTimeout"
+            assert body["connector"]["health_status"] == "degraded"
+            assert body["connector"]["last_verdict"] == "not_verified"
+            assert body["connector"]["last_error"] == "ReadTimeout"
+            assert body["connector"]["last_attempts"] == 2
+            assert "ledger-secret-token" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
 def test_customer_record_connector_rejects_unsafe_saved_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890")
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890"
+    )
     get_settings.cache_clear()
-    engine, session_factory = _sqlite_session_factory(tmp_path / "sor_crm_bad_config.db")
+    engine, session_factory = _sqlite_session_factory(
+        tmp_path / "sor_crm_bad_config.db"
+    )
     _seed_project(session_factory, "proj_sor_crm_bad")
 
     def override_db():

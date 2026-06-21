@@ -169,6 +169,7 @@ class LedgerRefundConnectorIngest(BaseModel):
     record_path: str | None = Field(default=None, max_length=255)
     query: dict[str, str | int | float | bool] | None = None
     timeout_seconds: float | None = Field(default=None, ge=0.1, le=30)
+    max_attempts: int | None = Field(default=None, ge=1, le=4)
 
 
 class LedgerRefundReconciliationIngest(BaseModel):
@@ -199,6 +200,7 @@ class CustomerRecordConnectorIngest(BaseModel):
     record_path: str | None = Field(default=None, max_length=255)
     query: dict[str, str | int | float | bool] | None = None
     timeout_seconds: float | None = Field(default=None, ge=0.1, le=30)
+    max_attempts: int | None = Field(default=None, ge=1, le=4)
 
 
 class CustomerRecordReconciliationIngest(BaseModel):
@@ -508,6 +510,9 @@ def create_ledger_refund_reconciliation(
     timeout = (
         body.connector.timeout_seconds or settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS
     )
+    max_attempts = (
+        body.connector.max_attempts or settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS
+    )
     connector = LedgerRefundApiConnector(
         base_url=body.connector.base_url,
         refund_id=refund_id,
@@ -516,6 +521,7 @@ def create_ledger_refund_reconciliation(
         query=body.connector.query,
         record_path=body.connector.record_path,
         timeout_seconds=timeout,
+        max_attempts=max_attempts,
         allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
     )
 
@@ -569,6 +575,9 @@ def create_customer_record_reconciliation(
     timeout = (
         body.connector.timeout_seconds or settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS
     )
+    max_attempts = (
+        body.connector.max_attempts or settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS
+    )
     connector = CustomerRecordApiConnector(
         base_url=body.connector.base_url,
         customer_id=customer_id,
@@ -577,6 +586,7 @@ def create_customer_record_reconciliation(
         query=body.connector.query,
         record_path=body.connector.record_path,
         timeout_seconds=timeout,
+        max_attempts=max_attempts,
         allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
     )
 
