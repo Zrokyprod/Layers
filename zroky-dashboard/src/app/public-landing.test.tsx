@@ -47,14 +47,18 @@ describe("PublicLanding", () => {
     expect(screen.getAllByRole("link", { name: "Sign in" }).some((link) => link.getAttribute("href") === "/login")).toBe(true);
     expect(screen.getByText("One reliability layer across your model stack.")).toBeInTheDocument();
     expect(screen.getByText("The dashboard zooms into the part that matters.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Run your money-touching agents unattended - safely." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Run high-stakes autonomous agents unattended - safely." })).toBeInTheDocument();
     expect(screen.getByText("Price Zroky against the action it protects: stop the costly operation before it commits, then prove the real-world outcome in the system of record.")).toBeInTheDocument();
+    expect(screen.getByText("coverage ratio")).toBeInTheDocument();
+    expect(screen.getByText("2.5%")).toBeInTheDocument();
+    expect(screen.getByText("Pro is 2.5% of one $8K incident and 0.08% of $250K protected monthly action value.")).toBeInTheDocument();
+    expect(screen.getByText("Full proof handoff")).toBeInTheDocument();
     expect(screen.getByText("Not just refunds. Protect every agent that mutates reality.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Protect a high-risk agent/i }).getAttribute("href")).toBe(
-      "/pilot?source=pricing&plan=pro"
+      "/pilot?source=pricing&intent=protect-agent&plan=pro"
     );
     expect(screen.getByRole("link", { name: /Open pilot handoff/i }).getAttribute("href")).toBe(
-      "/pilot?source=pricing&intent=handoff"
+      "/pilot?source=pricing&intent=handoff&plan=pro"
     );
     expect(screen.getByText("A fix is not accepted until the replay proves it.")).toBeInTheDocument();
     expect(screen.queryByText(/Latest captured trace/i)).not.toBeInTheDocument();

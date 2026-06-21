@@ -197,6 +197,11 @@ const riskValueMetrics = [
     value: "$199/mo",
     detail: "A starting price below the cost of one material mistake.",
   },
+  {
+    label: "coverage ratio",
+    value: "2.5%",
+    detail: "Pro is 2.5% of one $8K incident and 0.08% of $250K protected monthly action value.",
+  },
 ];
 
 const pricingPlans = [
@@ -218,8 +223,8 @@ const pricingPlans = [
     name: "Pro",
     price: "$199/mo",
     fit: "Run production agents with runtime gates, outcome proof, and exportable evidence.",
-    bullets: ["Blocking CI", "Evidence packs", "Ledger and CRM proof"],
-    href: "/pilot?source=pricing&plan=pro",
+    bullets: ["Blocking CI", "Evidence packs", "Full proof handoff"],
+    href: "/pilot?source=pricing&intent=protect-agent&plan=pro",
     featured: true,
   },
   {
@@ -830,7 +835,7 @@ export function PublicLanding() {
                   Risk-value pricing
                 </span>
                 <h2 id="zroky-pricing-title" className="zlp-disp">
-                  Run your money-touching agents unattended - safely.
+                  Run high-stakes autonomous agents unattended - safely.
                 </h2>
                 <p>
                   Price Zroky against the action it protects: stop the costly operation before it commits,
@@ -907,7 +912,7 @@ export function PublicLanding() {
                 Paid handoff proof: runtime decision, policy snapshot, approval audit, outcome reconciliation,
                 and evidence hash are all exportable for buyer review.
               </p>
-              <Link href="/pilot?source=pricing&intent=handoff" className="zlp-pricing-proof-link">
+              <Link href="/pilot?source=pricing&intent=handoff&plan=pro" className="zlp-pricing-proof-link">
                 Open pilot handoff
                 <ArrowRight aria-hidden="true" />
               </Link>
