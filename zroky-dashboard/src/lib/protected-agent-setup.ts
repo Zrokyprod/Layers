@@ -11,6 +11,8 @@ export type ProtectedAgentTemplate = {
   holdConditions: string[];
   systemOfRecord: string;
   requiredEvidence: string[];
+  connectorInputs: string[];
+  liveSmokeScenario?: "refund" | "customer-record";
 };
 
 export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
@@ -31,6 +33,13 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
     holdConditions: ["refund over approved amount", "missing order owner", "duplicate refund risk"],
     systemOfRecord: "payment ledger refund record",
     requiredEvidence: ["refund transaction id", "ledger status", "amount/currency match"],
+    connectorInputs: [
+      "ledger/refund API base URL",
+      "read-scoped ledger bearer token",
+      "safe refund id",
+      "amount, currency, and status fields",
+    ],
+    liveSmokeScenario: "refund",
   },
   {
     id: "devops",
@@ -49,6 +58,12 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
     holdConditions: ["production deploy without approval", "failing checks", "no rollback command"],
     systemOfRecord: "CI deployment and incident status",
     requiredEvidence: ["deployment id", "commit sha", "post-deploy health check"],
+    connectorInputs: [
+      "deployment or CI run API",
+      "service, environment, and change id",
+      "post-deploy health endpoint",
+      "rollback or cancel action",
+    ],
   },
   {
     id: "crm",
@@ -67,6 +82,13 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
     holdConditions: ["identity field change", "bulk update", "missing source proof"],
     systemOfRecord: "CRM account record",
     requiredEvidence: ["record id", "field diff", "CRM audit entry"],
+    connectorInputs: [
+      "CRM/customer API base URL",
+      "read-scoped CRM bearer token",
+      "safe customer or account id",
+      "fields to compare after mutation",
+    ],
+    liveSmokeScenario: "customer-record",
   },
   {
     id: "outreach",
@@ -85,6 +107,12 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
     holdConditions: ["missing consent", "manual freeform body", "large recipient segment"],
     systemOfRecord: "email provider delivery event",
     requiredEvidence: ["message id", "recipient status", "bounce/complaint check"],
+    connectorInputs: [
+      "email provider event API",
+      "message id or campaign id",
+      "delivery, bounce, and complaint endpoints",
+      "consent or suppression-list record",
+    ],
   },
   {
     id: "procurement",
@@ -103,7 +131,30 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
     holdConditions: ["new vendor", "budget mismatch", "amount over mandate"],
     systemOfRecord: "ERP purchase order",
     requiredEvidence: ["purchase order id", "approval status", "budget allocation"],
+    connectorInputs: [
+      "ERP or purchase-order API",
+      "vendor and budget record id",
+      "approval status endpoint",
+      "amount, currency, and budget fields",
+    ],
   },
+];
+
+export const pilotHandoffSteps = [
+  "Create project key",
+  "Copy mandate and SDK wrapper",
+  "Connect system of record",
+  "Run one safe live-like action",
+  "Export evidence pack",
+];
+
+export const pilotHandoffCriteria = [
+  "captured_call_linked",
+  "unsafe_action_stopped",
+  "matched_outcome_shown",
+  "evidence_hash_visible",
+  "evidence_pack_passed",
+  "secrets_redacted",
 ];
 
 export function humanizeIntent(value: string | null) {
@@ -169,4 +220,38 @@ await traceRun(
     return "submitted_for_outcome_verification";
   },
 );`;
+}
+
+export function buildLiveSmokeCommand(template: ProtectedAgentTemplate) {
+  if (template.liveSmokeScenario === "refund") {
+    return [
+      "python scripts/run_design_partner_install_kit.py",
+      "--scenario refund",
+      "--api-base-url https://api.zroky.ai",
+      "--api-key <zroky_api_key>",
+      "--ledger-base-url https://ledger.example.com/api",
+      "--ledger-bearer-token <ledger_token>",
+      "--refund-id <refund_id>",
+      "--json",
+      "--write-summary artifacts/design-partner-refund-live-summary.json",
+      "--write-evidence artifacts/design-partner-refund-live-evidence.json",
+    ].join(" ");
+  }
+
+  if (template.liveSmokeScenario === "customer-record") {
+    return [
+      "python scripts/run_design_partner_install_kit.py",
+      "--scenario customer-record",
+      "--api-base-url https://api.zroky.ai",
+      "--api-key <zroky_api_key>",
+      "--crm-base-url https://crm.example.com/api",
+      "--crm-bearer-token <crm_token>",
+      "--customer-id <customer_id>",
+      "--json",
+      "--write-summary artifacts/design-partner-crm-live-summary.json",
+      "--write-evidence artifacts/design-partner-crm-live-evidence.json",
+    ].join(" ");
+  }
+
+  return null;
 }
