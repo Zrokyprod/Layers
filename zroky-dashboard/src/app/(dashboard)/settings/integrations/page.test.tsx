@@ -42,6 +42,68 @@ vi.mock("@/lib/api", async () => {
   };
 });
 
+const readyLedgerReadiness = {
+  status: "ready",
+  contract: {
+    schema_version: "system_of_record_connector.v1",
+    connector_type: "ledger_refund_api",
+    adapter: "https_json_record",
+    system_of_record: "ledger_refund",
+    required_inputs: [
+      "https_base_url",
+      "path_template_with_refund_id",
+      "read_scoped_bearer_token",
+      "safe_existing_refund_id",
+    ],
+    required_record_fields: ["refund_id", "status"],
+    recommended_record_fields: ["amount_usd", "currency"],
+  },
+  checks: {
+    config_saved: true,
+    bearer_token_present: true,
+    saved_test_matched: true,
+    connector_attempted: true,
+    http_2xx: true,
+    no_connector_error_code: true,
+    not_retryable_failure: true,
+  },
+  blockers: [],
+  last_checked_at: "2026-06-20T09:00:00Z",
+};
+
+const notReadyCustomerReadiness = {
+  status: "not_ready",
+  contract: {
+    schema_version: "system_of_record_connector.v1",
+    connector_type: "customer_record_api",
+    adapter: "https_json_record",
+    system_of_record: "customer_record",
+    required_inputs: [
+      "https_base_url",
+      "path_template_with_customer_id",
+      "read_scoped_bearer_token",
+      "safe_existing_customer_id",
+    ],
+    required_record_fields: ["customer_id", "status"],
+    recommended_record_fields: ["email", "account_id"],
+  },
+  checks: {
+    config_saved: true,
+    bearer_token_present: true,
+    saved_test_matched: false,
+    connector_attempted: false,
+    http_2xx: false,
+    no_connector_error_code: true,
+    not_retryable_failure: true,
+  },
+  blockers: [
+    "Latest connector test did not reconcile as matched.",
+    "Connector has not attempted a system-of-record read.",
+    "Latest connector test did not return a 2xx HTTP response.",
+  ],
+  last_checked_at: null,
+};
+
 describe("IntegrationsSettingsPage", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -97,6 +159,7 @@ describe("IntegrationsSettingsPage", () => {
       last_attempts: 2,
       last_retryable: false,
       last_checked_at: "2026-06-20T09:00:00Z",
+      readiness: readyLedgerReadiness,
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
     });
@@ -118,6 +181,7 @@ describe("IntegrationsSettingsPage", () => {
       last_attempts: null,
       last_retryable: null,
       last_checked_at: null,
+      readiness: notReadyCustomerReadiness,
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
     });
@@ -327,6 +391,15 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getByText("data.0")).toBeInTheDocument();
     expect(screen.getAllByText("Stored token ending oken").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ledger:rf_999").length).toBeGreaterThan(0);
+    const card = heading.closest("article");
+    expect(card).not.toBeNull();
+    const readiness = within(card as HTMLElement).getByLabelText("Ledger refund readiness contract");
+    expect(within(readiness).getAllByText("Ready").length).toBeGreaterThan(0);
+    expect(within(readiness).getByText("Ledger Refund")).toBeInTheDocument();
+    expect(within(readiness).getByText("Https Json Record")).toBeInTheDocument();
+    expect(within(readiness).getByText(/Https Base Url/)).toBeInTheDocument();
+    expect(within(readiness).getByText("Refund Id, Status")).toBeInTheDocument();
+    expect(within(readiness).getByText("No readiness blockers.")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("ledger-secret-token");
   });
 
@@ -408,6 +481,15 @@ describe("IntegrationsSettingsPage", () => {
       last_attempts: 2,
       last_retryable: true,
       last_checked_at: "2026-06-20T09:00:00Z",
+      readiness: {
+        ...readyLedgerReadiness,
+        status: "not_ready",
+        checks: { ...readyLedgerReadiness.checks, http_2xx: false, not_retryable_failure: false },
+        blockers: [
+          "Latest connector test did not return a 2xx HTTP response.",
+          "Latest connector test ended in a retryable failure.",
+        ],
+      },
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
     });
@@ -420,6 +502,8 @@ describe("IntegrationsSettingsPage", () => {
     expect(within(status).getByText("Not verified")).toBeInTheDocument();
     expect(within(status).getByText("Connector Timeout / retryable")).toBeInTheDocument();
     expect(within(status).getByText("2")).toBeInTheDocument();
+    const readiness = await screen.findByLabelText("Ledger refund readiness blockers");
+    expect(within(readiness).getByText("Latest connector test did not return a 2xx HTTP response.")).toBeInTheDocument();
   });
 
   it("shows missing evidence state when a decision pack has no matched outcome", async () => {
@@ -499,6 +583,9 @@ describe("IntegrationsSettingsPage", () => {
     const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
     const template = await blob.text();
     expect(template).toContain('"connector_type": "ledger_refund_api"');
+    expect(template).toContain('"readiness_contract"');
+    expect(template).toContain('"system_of_record": "ledger_refund"');
+    expect(template).toContain('"readiness_status": "ready"');
     expect(template).toContain('"bearer_token": "<ledger_bearer_token>"');
     expect(template).toContain('"refund_id": "RF-PILOT-1"');
     expect(template).not.toContain("ledger-secret-token");
@@ -531,6 +618,12 @@ describe("IntegrationsSettingsPage", () => {
         last_verdict: "matched",
         last_http_status: "200",
         last_attempts: "2",
+        readiness_status: "ready",
+        readiness_blockers: [],
+      },
+      readiness_contract: {
+        system_of_record: "ledger_refund",
+        adapter: "https_json_record",
       },
       latest_check: {
         id: "check_ledger_refund",
@@ -744,6 +837,12 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getByText("https://crm.***/...")).toBeInTheDocument();
     expect(screen.getAllByText("crm:cus_999").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Stored token ending oken").length).toBeGreaterThan(0);
+    const card = heading.closest("article");
+    expect(card).not.toBeNull();
+    const readiness = within(card as HTMLElement).getByLabelText("Customer record readiness contract");
+    expect(within(readiness).getAllByText("Not ready").length).toBeGreaterThan(0);
+    expect(within(readiness).getByText("Customer Record")).toBeInTheDocument();
+    expect(within(readiness).getByText("Latest connector test did not reconcile as matched.")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("crm-secret-token");
   });
 
@@ -793,6 +892,9 @@ describe("IntegrationsSettingsPage", () => {
     const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
     const template = await blob.text();
     expect(template).toContain('"connector_type": "customer_record_api"');
+    expect(template).toContain('"readiness_contract"');
+    expect(template).toContain('"system_of_record": "customer_record"');
+    expect(template).toContain('"readiness_status": "ready"');
     expect(template).toContain('"bearer_token": "<crm_bearer_token>"');
     expect(template).toContain('"customer_id": "CUS-PILOT-1"');
     expect(template).not.toContain("crm-secret-token");

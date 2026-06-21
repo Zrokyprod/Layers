@@ -32,6 +32,8 @@ import {
   type LedgerRefundConnectorStatusResponse,
   type OutcomeReconciliationView,
   type RuntimePolicyEvidencePackResponse,
+  type SystemOfRecordConnectorContract,
+  type SystemOfRecordConnectorReadiness,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type {
@@ -63,6 +65,8 @@ type ConnectorGuidanceInput = {
   errorCode: string | null | undefined;
   httpStatus: unknown;
   retryable: boolean | null | undefined;
+  readinessStatus: string;
+  readinessBlockers: string[];
 };
 
 type ConnectorPreflightSummaryInput = {
@@ -75,6 +79,7 @@ type ConnectorPreflightSummaryInput = {
   httpStatus: unknown;
   attempts: unknown;
   retryable: boolean | null | undefined;
+  readiness: SystemOfRecordConnectorReadiness;
   guidance: string;
   readyForPilot: boolean;
   latestCheck: OutcomeReconciliationView | null;
@@ -125,6 +130,37 @@ const defaultCustomerForm: CustomerConnectorForm = {
   testAccountId: "acct_1001",
 };
 
+const defaultConnectorContracts: Record<ConnectorEvidenceKind, SystemOfRecordConnectorContract> = {
+  ledger: {
+    schema_version: "system_of_record_connector.v1",
+    connector_type: "ledger_refund_api",
+    adapter: "https_json_record",
+    system_of_record: "ledger_refund",
+    required_inputs: [
+      "https_base_url",
+      "path_template_with_refund_id",
+      "read_scoped_bearer_token",
+      "safe_existing_refund_id",
+    ],
+    required_record_fields: ["refund_id", "status"],
+    recommended_record_fields: ["amount_usd", "currency"],
+  },
+  customer: {
+    schema_version: "system_of_record_connector.v1",
+    connector_type: "customer_record_api",
+    adapter: "https_json_record",
+    system_of_record: "customer_record",
+    required_inputs: [
+      "https_base_url",
+      "path_template_with_customer_id",
+      "read_scoped_bearer_token",
+      "safe_existing_customer_id",
+    ],
+    required_record_fields: ["customer_id", "status"],
+    recommended_record_fields: ["email", "account_id"],
+  },
+};
+
 function integrationStatus(connected: boolean) {
   return connected ? "Connected" : "Not connected";
 }
@@ -156,6 +192,94 @@ function boolValue(value: unknown): boolean | null {
   if (["true", "1", "yes"].includes(normalized)) return true;
   if (["false", "0", "no"].includes(normalized)) return false;
   return null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function labelValue(value: string | null | undefined) {
+  if (!value) return "Unknown";
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function connectorContract(kind: ConnectorEvidenceKind, readiness?: SystemOfRecordConnectorReadiness) {
+  return readiness?.contract ?? defaultConnectorContracts[kind];
+}
+
+function connectorReadiness({
+  kind,
+  connected,
+  hasBearerToken,
+  verdict,
+  errorCode,
+  httpStatus,
+  attempts,
+  retryable,
+  readiness,
+}: {
+  kind: ConnectorEvidenceKind;
+  connected: boolean;
+  hasBearerToken: boolean;
+  verdict: string | null | undefined;
+  errorCode: string | null | undefined;
+  httpStatus: unknown;
+  attempts: unknown;
+  retryable: boolean | null | undefined;
+  readiness?: SystemOfRecordConnectorReadiness;
+}): SystemOfRecordConnectorReadiness {
+  const parsedHttpStatus = numberValue(httpStatus);
+  const parsedAttempts = numberValue(attempts);
+  const checks: Record<string, boolean> = {
+    config_saved: connected,
+    bearer_token_present: hasBearerToken,
+    saved_test_matched: verdict === "matched",
+    connector_attempted: parsedAttempts !== null && parsedAttempts >= 1,
+    http_2xx: parsedHttpStatus !== null && parsedHttpStatus >= 200 && parsedHttpStatus <= 299,
+    no_connector_error_code: !textValue(errorCode),
+    not_retryable_failure: retryable !== true,
+  };
+  const blockerMessages: Record<string, string> = {
+    config_saved: "Connector config has not been saved.",
+    bearer_token_present: "Read-scoped bearer token is missing.",
+    saved_test_matched: "Latest connector test did not reconcile as matched.",
+    connector_attempted: "Connector has not attempted a system-of-record read.",
+    http_2xx: "Latest connector test did not return a 2xx HTTP response.",
+    no_connector_error_code: "Latest connector test has an error code.",
+    not_retryable_failure: "Latest connector test ended in a retryable failure.",
+  };
+  const fallbackBlockers = Object.entries(checks)
+    .filter(([, passed]) => !passed)
+    .map(([key]) => blockerMessages[key] ?? labelValue(key));
+
+  return {
+    status: readiness?.status ?? (fallbackBlockers.length === 0 ? "ready" : "not_ready"),
+    contract: connectorContract(kind, readiness),
+    checks: readiness?.checks ?? checks,
+    blockers: readiness?.blockers ?? fallbackBlockers,
+    last_checked_at: readiness?.last_checked_at ?? null,
+  };
+}
+
+function connectorReadinessLabel(value: string | null | undefined) {
+  if (value === "ready") return "Ready";
+  if (value === "not_ready") return "Not ready";
+  return connectorHealthLabel(value);
+}
+
+function connectorReadinessPillClass(value: string | null | undefined) {
+  if (value === "ready") return "pill pill-green";
+  if (value === "not_ready") return "pill pill-yellow";
+  return "pill";
+}
+
+function contractList(values: unknown, fallback: string) {
+  return Array.isArray(values) && values.length
+    ? values.map((value) => labelValue(String(value))).join(", ")
+    : fallback;
 }
 
 function isLedgerRefundCheck(item: OutcomeReconciliationView) {
@@ -207,6 +331,8 @@ function connectorFixGuidance({
   errorCode,
   httpStatus,
   retryable,
+  readinessStatus,
+  readinessBlockers,
 }: ConnectorGuidanceInput) {
   const surface = kind === "ledger" ? "ledger/refund" : "CRM/customer";
   const code = textValue(errorCode)?.toLowerCase();
@@ -236,17 +362,13 @@ function connectorFixGuidance({
   if (code === "upstream_http_error" || status === "404") {
     return `Fix ${surface} lookup: verify base URL, path template, record path, and the test record id.`;
   }
+  if (readinessStatus === "not_ready" && readinessBlockers.length > 0) {
+    return `Fix ${surface} readiness: ${readinessBlockers[0]}`;
+  }
   if (health === "healthy" && verdict === "matched") {
     return "Preflight ready: connector matched ground truth and can support the buyer proof.";
   }
   return "Run preflight from this saved connector; do not pass handoff until health is Healthy and verdict is Matched.";
-}
-
-function connectorPillClass(check: OutcomeReconciliationView | null) {
-  if (!check) return "pill";
-  if (check.verdict === "matched") return "pill pill-green";
-  if (check.verdict === "mismatched") return "pill pill-red";
-  return "pill pill-yellow";
 }
 
 function connectorEvidenceLabel(kind: ConnectorEvidenceKind) {
@@ -353,8 +475,21 @@ function ledgerConnectorTemplate(form: LedgerConnectorForm) {
         partner_run_id: "<partner_run_id>",
       },
     },
+    readiness_contract: {
+      ...defaultConnectorContracts.ledger,
+      ready_when: [
+        "config_saved",
+        "bearer_token_present",
+        "saved_test_matched",
+        "connector_attempted",
+        "http_2xx",
+        "no_connector_error_code",
+        "not_retryable_failure",
+      ],
+    },
     pass_criteria: {
       connector_health_status: "healthy",
+      readiness_status: "ready",
       outcome_verdict: "matched",
       last_attempts: ">=1",
       last_error_code: null,
@@ -390,8 +525,21 @@ function customerConnectorTemplate(form: CustomerConnectorForm) {
         partner_run_id: "<partner_run_id>",
       },
     },
+    readiness_contract: {
+      ...defaultConnectorContracts.customer,
+      ready_when: [
+        "config_saved",
+        "bearer_token_present",
+        "saved_test_matched",
+        "connector_attempted",
+        "http_2xx",
+        "no_connector_error_code",
+        "not_retryable_failure",
+      ],
+    },
     pass_criteria: {
       connector_health_status: "healthy",
+      readiness_status: "ready",
       outcome_verdict: "matched",
       last_attempts: ">=1",
       last_error_code: null,
@@ -405,8 +553,9 @@ function connectorReadyForPilot(
   health: string,
   verdict: string | null | undefined,
   errorCode: string | null | undefined,
+  readinessStatus: string | null | undefined,
 ) {
-  return connected && health === "healthy" && verdict === "matched" && !textValue(errorCode);
+  return connected && health === "healthy" && verdict === "matched" && !textValue(errorCode) && readinessStatus === "ready";
 }
 
 function failedPreflightAttempts(checks: OutcomeReconciliationView[]) {
@@ -465,6 +614,7 @@ function buildConnectorPreflightSummary({
   httpStatus,
   attempts,
   retryable,
+  readiness,
   guidance,
   readyForPilot,
   latestCheck,
@@ -484,7 +634,11 @@ function buildConnectorPreflightSummary({
       last_http_status: textValue(httpStatus),
       last_attempts: textValue(attempts),
       last_retryable: retryable ?? null,
+      readiness_status: readiness.status,
+      readiness_blockers: readiness.blockers ?? [],
+      readiness_checks: readiness.checks ?? {},
     },
+    readiness_contract: readiness.contract ?? defaultConnectorContracts[kind],
     latest_check: preflightCheckSummary(latestCheck),
     failed_attempts: failedAttempts.map(preflightCheckSummary),
     fix_guidance: guidance,
@@ -621,9 +775,6 @@ export default function IntegrationsSettingsPage() {
   const latestCustomerRecordCheck = customerRecordChecks[0] ?? null;
   const ledgerMetadata = connectorMetadata(latestLedgerRefundCheck);
   const customerMetadata = connectorMetadata(latestCustomerRecordCheck);
-  const ledgerVerified = latestLedgerRefundCheck?.verdict === "matched";
-  const customerVerified = latestCustomerRecordCheck?.verdict === "matched";
-  const readyCount = [githubConnected, slackConnected, ledgerConnected && ledgerVerified, customerConnected && customerVerified].filter(Boolean).length;
   const ledgerHealth = state.ledgerConfig?.health_status ?? (ledgerConnected ? "not_verified" : "not_configured");
   const customerHealth = state.customerConfig?.health_status ?? (customerConnected ? "not_verified" : "not_configured");
   const ledgerLastVerdict = state.ledgerConfig?.last_verdict ?? latestLedgerRefundCheck?.verdict;
@@ -638,6 +789,40 @@ export default function IntegrationsSettingsPage() {
   const customerHttpStatusValue = state.customerConfig?.last_http_status ?? customerMetadata.http_status;
   const ledgerAttemptValue = state.ledgerConfig?.last_attempts ?? ledgerMetadata.attempts;
   const customerAttemptValue = state.customerConfig?.last_attempts ?? customerMetadata.attempts;
+  const ledgerReadiness = connectorReadiness({
+    kind: "ledger",
+    connected: ledgerConnected,
+    hasBearerToken: state.ledgerConfig?.has_bearer_token === true,
+    verdict: ledgerLastVerdict,
+    errorCode: ledgerErrorCode,
+    httpStatus: ledgerHttpStatusValue,
+    attempts: ledgerAttemptValue,
+    retryable: ledgerLastRetryable,
+    readiness: state.ledgerConfig?.readiness,
+  });
+  const customerReadiness = connectorReadiness({
+    kind: "customer",
+    connected: customerConnected,
+    hasBearerToken: state.customerConfig?.has_bearer_token === true,
+    verdict: customerLastVerdict,
+    errorCode: customerErrorCode,
+    httpStatus: customerHttpStatusValue,
+    attempts: customerAttemptValue,
+    retryable: customerLastRetryable,
+    readiness: state.customerConfig?.readiness,
+  });
+  const ledgerReadinessStatus = ledgerReadiness.status;
+  const customerReadinessStatus = customerReadiness.status;
+  const ledgerReadinessBlockers = ledgerReadiness.blockers ?? [];
+  const customerReadinessBlockers = customerReadiness.blockers ?? [];
+  const ledgerContract = ledgerReadiness.contract ?? defaultConnectorContracts.ledger;
+  const customerContract = customerReadiness.contract ?? defaultConnectorContracts.customer;
+  const readyCount = [
+    githubConnected,
+    slackConnected,
+    ledgerConnected && ledgerReadinessStatus === "ready",
+    customerConnected && customerReadinessStatus === "ready",
+  ].filter(Boolean).length;
   const ledgerLastError = connectorErrorLabel(
     ledgerErrorCode,
     ledgerRawError,
@@ -656,6 +841,8 @@ export default function IntegrationsSettingsPage() {
     errorCode: ledgerErrorCode,
     httpStatus: ledgerHttpStatusValue,
     retryable: ledgerLastRetryable,
+    readinessStatus: ledgerReadinessStatus,
+    readinessBlockers: ledgerReadinessBlockers,
   });
   const customerGuidance = connectorFixGuidance({
     kind: "customer",
@@ -665,6 +852,8 @@ export default function IntegrationsSettingsPage() {
     errorCode: customerErrorCode,
     httpStatus: customerHttpStatusValue,
     retryable: customerLastRetryable,
+    readinessStatus: customerReadinessStatus,
+    readinessBlockers: customerReadinessBlockers,
   });
   const ledgerPreflight = ledgerPreflightCommand(ledgerForm);
   const customerPreflight = customerPreflightCommand(customerForm);
@@ -673,12 +862,14 @@ export default function IntegrationsSettingsPage() {
     ledgerHealth,
     ledgerLastVerdict,
     ledgerErrorCode,
+    ledgerReadinessStatus,
   );
   const customerReadyForPilot = connectorReadyForPilot(
     customerConnected,
     customerHealth,
     customerLastVerdict,
     customerErrorCode,
+    customerReadinessStatus,
   );
   const ledgerFailedAttempts = failedPreflightAttempts(ledgerRefundChecks);
   const customerFailedAttempts = failedPreflightAttempts(customerRecordChecks);
@@ -755,6 +946,7 @@ export default function IntegrationsSettingsPage() {
         httpStatus: ledgerHttpStatusValue,
         attempts: ledgerAttemptValue,
         retryable: ledgerLastRetryable,
+        readiness: ledgerReadiness,
         guidance: ledgerGuidance,
         readyForPilot: ledgerReadyForPilot,
         latestCheck: latestLedgerRefundCheck,
@@ -777,6 +969,7 @@ export default function IntegrationsSettingsPage() {
         httpStatus: customerHttpStatusValue,
         attempts: customerAttemptValue,
         retryable: customerLastRetryable,
+        readiness: customerReadiness,
         guidance: customerGuidance,
         readyForPilot: customerReadyForPilot,
         latestCheck: latestCustomerRecordCheck,
@@ -1059,6 +1252,59 @@ export default function IntegrationsSettingsPage() {
     );
   }
 
+  function renderReadinessContract(
+    kind: ConnectorEvidenceKind,
+    readiness: SystemOfRecordConnectorReadiness,
+    contract: SystemOfRecordConnectorContract,
+  ) {
+    const label = connectorPreflightLabel(kind);
+    const blockers = readiness.blockers ?? [];
+
+    return (
+      <section className="settings-connector-readiness" aria-label={`${label} readiness contract`}>
+        <div className="settings-connector-readiness-header">
+          <div>
+            <span className="eyebrow">Readiness contract</span>
+            <strong>{connectorReadinessLabel(readiness.status)}</strong>
+          </div>
+          <span className={connectorReadinessPillClass(readiness.status)}>
+            {connectorReadinessLabel(readiness.status)}
+          </span>
+        </div>
+        <div className="settings-connector-summary-grid">
+          <div>
+            <span>System of record</span>
+            <strong>{labelValue(contract.system_of_record)}</strong>
+          </div>
+          <div>
+            <span>Adapter</span>
+            <strong>{labelValue(contract.adapter)}</strong>
+          </div>
+          <div>
+            <span>Required inputs</span>
+            <strong>{contractList(contract.required_inputs, "Not published")}</strong>
+          </div>
+          <div>
+            <span>Required fields</span>
+            <strong>{contractList(contract.required_record_fields, "Not published")}</strong>
+          </div>
+        </div>
+        <div className="settings-connector-blockers" aria-label={`${label} readiness blockers`}>
+          <span>Blockers</span>
+          {blockers.length ? (
+            <ul>
+              {blockers.map((blocker) => (
+                <li key={blocker}>{blocker}</li>
+              ))}
+            </ul>
+          ) : (
+            <strong>No readiness blockers.</strong>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   function renderFailedPreflightAttempts(kind: ConnectorEvidenceKind, failedAttempts: OutcomeReconciliationView[]) {
     const label = connectorPreflightLabel(kind);
 
@@ -1142,8 +1388,8 @@ export default function IntegrationsSettingsPage() {
         <article className="panel settings-summary-card">
           <DatabaseZap aria-hidden="true" />
             <span>Outcome proof</span>
-          <strong>{ledgerConnected || customerConnected ? `${Number(Boolean(ledgerVerified)) + Number(Boolean(customerVerified))}/2 verified` : "Not configured"}</strong>
-          <small>{ledgerConnected || customerConnected ? `Ledger ${connectorStatus(latestLedgerRefundCheck)} / CRM ${connectorStatus(latestCustomerRecordCheck)}` : "Save a connector before running proof."}</small>
+          <strong>{ledgerConnected || customerConnected ? `${Number(ledgerReadinessStatus === "ready") + Number(customerReadinessStatus === "ready")}/2 ready` : "Not configured"}</strong>
+          <small>{ledgerConnected || customerConnected ? `Ledger ${connectorReadinessLabel(ledgerReadinessStatus)} / CRM ${connectorReadinessLabel(customerReadinessStatus)}` : "Save a connector before running proof."}</small>
         </article>
       </section>
 
@@ -1246,8 +1492,8 @@ export default function IntegrationsSettingsPage() {
                 <p>System-of-record proof for refund agents and money-touching workflows.</p>
               </div>
             </div>
-            <span className={ledgerConnected ? connectorPillClass(latestLedgerRefundCheck) : "pill"}>
-              {ledgerConnected ? connectorStatus(latestLedgerRefundCheck) : "Not configured"}
+            <span className={ledgerConnected ? connectorReadinessPillClass(ledgerReadinessStatus) : "pill"}>
+              {ledgerConnected ? connectorReadinessLabel(ledgerReadinessStatus) : "Not configured"}
             </span>
           </header>
 
@@ -1259,6 +1505,10 @@ export default function IntegrationsSettingsPage() {
             <div>
               <span>Health</span>
               <strong>{connectorHealthLabel(ledgerHealth)}</strong>
+            </div>
+            <div>
+              <span>Readiness</span>
+              <strong>{connectorReadinessLabel(ledgerReadinessStatus)}</strong>
             </div>
             <div>
               <span>Last verdict</span>
@@ -1289,7 +1539,7 @@ export default function IntegrationsSettingsPage() {
           <section className="settings-connector-guidance" aria-label="Ledger refund preflight guidance">
             <div>
               <span className="eyebrow">Preflight fix</span>
-              <strong>{ledgerHealth === "healthy" && ledgerLastVerdict === "matched" ? "Pilot ready" : "Action required"}</strong>
+              <strong>{ledgerReadinessStatus === "ready" ? "Pilot ready" : "Action required"}</strong>
             </div>
             <p>{ledgerGuidance}</p>
           </section>
@@ -1415,6 +1665,7 @@ export default function IntegrationsSettingsPage() {
             ledgerFailedAttempts,
             downloadLedgerPreflightSummary,
           )}
+          {renderReadinessContract("ledger", ledgerReadiness, ledgerContract)}
           {renderFailedPreflightAttempts("ledger", ledgerFailedAttempts)}
 
           <div className="list settings-connector-proof">
@@ -1458,8 +1709,8 @@ export default function IntegrationsSettingsPage() {
                 <p>System-of-record proof for CRM agents that update customer, account, or contact records.</p>
               </div>
             </div>
-            <span className={customerConnected ? connectorPillClass(latestCustomerRecordCheck) : "pill"}>
-              {customerConnected ? connectorStatus(latestCustomerRecordCheck) : "Not configured"}
+            <span className={customerConnected ? connectorReadinessPillClass(customerReadinessStatus) : "pill"}>
+              {customerConnected ? connectorReadinessLabel(customerReadinessStatus) : "Not configured"}
             </span>
           </header>
 
@@ -1471,6 +1722,10 @@ export default function IntegrationsSettingsPage() {
             <div>
               <span>Health</span>
               <strong>{connectorHealthLabel(customerHealth)}</strong>
+            </div>
+            <div>
+              <span>Readiness</span>
+              <strong>{connectorReadinessLabel(customerReadinessStatus)}</strong>
             </div>
             <div>
               <span>Last verdict</span>
@@ -1501,7 +1756,7 @@ export default function IntegrationsSettingsPage() {
           <section className="settings-connector-guidance" aria-label="Customer record preflight guidance">
             <div>
               <span className="eyebrow">Preflight fix</span>
-              <strong>{customerHealth === "healthy" && customerLastVerdict === "matched" ? "Pilot ready" : "Action required"}</strong>
+              <strong>{customerReadinessStatus === "ready" ? "Pilot ready" : "Action required"}</strong>
             </div>
             <p>{customerGuidance}</p>
           </section>
@@ -1626,6 +1881,7 @@ export default function IntegrationsSettingsPage() {
             customerFailedAttempts,
             downloadCustomerPreflightSummary,
           )}
+          {renderReadinessContract("customer", customerReadiness, customerContract)}
           {renderFailedPreflightAttempts("customer", customerFailedAttempts)}
 
           <div className="list settings-connector-proof">

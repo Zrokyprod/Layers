@@ -1099,6 +1099,30 @@ export function sendSlackTestMessage(text?: string): Promise<SlackTestMessageRes
   });
 }
 
+export interface SystemOfRecordConnectorContract {
+  schema_version?: string;
+  connector_type?: string;
+  adapter?: string;
+  system_of_record?: string;
+  config_endpoint?: string;
+  status_endpoint?: string;
+  test_endpoint?: string;
+  required_inputs?: string[];
+  required_record_fields?: string[];
+  recommended_record_fields?: string[];
+  pass_rule?: string;
+  [key: string]: unknown;
+}
+
+export interface SystemOfRecordConnectorReadiness {
+  status: "ready" | "not_ready" | string;
+  contract?: SystemOfRecordConnectorContract;
+  checks?: Record<string, boolean>;
+  blockers?: string[];
+  last_checked_at?: string | null;
+  [key: string]: unknown;
+}
+
 export interface LedgerRefundConnectorStatusResponse {
   connected: boolean;
   connector_type: "ledger_refund_api" | string;
@@ -1117,6 +1141,7 @@ export interface LedgerRefundConnectorStatusResponse {
   last_attempts: number | null;
   last_retryable: boolean | null;
   last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -1168,6 +1193,7 @@ export interface CustomerRecordConnectorStatusResponse {
   last_attempts: number | null;
   last_retryable: boolean | null;
   last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
   created_at: string | null;
   updated_at: string | null;
 }
