@@ -383,6 +383,66 @@ def _connector_metadata(reconciliation: dict[str, Any]) -> dict[str, Any]:
     return dict(connector_metadata) if isinstance(connector_metadata, Mapping) else {}
 
 
+def _as_positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 1 else None
+
+
+def _as_bool_or_none(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return None
+
+
+def _derived_connector_readiness(
+    *,
+    status: dict[str, Any],
+    connector_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    api_readiness = status.get("readiness")
+    if isinstance(api_readiness, Mapping):
+        return dict(api_readiness)
+
+    http_status = connector_metadata.get("http_status") or status.get(
+        "last_http_status"
+    )
+    attempts = connector_metadata.get("attempts") or status.get("last_attempts")
+    error_code = connector_metadata.get("error_code") or status.get("last_error_code")
+    retryable = _as_bool_or_none(
+        connector_metadata.get("retryable", status.get("last_retryable"))
+    )
+    parsed_http_status = _as_positive_int(http_status)
+    checks = {
+        "config_saved": status.get("connected") is True,
+        "bearer_token_present": status.get("has_bearer_token") is True,
+        "saved_test_matched": status.get("last_verdict") == "matched",
+        "connector_attempted": _as_positive_int(attempts) is not None,
+        "http_2xx": parsed_http_status is not None
+        and 200 <= parsed_http_status <= 299,
+        "no_connector_error_code": error_code in (None, ""),
+        "not_retryable_failure": retryable in (None, False),
+    }
+    blockers = [key for key, passed in checks.items() if not passed]
+    return {
+        "status": "ready" if not blockers else "not_ready",
+        "checks": checks,
+        "blockers": blockers,
+    }
+
+
 def _outcome_reconciliation_summary(
     reconciliation: dict[str, Any],
 ) -> dict[str, Any]:
@@ -419,6 +479,10 @@ def _connector_setup_summary(
 ) -> dict[str, Any]:
     connector_metadata = _connector_metadata(reconciliation)
     connector_status = test_response.get("connector") or final_status
+    readiness = _derived_connector_readiness(
+        status=connector_status,
+        connector_metadata=connector_metadata,
+    )
     setup = {
         **endpoints,
         "connected": connector_status.get("connected") is True,
@@ -447,6 +511,11 @@ def _connector_setup_summary(
         "error_code": connector_metadata.get("error_code"),
         "retryable": connector_metadata.get("retryable"),
         "adapter": connector_metadata.get("adapter"),
+        "readiness": readiness,
+        "readiness_status": readiness.get("status"),
+        "readiness_checks": readiness.get("checks") or {},
+        "readiness_blockers": readiness.get("blockers") or [],
+        "readiness_contract": readiness.get("contract") or {},
     }
     setup["secrets_redacted"] = not _contains_secret(
         {
@@ -576,6 +645,8 @@ def _summarise(
             == "healthy"
             and connector_setup.get("last_verdict") == "matched"
             and connector_setup.get("last_attempts") is not None,
+            "real_connector_ready": connector_setup.get("readiness_status")
+            == "ready",
             "matched_outcome_shown": reconciliation["verdict"] == "matched",
             "evidence_hash_visible": bool(evidence_pack.get("evidence_hash")),
             "evidence_pack_passed": evidence_pack["verification_status"] == "pass",
@@ -597,6 +668,7 @@ def _summarise(
                 "unsafe_action_stopped",
                 "connector_configured",
                 "connector_health_verified",
+                "real_connector_ready",
                 "matched_outcome_shown",
                 "evidence_hash_visible",
                 "evidence_pack_passed",
@@ -647,6 +719,8 @@ def _summarise_preflight(
             == "healthy"
             and connector_setup.get("last_verdict") == "matched"
             and connector_setup.get("last_attempts") is not None,
+            "real_connector_ready": connector_setup.get("readiness_status")
+            == "ready",
             "matched_outcome_shown": reconciliation["verdict"] == "matched",
             "secrets_redacted": not _contains_secret(
                 {
@@ -664,6 +738,7 @@ def _summarise_preflight(
             "pass_criteria": [
                 "connector_configured",
                 "connector_health_verified",
+                "real_connector_ready",
                 "matched_outcome_shown",
                 "secrets_redacted",
             ],
@@ -1303,6 +1378,7 @@ def _print_summary(summary: dict[str, Any], *, as_json: bool) -> None:
     print(f"runtime_policy_status={summary['runtime_policy']['status']}")
     print(f"runtime_policy_allowed={str(summary['runtime_policy']['allowed']).lower()}")
     print(f"connector_health_status={summary['connector_setup']['health_status']}")
+    print(f"connector_readiness_status={summary['connector_setup']['readiness_status']}")
     print(f"connector_last_attempts={summary['connector_setup']['last_attempts']}")
     print(f"outcome_verdict={summary['outcome_reconciliation']['verdict']}")
     print(f"evidence_hash={summary['evidence_pack']['evidence_hash']}")
@@ -1320,6 +1396,7 @@ def _print_preflight_summary(summary: dict[str, Any], *, as_json: bool) -> None:
     print(f"mode={summary['mode']}")
     print(f"project_id={summary['project_id']}")
     print(f"connector_health_status={summary['connector_setup']['health_status']}")
+    print(f"connector_readiness_status={summary['connector_setup']['readiness_status']}")
     print(f"connector_last_attempts={summary['connector_setup']['last_attempts']}")
     print(f"outcome_verdict={summary['outcome_reconciliation']['verdict']}")
     print(f"secrets_redacted={str(summary['proof']['secrets_redacted']).lower()}")

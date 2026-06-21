@@ -28,8 +28,37 @@
       "partner_run_id": "<partner_run_id>"
     }
   },
+  "readiness_contract": {
+    "schema_version": "system_of_record_connector.v1",
+    "adapter": "https_json_record",
+    "system_of_record": "customer_record",
+    "required_inputs": [
+      "https_base_url",
+      "path_template_with_customer_id",
+      "read_scoped_bearer_token",
+      "safe_existing_customer_id"
+    ],
+    "required_record_fields": [
+      "customer_id",
+      "status"
+    ],
+    "recommended_record_fields": [
+      "email",
+      "account_id"
+    ],
+    "ready_when": [
+      "config_saved",
+      "bearer_token_present",
+      "saved_test_matched",
+      "connector_attempted",
+      "http_2xx",
+      "no_connector_error_code",
+      "not_retryable_failure"
+    ]
+  },
   "pass_criteria": {
     "connector_health_status": "healthy",
+    "readiness_status": "ready",
     "outcome_verdict": "matched",
     "last_attempts": ">=1",
     "last_error_code": null,

@@ -80,6 +80,9 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
                 "request_url": f"https://ledger.example.com/api/refunds/{self.refund_id}",
                 "http_status": 200,
                 "record_path": "data",
+                "attempts": 1,
+                "max_attempts": 2,
+                "retryable": False,
                 "refund_id": self.refund_id,
             },
         )
@@ -94,6 +97,10 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
             empty = client.get("/v1/integrations/system-of-record/ledger-refund/status")
             assert empty.status_code == 200
             assert empty.json()["connected"] is False
+            assert empty.json()["readiness"]["status"] == "not_ready"
+            assert "connector config has not been saved" in empty.json()["readiness"][
+                "blockers"
+            ]
 
             saved = client.put(
                 "/v1/integrations/system-of-record/ledger-refund/config",
@@ -117,6 +124,10 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
             assert status.status_code == 200
             assert status.json()["base_url"] == "https://ledger.example.com/api"
             assert status.json()["health_status"] == "not_verified"
+            assert status.json()["readiness"]["status"] == "not_ready"
+            assert "latest connector test did not reconcile as matched" in status.json()[
+                "readiness"
+            ]["blockers"]
             assert "ledger-secret-token" not in json.dumps(status.json())
 
             tested = client.post(
@@ -142,6 +153,11 @@ def test_ledger_refund_connector_config_status_and_test_run_redact_secret(
             assert body["connector"]["last_http_status"] == 200
             assert body["connector"]["last_error"] is None
             assert body["connector"]["last_tested_at"] is not None
+            assert body["connector"]["readiness"]["status"] == "ready"
+            assert body["connector"]["readiness"]["blockers"] == []
+            assert body["connector"]["readiness"]["contract"]["system_of_record"] == (
+                "ledger_refund"
+            )
             assert "ledger-secret-token" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()
@@ -190,6 +206,9 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
                 "request_url": f"https://crm.example.com/api/customers/{self.customer_id}",
                 "http_status": 200,
                 "record_path": "data",
+                "attempts": 1,
+                "max_attempts": 2,
+                "retryable": False,
                 "customer_id": self.customer_id,
             },
         )
@@ -207,6 +226,7 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
             assert empty.status_code == 200
             assert empty.json()["connected"] is False
             assert empty.json()["connector_type"] == "customer_record_api"
+            assert empty.json()["readiness"]["status"] == "not_ready"
 
             saved = client.put(
                 "/v1/integrations/system-of-record/customer-record/config",
@@ -247,6 +267,11 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
             assert body["connector"]["last_verdict"] == "matched"
             assert body["connector"]["last_http_status"] == 200
             assert body["connector"]["last_tested_at"] is not None
+            assert body["connector"]["readiness"]["status"] == "ready"
+            assert body["connector"]["readiness"]["blockers"] == []
+            assert body["connector"]["readiness"]["contract"]["system_of_record"] == (
+                "customer_record"
+            )
             assert "crm-secret-token" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()
@@ -378,6 +403,10 @@ def test_ledger_refund_connector_status_surfaces_degraded_health_after_timeout(
             assert body["connector"]["last_error_code"] == "connector_timeout"
             assert body["connector"]["last_attempts"] == 2
             assert body["connector"]["last_retryable"] is True
+            assert body["connector"]["readiness"]["status"] == "not_ready"
+            assert "latest connector test did not return a 2xx HTTP response" in body[
+                "connector"
+            ]["readiness"]["blockers"]
             assert "ledger-secret-token" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()
@@ -468,6 +497,10 @@ def test_ledger_refund_connector_status_surfaces_auth_failure_taxonomy(
             assert body["connector"]["last_http_status"] == 401
             assert body["connector"]["last_attempts"] == 1
             assert body["connector"]["last_retryable"] is False
+            assert body["connector"]["readiness"]["status"] == "not_ready"
+            assert "latest connector test has an error code" in body["connector"][
+                "readiness"
+            ]["blockers"]
             assert "ledger-secret-token" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()

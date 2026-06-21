@@ -100,6 +100,13 @@ def test_design_partner_connector_templates_are_customer_safe() -> None:
         "currency",
         "status",
     ]
+    assert ledger["readiness_contract"]["system_of_record"] == "ledger_refund"
+    assert ledger["readiness_contract"]["required_record_fields"] == [
+        "refund_id",
+        "status",
+    ]
+    assert "http_2xx" in ledger["readiness_contract"]["ready_when"]
+    assert ledger["pass_criteria"]["readiness_status"] == "ready"
     assert ledger["pass_criteria"]["last_error_code"] is None
 
     assert crm["connector_type"] == "customer_record_api"
@@ -117,6 +124,13 @@ def test_design_partner_connector_templates_are_customer_safe() -> None:
         "account_id",
         "status",
     ]
+    assert crm["readiness_contract"]["system_of_record"] == "customer_record"
+    assert crm["readiness_contract"]["required_record_fields"] == [
+        "customer_id",
+        "status",
+    ]
+    assert "connector_attempted" in crm["readiness_contract"]["ready_when"]
+    assert crm["pass_criteria"]["readiness_status"] == "ready"
     assert crm["pass_criteria"]["last_retryable"] is None
 
     assert "ledger-demo-token-not-persisted" not in rendered
@@ -148,6 +162,8 @@ def test_design_partner_handoff_guide_covers_customer_run_contract() -> None:
     assert "connector_setup.config_endpoint" in guide
     assert "connector_setup.test_endpoint" in guide
     assert "connector_setup.health_status" in guide
+    assert "connector_setup.readiness_status" in guide
+    assert "connector_setup.readiness_blockers" in guide
     assert "connector_setup.last_attempts" in guide
     assert "connector_setup.last_error_code" in guide
     assert "connector_setup.last_retryable" in guide
@@ -203,6 +219,12 @@ def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
     assert output["connector_setup"]["last_attempts"] == 1
     assert output["connector_setup"]["last_error_code"] is None
     assert output["connector_setup"]["last_retryable"] is None
+    assert output["connector_setup"]["readiness_status"] == "ready"
+    assert output["connector_setup"]["readiness_blockers"] == []
+    assert all(output["connector_setup"]["readiness_checks"].values())
+    assert output["connector_setup"]["readiness_contract"]["system_of_record"] == (
+        "ledger_refund"
+    )
     assert output["connector_setup"]["retry_count"] == 0
     assert output["connector_setup"]["max_attempts"] == 2
     assert output["connector_setup"]["error_code"] is None
@@ -217,6 +239,7 @@ def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
         "unsafe_action_stopped": True,
         "connector_configured": True,
         "connector_health_verified": True,
+        "real_connector_ready": True,
         "matched_outcome_shown": True,
         "evidence_hash_visible": True,
         "evidence_pack_passed": True,
@@ -290,6 +313,12 @@ def test_design_partner_install_kit_customer_record_demo_outputs_auditable_proof
     assert output["connector_setup"]["last_attempts"] == 1
     assert output["connector_setup"]["last_error_code"] is None
     assert output["connector_setup"]["last_retryable"] is None
+    assert output["connector_setup"]["readiness_status"] == "ready"
+    assert output["connector_setup"]["readiness_blockers"] == []
+    assert all(output["connector_setup"]["readiness_checks"].values())
+    assert output["connector_setup"]["readiness_contract"]["system_of_record"] == (
+        "customer_record"
+    )
     assert output["connector_setup"]["error_code"] is None
     assert output["connector_setup"]["retryable"] is None
     assert output["connector_setup"]["test_ok"] is True
@@ -302,6 +331,7 @@ def test_design_partner_install_kit_customer_record_demo_outputs_auditable_proof
         "unsafe_action_stopped": True,
         "connector_configured": True,
         "connector_health_verified": True,
+        "real_connector_ready": True,
         "matched_outcome_shown": True,
         "evidence_hash_visible": True,
         "evidence_pack_passed": True,
@@ -461,6 +491,8 @@ def test_design_partner_live_preflight_runs_connector_test_without_evidence(
     assert "evidence_pack" not in output
     assert output["connector_setup"]["config_saved"] is True
     assert output["connector_setup"]["health_status"] == "healthy"
+    assert output["connector_setup"]["readiness_status"] == "ready"
+    assert output["connector_setup"]["readiness_blockers"] == []
     assert output["connector_setup"]["last_error_code"] is None
     assert output["connector_setup"]["last_retryable"] is None
     assert output["outcome_reconciliation"]["verdict"] == "matched"
@@ -468,6 +500,7 @@ def test_design_partner_live_preflight_runs_connector_test_without_evidence(
     assert output["proof"] == {
         "connector_configured": True,
         "connector_health_verified": True,
+        "real_connector_ready": True,
         "matched_outcome_shown": True,
         "secrets_redacted": True,
     }

@@ -57,6 +57,7 @@ class LedgerRefundConnectorStatusResponse(BaseModel):
     last_attempts: int | None = None
     last_retryable: bool | None = None
     last_checked_at: Any | None = None
+    readiness: dict[str, Any] = Field(default_factory=dict)
     created_at: Any | None = None
     updated_at: Any | None = None
 
@@ -125,6 +126,7 @@ class CustomerRecordConnectorStatusResponse(BaseModel):
     last_attempts: int | None = None
     last_retryable: bool | None = None
     last_checked_at: Any | None = None
+    readiness: dict[str, Any] = Field(default_factory=dict)
     created_at: Any | None = None
     updated_at: Any | None = None
 
