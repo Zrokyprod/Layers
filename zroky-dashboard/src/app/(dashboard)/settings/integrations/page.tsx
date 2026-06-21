@@ -146,6 +146,11 @@ function connectorHealthLabel(value: string | null | undefined) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function connectorVerdictLabel(value: string | null | undefined) {
+  if (!value) return "No run yet";
+  return connectorHealthLabel(value);
+}
+
 function connectorPillClass(check: OutcomeReconciliationView | null) {
   if (!check) return "pill";
   if (check.verdict === "matched") return "pill pill-green";
@@ -200,13 +205,10 @@ function maskedConnectorUrl(value: unknown) {
 }
 
 function ledgerRefundPayloadSnippet() {
-  return `curl -X POST "$ZROKY_API_BASE/v1/outcomes/reconciliation/ledger-refund" \\
+  return `curl -X POST "$ZROKY_API_BASE/v1/integrations/system-of-record/ledger-refund/test" \\
   -H "x-api-key: $ZROKY_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "call_id": "call_refund_123",
-    "trace_id": "trace_refund_123",
-    "action_type": "refund",
     "refund_id": "RF-1001",
     "claimed": {
       "refund_id": "RF-1001",
@@ -215,23 +217,16 @@ function ledgerRefundPayloadSnippet() {
       "status": "posted"
     },
     "match_fields": ["refund_id", "amount_usd", "currency", "status"],
-    "connector": {
-      "base_url": "https://ledger.example.com/api",
-      "path_template": "/refunds/{refund_id}",
-      "record_path": "data",
-      "bearer_token": "$LEDGER_TOKEN"
-    }
+    "amount_usd": 42.18,
+    "currency": "USD"
   }'`;
 }
 
 function customerRecordPayloadSnippet() {
-  return `curl -X POST "$ZROKY_API_BASE/v1/outcomes/reconciliation/customer-record" \\
+  return `curl -X POST "$ZROKY_API_BASE/v1/integrations/system-of-record/customer-record/test" \\
   -H "x-api-key: $ZROKY_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "call_id": "call_crm_123",
-    "trace_id": "trace_crm_123",
-    "action_type": "customer_record_update",
     "customer_id": "CUS-1001",
     "claimed": {
       "customer_id": "CUS-1001",
@@ -239,13 +234,7 @@ function customerRecordPayloadSnippet() {
       "status": "active",
       "account_id": "acct_1001"
     },
-    "match_fields": ["customer_id", "email", "status", "account_id"],
-    "connector": {
-      "base_url": "https://crm.example.com/api",
-      "path_template": "/customers/{customer_id}",
-      "record_path": "data",
-      "bearer_token": "$CRM_TOKEN"
-    }
+    "match_fields": ["customer_id", "email", "status", "account_id"]
   }'`;
 }
 
@@ -352,6 +341,8 @@ export default function IntegrationsSettingsPage() {
   const customerHttpStatus = textValue(customerMetadata.http_status);
   const ledgerHealth = state.ledgerConfig?.health_status ?? (ledgerConnected ? "not_verified" : "not_configured");
   const customerHealth = state.customerConfig?.health_status ?? (customerConnected ? "not_verified" : "not_configured");
+  const ledgerLastVerdict = state.ledgerConfig?.last_verdict ?? latestLedgerRefundCheck?.verdict;
+  const customerLastVerdict = state.customerConfig?.last_verdict ?? latestCustomerRecordCheck?.verdict;
   const ledgerRecordPath = state.ledgerConfig?.record_path ?? textValue(ledgerMetadata.record_path);
   const customerRecordPath = state.customerConfig?.record_path ?? textValue(customerMetadata.record_path);
   const ledgerRequestUrl = maskedConnectorUrl(state.ledgerConfig?.base_url ?? ledgerMetadata.request_url);
@@ -370,7 +361,7 @@ export default function IntegrationsSettingsPage() {
   async function copyLedgerPayload() {
     try {
       await navigator.clipboard.writeText(ledgerRefundPayloadSnippet());
-      setMessage("Ledger refund reconciliation payload copied.");
+      setMessage("Ledger refund saved-connector test payload copied.");
     } catch {
       setMessage("Copy failed. Select the payload and copy it manually.");
     }
@@ -379,7 +370,7 @@ export default function IntegrationsSettingsPage() {
   async function copyCustomerPayload() {
     try {
       await navigator.clipboard.writeText(customerRecordPayloadSnippet());
-      setMessage("Customer record reconciliation payload copied.");
+      setMessage("Customer record saved-connector test payload copied.");
     } catch {
       setMessage("Copy failed. Select the payload and copy it manually.");
     }
@@ -626,7 +617,7 @@ export default function IntegrationsSettingsPage() {
         <header className="panel-header">
           <div>
             <h3>Integrations</h3>
-            <p>Connect source control for fix PRs and delivery channels for reliability alerts.</p>
+            <p>Connect source control, alert delivery, and system-of-record connectors for outcome proof.</p>
           </div>
           <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
             <RefreshCw aria-hidden="true" />
@@ -776,6 +767,10 @@ export default function IntegrationsSettingsPage() {
               <strong>{connectorHealthLabel(ledgerHealth)}</strong>
             </div>
             <div>
+              <span>Last verdict</span>
+              <strong>{connectorVerdictLabel(ledgerLastVerdict)}</strong>
+            </div>
+            <div>
               <span>Last HTTP</span>
               <strong>{ledgerHttpStatus ?? textValue(state.ledgerConfig?.last_http_status) ?? "No response yet"}</strong>
             </div>
@@ -901,14 +896,14 @@ export default function IntegrationsSettingsPage() {
           </div>
           {renderEvidenceSummary(latestLedgerRefundCheck, "ledger")}
 
-          <pre className="settings-connector-payload" aria-label="Ledger refund reconciliation payload">
+          <pre className="settings-connector-payload" aria-label="Ledger refund saved connector test payload">
             <code>{ledgerRefundPayloadSnippet()}</code>
           </pre>
 
           <div className="actions">
             <button type="button" className="btn btn-soft" onClick={() => void copyLedgerPayload()}>
               <Copy aria-hidden="true" />
-              Copy API payload
+              Copy saved test payload
             </button>
             <Link href="/outcomes" className="btn btn-primary">
               View outcome checks
@@ -938,6 +933,10 @@ export default function IntegrationsSettingsPage() {
             <div>
               <span>Health</span>
               <strong>{connectorHealthLabel(customerHealth)}</strong>
+            </div>
+            <div>
+              <span>Last verdict</span>
+              <strong>{connectorVerdictLabel(customerLastVerdict)}</strong>
             </div>
             <div>
               <span>Last HTTP</span>
@@ -1064,14 +1063,14 @@ export default function IntegrationsSettingsPage() {
           </div>
           {renderEvidenceSummary(latestCustomerRecordCheck, "customer")}
 
-          <pre className="settings-connector-payload" aria-label="Customer record reconciliation payload">
+          <pre className="settings-connector-payload" aria-label="Customer record saved connector test payload">
             <code>{customerRecordPayloadSnippet()}</code>
           </pre>
 
           <div className="actions">
             <button type="button" className="btn btn-soft" onClick={() => void copyCustomerPayload()}>
               <Copy aria-hidden="true" />
-              Copy CRM API payload
+              Copy CRM saved test payload
             </button>
             <Link href="/outcomes" className="btn btn-primary">
               View outcome checks

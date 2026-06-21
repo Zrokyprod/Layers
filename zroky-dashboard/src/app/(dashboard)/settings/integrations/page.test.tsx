@@ -295,10 +295,11 @@ describe("IntegrationsSettingsPage", () => {
     render(<IntegrationsSettingsPage />);
 
     expect(await screen.findByRole("heading", { name: "GitHub" })).toBeInTheDocument();
-    expect(screen.getAllByText("@zroky").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Reconnect GitHub" })).toBeInTheDocument();
+    expect((await screen.findAllByText("@zroky")).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("button", { name: "Reconnect GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Slack" })).toBeInTheDocument();
-    expect(screen.getByText("2/4")).toBeInTheDocument();
+    expect(await screen.findByText("2/4")).toBeInTheDocument();
+    expect(screen.getByText("Connect source control, alert delivery, and system-of-record connectors for outcome proof.")).toBeInTheDocument();
     expect(api.getSlackInstallStatus).toHaveBeenCalledTimes(1);
     expect(api.getLedgerRefundConnectorStatus).toHaveBeenCalledTimes(1);
     expect(api.getCustomerRecordConnectorStatus).toHaveBeenCalledTimes(1);
@@ -313,6 +314,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(heading.closest("article")?.getAttribute("id")).toBe("ledger-refund-connector");
     expect(screen.getAllByText("Verified").length).toBeGreaterThan(0);
     expect(screen.getByText("Healthy")).toBeInTheDocument();
+    expect(screen.getAllByText("Matched").length).toBeGreaterThan(0);
     expect(screen.getByText("https://ledger.***/...")).toBeInTheDocument();
     expect(screen.getByText("200")).toBeInTheDocument();
     expect(screen.getByText("data.0")).toBeInTheDocument();
@@ -380,6 +382,36 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getAllByText("Unavailable until this reconciliation is linked to a runtime policy decision.").length).toBeGreaterThan(0);
   });
 
+  it("surfaces degraded connector health from saved status", async () => {
+    api.getLedgerRefundConnectorStatus.mockResolvedValue({
+      connected: true,
+      connector_type: "ledger_refund_api",
+      base_url: "https://ledger.example.com/api",
+      path_template: "/refunds/{refund_id}",
+      record_path: "data.0",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: "2026-06-20T09:00:00Z",
+      health_status: "degraded",
+      last_verdict: "not_verified",
+      last_error: "ReadTimeout",
+      last_http_status: null,
+      last_attempts: 2,
+      last_checked_at: "2026-06-20T09:00:00Z",
+      created_at: "2026-06-20T08:00:00Z",
+      updated_at: "2026-06-20T08:30:00Z",
+    });
+    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 0, items: [] });
+
+    render(<IntegrationsSettingsPage />);
+
+    const status = await screen.findByLabelText("Ledger refund connector status");
+    expect(within(status).getByText("Degraded")).toBeInTheDocument();
+    expect(within(status).getByText("Not verified")).toBeInTheDocument();
+    expect(within(status).getByText("2")).toBeInTheDocument();
+  });
+
   it("shows missing evidence state when a decision pack has no matched outcome", async () => {
     api.getRuntimePolicyEvidencePack.mockResolvedValue({
       schema_version: "runtime_policy_evidence.v1",
@@ -415,15 +447,14 @@ describe("IntegrationsSettingsPage", () => {
     const clipboardWrite = vi.spyOn(navigator.clipboard, "writeText");
     render(<IntegrationsSettingsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Copy API payload" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy saved test payload" }));
 
-    await waitFor(() =>
-      expect(clipboardWrite).toHaveBeenCalledWith(
-        expect.stringContaining("/v1/outcomes/reconciliation/ledger-refund"),
-      ),
-    );
-    expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("$LEDGER_TOKEN"));
-    expect(await screen.findByText("Ledger refund reconciliation payload copied.")).toBeInTheDocument();
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalled());
+    const copied = clipboardWrite.mock.calls[0]?.[0] as string;
+    expect(copied).toContain("/v1/integrations/system-of-record/ledger-refund/test");
+    expect(copied).not.toContain("bearer_token");
+    expect(copied).not.toContain("$LEDGER_TOKEN");
+    expect(await screen.findByText("Ledger refund saved-connector test payload copied.")).toBeInTheDocument();
   });
 
   it("saves ledger refund connector config without rendering the token", async () => {
@@ -523,15 +554,14 @@ describe("IntegrationsSettingsPage", () => {
     const clipboardWrite = vi.spyOn(navigator.clipboard, "writeText");
     render(<IntegrationsSettingsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Copy CRM API payload" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy CRM saved test payload" }));
 
-    await waitFor(() =>
-      expect(clipboardWrite).toHaveBeenCalledWith(
-        expect.stringContaining("/v1/outcomes/reconciliation/customer-record"),
-      ),
-    );
-    expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("$CRM_TOKEN"));
-    expect(await screen.findByText("Customer record reconciliation payload copied.")).toBeInTheDocument();
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalled());
+    const copied = clipboardWrite.mock.calls[0]?.[0] as string;
+    expect(copied).toContain("/v1/integrations/system-of-record/customer-record/test");
+    expect(copied).not.toContain("bearer_token");
+    expect(copied).not.toContain("$CRM_TOKEN");
+    expect(await screen.findByText("Customer record saved-connector test payload copied.")).toBeInTheDocument();
   });
 
   it("saves customer record connector config without rendering the token", async () => {
