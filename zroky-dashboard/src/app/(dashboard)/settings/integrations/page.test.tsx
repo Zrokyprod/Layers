@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getCustomerRecordConnectorStatus: vi.fn(),
   getGithubConnectionStatus: vi.fn(),
   getLedgerRefundConnectorStatus: vi.fn(),
+  getRuntimePolicyEvidencePack: vi.fn(),
   getSlackInstallStatus: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
   saveCustomerRecordConnectorConfig: vi.fn(),
@@ -43,11 +44,21 @@ vi.mock("@/lib/api", async () => {
 
 describe("IntegrationsSettingsPage", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:connector-evidence-pack"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     api.getGithubConnectionStatus.mockResolvedValue({
       connected: true,
       github_id: "123",
@@ -194,6 +205,44 @@ describe("IntegrationsSettingsPage", () => {
         created_at: "2026-06-20T09:15:00Z",
       },
     });
+    api.getRuntimePolicyEvidencePack.mockResolvedValue({
+      schema_version: "runtime_policy_evidence.v1",
+      project_id: "proj_1",
+      decision_id: "decision_1",
+      verification_status: "pass",
+      decision: { id: "decision_1" },
+      related_decisions: [],
+      audit_log: [],
+      trace_policy_spans: [],
+      outcome_reconciliation: [
+        {
+          id: "check_ledger_refund",
+          project_id: "proj_1",
+          call_id: "call_refund_api",
+          trace_id: "trace_refund_api",
+          runtime_policy_decision_id: "decision_1",
+          action_type: "refund",
+          connector_type: "ledger_refund_api",
+          system_ref: "ledger:rf_999",
+          verdict: "matched",
+          reason: "all_compared_fields_matched",
+          amount_usd: 42.5,
+          currency: "USD",
+          claimed: { refund_id: "rf_999", amount_usd: 42.5, currency: "USD" },
+          actual: { refund_id: "rf_999", amount_usd: 42.5, currency: "USD" },
+          comparison: { compared_fields: [], mismatches: [] },
+          idempotency_key: "call_refund_api:rf_999",
+          metadata: { connector_kind: "ledger_refund_api" },
+          checked_at: "2026-06-20T09:00:00Z",
+          created_at: "2026-06-20T09:00:00Z",
+        },
+      ],
+      call: null,
+      generated_at: "2026-06-20T09:01:00Z",
+      hash_algorithm: "sha256",
+      evidence_hash: "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abcd",
+      hash_payload_excludes: ["generated_at"],
+    });
     api.listOutcomeReconciliations.mockResolvedValue({
       total_in_page: 1,
       items: [
@@ -259,6 +308,27 @@ describe("IntegrationsSettingsPage", () => {
     expect(document.body.textContent).not.toContain("ledger-secret-token");
   });
 
+  it("loads and downloads the ledger evidence pack from the latest connector proof", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Ledger refund connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "View ledger evidence" }));
+
+    await waitFor(() => expect(api.getRuntimePolicyEvidencePack).toHaveBeenCalledWith("decision_1"));
+    const evidence = await within(connectorCard as HTMLElement).findByLabelText("Ledger evidence pack");
+    expect(within(evidence).getByText("Pass")).toBeInTheDocument();
+    expect(within(evidence).getByText("ledger:rf_999")).toBeInTheDocument();
+    expect(within(evidence).getByText("abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abcd")).toBeInTheDocument();
+
+    fireEvent.click(within(evidence).getByRole("button", { name: "Download JSON" }));
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:connector-evidence-pack");
+  });
+
   it("shows not_verified when no trusted connector proof is available", async () => {
     api.listOutcomeReconciliations.mockResolvedValue({
       total_in_page: 1,
@@ -293,6 +363,39 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getAllByText("Not verified").length).toBeGreaterThan(0);
     expect(screen.getAllByText("No response yet").length).toBeGreaterThan(0);
     expect(screen.getByText("data.0")).toBeInTheDocument();
+    expect((screen.getByRole("button", { name: "View ledger evidence" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByText("Unavailable until this reconciliation is linked to a runtime policy decision.").length).toBeGreaterThan(0);
+  });
+
+  it("shows missing evidence state when a decision pack has no matched outcome", async () => {
+    api.getRuntimePolicyEvidencePack.mockResolvedValue({
+      schema_version: "runtime_policy_evidence.v1",
+      project_id: "proj_1",
+      decision_id: "decision_1",
+      verification_status: "not_verified",
+      decision: { id: "decision_1" },
+      related_decisions: [],
+      audit_log: [],
+      trace_policy_spans: [],
+      outcome_reconciliation: [],
+      call: null,
+      generated_at: "2026-06-20T09:01:00Z",
+      hash_algorithm: "sha256",
+      evidence_hash: "def456def456def456def456def456def456def456def456def456def456def0",
+      hash_payload_excludes: ["generated_at"],
+    });
+
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Ledger refund connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "View ledger evidence" }));
+
+    const evidence = await within(connectorCard as HTMLElement).findByLabelText("Ledger evidence pack");
+    expect(within(evidence).getByText("Not verified")).toBeInTheDocument();
+    expect(within(evidence).getByText("No matched system-of-record outcome is linked yet.")).toBeInTheDocument();
+    expect(within(evidence).getByText("def456def456def456def456def456def456def456def456def456def456def0")).toBeInTheDocument();
   });
 
   it("copies the ledger refund reconciliation payload", async () => {

@@ -29978,6 +29978,74 @@ button.gm-kpi-card {
   gap: 8px;
 }
 
+.app-shell .settings-connector-proof-action {
+  align-items: center;
+  gap: 10px;
+}
+
+.app-shell .settings-connector-proof-action .btn {
+  flex: 0 0 auto;
+  min-height: 34px;
+}
+
+.app-shell .settings-connector-evidence {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.app-shell .settings-connector-evidence-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-shell .settings-connector-evidence-header h4 {
+  margin: 3px 0 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.app-shell .settings-connector-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.app-shell .settings-connector-evidence-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-shell .settings-connector-evidence-grid dt {
+  color: var(--text-tertiary);
+  font-size: 0.66rem;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.app-shell .settings-connector-evidence-grid dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.app-shell .settings-connector-evidence-grid code {
+  font-family: var(--font-mono, "Berkeley Mono", "SFMono-Regular", Consolas, monospace);
+  font-size: 0.7rem;
+}
+
 .app-shell .settings-connector-form,
 .app-shell .settings-connector-test {
   display: grid;
