@@ -326,7 +326,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getByText("200")).toBeInTheDocument();
     expect(screen.getByText("data.0")).toBeInTheDocument();
     expect(screen.getAllByText("Stored token ending oken").length).toBeGreaterThan(0);
-    expect(screen.getByText("ledger:rf_999")).toBeInTheDocument();
+    expect(screen.getAllByText("ledger:rf_999").length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain("ledger-secret-token");
   });
 
@@ -505,6 +505,120 @@ describe("IntegrationsSettingsPage", () => {
     expect(await screen.findByText("Ledger refund connector template downloaded.")).toBeInTheDocument();
   });
 
+  it("exports a ready ledger preflight summary without connector secrets", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Ledger refund connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+
+    const summary = await within(connectorCard as HTMLElement).findByLabelText("Ledger refund preflight summary");
+    expect(within(summary).getAllByText("Ready for pilot handoff").length).toBeGreaterThan(0);
+    expect(within(summary).getByText("None in latest 25")).toBeInTheDocument();
+
+    fireEvent.click(within(summary).getByRole("button", { name: "Download preflight summary" }));
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
+    const payload = JSON.parse(await blob.text()) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      schema_version: "zroky_connector_preflight_summary.v1",
+      connector_kind: "ledger_refund_api",
+      ready_for_pilot_handoff: true,
+      status: {
+        connected: true,
+        health_status: "healthy",
+        last_verdict: "matched",
+        last_http_status: "200",
+        last_attempts: "2",
+      },
+      latest_check: {
+        id: "check_ledger_refund",
+        verdict: "matched",
+        system_ref: "ledger:rf_999",
+      },
+      failed_attempts: [],
+    });
+    expect(JSON.stringify(payload)).not.toContain("ledger-secret-token");
+    expect(await screen.findByText("Ledger refund preflight summary downloaded.")).toBeInTheDocument();
+  });
+
+  it("shows failed ledger preflight attempts with exact retry guidance", async () => {
+    api.getLedgerRefundConnectorStatus.mockResolvedValue({
+      connected: true,
+      connector_type: "ledger_refund_api",
+      base_url: "https://ledger.example.com/api",
+      path_template: "/refunds/{refund_id}",
+      record_path: "data",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: "2026-06-20T09:00:00Z",
+      health_status: "degraded",
+      last_verdict: "not_verified",
+      last_error: "ReadTimeout",
+      last_error_code: "connector_timeout",
+      last_http_status: null,
+      last_attempts: 2,
+      last_retryable: true,
+      last_checked_at: "2026-06-20T09:00:00Z",
+      created_at: "2026-06-20T08:00:00Z",
+      updated_at: "2026-06-20T08:30:00Z",
+    });
+    api.listOutcomeReconciliations.mockResolvedValue({
+      total_in_page: 1,
+      items: [
+        {
+          id: "check_ledger_timeout",
+          project_id: "proj_1",
+          call_id: "call_refund_api",
+          trace_id: "trace_refund_api",
+          runtime_policy_decision_id: null,
+          action_type: "refund",
+          connector_type: "ledger_refund_api",
+          system_ref: "ledger:rf_timeout",
+          verdict: "not_verified",
+          reason: "connector_timeout",
+          amount_usd: 42.5,
+          currency: "USD",
+          claimed: { refund_id: "rf_timeout", amount_usd: 42.5, currency: "USD" },
+          actual: null,
+          comparison: { compared_fields: [], mismatches: [] },
+          idempotency_key: "call_refund_api:rf_timeout",
+          metadata: {
+            connector_kind: "ledger_refund_api",
+            connector: {
+              request_url: "https://ledger.example.com/api/refunds/rf_timeout",
+              error_code: "connector_timeout",
+              error: "ReadTimeout",
+              retryable: true,
+              attempts: 2,
+              bearer_token: "ledger-secret-token",
+            },
+          },
+          checked_at: "2026-06-20T09:00:00Z",
+          created_at: "2026-06-20T09:00:00Z",
+        },
+      ],
+    });
+
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Ledger refund connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+
+    const summary = await within(connectorCard as HTMLElement).findByLabelText("Ledger refund preflight summary");
+    expect(within(summary).getAllByText("Not ready for pilot handoff").length).toBeGreaterThan(0);
+    expect(within(summary).getByText("1 in latest 25")).toBeInTheDocument();
+
+    const timeline = within(connectorCard as HTMLElement).getByLabelText("Ledger refund failed preflight attempts");
+    expect(within(timeline).getByText("Connector Timeout / retryable")).toBeInTheDocument();
+    expect(within(timeline).getByText("2 attempts")).toBeInTheDocument();
+    expect(within(timeline).getByText("ledger:rf_timeout", { exact: false })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("ledger-secret-token");
+  });
+
   it("saves ledger refund connector config without rendering the token", async () => {
     render(<IntegrationsSettingsPage />);
 
@@ -583,7 +697,7 @@ describe("IntegrationsSettingsPage", () => {
       }),
     );
     expect(await screen.findByText("Ledger refund test recorded matched.")).toBeInTheDocument();
-    expect(screen.getByText("ledger:RF-1001")).toBeInTheDocument();
+    expect(screen.getAllByText("ledger:RF-1001").length).toBeGreaterThan(0);
   });
 
   it("surfaces customer record connector without leaking secrets", async () => {
@@ -628,7 +742,7 @@ describe("IntegrationsSettingsPage", () => {
     expect(heading).toBeInTheDocument();
     expect(heading.closest("article")?.getAttribute("id")).toBe("customer-record-connector");
     expect(screen.getByText("https://crm.***/...")).toBeInTheDocument();
-    expect(screen.getByText("crm:cus_999")).toBeInTheDocument();
+    expect(screen.getAllByText("crm:cus_999").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Stored token ending oken").length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain("crm-secret-token");
   });
@@ -726,6 +840,6 @@ describe("IntegrationsSettingsPage", () => {
       }),
     );
     expect(await screen.findByText("Customer record test recorded matched.")).toBeInTheDocument();
-    expect(screen.getByText("crm:CUS-1001")).toBeInTheDocument();
+    expect(screen.getAllByText("crm:CUS-1001").length).toBeGreaterThan(0);
   });
 });

@@ -65,6 +65,22 @@ type ConnectorGuidanceInput = {
   retryable: boolean | null | undefined;
 };
 
+type ConnectorPreflightSummaryInput = {
+  kind: ConnectorEvidenceKind;
+  connected: boolean;
+  health: string;
+  verdict: string | null | undefined;
+  errorCode: string | null | undefined;
+  error: string | null | undefined;
+  httpStatus: unknown;
+  attempts: unknown;
+  retryable: boolean | null | undefined;
+  guidance: string;
+  readyForPilot: boolean;
+  latestCheck: OutcomeReconciliationView | null;
+  failedAttempts: OutcomeReconciliationView[];
+};
+
 type LedgerConnectorForm = {
   baseUrl: string;
   pathTemplate: string;
@@ -237,6 +253,14 @@ function connectorEvidenceLabel(kind: ConnectorEvidenceKind) {
   return kind === "ledger" ? "Ledger" : "Customer record";
 }
 
+function connectorPreflightLabel(kind: ConnectorEvidenceKind) {
+  return kind === "ledger" ? "Ledger refund" : "Customer record";
+}
+
+function connectorPreflightKind(kind: ConnectorEvidenceKind) {
+  return kind === "ledger" ? "ledger_refund_api" : "customer_record_api";
+}
+
 function evidenceStatusLabel(value: string) {
   if (value === "not_verified") return "Not verified";
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -373,6 +397,97 @@ function customerConnectorTemplate(form: CustomerConnectorForm) {
       last_error_code: null,
       last_retryable: null,
     },
+  };
+}
+
+function connectorReadyForPilot(
+  connected: boolean,
+  health: string,
+  verdict: string | null | undefined,
+  errorCode: string | null | undefined,
+) {
+  return connected && health === "healthy" && verdict === "matched" && !textValue(errorCode);
+}
+
+function failedPreflightAttempts(checks: OutcomeReconciliationView[]) {
+  return checks.filter((check) => check.verdict !== "matched").slice(0, 4);
+}
+
+function preflightCheckIssue(check: OutcomeReconciliationView) {
+  const metadata = connectorMetadata(check);
+  const issue = connectorErrorLabel(
+    textValue(metadata.error_code),
+    textValue(metadata.error),
+    boolValue(metadata.retryable),
+  );
+  if (issue !== "None") return issue;
+  if (check.verdict === "mismatched") return "Mismatched outcome";
+  return check.reason ? connectorHealthLabel(check.reason) : connectorStatus(check);
+}
+
+function preflightCheckHttpStatus(check: OutcomeReconciliationView) {
+  return textValue(connectorMetadata(check).http_status) ?? "No response";
+}
+
+function preflightCheckAttempts(check: OutcomeReconciliationView) {
+  const attempts = textValue(connectorMetadata(check).attempts);
+  if (!attempts) return "No retry data";
+  return attempts === "1" ? "1 attempt" : `${attempts} attempts`;
+}
+
+function preflightCheckSummary(check: OutcomeReconciliationView | null) {
+  if (!check) return null;
+  const metadata = connectorMetadata(check);
+  return {
+    id: check.id,
+    verdict: check.verdict,
+    system_ref: check.system_ref,
+    reason: check.reason,
+    checked_at: check.checked_at,
+    runtime_policy_decision_id: check.runtime_policy_decision_id,
+    call_id: check.call_id,
+    trace_id: check.trace_id,
+    error_code: textValue(metadata.error_code),
+    error_label: preflightCheckIssue(check),
+    http_status: textValue(metadata.http_status),
+    attempts: textValue(metadata.attempts),
+    retryable: boolValue(metadata.retryable),
+  };
+}
+
+function buildConnectorPreflightSummary({
+  kind,
+  connected,
+  health,
+  verdict,
+  errorCode,
+  error,
+  httpStatus,
+  attempts,
+  retryable,
+  guidance,
+  readyForPilot,
+  latestCheck,
+  failedAttempts,
+}: ConnectorPreflightSummaryInput) {
+  return {
+    schema_version: "zroky_connector_preflight_summary.v1",
+    connector_kind: connectorPreflightKind(kind),
+    generated_at: new Date().toISOString(),
+    ready_for_pilot_handoff: readyForPilot,
+    status: {
+      connected,
+      health_status: health,
+      last_verdict: verdict ?? latestCheck?.verdict ?? "not_verified",
+      last_error_code: textValue(errorCode),
+      last_error_label: connectorErrorLabel(errorCode, error, retryable),
+      last_http_status: textValue(httpStatus),
+      last_attempts: textValue(attempts),
+      last_retryable: retryable ?? null,
+    },
+    latest_check: preflightCheckSummary(latestCheck),
+    failed_attempts: failedAttempts.map(preflightCheckSummary),
+    fix_guidance: guidance,
   };
 }
 
@@ -521,6 +636,8 @@ export default function IntegrationsSettingsPage() {
   const customerRawError = state.customerConfig?.last_error ?? textValue(customerMetadata.error);
   const ledgerHttpStatusValue = state.ledgerConfig?.last_http_status ?? ledgerMetadata.http_status;
   const customerHttpStatusValue = state.customerConfig?.last_http_status ?? customerMetadata.http_status;
+  const ledgerAttemptValue = state.ledgerConfig?.last_attempts ?? ledgerMetadata.attempts;
+  const customerAttemptValue = state.customerConfig?.last_attempts ?? customerMetadata.attempts;
   const ledgerLastError = connectorErrorLabel(
     ledgerErrorCode,
     ledgerRawError,
@@ -551,6 +668,20 @@ export default function IntegrationsSettingsPage() {
   });
   const ledgerPreflight = ledgerPreflightCommand(ledgerForm);
   const customerPreflight = customerPreflightCommand(customerForm);
+  const ledgerReadyForPilot = connectorReadyForPilot(
+    ledgerConnected,
+    ledgerHealth,
+    ledgerLastVerdict,
+    ledgerErrorCode,
+  );
+  const customerReadyForPilot = connectorReadyForPilot(
+    customerConnected,
+    customerHealth,
+    customerLastVerdict,
+    customerErrorCode,
+  );
+  const ledgerFailedAttempts = failedPreflightAttempts(ledgerRefundChecks);
+  const customerFailedAttempts = failedPreflightAttempts(customerRecordChecks);
   const ledgerRecordPath = state.ledgerConfig?.record_path ?? textValue(ledgerMetadata.record_path);
   const customerRecordPath = state.customerConfig?.record_path ?? textValue(customerMetadata.record_path);
   const ledgerRequestUrl = maskedConnectorUrl(state.ledgerConfig?.base_url ?? ledgerMetadata.request_url);
@@ -610,6 +741,50 @@ export default function IntegrationsSettingsPage() {
   function downloadCustomerTemplate() {
     downloadJsonFile(customerConnectorTemplate(customerForm), "customer_record_connector_config.example.json");
     setMessage("Customer record connector template downloaded.");
+  }
+
+  function downloadLedgerPreflightSummary() {
+    downloadJsonFile(
+      buildConnectorPreflightSummary({
+        kind: "ledger",
+        connected: ledgerConnected,
+        health: ledgerHealth,
+        verdict: ledgerLastVerdict,
+        errorCode: ledgerErrorCode,
+        error: ledgerRawError,
+        httpStatus: ledgerHttpStatusValue,
+        attempts: ledgerAttemptValue,
+        retryable: ledgerLastRetryable,
+        guidance: ledgerGuidance,
+        readyForPilot: ledgerReadyForPilot,
+        latestCheck: latestLedgerRefundCheck,
+        failedAttempts: ledgerFailedAttempts,
+      }),
+      "ledger_refund_preflight_summary.json",
+    );
+    setMessage("Ledger refund preflight summary downloaded.");
+  }
+
+  function downloadCustomerPreflightSummary() {
+    downloadJsonFile(
+      buildConnectorPreflightSummary({
+        kind: "customer",
+        connected: customerConnected,
+        health: customerHealth,
+        verdict: customerLastVerdict,
+        errorCode: customerErrorCode,
+        error: customerRawError,
+        httpStatus: customerHttpStatusValue,
+        attempts: customerAttemptValue,
+        retryable: customerLastRetryable,
+        guidance: customerGuidance,
+        readyForPilot: customerReadyForPilot,
+        latestCheck: latestCustomerRecordCheck,
+        failedAttempts: customerFailedAttempts,
+      }),
+      "customer_record_preflight_summary.json",
+    );
+    setMessage("Customer record preflight summary downloaded.");
   }
 
   async function loadConnectorEvidence(check: OutcomeReconciliationView | null, kind: ConnectorEvidenceKind) {
@@ -841,6 +1016,83 @@ export default function IntegrationsSettingsPage() {
     );
   }
 
+  function renderPreflightSummary(
+    kind: ConnectorEvidenceKind,
+    readyForPilot: boolean,
+    latestCheck: OutcomeReconciliationView | null,
+    failedAttempts: OutcomeReconciliationView[],
+    onDownload: () => void,
+  ) {
+    const label = connectorPreflightLabel(kind);
+    const status = readyForPilot ? "Ready for pilot handoff" : "Not ready for pilot handoff";
+
+    return (
+      <section className="settings-connector-preflight-summary" aria-label={`${label} preflight summary`}>
+        <div className="settings-connector-preflight-summary-header">
+          <div>
+            <span className="eyebrow">Preflight summary</span>
+            <strong>{status}</strong>
+          </div>
+          <span className={readyForPilot ? "pill pill-green" : "pill pill-yellow"}>{status}</span>
+        </div>
+        <div className="settings-connector-summary-grid">
+          <div>
+            <span>Latest check</span>
+            <strong>{latestCheck?.system_ref ?? "No system-of-record check yet"}</strong>
+          </div>
+          <div>
+            <span>Outcome</span>
+            <strong>{connectorStatus(latestCheck)}</strong>
+          </div>
+          <div>
+            <span>Failed attempts</span>
+            <strong>{failedAttempts.length ? `${failedAttempts.length} in latest 25` : "None in latest 25"}</strong>
+          </div>
+        </div>
+        <div className="actions">
+          <button type="button" className="btn btn-soft" onClick={onDownload}>
+            <Download aria-hidden="true" />
+            Download preflight summary
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  function renderFailedPreflightAttempts(kind: ConnectorEvidenceKind, failedAttempts: OutcomeReconciliationView[]) {
+    const label = connectorPreflightLabel(kind);
+
+    return (
+      <section className="settings-connector-timeline" aria-label={`${label} failed preflight attempts`}>
+        <div className="settings-connector-timeline-header">
+          <span className="eyebrow">Failed attempts</span>
+          <strong>{failedAttempts.length ? `${failedAttempts.length} needs review` : "No failed attempts"}</strong>
+        </div>
+        {failedAttempts.length ? (
+          <ol>
+            {failedAttempts.map((check) => (
+              <li key={check.id}>
+                <div>
+                  <strong>
+                    {connectorStatus(check)} - {check.system_ref ?? "No system reference"}
+                  </strong>
+                  <span>{formatDateTime(check.checked_at)}</span>
+                  <span>{preflightCheckIssue(check)}</span>
+                </div>
+                <div className="settings-connector-timeline-meta">
+                  <span>{preflightCheckHttpStatus(check)}</span>
+                  <span>{preflightCheckAttempts(check)}</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>No failed preflight attempts in the latest 25 checks.</p>
+        )}
+      </section>
+    );
+  }
+
   return (
     <div className="page-content settings-integrations-page">
       {message ? (
@@ -1022,7 +1274,7 @@ export default function IntegrationsSettingsPage() {
             </div>
             <div>
               <span>Attempts</span>
-              <strong>{textValue(state.ledgerConfig?.last_attempts) ?? textValue(ledgerMetadata.attempts) ?? "No run yet"}</strong>
+              <strong>{textValue(ledgerAttemptValue) ?? "No run yet"}</strong>
             </div>
             <div>
               <span>Record path</span>
@@ -1156,6 +1408,15 @@ export default function IntegrationsSettingsPage() {
             </div>
           </section>
 
+          {renderPreflightSummary(
+            "ledger",
+            ledgerReadyForPilot,
+            latestLedgerRefundCheck,
+            ledgerFailedAttempts,
+            downloadLedgerPreflightSummary,
+          )}
+          {renderFailedPreflightAttempts("ledger", ledgerFailedAttempts)}
+
           <div className="list settings-connector-proof">
             <div className="list-row">
               <div className="list-main">
@@ -1225,7 +1486,7 @@ export default function IntegrationsSettingsPage() {
             </div>
             <div>
               <span>Attempts</span>
-              <strong>{textValue(state.customerConfig?.last_attempts) ?? textValue(customerMetadata.attempts) ?? "No run yet"}</strong>
+              <strong>{textValue(customerAttemptValue) ?? "No run yet"}</strong>
             </div>
             <div>
               <span>Record path</span>
@@ -1357,6 +1618,15 @@ export default function IntegrationsSettingsPage() {
               </button>
             </div>
           </section>
+
+          {renderPreflightSummary(
+            "customer",
+            customerReadyForPilot,
+            latestCustomerRecordCheck,
+            customerFailedAttempts,
+            downloadCustomerPreflightSummary,
+          )}
+          {renderFailedPreflightAttempts("customer", customerFailedAttempts)}
 
           <div className="list settings-connector-proof">
             <div className="list-row">
