@@ -25,10 +25,11 @@ vi.mock("../settings/integrations/page", () => ({
 }));
 
 describe("IntegrationsPage", () => {
-  it("keeps the overview focused on provider, GitHub, capture, and Slack", () => {
+  it("keeps the overview focused on outcome connectors and support integrations", () => {
     render(<IntegrationsPage />);
 
-    expect(screen.getByRole("heading", { name: "Integrations" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connectors" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open setup" }).getAttribute("href")).toBe("/settings/integrations#ledger-refund-connector");
     expect(screen.getByRole("link", { name: "Manage providers" }).getAttribute("href")).toBe("/settings/providers");
     expect(screen.getByRole("link", { name: "Open CI gates" }).getAttribute("href")).toBe("/ci-gates");
     expect(screen.getByRole("link", { name: "Open health" }).getAttribute("href")).toBe("/home");

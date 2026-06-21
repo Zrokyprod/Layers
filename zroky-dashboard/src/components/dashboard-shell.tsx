@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Clock3,
   CreditCard,
+  FileJson,
   FolderOpen,
   GitBranch,
   GitPullRequest,
@@ -61,8 +62,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "failure-inbox",
     href: "/home",
-    label: "Overview",
-    subtitle: "Capture health, open incidents, replay proof, contracts, CI gates, and next actions.",
+    label: "Home",
+    subtitle: "Mission control for protected agents, held actions, verified outcomes, and evidence gaps.",
     Icon: Inbox,
     visibleInNav: true,
   },
@@ -70,25 +71,16 @@ const NAV_ITEMS: NavItem[] = [
     id: "agents",
     href: "/agents",
     label: "Agents",
-    subtitle: "Agent safety coverage, open incidents, replay proof, Contract coverage, and CI gate health.",
+    subtitle: "Protected agents, mandates, high-risk action coverage, and outcome proof readiness.",
     Icon: Bot,
-    visibleInNav: false,
+    visibleInNav: true,
   },
   {
-    id: "traces",
-    href: "/trace",
-    label: "Traces",
-    subtitle: "Execution evidence for agent inputs, tools, RAG, memory, policies, outcomes, and versions.",
-    Icon: GitBranch,
-    visibleInNav: false,
-  },
-  {
-    id: "issues",
-    href: "/issues",
-    label: "Incidents",
-    subtitle: "Clustered production failures with impact, owners, and release decisions.",
-    Icon: AlertTriangle,
-    badgeKey: "issues",
+    id: "approvals",
+    href: "/approvals",
+    label: "Approvals",
+    subtitle: "Held risky actions, runtime policy decisions, approval trail, and Evidence Pack access.",
+    Icon: LockKeyhole,
     visibleInNav: true,
   },
   {
@@ -100,13 +92,54 @@ const NAV_ITEMS: NavItem[] = [
     visibleInNav: true,
   },
   {
+    id: "evidence",
+    href: "/evidence",
+    label: "Evidence",
+    subtitle: "Decision evidence packs, outcome proof, audit hashes, and customer export readiness.",
+    Icon: FileJson,
+    visibleInNav: true,
+  },
+  {
+    id: "integrations",
+    href: "/integrations",
+    label: "Connectors",
+    subtitle: "System-of-record connectors, preflight status, and pilot handoff readiness.",
+    Icon: Plug,
+    visibleInNav: true,
+  },
+  {
+    id: "issues",
+    href: "/issues",
+    label: "Incidents",
+    subtitle: "Unsafe actions, wrong outcomes, connector failures, and proof gaps needing review.",
+    Icon: AlertTriangle,
+    badgeKey: "issues",
+    visibleInNav: true,
+  },
+  {
+    id: "policies",
+    href: "/policies",
+    label: "Policies",
+    subtitle: "Agent mandates, runtime limits, approval-required actions, and kill switch state.",
+    Icon: ShieldAlert,
+    visibleInNav: true,
+  },
+  {
     id: "replay",
     href: "/replay",
-    label: "Replays",
-    subtitle: "Replay production failures and verify whether a fix is trusted, failed, or not verified.",
+    label: "Replay",
+    subtitle: "Replay failures and verify whether a fix is trusted, failed, or not verified.",
     Icon: RotateCcw,
     requiredEntitlement: "pilot.replay_stub",
     visibleInNav: true,
+  },
+  {
+    id: "traces",
+    href: "/trace",
+    label: "Traces",
+    subtitle: "Execution evidence for agent inputs, tools, RAG, memory, policies, outcomes, and versions.",
+    Icon: GitBranch,
+    visibleInNav: false,
   },
   {
     id: "goldens",
@@ -115,7 +148,7 @@ const NAV_ITEMS: NavItem[] = [
     subtitle: "Regression contracts, fixture evidence, activation proof, and blocking coverage.",
     Icon: Shield,
     requiredEntitlement: "pilot.goldens_basic",
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "ci-gates",
@@ -124,30 +157,6 @@ const NAV_ITEMS: NavItem[] = [
     subtitle: "Regression CI gate controls for pull request safety.",
     Icon: GitPullRequest,
     requiredEntitlement: "pilot.goldens_basic",
-    visibleInNav: true,
-  },
-  {
-    id: "policies",
-    href: "/policies",
-    label: "Policies",
-    subtitle: "Runtime limits, approval-required actions, allowed tools, and kill switch state.",
-    Icon: ShieldAlert,
-    visibleInNav: false,
-  },
-  {
-    id: "approvals",
-    href: "/approvals",
-    label: "Approvals",
-    subtitle: "Runtime policy hits, paused risky actions, and human approval decisions.",
-    Icon: LockKeyhole,
-    visibleInNav: false,
-  },
-  {
-    id: "integrations",
-    href: "/integrations",
-    label: "Integrations",
-    subtitle: "Provider, GitHub, Slack, and capture connection health.",
-    Icon: Plug,
     visibleInNav: false,
   },
   {
@@ -165,7 +174,7 @@ const VISIBLE_NAV = NAV_ITEMS.filter((n) => n.visibleInNav);
 const SETTINGS_CHILD_LINKS = [
   { href: "/settings/keys", label: "API keys", Icon: KeyRound },
   { href: "/settings/providers", label: "Providers", Icon: Shield },
-  { href: "/settings/integrations", label: "Integrations", Icon: Plug },
+  { href: "/settings/integrations", label: "Connectors", Icon: Plug },
   { href: "/settings/billing", label: "Billing", Icon: CreditCard },
   { href: "/settings/team", label: "Members", Icon: UserRound },
 ];
@@ -919,7 +928,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </Link>
 
         <nav className="nav-links" aria-label="Primary">
-          <span className="nav-section-label">Reliability</span>
+          <span className="nav-section-label">Action Control</span>
           {VISIBLE_NAV.filter((item) => item.id !== "settings").map((item) => {
             const { badgeKey } = item;
             const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
@@ -1088,7 +1097,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             aria-label="Search (Command Palette)"
           >
             <Search className="topbar-search-icon" size={14} aria-hidden="true" />
-            <span className="topbar-search-hint">Search incidents, replays, contracts...</span>
+            <span className="topbar-search-hint">Search agents, outcomes, evidence...</span>
             <kbd className="topbar-search-kbd">⌘K</kbd>
           </button>
 

@@ -258,12 +258,15 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     expect(primaryNavLabels()).toEqual([
-      "Overview",
-      "Incidents",
+      "Home",
+      "Agents",
+      "Approvals",
       "Outcomes",
-      "Replays",
-      "Contracts",
-      "CI",
+      "Evidence",
+      "Connectors",
+      "Incidents",
+      "Policies",
+      "Replay",
       "Settings",
     ]);
     expect(screen.queryByText("Provider Drift")).toBeNull();
@@ -291,7 +294,7 @@ describe("DashboardShell primary navigation", () => {
     expect(within(settingsSections).queryByRole("link", { name: /Project/ })).not.toBeInTheDocument();
     expect(within(settingsSections).getByRole("link", { name: /API keys/ }).getAttribute("href")).toBe("/settings/keys");
     expect(within(settingsSections).getByRole("link", { name: /Providers/ }).getAttribute("href")).toBe("/settings/providers");
-    expect(within(settingsSections).getByRole("link", { name: /Integrations/ }).getAttribute("href")).toBe("/settings/integrations");
+    expect(within(settingsSections).getByRole("link", { name: /Connectors/ }).getAttribute("href")).toBe("/settings/integrations");
     expect(within(settingsSections).getByRole("link", { name: /Billing/ }).getAttribute("href")).toBe("/settings/billing");
     expect(within(settingsSections).getByRole("link", { name: /Members/ }).getAttribute("href")).toBe("/settings/team");
   });
@@ -305,35 +308,35 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("ZROKY")).not.toBeInTheDocument();
   });
 
-  it("renders CI Gates as a live primary route", () => {
-    render(<DashboardShell>content</DashboardShell>);
-
-    const ciGates = navItem("ci-gates");
-    expect(ciGates.getAttribute("aria-disabled")).toBeNull();
-    expect(ciGates.getAttribute("href")).toBe("/ci-gates");
-    expect(within(ciGates as HTMLElement).queryByText("soon")).toBeNull();
-  });
-
-  it("renders the reliability control-plane routes instead of deprecated analytics surfaces", () => {
+  it("removes engineering routes from the primary action-control IA", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const labels = primaryNavLabels();
-    expect(labels).toContain("Contracts");
-    expect(labels).toContain("CI");
+    expect(labels).not.toContain("Contracts");
+    expect(labels).not.toContain("CI");
+  });
+
+  it("renders the action-accountability routes instead of deprecated analytics surfaces", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    const labels = primaryNavLabels();
+    expect(labels).toContain("Agents");
+    expect(labels).toContain("Approvals");
     expect(labels).toContain("Outcomes");
-    expect(labels).not.toContain("Agents");
+    expect(labels).toContain("Evidence");
+    expect(labels).toContain("Connectors");
+    expect(labels).toContain("Policies");
+    expect(labels).not.toContain("Contracts");
+    expect(labels).not.toContain("CI");
     expect(labels).not.toContain("Traces");
-    expect(labels).not.toContain("Policies");
-    expect(labels).not.toContain("Approvals");
     expect(labels).not.toContain("Integrations");
     expect(labels).not.toContain("Cost");
     expect(labels).not.toContain("Flight Recorder");
     expect(labels).not.toContain("Trace Graphs");
     expect(labels).not.toContain("Alerts");
 
-    const contracts = navItem("goldens");
-    expect(contracts.getAttribute("aria-disabled")).toBeNull();
-    expect(contracts.getAttribute("href")).toBe("/contracts");
+    expect(navItem("integrations").getAttribute("href")).toBe("/integrations");
+    expect(navItem("evidence").getAttribute("href")).toBe("/evidence");
   });
 
   it("does not show fake workspace or account data while identity APIs are unavailable", () => {
@@ -463,10 +466,7 @@ describe("DashboardShell primary navigation", () => {
 
     expect(navItem("replay").getAttribute("aria-disabled")).toBeNull();
     expect(navItem("replay").getAttribute("href")).toBe("/replay");
-    expect(navItem("goldens").getAttribute("aria-disabled")).toBeNull();
-    expect(navItem("goldens").getAttribute("href")).toBe("/contracts");
     expect(within(navItem("replay") as HTMLElement).getByText("locked")).toBeInTheDocument();
-    expect(within(navItem("goldens") as HTMLElement).getByText("locked")).toBeInTheDocument();
   });
 
   it("uses the actual billing plan code for the sidebar plan badge", () => {
@@ -503,15 +503,15 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
   });
 
-  it("does not lock Contracts for paid plan-code fallback", () => {
+  it("keeps Replay locked when the explicit replay entitlement is absent", () => {
     navState.planTemplate = {};
     navState.planCode = "pro";
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(navItem("goldens").getAttribute("aria-disabled")).toBeNull();
-    expect(navItem("goldens").getAttribute("href")).toBe("/contracts");
-    expect(within(navItem("goldens") as HTMLElement).queryByText("locked")).toBeNull();
+    expect(navItem("replay").getAttribute("aria-disabled")).toBeNull();
+    expect(navItem("replay").getAttribute("href")).toBe("/replay");
+    expect(within(navItem("replay") as HTMLElement).getByText("locked")).toBeInTheDocument();
   });
 
   it("opens an account menu from the topbar profile control instead of logging out immediately", () => {
@@ -553,11 +553,17 @@ describe("DashboardShell primary navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open dashboard navigation menu" }));
 
     expect(screen.getByRole("menu", { name: "Dashboard navigation" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Overview/ }).getAttribute("href")).toBe("/home");
+    expect(screen.getByRole("menuitem", { name: /Home/ }).getAttribute("href")).toBe("/home");
+    expect(screen.getByRole("menuitem", { name: /Agents/ }).getAttribute("href")).toBe("/agents");
+    expect(screen.getByRole("menuitem", { name: /Approvals/ }).getAttribute("href")).toBe("/approvals");
     expect(screen.getByRole("menuitem", { name: /Outcomes/ }).getAttribute("href")).toBe("/outcomes");
-    expect(screen.getByRole("menuitem", { name: /Contracts/ }).getAttribute("href")).toBe("/contracts");
+    const routeMenu = screen.getByRole("menu", { name: "Dashboard navigation" });
+    expect(routeMenu.querySelector('[href="/evidence"]')).not.toBeNull();
+    expect(routeMenu.querySelector('[href="/integrations"]')).not.toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Contracts/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^CI$/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Traces/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Policies/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Policies/ }).getAttribute("href")).toBe("/policies");
     expect(screen.queryByRole("menuitem", { name: /Integrations/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Cost/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Alerts/ })).not.toBeInTheDocument();
