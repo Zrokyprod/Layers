@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Copy,
   DatabaseZap,
+  Download,
   GitPullRequest,
   MessageSquare,
   PlayCircle,
@@ -19,6 +20,7 @@ import {
   getCustomerRecordConnectorStatus,
   getGithubConnectionStatus,
   getLedgerRefundConnectorStatus,
+  getRuntimePolicyEvidencePack,
   getSlackInstallStatus,
   listOutcomeReconciliations,
   saveCustomerRecordConnectorConfig,
@@ -28,6 +30,7 @@ import {
   type CustomerRecordConnectorStatusResponse,
   type LedgerRefundConnectorStatusResponse,
   type OutcomeReconciliationView,
+  type RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type {
@@ -41,6 +44,14 @@ type IntegrationState = {
   ledgerConfig: LedgerRefundConnectorStatusResponse | null;
   customerConfig: CustomerRecordConnectorStatusResponse | null;
   outcomeChecks: OutcomeReconciliationView[];
+};
+
+type ConnectorEvidenceKind = "ledger" | "customer";
+
+type ConnectorEvidenceState = {
+  kind: ConnectorEvidenceKind;
+  checkId: string;
+  pack: RuntimePolicyEvidencePackResponse;
 };
 
 type LedgerConnectorForm = {
@@ -133,6 +144,35 @@ function connectorPillClass(check: OutcomeReconciliationView | null) {
   if (check.verdict === "matched") return "pill pill-green";
   if (check.verdict === "mismatched") return "pill pill-red";
   return "pill pill-yellow";
+}
+
+function connectorEvidenceLabel(kind: ConnectorEvidenceKind) {
+  return kind === "ledger" ? "Ledger" : "Customer record";
+}
+
+function evidenceStatusLabel(value: string) {
+  if (value === "not_verified") return "Not verified";
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function evidenceMatchedOutcome(pack: RuntimePolicyEvidencePackResponse) {
+  return pack.outcome_reconciliation.find((item) => item.verdict === "matched") ?? null;
+}
+
+function safeEvidenceFilePart(value: string) {
+  return value.replace(/[^a-zA-Z0-9_.-]+/g, "_");
+}
+
+function downloadConnectorEvidencePack(pack: RuntimePolicyEvidencePackResponse, kind: ConnectorEvidenceKind) {
+  const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `zroky-${kind}-evidence-${safeEvidenceFilePart(pack.decision_id)}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function maskHost(hostname: string) {
@@ -250,6 +290,8 @@ export default function IntegrationsSettingsPage() {
   const [testingLedger, setTestingLedger] = useState(false);
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [testingCustomer, setTestingCustomer] = useState(false);
+  const [evidenceLoadingFor, setEvidenceLoadingFor] = useState<string | null>(null);
+  const [connectorEvidence, setConnectorEvidence] = useState<ConnectorEvidenceState | null>(null);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
@@ -331,6 +373,30 @@ export default function IntegrationsSettingsPage() {
       setMessage("Customer record reconciliation payload copied.");
     } catch {
       setMessage("Copy failed. Select the payload and copy it manually.");
+    }
+  }
+
+  async function loadConnectorEvidence(check: OutcomeReconciliationView | null, kind: ConnectorEvidenceKind) {
+    const label = connectorEvidenceLabel(kind);
+    if (!check) {
+      setMessage(`${label} evidence pack needs a reconciliation first.`);
+      return;
+    }
+    if (!check.runtime_policy_decision_id) {
+      setMessage(`${label} evidence pack is unavailable until the reconciliation is linked to a runtime policy decision.`);
+      return;
+    }
+
+    setMessage("");
+    setEvidenceLoadingFor(check.id);
+    try {
+      const pack = await getRuntimePolicyEvidencePack(check.runtime_policy_decision_id);
+      setConnectorEvidence({ kind, checkId: check.id, pack });
+      setMessage(`${label} evidence pack loaded.`);
+    } catch (evidenceError) {
+      setMessage(evidenceError instanceof Error ? evidenceError.message : `Failed to load ${label.toLowerCase()} evidence pack.`);
+    } finally {
+      setEvidenceLoadingFor(null);
     }
   }
 
@@ -461,6 +527,82 @@ export default function IntegrationsSettingsPage() {
     } catch (disconnectError) {
       setMessage(disconnectError instanceof Error ? disconnectError.message : "Failed to disconnect GitHub.");
     }
+  }
+
+  function renderEvidenceControl(check: OutcomeReconciliationView | null, kind: ConnectorEvidenceKind) {
+    const label = connectorEvidenceLabel(kind);
+    const hasDecision = Boolean(check?.runtime_policy_decision_id);
+    const isLoadingEvidence = Boolean(check && evidenceLoadingFor === check.id);
+
+    return (
+      <div className="list-row settings-connector-proof-action">
+        <div className="list-main">
+          <strong>Evidence pack</strong>
+          <span>
+            {hasDecision
+              ? `Decision ${check?.runtime_policy_decision_id} can be exported for audit proof.`
+              : "Unavailable until this reconciliation is linked to a runtime policy decision."}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="btn btn-soft btn-sm"
+          disabled={!hasDecision || isLoadingEvidence}
+          onClick={() => void loadConnectorEvidence(check, kind)}
+        >
+          <Download aria-hidden="true" />
+          {isLoadingEvidence ? "Loading..." : `View ${label.toLowerCase()} evidence`}
+        </button>
+      </div>
+    );
+  }
+
+  function renderEvidenceSummary(check: OutcomeReconciliationView | null, kind: ConnectorEvidenceKind) {
+    if (!check || connectorEvidence?.kind !== kind || connectorEvidence.checkId !== check.id) {
+      return null;
+    }
+
+    const { pack } = connectorEvidence;
+    const matched = evidenceMatchedOutcome(pack);
+
+    return (
+      <section className="settings-connector-evidence" aria-label={`${connectorEvidenceLabel(kind)} evidence pack`}>
+        <div className="settings-connector-evidence-header">
+          <div>
+            <span className="eyebrow">Evidence Pack</span>
+            <h4>{evidenceStatusLabel(pack.verification_status)}</h4>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => downloadConnectorEvidencePack(pack, kind)}
+          >
+            <Download aria-hidden="true" />
+            Download JSON
+          </button>
+        </div>
+        <dl className="settings-connector-evidence-grid">
+          <div>
+            <dt>Decision</dt>
+            <dd>{pack.decision_id}</dd>
+          </div>
+          <div>
+            <dt>Generated</dt>
+            <dd>{formatDateTime(pack.generated_at)}</dd>
+          </div>
+          <div>
+            <dt>Matched outcome</dt>
+            <dd>{matched?.system_ref ?? "No matched system-of-record outcome is linked yet."}</dd>
+          </div>
+          <div>
+            <dt>Evidence hash</dt>
+            <dd>
+              <code>{pack.evidence_hash}</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+    );
   }
 
   return (
@@ -738,7 +880,9 @@ export default function IntegrationsSettingsPage() {
                 <span>{latestLedgerRefundCheck?.verdict ?? "not_verified"}</span>
               </div>
             </div>
+            {renderEvidenceControl(latestLedgerRefundCheck, "ledger")}
           </div>
+          {renderEvidenceSummary(latestLedgerRefundCheck, "ledger")}
 
           <pre className="settings-connector-payload" aria-label="Ledger refund reconciliation payload">
             <code>{ledgerRefundPayloadSnippet()}</code>
@@ -891,7 +1035,9 @@ export default function IntegrationsSettingsPage() {
                 <span>{latestCustomerRecordCheck?.verdict ?? "not_verified"}</span>
               </div>
             </div>
+            {renderEvidenceControl(latestCustomerRecordCheck, "customer")}
           </div>
+          {renderEvidenceSummary(latestCustomerRecordCheck, "customer")}
 
           <pre className="settings-connector-payload" aria-label="Customer record reconciliation payload">
             <code>{customerRecordPayloadSnippet()}</code>
