@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, FileJson, ShieldCheck, Terminal } from "lucide-react";
+import { ArrowRight, CheckCircle2, DatabaseZap, FileJson, KeyRound, Plug, ShieldCheck, Terminal } from "lucide-react";
 
 import { PublicInfoPage } from "@/components/public-info-page";
 
@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 const protectedSetupHref = "/signup?source=pilot&intent=protect-agent&plan=pro";
+const dashboardSetupHref = "/settings/keys?intent=protect-agent&source=pilot&plan=pro";
 
 const proofCards = [
   {
@@ -42,11 +43,85 @@ const installCommands = [
   },
 ];
 
+const handoffSteps = [
+  {
+    Icon: KeyRound,
+    title: "Create protected-agent key",
+    body: "Open dashboard setup with pilot intent, choose the closest agent type, and copy the mandate plus SDK wrapper.",
+    href: dashboardSetupHref,
+    cta: "Open key setup",
+  },
+  {
+    Icon: Plug,
+    title: "Connect system of record",
+    body: "Save a ledger/refund or CRM/customer connector once the partner gives a safe test record and API access.",
+    href: "/settings/integrations#ledger-refund-connector",
+    cta: "Open connector setup",
+  },
+  {
+    Icon: DatabaseZap,
+    title: "Run saved connector test",
+    body: "Use the saved test endpoint so Zroky reads stored connector config instead of asking the customer to paste secrets into proof payloads.",
+    href: "#saved-connector-tests",
+    cta: "View test endpoints",
+  },
+  {
+    Icon: FileJson,
+    title: "Export evidence pack",
+    body: "Open latest connector proof, confirm matched outcome and evidence hash, then download the redacted JSON pack.",
+    href: "/settings/integrations#ledger-refund-connector",
+    cta: "Open evidence proof",
+  },
+];
+
+const savedConnectorTests = [
+  {
+    label: "Ledger/refund saved test endpoint",
+    href: "/settings/integrations#ledger-refund-connector",
+    command: `curl -X POST "$ZROKY_API_BASE/v1/integrations/system-of-record/ledger-refund/test" \\
+  -H "x-api-key: $ZROKY_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "refund_id": "RF-1001",
+    "claimed": {
+      "refund_id": "RF-1001",
+      "amount_usd": 42.18,
+      "currency": "USD",
+      "status": "posted"
+    },
+    "match_fields": ["refund_id", "amount_usd", "currency", "status"],
+    "amount_usd": 42.18,
+    "currency": "USD"
+  }'`,
+  },
+  {
+    label: "CRM/customer saved test endpoint",
+    href: "/settings/integrations#customer-record-connector",
+    command: `curl -X POST "$ZROKY_API_BASE/v1/integrations/system-of-record/customer-record/test" \\
+  -H "x-api-key: $ZROKY_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "customer_id": "CUS-1001",
+    "claimed": {
+      "customer_id": "CUS-1001",
+      "email": "owner@example.com",
+      "status": "active",
+      "account_id": "acct_1001"
+    },
+    "match_fields": ["customer_id", "email", "status", "account_id"]
+  }'`,
+  },
+];
+
 const passCriteria = [
   "captured_call_linked",
   "unsafe_action_stopped",
+  "connector_healthy",
+  "saved_test_endpoint_used",
   "matched_outcome_shown",
   "evidence_hash_visible",
+  "evidence_json_exported",
+  "not_verified_when_missing",
   "evidence_pack_passed",
   "secrets_redacted",
 ];
@@ -70,6 +145,7 @@ export default function PilotPage() {
           <Link href={protectedSetupHref} className="public-info-cta">
             Start protected setup
           </Link>
+          <Link href={dashboardSetupHref}>Open dashboard runbook</Link>
           <Link href="/#pricing">Back to pricing</Link>
         </div>
       </div>
@@ -81,6 +157,25 @@ export default function PilotPage() {
             <Icon aria-hidden="true" />
             <strong>{title}</strong>
             <p>{body}</p>
+          </article>
+        ))}
+      </div>
+
+      <h2>Dashboard handoff path</h2>
+      <p>
+        This is the route a design partner should follow after signup. It connects API-key setup, connector
+        configuration, saved proof tests, and the Evidence Pack export into one buyer-readable sequence.
+      </p>
+      <div className="pilot-console-grid">
+        {handoffSteps.map(({ Icon, title, body, href, cta }) => (
+          <article key={title}>
+            <Icon aria-hidden="true" />
+            <strong>{title}</strong>
+            <p>{body}</p>
+            <Link href={href}>
+              {cta}
+              <ArrowRight aria-hidden="true" />
+            </Link>
           </article>
         ))}
       </div>
@@ -102,6 +197,26 @@ export default function PilotPage() {
         ))}
       </div>
 
+      <h2 id="saved-connector-tests">Saved connector proof tests</h2>
+      <p>
+        These calls use the connector configuration already stored in Zroky. The copied payload should contain
+        claim data and match fields only; raw system-of-record bearer tokens stay out of the UI and evidence.
+      </p>
+      <div className="pilot-endpoint-list">
+        {savedConnectorTests.map((item) => (
+          <article key={item.label}>
+            <div>
+              <span>{item.label}</span>
+              <Link href={item.href}>
+                Configure connector
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </div>
+            <code>{item.command}</code>
+          </article>
+        ))}
+      </div>
+
       <h2>Pass criteria</h2>
       <p>
         The pilot handoff is a pass only when every check below is true. Missing evidence, mismatched outcome,
@@ -115,6 +230,10 @@ export default function PilotPage() {
           </li>
         ))}
       </ul>
+      <p className="pilot-proof-note">
+        Evidence Pack rule: <code>pass</code> needs a matched system-of-record outcome and visible evidence hash.
+        Missing connector proof, a mismatch, or an unlinked runtime decision must stay <code>not_verified</code>.
+      </p>
 
       <h2>Partner inputs for live smoke</h2>
       <p>

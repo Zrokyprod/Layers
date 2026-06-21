@@ -300,6 +300,9 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getByRole("heading", { name: "Slack" })).toBeInTheDocument();
     expect(await screen.findByText("2/4")).toBeInTheDocument();
     expect(screen.getByText("Connect source control, alert delivery, and system-of-record connectors for outcome proof.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pilot handoff" }).getAttribute("href")).toBe(
+      "/pilot?source=dashboard&intent=connector-proof"
+    );
     expect(api.getSlackInstallStatus).toHaveBeenCalledTimes(1);
     expect(api.getLedgerRefundConnectorStatus).toHaveBeenCalledTimes(1);
     expect(api.getCustomerRecordConnectorStatus).toHaveBeenCalledTimes(1);

@@ -8,6 +8,7 @@ import {
   Copy,
   DatabaseZap,
   Download,
+  FileJson,
   GitPullRequest,
   MessageSquare,
   PlayCircle,
@@ -619,10 +620,16 @@ export default function IntegrationsSettingsPage() {
             <h3>Integrations</h3>
             <p>Connect source control, alert delivery, and system-of-record connectors for outcome proof.</p>
           </div>
-          <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
-            <RefreshCw aria-hidden="true" />
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className="actions">
+            <Link href="/pilot?source=dashboard&intent=connector-proof" className="btn btn-soft">
+              <FileJson aria-hidden="true" />
+              Pilot handoff
+            </Link>
+            <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
+              <RefreshCw aria-hidden="true" />
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </header>
       </section>
 
