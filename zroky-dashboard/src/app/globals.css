@@ -36537,7 +36537,15 @@ button.gm-kpi-card {
   gap: 14px;
 }
 
+.pilot-console-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .pilot-proof-grid article,
+.pilot-console-grid article,
+.pilot-endpoint-list article,
 .pilot-command-list article {
   border: 1px solid rgba(11, 11, 12, 0.12);
   border-radius: 12px;
@@ -36545,19 +36553,36 @@ button.gm-kpi-card {
   padding: 16px;
 }
 
-.pilot-proof-grid svg {
+.pilot-proof-grid svg,
+.pilot-console-grid svg {
   width: 22px;
   height: 22px;
   color: #1d7a52;
 }
 
-.pilot-proof-grid strong {
+.pilot-proof-grid strong,
+.pilot-console-grid strong {
   display: block;
   margin-top: 12px;
 }
 
-.pilot-proof-grid p {
+.pilot-proof-grid p,
+.pilot-console-grid p {
   margin-top: 8px;
+}
+
+.pilot-console-grid a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 0.88rem;
+}
+
+.pilot-console-grid a svg {
+  width: 15px;
+  height: 15px;
+  color: currentColor;
 }
 
 .pilot-command-list {
@@ -36593,6 +36618,50 @@ button.gm-kpi-card {
   white-space: nowrap;
 }
 
+.pilot-endpoint-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pilot-endpoint-list article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pilot-endpoint-list span {
+  color: rgba(11, 11, 12, 0.72);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pilot-endpoint-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pilot-endpoint-list a svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pilot-endpoint-list code {
+  display: block;
+  margin-top: 12px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: #111214;
+  padding: 14px;
+  color: #f4f5f2;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre;
+}
+
 .pilot-check-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -36623,6 +36692,11 @@ button.gm-kpi-card {
   overflow-wrap: anywhere;
   color: #0b0b0c;
   font-size: 0.86rem;
+}
+
+.pilot-proof-note {
+  border-left: 3px solid #1d7a52;
+  padding-left: 14px;
 }
 
 @keyframes zlp-focus-pop {
@@ -41329,12 +41403,18 @@ body:has(.app-shell),
 @media (max-width: 760px) {
   .pilot-handoff-banner,
   .pilot-proof-grid,
+  .pilot-console-grid,
   .pilot-check-list {
     grid-template-columns: 1fr;
   }
 
   .pilot-handoff-actions {
     justify-content: flex-start;
+  }
+
+  .pilot-endpoint-list article > div {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
