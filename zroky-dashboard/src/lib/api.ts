@@ -1112,8 +1112,10 @@ export interface LedgerRefundConnectorStatusResponse {
   health_status: string;
   last_verdict: OutcomeReconciliationVerdict | string | null;
   last_error: string | null;
+  last_error_code: string | null;
   last_http_status: number | null;
   last_attempts: number | null;
+  last_retryable: boolean | null;
   last_checked_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -1161,8 +1163,10 @@ export interface CustomerRecordConnectorStatusResponse {
   health_status: string;
   last_verdict: OutcomeReconciliationVerdict | string | null;
   last_error: string | null;
+  last_error_code: string | null;
   last_http_status: number | null;
   last_attempts: number | null;
+  last_retryable: boolean | null;
   last_checked_at: string | null;
   created_at: string | null;
   updated_at: string | null;

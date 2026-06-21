@@ -62,6 +62,20 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
+def _as_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return None
+
+
 def _normalize_connector_type(connector_type: str) -> str:
     normalized = connector_type.strip().lower()
     if normalized not in VALID_CONNECTOR_TYPES:
@@ -271,6 +285,7 @@ def build_ledger_refund_connector(
         timeout_seconds=timeout_seconds,
         max_attempts=max_attempts,
         allow_private_hosts=allow_private_hosts,
+        fail_closed_config_errors=True,
     )
 
 
@@ -293,6 +308,7 @@ def build_customer_record_connector(
         timeout_seconds=timeout_seconds,
         max_attempts=max_attempts,
         allow_private_hosts=allow_private_hosts,
+        fail_closed_config_errors=True,
     )
 
 
@@ -327,20 +343,32 @@ def _health_from_latest_check(
     connector_metadata = {}
     if metadata and isinstance(metadata.get("connector"), Mapping):
         connector_metadata = dict(metadata["connector"])
+    error_code = (
+        str(connector_metadata.get("error_code")).strip()
+        if connector_metadata.get("error_code") is not None
+        else None
+    )
+    retryable = _as_bool(connector_metadata.get("retryable"))
 
     if row.verdict == "matched":
         health_status = "healthy"
     elif row.verdict == "mismatched":
         health_status = "failing"
-    else:
+    elif error_code == "auth_failed":
+        health_status = "auth_failed"
+    elif retryable:
         health_status = "degraded"
+    else:
+        health_status = "not_verified"
 
     return {
         "health_status": health_status,
         "last_verdict": row.verdict,
         "last_error": connector_metadata.get("error"),
+        "last_error_code": error_code,
         "last_http_status": _as_int(connector_metadata.get("http_status")),
         "last_attempts": _as_int(connector_metadata.get("attempts")),
+        "last_retryable": retryable,
         "last_checked_at": row.checked_at,
     }
 
@@ -391,8 +419,10 @@ def serialize_connector_config(
             "health_status": "not_configured",
             "last_verdict": None,
             "last_error": None,
+            "last_error_code": None,
             "last_http_status": None,
             "last_attempts": None,
+            "last_retryable": None,
             "last_checked_at": None,
         }
     return {
@@ -410,8 +440,10 @@ def serialize_connector_config(
         "health_status": health_payload.get("health_status") or "not_verified",
         "last_verdict": health_payload.get("last_verdict"),
         "last_error": health_payload.get("last_error"),
+        "last_error_code": health_payload.get("last_error_code"),
         "last_http_status": health_payload.get("last_http_status"),
         "last_attempts": health_payload.get("last_attempts"),
+        "last_retryable": health_payload.get("last_retryable"),
         "last_checked_at": health_payload.get("last_checked_at"),
     }
 

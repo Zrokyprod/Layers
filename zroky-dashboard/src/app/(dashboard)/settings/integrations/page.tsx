@@ -123,6 +123,15 @@ function textValue(value: unknown): string | null {
   return String(value);
 }
 
+function boolValue(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes"].includes(normalized)) return true;
+  if (["false", "0", "no"].includes(normalized)) return false;
+  return null;
+}
+
 function isLedgerRefundCheck(item: OutcomeReconciliationView) {
   const metadata = isRecord(item.metadata) ? item.metadata : {};
   return item.connector_type === "ledger_refund_api" || metadata.connector_kind === "ledger_refund_api";
@@ -150,6 +159,18 @@ function connectorHealthLabel(value: string | null | undefined) {
 function connectorVerdictLabel(value: string | null | undefined) {
   if (!value) return "No run yet";
   return connectorHealthLabel(value);
+}
+
+function connectorErrorLabel(
+  errorCode: string | null | undefined,
+  error: string | null | undefined,
+  retryable: boolean | null | undefined,
+) {
+  const code = textValue(errorCode);
+  const rawError = textValue(error);
+  if (!code && !rawError) return "None";
+  const label = connectorHealthLabel(code ?? rawError);
+  return retryable ? `${label} / retryable` : label;
 }
 
 function connectorPillClass(check: OutcomeReconciliationView | null) {
@@ -344,6 +365,18 @@ export default function IntegrationsSettingsPage() {
   const customerHealth = state.customerConfig?.health_status ?? (customerConnected ? "not_verified" : "not_configured");
   const ledgerLastVerdict = state.ledgerConfig?.last_verdict ?? latestLedgerRefundCheck?.verdict;
   const customerLastVerdict = state.customerConfig?.last_verdict ?? latestCustomerRecordCheck?.verdict;
+  const ledgerLastRetryable = state.ledgerConfig?.last_retryable ?? boolValue(ledgerMetadata.retryable);
+  const customerLastRetryable = state.customerConfig?.last_retryable ?? boolValue(customerMetadata.retryable);
+  const ledgerLastError = connectorErrorLabel(
+    state.ledgerConfig?.last_error_code ?? textValue(ledgerMetadata.error_code),
+    state.ledgerConfig?.last_error ?? textValue(ledgerMetadata.error),
+    ledgerLastRetryable,
+  );
+  const customerLastError = connectorErrorLabel(
+    state.customerConfig?.last_error_code ?? textValue(customerMetadata.error_code),
+    state.customerConfig?.last_error ?? textValue(customerMetadata.error),
+    customerLastRetryable,
+  );
   const ledgerRecordPath = state.ledgerConfig?.record_path ?? textValue(ledgerMetadata.record_path);
   const customerRecordPath = state.customerConfig?.record_path ?? textValue(customerMetadata.record_path);
   const ledgerRequestUrl = maskedConnectorUrl(state.ledgerConfig?.base_url ?? ledgerMetadata.request_url);
@@ -778,6 +811,10 @@ export default function IntegrationsSettingsPage() {
               <strong>{connectorVerdictLabel(ledgerLastVerdict)}</strong>
             </div>
             <div>
+              <span>Last error</span>
+              <strong>{ledgerLastError}</strong>
+            </div>
+            <div>
               <span>Last HTTP</span>
               <strong>{ledgerHttpStatus ?? textValue(state.ledgerConfig?.last_http_status) ?? "No response yet"}</strong>
             </div>
@@ -944,6 +981,10 @@ export default function IntegrationsSettingsPage() {
             <div>
               <span>Last verdict</span>
               <strong>{connectorVerdictLabel(customerLastVerdict)}</strong>
+            </div>
+            <div>
+              <span>Last error</span>
+              <strong>{customerLastError}</strong>
             </div>
             <div>
               <span>Last HTTP</span>
