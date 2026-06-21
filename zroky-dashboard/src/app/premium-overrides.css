@@ -7658,6 +7658,8 @@ body:has(.app-shell) {
 .app-shell .settings-connector-form,
 .app-shell .settings-connector-test,
 .app-shell .settings-connector-evidence,
+.app-shell .settings-connector-guidance,
+.app-shell .settings-connector-handoff,
 .app-shell .settings-connector-payload {
   border-color: var(--dashboard-border) !important;
   background: var(--dashboard-surface-inset) !important;
@@ -7676,9 +7678,16 @@ body:has(.app-shell) {
 
 .app-shell .settings-connector-facts strong,
 .app-shell .settings-connector-evidence-header h4,
+.app-shell .settings-connector-guidance strong,
+.app-shell .settings-connector-handoff-header h4,
 .app-shell .settings-connector-evidence-grid dd,
 .app-shell .settings-connector-payload {
   color: var(--dashboard-text) !important;
+}
+
+.app-shell .settings-connector-guidance p,
+.app-shell .settings-connector-handoff-header p {
+  color: var(--dashboard-text-soft) !important;
 }
 
 .app-shell .settings-connector-evidence-grid dt {
