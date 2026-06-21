@@ -247,7 +247,9 @@ describe("IntegrationsSettingsPage", () => {
   it("surfaces ledger refund connector proof without leaking secrets", async () => {
     render(<IntegrationsSettingsPage />);
 
-    expect(await screen.findByRole("heading", { name: "Ledger refund connector" })).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { name: "Ledger refund connector" });
+    expect(heading).toBeInTheDocument();
+    expect(heading.closest("article")?.getAttribute("id")).toBe("ledger-refund-connector");
     expect(screen.getAllByText("Verified").length).toBeGreaterThan(0);
     expect(screen.getByText("https://ledger.***/...")).toBeInTheDocument();
     expect(screen.getByText("200")).toBeInTheDocument();
@@ -392,7 +394,9 @@ describe("IntegrationsSettingsPage", () => {
 
     render(<IntegrationsSettingsPage />);
 
-    expect(await screen.findByRole("heading", { name: "Customer record connector" })).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { name: "Customer record connector" });
+    expect(heading).toBeInTheDocument();
+    expect(heading.closest("article")?.getAttribute("id")).toBe("customer-record-connector");
     expect(screen.getByText("https://crm.***/...")).toBeInTheDocument();
     expect(screen.getByText("crm:cus_999")).toBeInTheDocument();
     expect(screen.getAllByText("Stored token ending oken").length).toBeGreaterThan(0);

@@ -601,7 +601,7 @@ export default function IntegrationsSettingsPage() {
           </div>
         </article>
 
-        <article className="panel settings-integration-card settings-connector-card">
+        <article className="panel settings-integration-card settings-connector-card" id="ledger-refund-connector">
           <header className="panel-header">
             <div className="settings-card-title-row">
               <DatabaseZap aria-hidden="true" />
@@ -755,7 +755,7 @@ export default function IntegrationsSettingsPage() {
           </div>
         </article>
 
-        <article className="panel settings-integration-card settings-connector-card">
+        <article className="panel settings-integration-card settings-connector-card" id="customer-record-connector">
           <header className="panel-header">
             <div className="settings-card-title-row">
               <DatabaseZap aria-hidden="true" />

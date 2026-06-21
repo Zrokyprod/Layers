@@ -167,6 +167,9 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("unsafe_action_stopped")).toBeInTheDocument();
     expect(screen.getByText("evidence_hash_visible")).toBeInTheDocument();
     expect(screen.getByText(/--scenario refund/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configure ledger connector" }).getAttribute("href")).toBe(
+      "/settings/integrations#ledger-refund-connector"
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Copy live smoke command" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("--scenario refund")));
@@ -174,10 +177,16 @@ describe("ApiKeysPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "CRM / data" }));
     expect(screen.getByText("CRM/customer API base URL")).toBeInTheDocument();
     expect(screen.getByText(/--scenario customer-record/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configure CRM connector" }).getAttribute("href")).toBe(
+      "/settings/integrations#customer-record-connector"
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: "Procurement / spend" }));
     expect(screen.getByText("ERP or purchase-order API")).toBeInTheDocument();
     expect(screen.getByText("Connector gap before live smoke")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open integrations" }).getAttribute("href")).toBe(
+      "/settings/integrations"
+    );
   });
 
   it("creates a project key with the expected payload and shows the one-time copy panel", async () => {
