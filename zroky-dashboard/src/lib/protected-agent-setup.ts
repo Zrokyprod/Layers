@@ -12,6 +12,7 @@ export type ProtectedAgentTemplate = {
   systemOfRecord: string;
   requiredEvidence: string[];
   connectorInputs: string[];
+  proofStatus: "packaged_full_proof" | "custom_connector_required";
   liveSmokeScenario?: "refund" | "customer-record";
 };
 
@@ -39,6 +40,7 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
       "safe refund id",
       "amount, currency, and status fields",
     ],
+    proofStatus: "packaged_full_proof",
     liveSmokeScenario: "refund",
   },
   {
@@ -64,6 +66,7 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
       "post-deploy health endpoint",
       "rollback or cancel action",
     ],
+    proofStatus: "custom_connector_required",
   },
   {
     id: "crm",
@@ -88,6 +91,7 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
       "safe customer or account id",
       "fields to compare after mutation",
     ],
+    proofStatus: "packaged_full_proof",
     liveSmokeScenario: "customer-record",
   },
   {
@@ -113,6 +117,7 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
       "delivery, bounce, and complaint endpoints",
       "consent or suppression-list record",
     ],
+    proofStatus: "custom_connector_required",
   },
   {
     id: "procurement",
@@ -137,6 +142,7 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
       "approval status endpoint",
       "amount, currency, and budget fields",
     ],
+    proofStatus: "custom_connector_required",
   },
 ];
 
@@ -144,15 +150,22 @@ export const pilotHandoffSteps = [
   "Create project key",
   "Copy mandate and SDK wrapper",
   "Connect system of record",
-  "Run one safe live-like action",
+  "Run connector preflight",
+  "Run full proof command",
   "Export evidence pack",
 ];
 
 export const pilotHandoffCriteria = [
   "captured_call_linked",
   "unsafe_action_stopped",
+  "connector_configured",
+  "connector_health_verified",
+  "real_connector_ready",
+  "saved_test_endpoint_used",
   "matched_outcome_shown",
   "evidence_hash_visible",
+  "evidence_json_exported",
+  "not_verified_when_missing",
   "evidence_pack_passed",
   "secrets_redacted",
 ];
@@ -220,6 +233,22 @@ await traceRun(
     return "submitted_for_outcome_verification";
   },
 );`;
+}
+
+export function proofReadinessLabel(template: ProtectedAgentTemplate) {
+  return template.proofStatus === "packaged_full_proof"
+    ? "Packaged full proof runner"
+    : "Custom connector required";
+}
+
+export function proofReadinessDetail(template: ProtectedAgentTemplate) {
+  if (template.liveSmokeScenario === "refund") {
+    return "Refund and payment agents can use the packaged ledger/refund preflight and full proof runner.";
+  }
+  if (template.liveSmokeScenario === "customer-record") {
+    return "CRM and data agents can use the packaged customer-record preflight and full proof runner.";
+  }
+  return `This template has mandate and SDK capture coverage. Add a connector that reads ${template.systemOfRecord} before calling the pilot verified.`;
 }
 
 export function buildLiveSmokeCommand(template: ProtectedAgentTemplate) {

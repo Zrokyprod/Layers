@@ -34,6 +34,8 @@ import {
   humanizeIntent,
   pilotHandoffCriteria,
   pilotHandoffSteps,
+  proofReadinessDetail,
+  proofReadinessLabel,
   protectedAgentTemplates,
 } from "@/lib/protected-agent-setup";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
@@ -139,6 +141,8 @@ function ApiKeysContent() {
   const protectedMandateStarter = buildMandateStarter(selectedAgent);
   const protectedAgentSnippet = buildProtectedAgentSnippet(selectedAgent, snippetProjectId);
   const liveSmokeCommand = buildLiveSmokeCommand(selectedAgent);
+  const proofReadiness = proofReadinessLabel(selectedAgent);
+  const proofReadinessCopy = proofReadinessDetail(selectedAgent);
   const connectorSetupHref =
     selectedAgent.liveSmokeScenario === "refund"
       ? "/settings/integrations#ledger-refund-connector"
@@ -311,7 +315,10 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
                 </ul>
               </article>
               <article className="keys-pilot-card keys-pilot-live">
-                <h4>{liveSmokeCommand ? "Live smoke command" : "Connector gap before live smoke"}</h4>
+                <h4>{liveSmokeCommand ? "Packaged full proof command" : "Custom connector required before live smoke"}</h4>
+                <p>
+                  <strong>{proofReadiness}:</strong> {proofReadinessCopy}
+                </p>
                 {liveSmokeCommand ? (
                   <>
                     <pre aria-label="Design-partner live smoke command">

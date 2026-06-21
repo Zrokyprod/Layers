@@ -163,9 +163,20 @@ describe("ApiKeysPage", () => {
 
     expect(screen.getByText("Pilot handoff readiness")).toBeInTheDocument();
     expect(screen.getByText("Connect system of record")).toBeInTheDocument();
+    expect(screen.getByText("Run connector preflight")).toBeInTheDocument();
+    expect(screen.getByText("Run full proof command")).toBeInTheDocument();
     expect(screen.getByText("ledger/refund API base URL")).toBeInTheDocument();
     expect(screen.getByText("unsafe_action_stopped")).toBeInTheDocument();
+    expect(screen.getByText("connector_configured")).toBeInTheDocument();
+    expect(screen.getByText("connector_health_verified")).toBeInTheDocument();
+    expect(screen.getByText("real_connector_ready")).toBeInTheDocument();
+    expect(screen.getByText("saved_test_endpoint_used")).toBeInTheDocument();
     expect(screen.getByText("evidence_hash_visible")).toBeInTheDocument();
+    expect(screen.getByText("evidence_json_exported")).toBeInTheDocument();
+    expect(screen.getByText("not_verified_when_missing")).toBeInTheDocument();
+    expect(screen.getByText("Packaged full proof command")).toBeInTheDocument();
+    expect(screen.getByText("Packaged full proof runner:")).toBeInTheDocument();
+    expect(screen.getByText("Refund and payment agents can use the packaged ledger/refund preflight and full proof runner.")).toBeInTheDocument();
     expect(screen.getByText(/--scenario refund/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configure ledger connector" }).getAttribute("href")).toBe(
       "/settings/integrations#ledger-refund-connector"
@@ -176,6 +187,7 @@ describe("ApiKeysPage", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "CRM / data" }));
     expect(screen.getByText("CRM/customer API base URL")).toBeInTheDocument();
+    expect(screen.getByText("CRM and data agents can use the packaged customer-record preflight and full proof runner.")).toBeInTheDocument();
     expect(screen.getByText(/--scenario customer-record/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configure CRM connector" }).getAttribute("href")).toBe(
       "/settings/integrations#customer-record-connector"
@@ -183,7 +195,9 @@ describe("ApiKeysPage", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Procurement / spend" }));
     expect(screen.getByText("ERP or purchase-order API")).toBeInTheDocument();
-    expect(screen.getByText("Connector gap before live smoke")).toBeInTheDocument();
+    expect(screen.getByText("Custom connector required before live smoke")).toBeInTheDocument();
+    expect(screen.getByText("Custom connector required:")).toBeInTheDocument();
+    expect(screen.getByText("This template has mandate and SDK capture coverage. Add a connector that reads ERP purchase order before calling the pilot verified.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open integrations" }).getAttribute("href")).toBe(
       "/settings/integrations"
     );
