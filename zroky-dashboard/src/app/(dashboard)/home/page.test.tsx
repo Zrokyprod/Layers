@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -371,7 +371,7 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Action control room" })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("Release blocked")).toBeInTheDocument();
     expect(screen.getByText("1 gate failing on regression-ci:proj_1.")).toBeInTheDocument();
@@ -392,8 +392,17 @@ describe("Command Center home", () => {
     expect(within(summaryCard("Cost / latency trend")).getByText("+25% cost")).toBeInTheDocument();
     expect(summary).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "What needs action now?" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Action queue" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Action queue focus" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "All" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "P0/P1" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Proof gaps" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Impact" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Verified" })).toBeInTheDocument();
     expect(screen.getByText("Sorted by severity, impact, and replay trust gaps.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Impact" }));
+    expect(screen.getByRole("tab", { name: "Impact" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Showing issues with cost impact, sorted by spend exposure.")).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "Priority",
@@ -446,7 +455,7 @@ describe("Command Center home", () => {
     expect(screen.getByRole("link", { name: /Use Gateway/i }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("link", { name: /Send test capture/i }).getAttribute("href")).toBe("/trace");
     expect(screen.getByRole("heading", { name: "What happens next" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "What needs action now?" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Action queue" })).toBeNull();
     expect(screen.queryByRole("link", { name: "View all issues" })).toBeNull();
   });
 
@@ -470,7 +479,7 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "What needs action now?" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Action queue" })).toBeInTheDocument();
     expect(screen.getByText("No action required right now.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Setup progress" })).toBeNull();

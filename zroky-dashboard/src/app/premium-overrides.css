@@ -10430,3 +10430,630 @@ body:has(.app-shell) {
     min-width: 0;
   }
 }
+
+/* Home command center v4: dark enterprise action-control room. */
+
+.app-shell:has(.fi-home-v4) {
+  --home-v4-bg: #06080c;
+  --home-v4-bg-2: #0a0d12;
+  --home-v4-panel: rgba(13, 17, 24, 0.88);
+  --home-v4-panel-2: rgba(18, 23, 32, 0.9);
+  --home-v4-panel-3: rgba(8, 11, 16, 0.78);
+  --home-v4-line: rgba(228, 233, 242, 0.105);
+  --home-v4-line-strong: rgba(228, 233, 242, 0.2);
+  --home-v4-text: #f4f7fb;
+  --home-v4-soft: #a8b2c1;
+  --home-v4-muted: #687384;
+  --home-v4-accent: #8fd7c6;
+  --home-v4-success: #7ee7bd;
+  --home-v4-warning: #f0c86b;
+  --home-v4-danger: #ff7892;
+  --home-v4-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+  background:
+    radial-gradient(circle at 28% -12%, rgba(143, 215, 198, 0.11), transparent 34rem),
+    radial-gradient(circle at 100% 8%, rgba(240, 200, 107, 0.075), transparent 26rem),
+    linear-gradient(180deg, var(--home-v4-bg), var(--home-v4-bg-2));
+}
+
+.app-shell:has(.fi-home-v4) .content {
+  background: transparent !important;
+}
+
+.app-shell:has(.fi-home-v4) .content-inner {
+  width: min(100%, 1500px) !important;
+  margin-inline: auto !important;
+  padding: clamp(1rem, 1.8vw, 1.75rem) !important;
+}
+
+.app-shell .fi-home-v4 {
+  position: relative;
+  display: grid;
+  gap: 1rem !important;
+  color: var(--home-v4-text) !important;
+  font-family: var(--font-manrope), system-ui, sans-serif !important;
+  isolation: isolate;
+}
+
+.app-shell .fi-home-v4::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(248, 250, 252, 0.027) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(248, 250, 252, 0.021) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.74), transparent 82%);
+}
+
+.app-shell .fi-home-v4 .fi-command-hero {
+  min-height: 17.5rem !important;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 25rem) !important;
+  align-items: stretch !important;
+  overflow: hidden;
+  border: 1px solid var(--home-v4-line) !important;
+  border-radius: 12px !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), transparent 30%),
+    radial-gradient(circle at 78% 18%, rgba(143, 215, 198, 0.16), transparent 26rem),
+    linear-gradient(180deg, rgba(19, 24, 33, 0.94), rgba(8, 11, 16, 0.96)) !important;
+  box-shadow: var(--home-v4-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.075) !important;
+  padding: clamp(1.2rem, 2.3vw, 2rem) !important;
+}
+
+.app-shell .fi-home-v4 .fi-command-hero::after {
+  display: block !important;
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055), transparent 1px) 0 0 / 6rem 100%,
+    linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.2));
+  opacity: 0.58;
+}
+
+.app-shell .fi-home-v4 .fi-command-hero[data-tone="danger"] {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), transparent 30%),
+    radial-gradient(circle at 80% 18%, rgba(255, 120, 146, 0.2), transparent 27rem),
+    linear-gradient(180deg, rgba(22, 18, 24, 0.96), rgba(8, 11, 16, 0.97)) !important;
+}
+
+.app-shell .fi-home-v4 .fi-command-hero[data-tone="warning"] {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), transparent 30%),
+    radial-gradient(circle at 80% 18%, rgba(240, 200, 107, 0.19), transparent 27rem),
+    linear-gradient(180deg, rgba(24, 21, 15, 0.96), rgba(8, 11, 16, 0.97)) !important;
+}
+
+.app-shell .fi-home-v4 .fi-command-hero[data-tone="success"] {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), transparent 30%),
+    radial-gradient(circle at 80% 18%, rgba(126, 231, 189, 0.18), transparent 27rem),
+    linear-gradient(180deg, rgba(15, 23, 21, 0.96), rgba(8, 11, 16, 0.97)) !important;
+}
+
+.app-shell .fi-home-v4 .fi-hero-main,
+.app-shell .fi-home-v4 .fi-hero-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.app-shell .fi-home-v4 .fi-command-hero h1 {
+  margin: 0 0 1.1rem !important;
+  color: var(--home-v4-muted) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.72rem !important;
+  font-weight: 780 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell .fi-home-v4 .fi-hero-signal {
+  display: grid !important;
+  gap: 0.65rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-hero-eyebrow {
+  width: fit-content;
+  border: 1px solid var(--home-v4-line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 0.38rem 0.65rem;
+  color: var(--home-v4-soft) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.68rem !important;
+  font-weight: 760 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase;
+}
+
+.app-shell .fi-home-v4 .fi-hero-signal strong {
+  max-width: 16ch;
+  color: var(--home-v4-text) !important;
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: clamp(2.75rem, 6.5vw, 5.9rem) !important;
+  font-weight: 720 !important;
+  letter-spacing: 0 !important;
+  line-height: 0.9 !important;
+  text-wrap: balance;
+}
+
+.app-shell .fi-home-v4 .fi-command-hero p {
+  max-width: 58ch;
+  margin-top: 1rem !important;
+  color: var(--home-v4-soft) !important;
+  font-size: 1rem !important;
+  font-weight: 560 !important;
+  line-height: 1.55 !important;
+}
+
+.app-shell .fi-home-v4 .fi-hero-actions {
+  align-self: stretch !important;
+  display: grid !important;
+  align-content: start;
+  justify-items: stretch;
+  gap: 0.7rem !important;
+  border: 1px solid var(--home-v4-line);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.018)),
+    rgba(5, 7, 11, 0.56);
+  padding: 0.9rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.app-shell .fi-home-v4 .fi-refresh-meta {
+  display: grid !important;
+  gap: 0.55rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  color: var(--home-v4-soft) !important;
+  box-shadow: none !important;
+  white-space: normal !important;
+}
+
+.app-shell .fi-home-v4 .fi-refresh-meta span {
+  justify-content: space-between;
+  min-height: 2rem;
+  border: 1px solid var(--home-v4-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.45rem 0.55rem;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+}
+
+.app-shell .fi-home-v4 .fi-hero-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.app-shell .fi-home-v4 .fi-btn-primary,
+.app-shell .fi-home-v4 .fi-btn-secondary,
+.app-shell .fi-home-v4 .fi-inline-link {
+  min-height: 2.35rem;
+  border-radius: 8px !important;
+  font-weight: 760 !important;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease !important;
+}
+
+.app-shell .fi-home-v4 .fi-btn-primary {
+  border-color: rgba(244, 247, 251, 0.92) !important;
+  background: #f4f7fb !important;
+  color: #080b10 !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28) !important;
+}
+
+.app-shell .fi-home-v4 .fi-btn-secondary {
+  border-color: var(--home-v4-line-strong) !important;
+  background: rgba(255, 255, 255, 0.055) !important;
+  color: var(--home-v4-soft) !important;
+}
+
+.app-shell .fi-home-v4 .fi-btn-primary:hover,
+.app-shell .fi-home-v4 .fi-btn-primary:focus-visible,
+.app-shell .fi-home-v4 .fi-btn-secondary:hover,
+.app-shell .fi-home-v4 .fi-btn-secondary:focus-visible,
+.app-shell .fi-home-v4 .fi-inline-link:hover,
+.app-shell .fi-home-v4 .fi-inline-link:focus-visible {
+  transform: translateY(-1px);
+}
+
+.app-shell .fi-home-v4 .fi-command-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 0.85rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-card,
+.app-shell .fi-home-v4 .fi-section,
+.app-shell .fi-home-v4 .fi-next-setup,
+.app-shell .fi-home-v4 .fi-connection-panel,
+.app-shell .fi-home-v4 .fi-onboarding-flow,
+.app-shell .fi-home-v4 .fi-setup-action-card,
+.app-shell .fi-home-v4 .fi-onboarding-checklist,
+.app-shell .fi-home-v4 .fi-notice {
+  border: 1px solid var(--home-v4-line) !important;
+  border-radius: 10px !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+    var(--home-v4-panel) !important;
+  color: var(--home-v4-text) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-card {
+  min-height: 9.6rem !important;
+  padding: 1rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-card:hover,
+.app-shell .fi-home-v4 .fi-kpi-card:focus-visible,
+.app-shell .fi-home-v4 .fi-kpi-card.is-active {
+  border-color: var(--home-v4-line-strong) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.018)),
+    var(--home-v4-panel-2) !important;
+  transform: translateY(-2px);
+}
+
+.app-shell .fi-home-v4 .fi-kpi-card.is-active {
+  box-shadow: inset 0 -3px 0 var(--home-v4-accent) !important;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-topline > span,
+.app-shell .fi-home-v4 .fi-section-header p,
+.app-shell .fi-home-v4 .fi-evidence-row span,
+.app-shell .fi-home-v4 .fi-evidence-row small,
+.app-shell .fi-home-v4 .fi-pipeline-stage span,
+.app-shell .fi-home-v4 .fi-pipeline-stage small {
+  color: var(--home-v4-muted) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.66rem !important;
+  font-weight: 720 !important;
+  letter-spacing: 0.015em !important;
+  text-transform: uppercase;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-card strong {
+  color: var(--home-v4-text) !important;
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: clamp(1.9rem, 2.35vw, 2.55rem) !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.98 !important;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-card p {
+  color: var(--home-v4-soft) !important;
+  font-size: 0.82rem !important;
+  font-weight: 560 !important;
+  line-height: 1.42 !important;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-icon,
+.app-shell .fi-home-v4 .fi-section-icon,
+.app-shell .fi-home-v4 .fi-setup-icon,
+.app-shell .fi-home-v4 .fi-health-icon,
+.app-shell .fi-home-v4 .fi-onboarding-icon,
+.app-shell .fi-home-v4 .fi-pipeline-node {
+  border-color: var(--home-v4-line) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: var(--home-v4-soft) !important;
+}
+
+.app-shell .fi-home-v4 .fi-kpi-trend {
+  border-color: var(--home-v4-line) !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: var(--home-v4-soft) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+.app-shell .fi-home-v4 .fi-ops-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(21rem, 24rem) !important;
+  gap: 1rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-section {
+  padding: 1rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-section-header {
+  align-items: start !important;
+  gap: 1rem !important;
+  margin-bottom: 0.9rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-section-header h3 {
+  color: var(--home-v4-text) !important;
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: 1.28rem !important;
+  font-weight: 680 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .fi-home-v4 .fi-section-header p {
+  max-width: 64ch;
+  margin-top: 0.25rem !important;
+  text-transform: none;
+  font-family: var(--font-manrope), system-ui, sans-serif !important;
+  font-size: 0.82rem !important;
+  line-height: 1.45 !important;
+}
+
+.app-shell .fi-home-v4 .fi-queue-tabs {
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--home-v4-line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0.2rem;
+}
+
+.app-shell .fi-home-v4 .fi-queue-tab {
+  min-height: 1.95rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 0 0.75rem;
+  color: var(--home-v4-muted);
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  font-weight: 760;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-shell .fi-home-v4 .fi-queue-tab:hover,
+.app-shell .fi-home-v4 .fi-queue-tab:focus-visible {
+  color: var(--home-v4-text);
+  outline: none;
+}
+
+.app-shell .fi-home-v4 .fi-queue-tab.is-active {
+  background: rgba(244, 247, 251, 0.12);
+  color: var(--home-v4-text);
+  box-shadow: inset 0 0 0 1px var(--home-v4-line);
+}
+
+.app-shell .fi-home-v4 .fi-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--home-v4-line) !important;
+  border-radius: 10px !important;
+  background: rgba(5, 7, 11, 0.58) !important;
+}
+
+.app-shell .fi-home-v4 .fi-issues-table th {
+  height: 2.55rem;
+  border-color: var(--home-v4-line) !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  color: var(--home-v4-muted) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.64rem !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase;
+}
+
+.app-shell .fi-home-v4 .fi-issues-table td {
+  height: 4.9rem;
+  border-color: var(--home-v4-line) !important;
+  color: var(--home-v4-soft) !important;
+  font-size: 0.82rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-issues-table tbody tr {
+  transition: background 160ms ease;
+}
+
+.app-shell .fi-home-v4 .fi-issues-table tbody tr:hover td,
+.app-shell .fi-home-v4 .fi-issues-table tbody tr:focus-visible td,
+.app-shell .fi-home-v4 .fi-issues-table tbody tr.is-selected td {
+  background: rgba(143, 215, 198, 0.07) !important;
+}
+
+.app-shell .fi-home-v4 .fi-issues-table tbody tr.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--home-v4-accent) !important;
+}
+
+.app-shell .fi-home-v4 .fi-priority-pill {
+  border-color: var(--home-v4-line-strong) !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.055) !important;
+  color: var(--home-v4-text) !important;
+}
+
+.app-shell .fi-home-v4 .fi-row-type {
+  color: var(--home-v4-soft) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.7rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-issue-cell strong,
+.app-shell .fi-home-v4 .fi-impact-value,
+.app-shell .fi-home-v4 .fi-evidence-row strong,
+.app-shell .fi-home-v4 .fi-readiness-row strong,
+.app-shell .fi-home-v4 .fi-pipeline-stage strong {
+  color: var(--home-v4-text) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell .fi-home-v4 .fi-status-text {
+  gap: 0.45rem;
+  color: var(--home-v4-soft) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 760;
+}
+
+.app-shell .fi-home-v4 .fi-status-text > span {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.035);
+}
+
+.app-shell .fi-home-v4 .fi-status-text[data-tone="danger"] {
+  color: var(--home-v4-danger) !important;
+}
+
+.app-shell .fi-home-v4 .fi-status-text[data-tone="warning"] {
+  color: var(--home-v4-warning) !important;
+}
+
+.app-shell .fi-home-v4 .fi-status-text[data-tone="success"] {
+  color: var(--home-v4-success) !important;
+}
+
+.app-shell .fi-home-v4 .fi-evidence-row,
+.app-shell .fi-home-v4 .fi-readiness-row {
+  border-color: var(--home-v4-line) !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+.app-shell .fi-home-v4 .fi-evidence-row:hover {
+  border-color: var(--home-v4-line-strong) !important;
+  background: rgba(255, 255, 255, 0.055) !important;
+}
+
+.app-shell .fi-home-v4 .fi-readiness-row::before {
+  box-shadow: 0 0 18px currentColor;
+}
+
+.app-shell .fi-home-v4 .fi-readiness-row[data-tone="success"]::before {
+  background: var(--home-v4-success) !important;
+}
+
+.app-shell .fi-home-v4 .fi-readiness-row[data-tone="warning"]::before {
+  background: var(--home-v4-warning) !important;
+}
+
+.app-shell .fi-home-v4 .fi-readiness-row[data-tone="danger"]::before {
+  background: var(--home-v4-danger) !important;
+}
+
+.app-shell .fi-home-v4 .fi-pipeline-section {
+  background:
+    linear-gradient(90deg, rgba(143, 215, 198, 0.075), transparent 42%),
+    var(--home-v4-panel-3) !important;
+}
+
+.app-shell .fi-home-v4 .fi-pipeline-stage {
+  min-height: 7.6rem;
+  padding: 1rem 0.75rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-pipeline-stage:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--home-v4-line-strong), transparent) !important;
+}
+
+.app-shell .fi-home-v4 .fi-pipeline-stage[data-tone="success"] .fi-pipeline-node {
+  border-color: rgba(126, 231, 189, 0.45) !important;
+  color: var(--home-v4-success) !important;
+}
+
+.app-shell .fi-home-v4 .fi-pipeline-stage[data-tone="warning"] .fi-pipeline-node {
+  border-color: rgba(240, 200, 107, 0.45) !important;
+  color: var(--home-v4-warning) !important;
+}
+
+.app-shell .fi-home-v4 .fi-pipeline-stage[data-tone="danger"] .fi-pipeline-node {
+  border-color: rgba(255, 120, 146, 0.45) !important;
+  color: var(--home-v4-danger) !important;
+}
+
+.app-shell .fi-home-v4 .fi-setup-primary-grid {
+  grid-template-columns: minmax(0, 1.12fr) minmax(20rem, 0.68fr) !important;
+  gap: 1rem !important;
+}
+
+.app-shell .fi-home-v4 .fi-next-setup {
+  min-height: 18rem !important;
+  background:
+    radial-gradient(circle at 78% 8%, rgba(143, 215, 198, 0.14), transparent 22rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.014)),
+    var(--home-v4-panel) !important;
+}
+
+.app-shell .fi-home-v4 .fi-next-setup h3 {
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: clamp(2rem, 3.4vw, 3.65rem) !important;
+  font-weight: 680 !important;
+  line-height: 0.95 !important;
+  text-wrap: balance;
+}
+
+.app-shell .fi-home-v4 .fi-capture-path,
+.app-shell .fi-home-v4 .fi-health-row,
+.app-shell .fi-home-v4 .fi-onboarding-flow-step,
+.app-shell .fi-home-v4 .fi-proof-preview > div {
+  border-color: var(--home-v4-line) !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell .fi-home-v4 .fi-command-hero,
+  .app-shell .fi-home-v4 .fi-kpi-card,
+  .app-shell .fi-home-v4 .fi-setup-action-card,
+  .app-shell .fi-home-v4 .fi-evidence-row,
+  .app-shell .fi-home-v4 .fi-pipeline-stage {
+    transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+}
+
+@media (max-width: 1320px) {
+  .app-shell .fi-home-v4 .fi-command-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .app-shell .fi-home-v4 .fi-command-hero,
+  .app-shell .fi-home-v4 .fi-ops-layout,
+  .app-shell .fi-home-v4 .fi-setup-primary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .fi-home-v4 .fi-hero-actions {
+    max-width: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .app-shell:has(.fi-home-v4) .content-inner {
+    padding: 0.85rem !important;
+  }
+
+  .app-shell .fi-home-v4 .fi-command-hero,
+  .app-shell .fi-home-v4 .fi-section,
+  .app-shell .fi-home-v4 .fi-kpi-card,
+  .app-shell .fi-home-v4 .fi-next-setup,
+  .app-shell .fi-home-v4 .fi-connection-panel,
+  .app-shell .fi-home-v4 .fi-onboarding-checklist {
+    padding: 0.85rem !important;
+  }
+
+  .app-shell .fi-home-v4 .fi-command-metrics,
+  .app-shell .fi-home-v4 .fi-setup-action-grid,
+  .app-shell .fi-home-v4 .fi-proof-preview,
+  .app-shell .fi-home-v4 .fi-pipeline {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .fi-home-v4 .fi-section-header {
+    display: grid !important;
+  }
+
+  .app-shell .fi-home-v4 .fi-queue-tabs {
+    width: 100%;
+    grid-auto-flow: column;
+    justify-content: start;
+  }
+}
