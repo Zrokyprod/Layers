@@ -72,5 +72,6 @@ describe("PublicLanding", () => {
     expect(container.textContent).toContain('import { init, traceRun, wrap } from "@zroky-ai/sdk";');
     expect(container.textContent).not.toContain("new Zroky");
     expect(container.textContent).not.toContain("zroky-sdk");
+    expect(container.textContent).not.toContain("provider keys stay customer-managed");
   });
 });

@@ -30,9 +30,9 @@ describe("IntegrationsPage", () => {
 
     expect(screen.getByRole("heading", { name: "Connectors" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open setup" }).getAttribute("href")).toBe("/settings/integrations#ledger-refund-connector");
-    expect(screen.getByRole("link", { name: "Manage providers" }).getAttribute("href")).toBe("/settings/providers");
     expect(screen.getByRole("link", { name: "Open CI gates" }).getAttribute("href")).toBe("/ci-gates");
     expect(screen.getByRole("link", { name: "Open health" }).getAttribute("href")).toBe("/home");
     expect(screen.getByRole("link", { name: "Manage Slack" }).getAttribute("href")).toBe("/settings/integrations/slack");
+    expect(screen.queryByRole("link", { name: "Manage providers" })).not.toBeInTheDocument();
   });
 });

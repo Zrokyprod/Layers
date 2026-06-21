@@ -74,9 +74,9 @@ describe("CommandPalette", () => {
     expect(screen.getByText("Go to Projects")).toBeInTheDocument();
     expect(screen.getByText("Go to Settings")).toBeInTheDocument();
     expect(screen.getByText(/Settings.*API Keys/)).toBeInTheDocument();
-    expect(screen.getByText(/Settings.*Providers/)).toBeInTheDocument();
     expect(screen.getByText(/Settings.*Connectors/)).toBeInTheDocument();
     expect(screen.getByText(/Connectors.*Slack/)).toBeInTheDocument();
+    expect(screen.queryByText(/Settings.*Providers/)).not.toBeInTheDocument();
 
     expect(screen.queryByText("Go to Overview")).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Traces")).not.toBeInTheDocument();

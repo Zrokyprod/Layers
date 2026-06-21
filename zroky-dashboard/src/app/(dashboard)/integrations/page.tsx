@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { GitPullRequest, KeyRound, Plug, RadioTower } from "lucide-react";
+import { GitPullRequest, Plug, RadioTower } from "lucide-react";
 
 import IntegrationsSettingsPage from "../settings/integrations/page";
 
@@ -23,13 +23,6 @@ export default function IntegrationsPage() {
           <strong>Ledger + CRM</strong>
           <small>Run preflight and prove matched, mismatched, or not-verified real-world outcomes.</small>
           <Link href="/settings/integrations#ledger-refund-connector" className="btn btn-soft btn-sm">Open setup</Link>
-        </article>
-        <article className="panel settings-summary-card">
-          <KeyRound aria-hidden="true" />
-          <span>Provider keys</span>
-          <strong>Replay support</strong>
-          <small>Connect provider keys only when replay needs them to verify a fix.</small>
-          <Link href="/settings/providers" className="btn btn-soft btn-sm">Manage providers</Link>
         </article>
         <article className="panel settings-summary-card">
           <GitPullRequest aria-hidden="true" />
