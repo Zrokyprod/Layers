@@ -52,8 +52,11 @@ Expected summary:
 - `connector_setup.test_endpoint`: `/v1/integrations/system-of-record/.../test`
 - `connector_setup.health_status`: `healthy`
 - `connector_setup.last_attempts`: `1` or higher
+- `connector_setup.last_error_code`: `null`
+- `connector_setup.last_retryable`: `null`
 - `outcome_reconciliation.verdict`: `matched`
 - `outcome_reconciliation.connector_attempts`: `1` or higher
+- `outcome_reconciliation.connector_error_code`: `null`
 - `evidence_pack.verification_status`: `pass`
 - `proof.secrets_redacted`: `true`
 - `evidence_pack.evidence_hash`: 64 hex characters
@@ -64,6 +67,54 @@ Artifacts:
 - `artifacts/design-partner-refund-evidence.json`: redacted refund evidence pack.
 - `artifacts/design-partner-crm-summary.json`: redacted CRM proof summary.
 - `artifacts/design-partner-crm-evidence.json`: redacted CRM evidence pack.
+
+## Connector Config Templates
+
+Use these templates to map the partner's system of record before the first live
+smoke. Replace placeholder values only; do not paste real tokens into tickets,
+screenshots, or shared docs.
+
+- `demos/design-partner-install-kit/ledger_refund_connector_config.example.json`
+- `demos/design-partner-install-kit/customer_record_connector_config.example.json`
+
+Each template contains:
+
+- status endpoint: confirms whether Zroky has a saved connector.
+- config endpoint: saves the base URL, path template, record path, and token.
+- test endpoint: queries one safe existing record and reconciles it against the
+  claimed fields.
+- pass criteria: `health_status=healthy`, `verdict=matched`, attempts present,
+  no `last_error_code`, and no leaked secret.
+
+## Live Connector Preflight
+
+Before running the full buyer proof, run the sandbox connector test endpoint by
+itself. This catches bad tokens, wrong path templates, missing records, and
+system-of-record shape mismatches before the runtime/evidence demo.
+
+Refund preflight:
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario refund --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-preflight-summary.json
+```
+
+CRM/customer-record preflight:
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-preflight-summary.json
+```
+
+Expected preflight summary:
+
+- `mode`: `live_preflight`
+- `connector_setup.config_saved`: `true`
+- `connector_setup.health_status`: `healthy`
+- `connector_setup.last_verdict`: `matched`
+- `connector_setup.last_attempts`: `1` or higher
+- `connector_setup.last_error_code`: `null`
+- `connector_setup.last_retryable`: `null`
+- `outcome_reconciliation.verdict`: `matched`
+- `proof.secrets_redacted`: `true`
 
 ## Live Partner Smoke
 
@@ -91,6 +142,7 @@ bound to a single project.
 | --- | --- | --- | --- |
 | `--api-base-url` | No | Yes | Zroky API base URL. Omit for local demo. |
 | `--api-key` or `--bearer-token` | No | Yes | Zroky auth. Never paste into screenshots. |
+| `--preflight-only` | No | Optional | Runs connector config + sandbox test only; no evidence pack. |
 | `--ledger-base-url` | No | Yes | HTTPS ledger API base URL. |
 | `--ledger-bearer-token` | No | Yes | Ledger auth token. Redacted from artifacts. |
 | `--refund-id` | No | Yes | Existing refund id to verify in the ledger. |
@@ -125,7 +177,7 @@ missing.
 | --- | --- | --- |
 | `unsafe_action_stopped=false` | Runtime policy did not block/hold the risky action. | Check mandate, action type, impact amount, and policy thresholds. |
 | `connector_configured=false` | The saved connector config was not accepted or was not active. | Check connector base URL, path template, token, project id, and admin role. |
-| `connector_health_verified=false` | Connector setup exists but the latest saved connector test is not healthy/matched. | Open `connector_setup.last_error`, HTTP status, attempts, and the connector test check. |
+| `connector_health_verified=false` | Connector setup exists but the latest saved connector test is not healthy/matched. | Open `connector_setup.last_error_code`, `last_error`, HTTP status, attempts, and the connector test check. |
 | `matched_outcome_shown=false` | System of record did not match the agent's claim. | Compare refund id, amount, currency, and status. |
 | `evidence_pack_passed=false` | Evidence exists but is not verified. | Open the evidence pack and inspect decision/outcome status. |
 | `secrets_redacted=false` | A secret leaked into summary or evidence. | Stop the handoff, rotate the leaked token, and fix redaction before rerun. |
@@ -136,13 +188,14 @@ missing.
 ## Buyer Demo Script
 
 1. Pick the partner's highest-stakes live-like scenario: refund or CRM/customer record.
-2. Run the install kit and point to `runtime_policy.allowed=false`.
-3. Show `connector_setup.health_status=healthy` and `connector_setup.last_attempts`.
-4. Show `outcome_reconciliation.verdict=matched`.
-5. Show the 64-character `evidence_hash`.
-6. Open the evidence JSON and show decision, policy snapshot, reconciliation,
+2. Run live preflight and show `connector_setup.health_status=healthy`.
+3. Run the full install kit and point to `runtime_policy.allowed=false`.
+4. Show `connector_setup.health_status=healthy` and `connector_setup.last_attempts`.
+5. Show `outcome_reconciliation.verdict=matched`.
+6. Show the 64-character `evidence_hash`.
+7. Open the evidence JSON and show decision, policy snapshot, reconciliation,
    audit entries, and hash. Do not show raw secrets.
-7. Explain the next live step: connect the partner's real ledger or CRM API and
+8. Explain the next live step: connect the partner's real ledger or CRM API and
    repeat the same proof against their system of record.
 
 ## Expansion After Refund And CRM

@@ -27,6 +27,18 @@ CUSTOMER_RECORD_FIXTURE_PATH = (
 HANDOFF_GUIDE_PATH = (
     ROOT / "demos" / "design-partner-install-kit" / "HANDOFF.txt"
 )
+LEDGER_CONNECTOR_TEMPLATE_PATH = (
+    ROOT
+    / "demos"
+    / "design-partner-install-kit"
+    / "ledger_refund_connector_config.example.json"
+)
+CUSTOMER_RECORD_CONNECTOR_TEMPLATE_PATH = (
+    ROOT
+    / "demos"
+    / "design-partner-install-kit"
+    / "customer_record_connector_config.example.json"
+)
 SCENARIO_FIXTURES = {
     "refund": REFUND_FIXTURE_PATH,
     "customer-record": CUSTOMER_RECORD_FIXTURE_PATH,
@@ -237,7 +249,7 @@ def _connector_test_payload(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
-    runtime_policy_decision_id: str,
+    runtime_policy_decision_id: str | None,
 ) -> dict[str, Any]:
     if _fixture_scenario(fixture) == "customer-record":
         return _customer_record_connector_test_payload(
@@ -252,7 +264,7 @@ def _ledger_connector_test_payload(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
-    runtime_policy_decision_id: str,
+    runtime_policy_decision_id: str | None,
 ) -> dict[str, Any]:
     trace = fixture["trace"]
     claim = dict(fixture["claimed_outcome"])
@@ -287,7 +299,7 @@ def _customer_record_connector_test_payload(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
-    runtime_policy_decision_id: str,
+    runtime_policy_decision_id: str | None,
 ) -> dict[str, Any]:
     trace = fixture["trace"]
     claim = dict(fixture["claimed_outcome"])
@@ -337,10 +349,62 @@ def _next_live_command(fixture: dict[str, Any]) -> str:
     )
 
 
+def _next_live_preflight_command(fixture: dict[str, Any]) -> str:
+    if _fixture_scenario(fixture) == "customer-record":
+        return (
+            "python scripts/run_design_partner_install_kit.py --scenario customer-record "
+            "--preflight-only --api-base-url https://api.zroky.ai "
+            "--api-key <zroky_api_key> --crm-base-url https://crm.example.com/api "
+            "--crm-bearer-token <crm_token> --customer-id <customer_id> --json "
+            "--write-summary artifacts/design-partner-crm-preflight-summary.json"
+        )
+    return (
+        "python scripts/run_design_partner_install_kit.py --scenario refund "
+        "--preflight-only --api-base-url https://api.zroky.ai "
+        "--api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api "
+        "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json "
+        "--write-summary artifacts/design-partner-refund-preflight-summary.json"
+    )
+
+
+def _connector_template_path(fixture: dict[str, Any]) -> Path:
+    if _fixture_scenario(fixture) == "customer-record":
+        return CUSTOMER_RECORD_CONNECTOR_TEMPLATE_PATH
+    return LEDGER_CONNECTOR_TEMPLATE_PATH
+
+
+def _connector_template_relative_path(fixture: dict[str, Any]) -> str:
+    return _connector_template_path(fixture).relative_to(ROOT).as_posix()
+
+
 def _connector_metadata(reconciliation: dict[str, Any]) -> dict[str, Any]:
     metadata = reconciliation.get("metadata") or {}
     connector_metadata = metadata.get("connector") or {}
     return dict(connector_metadata) if isinstance(connector_metadata, Mapping) else {}
+
+
+def _outcome_reconciliation_summary(
+    reconciliation: dict[str, Any],
+) -> dict[str, Any]:
+    metadata = reconciliation.get("metadata") or {}
+    connector_metadata = _connector_metadata(reconciliation)
+    return {
+        "id": reconciliation["id"],
+        "verdict": reconciliation["verdict"],
+        "reason": reconciliation.get("reason"),
+        "connector_type": reconciliation["connector_type"],
+        "system_ref": reconciliation.get("system_ref"),
+        "match_fields": metadata.get("match_fields"),
+        "connector_http_status": connector_metadata.get("http_status"),
+        "connector_request_url": connector_metadata.get("request_url"),
+        "connector_attempts": connector_metadata.get("attempts"),
+        "connector_retry_count": connector_metadata.get("retry_count"),
+        "connector_max_attempts": connector_metadata.get("max_attempts"),
+        "connector_timeout_seconds": connector_metadata.get("timeout_seconds"),
+        "connector_error": connector_metadata.get("error"),
+        "connector_error_code": connector_metadata.get("error_code"),
+        "connector_retryable": connector_metadata.get("retryable"),
+    }
 
 
 def _connector_setup_summary(
@@ -368,6 +432,8 @@ def _connector_setup_summary(
         "last_http_status": final_status.get("last_http_status"),
         "last_attempts": final_status.get("last_attempts"),
         "last_error": final_status.get("last_error"),
+        "last_error_code": final_status.get("last_error_code"),
+        "last_retryable": final_status.get("last_retryable"),
         "last_checked_at": final_status.get("last_checked_at"),
         "last_tested_at": final_status.get("last_tested_at"),
         "test_ok": test_response.get("ok") is True,
@@ -377,6 +443,9 @@ def _connector_setup_summary(
         "retry_count": connector_metadata.get("retry_count"),
         "max_attempts": connector_metadata.get("max_attempts"),
         "timeout_seconds": connector_metadata.get("timeout_seconds"),
+        "error": connector_metadata.get("error"),
+        "error_code": connector_metadata.get("error_code"),
+        "retryable": connector_metadata.get("retryable"),
         "adapter": connector_metadata.get("adapter"),
     }
     setup["secrets_redacted"] = not _contains_secret(
@@ -397,7 +466,7 @@ def _run_connector_setup(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
-    runtime_policy_decision_id: str,
+    runtime_policy_decision_id: str | None,
     headers: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     request_headers = headers or {}
@@ -464,8 +533,6 @@ def _summarise(
     connector_setup: dict[str, Any],
     secrets: list[str],
 ) -> dict[str, Any]:
-    metadata = reconciliation.get("metadata") or {}
-    connector_metadata = _connector_metadata(reconciliation)
     evidence_outcomes = evidence_pack.get("outcome_reconciliation") or []
     evidence_call = evidence_pack.get("call") or {}
     artifact_prefix = _artifact_prefix(fixture)
@@ -490,20 +557,7 @@ def _summarise(
             "requires_approval": runtime_decision["requires_approval"],
             "reason_count": len(runtime_decision.get("reasons") or []),
         },
-        "outcome_reconciliation": {
-            "id": reconciliation["id"],
-            "verdict": reconciliation["verdict"],
-            "reason": reconciliation.get("reason"),
-            "connector_type": reconciliation["connector_type"],
-            "system_ref": reconciliation.get("system_ref"),
-            "match_fields": metadata.get("match_fields"),
-            "connector_http_status": connector_metadata.get("http_status"),
-            "connector_request_url": connector_metadata.get("request_url"),
-            "connector_attempts": connector_metadata.get("attempts"),
-            "connector_retry_count": connector_metadata.get("retry_count"),
-            "connector_max_attempts": connector_metadata.get("max_attempts"),
-            "connector_timeout_seconds": connector_metadata.get("timeout_seconds"),
-        },
+        "outcome_reconciliation": _outcome_reconciliation_summary(reconciliation),
         "connector_setup": connector_setup,
         "evidence_pack": {
             "decision_id": evidence_pack["decision_id"],
@@ -537,6 +591,7 @@ def _summarise(
         "handoff": {
             "guide": HANDOFF_GUIDE_PATH.relative_to(ROOT).as_posix(),
             "package": _fixture_package(fixture),
+            "connector_config_template": _connector_template_relative_path(fixture),
             "pass_criteria": [
                 "captured_call_linked",
                 "unsafe_action_stopped",
@@ -564,7 +619,60 @@ def _summarise(
                 "or missing evidence hash blocks partner handoff."
             ),
         },
+        "next_live_preflight_command": _next_live_preflight_command(fixture),
         "next_live_command": _next_live_command(fixture),
+    }
+    return _redact(summary, secrets)
+
+
+def _summarise_preflight(
+    fixture: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    mode: str,
+    reconciliation: dict[str, Any],
+    connector_setup: dict[str, Any],
+    secrets: list[str],
+) -> dict[str, Any]:
+    summary = {
+        "mode": mode,
+        "project_id": args.project_id or fixture["project_id"],
+        "scenario": fixture.get("scenario") or "refund_outcome_proof_v1",
+        "connector_setup": connector_setup,
+        "outcome_reconciliation": _outcome_reconciliation_summary(reconciliation),
+        "proof": {
+            "connector_configured": connector_setup.get("connected") is True
+            and connector_setup.get("config_saved") is True,
+            "connector_health_verified": connector_setup.get("health_status")
+            == "healthy"
+            and connector_setup.get("last_verdict") == "matched"
+            and connector_setup.get("last_attempts") is not None,
+            "matched_outcome_shown": reconciliation["verdict"] == "matched",
+            "secrets_redacted": not _contains_secret(
+                {
+                    "connector_setup": connector_setup,
+                    "reconciliation": reconciliation,
+                },
+                secrets,
+            ),
+        },
+        "handoff": {
+            "guide": HANDOFF_GUIDE_PATH.relative_to(ROOT).as_posix(),
+            "package": _fixture_package(fixture),
+            "connector_config_template": _connector_template_relative_path(fixture),
+            "sandbox_test_endpoint": connector_setup.get("test_endpoint"),
+            "pass_criteria": [
+                "connector_configured",
+                "connector_health_verified",
+                "matched_outcome_shown",
+                "secrets_redacted",
+            ],
+            "failure_policy": (
+                "Any false proof value, mismatched outcome, not_verified connector "
+                "health, or leaked secret blocks the full proof run."
+            ),
+        },
+        "next_full_proof_command": _next_live_command(fixture),
     }
     return _redact(summary, secrets)
 
@@ -575,6 +683,15 @@ def _validate_summary(summary: dict[str, Any]) -> None:
     if failures:
         raise RuntimeError(
             "Design-partner install kit proof failed: " + ", ".join(sorted(failures))
+        )
+
+
+def _validate_preflight_summary(summary: dict[str, Any]) -> None:
+    proof = summary.get("proof") or {}
+    failures = [key for key, value in proof.items() if value is not True]
+    if failures:
+        raise RuntimeError(
+            "Design-partner connector preflight failed: " + ", ".join(sorted(failures))
         )
 
 
@@ -972,9 +1089,7 @@ def _run_local_demo(
     return summary, evidence_pack
 
 
-def _run_live(
-    fixture: dict[str, Any], args: argparse.Namespace
-) -> tuple[dict[str, Any], dict[str, Any]]:
+def _validate_live_connector_args(fixture: dict[str, Any], args: argparse.Namespace) -> None:
     if not args.api_base_url:
         raise RuntimeError("--api-base-url is required for live mode.")
     if not args.api_key and not args.bearer_token:
@@ -997,6 +1112,41 @@ def _run_live(
             raise RuntimeError("--ledger-bearer-token is required for refund live mode.")
         if not args.refund_id:
             raise RuntimeError("--refund-id is required for refund live mode.")
+
+
+def _run_live_preflight(fixture: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    _validate_live_connector_args(fixture, args)
+
+    import httpx
+
+    headers = _headers(args)
+    timeout = args.timeout_seconds
+    with httpx.Client(
+        base_url=args.api_base_url.rstrip("/"), timeout=timeout
+    ) as client:
+        reconciliation, connector_setup = _run_connector_setup(
+            client,
+            fixture,
+            args,
+            runtime_policy_decision_id=None,
+            headers=headers,
+        )
+
+    secrets = _connector_secrets(fixture, args)
+    return _summarise_preflight(
+        fixture,
+        args,
+        mode="live_preflight",
+        reconciliation=reconciliation,
+        connector_setup=connector_setup,
+        secrets=secrets,
+    )
+
+
+def _run_live(
+    fixture: dict[str, Any], args: argparse.Namespace
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    _validate_live_connector_args(fixture, args)
 
     import httpx
 
@@ -1070,6 +1220,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--write-summary",
         help="Write the redacted customer-facing proof summary JSON to this path.",
+    )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help=(
+            "Save connector config and run the sandbox connector test endpoint only. "
+            "Requires --api-base-url and does not generate an evidence pack."
+        ),
     )
     parser.add_argument(
         "--api-base-url", help="Zroky API base URL. Omit for local demo mode."
@@ -1155,10 +1313,35 @@ def _print_summary(summary: dict[str, Any], *, as_json: bool) -> None:
     print("[design-partner-install-kit] passed")
 
 
+def _print_preflight_summary(summary: dict[str, Any], *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(summary, sort_keys=True, separators=(",", ":"), default=str))
+        return
+    print(f"mode={summary['mode']}")
+    print(f"project_id={summary['project_id']}")
+    print(f"connector_health_status={summary['connector_setup']['health_status']}")
+    print(f"connector_last_attempts={summary['connector_setup']['last_attempts']}")
+    print(f"outcome_verdict={summary['outcome_reconciliation']['verdict']}")
+    print(f"secrets_redacted={str(summary['proof']['secrets_redacted']).lower()}")
+    print("[design-partner-connector-preflight] passed")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     fixture_path = Path(args.fixture) if args.fixture else SCENARIO_FIXTURES[args.scenario]
     fixture = _load_json(fixture_path)
+    if args.preflight_only:
+        if args.write_evidence:
+            raise RuntimeError(
+                "--write-evidence cannot be used with --preflight-only because "
+                "no evidence pack is generated."
+            )
+        summary = _run_live_preflight(fixture, args)
+        secrets = _connector_secrets(fixture, args)
+        _validate_preflight_summary(summary)
+        _write_summary(args.write_summary, summary, secrets)
+        _print_preflight_summary(summary, as_json=args.json)
+        return 0
     if args.api_base_url:
         summary, evidence_pack = _run_live(fixture, args)
     else:

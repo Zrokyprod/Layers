@@ -1,0 +1,39 @@
+{
+  "connector_type": "ledger_refund_api",
+  "config_endpoint": "/v1/integrations/system-of-record/ledger-refund/config",
+  "status_endpoint": "/v1/integrations/system-of-record/ledger-refund/status",
+  "test_endpoint": "/v1/integrations/system-of-record/ledger-refund/test",
+  "config_payload": {
+    "base_url": "https://ledger.example.com/api",
+    "path_template": "/refunds/{refund_id}",
+    "record_path": "data",
+    "bearer_token": "<ledger_bearer_token>"
+  },
+  "test_payload": {
+    "refund_id": "RF-DP-1001",
+    "claimed": {
+      "refund_id": "RF-DP-1001",
+      "order_id": "ORD-DP-1001",
+      "amount_usd": 42.18,
+      "currency": "USD",
+      "status": "posted"
+    },
+    "match_fields": [
+      "refund_id",
+      "amount_usd",
+      "currency",
+      "status"
+    ],
+    "metadata": {
+      "install_kit": "design_partner_refund_v1",
+      "partner_run_id": "<partner_run_id>"
+    }
+  },
+  "pass_criteria": {
+    "connector_health_status": "healthy",
+    "outcome_verdict": "matched",
+    "last_attempts": ">=1",
+    "last_error_code": null,
+    "last_retryable": null
+  }
+}
