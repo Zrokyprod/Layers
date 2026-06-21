@@ -14,11 +14,17 @@ interface CommandItem {
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
   return [
-    { id: "overview", label: "Go to Overview", description: "Capture health, incidents, replay proof, contracts, and CI gates", shortcut: "Ctrl+H", action: () => router.push("/home") },
-    { id: "issues", label: "Go to Incidents", description: "Grouped production failures with root cause and action context", shortcut: "Ctrl+I", action: () => router.push("/issues") },
+    { id: "home", label: "Go to Home", description: "Protected agents, risky actions, outcome proof, approvals, and evidence gaps", shortcut: "Ctrl+H", action: () => router.push("/home") },
+    { id: "agents", label: "Go to Agents", description: "Protected agents, mandates, safety coverage, and proof readiness", action: () => router.push("/agents") },
+    { id: "approvals", label: "Go to Approvals", description: "Held risky actions, runtime policy decisions, and approval audit", action: () => router.push("/approvals") },
+    { id: "outcomes", label: "Go to Outcomes", description: "System-of-record matches, mismatches, and not-verified actions", action: () => router.push("/outcomes") },
+    { id: "evidence", label: "Go to Evidence", description: "Evidence packs, audit hashes, linked decisions, and export proof", action: () => router.push("/evidence") },
+    { id: "connectors", label: "Go to Connectors", description: "System-of-record connectors, preflight runs, and pilot handoff status", action: () => router.push("/integrations") },
+    { id: "issues", label: "Go to Incidents", description: "Unsafe actions, wrong outcomes, connector failures, and proof gaps", shortcut: "Ctrl+I", action: () => router.push("/issues") },
+    { id: "policies", label: "Go to Policies", description: "Agent mandates, runtime limits, approval rules, and kill switch", action: () => router.push("/policies") },
     { id: "replay", label: "Go to Replays", description: "Verify fixes against production-derived traces before deploying", action: () => router.push("/replay") },
-    { id: "contracts", label: "Go to Contracts", description: "Regression contracts, fixtures, approval proof, and blocking coverage", action: () => router.push("/contracts") },
-    { id: "ci-gates", label: "Go to CI", description: "Deploy safety verdicts, contract failures, and protected-flow gates", action: () => router.push("/ci-gates") },
+    { id: "contracts", label: "Engineering - Contracts", description: "Regression contracts, fixtures, approval proof, and blocking coverage", action: () => router.push("/contracts") },
+    { id: "ci-gates", label: "Engineering - CI", description: "Deploy safety verdicts, contract failures, and protected-flow gates", action: () => router.push("/ci-gates") },
     { id: "settings-evaluation", label: "Settings → Evaluation", description: "Calibration and judge controls live in settings", action: () => router.push("/settings/evaluation") },
     { id: "settings-evaluation-calibration", label: "Settings → Evaluation → Calibration", description: "Open calibration controls in settings", action: () => router.push("/settings/evaluation?workspace=calibration") },
     { id: "settings-evaluation-judge", label: "Settings → Evaluation → Judge", description: "Open judge controls in settings", action: () => router.push("/settings/evaluation?workspace=judge") },
@@ -28,7 +34,8 @@ function useCommandItems(): CommandItem[] {
     { id: "settings-billing", label: "Settings → Plan & Billing", description: "Plan, usage, payments", action: () => router.push("/settings/billing") },
     { id: "settings-team", label: "Settings → Members", description: "Invite and remove members", action: () => router.push("/settings/team") },
     { id: "settings-providers", label: "Settings → Providers", description: "Provider keys vault for replay", action: () => router.push("/settings/providers") },
-    { id: "integrations-slack", label: "Integrations → Slack", description: "Connect Slack reliability events", action: () => router.push("/settings/integrations/slack") },
+    { id: "settings-connectors", label: "Settings → Connectors", description: "Configure system-of-record, GitHub, and Slack connectors", action: () => router.push("/settings/integrations") },
+    { id: "integrations-slack", label: "Connectors → Slack", description: "Connect Slack reliability events", action: () => router.push("/settings/integrations/slack") },
     { id: "account-profile", label: "Account → Profile", description: "Identity, password, sessions, and account deletion", action: () => router.push("/account") },
   ];
 }

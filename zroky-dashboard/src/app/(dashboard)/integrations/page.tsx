@@ -10,25 +10,32 @@ export default function IntegrationsPage() {
     <div className="dashboard-page integrations-page">
       <section className="page-header">
         <div>
-          <span className="eyebrow">Reliability connections</span>
-          <h1>Integrations</h1>
-          <p>Is this agent safe to scale? Verify provider keys, PR gates, capture delivery, and notification channels.</p>
+          <span className="eyebrow">System-of-record proof</span>
+          <h1>Connectors</h1>
+          <p>Verify the real-world systems Zroky uses to prove agent outcomes, preflight pilot handoff, and export customer evidence.</p>
         </div>
       </section>
 
-      <section className="settings-summary-grid" aria-label="Integration readiness">
+      <section className="settings-summary-grid" aria-label="Connector readiness">
+        <article className="panel settings-summary-card">
+          <Plug aria-hidden="true" />
+          <span>Outcome connectors</span>
+          <strong>Ledger + CRM</strong>
+          <small>Run preflight and prove matched, mismatched, or not-verified real-world outcomes.</small>
+          <Link href="/settings/integrations#ledger-refund-connector" className="btn btn-soft btn-sm">Open setup</Link>
+        </article>
         <article className="panel settings-summary-card">
           <KeyRound aria-hidden="true" />
           <span>Provider keys</span>
-          <strong>Replay proof</strong>
-          <small>Connect provider keys only when verified replay requires them.</small>
+          <strong>Replay support</strong>
+          <small>Connect provider keys only when replay needs them to verify a fix.</small>
           <Link href="/settings/providers" className="btn btn-soft btn-sm">Manage providers</Link>
         </article>
         <article className="panel settings-summary-card">
           <GitPullRequest aria-hidden="true" />
           <span>GitHub</span>
-          <strong>CI gates</strong>
-          <small>Use GitHub checks and PR comments to block repeat failures.</small>
+          <strong>Fix proof</strong>
+          <small>Use GitHub checks and PR comments when replay proof should gate a change.</small>
           <Link href="/ci-gates" className="btn btn-soft btn-sm">Open CI gates</Link>
         </article>
         <article className="panel settings-summary-card">
