@@ -342,6 +342,13 @@ describe("ledger refund connector API client", () => {
       has_bearer_token: true,
       bearer_token_last4: "oken",
       last_tested_at: null,
+      readiness: {
+        status: "ready",
+        contract: { system_of_record: "ledger_refund" },
+        checks: { config_saved: true },
+        blockers: [],
+        last_checked_at: "2026-06-21T00:00:00Z",
+      },
       created_at: "2026-06-21T00:00:00Z",
       updated_at: "2026-06-21T00:00:00Z",
     };
@@ -353,6 +360,10 @@ describe("ledger refund connector API client", () => {
     await expect(getLedgerRefundConnectorStatus()).resolves.toMatchObject({
       connected: true,
       bearer_token_last4: "oken",
+      readiness: expect.objectContaining({
+        status: "ready",
+        contract: { system_of_record: "ledger_refund" },
+      }),
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -485,6 +496,13 @@ describe("customer record connector API client", () => {
       has_bearer_token: true,
       bearer_token_last4: "oken",
       last_tested_at: null,
+      readiness: {
+        status: "not_ready",
+        contract: { system_of_record: "customer_record" },
+        checks: { saved_test_matched: false },
+        blockers: ["Latest connector test did not reconcile as matched."],
+        last_checked_at: null,
+      },
       created_at: "2026-06-21T00:00:00Z",
       updated_at: "2026-06-21T00:00:00Z",
     };
@@ -497,6 +515,10 @@ describe("customer record connector API client", () => {
       connected: true,
       connector_type: "customer_record_api",
       bearer_token_last4: "oken",
+      readiness: expect.objectContaining({
+        status: "not_ready",
+        blockers: ["Latest connector test did not reconcile as matched."],
+      }),
     });
 
     expect(fetchMock).toHaveBeenCalledWith(

@@ -30049,6 +30049,7 @@ button.gm-kpi-card {
 .app-shell .settings-connector-guidance,
 .app-shell .settings-connector-handoff,
 .app-shell .settings-connector-preflight-summary,
+.app-shell .settings-connector-readiness,
 .app-shell .settings-connector-timeline {
   display: grid;
   gap: 10px;
@@ -30104,6 +30105,7 @@ button.gm-kpi-card {
 }
 
 .app-shell .settings-connector-preflight-summary-header,
+.app-shell .settings-connector-readiness-header,
 .app-shell .settings-connector-timeline-header {
   display: flex;
   align-items: flex-start;
@@ -30113,11 +30115,13 @@ button.gm-kpi-card {
 }
 
 .app-shell .settings-connector-preflight-summary-header > div,
+.app-shell .settings-connector-readiness-header > div,
 .app-shell .settings-connector-timeline-header {
   min-width: 0;
 }
 
 .app-shell .settings-connector-preflight-summary-header strong,
+.app-shell .settings-connector-readiness-header strong,
 .app-shell .settings-connector-timeline-header strong {
   display: block;
   margin-top: 3px;
@@ -30155,6 +30159,33 @@ button.gm-kpi-card {
   font-size: 0.78rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.app-shell .settings-connector-blockers {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.app-shell .settings-connector-blockers > span {
+  color: var(--text-tertiary);
+  font-size: 0.66rem;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.app-shell .settings-connector-blockers strong,
+.app-shell .settings-connector-blockers li {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.app-shell .settings-connector-blockers ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .app-shell .settings-connector-timeline p {
