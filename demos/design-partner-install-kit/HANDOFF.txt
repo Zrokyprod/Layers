@@ -5,8 +5,9 @@ autonomous agent action end to end:
 
 1. Capture a high-stakes action from an agent trace.
 2. Stop the unsafe action at runtime with a policy decision.
-3. Reconcile the agent's claimed result against a real system of record.
-4. Export a redacted evidence pack with a stable evidence hash.
+3. Configure and health-check the system-of-record connector.
+4. Reconcile the agent's claimed result against that connector.
+5. Export a redacted evidence pack with a stable evidence hash.
 
 The kit is intentionally narrow. It proves the paid-launch loop for one
 money-touching action and one customer-record action before expanding to DevOps,
@@ -18,6 +19,8 @@ A successful run means:
 
 - Zroky saw the action before it committed.
 - Zroky blocked or held the risky action instead of silently allowing it.
+- Zroky configured the system-of-record connector and marked it healthy only
+  after a saved connector test matched ground truth.
 - Zroky checked the real ledger or CRM outcome, not just the agent's text output.
 - Zroky produced an audit-ready evidence hash.
 - No API key, ledger token, or CRM token was printed into the handoff artifacts.
@@ -44,7 +47,13 @@ Expected summary:
 
 - `mode`: `local_demo`
 - `runtime_policy.allowed`: `false`
+- `connector_setup.status_endpoint`: `/v1/integrations/system-of-record/.../status`
+- `connector_setup.config_endpoint`: `/v1/integrations/system-of-record/.../config`
+- `connector_setup.test_endpoint`: `/v1/integrations/system-of-record/.../test`
+- `connector_setup.health_status`: `healthy`
+- `connector_setup.last_attempts`: `1` or higher
 - `outcome_reconciliation.verdict`: `matched`
+- `outcome_reconciliation.connector_attempts`: `1` or higher
 - `evidence_pack.verification_status`: `pass`
 - `proof.secrets_redacted`: `true`
 - `evidence_pack.evidence_hash`: 64 hex characters
@@ -99,6 +108,8 @@ The handoff is a pass only when all of these are true:
 
 - `captured_call_linked`
 - `unsafe_action_stopped`
+- `connector_configured`
+- `connector_health_verified`
 - `matched_outcome_shown`
 - `evidence_hash_visible`
 - `evidence_pack_passed`
@@ -113,6 +124,8 @@ missing.
 | Failure | Meaning | First fix |
 | --- | --- | --- |
 | `unsafe_action_stopped=false` | Runtime policy did not block/hold the risky action. | Check mandate, action type, impact amount, and policy thresholds. |
+| `connector_configured=false` | The saved connector config was not accepted or was not active. | Check connector base URL, path template, token, project id, and admin role. |
+| `connector_health_verified=false` | Connector setup exists but the latest saved connector test is not healthy/matched. | Open `connector_setup.last_error`, HTTP status, attempts, and the connector test check. |
 | `matched_outcome_shown=false` | System of record did not match the agent's claim. | Compare refund id, amount, currency, and status. |
 | `evidence_pack_passed=false` | Evidence exists but is not verified. | Open the evidence pack and inspect decision/outcome status. |
 | `secrets_redacted=false` | A secret leaked into summary or evidence. | Stop the handoff, rotate the leaked token, and fix redaction before rerun. |
@@ -124,11 +137,12 @@ missing.
 
 1. Pick the partner's highest-stakes live-like scenario: refund or CRM/customer record.
 2. Run the install kit and point to `runtime_policy.allowed=false`.
-3. Show `outcome_reconciliation.verdict=matched`.
-4. Show the 64-character `evidence_hash`.
-5. Open the evidence JSON and show decision, policy snapshot, reconciliation,
+3. Show `connector_setup.health_status=healthy` and `connector_setup.last_attempts`.
+4. Show `outcome_reconciliation.verdict=matched`.
+5. Show the 64-character `evidence_hash`.
+6. Open the evidence JSON and show decision, policy snapshot, reconciliation,
    audit entries, and hash. Do not show raw secrets.
-6. Explain the next live step: connect the partner's real ledger or CRM API and
+7. Explain the next live step: connect the partner's real ledger or CRM API and
    repeat the same proof against their system of record.
 
 ## Expansion After Refund And CRM

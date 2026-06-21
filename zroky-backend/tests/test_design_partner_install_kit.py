@@ -40,6 +40,9 @@ def test_design_partner_fixture_has_no_missing_install_inputs() -> None:
     assert fixture["claimed_outcome"]["refund_id"]
     assert fixture["ledger"]["base_url"].startswith("https://")
     assert fixture["ledger"]["record_path"] == "data"
+    assert fixture["expected"]["connector_health_status"] == "healthy"
+    assert fixture["expected"]["connector_last_attempts"] == 1
+    assert fixture["expected"]["connector_retry_count"] == 0
     assert fixture["ledger"]["bearer_token"] not in json.dumps(
         fixture["expected"], sort_keys=True
     )
@@ -57,6 +60,9 @@ def test_design_partner_customer_record_fixture_has_no_missing_install_inputs() 
     assert fixture["claimed_outcome"]["account_id"]
     assert fixture["crm"]["base_url"].startswith("https://")
     assert fixture["crm"]["record_path"] == "data"
+    assert fixture["expected"]["connector_health_status"] == "healthy"
+    assert fixture["expected"]["connector_last_attempts"] == 1
+    assert fixture["expected"]["connector_retry_count"] == 0
     assert fixture["crm"]["bearer_token"] not in json.dumps(
         fixture["expected"], sort_keys=True
     )
@@ -78,7 +84,13 @@ def test_design_partner_handoff_guide_covers_customer_run_contract() -> None:
     assert "--ledger-base-url https://ledger.example.com/api" in guide
     assert "--crm-base-url https://crm.example.com/api" in guide
     assert "runtime_policy.allowed" in guide
+    assert "connector_setup.status_endpoint" in guide
+    assert "connector_setup.config_endpoint" in guide
+    assert "connector_setup.test_endpoint" in guide
+    assert "connector_setup.health_status" in guide
+    assert "connector_setup.last_attempts" in guide
     assert "outcome_reconciliation.verdict" in guide
+    assert "outcome_reconciliation.connector_attempts" in guide
     assert "evidence_pack.evidence_hash" in guide
     assert "secrets_redacted" in guide
     assert "not_verified" in guide
@@ -102,11 +114,39 @@ def test_design_partner_install_kit_local_demo_outputs_auditable_proof(
     assert output["runtime_policy"]["status"] in {"blocked", "pending_approval"}
     assert output["outcome_reconciliation"]["verdict"] == "matched"
     assert output["outcome_reconciliation"]["connector_type"] == "ledger_refund_api"
+    assert output["outcome_reconciliation"]["connector_attempts"] == 1
+    assert output["outcome_reconciliation"]["connector_retry_count"] == 0
+    assert output["outcome_reconciliation"]["connector_max_attempts"] == 2
+    assert output["outcome_reconciliation"]["connector_timeout_seconds"] is not None
+    assert output["connector_setup"]["status_endpoint"] == (
+        "/v1/integrations/system-of-record/ledger-refund/status"
+    )
+    assert output["connector_setup"]["config_endpoint"] == (
+        "/v1/integrations/system-of-record/ledger-refund/config"
+    )
+    assert output["connector_setup"]["test_endpoint"] == (
+        "/v1/integrations/system-of-record/ledger-refund/test"
+    )
+    assert output["connector_setup"]["connected"] is True
+    assert output["connector_setup"]["config_saved"] is True
+    assert output["connector_setup"]["has_bearer_token"] is True
+    assert output["connector_setup"]["bearer_token_last4"] == "sted"
+    assert output["connector_setup"]["health_status"] == "healthy"
+    assert output["connector_setup"]["last_verdict"] == "matched"
+    assert output["connector_setup"]["last_http_status"] == 200
+    assert output["connector_setup"]["last_attempts"] == 1
+    assert output["connector_setup"]["retry_count"] == 0
+    assert output["connector_setup"]["max_attempts"] == 2
+    assert output["connector_setup"]["test_ok"] is True
+    assert output["connector_setup"]["test_source"] == "saved_connector_test"
+    assert output["connector_setup"]["secrets_redacted"] is True
     assert output["evidence_pack"]["verification_status"] == "pass"
     assert len(output["evidence_pack"]["evidence_hash"]) == 64
     assert output["proof"] == {
         "captured_call_linked": True,
         "unsafe_action_stopped": True,
+        "connector_configured": True,
+        "connector_health_verified": True,
         "matched_outcome_shown": True,
         "evidence_hash_visible": True,
         "evidence_pack_passed": True,
@@ -151,11 +191,36 @@ def test_design_partner_install_kit_customer_record_demo_outputs_auditable_proof
         "account_id",
         "status",
     ]
+    assert output["outcome_reconciliation"]["connector_attempts"] == 1
+    assert output["outcome_reconciliation"]["connector_retry_count"] == 0
+    assert output["outcome_reconciliation"]["connector_max_attempts"] == 2
+    assert output["connector_setup"]["status_endpoint"] == (
+        "/v1/integrations/system-of-record/customer-record/status"
+    )
+    assert output["connector_setup"]["config_endpoint"] == (
+        "/v1/integrations/system-of-record/customer-record/config"
+    )
+    assert output["connector_setup"]["test_endpoint"] == (
+        "/v1/integrations/system-of-record/customer-record/test"
+    )
+    assert output["connector_setup"]["connected"] is True
+    assert output["connector_setup"]["config_saved"] is True
+    assert output["connector_setup"]["has_bearer_token"] is True
+    assert output["connector_setup"]["bearer_token_last4"] == "sted"
+    assert output["connector_setup"]["health_status"] == "healthy"
+    assert output["connector_setup"]["last_verdict"] == "matched"
+    assert output["connector_setup"]["last_http_status"] == 200
+    assert output["connector_setup"]["last_attempts"] == 1
+    assert output["connector_setup"]["test_ok"] is True
+    assert output["connector_setup"]["test_source"] == "saved_connector_test"
+    assert output["connector_setup"]["secrets_redacted"] is True
     assert output["evidence_pack"]["verification_status"] == "pass"
     assert len(output["evidence_pack"]["evidence_hash"]) == 64
     assert output["proof"] == {
         "captured_call_linked": True,
         "unsafe_action_stopped": True,
+        "connector_configured": True,
+        "connector_health_verified": True,
         "matched_outcome_shown": True,
         "evidence_hash_visible": True,
         "evidence_pack_passed": True,
@@ -195,6 +260,9 @@ def test_design_partner_install_kit_writes_redacted_handoff_artifacts(
     assert summary["scenario"] == "refund_outcome_proof_v1"
     assert summary["handoff"]["customer_artifacts"][0]["flag"] == "--write-summary"
     assert summary["proof"]["secrets_redacted"] is True
+    assert summary["connector_setup"]["health_status"] == "healthy"
+    assert summary["connector_setup"]["last_attempts"] == 1
+    assert summary["outcome_reconciliation"]["connector_attempts"] == 1
     assert len(summary["evidence_pack"]["evidence_hash"]) == 64
     assert "ledger-demo-token-not-persisted" not in json.dumps(summary)
 
@@ -204,6 +272,12 @@ def test_design_partner_install_kit_writes_redacted_handoff_artifacts(
     assert evidence["call"]["id"] == "dp-call-refund-1001"
     assert len(evidence["evidence_hash"]) == 64
     assert evidence["outcome_reconciliation"][0]["verdict"] == "matched"
+    assert evidence["outcome_reconciliation"][0]["metadata"]["source"] == (
+        "saved_connector_test"
+    )
+    assert evidence["outcome_reconciliation"][0]["metadata"]["connector"][
+        "attempts"
+    ] == 1
     assert "ledger-demo-token-not-persisted" not in json.dumps(evidence)
 
 
@@ -232,6 +306,9 @@ def test_design_partner_install_kit_writes_redacted_customer_record_artifacts(
     assert summary["scenario"] == "crm_customer_record_proof_v1"
     assert summary["handoff"]["customer_artifacts"][0]["flag"] == "--write-summary"
     assert summary["proof"]["secrets_redacted"] is True
+    assert summary["connector_setup"]["health_status"] == "healthy"
+    assert summary["connector_setup"]["last_attempts"] == 1
+    assert summary["outcome_reconciliation"]["connector_attempts"] == 1
     assert len(summary["evidence_pack"]["evidence_hash"]) == 64
     assert "crm-demo-token-not-persisted" not in json.dumps(summary)
 
@@ -241,4 +318,10 @@ def test_design_partner_install_kit_writes_redacted_customer_record_artifacts(
     assert evidence["call"]["id"] == "dp-call-crm-2001"
     assert len(evidence["evidence_hash"]) == 64
     assert evidence["outcome_reconciliation"][0]["verdict"] == "matched"
+    assert evidence["outcome_reconciliation"][0]["metadata"]["source"] == (
+        "saved_connector_test"
+    )
+    assert evidence["outcome_reconciliation"][0]["metadata"]["connector"][
+        "attempts"
+    ] == 1
     assert "crm-demo-token-not-persisted" not in json.dumps(evidence)

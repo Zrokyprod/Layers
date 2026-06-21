@@ -7,8 +7,8 @@ import os
 import sys
 import tempfile
 import warnings
-from datetime import datetime, timezone
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +46,7 @@ LOCAL_ENV_KEYS = (
     "INGEST_ENFORCE_RATE_LIMIT",
     "BILLING_ENFORCE_QUOTA",
     "OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS",
+    "PROVIDER_KEY_VAULT_KEK",
 )
 
 
@@ -198,22 +199,56 @@ def _runtime_policy_payload(
     }
 
 
-def _reconciliation_payload(
+def _connector_endpoints(fixture: dict[str, Any]) -> dict[str, str]:
+    slug = (
+        "customer-record"
+        if _fixture_scenario(fixture) == "customer-record"
+        else "ledger-refund"
+    )
+    base_path = f"/v1/integrations/system-of-record/{slug}"
+    return {
+        "status_endpoint": f"{base_path}/status",
+        "config_endpoint": f"{base_path}/config",
+        "test_endpoint": f"{base_path}/test",
+    }
+
+
+def _connector_config_payload(
+    fixture: dict[str, Any], args: argparse.Namespace
+) -> dict[str, Any]:
+    if _fixture_scenario(fixture) == "customer-record":
+        crm = fixture["crm"]
+        return {
+            "base_url": args.crm_base_url or crm["base_url"],
+            "path_template": args.crm_path_template or crm["path_template"],
+            "record_path": args.crm_record_path or crm["record_path"],
+            "bearer_token": args.crm_bearer_token or crm.get("bearer_token"),
+        }
+    ledger = fixture["ledger"]
+    return {
+        "base_url": args.ledger_base_url or ledger["base_url"],
+        "path_template": args.ledger_path_template or ledger["path_template"],
+        "record_path": args.ledger_record_path or ledger["record_path"],
+        "bearer_token": args.ledger_bearer_token or ledger.get("bearer_token"),
+    }
+
+
+def _connector_test_payload(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
     runtime_policy_decision_id: str,
 ) -> dict[str, Any]:
     if _fixture_scenario(fixture) == "customer-record":
-        return _customer_record_reconciliation_payload(
+        return _customer_record_connector_test_payload(
             fixture, args, runtime_policy_decision_id=runtime_policy_decision_id
         )
-    return _ledger_reconciliation_payload(
+    return _ledger_connector_test_payload(
         fixture, args, runtime_policy_decision_id=runtime_policy_decision_id
     )
 
 
-def _ledger_reconciliation_payload(
+def _ledger_connector_test_payload(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
@@ -221,7 +256,6 @@ def _ledger_reconciliation_payload(
 ) -> dict[str, Any]:
     trace = fixture["trace"]
     claim = dict(fixture["claimed_outcome"])
-    ledger = fixture["ledger"]
     refund_id = args.refund_id or claim["refund_id"]
     amount = args.amount_usd if args.amount_usd is not None else claim["amount_usd"]
     claim.update(
@@ -246,16 +280,10 @@ def _ledger_reconciliation_payload(
             "install_kit": "design_partner_refund_v1",
             "partner_run_id": args.partner_run_id,
         },
-        "connector": {
-            "base_url": args.ledger_base_url or ledger["base_url"],
-            "path_template": args.ledger_path_template or ledger["path_template"],
-            "record_path": args.ledger_record_path or ledger["record_path"],
-            "bearer_token": args.ledger_bearer_token or ledger.get("bearer_token"),
-        },
     }
 
 
-def _customer_record_reconciliation_payload(
+def _customer_record_connector_test_payload(
     fixture: dict[str, Any],
     args: argparse.Namespace,
     *,
@@ -263,7 +291,6 @@ def _customer_record_reconciliation_payload(
 ) -> dict[str, Any]:
     trace = fixture["trace"]
     claim = dict(fixture["claimed_outcome"])
-    crm = fixture["crm"]
     customer_id = _customer_id(fixture, args)
     claim.update(
         {
@@ -286,12 +313,6 @@ def _customer_record_reconciliation_payload(
         "metadata": {
             "install_kit": _fixture_package(fixture),
             "partner_run_id": args.partner_run_id,
-        },
-        "connector": {
-            "base_url": args.crm_base_url or crm["base_url"],
-            "path_template": args.crm_path_template or crm["path_template"],
-            "record_path": args.crm_record_path or crm["record_path"],
-            "bearer_token": args.crm_bearer_token or crm.get("bearer_token"),
         },
     }
 
@@ -316,6 +337,116 @@ def _next_live_command(fixture: dict[str, Any]) -> str:
     )
 
 
+def _connector_metadata(reconciliation: dict[str, Any]) -> dict[str, Any]:
+    metadata = reconciliation.get("metadata") or {}
+    connector_metadata = metadata.get("connector") or {}
+    return dict(connector_metadata) if isinstance(connector_metadata, Mapping) else {}
+
+
+def _connector_setup_summary(
+    *,
+    endpoints: dict[str, str],
+    initial_status: dict[str, Any],
+    saved_status: dict[str, Any],
+    test_response: dict[str, Any],
+    final_status: dict[str, Any],
+    reconciliation: dict[str, Any],
+    secrets: list[str],
+) -> dict[str, Any]:
+    connector_metadata = _connector_metadata(reconciliation)
+    connector_status = test_response.get("connector") or final_status
+    setup = {
+        **endpoints,
+        "connected": connector_status.get("connected") is True,
+        "connector_type": connector_status.get("connector_type"),
+        "config_saved": saved_status.get("connected") is True,
+        "has_bearer_token": saved_status.get("has_bearer_token") is True,
+        "bearer_token_last4": saved_status.get("bearer_token_last4"),
+        "initial_health_status": initial_status.get("health_status"),
+        "health_status": final_status.get("health_status"),
+        "last_verdict": final_status.get("last_verdict"),
+        "last_http_status": final_status.get("last_http_status"),
+        "last_attempts": final_status.get("last_attempts"),
+        "last_error": final_status.get("last_error"),
+        "last_checked_at": final_status.get("last_checked_at"),
+        "last_tested_at": final_status.get("last_tested_at"),
+        "test_ok": test_response.get("ok") is True,
+        "test_check_id": reconciliation.get("id"),
+        "test_source": (reconciliation.get("metadata") or {}).get("source"),
+        "attempts": connector_metadata.get("attempts"),
+        "retry_count": connector_metadata.get("retry_count"),
+        "max_attempts": connector_metadata.get("max_attempts"),
+        "timeout_seconds": connector_metadata.get("timeout_seconds"),
+        "adapter": connector_metadata.get("adapter"),
+    }
+    setup["secrets_redacted"] = not _contains_secret(
+        {
+            "initial_status": initial_status,
+            "saved_status": saved_status,
+            "test_response": test_response,
+            "final_status": final_status,
+            "setup": setup,
+        },
+        secrets,
+    )
+    return _redact(setup, secrets)
+
+
+def _run_connector_setup(
+    client: Any,
+    fixture: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    runtime_policy_decision_id: str,
+    headers: dict[str, str] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    request_headers = headers or {}
+    endpoints = _connector_endpoints(fixture)
+    initial_status = _assert_response(
+        client.get(endpoints["status_endpoint"], headers=request_headers),
+        200,
+        "connector status",
+    )
+    saved_status = _assert_response(
+        client.put(
+            endpoints["config_endpoint"],
+            headers=request_headers,
+            json=_connector_config_payload(fixture, args),
+        ),
+        200,
+        "connector config",
+    )
+    test_response = _assert_response(
+        client.post(
+            endpoints["test_endpoint"],
+            headers=request_headers,
+            json=_connector_test_payload(
+                fixture,
+                args,
+                runtime_policy_decision_id=runtime_policy_decision_id,
+            ),
+        ),
+        201,
+        "connector test",
+    )
+    final_status = _assert_response(
+        client.get(endpoints["status_endpoint"], headers=request_headers),
+        200,
+        "connector status after test",
+    )
+    reconciliation = test_response["check"]
+    setup = _connector_setup_summary(
+        endpoints=endpoints,
+        initial_status=initial_status,
+        saved_status=saved_status,
+        test_response=test_response,
+        final_status=final_status,
+        reconciliation=reconciliation,
+        secrets=_connector_secrets(fixture, args),
+    )
+    return reconciliation, setup
+
+
 def _artifact_prefix(fixture: dict[str, Any]) -> str:
     if _fixture_scenario(fixture) == "customer-record":
         return "design-partner-crm"
@@ -330,10 +461,11 @@ def _summarise(
     runtime_decision: dict[str, Any],
     reconciliation: dict[str, Any],
     evidence_pack: dict[str, Any],
+    connector_setup: dict[str, Any],
     secrets: list[str],
 ) -> dict[str, Any]:
     metadata = reconciliation.get("metadata") or {}
-    connector_metadata = metadata.get("connector") or {}
+    connector_metadata = _connector_metadata(reconciliation)
     evidence_outcomes = evidence_pack.get("outcome_reconciliation") or []
     evidence_call = evidence_pack.get("call") or {}
     artifact_prefix = _artifact_prefix(fixture)
@@ -367,7 +499,12 @@ def _summarise(
             "match_fields": metadata.get("match_fields"),
             "connector_http_status": connector_metadata.get("http_status"),
             "connector_request_url": connector_metadata.get("request_url"),
+            "connector_attempts": connector_metadata.get("attempts"),
+            "connector_retry_count": connector_metadata.get("retry_count"),
+            "connector_max_attempts": connector_metadata.get("max_attempts"),
+            "connector_timeout_seconds": connector_metadata.get("timeout_seconds"),
         },
+        "connector_setup": connector_setup,
         "evidence_pack": {
             "decision_id": evidence_pack["decision_id"],
             "verification_status": evidence_pack["verification_status"],
@@ -379,11 +516,21 @@ def _summarise(
         "proof": {
             "captured_call_linked": evidence_call.get("id") == call_id,
             "unsafe_action_stopped": runtime_decision["allowed"] is False,
+            "connector_configured": connector_setup.get("connected") is True
+            and connector_setup.get("config_saved") is True,
+            "connector_health_verified": connector_setup.get("health_status")
+            == "healthy"
+            and connector_setup.get("last_verdict") == "matched"
+            and connector_setup.get("last_attempts") is not None,
             "matched_outcome_shown": reconciliation["verdict"] == "matched",
             "evidence_hash_visible": bool(evidence_pack.get("evidence_hash")),
             "evidence_pack_passed": evidence_pack["verification_status"] == "pass",
             "secrets_redacted": not _contains_secret(
-                {"reconciliation": reconciliation, "evidence_pack": evidence_pack},
+                {
+                    "connector_setup": connector_setup,
+                    "reconciliation": reconciliation,
+                    "evidence_pack": evidence_pack,
+                },
                 secrets,
             ),
         },
@@ -393,6 +540,8 @@ def _summarise(
             "pass_criteria": [
                 "captured_call_linked",
                 "unsafe_action_stopped",
+                "connector_configured",
+                "connector_health_verified",
                 "matched_outcome_shown",
                 "evidence_hash_visible",
                 "evidence_pack_passed",
@@ -478,6 +627,7 @@ def _configure_local_env(db_path: Path) -> dict[str, str | None]:
             "INGEST_ENFORCE_RATE_LIMIT": "false",
             "BILLING_ENFORCE_QUOTA": "false",
             "OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS": "false",
+            "PROVIDER_KEY_VAULT_KEK": "design-partner-install-kit-kek-1234567890",
         }
     )
     return snapshot
@@ -486,7 +636,7 @@ def _configure_local_env(db_path: Path) -> dict[str, str | None]:
 def _seed_local_call(
     session_local: Any, fixture: dict[str, Any], args: argparse.Namespace
 ) -> None:
-    from app.db.models import Call
+    from app.db.models import Call, Project
 
     agent = fixture["agent"]
     trace = fixture["trace"]
@@ -494,6 +644,7 @@ def _seed_local_call(
     risky_action = fixture["risky_action"]
     call_id = args.call_id or trace["call_id"]
     trace_id = args.trace_id or trace["trace_id"]
+    project_id = args.project_id or fixture["project_id"]
     tool_args = dict(risky_action.get("tool_args") or {})
     if _fixture_scenario(fixture) == "customer-record":
         tool_args.update(
@@ -515,10 +666,12 @@ def _seed_local_call(
         )
     now = datetime.now(timezone.utc)
     with session_local() as session:
+        if session.get(Project, project_id) is None:
+            session.add(Project(id=project_id, name=project_id))
         session.add(
             Call(
                 id=call_id,
-                project_id=args.project_id or fixture["project_id"],
+                project_id=project_id,
                 event_id=f"evt-{call_id}",
                 created_at=now,
                 agent_name=args.agent_name or agent["name"],
@@ -594,6 +747,10 @@ def _install_local_ledger_stub(fixture: dict[str, Any]) -> Any:
                     "http_status": 404,
                     "refund_id": self.refund_id,
                     "adapter": "design_partner_local_stub",
+                    "attempts": 1,
+                    "retry_count": 0,
+                    "max_attempts": self.max_attempts,
+                    "timeout_seconds": self.timeout_seconds,
                 },
             )
         return SourceRecord(
@@ -606,6 +763,10 @@ def _install_local_ledger_stub(fixture: dict[str, Any]) -> Any:
                 "record_path": ledger["record_path"],
                 "refund_id": self.refund_id,
                 "adapter": "design_partner_local_stub",
+                "attempts": 1,
+                "retry_count": 0,
+                "max_attempts": self.max_attempts,
+                "timeout_seconds": self.timeout_seconds,
             },
         )
 
@@ -642,6 +803,10 @@ def _install_local_customer_record_stub(fixture: dict[str, Any]) -> Any:
                     "http_status": 404,
                     "customer_id": self.customer_id,
                     "adapter": "design_partner_local_stub",
+                    "attempts": 1,
+                    "retry_count": 0,
+                    "max_attempts": self.max_attempts,
+                    "timeout_seconds": self.timeout_seconds,
                 },
             )
         return SourceRecord(
@@ -654,6 +819,10 @@ def _install_local_customer_record_stub(fixture: dict[str, Any]) -> Any:
                 "record_path": crm["record_path"],
                 "customer_id": self.customer_id,
                 "adapter": "design_partner_local_stub",
+                "attempts": 1,
+                "retry_count": 0,
+                "max_attempts": self.max_attempts,
+                "timeout_seconds": self.timeout_seconds,
             },
         )
 
@@ -669,15 +838,6 @@ def _install_local_connector_stub(fixture: dict[str, Any]) -> Any:
     if _fixture_scenario(fixture) == "customer-record":
         return _install_local_customer_record_stub(fixture)
     return _install_local_ledger_stub(fixture)
-
-
-def _reconciliation_endpoint_and_label(fixture: dict[str, Any]) -> tuple[str, str]:
-    if _fixture_scenario(fixture) == "customer-record":
-        return (
-            "/v1/outcomes/reconciliation/customer-record",
-            "customer record reconciliation",
-        )
-    return "/v1/outcomes/reconciliation/ledger-refund", "ledger refund reconciliation"
 
 
 def _run_local_demo(
@@ -756,9 +916,6 @@ def _run_local_demo(
                 override_tenant_context
             )
             restore_connector = _install_local_connector_stub(fixture)
-            reconciliation_endpoint, reconciliation_label = (
-                _reconciliation_endpoint_and_label(fixture)
-            )
 
             try:
                 with TestClient(app_ref) as client:
@@ -770,17 +927,11 @@ def _run_local_demo(
                         200,
                         "runtime policy check",
                     )
-                    reconciliation = _assert_response(
-                        client.post(
-                            reconciliation_endpoint,
-                            json=_reconciliation_payload(
-                                fixture,
-                                args,
-                                runtime_policy_decision_id=runtime_decision["id"],
-                            ),
-                        ),
-                        201,
-                        reconciliation_label,
+                    reconciliation, connector_setup = _run_connector_setup(
+                        client,
+                        fixture,
+                        args,
+                        runtime_policy_decision_id=runtime_decision["id"],
                     )
                     evidence_pack = _assert_response(
                         client.get(
@@ -815,6 +966,7 @@ def _run_local_demo(
         runtime_decision=runtime_decision,
         reconciliation=reconciliation,
         evidence_pack=evidence_pack,
+        connector_setup=connector_setup,
         secrets=secrets,
     )
     return summary, evidence_pack
@@ -850,9 +1002,6 @@ def _run_live(
 
     headers = _headers(args)
     timeout = args.timeout_seconds
-    reconciliation_endpoint, reconciliation_label = _reconciliation_endpoint_and_label(
-        fixture
-    )
     with httpx.Client(
         base_url=args.api_base_url.rstrip("/"), timeout=timeout
     ) as client:
@@ -865,18 +1014,12 @@ def _run_live(
             200,
             "runtime policy check",
         )
-        reconciliation = _assert_response(
-            client.post(
-                reconciliation_endpoint,
-                headers=headers,
-                json=_reconciliation_payload(
-                    fixture,
-                    args,
-                    runtime_policy_decision_id=runtime_decision["id"],
-                ),
-            ),
-            201,
-            reconciliation_label,
+        reconciliation, connector_setup = _run_connector_setup(
+            client,
+            fixture,
+            args,
+            runtime_policy_decision_id=runtime_decision["id"],
+            headers=headers,
         )
         evidence_pack = _assert_response(
             client.get(
@@ -895,6 +1038,7 @@ def _run_live(
         runtime_decision=runtime_decision,
         reconciliation=reconciliation,
         evidence_pack=evidence_pack,
+        connector_setup=connector_setup,
         secrets=secrets,
     )
     return summary, evidence_pack
@@ -1000,6 +1144,8 @@ def _print_summary(summary: dict[str, Any], *, as_json: bool) -> None:
     print(f"runtime_policy_decision_id={summary['runtime_policy']['decision_id']}")
     print(f"runtime_policy_status={summary['runtime_policy']['status']}")
     print(f"runtime_policy_allowed={str(summary['runtime_policy']['allowed']).lower()}")
+    print(f"connector_health_status={summary['connector_setup']['health_status']}")
+    print(f"connector_last_attempts={summary['connector_setup']['last_attempts']}")
     print(f"outcome_verdict={summary['outcome_reconciliation']['verdict']}")
     print(f"evidence_hash={summary['evidence_pack']['evidence_hash']}")
     print(
