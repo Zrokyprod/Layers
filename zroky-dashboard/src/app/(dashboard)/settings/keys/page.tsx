@@ -139,6 +139,18 @@ function ApiKeysContent() {
   const protectedMandateStarter = buildMandateStarter(selectedAgent);
   const protectedAgentSnippet = buildProtectedAgentSnippet(selectedAgent, snippetProjectId);
   const liveSmokeCommand = buildLiveSmokeCommand(selectedAgent);
+  const connectorSetupHref =
+    selectedAgent.liveSmokeScenario === "refund"
+      ? "/settings/integrations#ledger-refund-connector"
+      : selectedAgent.liveSmokeScenario === "customer-record"
+        ? "/settings/integrations#customer-record-connector"
+        : "/settings/integrations";
+  const connectorSetupLabel =
+    selectedAgent.liveSmokeScenario === "refund"
+      ? "Configure ledger connector"
+      : selectedAgent.liveSmokeScenario === "customer-record"
+        ? "Configure CRM connector"
+        : "Open integrations";
   const jsSetupSnippet = `npm install @zroky-ai/sdk
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
@@ -283,6 +295,10 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
                     <li key={input}>{input}</li>
                   ))}
                 </ul>
+                <Link href={connectorSetupHref} className="btn btn-primary btn-sm">
+                  {connectorSetupLabel}
+                  <ArrowRight aria-hidden="true" />
+                </Link>
               </article>
               <article className="keys-pilot-card">
                 <h4>Pass criteria</h4>

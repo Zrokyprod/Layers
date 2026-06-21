@@ -29940,6 +29940,7 @@ button.gm-kpi-card {
 .app-shell .settings-connector-card {
   display: grid;
   gap: 13px;
+  scroll-margin-top: 92px;
 }
 
 .app-shell .settings-connector-facts {
