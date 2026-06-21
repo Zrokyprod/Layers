@@ -32,6 +32,51 @@ VALID_CONNECTOR_TYPES = frozenset(
     {CUSTOMER_RECORD_CONNECTOR_TYPE, LEDGER_REFUND_CONNECTOR_TYPE}
 )
 
+_CONNECTOR_CONTRACTS: dict[str, dict[str, Any]] = {
+    LEDGER_REFUND_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": LEDGER_REFUND_CONNECTOR_TYPE,
+        "adapter": "https_json_record",
+        "system_of_record": "ledger_refund",
+        "config_endpoint": "/v1/integrations/system-of-record/ledger-refund/config",
+        "status_endpoint": "/v1/integrations/system-of-record/ledger-refund/status",
+        "test_endpoint": "/v1/integrations/system-of-record/ledger-refund/test",
+        "required_inputs": [
+            "https_base_url",
+            "path_template_with_refund_id",
+            "read_scoped_bearer_token",
+            "safe_existing_refund_id",
+        ],
+        "required_record_fields": ["refund_id", "status"],
+        "recommended_record_fields": ["amount_usd", "currency"],
+        "pass_rule": (
+            "A saved connector test must fetch one refund record from the "
+            "system of record and reconcile it as matched."
+        ),
+    },
+    CUSTOMER_RECORD_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": CUSTOMER_RECORD_CONNECTOR_TYPE,
+        "adapter": "https_json_record",
+        "system_of_record": "customer_record",
+        "config_endpoint": "/v1/integrations/system-of-record/customer-record/config",
+        "status_endpoint": "/v1/integrations/system-of-record/customer-record/status",
+        "test_endpoint": "/v1/integrations/system-of-record/customer-record/test",
+        "required_inputs": [
+            "https_base_url",
+            "path_template_with_customer_id",
+            "read_scoped_bearer_token",
+            "safe_existing_customer_id",
+        ],
+        "required_record_fields": ["customer_id", "status"],
+        "recommended_record_fields": ["email", "account_id"],
+        "pass_rule": (
+            "A saved connector test must fetch one customer record from the "
+            "system of record and reconcile it as matched."
+        ),
+    },
+}
+
 
 class InvalidSystemOfRecordConnectorError(ValueError):
     """Raised when a connector config is invalid or unsupported."""
@@ -74,6 +119,57 @@ def _as_bool(value: Any) -> bool | None:
         if normalized in {"false", "0", "no"}:
             return False
     return None
+
+
+def _connector_contract(connector_type: str) -> dict[str, Any]:
+    connector_type = _normalize_connector_type(connector_type)
+    return json.loads(json.dumps(_CONNECTOR_CONTRACTS[connector_type]))
+
+
+def _connector_readiness(
+    row: SystemOfRecordConnectorConfig | None,
+    *,
+    connector_type: str,
+    health: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    connector_type = _normalize_connector_type(connector_type)
+    health_payload = dict(health or {})
+    last_http_status = _as_int(health_payload.get("last_http_status"))
+    last_attempts = _as_int(health_payload.get("last_attempts"))
+    last_error_code = health_payload.get("last_error_code")
+    last_retryable = _as_bool(health_payload.get("last_retryable"))
+    checks = {
+        "config_saved": row is not None and bool(row.is_active),
+        "bearer_token_present": row is not None
+        and bool(row.bearer_token_ciphertext),
+        "saved_test_matched": health_payload.get("last_verdict") == "matched",
+        "connector_attempted": last_attempts is not None and last_attempts >= 1,
+        "http_2xx": last_http_status is not None
+        and 200 <= last_http_status <= 299,
+        "no_connector_error_code": last_error_code in (None, ""),
+        "not_retryable_failure": last_retryable in (None, False),
+    }
+    blocker_messages = {
+        "config_saved": "connector config has not been saved",
+        "bearer_token_present": "read-scoped bearer token is missing",
+        "saved_test_matched": "latest connector test did not reconcile as matched",
+        "connector_attempted": "connector has not attempted a system-of-record read",
+        "http_2xx": "latest connector test did not return a 2xx HTTP response",
+        "no_connector_error_code": "latest connector test has an error code",
+        "not_retryable_failure": "latest connector test ended in a retryable failure",
+    }
+    blockers = [
+        blocker_messages[key]
+        for key, passed in checks.items()
+        if not passed
+    ]
+    return {
+        "status": "ready" if not blockers else "not_ready",
+        "contract": _connector_contract(connector_type),
+        "checks": checks,
+        "blockers": blockers,
+        "last_checked_at": health_payload.get("last_checked_at"),
+    }
 
 
 def _normalize_connector_type(connector_type: str) -> str:
@@ -403,6 +499,11 @@ def serialize_connector_config(
 ) -> dict[str, Any]:
     connector_type = _normalize_connector_type(connector_type)
     health_payload = dict(health or {})
+    readiness = _connector_readiness(
+        row,
+        connector_type=connector_type,
+        health=health_payload,
+    )
     if row is None:
         return {
             "connected": False,
@@ -424,6 +525,7 @@ def serialize_connector_config(
             "last_attempts": None,
             "last_retryable": None,
             "last_checked_at": None,
+            "readiness": readiness,
         }
     return {
         "connected": bool(row.is_active),
@@ -445,6 +547,7 @@ def serialize_connector_config(
         "last_attempts": health_payload.get("last_attempts"),
         "last_retryable": health_payload.get("last_retryable"),
         "last_checked_at": health_payload.get("last_checked_at"),
+        "readiness": readiness,
     }
 
 

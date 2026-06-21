@@ -174,6 +174,7 @@ def _metadata(
     *,
     connector_type: str,
     request_url: str,
+    adapter: str = "https_json_record",
     http_status: int | None = None,
     record_path: str | None = None,
     error: str | None = None,
@@ -186,6 +187,7 @@ def _metadata(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "connector_type": connector_type,
+        "adapter": adapter,
         "request_url": _without_query(request_url),
     }
     if http_status is not None:

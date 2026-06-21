@@ -21,6 +21,8 @@ A successful run means:
 - Zroky blocked or held the risky action instead of silently allowing it.
 - Zroky configured the system-of-record connector and marked it healthy only
   after a saved connector test matched ground truth.
+- Zroky marked the connector ready only after config, token, matched test,
+  HTTP 2xx, and real read-attempt checks passed.
 - Zroky checked the real ledger or CRM outcome, not just the agent's text output.
 - Zroky produced an audit-ready evidence hash.
 - No API key, ledger token, or CRM token was printed into the handoff artifacts.
@@ -51,9 +53,11 @@ Expected summary:
 - `connector_setup.config_endpoint`: `/v1/integrations/system-of-record/.../config`
 - `connector_setup.test_endpoint`: `/v1/integrations/system-of-record/.../test`
 - `connector_setup.health_status`: `healthy`
+- `connector_setup.readiness_status`: `ready`
 - `connector_setup.last_attempts`: `1` or higher
 - `connector_setup.last_error_code`: `null`
 - `connector_setup.last_retryable`: `null`
+- `connector_setup.readiness_blockers`: `[]`
 - `outcome_reconciliation.verdict`: `matched`
 - `outcome_reconciliation.connector_attempts`: `1` or higher
 - `outcome_reconciliation.connector_error_code`: `null`
@@ -83,8 +87,11 @@ Each template contains:
 - config endpoint: saves the base URL, path template, record path, and token.
 - test endpoint: queries one safe existing record and reconciles it against the
   claimed fields.
-- pass criteria: `health_status=healthy`, `verdict=matched`, attempts present,
-  no `last_error_code`, and no leaked secret.
+- readiness contract: documents the required inputs, record fields, and checks
+  that must pass before the connector is considered ready.
+- pass criteria: `health_status=healthy`, `readiness_status=ready`,
+  `verdict=matched`, attempts present, no `last_error_code`, and no leaked
+  secret.
 
 ## Live Connector Preflight
 
@@ -109,10 +116,12 @@ Expected preflight summary:
 - `mode`: `live_preflight`
 - `connector_setup.config_saved`: `true`
 - `connector_setup.health_status`: `healthy`
+- `connector_setup.readiness_status`: `ready`
 - `connector_setup.last_verdict`: `matched`
 - `connector_setup.last_attempts`: `1` or higher
 - `connector_setup.last_error_code`: `null`
 - `connector_setup.last_retryable`: `null`
+- `connector_setup.readiness_blockers`: `[]`
 - `outcome_reconciliation.verdict`: `matched`
 - `proof.secrets_redacted`: `true`
 
@@ -162,6 +171,7 @@ The handoff is a pass only when all of these are true:
 - `unsafe_action_stopped`
 - `connector_configured`
 - `connector_health_verified`
+- `real_connector_ready`
 - `matched_outcome_shown`
 - `evidence_hash_visible`
 - `evidence_pack_passed`
@@ -178,6 +188,7 @@ missing.
 | `unsafe_action_stopped=false` | Runtime policy did not block/hold the risky action. | Check mandate, action type, impact amount, and policy thresholds. |
 | `connector_configured=false` | The saved connector config was not accepted or was not active. | Check connector base URL, path template, token, project id, and admin role. |
 | `connector_health_verified=false` | Connector setup exists but the latest saved connector test is not healthy/matched. | Open `connector_setup.last_error_code`, `last_error`, HTTP status, attempts, and the connector test check. |
+| `real_connector_ready=false` | Connector health looked green but the readiness contract did not pass. | Open `connector_setup.readiness_blockers` and fix missing token, missing HTTP 2xx, missing attempts, or connector error code. |
 | `matched_outcome_shown=false` | System of record did not match the agent's claim. | Compare refund id, amount, currency, and status. |
 | `evidence_pack_passed=false` | Evidence exists but is not verified. | Open the evidence pack and inspect decision/outcome status. |
 | `secrets_redacted=false` | A secret leaked into summary or evidence. | Stop the handoff, rotate the leaked token, and fix redaction before rerun. |
@@ -188,7 +199,8 @@ missing.
 ## Buyer Demo Script
 
 1. Pick the partner's highest-stakes live-like scenario: refund or CRM/customer record.
-2. Run live preflight and show `connector_setup.health_status=healthy`.
+2. Run live preflight and show `connector_setup.health_status=healthy` and
+   `connector_setup.readiness_status=ready`.
 3. Run the full install kit and point to `runtime_policy.allowed=false`.
 4. Show `connector_setup.health_status=healthy` and `connector_setup.last_attempts`.
 5. Show `outcome_reconciliation.verdict=matched`.

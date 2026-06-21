@@ -29,8 +29,37 @@
       "partner_run_id": "<partner_run_id>"
     }
   },
+  "readiness_contract": {
+    "schema_version": "system_of_record_connector.v1",
+    "adapter": "https_json_record",
+    "system_of_record": "ledger_refund",
+    "required_inputs": [
+      "https_base_url",
+      "path_template_with_refund_id",
+      "read_scoped_bearer_token",
+      "safe_existing_refund_id"
+    ],
+    "required_record_fields": [
+      "refund_id",
+      "status"
+    ],
+    "recommended_record_fields": [
+      "amount_usd",
+      "currency"
+    ],
+    "ready_when": [
+      "config_saved",
+      "bearer_token_present",
+      "saved_test_matched",
+      "connector_attempted",
+      "http_2xx",
+      "no_connector_error_code",
+      "not_retryable_failure"
+    ]
+  },
   "pass_criteria": {
     "connector_health_status": "healthy",
+    "readiness_status": "ready",
     "outcome_verdict": "matched",
     "last_attempts": ">=1",
     "last_error_code": null,
