@@ -30046,6 +30046,61 @@ button.gm-kpi-card {
   font-size: 0.7rem;
 }
 
+.app-shell .settings-connector-guidance,
+.app-shell .settings-connector-handoff {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.app-shell .settings-connector-guidance > div,
+.app-shell .settings-connector-handoff-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.app-shell .settings-connector-guidance > div::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: var(--brand-orange);
+}
+
+.app-shell .settings-connector-guidance strong,
+.app-shell .settings-connector-handoff-header h4 {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.app-shell .settings-connector-guidance p,
+.app-shell .settings-connector-handoff-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.app-shell .settings-connector-handoff-header > svg {
+  margin-top: 2px;
+  color: var(--brand-orange);
+}
+
+.app-shell .settings-connector-handoff .settings-connector-payload {
+  margin: 0;
+}
+
 .app-shell .settings-connector-form,
 .app-shell .settings-connector-test {
   display: grid;

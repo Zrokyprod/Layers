@@ -467,6 +467,44 @@ describe("IntegrationsSettingsPage", () => {
     expect(await screen.findByText("Ledger refund saved-connector test payload copied.")).toBeInTheDocument();
   });
 
+  it("surfaces ledger preflight handoff command and downloadable template", async () => {
+    const clipboardWrite = vi.spyOn(navigator.clipboard, "writeText");
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Ledger refund connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+
+    fireEvent.change(within(connectorCard as HTMLElement).getByLabelText("Refund ID"), {
+      target: { value: "RF-PILOT-1" },
+    });
+
+    const command = within(connectorCard as HTMLElement).getByLabelText("Ledger refund preflight command");
+    expect(command.textContent).toContain("--scenario refund --preflight-only");
+    expect(command.textContent).toContain("--ledger-base-url https://ledger.example.com/api");
+    expect(command.textContent).not.toContain("ledger-secret-token");
+
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Copy preflight command" }));
+
+    await waitFor(() =>
+      expect(clipboardWrite).toHaveBeenCalledWith(
+        expect.stringContaining("--refund-id RF-PILOT-1"),
+      ),
+    );
+    expect(await screen.findByText("Ledger refund preflight command copied.")).toBeInTheDocument();
+
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Download template JSON" }));
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
+    const template = await blob.text();
+    expect(template).toContain('"connector_type": "ledger_refund_api"');
+    expect(template).toContain('"bearer_token": "<ledger_bearer_token>"');
+    expect(template).toContain('"refund_id": "RF-PILOT-1"');
+    expect(template).not.toContain("ledger-secret-token");
+    expect(await screen.findByText("Ledger refund connector template downloaded.")).toBeInTheDocument();
+  });
+
   it("saves ledger refund connector config without rendering the token", async () => {
     render(<IntegrationsSettingsPage />);
 
@@ -485,6 +523,41 @@ describe("IntegrationsSettingsPage", () => {
     );
     expect(await screen.findByText("Ledger refund connector saved.")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("new-ledger-secret-token");
+  });
+
+  it("shows exact fix guidance for auth-failed ledger preflight", async () => {
+    api.getLedgerRefundConnectorStatus.mockResolvedValue({
+      connected: true,
+      connector_type: "ledger_refund_api",
+      base_url: "https://ledger.example.com/api",
+      path_template: "/refunds/{refund_id}",
+      record_path: "data",
+      query: null,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      last_tested_at: "2026-06-20T09:00:00Z",
+      health_status: "auth_failed",
+      last_verdict: "not_verified",
+      last_error: "http_error",
+      last_error_code: "auth_failed",
+      last_http_status: 401,
+      last_attempts: 1,
+      last_retryable: false,
+      last_checked_at: "2026-06-20T09:00:00Z",
+      created_at: "2026-06-20T08:00:00Z",
+      updated_at: "2026-06-20T08:30:00Z",
+    });
+    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 0, items: [] });
+
+    render(<IntegrationsSettingsPage />);
+
+    const guidance = await screen.findByLabelText("Ledger refund preflight guidance");
+    expect(within(guidance).getByText("Action required")).toBeInTheDocument();
+    expect(
+      within(guidance).getByText(
+        "Fix ledger/refund auth: rotate the bearer token, confirm scopes, then rerun preflight.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("runs saved connector reconciliation from the dashboard", async () => {
@@ -572,6 +645,44 @@ describe("IntegrationsSettingsPage", () => {
     expect(copied).not.toContain("bearer_token");
     expect(copied).not.toContain("$CRM_TOKEN");
     expect(await screen.findByText("Customer record saved-connector test payload copied.")).toBeInTheDocument();
+  });
+
+  it("surfaces customer preflight handoff command and downloadable template", async () => {
+    const clipboardWrite = vi.spyOn(navigator.clipboard, "writeText");
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Customer record connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+
+    fireEvent.change(within(connectorCard as HTMLElement).getByLabelText("Customer ID"), {
+      target: { value: "CUS-PILOT-1" },
+    });
+
+    const command = within(connectorCard as HTMLElement).getByLabelText("Customer record preflight command");
+    expect(command.textContent).toContain("--scenario customer-record --preflight-only");
+    expect(command.textContent).toContain("--crm-base-url https://crm.example.com/api");
+    expect(command.textContent).not.toContain("crm-secret-token");
+
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Copy preflight command" }));
+
+    await waitFor(() =>
+      expect(clipboardWrite).toHaveBeenCalledWith(
+        expect.stringContaining("--customer-id CUS-PILOT-1"),
+      ),
+    );
+    expect(await screen.findByText("Customer record preflight command copied.")).toBeInTheDocument();
+
+    fireEvent.click(within(connectorCard as HTMLElement).getByRole("button", { name: "Download template JSON" }));
+
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
+    const template = await blob.text();
+    expect(template).toContain('"connector_type": "customer_record_api"');
+    expect(template).toContain('"bearer_token": "<crm_bearer_token>"');
+    expect(template).toContain('"customer_id": "CUS-PILOT-1"');
+    expect(template).not.toContain("crm-secret-token");
+    expect(await screen.findByText("Customer record connector template downloaded.")).toBeInTheDocument();
   });
 
   it("saves customer record connector config without rendering the token", async () => {

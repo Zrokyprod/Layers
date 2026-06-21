@@ -55,6 +55,16 @@ type ConnectorEvidenceState = {
   pack: RuntimePolicyEvidencePackResponse;
 };
 
+type ConnectorGuidanceInput = {
+  kind: ConnectorEvidenceKind;
+  connected: boolean;
+  health: string;
+  verdict: string | null | undefined;
+  errorCode: string | null | undefined;
+  httpStatus: unknown;
+  retryable: boolean | null | undefined;
+};
+
 type LedgerConnectorForm = {
   baseUrl: string;
   pathTemplate: string;
@@ -173,6 +183,49 @@ function connectorErrorLabel(
   return retryable ? `${label} / retryable` : label;
 }
 
+function connectorFixGuidance({
+  kind,
+  connected,
+  health,
+  verdict,
+  errorCode,
+  httpStatus,
+  retryable,
+}: ConnectorGuidanceInput) {
+  const surface = kind === "ledger" ? "ledger/refund" : "CRM/customer";
+  const code = textValue(errorCode)?.toLowerCase();
+  const status = textValue(httpStatus);
+
+  if (!connected) {
+    return "Save connector config, then run preflight before pilot handoff.";
+  }
+  if (verdict === "mismatched") {
+    return `Fix ${surface} mismatch: compare claimed fields with the system-of-record record, then rerun preflight.`;
+  }
+  if (code === "auth_failed" || status === "401" || status === "403") {
+    return `Fix ${surface} auth: rotate the bearer token, confirm scopes, then rerun preflight.`;
+  }
+  if (code === "connector_timeout") {
+    return `Fix ${surface} reachability: confirm the API is public HTTPS, allowlisted, and responds within timeout.`;
+  }
+  if (code === "rate_limited" || status === "429") {
+    return `Fix ${surface} throttling: raise the partner API limit or rerun after the retry window.`;
+  }
+  if (code === "connector_config_invalid") {
+    return `Fix ${surface} config: use HTTPS, a relative path template, and the required record id placeholder.`;
+  }
+  if (code === "upstream_retryable_http_error" || retryable) {
+    return `Fix ${surface} upstream: the partner API returned a retryable error; retry after recovery.`;
+  }
+  if (code === "upstream_http_error" || status === "404") {
+    return `Fix ${surface} lookup: verify base URL, path template, record path, and the test record id.`;
+  }
+  if (health === "healthy" && verdict === "matched") {
+    return "Preflight ready: connector matched ground truth and can support the buyer proof.";
+  }
+  return "Run preflight from this saved connector; do not pass handoff until health is Healthy and verdict is Matched.";
+}
+
 function connectorPillClass(check: OutcomeReconciliationView | null) {
   if (!check) return "pill";
   if (check.verdict === "matched") return "pill pill-green";
@@ -197,16 +250,20 @@ function safeEvidenceFilePart(value: string) {
   return value.replace(/[^a-zA-Z0-9_.-]+/g, "_");
 }
 
-function downloadConnectorEvidencePack(pack: RuntimePolicyEvidencePackResponse, kind: ConnectorEvidenceKind) {
-  const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json" });
+function downloadJsonFile(payload: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `zroky-${kind}-evidence-${safeEvidenceFilePart(pack.decision_id)}.json`;
+  anchor.download = filename;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+function downloadConnectorEvidencePack(pack: RuntimePolicyEvidencePackResponse, kind: ConnectorEvidenceKind) {
+  downloadJsonFile(pack, `zroky-${kind}-evidence-${safeEvidenceFilePart(pack.decision_id)}.json`);
 }
 
 function maskHost(hostname: string) {
@@ -224,6 +281,99 @@ function maskedConnectorUrl(value: unknown) {
   } catch {
     return "Masked connector URL";
   }
+}
+
+function commandValue(value: string, fallback: string) {
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
+function ledgerPreflightCommand(form: LedgerConnectorForm) {
+  return `python scripts/run_design_partner_install_kit.py --scenario refund --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url ${commandValue(form.baseUrl, "https://ledger.example.com/api")} --ledger-bearer-token <ledger_token> --refund-id ${commandValue(form.testRefundId, "<refund_id>")} --json --write-summary artifacts/design-partner-refund-preflight-summary.json`;
+}
+
+function customerPreflightCommand(form: CustomerConnectorForm) {
+  return `python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url ${commandValue(form.baseUrl, "https://crm.example.com/api")} --crm-bearer-token <crm_token> --customer-id ${commandValue(form.testCustomerId, "<customer_id>")} --json --write-summary artifacts/design-partner-crm-preflight-summary.json`;
+}
+
+function ledgerConnectorTemplate(form: LedgerConnectorForm) {
+  const amount = Number(form.testAmountUsd.trim());
+  const amountUsd = Number.isFinite(amount) ? amount : 42.18;
+  const refundId = commandValue(form.testRefundId, "RF-1001");
+  const currency = commandValue(form.testCurrency, "USD").toUpperCase();
+  const status = commandValue(form.testStatus, "posted");
+  return {
+    connector_type: "ledger_refund_api",
+    config_endpoint: "/v1/integrations/system-of-record/ledger-refund/config",
+    status_endpoint: "/v1/integrations/system-of-record/ledger-refund/status",
+    test_endpoint: "/v1/integrations/system-of-record/ledger-refund/test",
+    config_payload: {
+      base_url: commandValue(form.baseUrl, "https://ledger.example.com/api"),
+      path_template: commandValue(form.pathTemplate, "/refunds/{refund_id}"),
+      record_path: commandValue(form.recordPath, "data"),
+      bearer_token: "<ledger_bearer_token>",
+    },
+    test_payload: {
+      refund_id: refundId,
+      claimed: {
+        refund_id: refundId,
+        amount_usd: amountUsd,
+        currency,
+        status,
+      },
+      match_fields: ["refund_id", "amount_usd", "currency", "status"],
+      amount_usd: amountUsd,
+      currency,
+      metadata: {
+        install_kit: "design_partner_refund_v1",
+        partner_run_id: "<partner_run_id>",
+      },
+    },
+    pass_criteria: {
+      connector_health_status: "healthy",
+      outcome_verdict: "matched",
+      last_attempts: ">=1",
+      last_error_code: null,
+      last_retryable: null,
+    },
+  };
+}
+
+function customerConnectorTemplate(form: CustomerConnectorForm) {
+  const customerId = commandValue(form.testCustomerId, "CUS-1001");
+  return {
+    connector_type: "customer_record_api",
+    config_endpoint: "/v1/integrations/system-of-record/customer-record/config",
+    status_endpoint: "/v1/integrations/system-of-record/customer-record/status",
+    test_endpoint: "/v1/integrations/system-of-record/customer-record/test",
+    config_payload: {
+      base_url: commandValue(form.baseUrl, "https://crm.example.com/api"),
+      path_template: commandValue(form.pathTemplate, "/customers/{customer_id}"),
+      record_path: commandValue(form.recordPath, "data"),
+      bearer_token: "<crm_bearer_token>",
+    },
+    test_payload: {
+      customer_id: customerId,
+      claimed: {
+        customer_id: customerId,
+        email: commandValue(form.testEmail, "owner@example.com"),
+        account_id: commandValue(form.testAccountId, "acct_1001"),
+        status: commandValue(form.testStatus, "active"),
+      },
+      match_fields: ["customer_id", "email", "account_id", "status"],
+      metadata: {
+        install_kit: "design_partner_crm_v1",
+        partner_run_id: "<partner_run_id>",
+      },
+    },
+    pass_criteria: {
+      connector_health_status: "healthy",
+      outcome_verdict: "matched",
+      last_attempts: ">=1",
+      last_error_code: null,
+      last_retryable: null,
+    },
+  };
 }
 
 function ledgerRefundPayloadSnippet() {
@@ -359,24 +509,48 @@ export default function IntegrationsSettingsPage() {
   const ledgerVerified = latestLedgerRefundCheck?.verdict === "matched";
   const customerVerified = latestCustomerRecordCheck?.verdict === "matched";
   const readyCount = [githubConnected, slackConnected, ledgerConnected && ledgerVerified, customerConnected && customerVerified].filter(Boolean).length;
-  const ledgerHttpStatus = textValue(ledgerMetadata.http_status);
-  const customerHttpStatus = textValue(customerMetadata.http_status);
   const ledgerHealth = state.ledgerConfig?.health_status ?? (ledgerConnected ? "not_verified" : "not_configured");
   const customerHealth = state.customerConfig?.health_status ?? (customerConnected ? "not_verified" : "not_configured");
   const ledgerLastVerdict = state.ledgerConfig?.last_verdict ?? latestLedgerRefundCheck?.verdict;
   const customerLastVerdict = state.customerConfig?.last_verdict ?? latestCustomerRecordCheck?.verdict;
   const ledgerLastRetryable = state.ledgerConfig?.last_retryable ?? boolValue(ledgerMetadata.retryable);
   const customerLastRetryable = state.customerConfig?.last_retryable ?? boolValue(customerMetadata.retryable);
+  const ledgerErrorCode = state.ledgerConfig?.last_error_code ?? textValue(ledgerMetadata.error_code);
+  const customerErrorCode = state.customerConfig?.last_error_code ?? textValue(customerMetadata.error_code);
+  const ledgerRawError = state.ledgerConfig?.last_error ?? textValue(ledgerMetadata.error);
+  const customerRawError = state.customerConfig?.last_error ?? textValue(customerMetadata.error);
+  const ledgerHttpStatusValue = state.ledgerConfig?.last_http_status ?? ledgerMetadata.http_status;
+  const customerHttpStatusValue = state.customerConfig?.last_http_status ?? customerMetadata.http_status;
   const ledgerLastError = connectorErrorLabel(
-    state.ledgerConfig?.last_error_code ?? textValue(ledgerMetadata.error_code),
-    state.ledgerConfig?.last_error ?? textValue(ledgerMetadata.error),
+    ledgerErrorCode,
+    ledgerRawError,
     ledgerLastRetryable,
   );
   const customerLastError = connectorErrorLabel(
-    state.customerConfig?.last_error_code ?? textValue(customerMetadata.error_code),
-    state.customerConfig?.last_error ?? textValue(customerMetadata.error),
+    customerErrorCode,
+    customerRawError,
     customerLastRetryable,
   );
+  const ledgerGuidance = connectorFixGuidance({
+    kind: "ledger",
+    connected: ledgerConnected,
+    health: ledgerHealth,
+    verdict: ledgerLastVerdict,
+    errorCode: ledgerErrorCode,
+    httpStatus: ledgerHttpStatusValue,
+    retryable: ledgerLastRetryable,
+  });
+  const customerGuidance = connectorFixGuidance({
+    kind: "customer",
+    connected: customerConnected,
+    health: customerHealth,
+    verdict: customerLastVerdict,
+    errorCode: customerErrorCode,
+    httpStatus: customerHttpStatusValue,
+    retryable: customerLastRetryable,
+  });
+  const ledgerPreflight = ledgerPreflightCommand(ledgerForm);
+  const customerPreflight = customerPreflightCommand(customerForm);
   const ledgerRecordPath = state.ledgerConfig?.record_path ?? textValue(ledgerMetadata.record_path);
   const customerRecordPath = state.customerConfig?.record_path ?? textValue(customerMetadata.record_path);
   const ledgerRequestUrl = maskedConnectorUrl(state.ledgerConfig?.base_url ?? ledgerMetadata.request_url);
@@ -408,6 +582,34 @@ export default function IntegrationsSettingsPage() {
     } catch {
       setMessage("Copy failed. Select the payload and copy it manually.");
     }
+  }
+
+  async function copyLedgerPreflightCommand() {
+    try {
+      await navigator.clipboard.writeText(ledgerPreflight);
+      setMessage("Ledger refund preflight command copied.");
+    } catch {
+      setMessage("Copy failed. Select the preflight command and copy it manually.");
+    }
+  }
+
+  async function copyCustomerPreflightCommand() {
+    try {
+      await navigator.clipboard.writeText(customerPreflight);
+      setMessage("Customer record preflight command copied.");
+    } catch {
+      setMessage("Copy failed. Select the preflight command and copy it manually.");
+    }
+  }
+
+  function downloadLedgerTemplate() {
+    downloadJsonFile(ledgerConnectorTemplate(ledgerForm), "ledger_refund_connector_config.example.json");
+    setMessage("Ledger refund connector template downloaded.");
+  }
+
+  function downloadCustomerTemplate() {
+    downloadJsonFile(customerConnectorTemplate(customerForm), "customer_record_connector_config.example.json");
+    setMessage("Customer record connector template downloaded.");
   }
 
   async function loadConnectorEvidence(check: OutcomeReconciliationView | null, kind: ConnectorEvidenceKind) {
@@ -816,7 +1018,7 @@ export default function IntegrationsSettingsPage() {
             </div>
             <div>
               <span>Last HTTP</span>
-              <strong>{ledgerHttpStatus ?? textValue(state.ledgerConfig?.last_http_status) ?? "No response yet"}</strong>
+              <strong>{textValue(ledgerHttpStatusValue) ?? "No response yet"}</strong>
             </div>
             <div>
               <span>Attempts</span>
@@ -831,6 +1033,14 @@ export default function IntegrationsSettingsPage() {
               <strong>{tokenStatus}</strong>
             </div>
           </div>
+
+          <section className="settings-connector-guidance" aria-label="Ledger refund preflight guidance">
+            <div>
+              <span className="eyebrow">Preflight fix</span>
+              <strong>{ledgerHealth === "healthy" && ledgerLastVerdict === "matched" ? "Pilot ready" : "Action required"}</strong>
+            </div>
+            <p>{ledgerGuidance}</p>
+          </section>
 
           <form className="settings-connector-form" onSubmit={(event) => void onSaveLedgerConnector(event)}>
             <div className="settings-connector-form-grid">
@@ -923,6 +1133,29 @@ export default function IntegrationsSettingsPage() {
             </div>
           </form>
 
+          <section className="settings-connector-handoff" aria-label="Ledger refund pilot handoff">
+            <div className="settings-connector-handoff-header">
+              <FileJson aria-hidden="true" />
+              <div>
+                <h4>Pilot preflight handoff</h4>
+                <p>demos/design-partner-install-kit/ledger_refund_connector_config.example.json</p>
+              </div>
+            </div>
+            <pre className="settings-connector-payload" aria-label="Ledger refund preflight command">
+              <code>{ledgerPreflight}</code>
+            </pre>
+            <div className="actions">
+              <button type="button" className="btn btn-soft" onClick={() => void copyLedgerPreflightCommand()}>
+                <Copy aria-hidden="true" />
+                Copy preflight command
+              </button>
+              <button type="button" className="btn btn-soft" onClick={downloadLedgerTemplate}>
+                <Download aria-hidden="true" />
+                Download template JSON
+              </button>
+            </div>
+          </section>
+
           <div className="list settings-connector-proof">
             <div className="list-row">
               <div className="list-main">
@@ -988,7 +1221,7 @@ export default function IntegrationsSettingsPage() {
             </div>
             <div>
               <span>Last HTTP</span>
-              <strong>{customerHttpStatus ?? textValue(state.customerConfig?.last_http_status) ?? "No response yet"}</strong>
+              <strong>{textValue(customerHttpStatusValue) ?? "No response yet"}</strong>
             </div>
             <div>
               <span>Attempts</span>
@@ -1003,6 +1236,14 @@ export default function IntegrationsSettingsPage() {
               <strong>{customerTokenStatus}</strong>
             </div>
           </div>
+
+          <section className="settings-connector-guidance" aria-label="Customer record preflight guidance">
+            <div>
+              <span className="eyebrow">Preflight fix</span>
+              <strong>{customerHealth === "healthy" && customerLastVerdict === "matched" ? "Pilot ready" : "Action required"}</strong>
+            </div>
+            <p>{customerGuidance}</p>
+          </section>
 
           <form className="settings-connector-form" onSubmit={(event) => void onSaveCustomerConnector(event)}>
             <div className="settings-connector-form-grid">
@@ -1093,6 +1334,29 @@ export default function IntegrationsSettingsPage() {
               </button>
             </div>
           </form>
+
+          <section className="settings-connector-handoff" aria-label="Customer record pilot handoff">
+            <div className="settings-connector-handoff-header">
+              <FileJson aria-hidden="true" />
+              <div>
+                <h4>Pilot preflight handoff</h4>
+                <p>demos/design-partner-install-kit/customer_record_connector_config.example.json</p>
+              </div>
+            </div>
+            <pre className="settings-connector-payload" aria-label="Customer record preflight command">
+              <code>{customerPreflight}</code>
+            </pre>
+            <div className="actions">
+              <button type="button" className="btn btn-soft" onClick={() => void copyCustomerPreflightCommand()}>
+                <Copy aria-hidden="true" />
+                Copy preflight command
+              </button>
+              <button type="button" className="btn btn-soft" onClick={downloadCustomerTemplate}>
+                <Download aria-hidden="true" />
+                Download template JSON
+              </button>
+            </div>
+          </section>
 
           <div className="list settings-connector-proof">
             <div className="list-row">
