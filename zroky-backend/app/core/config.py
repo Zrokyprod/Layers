@@ -146,6 +146,7 @@ class Settings(BaseSettings):
     # Outcome verification connectors.
     OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS: bool = False
     OUTCOME_CONNECTOR_TIMEOUT_SECONDS: float = 5.0
+    OUTCOME_CONNECTOR_MAX_ATTEMPTS: int = 2
 
     # â”€â”€ Replay worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Shared secret between the control plane and the customer-hosted replay worker.

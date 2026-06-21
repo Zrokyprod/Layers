@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.db.models import SystemOfRecordConnectorConfig
+from app.db.models import OutcomeReconciliationCheck, SystemOfRecordConnectorConfig
 from app.services.provider_key_cipher import (
     EnvelopeFormatError,
     VaultCipherUnavailable,
@@ -53,6 +53,15 @@ def _json_loads(value: str | None) -> dict[str, Any] | None:
     return dict(loaded) if isinstance(loaded, Mapping) else None
 
 
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_connector_type(connector_type: str) -> str:
     normalized = connector_type.strip().lower()
     if normalized not in VALID_CONNECTOR_TYPES:
@@ -62,7 +71,9 @@ def _normalize_connector_type(connector_type: str) -> str:
     return normalized
 
 
-def _normalize_query(query: Mapping[str, Any] | None) -> dict[str, str | int | float | bool] | None:
+def _normalize_query(
+    query: Mapping[str, Any] | None,
+) -> dict[str, str | int | float | bool] | None:
     if not query:
         return None
     normalized: dict[str, str | int | float | bool] = {}
@@ -247,6 +258,7 @@ def build_ledger_refund_connector(
     refund_id: str,
     bearer_token: str | None,
     timeout_seconds: float,
+    max_attempts: int,
     allow_private_hosts: bool,
 ) -> LedgerRefundApiConnector:
     return LedgerRefundApiConnector(
@@ -257,6 +269,7 @@ def build_ledger_refund_connector(
         query=_json_loads(row.query_json),
         record_path=row.record_path,
         timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
         allow_private_hosts=allow_private_hosts,
     )
 
@@ -267,6 +280,7 @@ def build_customer_record_connector(
     customer_id: str,
     bearer_token: str | None,
     timeout_seconds: float,
+    max_attempts: int,
     allow_private_hosts: bool,
 ) -> CustomerRecordApiConnector:
     return CustomerRecordApiConnector(
@@ -277,6 +291,7 @@ def build_customer_record_connector(
         query=_json_loads(row.query_json),
         record_path=row.record_path,
         timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
         allow_private_hosts=allow_private_hosts,
     )
 
@@ -295,12 +310,71 @@ def mark_connector_tested(
     return row
 
 
+def _health_from_latest_check(
+    row: OutcomeReconciliationCheck | None,
+) -> dict[str, Any]:
+    if row is None:
+        return {
+            "health_status": "not_verified",
+            "last_verdict": None,
+            "last_error": None,
+            "last_http_status": None,
+            "last_attempts": None,
+            "last_checked_at": None,
+        }
+
+    metadata = _json_loads(row.metadata_json)
+    connector_metadata = {}
+    if metadata and isinstance(metadata.get("connector"), Mapping):
+        connector_metadata = dict(metadata["connector"])
+
+    if row.verdict == "matched":
+        health_status = "healthy"
+    elif row.verdict == "mismatched":
+        health_status = "failing"
+    else:
+        health_status = "degraded"
+
+    return {
+        "health_status": health_status,
+        "last_verdict": row.verdict,
+        "last_error": connector_metadata.get("error"),
+        "last_http_status": _as_int(connector_metadata.get("http_status")),
+        "last_attempts": _as_int(connector_metadata.get("attempts")),
+        "last_checked_at": row.checked_at,
+    }
+
+
+def get_connector_health_snapshot(
+    db: Session,
+    *,
+    project_id: str,
+    connector_type: str = LEDGER_REFUND_CONNECTOR_TYPE,
+) -> dict[str, Any]:
+    connector_type = _normalize_connector_type(connector_type)
+    latest = db.execute(
+        select(OutcomeReconciliationCheck)
+        .where(
+            OutcomeReconciliationCheck.project_id == project_id,
+            OutcomeReconciliationCheck.connector_type == connector_type,
+        )
+        .order_by(
+            desc(OutcomeReconciliationCheck.checked_at),
+            desc(OutcomeReconciliationCheck.id),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    return _health_from_latest_check(latest)
+
+
 def serialize_connector_config(
     row: SystemOfRecordConnectorConfig | None,
     *,
     connector_type: str = LEDGER_REFUND_CONNECTOR_TYPE,
+    health: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     connector_type = _normalize_connector_type(connector_type)
+    health_payload = dict(health or {})
     if row is None:
         return {
             "connected": False,
@@ -314,6 +388,12 @@ def serialize_connector_config(
             "last_tested_at": None,
             "created_at": None,
             "updated_at": None,
+            "health_status": "not_configured",
+            "last_verdict": None,
+            "last_error": None,
+            "last_http_status": None,
+            "last_attempts": None,
+            "last_checked_at": None,
         }
     return {
         "connected": bool(row.is_active),
@@ -327,6 +407,12 @@ def serialize_connector_config(
         "last_tested_at": row.last_tested_at,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
+        "health_status": health_payload.get("health_status") or "not_verified",
+        "last_verdict": health_payload.get("last_verdict"),
+        "last_error": health_payload.get("last_error"),
+        "last_http_status": health_payload.get("last_http_status"),
+        "last_attempts": health_payload.get("last_attempts"),
+        "last_checked_at": health_payload.get("last_checked_at"),
     }
 
 
@@ -340,6 +426,7 @@ __all__ = [
     "build_ledger_refund_connector",
     "decrypt_connector_bearer_token",
     "get_connector_config",
+    "get_connector_health_snapshot",
     "mark_connector_tested",
     "serialize_connector_config",
     "upsert_customer_record_connector_config",
