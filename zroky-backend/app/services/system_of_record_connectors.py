@@ -26,6 +26,7 @@ class ConnectorConfigError(ValueError):
 
 _TEMPLATE_RE = re.compile(r"{([a-zA-Z_][a-zA-Z0-9_]*)}")
 _BLOCKED_HOSTS = {"localhost", "localhost.localdomain"}
+_AUTH_FAILED_HTTP_STATUSES = {401, 403}
 _RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 _MAX_CONNECTOR_ATTEMPTS = 4
 
@@ -153,6 +154,22 @@ def _bounded_max_attempts(value: int | None) -> int:
     return min(_MAX_CONNECTOR_ATTEMPTS, max(1, attempts))
 
 
+def _request_error_code(exc: httpx.RequestError) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "connector_timeout"
+    return "connector_request_error"
+
+
+def _http_error_taxonomy(status: int) -> tuple[str, str, bool]:
+    if status in _AUTH_FAILED_HTTP_STATUSES:
+        return "http_error", "auth_failed", False
+    if status == 429:
+        return "http_error", "rate_limited", True
+    if status in _RETRYABLE_HTTP_STATUSES:
+        return "http_error", "upstream_retryable_http_error", True
+    return "http_error", "upstream_http_error", False
+
+
 def _metadata(
     *,
     connector_type: str,
@@ -160,6 +177,7 @@ def _metadata(
     http_status: int | None = None,
     record_path: str | None = None,
     error: str | None = None,
+    error_code: str | None = None,
     attempts: int | None = None,
     max_attempts: int | None = None,
     timeout_seconds: float | None = None,
@@ -176,6 +194,8 @@ def _metadata(
         payload["record_path"] = record_path
     if error:
         payload["error"] = error
+    if error_code:
+        payload["error_code"] = error_code
     if attempts is not None:
         payload["attempts"] = attempts
         payload["retry_count"] = max(0, attempts - 1)
@@ -278,6 +298,7 @@ class HttpJsonRecordConnector:
     timeout_seconds: float = 5.0
     max_attempts: int = 2
     allow_private_hosts: bool = False
+    fail_closed_config_errors: bool = False
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
 
     def _url(self) -> str:
@@ -296,7 +317,27 @@ class HttpJsonRecordConnector:
         return url
 
     def fetch(self) -> SourceRecord:
-        url = self._url()
+        try:
+            url = self._url()
+        except ConnectorConfigError:
+            if not self.fail_closed_config_errors:
+                raise
+            return SourceRecord(
+                record=None,
+                record_found=None,
+                metadata=_metadata(
+                    connector_type=self.connector_type,
+                    request_url="connector_url_unavailable",
+                    record_path=self.record_path,
+                    error="connector_config_error",
+                    error_code="connector_config_invalid",
+                    attempts=0,
+                    max_attempts=_bounded_max_attempts(self.max_attempts),
+                    timeout_seconds=self.timeout_seconds,
+                    retryable=False,
+                ),
+            )
+
         headers = {"Accept": "application/json"}
         if self.bearer_token and self.bearer_token.strip():
             headers["Authorization"] = f"Bearer {self.bearer_token.strip()}"
@@ -315,6 +356,7 @@ class HttpJsonRecordConnector:
                         response = client.get(url, headers=headers)
                     except httpx.RequestError as exc:
                         error_name = exc.__class__.__name__
+                        error_code = _request_error_code(exc)
                         transient_errors.append(error_name)
                         if attempt < max_attempts:
                             continue
@@ -326,6 +368,7 @@ class HttpJsonRecordConnector:
                                 request_url=url,
                                 record_path=self.record_path,
                                 error=error_name,
+                                error_code=error_code,
                                 attempts=attempts,
                                 max_attempts=max_attempts,
                                 timeout_seconds=self.timeout_seconds,
@@ -340,6 +383,7 @@ class HttpJsonRecordConnector:
                             continue
                     break
         except httpx.RequestError as exc:
+            error_name = exc.__class__.__name__
             return SourceRecord(
                 record=None,
                 record_found=None,
@@ -347,12 +391,13 @@ class HttpJsonRecordConnector:
                     connector_type=self.connector_type,
                     request_url=url,
                     record_path=self.record_path,
-                    error=exc.__class__.__name__,
+                    error=error_name,
+                    error_code=_request_error_code(exc),
                     attempts=attempts or 1,
                     max_attempts=max_attempts,
                     timeout_seconds=self.timeout_seconds,
                     retryable=True,
-                    transient_errors=transient_errors or [exc.__class__.__name__],
+                    transient_errors=transient_errors or [error_name],
                 ),
             )
 
@@ -382,6 +427,7 @@ class HttpJsonRecordConnector:
                     request_url=url,
                     http_status=status,
                     record_path=self.record_path,
+                    error_code="system_record_missing",
                     attempts=attempts,
                     max_attempts=max_attempts,
                     timeout_seconds=self.timeout_seconds,
@@ -390,6 +436,7 @@ class HttpJsonRecordConnector:
                 ),
             )
         if status < 200 or status >= 300:
+            error, error_code, retryable = _http_error_taxonomy(status)
             return SourceRecord(
                 record=None,
                 record_found=None,
@@ -398,11 +445,12 @@ class HttpJsonRecordConnector:
                     request_url=url,
                     http_status=status,
                     record_path=self.record_path,
-                    error="http_error",
+                    error=error,
+                    error_code=error_code,
                     attempts=attempts,
                     max_attempts=max_attempts,
                     timeout_seconds=self.timeout_seconds,
-                    retryable=status in _RETRYABLE_HTTP_STATUSES,
+                    retryable=retryable,
                     transient_errors=transient_errors,
                 ),
             )
@@ -416,6 +464,7 @@ class HttpJsonRecordConnector:
                     http_status=status,
                     record_path=self.record_path,
                     error="empty_response",
+                    error_code="empty_response",
                     attempts=attempts,
                     max_attempts=max_attempts,
                     timeout_seconds=self.timeout_seconds,
@@ -435,6 +484,7 @@ class HttpJsonRecordConnector:
                     http_status=status,
                     record_path=self.record_path,
                     error="invalid_json",
+                    error_code="invalid_json",
                     attempts=attempts,
                     max_attempts=max_attempts,
                     timeout_seconds=self.timeout_seconds,
@@ -453,6 +503,7 @@ class HttpJsonRecordConnector:
                 http_status=status,
                 record_path=self.record_path,
                 error=None if record is not None else "record_path_missing",
+                error_code=None if record is not None else "record_path_missing",
                 attempts=attempts,
                 max_attempts=max_attempts,
                 timeout_seconds=self.timeout_seconds,
@@ -555,6 +606,7 @@ class LedgerRefundApiConnector:
     timeout_seconds: float = 5.0
     max_attempts: int = 2
     allow_private_hosts: bool = False
+    fail_closed_config_errors: bool = False
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
     connector_type: str = "ledger_refund_api"
 
@@ -569,6 +621,7 @@ class LedgerRefundApiConnector:
             timeout_seconds=self.timeout_seconds,
             max_attempts=self.max_attempts,
             allow_private_hosts=self.allow_private_hosts,
+            fail_closed_config_errors=self.fail_closed_config_errors,
             transport=self.transport,
             connector_type=self.connector_type,
         )
@@ -598,6 +651,7 @@ class CustomerRecordApiConnector:
     timeout_seconds: float = 5.0
     max_attempts: int = 2
     allow_private_hosts: bool = False
+    fail_closed_config_errors: bool = False
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
     connector_type: str = "customer_record_api"
 
@@ -612,6 +666,7 @@ class CustomerRecordApiConnector:
             timeout_seconds=self.timeout_seconds,
             max_attempts=self.max_attempts,
             allow_private_hosts=self.allow_private_hosts,
+            fail_closed_config_errors=self.fail_closed_config_errors,
             transport=self.transport,
             connector_type=self.connector_type,
         )

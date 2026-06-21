@@ -52,8 +52,10 @@ class LedgerRefundConnectorStatusResponse(BaseModel):
     health_status: str = "not_configured"
     last_verdict: str | None = None
     last_error: str | None = None
+    last_error_code: str | None = None
     last_http_status: int | None = None
     last_attempts: int | None = None
+    last_retryable: bool | None = None
     last_checked_at: Any | None = None
     created_at: Any | None = None
     updated_at: Any | None = None
@@ -118,8 +120,10 @@ class CustomerRecordConnectorStatusResponse(BaseModel):
     health_status: str = "not_configured"
     last_verdict: str | None = None
     last_error: str | None = None
+    last_error_code: str | None = None
     last_http_status: int | None = None
     last_attempts: int | None = None
+    last_retryable: bool | None = None
     last_checked_at: Any | None = None
     created_at: Any | None = None
     updated_at: Any | None = None

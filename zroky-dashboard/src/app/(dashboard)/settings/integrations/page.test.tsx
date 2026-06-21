@@ -92,8 +92,10 @@ describe("IntegrationsSettingsPage", () => {
       health_status: "healthy",
       last_verdict: "matched",
       last_error: null,
+      last_error_code: null,
       last_http_status: 200,
       last_attempts: 2,
+      last_retryable: false,
       last_checked_at: "2026-06-20T09:00:00Z",
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
@@ -111,8 +113,10 @@ describe("IntegrationsSettingsPage", () => {
       health_status: "not_verified",
       last_verdict: null,
       last_error: null,
+      last_error_code: null,
       last_http_status: null,
       last_attempts: null,
+      last_retryable: null,
       last_checked_at: null,
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
@@ -399,8 +403,10 @@ describe("IntegrationsSettingsPage", () => {
       health_status: "degraded",
       last_verdict: "not_verified",
       last_error: "ReadTimeout",
+      last_error_code: "connector_timeout",
       last_http_status: null,
       last_attempts: 2,
+      last_retryable: true,
       last_checked_at: "2026-06-20T09:00:00Z",
       created_at: "2026-06-20T08:00:00Z",
       updated_at: "2026-06-20T08:30:00Z",
@@ -412,6 +418,7 @@ describe("IntegrationsSettingsPage", () => {
     const status = await screen.findByLabelText("Ledger refund connector status");
     expect(within(status).getByText("Degraded")).toBeInTheDocument();
     expect(within(status).getByText("Not verified")).toBeInTheDocument();
+    expect(within(status).getByText("Connector Timeout / retryable")).toBeInTheDocument();
     expect(within(status).getByText("2")).toBeInTheDocument();
   });
 

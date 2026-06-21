@@ -332,6 +332,7 @@ def test_ledger_refund_connector_status_surfaces_degraded_health_after_timeout(
                 "request_url": f"https://ledger.example.com/api/refunds/{self.refund_id}",
                 "record_path": "data",
                 "error": "ReadTimeout",
+                "error_code": "connector_timeout",
                 "attempts": 2,
                 "max_attempts": 2,
                 "retryable": True,
@@ -370,10 +371,103 @@ def test_ledger_refund_connector_status_surfaces_degraded_health_after_timeout(
             assert body["ok"] is False
             assert body["check"]["verdict"] == "not_verified"
             assert body["check"]["metadata"]["connector"]["error"] == "ReadTimeout"
+            assert body["check"]["metadata"]["connector"]["error_code"] == "connector_timeout"
             assert body["connector"]["health_status"] == "degraded"
             assert body["connector"]["last_verdict"] == "not_verified"
             assert body["connector"]["last_error"] == "ReadTimeout"
+            assert body["connector"]["last_error_code"] == "connector_timeout"
             assert body["connector"]["last_attempts"] == 2
+            assert body["connector"]["last_retryable"] is True
+            assert "ledger-secret-token" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_ledger_refund_connector_status_surfaces_auth_failure_taxonomy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890"
+    )
+    get_settings.cache_clear()
+    engine, session_factory = _sqlite_session_factory(
+        tmp_path / "sor_connector_auth_failed.db"
+    )
+    _seed_project(session_factory, "proj_sor_auth_failed")
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_sor_auth_failed", role="admin", subject="user-sor"
+        )
+
+    def fake_fetch(self: LedgerRefundApiConnector) -> SourceRecord:
+        return SourceRecord(
+            record=None,
+            record_found=None,
+            metadata={
+                "connector_type": "ledger_refund_api",
+                "request_url": f"https://ledger.example.com/api/refunds/{self.refund_id}",
+                "http_status": 401,
+                "record_path": "data",
+                "error": "http_error",
+                "error_code": "auth_failed",
+                "attempts": 1,
+                "max_attempts": 2,
+                "retryable": False,
+                "refund_id": self.refund_id,
+            },
+        )
+
+    monkeypatch.setattr(LedgerRefundApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            saved = client.put(
+                "/v1/integrations/system-of-record/ledger-refund/config",
+                json={
+                    "base_url": "https://ledger.example.com/api",
+                    "path_template": "/refunds/{refund_id}",
+                    "record_path": "data",
+                    "bearer_token": "ledger-secret-token",
+                },
+            )
+            assert saved.status_code == 200
+
+            tested = client.post(
+                "/v1/integrations/system-of-record/ledger-refund/test",
+                json={
+                    "refund_id": "rf_auth_failed",
+                    "claimed": {"refund_id": "rf_auth_failed", "amount_usd": 42.5},
+                },
+            )
+
+            assert tested.status_code == 201
+            body = tested.json()
+            assert body["ok"] is False
+            assert body["check"]["verdict"] == "not_verified"
+            assert body["check"]["metadata"]["connector"]["http_status"] == 401
+            assert body["check"]["metadata"]["connector"]["error_code"] == "auth_failed"
+            assert body["connector"]["health_status"] == "auth_failed"
+            assert body["connector"]["last_verdict"] == "not_verified"
+            assert body["connector"]["last_error"] == "http_error"
+            assert body["connector"]["last_error_code"] == "auth_failed"
+            assert body["connector"]["last_http_status"] == 401
+            assert body["connector"]["last_attempts"] == 1
+            assert body["connector"]["last_retryable"] is False
             assert "ledger-secret-token" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()
