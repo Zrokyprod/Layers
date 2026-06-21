@@ -72,6 +72,10 @@ type InboxLoadKey = keyof InboxData;
 type InboxLoadErrors = Partial<Record<InboxLoadKey, string>>;
 type InboxQueueFocus = "all" | "critical_high" | "replay_gap" | "impact" | "verified";
 type PriorityTone = "danger" | "warning" | "success" | "neutral";
+type QueueFocusControl = {
+  id: InboxQueueFocus;
+  label: string;
+};
 
 type PriorityRow = {
   id: string;
@@ -116,6 +120,14 @@ const REPLAY_GAP_STATUSES = new Set([
   "real_replay_passed",
   "covered_passed",
 ]);
+
+const queueFocusControls: QueueFocusControl[] = [
+  { id: "all", label: "All" },
+  { id: "critical_high", label: "P0/P1" },
+  { id: "replay_gap", label: "Proof gaps" },
+  { id: "impact", label: "Impact" },
+  { id: "verified", label: "Verified" },
+];
 
 function normalizedReplayStatus(issue: IssueItem): string {
   return issue.replay_coverage_status.trim().toLowerCase();
@@ -851,10 +863,10 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="fi-screen" aria-busy={loading || refreshing}>
+    <div className="fi-screen fi-home-v4" aria-busy={loading || refreshing}>
       <section className="fi-hero fi-command-hero" data-tone={heroSignal.tone}>
         <div className="fi-hero-main">
-          <h1>Overview</h1>
+          <h1>Action control room</h1>
           <div className="fi-hero-signal" aria-live="polite">
             <span className="fi-hero-eyebrow">{heroSignal.eyebrow}</span>
             <strong>{heroSignal.title}</strong>
@@ -974,14 +986,23 @@ export default function HomePage() {
       <section className="fi-ops-layout">
         <section className="fi-section fi-priority-section">
           <SectionHeader
-            title="What needs action now?"
+            title="Action queue"
             description={queueFocusDescription(queueFocus)}
             action={
-              queueFocus === "all" ? undefined : (
-                <button type="button" className="btn btn-soft btn-sm fi-btn-secondary" onClick={() => focusQueue("all")}>
-                  Clear focus
-                </button>
-              )
+              <div className="fi-queue-tabs" role="tablist" aria-label="Action queue focus">
+                {queueFocusControls.map((control) => (
+                  <button
+                    type="button"
+                    key={control.id}
+                    role="tab"
+                    aria-selected={queueFocus === control.id}
+                    className={`fi-queue-tab${queueFocus === control.id ? " is-active" : ""}`}
+                    onClick={() => focusQueue(control.id)}
+                  >
+                    {control.label}
+                  </button>
+                ))}
+              </div>
             }
           />
 
