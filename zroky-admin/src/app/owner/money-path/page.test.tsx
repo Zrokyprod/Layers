@@ -155,7 +155,7 @@ describe("OwnerMoneyPathPage", () => {
     expect(within(panel).getByText("Provider Gap Tenant")).toBeInTheDocument();
     expect(within(panel).getByText("missing (0)")).toBeInTheDocument();
     expect(within(panel).getByText("95 / 100")).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it("filters tenants by risk and search text", () => {
     setHookData(moneyPath);

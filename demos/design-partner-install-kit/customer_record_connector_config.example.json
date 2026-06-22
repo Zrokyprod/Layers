@@ -3,6 +3,7 @@
   "config_endpoint": "/v1/integrations/system-of-record/customer-record/config",
   "status_endpoint": "/v1/integrations/system-of-record/customer-record/status",
   "test_endpoint": "/v1/integrations/system-of-record/customer-record/test",
+  "saved_runtime_endpoint": "/v1/outcomes/reconciliation/customer-record/saved",
   "config_payload": {
     "base_url": "https://crm.example.com/api",
     "path_template": "/customers/{customer_id}",
@@ -25,7 +26,35 @@
     ],
     "metadata": {
       "install_kit": "design_partner_crm_v1",
-      "partner_run_id": "<partner_run_id>"
+      "partner_run_id": "<partner_run_id>",
+      "proof_mode": "preflight",
+      "real_customer_proof_candidate": false
+    }
+  },
+  "saved_runtime_payload": {
+    "call_id": "dp-call-customer-2001",
+    "trace_id": "dp-trace-customer-2001",
+    "runtime_policy_decision_id": "<runtime_policy_decision_id>",
+    "action_type": "customer_record_update",
+    "customer_id": "CUS-DP-2001",
+    "claimed": {
+      "customer_id": "CUS-DP-2001",
+      "email": "owner@example.com",
+      "account_id": "ACCT-DP-2001",
+      "status": "active"
+    },
+    "match_fields": [
+      "customer_id",
+      "email",
+      "account_id",
+      "status"
+    ],
+    "metadata": {
+      "install_kit": "design_partner_crm_v1",
+      "partner_run_id": "<partner_run_id>",
+      "source": "saved_connector_runtime",
+      "proof_mode": "live_customer",
+      "real_customer_proof_candidate": true
     }
   },
   "readiness_contract": {

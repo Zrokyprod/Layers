@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -79,6 +79,15 @@ function queueTone(status: string): "danger" | "warning" | "success" | "neutral"
   return "neutral";
 }
 
+function statusVerb(status: string): string {
+  if (status === "pending_approval") return "Hold";
+  if (status === "blocked") return "Blocked";
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  if (status === "allowed") return "Allowed";
+  return humanize(status);
+}
+
 type RuntimePolicyActionLike = Pick<
   RuntimePolicyDecisionResponse,
   "action_type" | "tool_name" | "intended_action" | "policy_hit"
@@ -120,6 +129,95 @@ function actionClassFor(item: RuntimePolicyActionLike): string {
   return ACTION_CLASS_RULES.find((rule) => rule.terms.some((term) => haystack.includes(term)))?.label ?? "High-stakes action";
 }
 
+function titleFor(item: RuntimePolicyDecisionResponse): string {
+  return summary(item.intended_action, item.tool_name ?? item.action_type ?? "Agent action");
+}
+
+function riskSummary(item: RuntimePolicyDecisionResponse): string {
+  return item.reasons[0] ?? field(item.policy_hit.risk_reasons) ?? field(item.policy_hit.policy);
+}
+
+function numberFrom(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+function moneyValue(item: RuntimePolicyDecisionResponse): string {
+  const amount =
+    numberFrom(item.business_impact.amount_usd) ??
+    numberFrom(item.business_impact.estimated_value_usd) ??
+    numberFrom(item.request.amount_usd) ??
+    numberFrom(item.intended_action.amount_usd);
+  if (amount == null) return "-";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function timeUntil(value: string | null): string {
+  if (!value) return "-";
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return "-";
+  const diff = time - Date.now();
+  if (diff <= 0) return "Expired";
+  const minutes = Math.ceil(diff / 60_000);
+  if (minutes < 60) return `${minutes}m left`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 48) return `${hours}h left`;
+  return `${Math.ceil(hours / 24)}d left`;
+}
+
+function timeSince(value: string | null): string {
+  if (!value) return "-";
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return "-";
+  const diff = Math.max(0, Date.now() - time);
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m old`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h old`;
+  return `${Math.floor(hours / 24)}d old`;
+}
+
+function priorityFor(item: RuntimePolicyDecisionResponse): { score: number; label: string; detail: string } {
+  const actionClass = actionClassFor(item);
+  const isFinancial = actionClass === "Financial action";
+  const expired = item.expires_at ? new Date(item.expires_at).getTime() <= Date.now() : false;
+  if (item.status === "pending_approval" && (isFinancial || expired)) {
+    return { score: 0, label: "P0", detail: expired ? "expired hold" : "money-action hold" };
+  }
+  if (item.status === "blocked" || item.status === "rejected") {
+    return { score: 1, label: "P0", detail: "damage stopped" };
+  }
+  if (item.status === "pending_approval") {
+    return { score: 2, label: "P1", detail: "needs decision" };
+  }
+  if (item.status === "approved") {
+    return { score: 3, label: "P2", detail: "approved action" };
+  }
+  return { score: 4, label: "P3", detail: "audit only" };
+}
+
+function proofStatus(pack: RuntimePolicyEvidencePackResponse | undefined, isLoading: boolean, error: Error | null) {
+  if (isLoading) return { label: "Loading proof", detail: "Evidence Pack is being loaded.", tone: "neutral" as const };
+  if (error) return { label: "Proof unavailable", detail: error.message, tone: "danger" as const };
+  if (!pack) return { label: "Not verified", detail: "Open the Evidence Pack to load outcome proof.", tone: "warning" as const };
+  if (pack.verification_status === "pass") {
+    return { label: "Outcome verified", detail: "Matched system-of-record outcome is linked.", tone: "success" as const };
+  }
+  if (pack.verification_status === "fail") {
+    return { label: "Outcome failed", detail: "System-of-record reconciliation failed.", tone: "danger" as const };
+  }
+  if (pack.outcome_reconciliation.length === 0) {
+    return { label: "Not verified", detail: "No system-of-record outcome proof is linked.", tone: "warning" as const };
+  }
+  return { label: humanize(pack.verification_status), detail: "Outcome proof needs review.", tone: "warning" as const };
+}
+
 function verificationCopy(pack: RuntimePolicyEvidencePackResponse): string {
   if (pack.verification_status === "pass") {
     return "Outcome verified against the system of record.";
@@ -143,6 +241,288 @@ function downloadEvidencePack(pack: RuntimePolicyEvidencePackResponse) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+function ApprovalQueue({
+  items,
+  selectedId,
+  onSelect,
+}: {
+  items: RuntimePolicyDecisionResponse[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <section className="approval-queue-panel" aria-label="Approval priority queue">
+      <div className="approval-panel-head">
+        <div>
+          <span className="eyebrow">Priority queue</span>
+          <strong>{items.length} runtime decision{items.length === 1 ? "" : "s"}</strong>
+        </div>
+        <span className="approval-live-dot">live</span>
+      </div>
+      <div className="approval-queue-list">
+        {items.map((item) => {
+          const priority = priorityFor(item);
+          const selected = item.id === selectedId;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`approval-queue-row tone-${queueTone(item.status)}${selected ? " selected" : ""}`}
+              onClick={() => onSelect(item.id)}
+            >
+              <span className="approval-priority">{priority.label}</span>
+              <span className="approval-queue-main">
+                <strong>{titleFor(item)}</strong>
+                <small>
+                  {item.agent_name ?? "unknown agent"} / {actionClassFor(item)}
+                </small>
+                <em>{riskSummary(item)}</em>
+              </span>
+              <span className="approval-queue-side">
+                <StatusPill value={item.status} />
+                <small>{priority.detail}</small>
+                <small>{timeUntil(item.expires_at)}</small>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AuditTrail({ item }: { item: RuntimePolicyDecisionResponse }) {
+  return (
+    <section className="approval-audit approval-inspector-audit">
+      <h4>Approval audit</h4>
+      {item.audit_log.length === 0 ? (
+        <p>-</p>
+      ) : (
+        <ol>
+          {item.audit_log.map((event) => (
+            <li key={event.id}>
+              <div>
+                <strong>{event.event_type}</strong>
+                <span>{formatDateTime(event.created_at)}</span>
+              </div>
+              <p>
+                {event.actor ? `${event.actor}: ` : ""}
+                {event.reason ?? "-"}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function ApprovalInspector({
+  item,
+  pack,
+  packLoading,
+  packError,
+  reason,
+  setReason,
+  busy,
+  onViewEvidence,
+  onApprove,
+  onReject,
+}: {
+  item: RuntimePolicyDecisionResponse | null;
+  pack: RuntimePolicyEvidencePackResponse | undefined;
+  packLoading: boolean;
+  packError: Error | null;
+  reason: string;
+  setReason: (value: string) => void;
+  busy: boolean;
+  onViewEvidence: (id: string) => void;
+  onApprove: (id: string, reason: string) => void;
+  onReject: (id: string, reason: string) => void;
+}) {
+  if (!item) {
+    return (
+      <section className="approval-inspector-panel empty-state">
+        <ShieldAlert size={22} aria-hidden="true" />
+        <h2>Select a held action.</h2>
+        <p>Runtime decisions will appear here after the SDK or gateway calls the policy gate.</p>
+      </section>
+    );
+  }
+
+  const canResolve = item.status === "pending_approval";
+  const disabled = busy || !canResolve || reason.trim().length < 3;
+  const proof = proofStatus(pack, packLoading, packError);
+
+  return (
+    <section className="approval-inspector-panel" aria-label="Selected action control">
+      <div className="approval-inspector-header">
+        <div>
+          <span className="eyebrow">Selected action control</span>
+          <h2>{titleFor(item)}</h2>
+          <p>
+            {item.agent_name ?? "unknown agent"} / {statusVerb(item.status)} / {actionClassFor(item)}
+          </p>
+        </div>
+        <div className="approval-inspector-actions">
+          <StatusPill value={item.status} />
+          <button className="btn btn-soft btn-sm" type="button" onClick={() => onViewEvidence(item.id)}>
+            <FileText size={15} />
+            Evidence Pack
+          </button>
+        </div>
+      </div>
+
+      <section className={`approval-proof-strip tone-${proof.tone}`}>
+        <div>
+          <span className="eyebrow">Outcome proof</span>
+          <strong>{proof.label}</strong>
+          <p>{proof.detail}</p>
+        </div>
+        {pack ? <StatusPill value={pack.verification_status} /> : <StatusPill value="not_verified" />}
+      </section>
+
+      <dl className="approval-inspector-metrics">
+        <div>
+          <dt>Impact</dt>
+          <dd>{moneyValue(item)}</dd>
+        </div>
+        <div>
+          <dt>Age</dt>
+          <dd>{timeSince(item.created_at)}</dd>
+        </div>
+        <div>
+          <dt>Expires</dt>
+          <dd>{timeUntil(item.expires_at)}</dd>
+        </div>
+        <div>
+          <dt>Trace</dt>
+          <dd>
+            {item.trace_id ? <Link href={`/trace/${encodeURIComponent(item.trace_id)}`}>{item.trace_id}</Link> : "-"}
+          </dd>
+        </div>
+        <div>
+          <dt>Call</dt>
+          <dd>
+            {item.call_id ? <Link href={`/calls/${encodeURIComponent(item.call_id)}`}>{item.call_id}</Link> : "-"}
+          </dd>
+        </div>
+        <div>
+          <dt>Decision ID</dt>
+          <dd>{item.id}</dd>
+        </div>
+      </dl>
+
+      <div className="approval-inspector-grid">
+        <section>
+          <h3>Mandate hit</h3>
+          <ul>
+            {item.reasons.length > 0 ? item.reasons.map((reasonItem) => <li key={reasonItem}>{reasonItem}</li>) : <li>-</li>}
+          </ul>
+          <pre>{compactJson(item.policy_hit)}</pre>
+        </section>
+        <section>
+          <h3>Intended action</h3>
+          <pre>{compactJson(item.intended_action)}</pre>
+        </section>
+        <section>
+          <h3>Business impact</h3>
+          <pre>{compactJson(item.business_impact)}</pre>
+        </section>
+        <section>
+          <h3>Masked request</h3>
+          <pre>{compactJson(item.request)}</pre>
+        </section>
+      </div>
+
+      {item.resolution_reason ? (
+        <div className="approval-resolution">
+          <strong>{item.resolved_by ?? "resolved"}</strong>
+          <span>{item.resolved_at ? formatDateTime(item.resolved_at) : ""}</span>
+          <p>{item.resolution_reason}</p>
+        </div>
+      ) : null}
+
+      <AuditTrail item={item} />
+
+      <section className="approval-decision-console">
+        <div>
+          <span className="eyebrow">Human decision</span>
+          <strong>{canResolve ? "Approve or reject this held action." : "Decision already resolved."}</strong>
+          <p>Reason is required because it becomes part of the approval audit trail and Evidence Pack.</p>
+        </div>
+        <div className="approval-actions">
+          <input
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Reason for approving or rejecting"
+            aria-label="Decision reason"
+            disabled={!canResolve}
+          />
+          <button
+            className="btn btn-primary"
+            type="button"
+            disabled={disabled}
+            onClick={() => onApprove(item.id, reason)}
+          >
+            <Check size={16} />
+            Approve
+          </button>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={disabled}
+            onClick={() => onReject(item.id, reason)}
+          >
+            <X size={16} />
+            Reject
+          </button>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function KillSwitchPanel({
+  armed,
+  setArmed,
+  isPending,
+  onConfirm,
+}: {
+  armed: boolean;
+  setArmed: (value: boolean) => void;
+  isPending: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <section className={`approval-kill-panel${armed ? " armed" : ""}`} aria-label="Runtime kill switch">
+      <div>
+        <span className="eyebrow">Runtime kill switch</span>
+        <strong>{armed ? "Confirm global runtime hold" : "Fail closed if policy proof is unsafe"}</strong>
+        <p>
+          This should pause high-stakes runtime approvals when evidence or mandate boundaries are unreliable.
+        </p>
+      </div>
+      {armed ? (
+        <div className="approval-kill-actions">
+          <button className="btn btn-secondary" type="button" onClick={() => setArmed(false)} disabled={isPending}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" type="button" onClick={onConfirm} disabled={isPending}>
+            <ShieldAlert size={16} />
+            Confirm kill switch
+          </button>
+        </div>
+      ) : (
+        <button className="btn btn-secondary" type="button" onClick={() => setArmed(true)} disabled={isPending}>
+          <ShieldAlert size={16} />
+          Arm kill switch confirmation
+        </button>
+      )}
+    </section>
+  );
 }
 
 function EvidencePackModal({
@@ -373,181 +753,13 @@ function EvidencePackModal({
   );
 }
 
-function DecisionCard({
-  item,
-  busy,
-  onViewEvidence,
-  onApprove,
-  onReject,
-}: {
-  item: RuntimePolicyDecisionResponse;
-  busy: boolean;
-  onViewEvidence: (id: string) => void;
-  onApprove: (id: string, reason: string) => void;
-  onReject: (id: string, reason: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const canResolve = item.status === "pending_approval";
-  const disabled = busy || !canResolve || reason.trim().length < 3;
-
-  return (
-    <article className={`panel approval-card tone-${queueTone(item.status)}`}>
-      <div className="approval-card-header">
-        <div>
-          <span className="eyebrow">Runtime policy</span>
-          <h3>{summary(item.intended_action, item.tool_name ?? item.action_type ?? "Agent action")}</h3>
-          <p>
-            {item.agent_name ?? "unknown agent"} · {item.action_type ?? "unknown action"}
-          </p>
-        </div>
-        <div className="approval-card-badges">
-          <StatusPill value={item.status} />
-          <span className="approval-action-class">{actionClassFor(item)}</span>
-          <button className="btn btn-soft btn-sm" type="button" onClick={() => onViewEvidence(item.id)}>
-            <FileText size={15} />
-            Evidence Pack
-          </button>
-        </div>
-      </div>
-
-      <dl className="approval-meta-grid">
-        <div>
-          <dt>Agent</dt>
-          <dd>{item.agent_name ?? field(item.trace_context.agent_name)}</dd>
-        </div>
-        <div>
-          <dt>Trace</dt>
-          <dd>
-            {item.trace_id ? (
-              <Link href={`/trace/${encodeURIComponent(item.trace_id)}`}>{item.trace_id}</Link>
-            ) : (
-              "-"
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Policy hit</dt>
-          <dd>{field(item.policy_hit.policy)}</dd>
-        </div>
-        <div>
-          <dt>Business impact</dt>
-          <dd>{field(item.business_impact.risk_category ?? item.business_impact.summary)}</dd>
-        </div>
-        <div>
-          <dt>Created</dt>
-          <dd>{formatDateTime(item.created_at)}</dd>
-        </div>
-        <div>
-          <dt>Expires</dt>
-          <dd>{item.expires_at ? formatDateTime(item.expires_at) : "-"}</dd>
-        </div>
-        <div>
-          <dt>Consumed</dt>
-          <dd>{item.consumed_at ? formatDateTime(item.consumed_at) : "-"}</dd>
-        </div>
-      </dl>
-
-      <div className="approval-evidence-grid">
-        <section>
-          <h4>Risk reason</h4>
-          {item.reasons.length > 0 ? (
-            <ul>
-              {item.reasons.map((reasonItem) => (
-                <li key={reasonItem}>{reasonItem}</li>
-              ))}
-            </ul>
-          ) : (
-            <p>-</p>
-          )}
-        </section>
-        <section>
-          <h4>Intended action</h4>
-          <pre>{compactJson(item.intended_action)}</pre>
-        </section>
-        <section>
-          <h4>Trace context</h4>
-          <pre>{compactJson(item.trace_context)}</pre>
-        </section>
-        <section>
-          <h4>Policy hit</h4>
-          <pre>{compactJson(item.policy_hit)}</pre>
-        </section>
-        <section>
-          <h4>Business impact</h4>
-          <pre>{compactJson(item.business_impact)}</pre>
-        </section>
-        <section>
-          <h4>Masked request</h4>
-          <pre>{compactJson(item.request)}</pre>
-        </section>
-      </div>
-
-      {item.resolution_reason ? (
-        <div className="approval-resolution">
-          <strong>{item.resolved_by ?? "resolved"}</strong>
-          <span>{item.resolved_at ? formatDateTime(item.resolved_at) : ""}</span>
-          <p>{item.resolution_reason}</p>
-        </div>
-      ) : null}
-
-      <section className="approval-audit">
-        <h4>Audit log</h4>
-        {item.audit_log.length === 0 ? (
-          <p>-</p>
-        ) : (
-          <ol>
-            {item.audit_log.map((event) => (
-              <li key={event.id}>
-                <div>
-                  <strong>{event.event_type}</strong>
-                  <span>{formatDateTime(event.created_at)}</span>
-                </div>
-                <p>
-                  {event.actor ? `${event.actor}: ` : ""}
-                  {event.reason ?? "-"}
-                </p>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      {canResolve ? (
-        <div className="approval-actions">
-          <input
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Reason"
-            aria-label="Decision reason"
-          />
-          <button
-            className="btn btn-primary"
-            type="button"
-            disabled={disabled}
-            onClick={() => onApprove(item.id, reason)}
-          >
-            <Check size={16} />
-            Approve
-          </button>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            disabled={disabled}
-            onClick={() => onReject(item.id, reason)}
-          >
-            <X size={16} />
-            Reject
-          </button>
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
 export default function RuntimeApprovalsPage() {
   const [filter, setFilter] = useState<Filter>("pending_approval");
   const [message, setMessage] = useState<string | null>(null);
   const [evidenceDecisionId, setEvidenceDecisionId] = useState<string | null>(null);
+  const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
+  const [decisionReason, setDecisionReason] = useState("");
+  const [killSwitchArmed, setKillSwitchArmed] = useState(false);
   const approvalsQuery = useRuntimePolicyApprovals(filter);
   const evidencePackQuery = useRuntimePolicyEvidencePack(evidenceDecisionId);
   const approveMutation = useApproveRuntimePolicyDecision();
@@ -555,11 +767,48 @@ export default function RuntimeApprovalsPage() {
   const killSwitchMutation = useSetRuntimePolicyKillSwitch();
 
   const items = useMemo(() => approvalsQuery.data?.items ?? [], [approvalsQuery.data?.items]);
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((a, b) => {
+        const priorityDiff = priorityFor(a).score - priorityFor(b).score;
+        if (priorityDiff !== 0) return priorityDiff;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }),
+    [items],
+  );
+  const selectedItem = useMemo(
+    () => sortedItems.find((item) => item.id === selectedDecisionId) ?? sortedItems[0] ?? null,
+    [selectedDecisionId, sortedItems],
+  );
+  const selectedEvidenceQuery = useRuntimePolicyEvidencePack(selectedItem?.id ?? null);
   const pendingCount = useMemo(
     () => items.filter((item) => item.status === "pending_approval").length,
     [items],
   );
+  const blockedCount = useMemo(
+    () => items.filter((item) => item.status === "blocked" || item.status === "rejected").length,
+    [items],
+  );
+  const visibleTraceCount = useMemo(() => items.filter((item) => item.trace_id).length, [items]);
+  const financialCount = useMemo(
+    () => items.filter((item) => actionClassFor(item) === "Financial action").length,
+    [items],
+  );
   const busy = approveMutation.isPending || rejectMutation.isPending;
+
+  useEffect(() => {
+    if (sortedItems.length === 0) {
+      setSelectedDecisionId(null);
+      return;
+    }
+    if (!selectedDecisionId || !sortedItems.some((item) => item.id === selectedDecisionId)) {
+      setSelectedDecisionId(sortedItems[0].id);
+    }
+  }, [selectedDecisionId, sortedItems]);
+
+  useEffect(() => {
+    setDecisionReason("");
+  }, [selectedItem?.id]);
 
   const resolve = async (kind: "approve" | "reject", id: string, reason: string) => {
     setMessage(null);
@@ -571,20 +820,22 @@ export default function RuntimeApprovalsPage() {
         await rejectMutation.mutateAsync({ decisionId: id, reason });
         setMessage("Rejection recorded.");
       }
+      setDecisionReason("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Decision failed.");
     }
   };
 
   return (
-    <div className="dashboard-page approvals-page">
-      <section className="page-header">
+    <div className="dashboard-page approvals-page approvals-cockpit">
+      <section className="approvals-hero">
         <div>
           <span className="eyebrow">Runtime gate</span>
-          <h1>Approvals</h1>
-          <p>Paused agent actions, policy hits, and owner/admin decisions.</p>
+          <h1>Held actions before commit</h1>
+          <p>Approve, reject, or freeze autonomous actions with mandate proof and outcome evidence in one place.</p>
         </div>
-        <div className="page-actions">
+        <div className="approvals-hero-rail">
+          <span className="approval-hero-pill">{pendingCount} pending</span>
           <button
             className="btn btn-secondary"
             type="button"
@@ -594,55 +845,46 @@ export default function RuntimeApprovalsPage() {
             <RefreshCw size={16} />
             Refresh
           </button>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            disabled={killSwitchMutation.isPending}
-            onClick={async () => {
-              setMessage(null);
-              try {
-                await killSwitchMutation.mutateAsync(true);
-                setMessage("Kill switch enabled.");
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Kill switch update failed.");
-              }
-            }}
-          >
-            <ShieldAlert size={16} />
-            Kill switch
-          </button>
         </div>
       </section>
 
-      <section className="metric-grid compact">
-        <article className="metric-card tone-warning">
+      <section className="approvals-metric-grid">
+        <article className="approval-metric-card tone-warning">
           <Clock3 size={18} />
-          <span>Pending</span>
+          <span>Waiting for owner</span>
           <strong>{pendingCount}</strong>
         </article>
-        <article className="metric-card tone-danger">
+        <article className="approval-metric-card tone-danger">
           <AlertTriangle size={18} />
-          <span>Blocked</span>
-          <strong>{items.filter((item) => item.status === "blocked").length}</strong>
+          <span>Blocked or rejected</span>
+          <strong>{blockedCount}</strong>
         </article>
-        <article className="metric-card tone-neutral">
+        <article className="approval-metric-card tone-neutral">
           <LockKeyhole size={18} />
           <span>Visible traces</span>
-          <strong>{items.filter((item) => item.trace_id).length}</strong>
+          <strong>{visibleTraceCount}</strong>
+        </article>
+        <article className="approval-metric-card tone-success">
+          <FileText size={18} />
+          <span>Money-touching</span>
+          <strong>{financialCount}</strong>
         </article>
       </section>
 
-      <section className="filter-bar" aria-label="Approval filters">
-        {FILTERS.map((item) => (
-          <button
-            key={item.id}
-            className={`filter-chip ${filter === item.id ? "active" : ""}`}
-            type="button"
-            onClick={() => setFilter(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+      <section className="approval-cockpit-toolbar" aria-label="Approval filters">
+        <div className="filter-bar">
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              className={`filter-chip ${filter === item.id ? "active" : ""}`}
+              type="button"
+              onClick={() => setFilter(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <span>{approvalsQuery.isFetching ? "Refreshing queue..." : "Runtime queue is live"}</span>
       </section>
 
       {message ? <div className="notice">{message}</div> : null}
@@ -652,19 +894,50 @@ export default function RuntimeApprovalsPage() {
       ) : approvalsQuery.isError ? (
         <div className="empty error">{approvalsQuery.error.message}</div>
       ) : items.length === 0 ? (
-        <div className="empty">No runtime policy approvals in this view.</div>
+        <section className="approval-empty-state">
+          <ShieldAlert size={24} aria-hidden="true" />
+          <h2>No runtime approvals in this view.</h2>
+          <p>When an agent attempts a high-stakes action, Zroky will hold it here before commit.</p>
+          <Link className="btn btn-secondary" href="/policies">
+            Review mandates
+          </Link>
+        </section>
       ) : (
-        <section className="approval-list">
-          {items.map((item) => (
-            <DecisionCard
-              key={item.id}
-              item={item}
+        <section className="approval-cockpit-grid">
+          <ApprovalQueue
+            items={sortedItems}
+            selectedId={selectedItem?.id ?? null}
+            onSelect={setSelectedDecisionId}
+          />
+          <div className="approval-cockpit-detail">
+            <ApprovalInspector
+              item={selectedItem}
+              pack={selectedEvidenceQuery.data}
+              packLoading={selectedEvidenceQuery.isLoading}
+              packError={selectedEvidenceQuery.error instanceof Error ? selectedEvidenceQuery.error : null}
+              reason={decisionReason}
+              setReason={setDecisionReason}
               busy={busy}
               onViewEvidence={setEvidenceDecisionId}
               onApprove={(id, reason) => resolve("approve", id, reason)}
               onReject={(id, reason) => resolve("reject", id, reason)}
             />
-          ))}
+            <KillSwitchPanel
+              armed={killSwitchArmed}
+              setArmed={setKillSwitchArmed}
+              isPending={killSwitchMutation.isPending}
+              onConfirm={async () => {
+                setMessage(null);
+                try {
+                  await killSwitchMutation.mutateAsync(true);
+                  setKillSwitchArmed(false);
+                  setMessage("Kill switch enabled.");
+                } catch (error) {
+                  setMessage(error instanceof Error ? error.message : "Kill switch update failed.");
+                }
+              }}
+            />
+          </div>
         </section>
       )}
 

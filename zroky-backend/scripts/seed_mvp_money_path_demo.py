@@ -25,6 +25,7 @@ from app.db.models import (  # noqa: E402
     GoldenSet,
     GoldenTrace,
     Notification,
+    OutcomeReconciliationCheck,
     Project,
     ProjectAlert,
     ProjectDashboardConfig,
@@ -33,6 +34,8 @@ from app.db.models import (  # noqa: E402
     ProviderKeyVault,
     ReplayRun,
     ReplayRunTrace,
+    RuntimePolicyAuditEvent,
+    RuntimePolicyDecision,
     Subscription,
     TraceRun,
     TraceSpan,
@@ -79,6 +82,9 @@ def _delete_existing_demo_rows(
     user_subject: str,
 ) -> None:
     project_ids = [project_id, OWNER_VALUE_PROJECT_ID]
+    db.execute(delete(OutcomeReconciliationCheck).where(OutcomeReconciliationCheck.project_id.in_(project_ids)))
+    db.execute(delete(RuntimePolicyAuditEvent).where(RuntimePolicyAuditEvent.project_id.in_(project_ids)))
+    db.execute(delete(RuntimePolicyDecision).where(RuntimePolicyDecision.project_id.in_(project_ids)))
     db.execute(
         delete(ReplayRunTrace).where(ReplayRunTrace.project_id.in_(project_ids))
     )
@@ -612,6 +618,168 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
     db.flush()
     upsert_trace_graph_for_call(db=db, tenant_id=project_id, call=bad_call, payload=call_payload)
 
+    runtime_decision_id = "demo-runtime-refund-hold"
+    refund_claim = {
+        "summary": "Refund RF-1001 for customer cus_demo_001",
+        "refund_id": scenario["refund_id"],
+        "order_id": scenario["order_id"],
+        "customer_id": scenario["customer_id"],
+        "amount_usd": fake_tool["response"]["amount_usd"],
+        "currency": "USD",
+    }
+    runtime_decision = RuntimePolicyDecision(
+        id=runtime_decision_id,
+        project_id=project_id,
+        trace_id=str(scenario["trace_id"]),
+        call_id=str(ids["bad_call"]),
+        agent_name=str(scenario["agent_name"]),
+        role="refund_ops",
+        action_type="refund",
+        tool_name="ledger.refund",
+        decision="requires_approval",
+        status="pending_approval",
+        reasons_json=_compact_json(["refund amount requires owner approval", "ledger write must be verified"]),
+        request_json=_compact_json(
+            {
+                "refund_id": scenario["refund_id"],
+                "customer_id": scenario["customer_id"],
+                "order_id": scenario["order_id"],
+                "amount_usd": fake_tool["response"]["amount_usd"],
+            }
+        ),
+        policy_snapshot_json=_compact_json(
+            {
+                "policy": "refund_mandate_v1",
+                "max_auto_refund_usd": 25,
+                "require_owner_approval_above_usd": 25,
+                "fail_closed_without_outcome_proof": True,
+            }
+        ),
+        intended_action_json=_compact_json(refund_claim),
+        trace_context_json=_compact_json(
+            {
+                "trace_id": scenario["trace_id"],
+                "call_id": ids["bad_call"],
+                "workflow_name": scenario["workflow_name"],
+                "prompt_version": scenario["prompt_version"],
+            }
+        ),
+        policy_hit_json=_compact_json(
+            {
+                "policy": "money_action",
+                "threshold_usd": 25,
+                "detector": "unsafe_money_action",
+            }
+        ),
+        business_impact_json=_compact_json(
+            {
+                "risk_category": "financial_loss",
+                "amount_usd": fake_tool["response"]["amount_usd"],
+                "currency": "USD",
+                "customer_impact": "wrong refund could post to ledger",
+            }
+        ),
+        approval_scope_hash="demo-refund-approval-scope",
+        created_at=base_time + timedelta(minutes=9),
+        expires_at=base_time + timedelta(days=180),
+    )
+    runtime_audit = RuntimePolicyAuditEvent(
+        id="demo-runtime-refund-audit-requested",
+        project_id=project_id,
+        decision_id=runtime_decision_id,
+        event_type="approval_requested",
+        actor="runtime_policy_gate",
+        reason="refund amount requires owner approval",
+        before_json=None,
+        after_json=_compact_json({"status": "pending_approval", "decision": "requires_approval"}),
+        created_at=base_time + timedelta(minutes=9, seconds=5),
+    )
+    db.add_all([runtime_decision, runtime_audit])
+    db.add_all(
+        [
+            OutcomeReconciliationCheck(
+                id="demo-outcome-refund-mismatch",
+                project_id=project_id,
+                call_id=str(ids["bad_call"]),
+                trace_id=str(scenario["trace_id"]),
+                runtime_policy_decision_id=runtime_decision_id,
+                action_type="refund",
+                connector_type="ledger_refund_api",
+                system_ref=f"ledger:{scenario['refund_id']}",
+                verdict="mismatched",
+                reason="field_mismatch",
+                amount_usd=float(fake_tool["response"]["amount_usd"]),
+                currency="USD",
+                claimed_json=_compact_json(refund_claim),
+                actual_json=_compact_json(
+                    {
+                        **refund_claim,
+                        "amount_usd": 41.18,
+                        "status": "posted",
+                    }
+                ),
+                comparison_json=_compact_json(
+                    {
+                        "compared_fields": ["refund_id", "order_id", "customer_id", "amount_usd", "currency"],
+                        "mismatches": [{"field": "amount_usd", "claimed": 42.18, "actual": 41.18}],
+                    }
+                ),
+                idempotency_key="demo-refund-mismatch",
+                metadata_json=_compact_json({"source": "seeded_design_partner_demo", "connector": "ledger_refund_api"}),
+                checked_at=base_time + timedelta(minutes=10),
+                created_at=base_time + timedelta(minutes=10),
+            ),
+            OutcomeReconciliationCheck(
+                id="demo-outcome-refund-matched",
+                project_id=project_id,
+                call_id=str(ids["bad_call"]),
+                trace_id=str(scenario["trace_id"]),
+                runtime_policy_decision_id=runtime_decision_id,
+                action_type="refund",
+                connector_type="ledger_refund_api",
+                system_ref=f"ledger:{scenario['refund_id']}:verified",
+                verdict="matched",
+                reason="all_compared_fields_matched",
+                amount_usd=float(fake_tool["response"]["amount_usd"]),
+                currency="USD",
+                claimed_json=_compact_json(refund_claim),
+                actual_json=_compact_json({**refund_claim, "status": "posted"}),
+                comparison_json=_compact_json({"compared_fields": ["refund_id", "amount_usd", "currency"], "mismatches": []}),
+                idempotency_key="demo-refund-matched",
+                metadata_json=_compact_json({"source": "seeded_design_partner_demo", "connector": "ledger_refund_api"}),
+                checked_at=base_time + timedelta(minutes=11),
+                created_at=base_time + timedelta(minutes=11),
+            ),
+            OutcomeReconciliationCheck(
+                id="demo-outcome-email-not-verified",
+                project_id=project_id,
+                call_id=str(ids["bad_call"]),
+                trace_id=str(scenario["trace_id"]),
+                runtime_policy_decision_id=None,
+                action_type="email",
+                connector_type="email_provider",
+                system_ref="email:refund-status-followup",
+                verdict="not_verified",
+                reason="system_of_record_missing",
+                amount_usd=None,
+                currency=None,
+                claimed_json=_compact_json(
+                    {
+                        "summary": "Refund status follow-up email delivered",
+                        "email": "customer@example.com",
+                        "email_status": "delivered",
+                    }
+                ),
+                actual_json=None,
+                comparison_json=_compact_json({"compared_fields": [], "mismatches": [], "missing_record": True}),
+                idempotency_key="demo-email-not-verified",
+                metadata_json=_compact_json({"source": "seeded_design_partner_demo", "connector": "email_provider"}),
+                checked_at=base_time + timedelta(minutes=12),
+                created_at=base_time + timedelta(minutes=12),
+            ),
+        ]
+    )
+
     diagnosis_result = {
         "failure_code": scenario["failure_code"],
         "root_cause": "The agent treated a status lookup as a policy question and skipped get_refund_status.",
@@ -1029,6 +1197,10 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         "replay_trace_id": str(ids["verified_replay_trace"]),
         "ci_run_id": str(ids["regression_ci_run"]),
         "ci_trace_id": str(ids["regression_ci_trace"]),
+        "runtime_policy_decision_id": runtime_decision_id,
+        "outcome_mismatch_id": "demo-outcome-refund-mismatch",
+        "outcome_matched_id": "demo-outcome-refund-matched",
+        "outcome_not_verified_id": "demo-outcome-email-not-verified",
         "trace_id": str(scenario["trace_id"]),
         "issue_url": f"http://localhost:3000/issues/{ids['issue']}",
         "call_url": f"http://localhost:3000/calls/{ids['bad_call']}",

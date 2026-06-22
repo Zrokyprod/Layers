@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -133,6 +133,13 @@ describe("CI Gate detail MVP", () => {
     expect(await screen.findByRole("heading", { name: "PR #42 - Refund retry guard" })).toBeInTheDocument();
     expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Regression CI blocked this change.").length).toBeGreaterThan(0);
+    const decisionProof = screen.getByLabelText("CI gate decision proof");
+    for (const label of ["Verdict", "Replay proof", "Contract evidence", "Merge decision"]) {
+      expect(within(decisionProof).getByText(label)).toBeInTheDocument();
+    }
+    expect(within(decisionProof).getByText("Repository replay")).toBeInTheDocument();
+    expect(within(decisionProof).getByText("0 Contract items")).toBeInTheDocument();
+    expect(within(decisionProof).getByText("Block")).toBeInTheDocument();
     expect(screen.getByText("Refund protected flow (3)")).toBeInTheDocument();
     expect(screen.getByText("Refund status changed")).toBeInTheDocument();
     expect(screen.getAllByText("/v1/regression-ci/runs/run_ci_1").length).toBeGreaterThan(0);

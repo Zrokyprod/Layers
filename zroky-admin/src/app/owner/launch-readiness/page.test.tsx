@@ -24,7 +24,10 @@ const readiness: OwnerLaunchReadiness = {
   product_standard: "Did Zroky prevent an important AI agent failure from silently repeating?",
   overall_status: "blocked",
   paid_launch_allowed: false,
-  hard_blockers: ["honest_replay_proof:stub_replay_marked_verified"],
+  hard_blockers: [
+    "honest_replay_proof:stub_replay_marked_verified",
+    "real_customer_proof:real_customer_outcome_proof_missing",
+  ],
   verification_commands: [
     "powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1",
     "python -m pytest tests/test_tenant_project_route_scoping.py",
@@ -67,6 +70,19 @@ const readiness: OwnerLaunchReadiness = {
       ],
       verification_commands: ["python -m pytest tests/test_outcome_reconciliation.py"],
     },
+    {
+      code: "real_customer_proof",
+      title: "Real Customer Proof",
+      status: "not_verified",
+      summary: "Paid launch requires non-demo outcome proof.",
+      blockers: ["real_customer_outcome_proof_missing"],
+      evidence: [
+        { label: "candidate_matched_outcomes_7d", value: 1, status: null, detail: null },
+        { label: "real_customer_matched_outcomes_7d", value: 0, status: null, detail: null },
+        { label: "demo_or_synthetic_outcomes_7d", value: 1, status: null, detail: null },
+      ],
+      verification_commands: ["python -m pytest tests/test_owner_money_path_health.py -k real_customer_proof"],
+    },
   ],
 };
 
@@ -93,6 +109,7 @@ describe("OwnerLaunchReadinessPage", () => {
     expect(screen.getByText("Paid launch blocked")).toBeInTheDocument();
     expect(screen.getByText(readiness.product_standard)).toBeInTheDocument();
     expect(screen.getByText("honest_replay_proof:stub_replay_marked_verified")).toBeInTheDocument();
+    expect(screen.getByText("real_customer_proof:real_customer_outcome_proof_missing")).toBeInTheDocument();
 
     const gateRegion = screen.getByLabelText("Required launch gates");
     expect(within(gateRegion).getByText("Honest Replay Proof")).toBeInTheDocument();
@@ -102,6 +119,9 @@ describe("OwnerLaunchReadinessPage", () => {
     expect(within(gateRegion).getByText("Outcome Verification")).toBeInTheDocument();
     expect(within(gateRegion).getByText("outcome_mismatch_detected")).toBeInTheDocument();
     expect(within(gateRegion).getByText("outcome_not_verified")).toBeInTheDocument();
+    expect(within(gateRegion).getByText("Real Customer Proof")).toBeInTheDocument();
+    expect(within(gateRegion).getByText("real_customer_outcome_proof_missing")).toBeInTheDocument();
+    expect(within(gateRegion).getByText("demo or synthetic outcomes 7d")).toBeInTheDocument();
     expect(screen.getByText("powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1")).toBeInTheDocument();
   });
 

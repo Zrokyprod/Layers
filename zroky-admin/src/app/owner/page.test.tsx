@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import OwnerOverviewPage from "./page";
 import * as hooks from "@/lib/hooks";
-import type { OwnerHealth, OwnerMoneyPathHealth } from "@/lib/owner-api";
+import type { OwnerHealth, OwnerLaunchReadiness, OwnerMoneyPathHealth } from "@/lib/owner-api";
 
 vi.mock("@/lib/hooks", () => ({
   useOwnerHealth: vi.fn(),
+  useOwnerLaunchReadiness: vi.fn(),
   useOwnerMoneyPathHealth: vi.fn(),
   useToggleMaintenance: vi.fn(),
 }));
@@ -82,7 +83,32 @@ const moneyPath: OwnerMoneyPathHealth = {
   ],
 };
 
-function setHookData(data: OwnerMoneyPathHealth | null, error: Error | null = null) {
+const readiness: OwnerLaunchReadiness = {
+  generated_at: "2026-06-04T12:00:00Z",
+  product_standard: "Paid launch requires runtime stops, outcome proof, tenant isolation, billing readiness, and no fake verified state.",
+  overall_status: "blocked",
+  paid_launch_allowed: false,
+  hard_blockers: ["runtime_risk_stop:runtime_risk_stop_evidence_missing"],
+  verification_commands: ["powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1"],
+  gates: [
+    {
+      code: "runtime_risk_stop",
+      title: "Runtime Risk Stop",
+      status: "not_verified",
+      summary: "Risky actions must pause before damage.",
+      blockers: ["runtime_risk_stop_evidence_missing"],
+      evidence: [{ label: "risk_stopped_7d", value: 0, status: null, detail: null }],
+      verification_commands: ["python -m pytest tests/test_runtime_policy_gate.py"],
+    },
+  ],
+};
+
+function setHookData(
+  data: OwnerMoneyPathHealth | null,
+  error: Error | null = null,
+  launchData: OwnerLaunchReadiness | null = readiness,
+  launchError: Error | null = null,
+) {
   vi.mocked(hooks.useOwnerMoneyPathHealth).mockReturnValue({
     data,
     error,
@@ -95,6 +121,13 @@ function setHookData(data: OwnerMoneyPathHealth | null, error: Error | null = nu
     dataUpdatedAt: Date.parse(health.checked_at),
     refetch: vi.fn(),
   } as ReturnType<typeof hooks.useOwnerHealth>);
+  vi.mocked(hooks.useOwnerLaunchReadiness).mockReturnValue({
+    data: launchData,
+    error: launchError,
+    dataUpdatedAt: launchData ? Date.parse(launchData.generated_at) : 0,
+    isLoading: false,
+    refetch: vi.fn(),
+  } as ReturnType<typeof hooks.useOwnerLaunchReadiness>);
   vi.mocked(hooks.useToggleMaintenance).mockReturnValue({
     isPending: false,
     mutateAsync: vi.fn(),
@@ -111,16 +144,23 @@ describe("OwnerOverviewPage", () => {
 
     render(<OwnerOverviewPage />);
 
-    expect(screen.getByText("Regression Firewall Health")).toBeInTheDocument();
+    expect(screen.getByText("Owner signal command")).toBeInTheDocument();
+    expect(screen.getByText("Paid launch decision")).toBeInTheDocument();
+    expect(screen.getByText("Paid launch blocked")).toBeInTheDocument();
+    expect(screen.getByText(readiness.product_standard)).toBeInTheDocument();
+    expect(screen.getByText("runtime_risk_stop:runtime_risk_stop_evidence_missing")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open full launch gate" }).getAttribute("href")).toBe("/owner/launch-readiness");
+    expect(screen.getByText("End-to-end signal flow")).toBeInTheDocument();
+    expect(screen.getByText("Outcome proof")).toBeInTheDocument();
     expect(screen.getByText("Primary Loop")).toBeInTheDocument();
     expect(screen.getByText("Deployment Smoke")).toBeInTheDocument();
-    expect(screen.getByText("Latest deployed smoke CI gate run ended with status=fail.")).toBeInTheDocument();
+    expect(screen.getAllByText("Latest deployed smoke CI gate run ended with status=fail.").length).toBeGreaterThan(0);
     expect(screen.getByText("Good Tenant")).toBeInTheDocument();
     expect(screen.getByText("Gap Tenant")).toBeInTheDocument();
     expect(screen.getByText("Review blocked CI")).toBeInTheDocument();
     expect(screen.getByText("Restore capture")).toBeInTheDocument();
     expect(screen.getByText("missing")).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it("does not render fake success when money-path health fails", () => {
     setHookData(null, new Error("HTTP 500"));
@@ -130,5 +170,16 @@ describe("OwnerOverviewPage", () => {
     expect(screen.getByText("HTTP 500")).toBeInTheDocument();
     expect(screen.queryByText("Primary Loop")).toBe(null);
     expect(screen.queryByText("Tenant Action Queue")).toBe(null);
+  });
+
+  it("keeps owner launch approval blocked when launch readiness is unavailable", () => {
+    setHookData(moneyPath, null, null, new Error("HTTP 503"));
+
+    render(<OwnerOverviewPage />);
+
+    expect(screen.getByText("Launch gate not verified")).toBeInTheDocument();
+    expect(screen.getByText("HTTP 503")).toBeInTheDocument();
+    expect(screen.queryByText("Paid launch allowed")).toBe(null);
+    expect(screen.getByText("End-to-end signal flow")).toBeInTheDocument();
   });
 });

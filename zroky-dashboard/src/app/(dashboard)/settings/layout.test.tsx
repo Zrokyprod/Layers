@@ -48,6 +48,21 @@ describe("SettingsLayout", () => {
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
   });
 
+  it("frames settings as the workspace control plane", () => {
+    render(
+      <SettingsLayout>
+        <div>Settings content</div>
+      </SettingsLayout>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Workspace control plane" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Workspace control loop")).toBeInTheDocument();
+    for (const label of ["Capture key", "Team access", "Spend guard", "Evidence route"]) {
+      expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    }
+    expect(screen.getByText("Current section")).toBeInTheDocument();
+  });
+
   it("keeps direct provider settings usable without exposing a tab", () => {
     navigation.pathname = "/settings/providers";
 
@@ -72,7 +87,8 @@ describe("SettingsLayout", () => {
     );
 
     expect(screen.getByRole("link", { name: "Integrations" }).className).toContain("settings-tab-link-active");
-    expect(screen.getByText("Repos, alerts, records")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Integrations" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getAllByText("Repos, alerts, records").length).toBeGreaterThan(0);
   });
 
   it("does not include personal account controls in workspace settings", () => {

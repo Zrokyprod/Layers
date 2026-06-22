@@ -56,7 +56,7 @@ function ResetPasswordForm() {
   });
 
   return (
-    <form onSubmit={onSubmit} className="auth-form">
+    <form method="post" onSubmit={onSubmit} className="auth-form">
       {error && <div className="auth-banner auth-banner-error">{error}</div>}
       {message && <div className="auth-banner auth-banner-success">{message}</div>}
       <AuthInput

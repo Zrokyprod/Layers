@@ -20,6 +20,7 @@ from app.api.routes._internal.owner_money_path import (
     _json_object,
 )
 from app.db.models import (
+    Call,
     GoldenSet,
     GoldenTrace,
     OutcomeReconciliationCheck,
@@ -35,6 +36,20 @@ STALE_PRODUCT_DOC_PATHS = (
     ".kiro/specs/unknown-failure-discovery/requirements.md",
     ".kiro/specs/unknown-failure-discovery/tasks.md",
 )
+
+LOCAL_PROOF_SOURCES = {
+    "design_partner_install_kit",
+    "money_path_demo",
+    "phase_8_deployment_smoke",
+}
+
+LOCAL_PROOF_MODES = {
+    "demo",
+    "local_demo",
+    "preflight",
+    "sandbox",
+    "synthetic",
+}
 
 
 def _evidence(
@@ -273,6 +288,82 @@ def _outcome_reconciliation_counts(
     return counts
 
 
+def _is_local_or_synthetic_proof(
+    *,
+    check: OutcomeReconciliationCheck,
+    call: Call,
+) -> bool:
+    check_metadata = _json_object(check.metadata_json)
+    call_metadata = _json_object(call.metadata_json)
+    sources = {
+        str(check_metadata.get("source") or "").strip(),
+        str(call_metadata.get("source") or "").strip(),
+    }
+    proof_modes = {
+        str(check_metadata.get("proof_mode") or "").strip(),
+        str(call_metadata.get("proof_mode") or "").strip(),
+    }
+    if sources & LOCAL_PROOF_SOURCES:
+        return True
+    if proof_modes & LOCAL_PROOF_MODES:
+        return True
+    return (
+        bool(check_metadata.get("demo"))
+        or bool(check_metadata.get("is_synthetic"))
+        or bool(check_metadata.get("synthetic"))
+        or bool(call_metadata.get("demo"))
+        or bool(call_metadata.get("is_synthetic"))
+        or bool(call_metadata.get("synthetic"))
+        or call.is_production is False
+    )
+
+
+def _real_customer_proof_counts(
+    db: Session,
+    *,
+    project_ids: list[str],
+    since: datetime,
+) -> dict[str, int | float]:
+    counts: dict[str, int | float] = {
+        "candidate_matched": 0,
+        "real_matched": 0,
+        "demo_or_synthetic": 0,
+        "distinct_projects": 0,
+        "amount_usd": 0.0,
+    }
+    if not project_ids:
+        return counts
+
+    rows = db.execute(
+        select(OutcomeReconciliationCheck, Call)
+        .join(Call, OutcomeReconciliationCheck.call_id == Call.id)
+        .join(
+            RuntimePolicyDecision,
+            OutcomeReconciliationCheck.runtime_policy_decision_id
+            == RuntimePolicyDecision.id,
+        )
+        .where(
+            OutcomeReconciliationCheck.project_id.in_(project_ids),
+            OutcomeReconciliationCheck.checked_at >= since,
+            OutcomeReconciliationCheck.verdict == "matched",
+            OutcomeReconciliationCheck.call_id.is_not(None),
+            OutcomeReconciliationCheck.runtime_policy_decision_id.is_not(None),
+        )
+    ).all()
+
+    real_project_ids: set[str] = set()
+    for check, call in rows:
+        counts["candidate_matched"] += 1
+        if _is_local_or_synthetic_proof(check=check, call=call):
+            counts["demo_or_synthetic"] += 1
+            continue
+        counts["real_matched"] += 1
+        real_project_ids.add(check.project_id)
+        counts["amount_usd"] += float(check.amount_usd or 0)
+    counts["distinct_projects"] = len(real_project_ids)
+    return counts
+
+
 def _repo_root_for_source_truth() -> Path | None:
     candidates = [
         Path.cwd(),
@@ -340,6 +431,9 @@ def build_launch_readiness(
     golden_counts = _behavioral_golden_counts(db, project_ids=project_ids)
     runtime_counts = _runtime_policy_counts(db, project_ids=project_ids, since=since_7d)
     reconciliation_counts = _outcome_reconciliation_counts(
+        db, project_ids=project_ids, since=since_7d
+    )
+    real_customer_counts = _real_customer_proof_counts(
         db, project_ids=project_ids, since=since_7d
     )
     source_status, source_blockers, source_evidence = _source_truth_status()
@@ -664,6 +758,45 @@ def build_launch_readiness(
                 "python -m pytest tests/test_owner_money_path_health.py",
                 "python scripts/run_money_path_demo.py --json",
                 "npm test -- --run src/app/owner/page.test.tsx src/app/owner/money-path/page.test.tsx",
+            ],
+        )
+    )
+
+    real_customer_missing = []
+    if real_customer_counts["real_matched"] <= 0:
+        real_customer_missing.append("real_customer_outcome_proof_missing")
+    gates.append(
+        _gate(
+            code="real_customer_proof",
+            title="Real Customer Proof",
+            status=_status_for(blockers=[], missing=real_customer_missing),
+            summary="Paid launch requires at least one non-demo customer or pilot action with runtime policy evidence and matched system-of-record outcome proof.",
+            blockers=real_customer_missing,
+            evidence=[
+                _evidence(
+                    "candidate_matched_outcomes_7d",
+                    real_customer_counts["candidate_matched"],
+                ),
+                _evidence(
+                    "real_customer_matched_outcomes_7d",
+                    real_customer_counts["real_matched"],
+                ),
+                _evidence(
+                    "demo_or_synthetic_outcomes_7d",
+                    real_customer_counts["demo_or_synthetic"],
+                ),
+                _evidence(
+                    "real_customer_projects_7d",
+                    real_customer_counts["distinct_projects"],
+                ),
+                _evidence(
+                    "real_customer_amount_usd_7d",
+                    round(float(real_customer_counts["amount_usd"]), 2),
+                ),
+            ],
+            verification_commands=[
+                "python -m pytest tests/test_owner_money_path_health.py -k real_customer_proof",
+                "python scripts/run_deployment_smoke.py --api-base-url $ZROKY_STAGING_API_URL --provisioning-token $STAGING_PROVISIONING_TOKEN --backend-only",
             ],
         )
     )

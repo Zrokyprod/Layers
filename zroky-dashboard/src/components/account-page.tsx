@@ -4,12 +4,46 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Fingerprint,
+  KeyRound,
+  LogOut,
+  MonitorX,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 
 import { deleteAccount, getSecurityStatus, logoutAllSessions } from "@/lib/api";
 import { clearAccessToken } from "@/lib/auth";
 import { useChangePassword, useMe, useUpdateMe } from "@/lib/hooks";
 import { passwordChangeSchema, type PasswordChangeFormData } from "@/lib/schemas";
 import type { SecurityStatusResponse } from "@/lib/types";
+
+const ACCOUNT_FLOW = ["Identity", "Login method", "Session control", "Danger zone"] as const;
+
+function connectedLoginLabel(security: SecurityStatusResponse | null): string {
+  if (!security) return "Loading";
+  const providers = [
+    security.github_connected ? "GitHub" : null,
+    security.google_connected ? "Google" : null,
+  ].filter(Boolean);
+  return providers.length > 0 ? providers.join(", ") : "None";
+}
+
+function sessionExpiryLabel(value: string | null | undefined): string {
+  if (!value) return "Unknown";
+  return new Date(value).toLocaleString();
+}
+
+function accountPostureLabel(me: ReturnType<typeof useMe>["data"] | null, security: SecurityStatusResponse | null): string {
+  if (!me || !security) return "Checking";
+  if (me.email_verified && security.password_login_enabled && security.global_logout_available) return "Controlled";
+  if (!me.email_verified) return "Review email";
+  if (!security.global_logout_available) return "Session review";
+  return "Limited login";
+}
 
 export default function AccountPage() {
   const router = useRouter();
@@ -43,6 +77,12 @@ export default function AccountPage() {
   const me = meQuery.data ?? null;
   const loadError = meQuery.error?.message ?? "";
   const displayName = me?.display_name?.trim() || me?.email?.split("@")[0] || "User";
+  const accountPosture = securityLoading ? "Checking" : accountPostureLabel(me, security);
+  const accountInitial = displayName.charAt(0).toUpperCase();
+  const connectedLogin = connectedLoginLabel(security);
+  const memberSince = me?.created_at
+    ? new Date(me.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "-";
 
   useEffect(() => {
     if (me) {
@@ -125,9 +165,72 @@ export default function AccountPage() {
 
   return (
     <div className="page-content account-page settings-profile-page">
-      <section className="panel profile-section-gap">
+      <section className="account-command-hero" aria-label="Account security overview">
+        <div className="account-hero-copy">
+          <span className="account-eyebrow">
+            <Fingerprint aria-hidden="true" />
+            Personal account
+          </span>
+          <h1>{displayName}</h1>
+          <p>Manage the identity, login method, and browser sessions used to access protected Zroky workspaces.</p>
+          <div className="account-hero-meta" aria-label="Account identifiers">
+            <span>{me?.email ?? "No email set"}</span>
+            <span>{me?.user_id ?? "User loading"}</span>
+            <span>Member since {memberSince}</span>
+          </div>
+        </div>
+        <aside className={`account-posture-card is-${accountPosture.toLowerCase().replaceAll(" ", "-")}`}>
+          <span>Account posture</span>
+          <strong>{accountPosture}</strong>
+          <small>
+            {securityLoading
+              ? "Loading current session and login status."
+              : securityMessage
+                ? "Security status could not be loaded."
+                : "Identity and session controls are backed by the account API."}
+          </small>
+        </aside>
+      </section>
+
+      <section className="account-status-grid" aria-label="Account control summary">
+        <article className={me?.email_verified ? "account-status-card is-ready" : "account-status-card is-warn"}>
+          <ShieldCheck aria-hidden="true" />
+          <span>Email verification</span>
+          <strong>{me?.email_verified ? "Verified" : me ? "Not verified" : "Loading"}</strong>
+          <small>Used for account recovery and workspace invites.</small>
+        </article>
+        <article className={security?.password_login_enabled ? "account-status-card is-ready" : "account-status-card is-warn"}>
+          <KeyRound aria-hidden="true" />
+          <span>Password login</span>
+          <strong>{securityLoading ? "Loading" : security?.password_login_enabled ? "Enabled" : "OAuth only"}</strong>
+          <small>{me?.has_password ? "Password changes are available." : "Use recovery flow to set a password."}</small>
+        </article>
+        <article className={connectedLogin !== "None" && connectedLogin !== "Loading" ? "account-status-card is-ready" : "account-status-card"}>
+          <UserRound aria-hidden="true" />
+          <span>Connected login</span>
+          <strong>{connectedLogin}</strong>
+          <small>OAuth providers linked to this account.</small>
+        </article>
+        <article className={security?.global_logout_available ? "account-status-card is-ready" : "account-status-card is-warn"}>
+          <MonitorX aria-hidden="true" />
+          <span>Session control</span>
+          <strong>{securityLoading ? "Loading" : security?.global_logout_available ? "Available" : "Unavailable"}</strong>
+          <small>Expires {securityLoading ? "after security status loads" : sessionExpiryLabel(security?.current_session_expires_at)}.</small>
+        </article>
+      </section>
+
+      <nav className="account-flow-rail" aria-label="Account control flow">
+        {ACCOUNT_FLOW.map((item, index) => (
+          <a key={item} href={`#${item.toLowerCase().replaceAll(" ", "-")}`}>
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <strong>{item}</strong>
+          </a>
+        ))}
+      </nav>
+
+      <section className="panel profile-section-gap" id="identity">
         <header className="panel-header">
-          <h3>Your Identity</h3>
+          <h3>Your identity</h3>
           <p className="panel-sub">Account email and connected login methods.</p>
         </header>
 
@@ -138,15 +241,12 @@ export default function AccountPage() {
           <>
             <div className="profile-identity-row">
               <div className="profile-avatar">
-                {displayName.charAt(0).toUpperCase()}
+                {accountInitial}
               </div>
               <div>
                 <div className="profile-email">{displayName}</div>
                 <div className="profile-since">
-                  {me.email ?? "No email set"} - Member since{" "}
-                  {me.created_at
-                    ? new Date(me.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
-                    : "-"}
+                  {me.email ?? "No email set"} - Member since {memberSince}
                 </div>
               </div>
             </div>
@@ -201,9 +301,9 @@ export default function AccountPage() {
         )}
       </section>
 
-      <section className="panel profile-section-gap">
+      <section className="panel profile-section-gap" id="login-method">
         <header className="panel-header">
-          <h3>Change Password</h3>
+          <h3>Change password</h3>
           <p className="panel-sub">
             {me && !me.has_password
               ? "Your account uses OAuth login. Use Forgot Password to set a password."
@@ -260,10 +360,10 @@ export default function AccountPage() {
         )}
       </section>
 
-      <section className="panel">
+      <section className="panel" id="session-control">
         <header className="panel-header">
           <div>
-            <h3>Account Security</h3>
+            <h3>Account security</h3>
             <p>Password/OAuth status and session revocation controls.</p>
           </div>
           <button type="button" className="btn btn-soft" onClick={() => void loadSecurity()} disabled={securityLoading}>
@@ -282,22 +382,21 @@ export default function AccountPage() {
             </div>
             <div className="field-row">
               <dt>Current session expires</dt>
-              <dd>{security.current_session_expires_at ? new Date(security.current_session_expires_at).toLocaleString() : "Unknown"}</dd>
+              <dd>{sessionExpiryLabel(security.current_session_expires_at)}</dd>
             </div>
             <div className="field-row">
               <dt>Connected OAuth</dt>
-              <dd>
-                {security.github_connected ? "GitHub" : ""}
-                {security.github_connected && security.google_connected ? ", " : ""}
-                {security.google_connected ? "Google" : ""}
-                {!security.github_connected && !security.google_connected ? "None" : ""}
-              </dd>
+              <dd>{connectedLoginLabel(security)}</dd>
+            </div>
+            <div className="field-row">
+              <dt>Global session revoke</dt>
+              <dd>{security.global_logout_available ? <span className="pill pill-green">Available</span> : <span className="muted">Unavailable</span>}</dd>
             </div>
           </dl>
         ) : null}
       </section>
 
-      <section className="panel">
+      <section className="panel account-session-panel">
         <header className="panel-header">
           <div>
             <h3>Sessions</h3>
@@ -308,24 +407,26 @@ export default function AccountPage() {
           <button
             type="button"
             className="btn btn-danger"
-            disabled={logoutAllLoading}
+            disabled={logoutAllLoading || security?.global_logout_available === false}
             onClick={() => void onLogoutAllSessions()}
           >
+            <LogOut aria-hidden="true" />
             {logoutAllLoading ? "Revoking..." : "Log out all sessions"}
           </button>
         </div>
       </section>
 
-      <section className="panel profile-danger-zone">
+      <section className="panel profile-danger-zone" id="danger-zone">
         <header className="panel-header">
           <div>
-            <h3 className="profile-danger-title">Danger Zone</h3>
+            <h3 className="profile-danger-title">Danger zone</h3>
             <p>Permanently delete your account and all associated data. This cannot be undone.</p>
           </div>
         </header>
 
         {!showDeleteConfirm ? (
           <button type="button" className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>
+            <AlertTriangle aria-hidden="true" />
             Delete my account
           </button>
         ) : (
@@ -348,6 +449,7 @@ export default function AccountPage() {
                 disabled={!me?.email || deleteInput !== me.email || deleteLoading}
                 onClick={() => void onDeleteAccount()}
               >
+                <CheckCircle2 aria-hidden="true" />
                 {deleteLoading ? "Deleting..." : "Permanently delete account"}
               </button>
               <button

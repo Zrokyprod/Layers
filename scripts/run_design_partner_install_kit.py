@@ -110,6 +110,14 @@ def _headers(args: argparse.Namespace) -> dict[str, str]:
     return headers
 
 
+def _owner_headers(args: argparse.Namespace) -> dict[str, str]:
+    if not args.owner_admin_token:
+        raise RuntimeError(
+            "--owner-admin-token is required with --verify-owner-launch-readiness."
+        )
+    return {args.owner_token_header: args.owner_admin_token}
+
+
 def _fixture_scenario(fixture: dict[str, Any]) -> str:
     scenario = str(fixture.get("scenario") or "").lower()
     if "customer_record" in scenario or "crm" in scenario or "crm" in fixture:
@@ -149,6 +157,7 @@ def _connector_secrets(fixture: dict[str, Any], args: argparse.Namespace) -> lis
         fixture.get("crm", {}).get("bearer_token") or "",
         args.api_key or "",
         args.bearer_token or "",
+        args.owner_admin_token or "",
         args.ledger_bearer_token or "",
         args.crm_bearer_token or "",
     ]
@@ -207,7 +216,31 @@ def _runtime_policy_payload(
         "metadata": {
             "install_kit": _fixture_package(fixture),
             "agent_type": agent["type"],
+            "proof_mode": "live_customer" if args.api_base_url else "local_demo",
         },
+    }
+
+
+def _proof_mode(args: argparse.Namespace, runtime_policy_decision_id: str | None) -> str:
+    if runtime_policy_decision_id is None:
+        return "preflight"
+    if args.api_base_url:
+        return "live_customer"
+    return "local_demo"
+
+
+def _proof_metadata(
+    fixture: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    runtime_policy_decision_id: str | None,
+) -> dict[str, Any]:
+    proof_mode = _proof_mode(args, runtime_policy_decision_id)
+    return {
+        "install_kit": _fixture_package(fixture),
+        "partner_run_id": args.partner_run_id,
+        "proof_mode": proof_mode,
+        "real_customer_proof_candidate": proof_mode == "live_customer",
     }
 
 
@@ -223,6 +256,15 @@ def _connector_endpoints(fixture: dict[str, Any]) -> dict[str, str]:
         "config_endpoint": f"{base_path}/config",
         "test_endpoint": f"{base_path}/test",
     }
+
+
+def _saved_connector_endpoint(fixture: dict[str, Any]) -> str:
+    slug = (
+        "customer-record"
+        if _fixture_scenario(fixture) == "customer-record"
+        else "ledger-refund"
+    )
+    return f"/v1/outcomes/reconciliation/{slug}/saved"
 
 
 def _connector_config_payload(
@@ -289,8 +331,9 @@ def _ledger_connector_test_payload(
         "amount_usd": amount,
         "currency": args.currency or claim.get("currency", "USD"),
         "metadata": {
-            "install_kit": "design_partner_refund_v1",
-            "partner_run_id": args.partner_run_id,
+            **_proof_metadata(
+                fixture, args, runtime_policy_decision_id=runtime_policy_decision_id
+            ),
         },
     }
 
@@ -323,8 +366,9 @@ def _customer_record_connector_test_payload(
         "amount_usd": args.amount_usd,
         "currency": args.currency,
         "metadata": {
-            "install_kit": _fixture_package(fixture),
-            "partner_run_id": args.partner_run_id,
+            **_proof_metadata(
+                fixture, args, runtime_policy_decision_id=runtime_policy_decision_id
+            ),
         },
     }
 
@@ -349,6 +393,24 @@ def _next_live_command(fixture: dict[str, Any]) -> str:
     )
 
 
+def _next_saved_connector_live_command(fixture: dict[str, Any]) -> str:
+    if _fixture_scenario(fixture) == "customer-record":
+        return (
+            "python scripts/run_design_partner_install_kit.py --scenario customer-record "
+            "--use-saved-connector --api-base-url https://api.zroky.ai "
+            "--api-key <zroky_api_key> --customer-id <customer_id> --json "
+            "--write-summary artifacts/design-partner-crm-saved-live-summary.json "
+            "--write-evidence artifacts/design-partner-crm-saved-live-evidence.json"
+        )
+    return (
+        "python scripts/run_design_partner_install_kit.py --scenario refund "
+        "--use-saved-connector --api-base-url https://api.zroky.ai "
+        "--api-key <zroky_api_key> --refund-id <refund_id> --json "
+        "--write-summary artifacts/design-partner-refund-saved-live-summary.json "
+        "--write-evidence artifacts/design-partner-refund-saved-live-evidence.json"
+    )
+
+
 def _next_live_preflight_command(fixture: dict[str, Any]) -> str:
     if _fixture_scenario(fixture) == "customer-record":
         return (
@@ -363,6 +425,24 @@ def _next_live_preflight_command(fixture: dict[str, Any]) -> str:
         "--preflight-only --api-base-url https://api.zroky.ai "
         "--api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api "
         "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json "
+        "--write-summary artifacts/design-partner-refund-preflight-summary.json"
+    )
+
+
+def _next_saved_connector_preflight_command(fixture: dict[str, Any]) -> str:
+    if _fixture_scenario(fixture) == "customer-record":
+        return (
+            "python scripts/run_design_partner_install_kit.py --scenario customer-record "
+            "--preflight-only --use-saved-connector "
+            "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+            "--customer-id <customer_id> --json "
+            "--write-summary artifacts/design-partner-crm-preflight-summary.json"
+        )
+    return (
+        "python scripts/run_design_partner_install_kit.py --scenario refund "
+        "--preflight-only --use-saved-connector "
+        "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+        "--refund-id <refund_id> --json "
         "--write-summary artifacts/design-partner-refund-preflight-summary.json"
     )
 
@@ -530,6 +610,100 @@ def _connector_setup_summary(
     return _redact(setup, secrets)
 
 
+def _saved_connector_setup_summary(
+    *,
+    endpoint: str,
+    reconciliation: dict[str, Any],
+    secrets: list[str],
+) -> dict[str, Any]:
+    connector_metadata = _connector_metadata(reconciliation)
+    connector_type = reconciliation.get("connector_type")
+    system_of_record = (
+        "customer_record" if connector_type == "customer_record_api" else "ledger_refund"
+    )
+    verdict = reconciliation.get("verdict")
+    http_status = connector_metadata.get("http_status")
+    attempts = connector_metadata.get("attempts")
+    retryable = _as_bool_or_none(connector_metadata.get("retryable"))
+    error_code = connector_metadata.get("error_code")
+    parsed_http_status = _as_positive_int(http_status)
+    ready = (
+        verdict == "matched"
+        and _as_positive_int(attempts) is not None
+        and parsed_http_status is not None
+        and 200 <= parsed_http_status <= 299
+        and error_code in (None, "")
+        and retryable in (None, False)
+    )
+    readiness_checks = {
+        "config_saved": True,
+        "saved_runtime_reconciliation_matched": verdict == "matched",
+        "connector_attempted": _as_positive_int(attempts) is not None,
+        "http_2xx": parsed_http_status is not None
+        and 200 <= parsed_http_status <= 299,
+        "no_connector_error_code": error_code in (None, ""),
+        "not_retryable_failure": retryable in (None, False),
+    }
+    readiness_blockers = [
+        key for key, passed in readiness_checks.items() if not passed
+    ]
+    setup = {
+        "status_endpoint": None,
+        "config_endpoint": None,
+        "test_endpoint": endpoint,
+        "connected": True,
+        "connector_type": connector_type,
+        "config_saved": True,
+        "has_bearer_token": None,
+        "bearer_token_last4": None,
+        "initial_health_status": None,
+        "health_status": "healthy" if ready else "not_verified",
+        "last_verdict": verdict,
+        "last_http_status": http_status,
+        "last_attempts": attempts,
+        "last_error": connector_metadata.get("error"),
+        "last_error_code": error_code,
+        "last_retryable": retryable,
+        "last_checked_at": reconciliation.get("checked_at"),
+        "last_tested_at": None,
+        "test_ok": ready,
+        "test_check_id": reconciliation.get("id"),
+        "test_source": (reconciliation.get("metadata") or {}).get("source"),
+        "attempts": attempts,
+        "retry_count": connector_metadata.get("retry_count"),
+        "max_attempts": connector_metadata.get("max_attempts"),
+        "timeout_seconds": connector_metadata.get("timeout_seconds"),
+        "error": connector_metadata.get("error"),
+        "error_code": error_code,
+        "retryable": retryable,
+        "adapter": connector_metadata.get("adapter"),
+        "readiness": {
+            "status": "ready" if ready else "not_ready",
+            "checks": readiness_checks,
+            "blockers": readiness_blockers,
+        },
+        "readiness_status": "ready" if ready else "not_ready",
+        "readiness_checks": readiness_checks,
+        "readiness_blockers": readiness_blockers,
+        "readiness_contract": {
+            "schema_version": "system_of_record_connector.v1",
+            "connector_type": connector_type,
+            "system_of_record": system_of_record,
+            "test_endpoint": endpoint,
+            "pass_rule": (
+                "Saved connector runtime reconciliation must read the system "
+                "of record and return a matched outcome without resending the "
+                "connector secret."
+            ),
+        },
+    }
+    setup["secrets_redacted"] = not _contains_secret(
+        {"reconciliation": reconciliation, "setup": setup},
+        secrets,
+    )
+    return _redact(setup, secrets)
+
+
 def _run_connector_setup(
     client: Any,
     fixture: dict[str, Any],
@@ -539,6 +713,28 @@ def _run_connector_setup(
     headers: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     request_headers = headers or {}
+    if args.use_saved_connector:
+        endpoint = _saved_connector_endpoint(fixture)
+        reconciliation = _assert_response(
+            client.post(
+                endpoint,
+                headers=request_headers,
+                json=_connector_test_payload(
+                    fixture,
+                    args,
+                    runtime_policy_decision_id=runtime_policy_decision_id,
+                ),
+            ),
+            201,
+            "saved connector reconciliation",
+        )
+        setup = _saved_connector_setup_summary(
+            endpoint=endpoint,
+            reconciliation=reconciliation,
+            secrets=_connector_secrets(fixture, args),
+        )
+        return reconciliation, setup
+
     endpoints = _connector_endpoints(fixture)
     initial_status = _assert_response(
         client.get(endpoints["status_endpoint"], headers=request_headers),
@@ -591,6 +787,59 @@ def _artifact_prefix(fixture: dict[str, Any]) -> str:
     return "design-partner-refund"
 
 
+def _gate_evidence_value(gate: dict[str, Any], label: str) -> Any:
+    for item in gate.get("evidence") or []:
+        if item.get("label") == label:
+            return item.get("value")
+    return None
+
+
+def _owner_launch_readiness_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    gates = {
+        str(gate.get("code")): gate
+        for gate in payload.get("gates") or []
+        if isinstance(gate, dict)
+    }
+    real_customer_gate = gates.get("real_customer_proof")
+    if not real_customer_gate:
+        raise RuntimeError("Owner launch readiness did not include real_customer_proof.")
+    matched = _gate_evidence_value(
+        real_customer_gate, "real_customer_matched_outcomes_7d"
+    )
+    blockers = list(real_customer_gate.get("blockers") or [])
+    status = str(real_customer_gate.get("status") or "")
+    if (
+        status != "pass"
+        or "real_customer_outcome_proof_missing" in blockers
+        or int(matched or 0) < 1
+    ):
+        raise RuntimeError(
+            "Owner launch readiness real_customer_proof did not pass: "
+            f"status={status}, matched={matched}, blockers={blockers}"
+        )
+    return {
+        "checked": True,
+        "generated_at": payload.get("generated_at"),
+        "overall_status": payload.get("overall_status"),
+        "paid_launch_allowed": payload.get("paid_launch_allowed"),
+        "real_customer_proof_status": status,
+        "real_customer_matched_outcomes_7d": matched,
+        "hard_blockers": list(payload.get("hard_blockers") or []),
+    }
+
+
+def _verify_owner_launch_readiness(client: Any, args: argparse.Namespace) -> dict[str, Any]:
+    payload = _assert_response(
+        client.get(
+            "/v1/owner/launch-readiness",
+            headers=_owner_headers(args),
+        ),
+        200,
+        "owner launch readiness",
+    )
+    return _owner_launch_readiness_summary(payload)
+
+
 def _summarise(
     fixture: dict[str, Any],
     args: argparse.Namespace,
@@ -600,10 +849,12 @@ def _summarise(
     reconciliation: dict[str, Any],
     evidence_pack: dict[str, Any],
     connector_setup: dict[str, Any],
+    owner_launch_readiness: dict[str, Any] | None,
     secrets: list[str],
 ) -> dict[str, Any]:
     evidence_outcomes = evidence_pack.get("outcome_reconciliation") or []
     evidence_call = evidence_pack.get("call") or {}
+    reconciliation_metadata = reconciliation.get("metadata") or {}
     artifact_prefix = _artifact_prefix(fixture)
     call_id = (
         runtime_decision.get("call_id")
@@ -611,6 +862,24 @@ def _summarise(
         or args.call_id
         or fixture["trace"]["call_id"]
     )
+    launch_readiness = {
+        "owner_gate": "real_customer_proof",
+        "proof_mode": reconciliation_metadata.get("proof_mode"),
+        "real_customer_proof_candidate": (
+            mode == "live"
+            and reconciliation_metadata.get("proof_mode") == "live_customer"
+            and reconciliation.get("verdict") == "matched"
+            and bool(reconciliation.get("runtime_policy_decision_id"))
+            and evidence_pack["verification_status"] == "pass"
+            and bool(evidence_pack.get("evidence_hash"))
+        ),
+        "required_owner_blocker_to_clear": (
+            "real_customer_proof:real_customer_outcome_proof_missing"
+        ),
+    }
+    if owner_launch_readiness is not None:
+        launch_readiness["owner_launch_readiness"] = owner_launch_readiness
+
     summary = {
         "mode": mode,
         "project_id": args.project_id or fixture["project_id"],
@@ -636,6 +905,7 @@ def _summarise(
             "outcome_count": len(evidence_outcomes),
             "audit_event_count": len(evidence_pack.get("audit_log") or []),
         },
+        "launch_readiness": launch_readiness,
         "proof": {
             "captured_call_linked": evidence_call.get("id") == call_id,
             "unsafe_action_stopped": runtime_decision["allowed"] is False,
@@ -693,6 +963,10 @@ def _summarise(
         },
         "next_live_preflight_command": _next_live_preflight_command(fixture),
         "next_live_command": _next_live_command(fixture),
+        "next_saved_connector_preflight_command": _next_saved_connector_preflight_command(
+            fixture
+        ),
+        "next_saved_connector_live_command": _next_saved_connector_live_command(fixture),
     }
     return _redact(summary, secrets)
 
@@ -706,12 +980,21 @@ def _summarise_preflight(
     connector_setup: dict[str, Any],
     secrets: list[str],
 ) -> dict[str, Any]:
+    reconciliation_metadata = reconciliation.get("metadata") or {}
     summary = {
         "mode": mode,
         "project_id": args.project_id or fixture["project_id"],
         "scenario": fixture.get("scenario") or "refund_outcome_proof_v1",
         "connector_setup": connector_setup,
         "outcome_reconciliation": _outcome_reconciliation_summary(reconciliation),
+        "launch_readiness": {
+            "owner_gate": "real_customer_proof",
+            "proof_mode": reconciliation_metadata.get("proof_mode"),
+            "real_customer_proof_candidate": False,
+            "required_owner_blocker_to_clear": (
+                "real_customer_proof:real_customer_outcome_proof_missing"
+            ),
+        },
         "proof": {
             "connector_configured": connector_setup.get("connected") is True
             and connector_setup.get("config_saved") is True,
@@ -747,7 +1030,11 @@ def _summarise_preflight(
                 "health, or leaked secret blocks the full proof run."
             ),
         },
-        "next_full_proof_command": _next_live_command(fixture),
+        "next_full_proof_command": (
+            _next_saved_connector_live_command(fixture)
+            if args.use_saved_connector
+            else _next_live_command(fixture)
+        ),
     }
     return _redact(summary, secrets)
 
@@ -1159,6 +1446,7 @@ def _run_local_demo(
         reconciliation=reconciliation,
         evidence_pack=evidence_pack,
         connector_setup=connector_setup,
+        owner_launch_readiness=None,
         secrets=secrets,
     )
     return summary, evidence_pack
@@ -1172,6 +1460,12 @@ def _validate_live_connector_args(fixture: dict[str, Any], args: argparse.Namesp
             "Provide --api-key or --bearer-token for live mode authentication."
         )
     if _fixture_scenario(fixture) == "customer-record":
+        if args.use_saved_connector:
+            if not args.customer_id:
+                raise RuntimeError(
+                    "--customer-id is required with --use-saved-connector."
+                )
+            return
         if not args.crm_base_url:
             raise RuntimeError("--crm-base-url is required for customer-record live mode.")
         if not args.crm_bearer_token:
@@ -1181,6 +1475,10 @@ def _validate_live_connector_args(fixture: dict[str, Any], args: argparse.Namesp
         if not args.customer_id:
             raise RuntimeError("--customer-id is required for customer-record live mode.")
     else:
+        if args.use_saved_connector:
+            if not args.refund_id:
+                raise RuntimeError("--refund-id is required with --use-saved-connector.")
+            return
         if not args.ledger_base_url:
             raise RuntimeError("--ledger-base-url is required for refund live mode.")
         if not args.ledger_bearer_token:
@@ -1254,6 +1552,11 @@ def _run_live(
             200,
             "runtime policy evidence pack",
         )
+        owner_launch_readiness = (
+            _verify_owner_launch_readiness(client, args)
+            if args.verify_owner_launch_readiness
+            else None
+        )
 
     secrets = _connector_secrets(fixture, args)
     summary = _summarise(
@@ -1264,6 +1567,7 @@ def _run_live(
         reconciliation=reconciliation,
         evidence_pack=evidence_pack,
         connector_setup=connector_setup,
+        owner_launch_readiness=owner_launch_readiness,
         secrets=secrets,
     )
     return summary, evidence_pack
@@ -1305,6 +1609,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--use-saved-connector",
+        action="store_true",
+        help=(
+            "Use the already saved system-of-record connector for live proof. "
+            "Does not send the partner connector token in this run."
+        ),
+    )
+    parser.add_argument(
         "--api-base-url", help="Zroky API base URL. Omit for local demo mode."
     )
     parser.add_argument("--api-key", help="Zroky API key for x-api-key authentication.")
@@ -1313,6 +1625,27 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--project-id", help="Project/tenant id. Sent as X-Project-Id in live mode."
+    )
+    parser.add_argument(
+        "--verify-owner-launch-readiness",
+        action="store_true",
+        help=(
+            "After a live full proof, verify owner /v1/owner/launch-readiness "
+            "shows real_customer_proof=pass."
+        ),
+    )
+    parser.add_argument(
+        "--owner-admin-token",
+        default=os.getenv("ZROKY_PROVISIONING_TOKEN") or os.getenv("PROVISIONING_TOKEN"),
+        help=(
+            "Owner provisioning token used only with --verify-owner-launch-readiness. "
+            "Defaults to ZROKY_PROVISIONING_TOKEN or PROVISIONING_TOKEN."
+        ),
+    )
+    parser.add_argument(
+        "--owner-token-header",
+        default=os.getenv("ZROKY_PROVISIONING_TOKEN_HEADER", "x-zroky-admin-token"),
+        help="Owner token header name, default x-zroky-admin-token.",
     )
     parser.add_argument(
         "--ledger-base-url", help="HTTPS base URL for the partner ledger adapter."
@@ -1385,6 +1718,16 @@ def _print_summary(summary: dict[str, Any], *, as_json: bool) -> None:
     print(
         f"evidence_verification_status={summary['evidence_pack']['verification_status']}"
     )
+    owner_readiness = summary["launch_readiness"].get("owner_launch_readiness")
+    if owner_readiness:
+        print(
+            "owner_real_customer_proof_status="
+            f"{owner_readiness['real_customer_proof_status']}"
+        )
+        print(
+            "owner_real_customer_matched_outcomes_7d="
+            f"{owner_readiness['real_customer_matched_outcomes_7d']}"
+        )
     print(f"secrets_redacted={str(summary['proof']['secrets_redacted']).lower()}")
     print("[design-partner-install-kit] passed")
 
@@ -1407,6 +1750,15 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     fixture_path = Path(args.fixture) if args.fixture else SCENARIO_FIXTURES[args.scenario]
     fixture = _load_json(fixture_path)
+    if args.verify_owner_launch_readiness and args.preflight_only:
+        raise RuntimeError(
+            "--verify-owner-launch-readiness requires a full proof run; "
+            "remove --preflight-only."
+        )
+    if args.verify_owner_launch_readiness and not args.api_base_url:
+        raise RuntimeError(
+            "--verify-owner-launch-readiness requires live mode with --api-base-url."
+        )
     if args.preflight_only:
         if args.write_evidence:
             raise RuntimeError(

@@ -9,6 +9,7 @@ test.describe("dashboard modules", () => {
     const seed = readSeed();
     const routes = [
       { path: "/home", labels: ["Home", "selecting the wrong tool", "refund-support-agent"] },
+      { path: "/agents", labels: ["Agent accountability ledger", "Protected agents", "capture stream"] },
       { path: "/calls", labels: ["Call Evidence", "refund-support-agent", "failed"] },
       { path: `/calls/${seed.call_id}`, labels: [seed.call_id, "refund-support-agent", "Where is my refund?"] },
       { path: "/issues", labels: ["Failures", "selecting the wrong tool", "Tool Not Called"] },

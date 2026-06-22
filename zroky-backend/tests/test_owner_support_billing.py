@@ -160,6 +160,20 @@ def test_owner_support_ticket_detail_and_reply(client, monkeypatch: pytest.Monke
     assert messages[1]["sender_type"] == "owner"
     assert messages[1]["is_internal"] is True
 
+    audit = test_client.get(
+        "/v1/owner/audit-log?action=owner.support.ticket.reply",
+        headers=owner_headers,
+    )
+    assert audit.status_code == 200
+    audit_payload = audit.json()
+    assert audit_payload["total"] == 1
+    entry = audit_payload["entries"][0]
+    assert entry["tenant_id"] == "PLATFORM"
+    metadata = json.loads(entry["metadata_json"])
+    assert metadata["target_id"] == "ticket_1"
+    assert metadata["is_internal"] is True
+    assert metadata["body_length"] == len("Checking the capture stream now.")
+
 
 def test_owner_billing_accounts_include_razorpay_dashboard(client, monkeypatch: pytest.MonkeyPatch) -> None:
     test_client, session_factory = client

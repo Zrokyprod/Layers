@@ -117,6 +117,10 @@ function parseChangedFiles(value: string): RegressionCIChangedFilePayload[] {
     .map((path) => ({ path }));
 }
 
+function proofTone(kind: "ready" | "warn" | "danger" | "neutral"): string {
+  return `ci-proof-step is-${kind}`;
+}
+
 export default function CiGatesPage() {
   const router = useRouter();
   const [state, setState] = useState<PageState>({ runs: [], details: {} });
@@ -244,6 +248,14 @@ export default function CiGatesPage() {
     return { failed, notVerified, passed, running, protectedFlows };
   }, [decoratedRuns]);
 
+  const trustedReplayCount = useMemo(
+    () => decoratedRuns.filter(({ run, detail }) => replayProofLabel(run, detail) !== "No trusted replay").length,
+    [decoratedRuns],
+  );
+  const reviewRequired = metrics.failed + metrics.notVerified;
+  const loadedRunCount = decoratedRuns.length;
+  const trustedReplayTone = loadedRunCount === 0 ? "neutral" : trustedReplayCount === loadedRunCount ? "ready" : trustedReplayCount > 0 ? "warn" : "danger";
+
   const filteredRuns = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return decoratedRuns
@@ -274,15 +286,22 @@ export default function CiGatesPage() {
           <p>Replay-backed PR safety checks for protected agent flows.</p>
           <span>Review failed, not verified, and blocking regression runs before merge.</span>
         </div>
-        <div className="ci-hero-actions">
-          <button type="button" className="btn btn-soft" onClick={() => void loadRuns(undefined, "refresh")} disabled={loading || refreshing}>
-            <RefreshCw aria-hidden="true" className={refreshing ? "ci-spin" : undefined} />
-            {refreshing ? "Refreshing" : "Refresh"}
-          </button>
-          <button type="button" className="btn btn-primary" onClick={() => setCreateOpen((value) => !value)}>
-            <Play aria-hidden="true" />
-            Run gate
-          </button>
+        <div className="ci-hero-side">
+          <div className="ci-gate-rail" aria-label="CI gate chain">
+            <span>PR event</span>
+            <strong>Replay workers</strong>
+            <span>Merge gate</span>
+          </div>
+          <div className="ci-hero-actions">
+            <button type="button" className="btn btn-soft" onClick={() => void loadRuns(undefined, "refresh")} disabled={loading || refreshing}>
+              <RefreshCw aria-hidden="true" className={refreshing ? "ci-spin" : undefined} />
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => setCreateOpen((value) => !value)}>
+              <Play aria-hidden="true" />
+              Run gate
+            </button>
+          </div>
         </div>
       </section>
 
@@ -327,6 +346,29 @@ export default function CiGatesPage() {
           active={statusFilter === "all" && !query}
           onClick={clearFilters}
         />
+      </section>
+
+      <section className="ci-proof-strip" aria-label="CI release proof flow">
+        <article className={proofTone(loadedRunCount > 0 ? "ready" : "neutral")}>
+          <span>01</span>
+          <strong>Contract gates</strong>
+          <small>{loadedRunCount} loaded CI gate runs from protected flows.</small>
+        </article>
+        <article className={proofTone(trustedReplayTone)}>
+          <span>02</span>
+          <strong>Trusted replay</strong>
+          <small>{trustedReplayCount}/{loadedRunCount || 0} runs executed trusted replay.</small>
+        </article>
+        <article className={proofTone(metrics.failed > 0 ? "danger" : metrics.notVerified > 0 ? "warn" : "ready")}>
+          <span>03</span>
+          <strong>Blocking verdicts</strong>
+          <small>{metrics.failed} failed/error and {metrics.notVerified} not verified.</small>
+        </article>
+        <article className={proofTone(reviewRequired > 0 ? "warn" : "ready")}>
+          <span>04</span>
+          <strong>Review path</strong>
+          <small>{reviewRequired > 0 ? `${reviewRequired} runs require review before merge.` : "No review holds in loaded runs."}</small>
+        </article>
       </section>
 
       <section className="ci-toolbar" aria-label="CI gate controls">

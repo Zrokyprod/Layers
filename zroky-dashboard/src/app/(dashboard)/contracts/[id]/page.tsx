@@ -141,7 +141,7 @@ export default function ContractProofPage() {
 
   if (contractQuery.isLoading) {
     return (
-      <div className="goldens-mvp">
+      <div className="goldens-mvp contracts-mvp contract-proof-page">
         <div className="gm-empty">
           <ShieldCheck aria-hidden="true" />
           <strong>Loading contract proof</strong>
@@ -153,7 +153,7 @@ export default function ContractProofPage() {
 
   if (contractQuery.error || !contractQuery.data) {
     return (
-      <div className="goldens-mvp">
+      <div className="goldens-mvp contracts-mvp contract-proof-page">
         <div className="gm-notice">
           <AlertTriangle aria-hidden="true" />
           <strong>Contract proof unavailable.</strong>
@@ -170,7 +170,7 @@ export default function ContractProofPage() {
   const ready = checks.length > 0 && passedChecks === checks.length;
 
   return (
-    <div className="goldens-mvp">
+    <div className="goldens-mvp contracts-mvp contract-proof-page">
       <section className="gm-hero">
         <div>
           <div className="gm-eyebrow">
@@ -237,7 +237,7 @@ export default function ContractProofPage() {
           </div>
         </header>
         <div className="gm-table-wrap">
-          <table className="gm-table">
+          <table className="gm-table contract-evidence-table">
             <tbody>
               <tr>
                 <th>Source incident</th>

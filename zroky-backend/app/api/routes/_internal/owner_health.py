@@ -1,4 +1,5 @@
 from app.api.routes._internal.owner_common import *
+from app.api.routes._internal.owner_pricing_audit import _owner_audit, _resolve_actor
 
 @router.get("/health", response_model=HealthResponse)
 def owner_health(
@@ -88,11 +89,20 @@ def set_maintenance_mode(
     request: Request,
     body: MaintenanceModeRequest,
     _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
 ) -> MaintenanceModeResponse:
     if not _redis_ok():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
     payload = json.dumps({"enabled": body.enabled, "message": body.message})
     get_redis_client().set(_MAINTENANCE_KEY, payload)
+    _owner_audit(
+        db,
+        action="owner.maintenance.set",
+        actor=_resolve_actor(request),
+        target_id="maintenance_mode",
+        metadata={"enabled": body.enabled, "message_present": bool(body.message)},
+    )
+    db.commit()
     return MaintenanceModeResponse(enabled=body.enabled, message=body.message)
 
 

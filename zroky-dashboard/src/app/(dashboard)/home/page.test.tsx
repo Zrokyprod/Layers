@@ -371,55 +371,56 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Action control room" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Evidence ledger", level: 1 })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("Release blocked")).toBeInTheDocument();
     expect(screen.getByText("1 gate failing on regression-ci:proj_1.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Run replay" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Open gate" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "View all issues" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Open issues" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Loaded open issues")).toBeNull();
     expect(screen.queryByText("Replay mode")).toBeNull();
     expect(screen.queryByText("Silent failures detected")).toBeNull();
 
     const summary = screen.getByLabelText("Home summary");
     expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(5);
-    expect(within(summaryCard("Failed runs")).getByText("2")).toBeInTheDocument();
-    expect(within(summaryCard("New issues")).getByText("2")).toBeInTheDocument();
-    expect(within(summaryCard("Replay pass/fail")).getByText("0% pass")).toBeInTheDocument();
-    expect(within(summaryCard("CI blocked regressions")).getByText("1")).toBeInTheDocument();
-    expect(within(summaryCard("Cost / latency trend")).getByText("+25% cost")).toBeInTheDocument();
+    expect(within(summaryCard("Failed evidence")).getByText("2")).toBeInTheDocument();
+    expect(within(summaryCard("Open proof gaps")).getByText("2")).toBeInTheDocument();
+    expect(within(summaryCard("Outcome verified")).getByText("0% verified")).toBeInTheDocument();
+    expect(within(summaryCard("Blocked exports")).getByText("1")).toBeInTheDocument();
+    expect(within(summaryCard("Spend drift")).getByText("+25% cost")).toBeInTheDocument();
     expect(summary).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Action queue" })).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Action queue focus" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Evidence ledger", level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Evidence ledger focus" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "All" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "P0/P1" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Proof gaps" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Impact" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Verified" })).toBeInTheDocument();
-    expect(screen.getByText("Sorted by severity, impact, and replay trust gaps.")).toBeInTheDocument();
+    expect(screen.getByText("Sorted by severity, exposure, and proof gaps.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Impact" }));
     expect(screen.getByRole("tab", { name: "Impact" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText("Showing issues with cost impact, sorted by spend exposure.")).toBeInTheDocument();
+    expect(screen.getByText("Showing evidence rows sorted by spend exposure.")).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "Priority",
-      "Type",
-      "Item",
-      "Impact",
-      "Status",
-      "Action",
+      "Proof type",
+      "Evidence item",
+      "Exposure",
+      "State",
+      "Proof",
     ]);
     expect(within(rowForIssueTitle("Checkout loop")).getByText("Critical failure")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("Loop repeated the same checkout tool call.")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("No trusted replay")).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Recent evidence" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Release readiness" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Reliability pipeline" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Evidence packs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download JSON" }).getAttribute("href")).toBe("/evidence");
+    expect(screen.getByRole("heading", { name: "Proof gaps by connector" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Outcome verification chain" })).toBeInTheDocument();
     expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 
@@ -438,7 +439,7 @@ describe("Command Center home", () => {
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Create a project key" })).toBeInTheDocument();
-    expect(screen.getByText("Capture your first agent run to start reliability monitoring.")).toBeInTheDocument();
+    expect(screen.getByText("Capture your first agent run to start outcome proof.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("link", { name: /Create project key/i })[0]?.getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("heading", { name: "Connection health" })).toBeInTheDocument();
@@ -455,8 +456,8 @@ describe("Command Center home", () => {
     expect(screen.getByRole("link", { name: /Use Gateway/i }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("link", { name: /Send test capture/i }).getAttribute("href")).toBe("/trace");
     expect(screen.getByRole("heading", { name: "What happens next" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Action queue" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "View all issues" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Evidence ledger", level: 3 })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open issues" })).toBeNull();
   });
 
   it("switches to operations mode after the first trace even with no issues", async () => {
@@ -479,8 +480,8 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Action queue" })).toBeInTheDocument();
-    expect(screen.getByText("No action required right now.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Evidence ledger", level: 3 })).toBeInTheDocument();
+    expect(screen.getByText("No proof gaps right now.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Setup progress" })).toBeNull();
   });
@@ -533,7 +534,7 @@ describe("Command Center home", () => {
     await screen.findAllByText("Checkout loop");
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Schema drift")).getByText("$7.50")).toBeInTheDocument();
-    expect(within(summaryCard("Cost / latency trend")).getByText("+25% cost")).toBeInTheDocument();
+    expect(within(summaryCard("Spend drift")).getByText("+25% cost")).toBeInTheDocument();
     expect(screen.getByText("Capture traces to calculate latency.")).toBeInTheDocument();
   });
 
@@ -576,7 +577,7 @@ describe("Command Center home", () => {
 
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upgrade").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Release readiness" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Proof gaps by connector" })).toBeInTheDocument();
   });
 
   it("enables pilot replay and golden actions only for verified fixes", async () => {

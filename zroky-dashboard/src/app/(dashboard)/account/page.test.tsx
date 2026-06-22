@@ -77,6 +77,19 @@ describe("AccountPage", () => {
     });
   });
 
+  it("surfaces account posture and personal control flow", async () => {
+    render(<AccountPage />);
+
+    expect(screen.getByRole("heading", { name: "Sanket K." })).toBeInTheDocument();
+    expect(screen.getByLabelText("Account security overview")).toBeInTheDocument();
+    expect(await screen.findByText("Controlled")).toBeInTheDocument();
+    expect(screen.getByLabelText("Account control summary")).toBeInTheDocument();
+    for (const label of ["Identity", "Login method", "Session control", "Danger zone"]) {
+      expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    }
+    expect(screen.getAllByText("GitHub").length).toBeGreaterThan(0);
+  });
+
   it("loads profile identity and updates display name", async () => {
     render(<AccountPage />);
 
@@ -91,7 +104,23 @@ describe("AccountPage", () => {
   it("does not expose fake two-factor controls without backend enrollment", async () => {
     render(<AccountPage />);
 
-    expect(await screen.findByText("Account Security")).toBeInTheDocument();
+    expect(await screen.findByText("Account security")).toBeInTheDocument();
     expect(screen.queryByText(/two-factor/i)).not.toBeInTheDocument();
+  });
+
+  it("disables global session logout when backend does not allow it", async () => {
+    api.getSecurityStatus.mockResolvedValue({
+      two_factor_enabled: false,
+      password_login_enabled: true,
+      github_connected: true,
+      google_connected: false,
+      current_session_expires_at: "2026-05-30T10:00:00.000Z",
+      global_logout_available: false,
+    });
+
+    render(<AccountPage />);
+
+    expect(await screen.findAllByText("Unavailable")).not.toHaveLength(0);
+    expect((screen.getByRole("button", { name: /Log out all sessions/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

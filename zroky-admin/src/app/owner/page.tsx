@@ -11,14 +11,17 @@ import {
   KeyRound,
   MessageSquare,
   RefreshCw,
+  Rocket,
   ShieldAlert,
+  TerminalSquare,
   type LucideIcon,
 } from "lucide-react";
 
-import { useOwnerHealth, useOwnerMoneyPathHealth, useToggleMaintenance } from "@/lib/hooks";
+import { useOwnerHealth, useOwnerLaunchReadiness, useOwnerMoneyPathHealth, useToggleMaintenance } from "@/lib/hooks";
 import type {
   OwnerHealth,
   OwnerLastDeployedSmoke,
+  OwnerLaunchReadiness,
   OwnerMoneyPathPlatformSummary,
   OwnerMoneyPathTenantRow,
 } from "@/lib/owner-api";
@@ -69,9 +72,9 @@ function actionLabel(action: string): string {
 }
 
 function stateTone(state: string): "ok" | "warn" | "danger" | "neutral" {
-  if (["passed", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
+  if (["pass", "passed", "verified", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
   if (["failed", "down", "error", "exceeded", "blocked", "missing", "risk", "urgent", "failure", "unverified"].includes(state)) return "danger";
-  if (["partial", "running", "near_limit", "disabled", "not_configured", "stale", "fallback", "degraded", "open", "missing_paid"].includes(state)) return "warn";
+  if (["partial", "running", "near_limit", "disabled", "not_configured", "not_verified", "stale", "fallback", "degraded", "open", "missing_paid"].includes(state)) return "warn";
   return "neutral";
 }
 
@@ -84,6 +87,10 @@ function actionTone(action: string): "ok" | "warn" | "danger" | "neutral" {
 
 function valueLabel(value: string | undefined): string {
   return (value ?? "unknown").replaceAll("_", " ");
+}
+
+function statusLabel(status: string): string {
+  return status.replaceAll("_", " ");
 }
 
 function StatusBadge({ value }: { value: string }) {
@@ -192,6 +199,142 @@ function MoneyPathFunnel({ platform }: { platform: OwnerMoneyPathPlatformSummary
             <span>{step.sub}</span>
             {index < steps.length - 1 ? <i aria-hidden="true">-&gt;</i> : null}
           </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LaunchDecisionPanel({
+  readiness,
+  error,
+  isLoading,
+  onRefresh,
+}: {
+  readiness: OwnerLaunchReadiness | null;
+  error: string;
+  isLoading: boolean;
+  onRefresh: () => void;
+}) {
+  const status = readiness?.overall_status ?? (error ? "not_verified" : "unknown");
+  const tone = readiness?.paid_launch_allowed ? "ok" : error ? "danger" : "warn";
+  const hardBlockers = readiness?.hard_blockers ?? [];
+  const firstCommand = readiness?.verification_commands[0] ?? null;
+
+  return (
+    <section className={`panel owner-signal-launch owner-signal-launch-${tone}`}>
+      <div className="owner-signal-launch-main">
+        <span className="owner-signal-launch-icon" aria-hidden="true">
+          <Rocket size={20} />
+        </span>
+        <div>
+          <span className="owner-section-label">Paid launch decision</span>
+          <h3>
+            {readiness
+              ? readiness.paid_launch_allowed
+                ? "Paid launch allowed"
+                : "Paid launch blocked"
+              : error
+                ? "Launch gate not verified"
+                : "Checking launch gate"}
+          </h3>
+          <p>
+            {readiness
+              ? readiness.product_standard
+              : error
+                ? "Launch readiness evidence could not be loaded, so owner approval must stay blocked."
+                : "Loading launch readiness evidence before showing a decision."}
+          </p>
+        </div>
+      </div>
+      <div className="owner-signal-launch-side">
+        <StatusBadge value={status} />
+        {isLoading ? <span className="hint">Loading launch evidence...</span> : null}
+        {error ? <span className="owner-money-table-danger">{error}</span> : null}
+        {hardBlockers.length > 0 ? (
+          <div className="owner-signal-blockers">
+            {hardBlockers.slice(0, 3).map((blocker) => (
+              <span key={blocker}>{blocker}</span>
+            ))}
+          </div>
+        ) : readiness ? (
+          <span className="hint">No hard blockers reported by the launch gate.</span>
+        ) : null}
+        {firstCommand ? (
+          <div className="owner-signal-command">
+            <TerminalSquare size={14} aria-hidden="true" />
+            <code>{firstCommand}</code>
+          </div>
+        ) : null}
+        <div className="actions">
+          <Link href="/owner/launch-readiness" className="btn btn-soft">
+            Open full launch gate
+          </Link>
+          <button className="btn btn-soft" onClick={onRefresh}>
+            <RefreshCw size={15} aria-hidden="true" />
+            Refresh gate
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OwnerSignalFlow({
+  platform,
+  readiness,
+}: {
+  platform: OwnerMoneyPathPlatformSummary;
+  readiness: OwnerLaunchReadiness | null;
+}) {
+  const smokeStatus = platform.last_deployed_smoke.status;
+  const launchStatus = readiness?.overall_status ?? "not_verified";
+  const cards = [
+    {
+      label: "Action capture",
+      value: fmtCount(platform.captures_24h),
+      detail: `${fmtCount(platform.tenants_without_recent_capture)} tenant(s) missing recent capture.`,
+      href: "/owner/money-path",
+      status: platform.tenants_without_recent_capture > 0 ? "risk" : "ok",
+    },
+    {
+      label: "Outcome proof",
+      value: fmtCount(platform.verified_fixes_7d ?? platform.verified_replay_runs_7d),
+      detail: `${fmtCount(platform.blocked_regressions_7d ?? platform.ci_blocks_7d)} regression(s) blocked in 7d.`,
+      href: "/owner/projects",
+      status: (platform.verified_fixes_7d ?? platform.verified_replay_runs_7d) > 0 ? "ok" : "not_verified",
+    },
+    {
+      label: "Deploy smoke",
+      value: statusLabel(smokeStatus),
+      detail: platform.last_deployed_smoke.detail ?? "No deployment smoke detail reported.",
+      href: "/owner/infrastructure",
+      status: smokeStatus,
+    },
+    {
+      label: "Launch gate",
+      value: statusLabel(launchStatus),
+      detail: readiness?.paid_launch_allowed
+        ? "All required gates reported pass."
+        : `${fmtCount(readiness?.hard_blockers.length ?? 0)} hard blocker(s) before paid launch.`,
+      href: "/owner/launch-readiness",
+      status: launchStatus,
+    },
+  ];
+
+  return (
+    <section className="panel owner-signal-flow">
+      <div className="panel-header">
+        <h3>End-to-end signal flow</h3>
+        <span className="panel-header-note">Action -&gt; outcome -&gt; deploy -&gt; launch decision</span>
+      </div>
+      <div className="owner-signal-flow-grid">
+        {cards.map((card) => (
+          <Link key={card.label} href={card.href} className={`owner-signal-flow-card owner-signal-flow-${stateTone(card.status)}`}>
+            <span className="owner-stat-label">{card.label}</span>
+            <strong>{card.value}</strong>
+            <p>{card.detail}</p>
+          </Link>
         ))}
       </div>
     </section>
@@ -336,18 +479,26 @@ function TenantQueue({ tenants }: { tenants: OwnerMoneyPathTenantRow[] }) {
 
 export default function OwnerOverviewPage() {
   const moneyPathQuery = useOwnerMoneyPathHealth();
+  const readinessQuery = useOwnerLaunchReadiness();
   const healthQuery = useOwnerHealth();
   const toggleMutation = useToggleMaintenance();
 
   const moneyPath = moneyPathQuery.data ?? null;
+  const readiness = readinessQuery.data ?? null;
   const health = healthQuery.data ?? null;
   const platform = moneyPath?.platform ?? null;
   const error = moneyPathQuery.error?.message ?? healthQuery.error?.message ?? "";
+  const readinessError = readinessQuery.error?.message ?? "";
   const lastRefresh = moneyPathQuery.dataUpdatedAt ? new Date(moneyPathQuery.dataUpdatedAt) : null;
 
   const handleRefresh = () => {
     void moneyPathQuery.refetch();
+    void readinessQuery.refetch();
     void healthQuery.refetch();
+  };
+
+  const handleLaunchRefresh = () => {
+    void readinessQuery.refetch();
   };
 
   const handleToggleMaintenance = async () => {
@@ -359,8 +510,8 @@ export default function OwnerOverviewPage() {
     <div className="owner-page owner-money-page">
       <div className="owner-page-header">
         <div>
-          <h2 className="owner-page-title">Regression Firewall Health</h2>
-          <p className="hint">Real owner view of capture, issue, replay, Golden, CI gate, provider-key, and quota state.</p>
+          <h2 className="owner-page-title">Owner signal command</h2>
+          <p className="hint">Paid-launch control for agent actions, outcome proof, CI guardrails, billing readiness, and tenant blockers.</p>
         </div>
         <div className="owner-page-header-actions">
           {lastRefresh ? <span className="hint">Updated {lastRefresh.toLocaleTimeString()} - auto-refresh by query cache</span> : null}
@@ -381,6 +532,15 @@ export default function OwnerOverviewPage() {
 
       {platform ? (
         <>
+          <LaunchDecisionPanel
+            readiness={readiness}
+            error={readinessError}
+            isLoading={readinessQuery.isLoading}
+            onRefresh={handleLaunchRefresh}
+          />
+
+          <OwnerSignalFlow platform={platform} readiness={readiness} />
+
           <div className="owner-money-risk-grid">
             <RiskCard
               label="No capture"

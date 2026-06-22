@@ -479,10 +479,30 @@ Paid launch is blocked unless every required gate is `pass`:
 
 Owner/admin exposes this as `/owner/launch-readiness`.
 
-Run the final local verification before marking paid launch ready:
+Run the local code-readiness verification:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1
+```
+
+This can pass without a live customer artifact, but it is not enough to mark
+paid launch complete. Final paid launch requires one hosted design-partner owner
+proof artifact where `real_customer_proof=pass`.
+
+After `.github/workflows/zroky-design-partner-owner-proof.yml` uploads the
+owner proof artifacts, validate the downloaded summary/evidence before launch:
+
+```powershell
+$env:ZROKY_REQUIRE_OWNER_PROOF = "true"
+$env:ZROKY_OWNER_PROOF_SUMMARY = "artifacts/design-partner-owner-proof-summary.json"
+$env:ZROKY_OWNER_PROOF_EVIDENCE = "artifacts/design-partner-owner-proof-evidence.json"
+powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1
+```
+
+For artifact-only validation:
+
+```bash
+python scripts/verify_design_partner_owner_proof_artifact.py --summary artifacts/design-partner-owner-proof-summary.json --evidence artifacts/design-partner-owner-proof-evidence.json
 ```
 
 Run the deterministic release-candidate evidence pack:
@@ -509,11 +529,34 @@ Live partner smoke:
 python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-live-summary.json --write-evidence artifacts/design-partner-live-evidence.json
 ```
 
+Final owner-gate proof for a hosted pilot is run by:
+
+```text
+.github/workflows/zroky-design-partner-owner-proof.yml
+```
+
+It requires a real captured `call_id` and `trace_id`, a project API key,
+`ZROKY_STAGING_PROVISIONING_TOKEN`, and either a saved connector or the relevant
+ledger/CRM connector secret. The workflow calls owner `/v1/owner/launch-readiness`
+and fails unless `real_customer_proof=pass`.
+
 Validate filled production environment files before real launch:
 
 ```bash
 python scripts/validate_launch_env.py --roles backend,dashboard,admin,gateway,replay-worker --require backend,dashboard,admin,gateway,replay-worker
 ```
+
+Run staging backend deployment smoke before a hosted pilot:
+
+```bash
+python scripts/run_deployment_smoke.py --api-base-url https://api-staging.zroky.ai --provisioning-token <staging_provisioning_token> --backend-only
+```
+
+This must pass health, provisioning guard, API-key create/list/ingest/rotate/revoke,
+provider-key vault redaction, and replay/CI plan gates. GitHub workflow
+`.github/workflows/zroky-staging-rollout-verify.yml` runs the same backend smoke
+after readiness checks. Required secrets: `ZROKY_STAGING_PROVISIONING_TOKEN` and
+`ZROKY_STAGING_ADMIN_JWT`.
 
 GitHub paid-launch readiness is checked by:
 

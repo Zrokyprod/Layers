@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
+  ArrowRight,
   CreditCard,
   BellRing,
   KeyRound,
@@ -34,6 +35,18 @@ const HIDDEN_SETTINGS_TABS = [
   { href: "/settings/providers", label: "Providers", description: "Managed replay vault", icon: Plug, exact: false },
 ] as const;
 
+const SETTINGS_CONTROL_LOOP: ReadonlyArray<{
+  href: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  { href: "/settings/keys", label: "Capture key", description: "SDK and Gateway access", icon: KeyRound },
+  { href: "/settings/team", label: "Team access", description: "Members and owner guard", icon: Users },
+  { href: "/settings/billing", label: "Spend guard", description: "Plan, usage, and budget", icon: CreditCard },
+  { href: "/settings/integrations", label: "Evidence route", description: "Records and alert handoff", icon: BellRing },
+] as const;
+
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const activeTab =
@@ -50,8 +63,27 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               <ShieldCheck aria-hidden="true" />
               Settings
             </span>
-            <h1>Settings</h1>
-            <p>Manage capture keys, members, billing, evaluation, and integrations.</p>
+            <h1>Workspace control plane</h1>
+            <p>Set the credentials, access, budget limits, and evidence routes that decide whether protected agents can run unattended.</p>
+            <div className="settings-hero-rail" aria-label="Workspace control loop">
+              {SETTINGS_CONTROL_LOOP.map((item) => {
+                const RailIcon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`settings-hero-rail-link${isActivePath(pathname, item.href) ? " is-active" : ""}`}
+                  >
+                    <RailIcon aria-hidden="true" />
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                    <ArrowRight aria-hidden="true" className="settings-hero-rail-arrow" />
+                  </Link>
+                );
+              })}
+            </div>
           </div>
           <div className="settings-hero-current">
             <ActiveIcon aria-hidden="true" />
@@ -59,6 +91,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               <strong>{activeTab.label}</strong>
               <small>{activeTab.description}</small>
             </span>
+            <small className="settings-hero-current-caption">Current section</small>
           </div>
         </div>
       </section>
@@ -71,9 +104,14 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               key={tab.href}
               href={tab.href}
               className={`settings-tab-link${isActivePath(pathname, tab.href, tab.exact) ? " settings-tab-link-active" : ""}`}
+              aria-label={tab.label}
+              aria-current={isActivePath(pathname, tab.href, tab.exact) ? "page" : undefined}
             >
               <TabIcon aria-hidden="true" />
-              {tab.label}
+              <span>
+                <strong>{tab.label}</strong>
+                <small>{tab.description}</small>
+              </span>
             </Link>
           );
         })}

@@ -62,6 +62,8 @@ Expected summary:
 - `outcome_reconciliation.connector_attempts`: `1` or higher
 - `outcome_reconciliation.connector_error_code`: `null`
 - `evidence_pack.verification_status`: `pass`
+- `launch_readiness.proof_mode`: `local_demo`
+- `launch_readiness.real_customer_proof_candidate`: `false`
 - `proof.secrets_redacted`: `true`
 - `evidence_pack.evidence_hash`: 64 hex characters
 
@@ -111,6 +113,18 @@ CRM/customer-record preflight:
 python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-preflight-summary.json
 ```
 
+If the connector has already been saved in the dashboard, use the runtime-safe
+saved connector path. This verifies with the stored connector secret and does
+not send the ledger or CRM bearer token in the proof run:
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario refund --preflight-only --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-preflight-summary.json
+```
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-preflight-summary.json
+```
+
 Expected preflight summary:
 
 - `mode`: `live_preflight`
@@ -123,6 +137,8 @@ Expected preflight summary:
 - `connector_setup.last_retryable`: `null`
 - `connector_setup.readiness_blockers`: `[]`
 - `outcome_reconciliation.verdict`: `matched`
+- `launch_readiness.proof_mode`: `preflight`
+- `launch_readiness.real_customer_proof_candidate`: `false`
 - `proof.secrets_redacted`: `true`
 
 ## Live Partner Smoke
@@ -141,6 +157,51 @@ queried:
 python scripts/run_design_partner_install_kit.py --scenario customer-record --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-live-summary.json --write-evidence artifacts/design-partner-crm-live-evidence.json
 ```
 
+If the connector is already saved and healthy in Zroky, run the full proof
+through the saved connector runtime path. This proves runtime decision,
+system-of-record reconciliation, and evidence hash without resending the
+partner ledger or CRM token:
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario refund --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-saved-live-summary.json --write-evidence artifacts/design-partner-refund-saved-live-evidence.json
+```
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario customer-record --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-saved-live-summary.json --write-evidence artifacts/design-partner-crm-saved-live-evidence.json
+```
+
+Expected saved-connector full proof:
+
+- `mode`: `live`
+- `runtime_policy.allowed`: `false`
+- `connector_setup.test_endpoint`: `/v1/outcomes/reconciliation/.../saved`
+- `connector_setup.test_source`: `saved_connector_runtime`
+- `connector_setup.health_status`: `healthy`
+- `connector_setup.readiness_status`: `ready`
+- `outcome_reconciliation.verdict`: `matched`
+- `evidence_pack.verification_status`: `pass`
+- `evidence_pack.evidence_hash`: 64 hex characters
+- `launch_readiness.proof_mode`: `live_customer`
+- `launch_readiness.real_customer_proof_candidate`: `true`
+- `proof.secrets_redacted`: `true`
+
+Only the live full proof can clear the owner `real_customer_proof` launch gate.
+Local demo and preflight artifacts are useful for confidence, but they must
+leave `real_customer_proof:real_customer_outcome_proof_missing` blocked.
+
+Operator owner-gate verification:
+
+```powershell
+python scripts/run_design_partner_install_kit.py --scenario refund --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --refund-id <refund_id> --verify-owner-launch-readiness --owner-admin-token <owner_admin_token> --json --write-summary artifacts/design-partner-refund-owner-verified-summary.json --write-evidence artifacts/design-partner-refund-owner-verified-evidence.json
+```
+
+Expected owner-gate fields:
+
+- `launch_readiness.owner_launch_readiness.checked`: `true`
+- `launch_readiness.owner_launch_readiness.real_customer_proof_status`: `pass`
+- `launch_readiness.owner_launch_readiness.real_customer_matched_outcomes_7d`: `1` or higher
+- `launch_readiness.owner_launch_readiness.paid_launch_allowed`: may still be `false` if another required gate is blocked
+
 Use `--bearer-token` instead of `--api-key` when the partner authenticates with
 a user/session bearer token. Use `--project-id` when the API key is not already
 bound to a single project.
@@ -152,11 +213,12 @@ bound to a single project.
 | `--api-base-url` | No | Yes | Zroky API base URL. Omit for local demo. |
 | `--api-key` or `--bearer-token` | No | Yes | Zroky auth. Never paste into screenshots. |
 | `--preflight-only` | No | Optional | Runs connector config + sandbox test only; no evidence pack. |
+| `--use-saved-connector` | No | Optional | Uses the connector already saved in Zroky; no partner connector token is sent in this run. |
 | `--ledger-base-url` | No | Yes | HTTPS ledger API base URL. |
-| `--ledger-bearer-token` | No | Yes | Ledger auth token. Redacted from artifacts. |
+| `--ledger-bearer-token` | No | Yes unless `--use-saved-connector` | Ledger auth token. Redacted from artifacts. |
 | `--refund-id` | No | Yes | Existing refund id to verify in the ledger. |
 | `--crm-base-url` | No | Yes for CRM | HTTPS CRM/customer API base URL. |
-| `--crm-bearer-token` | No | Yes for CRM | CRM auth token. Redacted from artifacts. |
+| `--crm-bearer-token` | No | Yes for CRM unless `--use-saved-connector` | CRM auth token. Redacted from artifacts. |
 | `--customer-id` | No | Yes for CRM | Existing customer id to verify in CRM. |
 | `--amount-usd` | No | Optional | Use when the partner refund amount differs from the fixture. |
 | `--currency` | No | Optional | Defaults to the fixture currency. |

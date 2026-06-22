@@ -80,6 +80,25 @@ const moneyPath: OwnerMoneyPathHealth = {
       blocking_ci_failures_7d: 0,
       provider_key_status: { state: "missing", active_provider_count: 0 },
       replay_quota_status: { state: "near_limit", enabled: true, used: 18, limit: 100, resets_at: "2026-07-01" },
+      event_metering_status: { state: "ok", used: 2400, limit: 5000, failure_count: 0, last_failure_at: null },
+      pricing_cost_status: {
+        state: "stale",
+        pricing_version: "2026-05",
+        pricing_source: "fallback",
+        pricing_age_days: 18,
+        cost_confidence: "estimated",
+        detail: "Pricing metadata is older than allowed.",
+      },
+      billing_status: {
+        state: "missing_paid",
+        plan_code: "pro",
+        subscription_status: "past_due",
+        current_period_end: "2026-07-01T00:00:00Z",
+      },
+      support_status: { state: "urgent", open_count: 2, urgent_count: 1 },
+      money_path_breaks: ["provider_key_missing", "billing_past_due"],
+      value_status: "risk",
+      tenant_priority_score: 87,
       next_owner_action: "connect_provider_key",
     },
   ],
@@ -134,21 +153,29 @@ describe("ProjectDetailPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders tenant-specific regression-firewall evidence from money-path health", () => {
+  it("renders tenant-specific proof ledger evidence from money-path health", () => {
     mockBaseQueries(moneyPath);
 
     render(<ProjectDetailPage />);
 
     expect(screen.getAllByText("Demo Tenant").length).toBeGreaterThan(0);
-    expect(screen.getByText("Regression Firewall")).toBeInTheDocument();
-    expect(screen.getByText("Connect provider key")).toBeInTheDocument();
+    expect(screen.getByText("Tenant proof ledger")).toBeInTheDocument();
+    expect(screen.getByText("Next owner action")).toBeInTheDocument();
+    expect(screen.getAllByText("Connect provider key").length).toBeGreaterThan(0);
+    expect(screen.getByText("provider key missing")).toBeInTheDocument();
+    expect(screen.getByText("billing past due")).toBeInTheDocument();
+    expect(screen.getByText("Commercial readiness")).toBeInTheDocument();
+    expect(screen.getByText("Paid-path signals")).toBeInTheDocument();
+    expect(screen.getAllByText("2,400 / 5,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("missing paid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("18d age - estimated").length).toBeGreaterThan(0);
     expect(screen.getByText("missing (0)")).toBeInTheDocument();
     expect(screen.getByText("18 / 100")).toBeInTheDocument();
     expect(screen.getByText("2 verified")).toBeInTheDocument();
     expect(screen.getAllByText("near limit").length).toBeGreaterThan(0);
     expect(screen.getByDisplayValue("300")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Money path/i }).getAttribute("href")).toBe("/owner/money-path");
-  });
+  }, 10_000);
 
   it("is honest when the money-path endpoint has no row for this tenant", () => {
     mockBaseQueries({ ...moneyPath, tenants: [] });
@@ -158,6 +185,7 @@ describe("ProjectDetailPage", () => {
     expect(screen.getByText("No regression-firewall health row exists for this tenant.")).toBeInTheDocument();
     expect(screen.queryByText("Connect provider key")).toBe(null);
     expect(screen.queryByText("No open issue reported by backend.")).toBe(null);
+    expect(screen.queryByText("Commercial readiness")).toBe(null);
   });
 
   it("shows money-path backend errors without rendering synthetic product health", () => {

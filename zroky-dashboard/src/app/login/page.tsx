@@ -81,7 +81,7 @@ function LoginForm() {
         <AuthProviderButton provider="github" onClick={() => handleOAuthLogin("github")} />
       </div>
       <AuthDivider />
-      <form onSubmit={onSubmit} className="auth-form">
+      <form method="post" onSubmit={onSubmit} className="auth-form">
         <AuthInput
           label="Email address"
           type="email"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -106,3 +107,21 @@ def test_owner_feature_flag_crud_and_tenant_resolution(client: TestClient, monke
     listed_after_delete = client.get("/v1/feature-flags/admin", headers=owner_headers)
     assert listed_after_delete.status_code == 200
     assert listed_after_delete.json()["items"] == []
+
+    audit = client.get("/v1/owner/audit-log", headers=owner_headers)
+    assert audit.status_code == 200
+    entries = audit.json()["entries"]
+    by_action = {entry["action"]: entry for entry in entries}
+    assert set(by_action) == {
+        "owner.feature_flag.delete",
+        "owner.feature_flag.update",
+        "owner.feature_flag.create",
+    }
+    create_metadata = json.loads(by_action["owner.feature_flag.create"]["metadata_json"])
+    assert create_metadata["target_id"] == flag["id"]
+    assert create_metadata["key"] == "admin_console_v2"
+    update_metadata = json.loads(by_action["owner.feature_flag.update"]["metadata_json"])
+    assert update_metadata["before"]["enabled_tenants"] == []
+    assert update_metadata["after"]["enabled_tenants"] == ["proj_enabled"]
+    delete_metadata = json.loads(by_action["owner.feature_flag.delete"]["metadata_json"])
+    assert delete_metadata["key"] == "admin_console_v2"

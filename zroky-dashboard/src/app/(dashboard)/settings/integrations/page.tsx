@@ -24,6 +24,8 @@ import {
   getRuntimePolicyEvidencePack,
   getSlackInstallStatus,
   listOutcomeReconciliations,
+  reconcileSavedCustomerRecord,
+  reconcileSavedLedgerRefund,
   saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
   testCustomerRecordConnector,
@@ -374,6 +376,11 @@ function connectorFixGuidance({
 
 function connectorEvidenceLabel(kind: ConnectorEvidenceKind) {
   return kind === "ledger" ? "Ledger" : "Customer record";
+}
+
+function evidenceReadinessLabel(check: OutcomeReconciliationView | null) {
+  if (!check) return "Waiting for proof";
+  return check.runtime_policy_decision_id ? "Exportable" : "Decision link missing";
 }
 
 function connectorPreflightLabel(kind: ConnectorEvidenceKind) {
@@ -736,8 +743,10 @@ export default function IntegrationsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [savingLedger, setSavingLedger] = useState(false);
   const [testingLedger, setTestingLedger] = useState(false);
+  const [runningLedgerSavedProof, setRunningLedgerSavedProof] = useState(false);
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [testingCustomer, setTestingCustomer] = useState(false);
+  const [runningCustomerSavedProof, setRunningCustomerSavedProof] = useState(false);
   const [evidenceLoadingFor, setEvidenceLoadingFor] = useState<string | null>(null);
   const [connectorEvidence, setConnectorEvidence] = useState<ConnectorEvidenceState | null>(null);
   const [message, setMessage] = useState("");
@@ -1123,6 +1132,42 @@ export default function IntegrationsSettingsPage() {
     }
   }
 
+  async function onRunSavedLedgerProof() {
+    setMessage("");
+    setRunningLedgerSavedProof(true);
+    const refundId = ledgerForm.testRefundId.trim();
+    const amountText = ledgerForm.testAmountUsd.trim();
+    const amountUsd = amountText ? Number(amountText) : null;
+    const currency = ledgerForm.testCurrency.trim().toUpperCase();
+    const claimed: Record<string, unknown> = { refund_id: refundId };
+    if (amountUsd !== null && Number.isFinite(amountUsd)) claimed.amount_usd = amountUsd;
+    if (currency) claimed.currency = currency;
+    if (ledgerForm.testStatus.trim()) claimed.status = ledgerForm.testStatus.trim();
+
+    try {
+      const check = await reconcileSavedLedgerRefund({
+        refund_id: refundId,
+        claimed,
+        amount_usd: amountUsd !== null && Number.isFinite(amountUsd) ? amountUsd : null,
+        currency: currency || null,
+        match_fields: Object.keys(claimed),
+        metadata: { source: "dashboard_saved_connector_proof" },
+      });
+      setState((prev) => ({
+        ...prev,
+        outcomeChecks: [
+          check,
+          ...prev.outcomeChecks.filter((item) => item.id !== check.id),
+        ].slice(0, 25),
+      }));
+      setMessage(`Ledger saved proof recorded ${check.verdict}.`);
+    } catch (proofError) {
+      setMessage(proofError instanceof Error ? proofError.message : "Failed to run saved ledger proof.");
+    } finally {
+      setRunningLedgerSavedProof(false);
+    }
+  }
+
   async function onTestCustomerConnector(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
@@ -1152,6 +1197,37 @@ export default function IntegrationsSettingsPage() {
       setMessage(testError instanceof Error ? testError.message : "Failed to run customer record test.");
     } finally {
       setTestingCustomer(false);
+    }
+  }
+
+  async function onRunSavedCustomerProof() {
+    setMessage("");
+    setRunningCustomerSavedProof(true);
+    const customerId = customerForm.testCustomerId.trim();
+    const claimed: Record<string, unknown> = { customer_id: customerId };
+    if (customerForm.testEmail.trim()) claimed.email = customerForm.testEmail.trim().toLowerCase();
+    if (customerForm.testStatus.trim()) claimed.status = customerForm.testStatus.trim();
+    if (customerForm.testAccountId.trim()) claimed.account_id = customerForm.testAccountId.trim();
+
+    try {
+      const check = await reconcileSavedCustomerRecord({
+        customer_id: customerId,
+        claimed,
+        match_fields: Object.keys(claimed),
+        metadata: { source: "dashboard_saved_connector_proof" },
+      });
+      setState((prev) => ({
+        ...prev,
+        outcomeChecks: [
+          check,
+          ...prev.outcomeChecks.filter((item) => item.id !== check.id),
+        ].slice(0, 25),
+      }));
+      setMessage(`Customer saved proof recorded ${check.verdict}.`);
+    } catch (proofError) {
+      setMessage(proofError instanceof Error ? proofError.message : "Failed to run saved customer proof.");
+    } finally {
+      setRunningCustomerSavedProof(false);
     }
   }
 
@@ -1577,7 +1653,37 @@ export default function IntegrationsSettingsPage() {
             <p>{ledgerGuidance}</p>
           </section>
 
+          <div className="settings-connector-flow" aria-label="Ledger refund proof flow">
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">01</span>
+              <span>Config</span>
+              <strong>{ledgerConnected ? "Saved" : "Not configured"}</strong>
+            </div>
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">02</span>
+              <span>Preflight</span>
+              <strong>{connectorReadinessLabel(ledgerReadinessStatus)}</strong>
+            </div>
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">03</span>
+              <span>Saved proof</span>
+              <strong>{connectorStatus(latestLedgerRefundCheck)}</strong>
+            </div>
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">04</span>
+              <span>Evidence</span>
+              <strong>{evidenceReadinessLabel(latestLedgerRefundCheck)}</strong>
+            </div>
+          </div>
+
           <form className="settings-connector-form" onSubmit={(event) => void onSaveLedgerConnector(event)}>
+            <div className="settings-connector-stage-heading">
+              <span>01</span>
+              <div>
+                <strong>Connector setup</strong>
+                <p>Store the read-scoped endpoint and rotate the token only when needed.</p>
+              </div>
+            </div>
             <div className="settings-connector-form-grid">
               <label>
                 <span>Base URL</span>
@@ -1624,6 +1730,13 @@ export default function IntegrationsSettingsPage() {
           </form>
 
           <form className="settings-connector-test" onSubmit={(event) => void onTestLedgerConnector(event)}>
+            <div className="settings-connector-stage-heading">
+              <span>02</span>
+              <div>
+                <strong>Runtime proof</strong>
+                <p>Run a config test or prove the already-saved connector path used by live outcomes.</p>
+              </div>
+            </div>
             <div className="settings-connector-test-grid">
               <label>
                 <span>Refund ID</span>
@@ -1665,10 +1778,19 @@ export default function IntegrationsSettingsPage() {
                 <PlayCircle aria-hidden="true" />
                 {testingLedger ? "Running..." : "Run test reconciliation"}
               </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!ledgerConnected || testingLedger || runningLedgerSavedProof || !ledgerForm.testRefundId.trim()}
+                onClick={() => void onRunSavedLedgerProof()}
+              >
+                <PlayCircle aria-hidden="true" />
+                {runningLedgerSavedProof ? "Running..." : "Run saved proof"}
+              </button>
             </div>
           </form>
 
-          <section className="settings-connector-handoff" aria-label="Ledger refund pilot handoff">
+          <section className="settings-connector-handoff settings-connector-stage" aria-label="Ledger refund pilot handoff">
             <div className="settings-connector-handoff-header">
               <FileJson aria-hidden="true" />
               <div>
@@ -1711,22 +1833,31 @@ export default function IntegrationsSettingsPage() {
           {renderReadinessContract("ledger", ledgerReadiness, ledgerContract)}
           {renderFailedPreflightAttempts("ledger", ledgerFailedAttempts)}
 
-          <div className="list settings-connector-proof">
-            <div className="list-row">
-              <div className="list-main">
-                <strong>System reference</strong>
-                <span>{latestLedgerRefundCheck?.system_ref ?? "Run the first reconciliation to link a ledger record."}</span>
+          <section className="settings-connector-proof-panel" aria-label="Ledger refund evidence export">
+            <div className="settings-connector-stage-heading">
+              <span>04</span>
+              <div>
+                <strong>Evidence export</strong>
+                <p>Expose the latest proof and download the evidence pack when a runtime decision is linked.</p>
               </div>
             </div>
-            <div className="list-row">
-              <div className="list-main">
-                <strong>Last verdict</strong>
-                <span>{latestLedgerRefundCheck?.verdict ?? "not_verified"}</span>
+            <div className="list settings-connector-proof">
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>System reference</strong>
+                  <span>{latestLedgerRefundCheck?.system_ref ?? "Run the first reconciliation to link a ledger record."}</span>
+                </div>
               </div>
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Last verdict</strong>
+                  <span>{latestLedgerRefundCheck?.verdict ?? "not_verified"}</span>
+                </div>
+              </div>
+              {renderEvidenceControl(latestLedgerRefundCheck, "ledger")}
             </div>
-            {renderEvidenceControl(latestLedgerRefundCheck, "ledger")}
-          </div>
-          {renderEvidenceSummary(latestLedgerRefundCheck, "ledger")}
+            {renderEvidenceSummary(latestLedgerRefundCheck, "ledger")}
+          </section>
 
           <pre className="settings-connector-payload" aria-label="Ledger refund saved connector test payload">
             <code>{ledgerRefundPayloadSnippet()}</code>
@@ -1804,7 +1935,37 @@ export default function IntegrationsSettingsPage() {
             <p>{customerGuidance}</p>
           </section>
 
+          <div className="settings-connector-flow" aria-label="Customer record proof flow">
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">01</span>
+              <span>Config</span>
+              <strong>{customerConnected ? "Saved" : "Not configured"}</strong>
+            </div>
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">02</span>
+              <span>Preflight</span>
+              <strong>{connectorReadinessLabel(customerReadinessStatus)}</strong>
+            </div>
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">03</span>
+              <span>Saved proof</span>
+              <strong>{connectorStatus(latestCustomerRecordCheck)}</strong>
+            </div>
+            <div className="settings-connector-flow-item">
+              <span className="settings-connector-flow-index">04</span>
+              <span>Evidence</span>
+              <strong>{evidenceReadinessLabel(latestCustomerRecordCheck)}</strong>
+            </div>
+          </div>
+
           <form className="settings-connector-form" onSubmit={(event) => void onSaveCustomerConnector(event)}>
+            <div className="settings-connector-stage-heading">
+              <span>01</span>
+              <div>
+                <strong>Connector setup</strong>
+                <p>Store the read-scoped endpoint and rotate the token only when needed.</p>
+              </div>
+            </div>
             <div className="settings-connector-form-grid">
               <label>
                 <span>CRM base URL</span>
@@ -1851,6 +2012,13 @@ export default function IntegrationsSettingsPage() {
           </form>
 
           <form className="settings-connector-test" onSubmit={(event) => void onTestCustomerConnector(event)}>
+            <div className="settings-connector-stage-heading">
+              <span>02</span>
+              <div>
+                <strong>Runtime proof</strong>
+                <p>Run a config test or prove the already-saved connector path used by live outcomes.</p>
+              </div>
+            </div>
             <div className="settings-connector-test-grid">
               <label>
                 <span>Customer ID</span>
@@ -1891,10 +2059,19 @@ export default function IntegrationsSettingsPage() {
                 <PlayCircle aria-hidden="true" />
                 {testingCustomer ? "Running..." : "Run CRM test reconciliation"}
               </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!customerConnected || testingCustomer || runningCustomerSavedProof || !customerForm.testCustomerId.trim()}
+                onClick={() => void onRunSavedCustomerProof()}
+              >
+                <PlayCircle aria-hidden="true" />
+                {runningCustomerSavedProof ? "Running..." : "Run saved CRM proof"}
+              </button>
             </div>
           </form>
 
-          <section className="settings-connector-handoff" aria-label="Customer record pilot handoff">
+          <section className="settings-connector-handoff settings-connector-stage" aria-label="Customer record pilot handoff">
             <div className="settings-connector-handoff-header">
               <FileJson aria-hidden="true" />
               <div>
@@ -1937,22 +2114,31 @@ export default function IntegrationsSettingsPage() {
           {renderReadinessContract("customer", customerReadiness, customerContract)}
           {renderFailedPreflightAttempts("customer", customerFailedAttempts)}
 
-          <div className="list settings-connector-proof">
-            <div className="list-row">
-              <div className="list-main">
-                <strong>System reference</strong>
-                <span>{latestCustomerRecordCheck?.system_ref ?? "Run the first reconciliation to link a CRM record."}</span>
+          <section className="settings-connector-proof-panel" aria-label="Customer record evidence export">
+            <div className="settings-connector-stage-heading">
+              <span>04</span>
+              <div>
+                <strong>Evidence export</strong>
+                <p>Expose the latest proof and download the evidence pack when a runtime decision is linked.</p>
               </div>
             </div>
-            <div className="list-row">
-              <div className="list-main">
-                <strong>Last verdict</strong>
-                <span>{latestCustomerRecordCheck?.verdict ?? "not_verified"}</span>
+            <div className="list settings-connector-proof">
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>System reference</strong>
+                  <span>{latestCustomerRecordCheck?.system_ref ?? "Run the first reconciliation to link a CRM record."}</span>
+                </div>
               </div>
+              <div className="list-row">
+                <div className="list-main">
+                  <strong>Last verdict</strong>
+                  <span>{latestCustomerRecordCheck?.verdict ?? "not_verified"}</span>
+                </div>
+              </div>
+              {renderEvidenceControl(latestCustomerRecordCheck, "customer")}
             </div>
-            {renderEvidenceControl(latestCustomerRecordCheck, "customer")}
-          </div>
-          {renderEvidenceSummary(latestCustomerRecordCheck, "customer")}
+            {renderEvidenceSummary(latestCustomerRecordCheck, "customer")}
+          </section>
 
           <pre className="settings-connector-payload" aria-label="Customer record saved connector test payload">
             <code>{customerRecordPayloadSnippet()}</code>

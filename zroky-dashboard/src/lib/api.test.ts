@@ -11,6 +11,8 @@ import {
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
   rejectRuntimePolicyDecision,
+  reconcileSavedCustomerRecord,
+  reconcileSavedLedgerRefund,
   saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
   setRuntimePolicyKillSwitch,
@@ -322,6 +324,98 @@ describe("outcome reconciliation API client", () => {
       "/api/zroky/v1/outcomes/reconciliation/check_1",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("runs saved ledger refund reconciliation without connector secrets in the request", async () => {
+    const check = {
+      id: "check_saved_ledger",
+      project_id: "proj_1",
+      call_id: "call_1",
+      trace_id: "trace_1",
+      runtime_policy_decision_id: "decision_1",
+      action_type: "refund",
+      connector_type: "ledger_refund_api",
+      system_ref: "ledger:rf_1",
+      verdict: "matched",
+      reason: "all_compared_fields_matched",
+      amount_usd: 42.5,
+      currency: "USD",
+      claimed: {},
+      actual: {},
+      comparison: {},
+      idempotency_key: "saved_ledger_refund:decision_1:rf_1",
+      metadata: { source: "saved_connector_runtime" },
+      checked_at: "2026-06-20T00:00:00Z",
+      created_at: "2026-06-20T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(check), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      reconcileSavedLedgerRefund({
+        runtime_policy_decision_id: "decision_1",
+        claimed: { refund_id: "rf_1", amount_usd: 42.5, currency: "USD" },
+      }),
+    ).resolves.toMatchObject({ id: "check_saved_ledger" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/ledger-refund/saved",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          runtime_policy_decision_id: "decision_1",
+          claimed: { refund_id: "rf_1", amount_usd: 42.5, currency: "USD" },
+        }),
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("bearer");
+  });
+
+  it("runs saved customer record reconciliation without connector secrets in the request", async () => {
+    const check = {
+      id: "check_saved_customer",
+      project_id: "proj_1",
+      call_id: "call_1",
+      trace_id: "trace_1",
+      runtime_policy_decision_id: "decision_1",
+      action_type: "customer_record_update",
+      connector_type: "customer_record_api",
+      system_ref: "crm:cus_1",
+      verdict: "matched",
+      reason: "all_compared_fields_matched",
+      amount_usd: null,
+      currency: null,
+      claimed: {},
+      actual: {},
+      comparison: {},
+      idempotency_key: "saved_customer_record:decision_1:cus_1",
+      metadata: { source: "saved_connector_runtime" },
+      checked_at: "2026-06-20T00:00:00Z",
+      created_at: "2026-06-20T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(check), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      reconcileSavedCustomerRecord({
+        runtime_policy_decision_id: "decision_1",
+        customer_id: "cus_1",
+        claimed: { customer_id: "cus_1", status: "active" },
+      }),
+    ).resolves.toMatchObject({ id: "check_saved_customer" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/customer-record/saved",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          runtime_policy_decision_id: "decision_1",
+          customer_id: "cus_1",
+          claimed: { customer_id: "cus_1", status: "active" },
+        }),
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("bearer");
   });
 });
 

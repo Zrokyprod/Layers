@@ -9,7 +9,18 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models import Anomaly, Call, GoldenSet, Project, ProjectMembership, ReplayRun, User
+from app.db.models import (
+    Anomaly,
+    Call,
+    GoldenSet,
+    OutcomeEvent,
+    OutcomeReconciliationCheck,
+    Project,
+    ProjectMembership,
+    ReplayRun,
+    RuntimePolicyDecision,
+    User,
+)
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services import entitlements_resolver
@@ -150,6 +161,60 @@ def _seed_two_project_user(factory) -> str:
                     ),
                 )
             )
+            session.add(
+                RuntimePolicyDecision(
+                    id=f"decision_{project_id}",
+                    project_id=project_id,
+                    trace_id=f"trace_{project_id}",
+                    call_id=f"call_{project_id}",
+                    agent_name=f"refund-agent-{project_id}",
+                    action_type="refund",
+                    tool_name="refund_payment",
+                    decision="allow",
+                    status="allowed",
+                    reasons_json=json.dumps(["within_mandate"]),
+                    request_json=json.dumps({"amount_usd": 42.5, "project_id": project_id}),
+                    policy_snapshot_json=json.dumps({"max_refund_usd": 100}),
+                    intended_action_json=json.dumps({"refund_id": f"refund_{project_id}"}),
+                    trace_context_json=json.dumps({"trace_id": f"trace_{project_id}"}),
+                    policy_hit_json=json.dumps({"rule": "refund_limit"}),
+                    business_impact_json=json.dumps({"amount_usd": 42.5}),
+                )
+            )
+            session.add(
+                OutcomeReconciliationCheck(
+                    id=f"orc_{project_id}",
+                    project_id=project_id,
+                    call_id=f"call_{project_id}",
+                    trace_id=f"trace_{project_id}",
+                    runtime_policy_decision_id=f"decision_{project_id}",
+                    action_type="refund",
+                    connector_type="ledger_refund_api",
+                    system_ref=f"refund_{project_id}",
+                    verdict="matched",
+                    reason="ledger refund matched",
+                    amount_usd=42.5,
+                    currency="USD",
+                    claimed_json=json.dumps({"refund_id": f"refund_{project_id}", "amount_usd": 42.5}),
+                    actual_json=json.dumps({"refund_id": f"refund_{project_id}", "amount_usd": 42.5}),
+                    comparison_json=json.dumps({"amount_usd": {"matched": True}}),
+                    idempotency_key=f"orc-key-{project_id}",
+                    checked_at=now,
+                )
+            )
+            session.add(
+                OutcomeEvent(
+                    id=f"outcome_{project_id}",
+                    project_id=project_id,
+                    call_id=f"call_{project_id}",
+                    outcome_type="refund_issued",
+                    amount_usd=42.5,
+                    source="api",
+                    external_ref=f"refund_{project_id}",
+                    idempotency_key=f"outcome-key-{project_id}",
+                    occurred_at=now,
+                )
+            )
 
         session.commit()
         token = issue_access_token(
@@ -229,6 +294,54 @@ def test_same_session_switches_core_project_scoped_surfaces(client_ctx: TestClie
     assert beta_team.status_code == 200
     assert {item["project_id"] for item in alpha_team.json()} == {"proj_alpha"}
     assert {item["project_id"] for item in beta_team.json()} == {"proj_beta"}
+
+    alpha_policy = client_ctx.get("/v1/runtime-policy/approvals?status=all", headers=alpha_headers)
+    beta_policy = client_ctx.get("/v1/runtime-policy/approvals?status=all", headers=beta_headers)
+    assert alpha_policy.status_code == 200
+    assert beta_policy.status_code == 200
+    assert [item["id"] for item in alpha_policy.json()["items"]] == ["decision_proj_alpha"]
+    assert [item["id"] for item in beta_policy.json()["items"]] == ["decision_proj_beta"]
+
+    beta_evidence = client_ctx.get(
+        "/v1/runtime-policy/decisions/decision_proj_beta/evidence",
+        headers=beta_headers,
+    )
+    assert beta_evidence.status_code == 200
+    assert beta_evidence.json()["project_id"] == "proj_beta"
+    assert beta_evidence.json()["outcome_reconciliation"][0]["id"] == "orc_proj_beta"
+
+    foreign_evidence = client_ctx.get(
+        "/v1/runtime-policy/decisions/decision_proj_beta/evidence",
+        headers=alpha_headers,
+    )
+    assert foreign_evidence.status_code == 404
+
+    alpha_reconciliation = client_ctx.get("/v1/outcomes/reconciliation", headers=alpha_headers)
+    beta_reconciliation = client_ctx.get("/v1/outcomes/reconciliation", headers=beta_headers)
+    assert alpha_reconciliation.status_code == 200
+    assert beta_reconciliation.status_code == 200
+    assert [item["id"] for item in alpha_reconciliation.json()["items"]] == ["orc_proj_alpha"]
+    assert [item["id"] for item in beta_reconciliation.json()["items"]] == ["orc_proj_beta"]
+
+    foreign_reconciliation_by_call = client_ctx.get(
+        "/v1/outcomes/reconciliation/by-call/call_proj_beta",
+        headers=alpha_headers,
+    )
+    assert foreign_reconciliation_by_call.status_code == 200
+    assert foreign_reconciliation_by_call.json()["items"] == []
+
+    foreign_reconciliation_detail = client_ctx.get(
+        "/v1/outcomes/reconciliation/orc_proj_beta",
+        headers=alpha_headers,
+    )
+    assert foreign_reconciliation_detail.status_code == 404
+
+    alpha_outcomes_by_call = client_ctx.get("/v1/outcomes/by-call/call_proj_beta", headers=alpha_headers)
+    beta_outcomes_by_call = client_ctx.get("/v1/outcomes/by-call/call_proj_beta", headers=beta_headers)
+    assert alpha_outcomes_by_call.status_code == 200
+    assert beta_outcomes_by_call.status_code == 200
+    assert alpha_outcomes_by_call.json() == []
+    assert [item["outcome_type"] for item in beta_outcomes_by_call.json()] == ["refund_issued"]
 
 
 def test_project_delete_soft_deactivates_project_and_removes_from_user_list(client_ctx: TestClient) -> None:

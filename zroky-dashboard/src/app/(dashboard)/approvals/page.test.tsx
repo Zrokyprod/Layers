@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,7 +42,7 @@ const fixtures = vi.hoisted(() => {
       },
     ],
     created_at: "2026-06-20T09:00:00Z",
-    expires_at: "2026-06-20T09:15:00Z",
+    expires_at: "2099-06-20T09:15:00Z",
     resolved_at: null,
     resolved_by: null,
     resolution_reason: null,
@@ -205,10 +205,59 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   });
 
+  it("renders the cockpit queue, selected inspector, and loaded outcome proof", () => {
+    render(<RuntimeApprovalsPage />);
+
+    expect(screen.getByRole("heading", { name: "Held actions before commit" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Approval priority queue" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Selected action control" })).toBeInTheDocument();
+    expect(screen.getByText("P0")).toBeInTheDocument();
+    expect(screen.getByText("money-action hold")).toBeInTheDocument();
+    expect(screen.getByText("Outcome proof")).toBeInTheDocument();
+    expect(screen.getByText("Outcome verified")).toBeInTheDocument();
+    expect(screen.getByText("Matched system-of-record outcome is linked.")).toBeInTheDocument();
+    expect(hookState.evidenceDecisionId).toBe("decision_1");
+  });
+
+  it("requires an audit reason before approving or rejecting a held action", async () => {
+    render(<RuntimeApprovalsPage />);
+
+    const approve = screen.getByRole("button", { name: "Approve" });
+    const reject = screen.getByRole("button", { name: "Reject" });
+    expect(approve).toHaveProperty("disabled", true);
+    expect(reject).toHaveProperty("disabled", true);
+
+    fireEvent.change(screen.getByLabelText("Decision reason"), {
+      target: { value: "support ticket verified" },
+    });
+
+    expect(approve).toHaveProperty("disabled", false);
+    expect(reject).toHaveProperty("disabled", false);
+    fireEvent.click(approve);
+
+    await waitFor(() =>
+      expect(hookState.approve).toHaveBeenCalledWith({
+        decisionId: "decision_1",
+        reason: "support ticket verified",
+      }),
+    );
+  });
+
+  it("requires confirmation before enabling the runtime kill switch", async () => {
+    render(<RuntimeApprovalsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch confirmation" }));
+    expect(hookState.killSwitch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
+
+    await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
+  });
+
   it("opens the evidence pack, shows the hash, matched outcome, and exports JSON", () => {
     render(<RuntimeApprovalsPage />);
 
-    expect(screen.getByText("Financial action")).toBeInTheDocument();
+    expect(screen.getAllByText(/Financial action/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Evidence Pack" }));
 
     expect(hookState.evidenceDecisionId).toBe("decision_1");

@@ -3,6 +3,7 @@
   "config_endpoint": "/v1/integrations/system-of-record/ledger-refund/config",
   "status_endpoint": "/v1/integrations/system-of-record/ledger-refund/status",
   "test_endpoint": "/v1/integrations/system-of-record/ledger-refund/test",
+  "saved_runtime_endpoint": "/v1/outcomes/reconciliation/ledger-refund/saved",
   "config_payload": {
     "base_url": "https://ledger.example.com/api",
     "path_template": "/refunds/{refund_id}",
@@ -26,7 +27,36 @@
     ],
     "metadata": {
       "install_kit": "design_partner_refund_v1",
-      "partner_run_id": "<partner_run_id>"
+      "partner_run_id": "<partner_run_id>",
+      "proof_mode": "preflight",
+      "real_customer_proof_candidate": false
+    }
+  },
+  "saved_runtime_payload": {
+    "call_id": "dp-call-refund-1001",
+    "trace_id": "dp-trace-refund-1001",
+    "runtime_policy_decision_id": "<runtime_policy_decision_id>",
+    "action_type": "refund",
+    "refund_id": "RF-DP-1001",
+    "claimed": {
+      "refund_id": "RF-DP-1001",
+      "order_id": "ORD-DP-1001",
+      "amount_usd": 42.18,
+      "currency": "USD",
+      "status": "posted"
+    },
+    "match_fields": [
+      "refund_id",
+      "amount_usd",
+      "currency",
+      "status"
+    ],
+    "metadata": {
+      "install_kit": "design_partner_refund_v1",
+      "partner_run_id": "<partner_run_id>",
+      "source": "saved_connector_runtime",
+      "proof_mode": "live_customer",
+      "real_customer_proof_candidate": true
     }
   },
   "readiness_contract": {
