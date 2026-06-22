@@ -268,6 +268,23 @@ export interface OwnerLaunchReadiness {
   verification_commands: string[];
 }
 
+export interface OwnerProductionReadinessCheck {
+  code: string;
+  label: string;
+  status: "pass" | "fail" | "warn" | string;
+  required_for_launch: boolean;
+  detail: string;
+}
+
+export interface OwnerProductionReadiness {
+  overall_status: "pass" | "blocked" | string;
+  app_env: string;
+  production_profile: boolean;
+  hard_blockers: string[];
+  checks: OwnerProductionReadinessCheck[];
+  checked_at: string;
+}
+
 export interface OwnerUserItem {
   id: string;
   email: string | null;
@@ -617,6 +634,10 @@ export function fetchOwnerMoneyPathHealth(signal?: AbortSignal): Promise<OwnerMo
 
 export function fetchOwnerLaunchReadiness(signal?: AbortSignal): Promise<OwnerLaunchReadiness> {
   return ownerRequest<OwnerLaunchReadiness>("/v1/owner/launch-readiness", { signal });
+}
+
+export function fetchOwnerProductionReadiness(signal?: AbortSignal): Promise<OwnerProductionReadiness> {
+  return ownerRequest<OwnerProductionReadiness>("/v1/owner/production-readiness", { signal });
 }
 
 export function fetchOwnerUsers(limit = 100, offset = 0): Promise<OwnerUsersResponse> {

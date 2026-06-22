@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { clearOwnerToken, getOwnerToken } from "@/lib/owner-api";
-import { useOwnerRetention } from "@/lib/hooks";
+import { useOwnerProductionReadiness, useOwnerRetention } from "@/lib/hooks";
 
 function SettingRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -16,6 +16,7 @@ function SettingRow({ label, value }: { label: string; value: React.ReactNode })
 
 export default function OwnerSettingsPage() {
   const retentionQuery = useOwnerRetention();
+  const readinessQuery = useOwnerProductionReadiness();
   const [tokenPresent, setTokenPresent] = useState(() => Boolean(getOwnerToken()));
 
   const token = getOwnerToken();
@@ -30,6 +31,8 @@ export default function OwnerSettingsPage() {
   }
 
   const retention = retentionQuery.data ?? null;
+  const readiness = readinessQuery.data ?? null;
+  const readinessFailures = readiness?.checks.filter((check) => check.status === "fail").length ?? null;
 
   return (
     <div className="owner-page owner-settings-page">
@@ -62,6 +65,51 @@ export default function OwnerSettingsPage() {
           <SettingRow label="Proxy credential policy" value="Converts HttpOnly owner cookie to backend owner header" />
           <SettingRow label="Customer dashboard routes" value="Not present in admin build" />
         </div>
+      </section>
+
+      <section className="panel" aria-label="Production readiness">
+        <div className="panel-header">Production Readiness</div>
+        {readinessQuery.error ? <div className="alert-strip alert-strip-error">{readinessQuery.error.message}</div> : null}
+        {readinessQuery.isLoading ? (
+          <p className="hint owner-settings-loading">Loading production readiness...</p>
+        ) : readiness ? (
+          <div className="owner-settings-list">
+            <SettingRow
+              label="Overall"
+              value={
+                <span className={`status-pill status-${readiness.overall_status}`}>
+                  {readiness.overall_status}
+                </span>
+              }
+            />
+            <SettingRow label="Environment" value={readiness.app_env} />
+            <SettingRow label="Production profile" value={readiness.production_profile ? "enabled" : "not enabled"} />
+            <SettingRow label="Failed launch gates" value={readinessFailures ?? 0} />
+            {readiness.hard_blockers.length > 0 ? (
+              <div className="owner-settings-rules">
+                {readiness.hard_blockers.slice(0, 6).map((blocker) => (
+                  <div key={blocker}>
+                    <strong>{blocker.split(":")[0]}</strong>
+                    <span>{blocker.split(":").slice(1).join(":")}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="owner-settings-rules">
+              {readiness.checks.slice(0, 8).map((check) => (
+                <div key={check.code}>
+                  <strong>{check.label}</strong>
+                  <span>
+                    <span className={`status-pill status-${check.status}`}>{check.status}</span>{" "}
+                    {check.detail}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="hint owner-settings-loading">Production readiness unavailable.</p>
+        )}
       </section>
 
       <section className="panel">

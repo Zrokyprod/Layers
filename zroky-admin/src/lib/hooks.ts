@@ -16,6 +16,7 @@ import {
   fetchOwnerMoneyPathHealth,
   fetchOwnerPricing,
   fetchOwnerPricingPlans,
+  fetchOwnerProductionReadiness,
   fetchOwnerProject,
   fetchOwnerProjects,
   fetchOwnerRetention,
@@ -72,6 +73,13 @@ export function useOwnerLaunchReadiness() {
   return useQuery({
     queryKey: ["owner", "launch-readiness"],
     queryFn: ({ signal }) => fetchOwnerLaunchReadiness(signal),
+  });
+}
+
+export function useOwnerProductionReadiness() {
+  return useQuery({
+    queryKey: ["owner", "production-readiness"],
+    queryFn: ({ signal }) => fetchOwnerProductionReadiness(signal),
   });
 }
 

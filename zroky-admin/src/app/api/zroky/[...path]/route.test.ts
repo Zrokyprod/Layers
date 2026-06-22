@@ -77,6 +77,44 @@ describe("/api/zroky owner proxy route", () => {
     expect(headers.get("x-provisioning-token")).toBeNull();
   });
 
+  it("blocks non-owner backend paths before attaching owner credentials", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/auth/me", {
+      headers: {
+        cookie: "zroky_owner_token=cookie-owner-token",
+      },
+    });
+    const response = await GET(request, context(["v1", "auth", "me"]));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ detail: "Owner proxy path is not allowed." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows admin feature-interest paths through the owner proxy allowlist", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ features: [], generated_at: "2026-06-22T00:00:00.000Z" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/admin/feature-interest", {
+      headers: {
+        cookie: "zroky_owner_token=cookie-owner-token",
+      },
+    });
+    const response = await GET(request, context(["v1", "admin", "feature-interest"]));
+
+    expect(response.status).toBe(200);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("http://backend.test/v1/admin/feature-interest");
+  });
+
   it("does not use public API URL variables for the owner backend proxy", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "http://backend.test");

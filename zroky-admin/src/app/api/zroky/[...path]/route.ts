@@ -3,6 +3,11 @@ import { NextRequest } from "next/server";
 const devDefaultBaseUrl = "http://127.0.0.1:8000";
 const defaultTimeoutMs = 10_000;
 const OWNER_TOKEN_COOKIE = "zroky_owner_token";
+const OWNER_PROXY_ALLOWED_PREFIXES = [
+  "v1/owner",
+  "v1/feature-flags/admin",
+  "v1/admin/feature-interest",
+] as const;
 
 type RouteContext = {
   params: Promise<{
@@ -33,9 +38,20 @@ function getBaseUrl(): string {
   return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
 }
 
+function isAllowedOwnerProxyPath(path: string): boolean {
+  return OWNER_PROXY_ALLOWED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
+
 async function forwardRequest(request: NextRequest, context: RouteContext): Promise<Response> {
   const params = await context.params;
   const path = params.path.join("/");
+  if (!isAllowedOwnerProxyPath(path)) {
+    return Response.json(
+      { detail: "Owner proxy path is not allowed." },
+      { status: 403 },
+    );
+  }
+
   let baseUrl: string;
   try {
     baseUrl = getBaseUrl();

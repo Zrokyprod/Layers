@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, ArrowRight, GitBranch, KeyRound, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, BadgeDollarSign, GitBranch, KeyRound, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
@@ -32,17 +32,9 @@ const ACTION_LABELS: Record<string, string> = {
 
 function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 12,
-        padding: "9px 0",
-        borderBottom: "1px solid var(--line-subtle)",
-        alignItems: "flex-start",
-      }}
-    >
-      <span style={{ width: 180, flexShrink: 0, fontSize: "0.8rem", color: "var(--text-secondary)" }}>{label}</span>
-      <span style={{ fontSize: "0.82rem", color: "var(--text-primary)", wordBreak: "break-all" }}>{value}</span>
+    <div className="owner-info-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -71,15 +63,15 @@ function actionLabel(action: string): string {
 }
 
 function stateTone(state: string): Tone {
-  if (["passed", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
-  if (["failed", "down", "error", "exceeded", "blocked", "missing"].includes(state)) return "danger";
-  if (["partial", "running", "near_limit", "disabled", "not_configured"].includes(state)) return "warn";
+  if (["pass", "passed", "verified", "configured", "ok", "unlimited", "monitor", "active"].includes(state)) return "ok";
+  if (["fail", "failed", "down", "error", "exceeded", "blocked", "missing", "risk", "urgent", "failure", "canceled", "incomplete"].includes(state)) return "danger";
+  if (["partial", "running", "near_limit", "disabled", "not_configured", "not_verified", "stale", "fallback", "open", "missing_paid", "past_due"].includes(state)) return "warn";
   return "neutral";
 }
 
 function actionTone(action: string): Tone {
-  if (["review_blocked_ci", "restore_capture"].includes(action)) return "danger";
-  if (["connect_provider_key", "review_replay_quota", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
+  if (["review_blocked_ci", "restore_capture", "restore_replay_worker", "fix_billing", "fix_metering"].includes(action)) return "danger";
+  if (["connect_provider_key", "review_replay_quota", "review_event_quota", "review_support", "refresh_pricing", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
   if (action === "monitor") return "ok";
   return "neutral";
 }
@@ -107,6 +99,32 @@ function loopTone(tenant: OwnerMoneyPathTenantRow, step: string): Tone {
 function quotaText(tenant: OwnerMoneyPathTenantRow): string {
   if (tenant.replay_quota_status.limit === -1) return `${fmtCount(tenant.replay_quota_status.used)} used`;
   return `${fmtCount(tenant.replay_quota_status.used)} / ${fmtCount(tenant.replay_quota_status.limit)}`;
+}
+
+function eventMeteringText(tenant: OwnerMoneyPathTenantRow): string {
+  const metering = tenant.event_metering_status;
+  if (!metering) return "No event-metering proof";
+  if (metering.limit == null) return `${fmtCount(metering.used)} used`;
+  return `${fmtCount(metering.used)} / ${fmtCount(metering.limit)}`;
+}
+
+function pricingDetail(tenant: OwnerMoneyPathTenantRow): string {
+  const pricing = tenant.pricing_cost_status;
+  if (!pricing) return "No pricing evidence";
+  if (pricing.pricing_age_days == null) return pricing.detail ?? "No pricing age";
+  return `${pricing.pricing_age_days}d age - ${pricing.cost_confidence ?? "unknown confidence"}`;
+}
+
+function billingDetail(tenant: OwnerMoneyPathTenantRow): string {
+  const billing = tenant.billing_status;
+  if (!billing) return "No billing row";
+  return billing.subscription_status ?? billing.plan_code;
+}
+
+function supportDetail(tenant: OwnerMoneyPathTenantRow): string {
+  const support = tenant.support_status;
+  if (!support) return "No support status";
+  return `${fmtCount(support.open_count)} open / ${fmtCount(support.urgent_count)} urgent`;
 }
 
 function StatusBadge({ value, tone }: { value: string; tone?: Tone }) {
@@ -145,7 +163,27 @@ function TenantLoopEvidence({ tenant }: { tenant: OwnerMoneyPathTenantRow }) {
   );
 }
 
-function ProductIntelligencePanel({
+function CommercialSignal({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: Tone;
+}) {
+  return (
+    <div className={`owner-project-signal-card owner-project-signal-${tone ?? stateTone(value)}`}>
+      <span>{label}</span>
+      <strong>{value.replaceAll("_", " ")}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function TenantProofLedger({
   tenant,
   error,
   loading,
@@ -158,7 +196,7 @@ function ProductIntelligencePanel({
     return (
       <div className="panel owner-project-intel-panel">
         <div className="panel-header">
-          Regression Firewall
+          Tenant proof ledger
           <span className="panel-header-note">Backend money-path health unavailable</span>
         </div>
         <div className="owner-project-intel-body">
@@ -171,7 +209,7 @@ function ProductIntelligencePanel({
   if (loading && !tenant) {
     return (
       <div className="panel owner-project-intel-panel">
-        <div className="panel-header">Regression Firewall</div>
+        <div className="panel-header">Tenant proof ledger</div>
         <div className="owner-project-intel-empty">
           <ShieldCheck size={20} aria-hidden="true" />
           <p>Loading tenant money-path evidence...</p>
@@ -184,7 +222,7 @@ function ProductIntelligencePanel({
     return (
       <div className="panel owner-project-intel-panel">
         <div className="panel-header">
-          Regression Firewall
+          Tenant proof ledger
           <span className="panel-header-note">No backend row for this tenant</span>
         </div>
         <div className="owner-project-intel-empty">
@@ -200,14 +238,67 @@ function ProductIntelligencePanel({
   }
 
   const providerValue = `${tenant.provider_key_status.state} (${tenant.provider_key_status.active_provider_count})`;
+  const breaks = tenant.money_path_breaks ?? tenant.launch_blockers ?? [];
+  const valueStatus = tenant.value_status ?? "unknown";
+  const commercialSignals = [
+    {
+      label: "Provider",
+      value: tenant.provider_key_status.state,
+      detail: `${fmtCount(tenant.provider_key_status.active_provider_count)} active key(s)`,
+    },
+    {
+      label: "Metering",
+      value: tenant.event_metering_status?.state ?? "unknown",
+      detail: eventMeteringText(tenant),
+    },
+    {
+      label: "Pricing",
+      value: tenant.pricing_cost_status?.state ?? "unknown",
+      detail: pricingDetail(tenant),
+    },
+    {
+      label: "Billing",
+      value: tenant.billing_status?.state ?? "unknown",
+      detail: billingDetail(tenant),
+    },
+    {
+      label: "Support",
+      value: tenant.support_status?.state ?? "none",
+      detail: supportDetail(tenant),
+    },
+  ];
 
   return (
     <div className="panel owner-project-intel-panel">
       <div className="panel-header">
-        <span>Regression Firewall</span>
-        <StatusBadge value={actionLabel(tenant.next_owner_action)} tone={actionTone(tenant.next_owner_action)} />
+        <div className="owner-project-intel-heading">
+          <span>Tenant proof ledger</span>
+          <small>Capture, replay, CI, provider, metering, billing, and support evidence for this tenant.</small>
+        </div>
+        <div className="owner-project-intel-status">
+          <StatusBadge value={valueStatus} />
+          <StatusBadge value={actionLabel(tenant.next_owner_action)} tone={actionTone(tenant.next_owner_action)} />
+        </div>
       </div>
       <div className="owner-project-intel-body">
+        <section className={`owner-project-action-card owner-project-action-${actionTone(tenant.next_owner_action)}`}>
+          <div>
+            <span className="owner-section-label">Next owner action</span>
+            <strong>{actionLabel(tenant.next_owner_action)}</strong>
+            <p>
+              Priority score {tenant.tenant_priority_score == null ? "not reported" : tenant.tenant_priority_score}.
+              {breaks.length > 0 ? " Resolve the listed breaks before treating this tenant as launch-ready." : " No money-path breaks reported."}
+            </p>
+          </div>
+          <div className="owner-project-break-list">
+            {breaks.length > 0 ? (
+              breaks.slice(0, 5).map((item) => <span key={item}>{item.replaceAll("_", " ")}</span>)
+            ) : (
+              <span>No breaks reported</span>
+            )}
+          </div>
+        </section>
+
         <div className="owner-project-intel-grid">
           <div className="owner-project-intel-card">
             <span className="owner-stat-label">Open Issues</span>
@@ -233,19 +324,37 @@ function ProductIntelligencePanel({
 
         <TenantLoopEvidence tenant={tenant} />
 
+        <section className="owner-project-commercial-panel">
+          <div className="owner-project-commercial-head">
+            <div>
+              <span className="owner-section-label">Commercial readiness</span>
+              <strong>Paid-path signals</strong>
+            </div>
+            <BadgeDollarSign size={18} aria-hidden="true" />
+          </div>
+          <div className="owner-project-commercial-grid">
+            {commercialSignals.map((signal) => (
+              <CommercialSignal key={signal.label} {...signal} />
+            ))}
+          </div>
+        </section>
+
         <div className="owner-project-intel-proof">
           <div className="owner-money-proof-grid">
             <EvidenceItem label="Project Plan" value={tenant.plan_code} />
             <EvidenceItem label="Last Capture" value={fmtDate(tenant.last_capture_at)} />
             <EvidenceItem label="Provider Keys" value={providerValue} />
             <EvidenceItem label="Replay Quota" value={quotaText(tenant)} />
+            <EvidenceItem label="Event Metering" value={eventMeteringText(tenant)} />
+            <EvidenceItem label="Pricing Evidence" value={pricingDetail(tenant)} />
           </div>
           <div className="owner-project-intel-actions">
             <div className="owner-project-intel-action-copy">
               <KeyRound size={16} aria-hidden="true" />
               <span>
-                Provider key is <StatusBadge value={tenant.provider_key_status.state} /> and replay quota is{" "}
-                <StatusBadge value={tenant.replay_quota_status.state} />.
+                Provider key is <StatusBadge value={tenant.provider_key_status.state} />, replay quota is{" "}
+                <StatusBadge value={tenant.replay_quota_status.state} />, and billing is{" "}
+                <StatusBadge value={tenant.billing_status?.state ?? "unknown"} />.
               </span>
             </div>
             <div className="owner-project-intel-action-links">
@@ -341,7 +450,7 @@ export default function ProjectDetailPage() {
   }
 
   if (loading) {
-    return <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Loading...</p>;
+    return <p className="hint">Loading tenant record...</p>;
   }
   if (error) {
     return <div className="alert-strip alert-strip-error">{error}</div>;
@@ -350,24 +459,21 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="owner-page owner-project-detail-page">
-      {/* Breadcrumb */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
-        <Link href="/owner/projects" style={{ color: "var(--accent)", textDecoration: "none" }}>Projects</Link>
+      <div className="owner-project-breadcrumb">
+        <Link href="/owner/projects">Projects</Link>
         <span>/</span>
         <span>{project.name}</span>
       </div>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div className="owner-project-hero">
         <div>
-          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-            {project.name}
-          </h2>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.82rem", marginTop: 4 }}>
-            ID: <code style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>{project.id}</code>
+          <span className="owner-section-label">Tenant record</span>
+          <h2>{project.name}</h2>
+          <p>
+            ID: <code>{project.id}</code>
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div className="owner-project-hero-actions">
           <span className={project.is_active ? "pill pill-green" : "pill pill-red"}>
             {project.is_active ? "Active" : "Suspended"}
           </span>
@@ -375,7 +481,6 @@ export default function ProjectDetailPage() {
             className={project.is_active ? "btn btn-danger" : "btn btn-primary"}
             onClick={handleToggleStatus}
             disabled={toggleMutation.isPending}
-            style={{ fontSize: "0.82rem", padding: "7px 16px" }}
           >
             {toggleMutation.isPending ? "Working..." : project.is_active ? "Suspend Project" : "Activate Project"}
           </button>
@@ -388,55 +493,34 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Stats */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-          gap: 14,
-        }}
-      >
+      <div className="owner-project-stat-grid">
         {[
           { label: "Total Calls", value: project.call_count.toLocaleString() },
           { label: "Total Cost (USD)", value: usd(project.total_cost_usd) },
           { label: "Members", value: project.member_count },
         ].map((s) => (
-          <div
-            key={s.label}
-            style={{
-              background: "var(--bg-panel)",
-              border: "1px solid var(--line-soft)",
-              borderRadius: "var(--radius-md)",
-              padding: "16px 18px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-            }}
-          >
-            <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              {s.label}
-            </span>
-            <span style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.2 }}>
-              {s.value}
-            </span>
+          <div key={s.label} className="owner-project-stat-card">
+            <span>{s.label}</span>
+            <strong>{s.value}</strong>
           </div>
         ))}
       </div>
 
-      <ProductIntelligencePanel
+      <TenantProofLedger
         tenant={tenantHealth}
         error={moneyPathError}
         loading={moneyPathQuery.isLoading}
       />
 
-      {/* Project Info */}
       <div className="panel">
         <div className="panel-header">Project Details</div>
-        <InfoRow label="Project ID" value={<code style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>{project.id}</code>} />
-        <InfoRow label="Name" value={project.name} />
-        <InfoRow label="Owner Ref" value={project.owner_ref ?? "-"} />
-        <InfoRow label="Status" value={project.is_active ? "Active" : "Suspended"} />
-        <InfoRow label="Created" value={new Date(project.created_at).toLocaleString()} />
+        <div className="owner-info-list">
+          <InfoRow label="Project ID" value={<code>{project.id}</code>} />
+          <InfoRow label="Name" value={project.name} />
+          <InfoRow label="Owner Ref" value={project.owner_ref ?? "-"} />
+          <InfoRow label="Status" value={project.is_active ? "Active" : "Suspended"} />
+          <InfoRow label="Created" value={new Date(project.created_at).toLocaleString()} />
+        </div>
       </div>
 
       <div className="panel">
@@ -486,61 +570,50 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Members */}
       <div className="panel">
         <div className="panel-header">
-          Members
-          <span style={{ fontWeight: 400, color: "var(--text-secondary)", marginLeft: 8, fontSize: "0.78rem" }}>
+          <span>Members</span>
+          <span className="panel-header-note">
             {members.length} member{members.length !== 1 ? "s" : ""}
           </span>
         </div>
         {members.length === 0 && (
-          <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", padding: "12px 0" }}>No members found.</p>
+          <p className="owner-panel-empty">No members found.</p>
         )}
         {members.length > 0 && (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-            <thead>
-              <tr>
-                {["User", "Role", "Status", "Joined"].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      textAlign: "left",
-                      padding: "8px 10px",
-                      borderBottom: "1px solid var(--line-soft)",
-                      fontSize: "0.72rem",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                      color: "var(--text-secondary)",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((m) => (
-                <tr key={m.membership_id} style={{ borderBottom: "1px solid var(--line-subtle)" }}>
-                  <td style={{ padding: "9px 10px" }}>
-                    <Link href={`/owner/users/${m.user_id}`} style={{ color: "var(--accent)", textDecoration: "none" }}>
-                      {m.email ?? m.github_login ?? m.display_name ?? m.user_id}
-                    </Link>
-                  </td>
-                  <td style={{ padding: "9px 10px", color: "var(--text-secondary)" }}>{m.role}</td>
-                  <td style={{ padding: "9px 10px" }}>
-                    <span className={m.is_active ? "pill pill-green" : "pill pill-red"} style={{ fontSize: "0.68rem" }}>
-                      {m.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "9px 10px", color: "var(--text-secondary)" }}>
-                    {new Date(m.joined_at).toLocaleDateString()}
-                  </td>
+          <div className="owner-table-wrap owner-table-wrap-embedded">
+            <table className="owner-table">
+              <thead>
+                <tr>
+                  {["User", "Role", "Status", "Joined"].map((h) => (
+                    <th key={h} className="owner-th">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {members.map((m) => (
+                  <tr key={m.membership_id} className="owner-tr">
+                    <td className="owner-td">
+                      <Link href={`/owner/users/${m.user_id}`} className="owner-row-link">
+                        {m.email ?? m.github_login ?? m.display_name ?? m.user_id}
+                      </Link>
+                    </td>
+                    <td className="owner-td owner-td-secondary">{m.role}</td>
+                    <td className="owner-td">
+                      <span className={m.is_active ? "pill pill-green" : "pill pill-red"}>
+                        {m.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="owner-td owner-td-secondary">
+                      {new Date(m.joined_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
