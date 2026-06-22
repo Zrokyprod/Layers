@@ -167,6 +167,24 @@ function GoldenEvidenceList({ items, empty }: { items: Record<string, unknown>[]
   );
 }
 
+function decisionStepClass(tone: "ready" | "warn" | "danger" | "neutral"): string {
+  return `ci-decision-step is-${tone}`;
+}
+
+function statusTone(status: string): "ready" | "warn" | "danger" | "neutral" {
+  if (status === "pass") return "ready";
+  if (status === "fail" || status === "error") return "danger";
+  if (status === "not_verified" || ACTIVE_STATUSES.has(status)) return "warn";
+  return "neutral";
+}
+
+function mergeDecisionLabel(status: string): string {
+  if (status === "pass") return "Can merge";
+  if (status === "not_verified" || ACTIVE_STATUSES.has(status)) return "Hold";
+  if (status === "fail" || status === "error") return "Block";
+  return "Review";
+}
+
 export default function CiGateDetailPage() {
   const params = useParams<{ runId: string }>();
   const router = useRouter();
@@ -224,6 +242,10 @@ export default function CiGateDetailPage() {
   const warnGoldens = recordArray(detail, "warn_goldens");
   const notVerifiedReasons = stringArray(detail, "not_verified_reasons");
   const override = detail?.override && isRecord(detail.override) ? detail.override : null;
+  const replayProof = run ? replayProofLabel(run, detail) : "No trusted replay";
+  const contractEvidenceCount = failedGoldens.length + warnGoldens.length;
+  const proofGapCount = notVerifiedReasons.length;
+  const mergeDecision = mergeDecisionLabel(status);
 
   useEffect(() => {
     if (!autoRefresh || !isActive) return;
@@ -334,6 +356,29 @@ export default function CiGateDetailPage() {
 
       {actionError ? <div className="ci-context-warning ci-context-error" role="alert"><AlertTriangle aria-hidden="true" /> <span>{actionError}</span></div> : null}
       {actionMessage ? <div className="ci-context-warning" role="status"><CheckCircle2 aria-hidden="true" /> <span>{actionMessage}</span></div> : null}
+
+      <section className="ci-decision-strip" aria-label="CI gate decision proof">
+        <article className={decisionStepClass(statusTone(status))}>
+          <span>Verdict</span>
+          <strong>{statusLabel(status)}</strong>
+          <small>{verdictSubtitle(status)}</small>
+        </article>
+        <article className={decisionStepClass(replayProof === "No trusted replay" ? "warn" : "ready")}>
+          <span>Replay proof</span>
+          <strong>{replayProof}</strong>
+          <small>{replayProof === "No trusted replay" ? "Cannot prove the run safe." : "Trusted replay evidence exists."}</small>
+        </article>
+        <article className={decisionStepClass(contractEvidenceCount > 0 ? "danger" : proofGapCount > 0 ? "warn" : "ready")}>
+          <span>Contract evidence</span>
+          <strong>{contractEvidenceCount} Contract item{contractEvidenceCount === 1 ? "" : "s"}</strong>
+          <small>{proofGapCount > 0 ? `${proofGapCount} proof gap${proofGapCount === 1 ? "" : "s"} require review.` : "No proof gaps reported."}</small>
+        </article>
+        <article className={decisionStepClass(mergeDecision === "Can merge" ? "ready" : mergeDecision === "Block" ? "danger" : "warn")}>
+          <span>Merge decision</span>
+          <strong>{mergeDecision}</strong>
+          <small>{mergeDecision === "Can merge" ? "No blocking CI action in this run." : "Do not merge until evidence is resolved."}</small>
+        </article>
+      </section>
 
       <section className="ci-meta-grid" aria-label="CI gate run metadata">
         <MetadataCard label="Regression rate" value={status === "not_verified" ? "-" : formatRate(regressionRate(run, detail))} />

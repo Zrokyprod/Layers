@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
             Enter the email connected to your workspace.
           </AuthEmailNotice>
         )}
-        <form onSubmit={onSubmit} className="auth-form">
+        <form method="post" onSubmit={onSubmit} className="auth-form">
           <AuthInput
             label="Email address"
             type="email"

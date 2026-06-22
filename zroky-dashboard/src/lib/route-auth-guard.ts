@@ -11,6 +11,7 @@ const PROTECTED_PREFIXES = [
   "/ci-gates",
   "/contracts",
   "/cost",
+  "/evidence",
   "/goldens",
   "/home",
   "/integrations",

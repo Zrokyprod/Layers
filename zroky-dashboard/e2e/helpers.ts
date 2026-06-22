@@ -19,6 +19,10 @@ export type E2ESeed = {
   replay_run_id: string;
   trace_id: string;
   user_id: string;
+  runtime_policy_decision_id?: string;
+  outcome_mismatch_id?: string;
+  outcome_matched_id?: string;
+  outcome_not_verified_id?: string;
   provider_key_id?: string;
 };
 

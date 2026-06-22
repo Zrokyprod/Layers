@@ -20,10 +20,12 @@ import {
   setRuntimePolicyKillSwitch,
   updatePilotPolicy,
   type PilotPolicyPayload,
+  type RuntimePolicyDecisionResponse,
 } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
 const DASH = "-";
+const ACTIVE_GUARDRAIL_COUNT = 3;
 
 function listToText(values: string[]): string {
   return values.join(", ");
@@ -38,6 +40,46 @@ function textToList(value: string): string[] {
 
 function statusTone(enabled: boolean): "tone-success" | "tone-warning" {
   return enabled ? "tone-success" : "tone-warning";
+}
+
+function policyStepClass(tone: "ready" | "warn" | "danger" | "neutral"): string {
+  return `policy-proof-step is-${tone}`;
+}
+
+function formatUsd(value: number | null | undefined): string {
+  if (value == null) return DASH;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: value >= 100 ? 0 : 2,
+  }).format(value);
+}
+
+function toolsLabel(values: string[] | undefined, emptyLabel: string): string {
+  if (!values || values.length === 0) return emptyLabel;
+  return `${values.length} ${values.length === 1 ? "tool" : "tools"}`;
+}
+
+function decisionStatusLabel(status: string): string {
+  return status.replaceAll("_", " ");
+}
+
+function decisionTone(item: RuntimePolicyDecisionResponse): "is-ready" | "is-warn" | "is-danger" {
+  if (item.status === "allowed" || item.status === "approved") return "is-ready";
+  if (item.status === "blocked" || item.status === "rejected") return "is-danger";
+  return "is-warn";
+}
+
+function decisionTitle(item: RuntimePolicyDecisionResponse): string {
+  return item.action_type || item.tool_name || item.role || "Runtime action";
+}
+
+function decisionSubtitle(item: RuntimePolicyDecisionResponse): string {
+  return [item.agent_name, item.tool_name, item.call_id || item.trace_id].filter(Boolean).join(" - ") || "Runtime policy decision";
+}
+
+function decisionReason(item: RuntimePolicyDecisionResponse): string {
+  return item.reasons[0] || (item.requires_approval ? "Human approval required." : "Policy decision captured.");
 }
 
 function policyReadiness(policy: PilotPolicyPayload | null): {
@@ -166,6 +208,19 @@ export default function PoliciesPage() {
   const approvals = approvalsQuery.data?.items ?? [];
   const pendingApprovals = approvals.filter((item) => item.status === "pending_approval").length;
   const blockedActions = approvals.filter((item) => item.status === "blocked" || item.status === "rejected").length;
+  const approvedOrAllowedActions = approvals.filter((item) => item.status === "approved" || item.status === "allowed").length;
+  const sensitiveToolCount = policy?.runtime_sensitive_tools.length ?? 0;
+  const allowedToolCount = policy?.runtime_allowed_tools.length ?? 0;
+  const activeGuardrails = policy
+    ? [
+        policy.runtime_sensitive_actions_require_approval,
+        policy.runtime_block_pii_leak,
+        policy.runtime_block_prompt_injected_external_action,
+      ].filter(Boolean).length
+    : 0;
+  const runtimeEnabled = Boolean(policy?.runtime_enabled);
+  const killSwitchEnabled = Boolean(policy?.kill_switch);
+  const latestDecisions = approvals.slice(0, 5);
 
   function updatePolicyField<Key extends keyof PilotPolicyPayload>(key: Key, value: PilotPolicyPayload[Key]) {
     setPolicy((current) => (current ? { ...current, [key]: value } : current));
@@ -183,43 +238,51 @@ export default function PoliciesPage() {
 
   return (
     <div className="dashboard-page policies-page">
-      <section className="page-header">
+      <section className="page-header policy-command-hero">
         <div>
           <span className="eyebrow">Runtime gate</span>
           <h1>Policies</h1>
-          <p>Is this agent safe to scale? Control limits, approval-required actions, allowed tools, and kill switch state.</p>
+          <p>Mandate Control defines what autonomous agents may do, what must pause, what gets blocked, and where proof is recorded.</p>
         </div>
-        <div className="page-actions">
-          <button
-            className="btn btn-secondary"
-            type="button"
-            onClick={() => {
-              setMessage(null);
-              void Promise.all([policyQuery.refetch(), approvalsQuery.refetch()]);
-            }}
-            disabled={policyQuery.isFetching || approvalsQuery.isFetching}
-          >
-            <RefreshCw size={16} />
-            Refresh
-          </button>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            disabled={killSwitchMutation.isPending || policy?.kill_switch === true}
-            onClick={() => killSwitchMutation.mutate(true)}
-          >
-            <ShieldAlert size={16} />
-            Kill switch
-          </button>
-          <button
-            className="btn btn-primary"
-            type="button"
-            disabled={!policy || savePolicyMutation.isPending}
-            onClick={savePolicy}
-          >
-            <Save size={16} />
-            {savePolicyMutation.isPending ? "Saving..." : "Save policy"}
-          </button>
+        <div className="policy-hero-side">
+          <div className="policy-flow-rail" aria-label="Runtime mandate flow">
+            <span>Mandate</span>
+            <strong>Runtime gate</strong>
+            <span>Human hold</span>
+            <span>Evidence</span>
+          </div>
+          <div className="page-actions">
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => {
+                setMessage(null);
+                void Promise.all([policyQuery.refetch(), approvalsQuery.refetch()]);
+              }}
+              disabled={policyQuery.isFetching || approvalsQuery.isFetching}
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={killSwitchMutation.isPending || policy?.kill_switch === true}
+              onClick={() => killSwitchMutation.mutate(true)}
+            >
+              <ShieldAlert size={16} />
+              Kill switch
+            </button>
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={!policy || savePolicyMutation.isPending}
+              onClick={savePolicy}
+            >
+              <Save size={16} />
+              {savePolicyMutation.isPending ? "Saving..." : "Save policy"}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -252,6 +315,35 @@ export default function PoliciesPage() {
         </article>
       </section>
 
+      <section className="policy-proof-strip" aria-label="Mandate proof flow">
+        <article className={policyStepClass(killSwitchEnabled ? "danger" : runtimeEnabled ? "ready" : "warn")}>
+          <span>01</span>
+          <strong>Mandate boundary</strong>
+          <small>
+            {killSwitchEnabled
+              ? "Frozen by kill switch."
+              : runtimeEnabled
+                ? `${allowedToolCount > 0 ? `${allowedToolCount} allowed tools` : "Open non-sensitive surface"}, ${sensitiveToolCount} sensitive tools.`
+                : "Runtime gate is disabled."}
+          </small>
+        </article>
+        <article className={policyStepClass(activeGuardrails === ACTIVE_GUARDRAIL_COUNT ? "ready" : activeGuardrails > 0 ? "warn" : "danger")}>
+          <span>02</span>
+          <strong>Pre-action gate</strong>
+          <small>{activeGuardrails}/{ACTIVE_GUARDRAIL_COUNT} high-stakes guardrails enabled.</small>
+        </article>
+        <article className={policyStepClass(pendingApprovals > 0 ? "warn" : "ready")}>
+          <span>03</span>
+          <strong>Human hold</strong>
+          <small>{pendingApprovals} pending approval{pendingApprovals === 1 ? "" : "s"} before execution.</small>
+        </article>
+        <article className={policyStepClass(blockedActions > 0 ? "danger" : latestDecisions.length > 0 ? "ready" : "neutral")}>
+          <span>04</span>
+          <strong>Evidence trail</strong>
+          <small>{latestDecisions.length > 0 ? `${latestDecisions.length} recent decisions loaded.` : "No runtime decisions loaded yet."}</small>
+        </article>
+      </section>
+
       {policyQuery.isLoading ? <div className="empty">Loading runtime policy...</div> : null}
       {policyQuery.isError ? (
         <div className="empty error">
@@ -260,6 +352,62 @@ export default function PoliciesPage() {
       ) : null}
 
       {policy ? (
+        <>
+          <section className="policy-boundary-grid" aria-label="Current mandate boundary">
+            <article className="policy-boundary-card">
+              <span>Allowed surface</span>
+              <strong>{toolsLabel(policy.runtime_allowed_tools, "Open non-sensitive tools")}</strong>
+              <p>{policy.runtime_allowed_tools.length > 0 ? policy.runtime_allowed_tools.join(", ") : "Any non-sensitive tool may run inside the runtime limits."}</p>
+            </article>
+            <article className="policy-boundary-card">
+              <span>Hold conditions</span>
+              <strong>{toolsLabel(policy.runtime_sensitive_tools, "No sensitive tools listed")}</strong>
+              <p>
+                {policy.runtime_sensitive_actions_require_approval
+                  ? `Sensitive actions hold for ${policy.runtime_approval_ttl_minutes} minutes.`
+                  : "Sensitive actions do not currently force human approval."}
+              </p>
+            </article>
+            <article className="policy-boundary-card">
+              <span>Execution limits</span>
+              <strong>{formatUsd(policy.runtime_max_cost_usd)} per action</strong>
+              <p>{policy.runtime_max_tool_calls} tool calls, {policy.runtime_max_retries} retries, then the action must stop.</p>
+            </article>
+            <article className="policy-boundary-card">
+              <span>Latest decisions</span>
+              <strong>{approvedOrAllowedActions} allowed, {blockedActions} blocked</strong>
+              <p>{pendingApprovals} waiting for review in the runtime approval queue.</p>
+            </article>
+          </section>
+
+          <section className="policy-decision-panel" aria-label="Latest runtime decisions">
+            <header className="panel-header">
+              <div>
+                <h3>Latest runtime decisions</h3>
+                <p>Recent allow, hold, and block events generated when SDK or Gateway called the runtime gate.</p>
+              </div>
+              <Link href="/approvals" className="btn btn-soft btn-sm">Open approvals</Link>
+            </header>
+            {latestDecisions.length > 0 ? (
+              <div className="policy-decision-list">
+                {latestDecisions.map((item) => (
+                  <article key={item.id} className={`policy-decision-row ${decisionTone(item)}`}>
+                    <div>
+                      <strong>{decisionTitle(item)}</strong>
+                      <span>{decisionSubtitle(item)}</span>
+                    </div>
+                    <p>{decisionReason(item)}</p>
+                    <span className="policy-decision-status">{decisionStatusLabel(item.status)}</span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="policy-empty-state">
+                Runtime decisions will appear after an agent calls the policy gate.
+              </div>
+            )}
+          </section>
+
         <section className="settings-integration-grid">
           <article className="panel settings-control-panel">
             <header className="panel-header">
@@ -421,6 +569,7 @@ export default function PoliciesPage() {
             </div>
           </article>
         </section>
+        </>
       ) : null}
     </div>
   );

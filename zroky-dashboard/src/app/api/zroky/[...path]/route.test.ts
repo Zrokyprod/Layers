@@ -143,6 +143,24 @@ describe("/api/zroky proxy route", () => {
     expect((init.headers as Headers).get("x-provisioning-token")).toBeNull();
   });
 
+  it("does not inject server-side project API keys into customer proxy requests", async () => {
+    vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
+    vi.stubEnv("ZROKY_API_KEY", "server-project-key");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("http://localhost/api/zroky/v1/calls");
+    await GET(request, context(["v1", "calls"]));
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Headers).get("x-api-key")).toBeNull();
+  });
+
   it("forwards the selected project context to the backend", async () => {
     vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
     const fetchMock = vi.fn().mockResolvedValue(

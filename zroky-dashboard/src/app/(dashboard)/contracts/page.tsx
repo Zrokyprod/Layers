@@ -55,6 +55,22 @@ function proofLabel(contract: RegressionContractView, version: RegressionContrac
   return "Needs approval";
 }
 
+function hasPinnedEvidence(version: RegressionContractVersionView | null): boolean {
+  return Boolean(version?.fixture_set_id && version.baseline_release_id && version.evaluator_bundle_version);
+}
+
+function isApprovedContract(contract: RegressionContractView): boolean {
+  const version = activeVersion(contract);
+  return contract.status === "active" && Boolean(version?.approved_at);
+}
+
+function readinessTone(count: number, total: number): string {
+  if (total === 0) return "";
+  if (count === total) return "is-ready";
+  if (count > 0) return "is-warn";
+  return "";
+}
+
 function ContractsTable({ contracts }: { contracts: RegressionContractView[] }) {
   if (contracts.length === 0) {
     return (
@@ -68,7 +84,7 @@ function ContractsTable({ contracts }: { contracts: RegressionContractView[] }) 
 
   return (
     <div className="gm-table-wrap">
-      <table className="gm-table">
+      <table className="gm-table contract-table">
         <thead>
           <tr>
             <th>Contract</th>
@@ -129,7 +145,7 @@ function FixturesTable({ fixtures }: { fixtures: GoldenSetView[] }) {
 
   return (
     <div className="gm-table-wrap">
-      <table className="gm-table">
+      <table className="gm-table contract-fixtures-table">
         <thead>
           <tr>
             <th>Fixture set</th>
@@ -199,10 +215,15 @@ export default function ContractsPage() {
       .some((value) => String(value).toLowerCase().includes(normalizedSearch));
   });
   const activeCount = contracts.filter((contract) => contract.status === "active").length;
-  const draftCount = contracts.filter((contract) => contract.status === "draft").length;
+  const approvedCount = contracts.filter(isApprovedContract).length;
+  const pinnedCount = contracts.filter((contract) => hasPinnedEvidence(activeVersion(contract))).length;
+  const sourcedCount = contracts.filter((contract) => Boolean(contract.source_issue_id)).length;
+  const needsApprovalCount = contracts.filter((contract) => proofLabel(contract, activeVersion(contract)) !== "Approved").length;
+  const fixtureEvidenceCount = fixtures.filter((fixture) => fixture.trace_count > 0).length;
+  const gateCoverage = contracts.length > 0 ? `${activeCount}/${contracts.length}` : "0/0";
 
   return (
-    <div className="goldens-mvp">
+    <div className="goldens-mvp contracts-mvp">
       <section className="gm-hero">
         <div>
           <div className="gm-eyebrow">
@@ -212,27 +233,34 @@ export default function ContractsPage() {
           <h1>Contracts</h1>
           <p>Activated incident contracts and the fixture evidence used by repository replay and CI gates.</p>
         </div>
-        <div className="gm-hero-actions">
-          <button
-            type="button"
-            className="btn btn-soft"
-            onClick={() => {
-              void queryClient.invalidateQueries({ queryKey: ["regression-contracts"] });
-              void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
-            }}
-          >
-            <RefreshCw aria-hidden="true" />
-            Refresh
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={importMutation.isPending}
-            onClick={() => importMutation.mutate()}
-          >
-            <Upload aria-hidden="true" />
-            {importMutation.isPending ? "Importing..." : "Import fixtures"}
-          </button>
+        <div className="contract-hero-side">
+          <div className="contract-hero-rail" aria-label="Contract gate chain">
+            <span>Replay proof</span>
+            <strong>Immutable version</strong>
+            <span>CI/runtime gate</span>
+          </div>
+          <div className="gm-hero-actions">
+            <button
+              type="button"
+              className="btn btn-soft"
+              onClick={() => {
+                void queryClient.invalidateQueries({ queryKey: ["regression-contracts"] });
+                void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
+              }}
+            >
+              <RefreshCw aria-hidden="true" />
+              Refresh
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={importMutation.isPending}
+              onClick={() => importMutation.mutate()}
+            >
+              <Upload aria-hidden="true" />
+              {importMutation.isPending ? "Importing..." : "Import fixtures"}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -243,15 +271,45 @@ export default function ContractsPage() {
           <small>Blocking contract versions</small>
         </div>
         <div className="gm-kpi-card">
-          <span>Draft</span>
-          <strong>{draftCount}</strong>
-          <small>Need pinned proof and approval</small>
+          <span>Needs approval</span>
+          <strong>{needsApprovalCount}</strong>
+          <small>Missing pins or sign-off</small>
         </div>
         <div className="gm-kpi-card">
           <span>Fixtures</span>
           <strong>{fixtures.length}</strong>
           <small>Fixture evidence sets</small>
         </div>
+        <div className="gm-kpi-card">
+          <span>Gate coverage</span>
+          <strong>{gateCoverage}</strong>
+          <small>Contracts blocking CI/runtime</small>
+        </div>
+      </section>
+
+      <section className="contract-proof-strip" aria-label="Contract activation proof flow">
+        <article className={readinessTone(sourcedCount, contracts.length)}>
+          <span>01</span>
+          <strong>Source incident</strong>
+          <small>{sourcedCount}/{contracts.length || 0} contracts tied to a real issue</small>
+        </article>
+        <article className={readinessTone(fixtureEvidenceCount, fixtures.length)}>
+          <span>02</span>
+          <strong>Fixture evidence</strong>
+          <small>
+            {pinnedCount}/{contracts.length || 0} versions pinned; {fixtureEvidenceCount}/{fixtures.length || 0} fixture sets contain traces
+          </small>
+        </article>
+        <article className={readinessTone(approvedCount, contracts.length)}>
+          <span>03</span>
+          <strong>Approved version</strong>
+          <small>{approvedCount}/{contracts.length || 0} immutable versions approved</small>
+        </article>
+        <article className={readinessTone(activeCount, contracts.length)}>
+          <span>04</span>
+          <strong>CI gate</strong>
+          <small>{activeCount}/{contracts.length || 0} contracts actively blocking regressions</small>
+        </article>
       </section>
 
       {contractsQuery.error || fixturesQuery.error || importMutation.error ? (
@@ -274,10 +332,22 @@ export default function ContractsPage() {
         <header className="gm-section-header">
           <div className="gm-table-tools">
             <div className="gm-row-actions" role="tablist" aria-label="Contracts workspace">
-              <button type="button" className={`btn btn-sm ${tab === "contracts" ? "btn-primary" : "btn-soft"}`} onClick={() => setTab("contracts")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "contracts"}
+                className={`btn btn-sm ${tab === "contracts" ? "btn-primary" : "btn-soft"}`}
+                onClick={() => setTab("contracts")}
+              >
                 Contracts
               </button>
-              <button type="button" className={`btn btn-sm ${tab === "fixtures" ? "btn-primary" : "btn-soft"}`} onClick={() => setTab("fixtures")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "fixtures"}
+                className={`btn btn-sm ${tab === "fixtures" ? "btn-primary" : "btn-soft"}`}
+                onClick={() => setTab("fixtures")}
+              >
                 Fixtures
               </button>
             </div>

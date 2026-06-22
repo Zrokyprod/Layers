@@ -2062,6 +2062,36 @@ export interface OutcomeReconciliationSummaryResponse {
   not_verified: number;
 }
 
+export interface SavedLedgerRefundReconciliationPayload {
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  refund_id?: string | null;
+  system_ref?: string | null;
+  claimed: Record<string, unknown>;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface SavedCustomerRecordReconciliationPayload {
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  customer_id?: string | null;
+  system_ref?: string | null;
+  claimed: Record<string, unknown>;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
 export function getOutcomeSummary(
   days = 30,
   signal?: AbortSignal,
@@ -2116,6 +2146,26 @@ export function getOutcomeReconciliation(
     `/v1/outcomes/reconciliation/${encodeURIComponent(checkId)}`,
     { signal },
   );
+}
+
+export function reconcileSavedLedgerRefund(
+  payload: SavedLedgerRefundReconciliationPayload,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/ledger-refund/saved", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 45_000,
+  });
+}
+
+export function reconcileSavedCustomerRecord(
+  payload: SavedCustomerRecordReconciliationPayload,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/customer-record/saved", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 45_000,
+  });
 }
 
 export function ingestOutcome(

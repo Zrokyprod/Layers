@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
   getRuntimePolicyEvidencePack: vi.fn(),
   getSlackInstallStatus: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
+  reconcileSavedCustomerRecord: vi.fn(),
+  reconcileSavedLedgerRefund: vi.fn(),
   saveCustomerRecordConnectorConfig: vi.fn(),
   saveLedgerRefundConnectorConfig: vi.fn(),
   testCustomerRecordConnector: vi.fn(),
@@ -284,6 +286,48 @@ describe("IntegrationsSettingsPage", () => {
         checked_at: "2026-06-20T09:15:00Z",
         created_at: "2026-06-20T09:15:00Z",
       },
+    });
+    api.reconcileSavedLedgerRefund.mockResolvedValue({
+      id: "check_ledger_saved",
+      project_id: "proj_1",
+      call_id: null,
+      trace_id: null,
+      runtime_policy_decision_id: null,
+      action_type: "refund",
+      connector_type: "ledger_refund_api",
+      system_ref: "ledger:RF-1001",
+      verdict: "matched",
+      reason: "all_compared_fields_matched",
+      amount_usd: 42.5,
+      currency: "USD",
+      claimed: { refund_id: "RF-1001", amount_usd: 42.5, currency: "USD", status: "posted" },
+      actual: { refund_id: "RF-1001", amount_usd: 42.5, currency: "USD", status: "posted" },
+      comparison: { compared_fields: [], mismatches: [] },
+      idempotency_key: null,
+      metadata: { connector_kind: "ledger_refund_api", source: "dashboard_saved_connector_proof" },
+      checked_at: "2026-06-20T09:20:00Z",
+      created_at: "2026-06-20T09:20:00Z",
+    });
+    api.reconcileSavedCustomerRecord.mockResolvedValue({
+      id: "check_customer_saved",
+      project_id: "proj_1",
+      call_id: null,
+      trace_id: null,
+      runtime_policy_decision_id: null,
+      action_type: "customer_record_update",
+      connector_type: "customer_record_api",
+      system_ref: "crm:CUS-1001",
+      verdict: "matched",
+      reason: "all_compared_fields_matched",
+      amount_usd: null,
+      currency: null,
+      claimed: { customer_id: "CUS-1001", email: "owner@example.com", status: "active", account_id: "acct_1001" },
+      actual: { customer_id: "CUS-1001", email: "owner@example.com", status: "active", account_id: "acct_1001" },
+      comparison: { compared_fields: [], mismatches: [] },
+      idempotency_key: null,
+      metadata: { connector_kind: "customer_record_api", source: "dashboard_saved_connector_proof" },
+      checked_at: "2026-06-20T09:25:00Z",
+      created_at: "2026-06-20T09:25:00Z",
     });
     api.getRuntimePolicyEvidencePack.mockResolvedValue({
       schema_version: "runtime_policy_evidence.v1",
@@ -811,6 +855,42 @@ describe("IntegrationsSettingsPage", () => {
     expect(screen.getAllByText("ledger:RF-1001").length).toBeGreaterThan(0);
   });
 
+  it("runs ledger saved proof without sending connector secrets", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Ledger refund connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+
+    fireEvent.change(within(connectorCard as HTMLElement).getByLabelText("Refund ID"), {
+      target: { value: "RF-1001" },
+    });
+    const proofButton = within(connectorCard as HTMLElement).getByRole("button", { name: "Run saved proof" });
+
+    await waitFor(() => expect((proofButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(proofButton);
+
+    await waitFor(() =>
+      expect(api.reconcileSavedLedgerRefund).toHaveBeenCalledWith({
+        refund_id: "RF-1001",
+        claimed: {
+          refund_id: "RF-1001",
+          amount_usd: 42.5,
+          currency: "USD",
+          status: "posted",
+        },
+        amount_usd: 42.5,
+        currency: "USD",
+        match_fields: ["refund_id", "amount_usd", "currency", "status"],
+        metadata: { source: "dashboard_saved_connector_proof" },
+      }),
+    );
+    expect(api.testLedgerRefundConnector).not.toHaveBeenCalled();
+    expect(JSON.stringify(api.reconcileSavedLedgerRefund.mock.calls[0]?.[0])).not.toMatch(/bearer|token/i);
+    expect(await screen.findByText("Ledger saved proof recorded matched.")).toBeInTheDocument();
+    expect(screen.getAllByText("ledger:RF-1001").length).toBeGreaterThan(0);
+  });
+
   it("surfaces customer record connector without leaking secrets", async () => {
     api.listOutcomeReconciliations.mockResolvedValue({
       total_in_page: 1,
@@ -976,6 +1056,40 @@ describe("IntegrationsSettingsPage", () => {
       }),
     );
     expect(await screen.findByText("Customer record test recorded matched.")).toBeInTheDocument();
+    expect(screen.getAllByText("crm:CUS-1001").length).toBeGreaterThan(0);
+  });
+
+  it("runs customer saved proof without sending connector secrets", async () => {
+    render(<IntegrationsSettingsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Customer record connector" });
+    const connectorCard = heading.closest("article");
+    expect(connectorCard).not.toBeNull();
+
+    fireEvent.change(within(connectorCard as HTMLElement).getByLabelText("Customer ID"), {
+      target: { value: "CUS-1001" },
+    });
+    const proofButton = within(connectorCard as HTMLElement).getByRole("button", { name: "Run saved CRM proof" });
+
+    await waitFor(() => expect((proofButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(proofButton);
+
+    await waitFor(() =>
+      expect(api.reconcileSavedCustomerRecord).toHaveBeenCalledWith({
+        customer_id: "CUS-1001",
+        claimed: {
+          customer_id: "CUS-1001",
+          email: "owner@example.com",
+          status: "active",
+          account_id: "acct_1001",
+        },
+        match_fields: ["customer_id", "email", "status", "account_id"],
+        metadata: { source: "dashboard_saved_connector_proof" },
+      }),
+    );
+    expect(api.testCustomerRecordConnector).not.toHaveBeenCalled();
+    expect(JSON.stringify(api.reconcileSavedCustomerRecord.mock.calls[0]?.[0])).not.toMatch(/bearer|token/i);
+    expect(await screen.findByText("Customer saved proof recorded matched.")).toBeInTheDocument();
     expect(screen.getAllByText("crm:CUS-1001").length).toBeGreaterThan(0);
   });
 });

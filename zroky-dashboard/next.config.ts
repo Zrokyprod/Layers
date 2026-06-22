@@ -74,11 +74,6 @@ const nextConfig: NextConfig = {
         destination: "/agents",
         permanent: true,
       },
-      {
-        source: "/outcomes",
-        destination: "/cost",
-        permanent: true,
-      },
     ];
   },
 };

@@ -175,9 +175,20 @@ describe("CI Gates list MVP", () => {
     expect(await screen.findByRole("heading", { name: "CI Gates" })).toBeInTheDocument();
     expect(screen.getByText("Replay-backed PR safety checks for protected agent flows.")).toBeInTheDocument();
     expect(screen.getByText("Review failed, not verified, and blocking regression runs before merge.")).toBeInTheDocument();
+    const gateChain = screen.getByLabelText("CI gate chain");
+    expect(within(gateChain).getByText("PR event")).toBeInTheDocument();
+    expect(within(gateChain).getByText("Replay workers")).toBeInTheDocument();
+    expect(within(gateChain).getByText("Merge gate")).toBeInTheDocument();
     for (const label of ["Failed / blocked", "Not verified", "Passed", "Protected flows"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
+    const proofFlow = screen.getByLabelText("CI release proof flow");
+    for (const label of ["Contract gates", "Trusted replay", "Blocking verdicts", "Review path"]) {
+      expect(within(proofFlow).getByText(label)).toBeInTheDocument();
+    }
+    expect(within(proofFlow).getByText("4/5 runs executed trusted replay.")).toBeInTheDocument();
+    expect(within(proofFlow).getByText("2 failed/error and 1 not verified.")).toBeInTheDocument();
+    expect(within(proofFlow).getByText("3 runs require review before merge.")).toBeInTheDocument();
 
     const table = await screen.findByRole("table");
     for (const heading of ["Run", "Status", "Regression", "Failed flows", "Replay proof", "Git SHA", "Summary URL", "Completed", "Action"]) {

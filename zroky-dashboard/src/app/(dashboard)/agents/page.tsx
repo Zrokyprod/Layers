@@ -10,6 +10,7 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
+  FileJson,
   Gauge,
   RefreshCw,
   RotateCcw,
@@ -22,12 +23,17 @@ import {
   buildCostExposureRows,
   buildSignalClusters,
   buildTimelineEntries,
-  passingGuardrailRate,
-  replayReadyCount,
   verifiedCostCoverage,
 } from "@/lib/agents-console";
-import { getAnalyticsSummary, getCaptureHealth, listCalls, listIssues } from "@/lib/api";
-import type { AgentScoreView } from "@/lib/api";
+import {
+  getAnalyticsSummary,
+  getCaptureHealth,
+  listCalls,
+  listIssues,
+  listOutcomeReconciliations,
+  listRuntimePolicyApprovals,
+} from "@/lib/api";
+import type { AgentScoreView, OutcomeReconciliationView, RuntimePolicyDecisionResponse } from "@/lib/api";
 import { formatCount, formatDateTime, formatPercent, formatUsd } from "@/lib/format";
 import { replayLabel, severityRank } from "@/lib/issue-format";
 import { useReliabilityLeaderboard } from "@/lib/hooks";
@@ -57,6 +63,8 @@ type AgentLaunchpadRow = {
   callCount: number;
   successfulCalls: number;
   p95LatencyMs: number | null;
+  latestDecision: RuntimePolicyDecisionResponse | null;
+  latestOutcome: OutcomeReconciliationView | null;
 };
 
 function agentNameFromCall(call: CallListItem): string {
@@ -76,6 +84,110 @@ function latestDate(a: string | null, b: string | null): string | null {
   if (!a) return b;
   if (!b) return a;
   return new Date(a).getTime() >= new Date(b).getTime() ? a : b;
+}
+
+function timestamp(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function evidencePackHref(decisionId: string): string {
+  return `/evidence?decision_id=${encodeURIComponent(decisionId)}`;
+}
+
+function latestByDate<T>(
+  current: T | null,
+  next: T,
+  getDate: (item: T) => string | null | undefined,
+): T {
+  if (!current) return next;
+  return timestamp(getDate(next)) >= timestamp(getDate(current)) ? next : current;
+}
+
+function recordText(source: Record<string, unknown> | null | undefined, key: string): string | null {
+  const value = source?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function agentNameFromDecision(decision: RuntimePolicyDecisionResponse): string | null {
+  return (
+    decision.agent_name?.trim() ||
+    recordText(decision.trace_context, "agent_name") ||
+    recordText(decision.intended_action, "agent_name") ||
+    recordText(decision.request, "agent_name")
+  );
+}
+
+function outcomeAgentName(
+  outcome: OutcomeReconciliationView,
+  decisionsById: Map<string, RuntimePolicyDecisionResponse>,
+  decisionsByCall: Map<string, RuntimePolicyDecisionResponse>,
+  decisionsByTrace: Map<string, RuntimePolicyDecisionResponse>,
+  callsById: Map<string, CallListItem>,
+): string | null {
+  const decision =
+    (outcome.runtime_policy_decision_id ? decisionsById.get(outcome.runtime_policy_decision_id) : null) ??
+    (outcome.call_id ? decisionsByCall.get(outcome.call_id) : null) ??
+    (outcome.trace_id ? decisionsByTrace.get(outcome.trace_id) : null);
+  const decisionAgent = decision ? agentNameFromDecision(decision) : null;
+  if (decisionAgent) return decisionAgent;
+  const call = outcome.call_id ? callsById.get(outcome.call_id) : null;
+  return call ? agentNameFromCall(call) : null;
+}
+
+function decisionDisplay(decision: RuntimePolicyDecisionResponse | null): string {
+  if (!decision) return "not_verified";
+  if (decision.decision === "block" || decision.status === "blocked") return "BLOCK";
+  if (decision.decision === "allow" || decision.status === "allowed") return "ALLOW";
+  if (decision.status === "approved") return "APPROVED";
+  if (decision.status === "rejected") return "REJECTED";
+  if (decision.status === "expired") return "EXPIRED";
+  return "HOLD";
+}
+
+function decisionTone(decision: RuntimePolicyDecisionResponse | null): string {
+  if (!decision) return "badge-gray";
+  if (decision.decision === "block" || decision.status === "blocked" || decision.status === "rejected") return "badge-red";
+  if (decision.decision === "requires_approval" || decision.status === "pending_approval" || decision.status === "expired") return "badge-yellow";
+  return "badge-green";
+}
+
+function outcomeDisplay(outcome: OutcomeReconciliationView | null): string {
+  return outcome?.verdict ?? "not_verified";
+}
+
+function outcomeTone(outcome: OutcomeReconciliationView | null): string {
+  if (!outcome || outcome.verdict === "not_verified") return "badge-yellow";
+  if (outcome.verdict === "mismatched") return "badge-red";
+  return "badge-green";
+}
+
+function outcomeRiskRank(outcome: OutcomeReconciliationView): number {
+  if (outcome.verdict === "mismatched") return 3;
+  if (outcome.verdict === "not_verified") return 2;
+  return 1;
+}
+
+function higherPriorityOutcome(
+  current: OutcomeReconciliationView | null,
+  next: OutcomeReconciliationView,
+): OutcomeReconciliationView {
+  if (!current) return next;
+  const riskDelta = outcomeRiskRank(next) - outcomeRiskRank(current);
+  if (riskDelta > 0) return next;
+  if (riskDelta < 0) return current;
+  return latestByDate(current, next, (item) => item.checked_at ?? item.created_at);
+}
+
+function decisionDetail(decision: RuntimePolicyDecisionResponse | null): string {
+  if (!decision) return "No runtime decision";
+  return [decision.action_type, decision.tool_name, decision.status].filter(Boolean).join(" - ");
+}
+
+function outcomeDetail(outcome: OutcomeReconciliationView | null): string {
+  if (!outcome) return "No system-of-record check";
+  return [outcome.connector_type, outcome.system_ref].filter(Boolean).join(" - ") || outcome.reason || "Outcome checked";
 }
 
 function issuePriority(a: IssueItem, b: IssueItem): number {
@@ -106,7 +218,18 @@ function recommendedActionFor(row: {
   healthScore: number | null;
   successRate: number | null;
   replayCoverage: string;
+  latestDecision?: RuntimePolicyDecisionResponse | null;
+  latestOutcome?: OutcomeReconciliationView | null;
 }): string {
+  if (row.latestOutcome?.verdict === "mismatched") {
+    return "Hold this agent path and review the system-of-record mismatch.";
+  }
+  if (!row.latestOutcome && row.latestDecision) {
+    return "Run outcome reconciliation before marking this action verified.";
+  }
+  if (row.latestDecision?.status === "pending_approval") {
+    return "Review the held runtime decision.";
+  }
   if (row.latestIssue?.recommended_next_action) {
     return row.latestIssue.recommended_next_action;
   }
@@ -154,16 +277,25 @@ function buildAgentRows(
   scores: AgentScoreView[],
   calls: CallListItem[],
   issues: IssueItem[],
+  decisions: RuntimePolicyDecisionResponse[] = [],
+  outcomes: OutcomeReconciliationView[] = [],
 ): AgentLaunchpadRow[] {
   const statsByAgent = new Map<string, AgentStats>();
   const callsByAgent = new Map<string, CallListItem[]>();
+  const callsById = new Map<string, CallListItem>();
   const scoreByAgent = new Map(scores.map((score) => [score.agent_name, score]));
   const issuesByAgent = new Map<string, IssueItem[]>();
+  const decisionsByAgent = new Map<string, RuntimePolicyDecisionResponse>();
+  const decisionsById = new Map<string, RuntimePolicyDecisionResponse>();
+  const decisionsByCall = new Map<string, RuntimePolicyDecisionResponse>();
+  const decisionsByTrace = new Map<string, RuntimePolicyDecisionResponse>();
+  const outcomesByAgent = new Map<string, OutcomeReconciliationView>();
   const names = new Set<string>();
 
   for (const call of calls) {
     const agentName = agentNameFromCall(call);
     names.add(agentName);
+    callsById.set(call.call_id, call);
     const existing = statsByAgent.get(agentName) ?? {
       callCount: 0,
       successfulCalls: 0,
@@ -203,12 +335,50 @@ function buildAgentRows(
     issuesByAgent.set(agentName, existing);
   }
 
+  for (const decision of decisions) {
+    decisionsById.set(decision.id, decision);
+    if (decision.call_id) {
+      decisionsByCall.set(decision.call_id, latestByDate(
+        decisionsByCall.get(decision.call_id) ?? null,
+        decision,
+        (item) => item.created_at,
+      ));
+    }
+    if (decision.trace_id) {
+      decisionsByTrace.set(decision.trace_id, latestByDate(
+        decisionsByTrace.get(decision.trace_id) ?? null,
+        decision,
+        (item) => item.created_at,
+      ));
+    }
+    const agentName = agentNameFromDecision(decision);
+    if (!agentName) continue;
+    names.add(agentName);
+    decisionsByAgent.set(agentName, latestByDate(
+      decisionsByAgent.get(agentName) ?? null,
+      decision,
+      (item) => item.created_at,
+    ));
+  }
+
+  for (const outcome of outcomes) {
+    const agentName = outcomeAgentName(outcome, decisionsById, decisionsByCall, decisionsByTrace, callsById);
+    if (!agentName) continue;
+    names.add(agentName);
+    outcomesByAgent.set(agentName, higherPriorityOutcome(
+      outcomesByAgent.get(agentName) ?? null,
+      outcome,
+    ));
+  }
+
   return Array.from(names)
     .map((agentName) => {
       const score = scoreByAgent.get(agentName) ?? null;
       const stats = statsByAgent.get(agentName) ?? null;
       const sortedIssues = [...(issuesByAgent.get(agentName) ?? [])].sort(issuePriority);
       const latestIssue = sortedIssues[0] ?? null;
+      const latestDecision = decisionsByAgent.get(agentName) ?? null;
+      const latestOutcome = outcomesByAgent.get(agentName) ?? null;
       const successRate =
         stats && stats.callCount > 0
           ? (stats.successfulCalls / stats.callCount) * 100
@@ -224,10 +394,14 @@ function buildAgentRows(
         agentName,
         healthScore: score?.health_score ?? null,
         latestIssue,
+        latestDecision,
+        latestOutcome,
         successRate,
         costPerSuccessfulTask,
         replayCoverage,
-        lastEventAt: stats?.lastEventAt ?? latestIssue?.last_seen_at ?? null,
+        lastEventAt: [stats?.lastEventAt, latestIssue?.last_seen_at, latestDecision?.created_at, latestOutcome?.checked_at]
+          .filter((value): value is string => Boolean(value))
+          .sort((a, b) => timestamp(b) - timestamp(a))[0] ?? null,
         recommendedAction: "",
         callCount: stats?.callCount ?? score?.call_count ?? 0,
         successfulCalls: stats?.successfulCalls ?? 0,
@@ -263,7 +437,7 @@ function AgentsSetupState({
   const connected = captureHealth?.status === "connected";
   const checklistItems = [
     { label: "Capture stream connected", done: connected },
-    { label: "At least one call ingested", done: callsToday > 0 || (captureHealth?.calls_24h ?? 0) > 0 },
+    { label: "At least one agent action ingested", done: callsToday > 0 || (captureHealth?.calls_24h ?? 0) > 0 },
     { label: "Setup path opened", done: setupOpened },
   ];
   const completed = checklistItems.filter((item) => item.done).length;
@@ -273,11 +447,11 @@ function AgentsSetupState({
       <article className="agents-empty-card">
         <div className="agents-eyebrow">
           <Zap aria-hidden="true" />
-          Setup required
+          Protection setup
         </div>
-        <h2>Connect one real agent call to activate the control plane.</h2>
+        <h2>Connect one real agent action to start proof.</h2>
         <p>
-          Once capture starts, this page ranks agents by health, open issue priority, replay proof, latency, and cost per successful task.
+          Once capture starts, Zroky ranks agents by mandate health, open proof gaps, outcome evidence, replay coverage, latency, and risk exposure.
         </p>
         <button type="button" className="btn btn-soft" onClick={onRefresh}>
           <RefreshCw aria-hidden="true" />
@@ -301,9 +475,14 @@ function AgentsLoadingState() {
   return (
     <div className="agents-screen">
       <section className="agents-hero-panel agents-skeleton-card">
-        <span />
-        <strong />
-        <p />
+        <div className="agents-hero-copy">
+          <div className="agents-eyebrow">
+            <Activity aria-hidden="true" />
+            Protected agents
+          </div>
+          <h1>Agent accountability ledger</h1>
+          <p>Loading mandate health, runtime decisions, outcome checks, and replay proof for this workspace.</p>
+        </div>
       </section>
       <section className="agents-kpi-grid">
         {[0, 1, 2, 3].map((item) => (
@@ -339,21 +518,20 @@ function AgentHealthBadge({ score }: { score: number | null }) {
 
 function FailureRateChart({ scores }: { scores: AgentScoreView[] }) {
   const source = scores.length > 0 ? [...scores].sort((a, b) => b.fail_rate - a.fail_rate).slice(0, 7) : [];
-  const fallback = [
-    { agent: "Refund", current: 6.1, previous: 4.4 },
-    { agent: "Billing", current: 4.8, previous: 3.6 },
-    { agent: "Order", current: 4.2, previous: 4.9 },
-    { agent: "Return", current: 3.6, previous: 3.2 },
-    { agent: "Support", current: 2.9, previous: 2.6 },
-  ];
-  const points =
-    source.length >= 3
-      ? source.map((score) => ({
-          agent: score.agent_name,
-          current: score.fail_rate * 100,
-          previous: (score.prev_week_fail_rate ?? score.fail_rate) * 100,
-        }))
-      : fallback;
+  const points = source.map((score) => ({
+    agent: score.agent_name,
+    current: score.fail_rate * 100,
+    previous: (score.prev_week_fail_rate ?? score.fail_rate) * 100,
+  }));
+
+  if (points.length === 0) {
+    return (
+      <div className="agents-trend-chart" aria-label="Behavior drift by agent">
+        <p className="agents-muted">No scored agent drift yet.</p>
+      </div>
+    );
+  }
+
   const width = 640;
   const height = 240;
   const step = width / Math.max(points.length - 1, 1);
@@ -373,11 +551,11 @@ function FailureRateChart({ scores }: { scores: AgentScoreView[] }) {
   const currentArea = `${currentLine} L${width} ${height} L0 ${height} Z`;
 
   return (
-    <div className="agents-trend-chart" aria-label="Failure rate by agent">
+    <div className="agents-trend-chart" aria-label="Behavior drift by agent">
       <div className="agents-chart-legend">
         <span>
           <i className="agents-legend-swatch is-current" aria-hidden="true" />
-          Current
+          Current risk
         </span>
         <span>
           <i className="agents-legend-swatch is-previous" aria-hidden="true" />
@@ -433,7 +611,7 @@ function CostOfFailureChart({ rows }: { rows: AgentLaunchpadRow[] }) {
           );
         })
       ) : (
-        <p className="agents-muted">No open issue blast radius yet.</p>
+        <p className="agents-muted">No open outcome risk yet.</p>
       )}
     </div>
   );
@@ -448,12 +626,12 @@ function SignalClustersTable({ issues }: { issues: IssueItem[] }) {
         <table className="agents-clusters-table">
           <thead>
             <tr>
-              <th>Cluster</th>
-              <th>Occurrences</th>
+              <th>Proof gap</th>
+              <th>Events</th>
               <th>Affected agents</th>
               <th>First seen</th>
-              <th>Impact</th>
-              <th>Replay</th>
+              <th>Risk</th>
+              <th>Replay proof</th>
             </tr>
           </thead>
           <tbody>
@@ -478,7 +656,7 @@ function SignalClustersTable({ issues }: { issues: IssueItem[] }) {
           </tbody>
         </table>
       ) : (
-        <p className="agents-muted">No issue clusters detected yet.</p>
+        <p className="agents-muted">No proof gap clusters detected yet.</p>
       )}
     </div>
   );
@@ -511,7 +689,7 @@ function TraceTimeline({ focusRow, calls }: { focusRow: AgentLaunchpadRow | null
           </Link>
         ))
       ) : (
-        <p className="agents-muted">No captured traces yet.</p>
+        <p className="agents-muted">No evidence trail captured yet.</p>
       )}
     </div>
   );
@@ -532,6 +710,35 @@ function AgentRow({ row }: { row: AgentLaunchpadRow }) {
         </div>
       </td>
       <td>
+        <div className="agents-proof-cell">
+          <span className={`alert-cat-badge ${decisionTone(row.latestDecision)}`}>
+            {decisionDisplay(row.latestDecision)}
+          </span>
+          <span className="agents-cell-note">{decisionDetail(row.latestDecision)}</span>
+        </div>
+      </td>
+      <td>
+        <div className="agents-proof-cell">
+          <span className={`alert-cat-badge ${outcomeTone(row.latestOutcome)}`}>
+            {outcomeDisplay(row.latestOutcome)}
+          </span>
+          <span className="agents-cell-note">{outcomeDetail(row.latestOutcome)}</span>
+        </div>
+      </td>
+      <td>
+        {row.latestDecision ? (
+          <div className="agents-proof-cell">
+            <Link href={evidencePackHref(row.latestDecision.id)} className="agents-text-link">
+              <FileJson aria-hidden="true" />
+              Evidence Pack
+            </Link>
+            <span className="agents-cell-note">{row.latestDecision.id}</span>
+          </div>
+        ) : (
+          <span className="agents-muted">No decision id</span>
+        )}
+      </td>
+      <td>
         <AgentHealthBadge score={row.healthScore} />
       </td>
       <td>
@@ -540,7 +747,7 @@ function AgentRow({ row }: { row: AgentLaunchpadRow }) {
       </td>
       <td>
         <strong>{row.costPerSuccessfulTask == null ? "-" : formatUsd(row.costPerSuccessfulTask)}</strong>
-        <span className="agents-cell-note">per success</span>
+        <span className="agents-cell-note">per verified success</span>
       </td>
       <td>
         <strong>{formatLatency(row.p95LatencyMs)}</strong>
@@ -568,6 +775,35 @@ function AgentRow({ row }: { row: AgentLaunchpadRow }) {
   );
 }
 
+function AgentsProofChain({ row }: { row: AgentLaunchpadRow }) {
+  return (
+    <div className="agents-proof-chain" aria-label="Selected agent proof chain">
+      <div>
+        <span>Runtime decision</span>
+        <strong>{decisionDisplay(row.latestDecision)}</strong>
+        <small>{decisionDetail(row.latestDecision)}</small>
+      </div>
+      <div>
+        <span>Outcome verdict</span>
+        <strong>{outcomeDisplay(row.latestOutcome)}</strong>
+        <small>{outcomeDetail(row.latestOutcome)}</small>
+      </div>
+      <div>
+        <span>Evidence Pack</span>
+        {row.latestDecision ? (
+          <Link href={evidencePackHref(row.latestDecision.id)} className="agents-text-link">
+            Export JSON
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        ) : (
+          <strong>not_verified</strong>
+        )}
+        <small>{row.latestDecision?.id ?? "No decision id"}</small>
+      </div>
+    </div>
+  );
+}
+
 function AgentsHero({
   captureHealth,
   callsToday,
@@ -589,40 +825,40 @@ function AgentsHero({
       <div className="agents-hero-copy">
         <div className="agents-eyebrow">
           <Activity aria-hidden="true" />
-          Release safety
+          Protected agents
         </div>
-        <h1>Release Safety Console</h1>
+        <h1>Agent accountability ledger</h1>
         <p>
-          Overview of reliability regressions, replay readiness, and blast radius across your production agents.
+          Fleet view for autonomous agents that touch systems of record: mandate health, proof gaps, outcome evidence, replay coverage, and risk exposure.
         </p>
       </div>
       <div className="agents-hero-actions">
-        <button type="button" className="btn btn-soft" onClick={onRefresh}>
-          <RefreshCw aria-hidden="true" />
-          Refresh
-        </button>
         <Link href="/replay" className="btn btn-primary">
           <RotateCcw aria-hidden="true" />
           Run replay
         </Link>
+        <button type="button" className="btn btn-soft" onClick={onRefresh}>
+          <RefreshCw aria-hidden="true" />
+          Refresh
+        </button>
       </div>
       <div className="agents-hero-strip">
         <div>
           <span className={connected ? "agents-live-dot is-live" : "agents-live-dot"} aria-hidden="true" />
           <strong>{captureHealth?.status ?? "unknown"}</strong>
-          <small>capture</small>
+          <small>capture stream</small>
         </div>
         <div>
           <strong>{formatCount(callsToday)}</strong>
-          <small>calls today</small>
+          <small>actions today</small>
         </div>
         <div>
           <strong>{formatCount(openIssues)}</strong>
-          <small>active issues</small>
+          <small>open proof gaps</small>
         </div>
         <div>
           <strong>{avgHealth == null ? "-" : Math.round(avgHealth)}</strong>
-          <small>avg health</small>
+          <small>avg mandate health</small>
         </div>
       </div>
     </section>
@@ -632,44 +868,45 @@ function AgentsHero({
 function AgentsKpis({
   rows,
   openIssues,
-  replayGaps,
   atRiskAgents,
 }: {
   rows: AgentLaunchpadRow[];
   openIssues: number;
-  replayGaps: number;
   atRiskAgents: number;
 }) {
   const issueCost = sumIssueCost(rows);
-  const replayReady = replayReadyCount(
-    rows.map((row) => row.latestIssue).filter((issue): issue is IssueItem => issue != null),
-  );
-  const guardrailRate = passingGuardrailRate(rows);
   const protectedCost = verifiedCostCoverage(rows);
+  const runtimeHoldOrBlock = rows.filter((row) => {
+    const decision = row.latestDecision;
+    return decision?.decision === "block" || decision?.decision === "requires_approval" || decision?.status === "pending_approval";
+  }).length;
+  const outcomeRows = rows.filter((row) => row.latestOutcome);
+  const matchedOutcomes = outcomeRows.filter((row) => row.latestOutcome?.verdict === "matched").length;
+  const missingOutcomes = rows.filter((row) => row.latestDecision && !row.latestOutcome).length;
   const cards = [
     {
       icon: AlertTriangle,
-      label: "Active issues",
+      label: "Open proof gaps",
       value: formatCount(openIssues),
-      helper: `${formatCount(atRiskAgents)} at-risk agents`,
+      helper: `${formatCount(atRiskAgents)} agents need attention`,
     },
     {
       icon: RotateCcw,
-      label: "Replay ready",
-      value: formatCount(replayReady),
-      helper: `${formatCount(replayGaps)} still missing proof`,
+      label: "Held / blocked",
+      value: formatCount(runtimeHoldOrBlock),
+      helper: "runtime decisions that stopped or paused action",
     },
     {
       icon: ShieldCheck,
-      label: "Guardrails passing",
-      value: guardrailRate == null ? "-" : formatPercent(guardrailRate),
-      helper: `${formatCount(rows.length)} monitored agents`,
+      label: "Outcomes matched",
+      value: outcomeRows.length > 0 ? `${formatCount(matchedOutcomes)}/${formatCount(outcomeRows.length)}` : "0",
+      helper: `${formatCount(missingOutcomes)} decision${missingOutcomes === 1 ? "" : "s"} still not_verified`,
     },
     {
       icon: Gauge,
-      label: "Failure cost exposed",
+      label: "Risk exposure",
       value: formatUsd(issueCost),
-      helper: protectedCost > 0 ? `${formatUsd(protectedCost)} covered by passing replay` : "no verified cost coverage yet",
+      helper: protectedCost > 0 ? `${formatUsd(protectedCost)} covered by verified proof` : "no verified cost coverage yet",
     },
   ];
 
@@ -708,7 +945,7 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
     <aside className="agents-inspector-panel">
       <div className="agents-panel-head">
         <div>
-          <span>Issue focus</span>
+          <span>Agent proof focus</span>
           <strong>{focusRow?.agentName ?? "No agent selected"}</strong>
         </div>
         {issue ? <span className={`alert-cat-badge ${severityTone(issue.severity)}`}>{issue.severity}</span> : null}
@@ -726,6 +963,8 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
               <strong>{focusRow.successRate == null ? "-" : formatPercent(focusRow.successRate)}</strong>
             </div>
           </div>
+
+          <AgentsProofChain row={focusRow} />
 
           {issue ? (
             <>
@@ -747,11 +986,11 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
                   <strong>{envLabel}</strong>
                 </div>
                 <div>
-                  <span>Trace ID</span>
+                  <span>Evidence ID</span>
                   <strong>{leadTrace?.trace_id ?? "Unavailable"}</strong>
                 </div>
                 <div>
-                  <span>Replay status</span>
+                  <span>Replay proof</span>
                   <strong>{replayLabel(issue.replay_coverage_status)}</strong>
                 </div>
               </div>
@@ -768,11 +1007,11 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
                   <dd>{formatCount(issue.occurrence_count)}</dd>
                 </div>
                 <div>
-                  <dt>Cost impact</dt>
+                  <dt>Risk exposure</dt>
                   <dd>{formatUsd(issue.cost_impact_usd || issue.blast_radius_usd)}</dd>
                 </div>
                 <div>
-                  <dt>Replay</dt>
+                  <dt>Replay proof</dt>
                   <dd>{focusRow.replayCoverage}</dd>
                 </div>
                 <div>
@@ -801,29 +1040,29 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
                   <RotateCcw aria-hidden="true" />
                 </Link>
                 <Link href={traceHref} className="btn btn-soft">
-                  View full trace
+                  View evidence trace
                 </Link>
               </div>
             </>
           ) : (
             <div className="agents-issue-summary">
               <span>quiet agent</span>
-              <h2>No open issue attached.</h2>
+              <h2>No open proof gap attached.</h2>
               <p>{focusRow.recommendedAction}</p>
               <div className="agents-inspector-actions">
                 <Link href={`/calls?agent_name=${encodeURIComponent(focusRow.agentName)}`} className="btn btn-primary">
-                  View calls
+                  View agent calls
                   <ArrowRight aria-hidden="true" />
                 </Link>
                 <Link href="/contracts" className="btn btn-soft">
-                  Promote contract
+                  Promote mandate
                 </Link>
               </div>
             </div>
           )}
         </>
       ) : (
-        <p className="agents-muted">Connect capture to populate priority, trace evidence, and replay guidance.</p>
+        <p className="agents-muted">Connect capture to populate mandate health, trace evidence, and replay guidance.</p>
       )}
     </aside>
   );
@@ -845,8 +1084,8 @@ function AgentsOperations({
       <article className="agents-mini-panel">
         <div className="agents-panel-head">
           <div>
-            <span>Failure rate by agent</span>
-            <strong>Current versus previous 7 days</strong>
+            <span>Behavior drift by agent</span>
+            <strong>Failure-rate movement from captured runs</strong>
           </div>
           <Activity aria-hidden="true" />
         </div>
@@ -856,8 +1095,8 @@ function AgentsOperations({
       <article className="agents-mini-panel">
         <div className="agents-panel-head">
           <div>
-            <span>Cost of failure</span>
-            <strong>Open issue blast radius by agent</strong>
+            <span>Risk exposure</span>
+            <strong>Open proof gap blast radius by agent</strong>
           </div>
           <Gauge aria-hidden="true" />
         </div>
@@ -867,8 +1106,8 @@ function AgentsOperations({
       <article className="agents-mini-panel">
         <div className="agents-panel-head">
           <div>
-            <span>Trace timeline</span>
-            <strong>Evidence from the selected issue</strong>
+            <span>Evidence trail</span>
+            <strong>System evidence from the selected proof gap</strong>
           </div>
           <Clock3 aria-hidden="true" />
         </div>
@@ -903,6 +1142,16 @@ export default function AgentsPage() {
     queryFn: ({ signal }) => getAnalyticsSummary(1, signal),
     refetchInterval: 30_000,
   });
+  const runtimeDecisionsQuery = useQuery({
+    queryKey: ["agents", "runtime-policy", "decisions", "all"],
+    queryFn: ({ signal }) => listRuntimePolicyApprovals("all", signal),
+    refetchInterval: 30_000,
+  });
+  const outcomeChecksQuery = useQuery({
+    queryKey: ["agents", "outcomes", "reconciliation"],
+    queryFn: ({ signal }) => listOutcomeReconciliations({ limit: 50 }, signal),
+    refetchInterval: 30_000,
+  });
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -928,8 +1177,10 @@ export default function AgentsPage() {
       issuesQuery.refetch(),
       captureHealthQuery.refetch(),
       summaryQuery.refetch(),
+      runtimeDecisionsQuery.refetch(),
+      outcomeChecksQuery.refetch(),
     ]);
-  }, [callsQuery, captureHealthQuery, issuesQuery, leaderboardQuery, summaryQuery]);
+  }, [callsQuery, captureHealthQuery, issuesQuery, leaderboardQuery, outcomeChecksQuery, runtimeDecisionsQuery, summaryQuery]);
 
   const rows = useMemo(
     () =>
@@ -937,24 +1188,27 @@ export default function AgentsPage() {
         leaderboardQuery.data ?? [],
         callsQuery.data?.items ?? [],
         issuesQuery.data?.items ?? [],
+        runtimeDecisionsQuery.data?.items ?? [],
+        outcomeChecksQuery.data?.items ?? [],
       ),
-    [callsQuery.data?.items, issuesQuery.data?.items, leaderboardQuery.data],
+    [
+      callsQuery.data?.items,
+      issuesQuery.data?.items,
+      leaderboardQuery.data,
+      outcomeChecksQuery.data?.items,
+      runtimeDecisionsQuery.data?.items,
+    ],
   );
 
-  const loading =
-    leaderboardQuery.isLoading ||
-    callsQuery.isLoading ||
-    issuesQuery.isLoading ||
-    captureHealthQuery.isLoading;
+  const primaryQueries = [leaderboardQuery, callsQuery, issuesQuery, runtimeDecisionsQuery, outcomeChecksQuery];
+  const loading = primaryQueries.every((query) => query.isLoading && query.data === undefined);
   const hasRows = rows.length > 0;
   const callsToday = summaryQuery.data?.calls_today ?? 0;
   const openIssues = issuesQuery.data?.items.length ?? 0;
   const atRiskAgents = rows.filter((row) => row.healthScore != null && row.healthScore < 55).length;
-  const replayGaps = rows.filter((row) => {
-    const status = row.latestIssue?.replay_coverage_status;
-    return status === "not_covered" || status === "fix_pending_replay" || status === "covered_not_run";
-  }).length;
   const focusRow =
+    rows.find((row) => row.latestOutcome?.verdict === "mismatched") ??
+    rows.find((row) => row.latestDecision?.status === "pending_approval") ??
     rows.find((row) => row.latestIssue) ??
     rows.find((row) => row.healthScore != null && row.healthScore < 55) ??
     rows[0] ??
@@ -998,7 +1252,6 @@ export default function AgentsPage() {
       <AgentsKpis
         rows={rows}
         openIssues={openIssues}
-        replayGaps={replayGaps}
         atRiskAgents={atRiskAgents}
       />
 
@@ -1014,11 +1267,11 @@ export default function AgentsPage() {
           <article className="agents-table-panel">
             <div className="agents-panel-head">
               <div>
-                <span>Signal clusters</span>
-                <strong>Failure patterns grouped from live production issues</strong>
+                <span>Proof gap clusters</span>
+                <strong>Failure patterns grouped from production agent actions</strong>
               </div>
               <Link href="/issues" className="agents-text-link">
-                Open issues
+                Open incidents
                 <ArrowRight aria-hidden="true" />
               </Link>
             </div>
@@ -1028,8 +1281,8 @@ export default function AgentsPage() {
           <article className="agents-chart-panel">
             <div className="agents-panel-head">
               <div>
-                <span>Live agent matrix</span>
-                <strong>Health, issue, replay, latency, and cost in one table</strong>
+                <span>Protected agent matrix</span>
+                <strong>Runtime decision, outcome verdict, Evidence Pack, and reliability context</strong>
               </div>
               <span className="agents-table-count">{formatCount(rows.length)} agents</span>
             </div>
@@ -1038,13 +1291,16 @@ export default function AgentsPage() {
                 <thead>
                   <tr>
                     <th>Agent</th>
-                    <th>Health</th>
+                    <th>Runtime decision</th>
+                    <th>Outcome</th>
+                    <th>Evidence Pack</th>
+                    <th>Mandate health</th>
                     <th>Success</th>
-                    <th>Cost</th>
+                    <th>Cost / success</th>
                     <th>Latency</th>
-                    <th>Priority issue</th>
-                    <th>Replay</th>
-                    <th>Last event</th>
+                    <th>Proof gap</th>
+                    <th>Replay proof</th>
+                    <th>Last evidence</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1064,8 +1320,8 @@ export default function AgentsPage() {
         <section className="agents-warning-panel" id="capture-warnings">
           <div className="agents-panel-head">
             <div>
-              <span>Capture quality</span>
-              <strong>Warnings that affect attribution accuracy</strong>
+              <span>Evidence capture quality</span>
+              <strong>Warnings that affect proof and attribution accuracy</strong>
             </div>
             <AlertTriangle aria-hidden="true" />
           </div>
@@ -1083,7 +1339,7 @@ export default function AgentsPage() {
         <section className="agents-quality-panel">
           <CheckCircle2 aria-hidden="true" />
           <div>
-            <strong>No capture validation warnings.</strong>
+            <strong>No evidence capture warnings.</strong>
             <span>Agent attribution, source, and payload quality are clean for this window.</span>
           </div>
         </section>
@@ -1092,7 +1348,7 @@ export default function AgentsPage() {
       <section className="agents-footnote-panel">
         <Clock3 aria-hidden="true" />
         <span>
-          Recommendations come from the Issue product object when available, then fall back to health score, success-rate, latency, and replay coverage.
+          Recommendations use issue objects when available, then fall back to mandate health, success rate, latency, and replay coverage.
         </span>
       </section>
     </div>

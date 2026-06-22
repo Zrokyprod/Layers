@@ -68,14 +68,9 @@ async function forwardRequest(request: NextRequest, context: RouteContext): Prom
 
   const selectedProjectId = request.headers.get("x-project-id")?.trim();
   const projectId = selectedProjectId || process.env.ZROKY_PROJECT_ID;
-  const apiKey = process.env.ZROKY_API_KEY;
 
   if (projectId) {
     headers.set("x-project-id", projectId);
-  }
-
-  if (apiKey) {
-    headers.set("x-api-key", apiKey);
   }
 
   const timeoutMsRaw = Number(process.env.ZROKY_API_PROXY_TIMEOUT_MS ?? defaultTimeoutMs);

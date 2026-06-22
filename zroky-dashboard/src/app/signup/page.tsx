@@ -85,7 +85,7 @@ function SignupForm() {
       </div>
       <AuthDivider>Or register with email</AuthDivider>
       {error && <div className="auth-banner auth-banner-error">{error}</div>}
-      <form onSubmit={onSubmit} className="auth-form">
+      <form method="post" onSubmit={onSubmit} className="auth-form">
         <AuthInput
           label="Email address"
           type="email"

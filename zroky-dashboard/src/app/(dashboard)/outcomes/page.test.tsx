@@ -152,8 +152,12 @@ describe("OutcomesPage", () => {
     expect(within(metricCard("Matched")).getByText("1")).toBeInTheDocument();
     expect(within(metricCard("Verified rate")).getByText("33%")).toBeInTheDocument();
 
-    expect(screen.getByText("Refund rf_999")).toBeInTheDocument();
-    expect(screen.getByText("ledger:rf_999 · Field mismatch")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Outcome check queue" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Selected outcome inspector" })).toBeInTheDocument();
+    expect(screen.getAllByText("Refund rf_999").length).toBeGreaterThan(0);
+    expect(screen.getByText("Outcome mismatch")).toBeInTheDocument();
+    expect(screen.getByText("1 field mismatch")).toBeInTheDocument();
+    expect(screen.getByText(/ledger:rf_999 \/ Field mismatch/)).toBeInTheDocument();
     expect(screen.getByText("call_refund_api").getAttribute("href")).toBe("/calls/call_refund_api");
     expect(screen.getByText("trace_refund_api").getAttribute("href")).toBe("/trace/trace_refund_api");
   });
@@ -164,7 +168,7 @@ describe("OutcomesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mismatched" }));
 
     expect(hookState.filter).toBe("mismatched");
-    expect(screen.getByText("Refund rf_999")).toBeInTheDocument();
+    expect(screen.getAllByText("Refund rf_999").length).toBeGreaterThan(0);
     expect(screen.queryByText("Email customer@example.com")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
@@ -181,7 +185,7 @@ describe("OutcomesPage", () => {
     });
 
     expect(hookState.filter).toBe("all");
-    expect(screen.getByText("Email customer@example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("Email customer@example.com").length).toBeGreaterThan(0);
     expect(screen.queryByText("Refund rf_999")).not.toBeInTheDocument();
   });
 });
