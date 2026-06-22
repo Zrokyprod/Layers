@@ -9,6 +9,8 @@ from app.services.entitlement_catalog import (
     load_pricing_contract,
 )
 
+_DEFAULT_PRICING_PATH = Path(__file__).resolve().parents[4] / "pricing_config.json"
+
 def _pricing_config_path() -> Path:
     env_path = os.environ.get("PRICING_CONFIG_PATH", "")
     if env_path:

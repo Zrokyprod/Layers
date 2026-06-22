@@ -83,6 +83,34 @@ def _audit_rows(session_factory) -> list[AuditLog]:
         return list(db.scalars(select(AuditLog).order_by(AuditLog.created_at.asc())).all())
 
 
+def test_owner_pricing_get_handles_missing_filesystem_fallback(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    test_client, _ = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    monkeypatch.delenv("PRICING_CONFIG_PATH", raising=False)
+    monkeypatch.setattr("app.api.routes._internal.owner_pricing_audit._redis_ok", lambda: False)
+
+    res = test_client.get("/v1/owner/pricing", headers=owner_headers)
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert isinstance(payload["config"], dict)
+    assert isinstance(payload["exists"], bool)
+    assert payload["path"].endswith("pricing_config.json")
+
+    monkeypatch.setenv("PRICING_CONFIG_PATH", str(tmp_path / "missing-pricing-config.json"))
+    missing_res = test_client.get("/v1/owner/pricing", headers=owner_headers)
+
+    assert missing_res.status_code == 200
+    payload = missing_res.json()
+    assert payload["config"] == {}
+    assert payload["exists"] is False
+    assert payload["path"].endswith("missing-pricing-config.json")
+
+
 def test_owner_redis_mutations_write_audit_events(client, monkeypatch: pytest.MonkeyPatch) -> None:
     test_client, session_factory = client
     owner_headers = _set_owner_auth(monkeypatch)
