@@ -92,6 +92,19 @@ jobs:
           - id: outcome-reconciliation
             name: outcome reconciliation
             tests: tests/test_outcome_reconciliation.py
+          - id: system-record-connectors
+            name: system-of-record connectors
+            tests: >-
+              tests/test_system_of_record_connector_http.py
+              tests/test_system_of_record_integrations.py
+          - id: design-partner-handoff
+            name: design-partner handoff contract
+            tests: >-
+              tests/test_design_partner_install_kit.py
+              tests/test_design_partner_owner_proof_artifact.py
+          - id: deployment-smoke-contract
+            name: deployment smoke contract
+            tests: tests/test_deployment_smoke_contract.py
           - id: billing
             name: billing and quota
             tests: >-
@@ -108,6 +121,13 @@ jobs:
           - id: owner-health
             name: owner launch health
             tests: tests/test_owner_money_path_health.py
+          - id: owner-audit-readiness
+            name: owner audit and production readiness
+            tests: >-
+              tests/test_owner_mutation_audit.py
+              tests/test_owner_route_gate.py
+              tests/test_feature_flags.py
+              tests/test_owner_support_billing.py::test_owner_support_ticket_detail_and_reply
           - id: production-config
             name: production config
             tests: >-
@@ -219,6 +239,7 @@ jobs:
             "src/app/(dashboard)/layout.test.tsx" \
             "src/lib/replay-mode.test.ts" \
             "src/app/(dashboard)/outcomes/page.test.tsx" \
+            "src/app/(dashboard)/settings/integrations/page.test.tsx" \
             "src/app/(dashboard)/contracts/[id]/page.test.tsx" \
             "src/app/(dashboard)/settings/billing/page.test.tsx" \
             "src/app/(dashboard)/goldens/page.test.tsx" \
@@ -260,6 +281,7 @@ jobs:
             "src/app/owner/money-path/page.test.tsx" \
             "src/app/owner/pricing/page.test.tsx" \
             "src/app/owner/infrastructure/page.test.tsx" \
+            "src/app/owner/settings/page.test.tsx" \
             "src/app/owner/support/page.test.tsx"
 
       - name: Build admin

@@ -662,16 +662,131 @@ def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proo
         "outcome_verification",
         "billing_quota",
         "owner_value_proof",
+        "real_customer_proof",
         "single_source_of_truth",
     }
     assert all(gate["status"] == "pass" for gate in gates.values())
     assert gates["behavioral_goldens"]["evidence"][2]["value"] == 1
     assert gates["runtime_risk_stop"]["evidence"][0]["value"] == 1
     assert gates["outcome_verification"]["evidence"][1]["value"] == 1
+    assert gates["real_customer_proof"]["evidence"][1]["value"] == 1
     assert any(
         "verify_paid_launch_readiness.ps1" in command
         for command in payload["verification_commands"]
     )
+
+
+def test_owner_launch_readiness_rejects_demo_outcome_as_paid_launch_proof(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    now = datetime.now(UTC)
+
+    with session_factory() as db:
+        db.add(
+            Project(
+                id="proj_demo_proof",
+                name="Demo Proof Tenant",
+                owner_ref="demo-proof",
+                is_active=True,
+            )
+        )
+        db.add(
+            _call(
+                "proj_demo_proof",
+                "call_demo_proof",
+                created_at=now - timedelta(minutes=10),
+                agent_name="refund-agent",
+            )
+        )
+        db.add(
+            RuntimePolicyDecision(
+                id="rpd_demo_proof",
+                project_id="proj_demo_proof",
+                trace_id="trace_demo_proof",
+                call_id="call_demo_proof",
+                agent_name="refund-agent",
+                action_type="refund",
+                tool_name="refund_customer",
+                decision="block",
+                status="blocked",
+                reasons_json=json.dumps(["demo proof should not allow paid launch"]),
+                created_at=now - timedelta(minutes=9),
+            )
+        )
+        db.add(
+            OutcomeReconciliationCheck(
+                id="orc_demo_proof",
+                project_id="proj_demo_proof",
+                call_id="call_demo_proof",
+                trace_id="trace_demo_proof",
+                runtime_policy_decision_id="rpd_demo_proof",
+                action_type="refund",
+                connector_type="ledger_api",
+                system_ref="ledger:demo",
+                verdict="matched",
+                reason="demo ledger matched",
+                amount_usd=42.18,
+                currency="USD",
+                claimed_json=json.dumps({"refund_id": "demo", "amount_usd": 42.18}),
+                actual_json=json.dumps({"refund_id": "demo", "amount_usd": 42.18}),
+                comparison_json=json.dumps({"amount_usd": {"matched": True}}),
+                idempotency_key="orc-demo-proof",
+                metadata_json=json.dumps(
+                    {"source": "money_path_demo", "launch_readiness": True},
+                    separators=(",", ":"),
+                ),
+                checked_at=now - timedelta(minutes=8),
+            )
+        )
+        db.add(
+            OutcomeReconciliationCheck(
+                id="orc_install_kit_local_proof",
+                project_id="proj_demo_proof",
+                call_id="call_demo_proof",
+                trace_id="trace_demo_proof",
+                runtime_policy_decision_id="rpd_demo_proof",
+                action_type="refund",
+                connector_type="ledger_refund_api",
+                system_ref="ledger:install-kit-local",
+                verdict="matched",
+                reason="local install-kit stub matched",
+                amount_usd=19.25,
+                currency="USD",
+                claimed_json=json.dumps(
+                    {"refund_id": "install-kit-local", "amount_usd": 19.25}
+                ),
+                actual_json=json.dumps(
+                    {"refund_id": "install-kit-local", "amount_usd": 19.25}
+                ),
+                comparison_json=json.dumps({"amount_usd": {"matched": True}}),
+                idempotency_key="orc-install-kit-local-proof",
+                metadata_json=json.dumps(
+                    {
+                        "source": "design_partner_install_kit",
+                        "proof_mode": "local_demo",
+                    },
+                    separators=(",", ":"),
+                ),
+                checked_at=now - timedelta(minutes=7),
+            )
+        )
+        db.commit()
+
+    response = test_client.get("/v1/owner/launch-readiness", headers=owner_headers)
+    assert response.status_code == 200
+    payload = response.json()
+    gates = {gate["code"]: gate for gate in payload["gates"]}
+
+    assert payload["paid_launch_allowed"] is False
+    assert gates["real_customer_proof"]["status"] == "not_verified"
+    assert "real_customer_outcome_proof_missing" in gates["real_customer_proof"]["blockers"]
+    assert "real_customer_proof:real_customer_outcome_proof_missing" in payload["hard_blockers"]
+    assert gates["real_customer_proof"]["evidence"][0]["value"] == 2
+    assert gates["real_customer_proof"]["evidence"][1]["value"] == 0
+    assert gates["real_customer_proof"]["evidence"][2]["value"] == 2
 
 
 def test_owner_launch_readiness_blocks_on_fake_stub_replay_and_text_only_golden(

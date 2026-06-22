@@ -13,7 +13,7 @@ from app.api.routes.auth import list_current_user_projects
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import ApiKey, Project, ProjectMembership, User
-from app.services.security import issue_access_token
+from app.services.security import hash_api_key, issue_access_token
 
 
 AUTH_SECRET = "session-project-selection-secret"
@@ -47,6 +47,20 @@ def db_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 def _request(token: str, selected_project_id: str | None = None) -> Request:
     headers = [(b"authorization", f"Bearer {token}".encode("utf-8"))]
+    if selected_project_id:
+        headers.append((b"x-project-id", selected_project_id.encode("utf-8")))
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/test",
+            "headers": headers,
+        }
+    )
+
+
+def _api_key_request(api_key: str, selected_project_id: str | None = None) -> Request:
+    headers = [(b"x-api-key", api_key.encode("utf-8"))]
     if selected_project_id:
         headers.append((b"x-project-id", selected_project_id.encode("utf-8")))
     return Request(
@@ -216,6 +230,34 @@ def test_project_role_guard_rejects_selected_project_path_mismatch(db_session) -
         guard(
             request=_request(token, selected_project_id="proj_first"),
             project_id="proj_second",
+            db=db_session,
+        )
+
+    assert error.value.status_code == 403
+    assert error.value.detail == "Selected project does not match requested project."
+
+
+def test_project_role_guard_rejects_api_key_project_path_mismatch(db_session) -> None:
+    _seed_user_projects(
+        db_session,
+        memberships=[("proj_key_owner", "owner"), ("proj_key_other", "owner")],
+    )
+    api_key = "zk_live_project_owner_key"
+    db_session.add(
+        ApiKey(
+            project_id="proj_key_owner",
+            name="Owner project key",
+            key_prefix=api_key[:18],
+            key_hash=hash_api_key(api_key),
+        )
+    )
+    db_session.commit()
+    guard = require_project_role("member")
+
+    with pytest.raises(HTTPException) as error:
+        guard(
+            request=_api_key_request(api_key, selected_project_id="proj_key_other"),
+            project_id="proj_key_other",
             db=db_session,
         )
 

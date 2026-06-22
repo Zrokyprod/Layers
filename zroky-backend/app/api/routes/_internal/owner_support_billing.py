@@ -341,6 +341,13 @@ def owner_reply_support_ticket(
     )
     db.add(msg)
     ticket.updated_at = datetime.now(UTC)
+    _owner_audit(
+        db,
+        action="owner.support.ticket.reply",
+        actor=_resolve_actor(request),
+        target_id=ticket_id,
+        metadata={"is_internal": body.is_internal, "body_length": len(body.body)},
+    )
     db.commit()
     db.refresh(msg)
     return {"ok": True, "message_id": msg.id, "ticket_id": ticket_id}

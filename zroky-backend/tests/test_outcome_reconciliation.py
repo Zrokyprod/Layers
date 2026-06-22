@@ -11,8 +11,10 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.db.base import Base
+from app.db.models import Project
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.core.config import get_settings
 from app.services.detectors.outcome_mismatch import detect_outcome_mismatch
 from app.services.outcome_reconciliation import (
     ApiRecordConnector,
@@ -26,6 +28,16 @@ from app.services.system_of_record_connectors import (
     CustomerRecordApiConnector,
     LedgerRefundApiConnector,
 )
+from app.services.system_of_record_connector_config import (
+    upsert_customer_record_connector_config,
+    upsert_ledger_refund_connector_config,
+)
+
+
+def _seed_project(session_factory, project_id: str) -> None:
+    with session_factory() as session:
+        session.add(Project(id=project_id, name=project_id))
+        session.commit()
 
 
 def test_compare_claim_to_actual_has_honest_verdicts() -> None:
@@ -660,6 +672,267 @@ def test_ledger_refund_reconciliation_api_marks_missing_ledger_record_mismatched
             assert body["verdict"] == "mismatched"
             assert body["reason"] == "system_of_record_record_missing"
             assert body["metadata"]["connector"]["http_status"] == 404
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_saved_ledger_refund_reconciliation_uses_stored_connector_for_member_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-saved-sor-connectors-123456"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_ledger_runtime.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_saved_ledger")
+    with session_factory() as session:
+        upsert_ledger_refund_connector_config(
+            session,
+            project_id="proj_saved_ledger",
+            base_url="https://ledger.example.com/api",
+            path_template="/refunds/{refund_id}",
+            record_path="data",
+            bearer_token="stored-ledger-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_saved_ledger", role="member", subject=None
+        )
+
+    def fake_fetch(self: LedgerRefundApiConnector) -> SourceRecord:
+        assert self.base_url == "https://ledger.example.com/api"
+        assert self.record_path == "data"
+        assert self.bearer_token == "stored-ledger-secret"
+        return SourceRecord(
+            record={
+                "refund_id": self.refund_id,
+                "amount_usd": "42.50",
+                "currency": "usd",
+                "status": "posted",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "ledger_refund_api",
+                "request_url": f"https://ledger.example.com/api/refunds/{self.refund_id}",
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+            },
+        )
+
+    monkeypatch.setattr(LedgerRefundApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/ledger-refund/saved",
+                json={
+                    "call_id": "call_saved_refund",
+                    "trace_id": "trace_saved_refund",
+                    "runtime_policy_decision_id": "decision_saved_refund",
+                    "claimed": {
+                        "refund_id": "rf_saved",
+                        "amount_usd": 42.5,
+                        "currency": "USD",
+                        "status": "posted",
+                    },
+                    "metadata": {"partner_run_id": "pilot_1"},
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "ledger_refund_api"
+            assert body["system_ref"] == "ledger:rf_saved"
+            assert body["runtime_policy_decision_id"] == "decision_saved_refund"
+            assert body["idempotency_key"] == (
+                "saved_ledger_refund:decision_saved_refund:rf_saved"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["partner_run_id"] == "pilot_1"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-ledger-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_customer_record_reconciliation_uses_stored_connector(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-saved-crm-connectors-123456"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_customer_runtime.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_saved_customer")
+    with session_factory() as session:
+        upsert_customer_record_connector_config(
+            session,
+            project_id="proj_saved_customer",
+            base_url="https://crm.example.com/api",
+            path_template="/customers/{customer_id}",
+            record_path="data",
+            bearer_token="stored-crm-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_saved_customer", role="member", subject=None
+        )
+
+    def fake_fetch(self: CustomerRecordApiConnector) -> SourceRecord:
+        assert self.base_url == "https://crm.example.com/api"
+        assert self.record_path == "data"
+        assert self.bearer_token == "stored-crm-secret"
+        return SourceRecord(
+            record={
+                "customer_id": self.customer_id,
+                "email": "OWNER@EXAMPLE.COM",
+                "status": "active",
+                "account_id": "acct_1001",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "customer_record_api",
+                "request_url": f"https://crm.example.com/api/customers/{self.customer_id}",
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+            },
+        )
+
+    monkeypatch.setattr(CustomerRecordApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/customer-record/saved",
+                json={
+                    "call_id": "call_saved_crm",
+                    "trace_id": "trace_saved_crm",
+                    "runtime_policy_decision_id": "decision_saved_crm",
+                    "customer_id": "cus_saved",
+                    "claimed": {
+                        "customer_id": "cus_saved",
+                        "email": "owner@example.com",
+                        "status": "ACTIVE",
+                        "account_id": "acct_1001",
+                    },
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "customer_record_api"
+            assert body["system_ref"] == "crm:cus_saved"
+            assert body["idempotency_key"] == (
+                "saved_customer_record:decision_saved_crm:cus_saved"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-crm-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_reconciliation_fails_closed_when_config_missing(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "saved_connector_missing.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_missing_saved_connector", role="member", subject=None
+        )
+
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/outcomes/reconciliation/ledger-refund/saved",
+                json={
+                    "claimed": {"refund_id": "rf_missing"},
+                },
+            )
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == (
+                "Ledger refund connector is not configured."
+            )
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)

@@ -55,6 +55,7 @@ yarn-error.log*
 # ── Testing ───────────────────────────────────────────────────────────────────
 .pytest_cache/
 .pytest_tmp/
+.pytest-tmp/
 .pytest_*/
 pytest_temp_privacy2/
 .coverage
@@ -77,6 +78,8 @@ lint_output.txt
 .vscode/
 .idea/
 .codex/
+.codex-logs/
+codex-logs/
 .agents/
 .windsurf/
 .claude/

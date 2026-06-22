@@ -1,0 +1,224 @@
+name: Zroky Design Partner Owner Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: Staging or pilot backend base URL
+        required: true
+        default: https://api-staging.example.com
+      project_id:
+        description: Project id for the pilot tenant
+        required: true
+      scenario:
+        description: Proof scenario
+        required: true
+        type: choice
+        default: refund
+        options:
+          - refund
+          - customer-record
+      use_saved_connector:
+        description: Use connector already saved in Zroky
+        required: true
+        type: boolean
+        default: true
+      call_id:
+        description: Existing Zroky call id captured from the real pilot action
+        required: true
+      trace_id:
+        description: Existing Zroky trace id linked to the pilot action
+        required: true
+      refund_id:
+        description: Refund id to verify for refund scenario
+        required: false
+        default: ""
+      customer_id:
+        description: Customer id to verify for customer-record scenario
+        required: false
+        default: ""
+      ledger_base_url:
+        description: Ledger base URL, required only when not using saved connector
+        required: false
+        default: ""
+      crm_base_url:
+        description: CRM/customer API base URL, required only when not using saved connector
+        required: false
+        default: ""
+      amount_usd:
+        description: Claimed refund amount, optional
+        required: false
+        default: ""
+      currency:
+        description: Claimed currency, optional
+        required: false
+        default: ""
+      status:
+        description: Claimed refund/customer status, optional
+        required: false
+        default: ""
+      email:
+        description: Claimed CRM email, optional
+        required: false
+        default: ""
+      account_id:
+        description: Claimed CRM account id, optional
+        required: false
+        default: ""
+      timeout_seconds:
+        description: HTTP timeout for proof calls
+        required: true
+        default: "20"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: zroky-design-partner-owner-proof-${{ github.event.inputs.project_id }}
+  cancel-in-progress: false
+
+jobs:
+  owner-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      API_BASE_URL: ${{ github.event.inputs.api_base_url }}
+      PROJECT_ID: ${{ github.event.inputs.project_id }}
+      SCENARIO: ${{ github.event.inputs.scenario }}
+      USE_SAVED_CONNECTOR: ${{ github.event.inputs.use_saved_connector }}
+      CALL_ID: ${{ github.event.inputs.call_id }}
+      TRACE_ID: ${{ github.event.inputs.trace_id }}
+      REFUND_ID: ${{ github.event.inputs.refund_id }}
+      CUSTOMER_ID: ${{ github.event.inputs.customer_id }}
+      LEDGER_BASE_URL: ${{ github.event.inputs.ledger_base_url }}
+      CRM_BASE_URL: ${{ github.event.inputs.crm_base_url }}
+      AMOUNT_USD: ${{ github.event.inputs.amount_usd }}
+      CURRENCY: ${{ github.event.inputs.currency }}
+      STATUS_VALUE: ${{ github.event.inputs.status }}
+      EMAIL: ${{ github.event.inputs.email }}
+      ACCOUNT_ID: ${{ github.event.inputs.account_id }}
+      TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds }}
+      STAGING_API_KEY: ${{ secrets.ZROKY_STAGING_API_KEY }}
+      STAGING_PROVISIONING_TOKEN: ${{ secrets.ZROKY_STAGING_PROVISIONING_TOKEN }}
+      STAGING_LEDGER_BEARER_TOKEN: ${{ secrets.ZROKY_STAGING_LEDGER_BEARER_TOKEN }}
+      STAGING_CRM_BEARER_TOKEN: ${{ secrets.ZROKY_STAGING_CRM_BEARER_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate proof inputs and secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if echo "${API_BASE_URL}" | grep -q "example.com"; then
+            echo "::error::api_base_url must be a real backend URL, not example.com"
+            exit 1
+          fi
+
+          for required in PROJECT_ID CALL_ID TRACE_ID STAGING_API_KEY STAGING_PROVISIONING_TOKEN; do
+            if [ -z "${!required}" ]; then
+              echo "::error::Missing required value: ${required}"
+              exit 1
+            fi
+          done
+
+          if [ "${SCENARIO}" = "refund" ]; then
+            if [ -z "${REFUND_ID}" ]; then
+              echo "::error::refund_id is required for refund scenario"
+              exit 1
+            fi
+            if [ "${USE_SAVED_CONNECTOR}" != "true" ]; then
+              if [ -z "${LEDGER_BASE_URL}" ] || [ -z "${STAGING_LEDGER_BEARER_TOKEN}" ]; then
+                echo "::error::ledger_base_url and ZROKY_STAGING_LEDGER_BEARER_TOKEN are required when use_saved_connector=false"
+                exit 1
+              fi
+            fi
+          fi
+
+          if [ "${SCENARIO}" = "customer-record" ]; then
+            if [ -z "${CUSTOMER_ID}" ]; then
+              echo "::error::customer_id is required for customer-record scenario"
+              exit 1
+            fi
+            if [ "${USE_SAVED_CONNECTOR}" != "true" ]; then
+              if [ -z "${CRM_BASE_URL}" ] || [ -z "${STAGING_CRM_BEARER_TOKEN}" ]; then
+                echo "::error::crm_base_url and ZROKY_STAGING_CRM_BEARER_TOKEN are required when use_saved_connector=false"
+                exit 1
+              fi
+            fi
+          fi
+
+      - name: Run live owner proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+
+          args=(
+            "--scenario" "${SCENARIO}"
+            "--api-base-url" "${API_BASE_URL}"
+            "--api-key" "${STAGING_API_KEY}"
+            "--project-id" "${PROJECT_ID}"
+            "--call-id" "${CALL_ID}"
+            "--trace-id" "${TRACE_ID}"
+            "--timeout-seconds" "${TIMEOUT_SECONDS}"
+            "--verify-owner-launch-readiness"
+            "--owner-admin-token" "${STAGING_PROVISIONING_TOKEN}"
+            "--json"
+            "--write-summary" "artifacts/design-partner-owner-proof-summary.json"
+            "--write-evidence" "artifacts/design-partner-owner-proof-evidence.json"
+          )
+
+          if [ "${USE_SAVED_CONNECTOR}" = "true" ]; then
+            args+=("--use-saved-connector")
+          fi
+
+          if [ "${SCENARIO}" = "refund" ]; then
+            args+=("--refund-id" "${REFUND_ID}")
+            if [ "${USE_SAVED_CONNECTOR}" != "true" ]; then
+              args+=("--ledger-base-url" "${LEDGER_BASE_URL}")
+              args+=("--ledger-bearer-token" "${STAGING_LEDGER_BEARER_TOKEN}")
+            fi
+          fi
+
+          if [ "${SCENARIO}" = "customer-record" ]; then
+            args+=("--customer-id" "${CUSTOMER_ID}")
+            if [ "${USE_SAVED_CONNECTOR}" != "true" ]; then
+              args+=("--crm-base-url" "${CRM_BASE_URL}")
+              args+=("--crm-bearer-token" "${STAGING_CRM_BEARER_TOKEN}")
+            fi
+          fi
+
+          if [ -n "${AMOUNT_USD}" ]; then args+=("--amount-usd" "${AMOUNT_USD}"); fi
+          if [ -n "${CURRENCY}" ]; then args+=("--currency" "${CURRENCY}"); fi
+          if [ -n "${STATUS_VALUE}" ]; then args+=("--status" "${STATUS_VALUE}"); fi
+          if [ -n "${EMAIL}" ]; then args+=("--email" "${EMAIL}"); fi
+          if [ -n "${ACCOUNT_ID}" ]; then args+=("--account-id" "${ACCOUNT_ID}"); fi
+
+          python scripts/run_design_partner_install_kit.py "${args[@]}"
+
+      - name: Validate owner proof artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_design_partner_owner_proof_artifact.py \
+            --summary artifacts/design-partner-owner-proof-summary.json \
+            --evidence artifacts/design-partner-owner-proof-evidence.json
+
+      - name: Upload owner proof artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-partner-owner-proof
+          path: artifacts/
+          if-no-files-found: ignore

@@ -55,6 +55,7 @@ def owner_set_rate_limit_overrides(
     request: Request,
     body: RateLimitOverrideRequest,
     _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
 ) -> dict:
     if not _redis_ok():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
@@ -67,6 +68,14 @@ def owner_set_rate_limit_overrides(
     if bad_keys:
         raise HTTPException(status_code=400, detail=f"Unknown override keys: {bad_keys}")
     get_redis_client().set(_RATE_LIMIT_OVERRIDE_KEY, json.dumps(body.overrides))
+    _owner_audit(
+        db,
+        action="owner.rate_limit_overrides.set",
+        actor=_resolve_actor(request),
+        target_id="global_rate_limits",
+        metadata={"override_keys": sorted(str(key) for key in body.overrides.keys())},
+    )
+    db.commit()
     return {"ok": True, "overrides": body.overrides}
 
 
@@ -75,9 +84,18 @@ def owner_set_rate_limit_overrides(
 def owner_clear_rate_limit_overrides(
     request: Request,
     _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
 ) -> dict:
     if _redis_ok():
         get_redis_client().delete(_RATE_LIMIT_OVERRIDE_KEY)
+    _owner_audit(
+        db,
+        action="owner.rate_limit_overrides.clear",
+        actor=_resolve_actor(request),
+        target_id="global_rate_limits",
+        metadata={},
+    )
+    db.commit()
     return {"ok": True}
 
 

@@ -1,3 +1,9 @@
+param(
+  [string]$OwnerProofSummary = $env:ZROKY_OWNER_PROOF_SUMMARY,
+  [string]$OwnerProofEvidence = $env:ZROKY_OWNER_PROOF_EVIDENCE,
+  [switch]$RequireOwnerProof
+)
+
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -110,6 +116,17 @@ Invoke-BackendPytestStep -Name "regression CI routes" -TestPaths @("tests/test_r
 Invoke-BackendPytestStep -Name "regression CI orchestrator" -TestPaths @("tests/test_regression_ci_orchestrator.py")
 Invoke-BackendPytestStep -Name "runtime policy gate" -TestPaths @("tests/test_runtime_policy_gate.py")
 Invoke-BackendPytestStep -Name "outcome reconciliation" -TestPaths @("tests/test_outcome_reconciliation.py")
+Invoke-BackendPytestStep -Name "system-of-record connectors" -TestPaths @(
+  "tests/test_system_of_record_connector_http.py",
+  "tests/test_system_of_record_integrations.py"
+)
+Invoke-BackendPytestStep -Name "design-partner handoff contract" -TestPaths @(
+  "tests/test_design_partner_install_kit.py",
+  "tests/test_design_partner_owner_proof_artifact.py"
+)
+Invoke-BackendPytestStep -Name "deployment smoke contract" -TestPaths @(
+  "tests/test_deployment_smoke_contract.py"
+)
 Invoke-BackendPytestStep -Name "billing and quota" -TestPaths @(
   "tests/test_billing_v2.py::TestBillingPlans::test_all_plans_have_same_keys",
   "tests/test_billing_v2.py::TestRazorpayCheckoutRoute::test_create_order_computes_plan_amount_and_tracks_pending_request",
@@ -123,6 +140,12 @@ Invoke-BackendPytestStep -Name "billing and quota" -TestPaths @(
   "tests/test_billing_v2.py::TestInvariants::test_plan_codes_match_tier_matrix"
 )
 Invoke-BackendPytestStep -Name "owner launch health" -TestPaths @("tests/test_owner_money_path_health.py")
+Invoke-BackendPytestStep -Name "owner audit and production readiness" -TestPaths @(
+  "tests/test_owner_mutation_audit.py",
+  "tests/test_owner_route_gate.py",
+  "tests/test_feature_flags.py",
+  "tests/test_owner_support_billing.py::test_owner_support_ticket_detail_and_reply"
+)
 Invoke-BackendPytestStep -Name "production config" -TestPaths @(
   "tests/test_production_config.py",
   "tests/test_launch_env_validator.py"
@@ -151,6 +174,7 @@ Invoke-ReadinessStep `
     "src/lib/route-auth-guard.test.ts",
     "src/lib/replay-mode.test.ts",
     "src/app/(dashboard)/outcomes/page.test.tsx",
+    "src/app/(dashboard)/settings/integrations/page.test.tsx",
     "src/app/(dashboard)/settings/billing/page.test.tsx",
     "src/app/(dashboard)/goldens/page.test.tsx",
     "src/app/(dashboard)/ci-gates/page.test.tsx",
@@ -186,6 +210,7 @@ Invoke-ReadinessStep `
     "src/app/owner/money-path/page.test.tsx",
     "src/app/owner/pricing/page.test.tsx",
     "src/app/owner/infrastructure/page.test.tsx",
+    "src/app/owner/settings/page.test.tsx",
     "src/app/owner/support/page.test.tsx"
   )
 
@@ -252,5 +277,41 @@ if ($TrackedMarkdown) {
   exit 1
 }
 
+$RequireOwnerProofArtifact = $RequireOwnerProof.IsPresent
+if (-not $RequireOwnerProofArtifact) {
+  $RequireOwnerProofValue = [string]$env:ZROKY_REQUIRE_OWNER_PROOF
+  $RequireOwnerProofArtifact = $RequireOwnerProofValue -match "^(1|true|yes)$"
+}
+
+$OwnerProofValidated = $false
+if ([string]::IsNullOrWhiteSpace($OwnerProofSummary)) {
+  if ($RequireOwnerProofArtifact) {
+    throw "Final paid launch requires ZROKY_OWNER_PROOF_SUMMARY or -OwnerProofSummary pointing at a live owner proof summary artifact."
+  }
+  Write-Host ""
+  Write-Host "Live owner proof artifact not supplied; final paid launch gate is not complete." -ForegroundColor Yellow
+  Write-Host "Set ZROKY_REQUIRE_OWNER_PROOF=true and ZROKY_OWNER_PROOF_SUMMARY=<summary.json> for final launch." -ForegroundColor Yellow
+} else {
+  $OwnerProofArguments = @(
+    "scripts/verify_design_partner_owner_proof_artifact.py",
+    "--summary",
+    $OwnerProofSummary
+  )
+  if (-not [string]::IsNullOrWhiteSpace($OwnerProofEvidence)) {
+    $OwnerProofArguments += @("--evidence", $OwnerProofEvidence)
+  }
+
+  Invoke-ReadinessStep `
+    -Name "Live owner proof artifact" `
+    -WorkingDirectory $RootDir `
+    -Command "python" `
+    -Arguments $OwnerProofArguments
+  $OwnerProofValidated = $true
+}
+
 Write-Host ""
-Write-Host "Paid launch readiness verification passed." -ForegroundColor Green
+if ($OwnerProofValidated) {
+  Write-Host "Paid launch readiness verification passed with live owner proof." -ForegroundColor Green
+} else {
+  Write-Host "Paid launch code readiness verification passed; live owner proof is still required." -ForegroundColor Green
+}

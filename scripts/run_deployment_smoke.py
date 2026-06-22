@@ -995,6 +995,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--timeout-seconds", type=float, default=20.0)
     parser.add_argument(
+        "--backend-only",
+        action="store_true",
+        help="Run backend deploy smoke only; skip dashboard and landing checks.",
+    )
+    parser.add_argument(
+        "--skip-dashboard",
+        action="store_true",
+        help="Skip dashboard page/proxy/session checks.",
+    )
+    parser.add_argument(
+        "--skip-landing",
+        action="store_true",
+        help="Skip landing page and dashboard redirect checks.",
+    )
+    parser.add_argument(
         "--grant-pro-via-railway-ssh",
         action="store_true",
         help="Grant the synthetic smoke project Pro entitlements through Railway SSH before replay/CI dispatch.",
@@ -1004,8 +1019,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     if not args.provisioning_token:
         print("[ERROR] ZROKY_PROVISIONING_TOKEN or --provisioning-token is required for deployed money-path smoke.")
         return 2
@@ -1074,8 +1089,15 @@ def main() -> int:
         )
         result_ids.update(replay_ids)
 
-        _check_dashboard(args.dashboard_url, args.timeout_seconds)
-        _check_landing(args.landing_url, args.dashboard_url, args.timeout_seconds)
+        if args.backend_only or args.skip_dashboard:
+            print("[SKIP] dashboard smoke skipped")
+        else:
+            _check_dashboard(args.dashboard_url, args.timeout_seconds)
+
+        if args.backend_only or args.skip_landing:
+            print("[SKIP] landing smoke skipped")
+        else:
+            _check_landing(args.landing_url, args.dashboard_url, args.timeout_seconds)
     except SmokeFailure as exc:
         print(f"[FAIL] {exc}")
         if result_ids:

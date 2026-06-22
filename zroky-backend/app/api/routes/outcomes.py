@@ -48,6 +48,16 @@ from app.services.system_of_record_connectors import (
     CustomerRecordApiConnector,
     LedgerRefundApiConnector,
 )
+from app.services.system_of_record_connector_config import (
+    CUSTOMER_RECORD_CONNECTOR_TYPE,
+    LEDGER_REFUND_CONNECTOR_TYPE,
+    EnvelopeFormatError,
+    VaultCipherUnavailable,
+    build_customer_record_connector,
+    build_ledger_refund_connector,
+    decrypt_connector_bearer_token,
+    get_connector_config,
+)
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
 logger = logging.getLogger(__name__)
@@ -193,6 +203,26 @@ class LedgerRefundReconciliationIngest(BaseModel):
         return value.upper() if value else value
 
 
+class SavedLedgerRefundReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="refund", max_length=64)
+    refund_id: str | None = Field(None, max_length=255)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
 class CustomerRecordConnectorIngest(BaseModel):
     base_url: str = Field(..., max_length=2048)
     path_template: str = Field(default="/customers/{customer_id}", max_length=512)
@@ -217,6 +247,26 @@ class CustomerRecordReconciliationIngest(BaseModel):
     idempotency_key: str | None = Field(None, max_length=255)
     metadata: dict[str, Any] | None = None
     connector: CustomerRecordConnectorIngest
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
+class SavedCustomerRecordReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="customer_record_update", max_length=64)
+    customer_id: str | None = Field(None, max_length=255)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
 
     @field_validator("currency")
     @classmethod
@@ -415,6 +465,43 @@ def _customer_record_idempotency_key(
     return f"customer_record:{scope}:{customer_id}"
 
 
+def _saved_ledger_refund_idempotency_key(
+    body: SavedLedgerRefundReconciliationIngest,
+    *,
+    refund_id: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_ledger_refund:{scope}:{refund_id}"
+
+
+def _saved_customer_record_idempotency_key(
+    body: SavedCustomerRecordReconciliationIngest,
+    *,
+    customer_id: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_customer_record:{scope}:{customer_id}"
+
+
+def _map_saved_connector_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, VaultCipherUnavailable):
+        return HTTPException(status_code=503, detail=str(exc))
+    if isinstance(exc, EnvelopeFormatError):
+        return HTTPException(
+            status_code=500,
+            detail="Connector secret could not be decrypted.",
+        )
+    return HTTPException(status_code=422, detail=str(exc))
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -555,6 +642,82 @@ def create_ledger_refund_reconciliation(
 
 
 @router.post(
+    "/reconciliation/ledger-refund/saved",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_saved_ledger_refund_reconciliation(
+    request: Request,
+    body: SavedLedgerRefundReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Use the saved ledger connector to verify a refund without resending its secret."""
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=LEDGER_REFUND_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Ledger refund connector is not configured.",
+        )
+
+    refund_id = _refund_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("refund_id", refund_id)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_ledger_refund_connector(
+            config,
+            refund_id=refund_id,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "refund",
+            system_ref=body.system_ref or f"ledger:{refund_id}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(claimed.get("amount_usd")),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_ledger_refund_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_ledger_refund_idempotency_key(
+                body, refund_id=refund_id
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "ledger_refund_api",
+                "connector_config_id": config.id,
+                "refund_id": refund_id,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+@router.post(
     "/reconciliation/customer-record",
     response_model=OutcomeReconciliationView,
     status_code=201,
@@ -615,6 +778,80 @@ def create_customer_record_reconciliation(
         )
     except ConnectorConfigError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _serialize_reconciliation(row)
+
+
+@router.post(
+    "/reconciliation/customer-record/saved",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_saved_customer_record_reconciliation(
+    request: Request,
+    body: SavedCustomerRecordReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Use the saved CRM connector to verify a customer record without resending its secret."""
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer record connector is not configured.",
+        )
+
+    customer_id = _customer_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("customer_id", customer_id)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_customer_record_connector(
+            config,
+            customer_id=customer_id,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "customer_record_update",
+            system_ref=body.system_ref or f"crm:{customer_id}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_customer_record_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_customer_record_idempotency_key(
+                body, customer_id=customer_id
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "customer_record_api",
+                "connector_config_id": config.id,
+                "customer_id": customer_id,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
 
     return _serialize_reconciliation(row)
 

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -273,6 +274,142 @@ def test_customer_record_connector_config_status_and_test_run_redact_secret(
                 "customer_record"
             )
             assert "crm-secret-token" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_ledger_refund_connector_config_and_test_run_are_tenant_scoped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-sor-connectors-1234567890"
+    )
+    get_settings.cache_clear()
+    engine, session_factory = _sqlite_session_factory(
+        tmp_path / "sor_connector_tenant_scope.db"
+    )
+    _seed_project(session_factory, "proj_sor_alpha")
+    _seed_project(session_factory, "proj_sor_beta")
+    fetches: list[tuple[str, str]] = []
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant(request: Request):
+        tenant_id = request.headers.get("x-zroky-test-project", "proj_sor_alpha")
+        return TenantContext(
+            tenant_id=tenant_id, role="admin", subject=f"user-{tenant_id}"
+        )
+
+    def fake_fetch(self: LedgerRefundApiConnector) -> SourceRecord:
+        fetches.append((self.base_url, self.refund_id))
+        assert self.base_url == "https://alpha-ledger.example.com/api"
+        assert self.bearer_token == "alpha-secret-token"
+        return SourceRecord(
+            record={
+                "refund_id": self.refund_id,
+                "amount_usd": 42.5,
+                "currency": "USD",
+                "status": "posted",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "ledger_refund_api",
+                "request_url": f"https://alpha-ledger.example.com/api/refunds/{self.refund_id}",
+                "http_status": 200,
+                "attempts": 1,
+                "max_attempts": 2,
+                "retryable": False,
+                "refund_id": self.refund_id,
+            },
+        )
+
+    monkeypatch.setattr(LedgerRefundApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            alpha_headers = {"x-zroky-test-project": "proj_sor_alpha"}
+            beta_headers = {"x-zroky-test-project": "proj_sor_beta"}
+
+            saved = client.put(
+                "/v1/integrations/system-of-record/ledger-refund/config",
+                headers=alpha_headers,
+                json={
+                    "base_url": "https://alpha-ledger.example.com/api",
+                    "path_template": "/refunds/{refund_id}",
+                    "bearer_token": "alpha-secret-token",
+                },
+            )
+            assert saved.status_code == 200
+            assert saved.json()["connected"] is True
+
+            beta_status = client.get(
+                "/v1/integrations/system-of-record/ledger-refund/status",
+                headers=beta_headers,
+            )
+            assert beta_status.status_code == 200
+            assert beta_status.json()["connected"] is False
+            assert beta_status.json()["base_url"] is None
+
+            beta_test = client.post(
+                "/v1/integrations/system-of-record/ledger-refund/test",
+                headers=beta_headers,
+                json={
+                    "refund_id": "rf_alpha",
+                    "claimed": {
+                        "refund_id": "rf_alpha",
+                        "amount_usd": 42.5,
+                        "currency": "USD",
+                        "status": "posted",
+                    },
+                },
+            )
+            assert beta_test.status_code == 404
+            assert fetches == []
+
+            alpha_test = client.post(
+                "/v1/integrations/system-of-record/ledger-refund/test",
+                headers=alpha_headers,
+                json={
+                    "refund_id": "rf_alpha",
+                    "claimed": {
+                        "refund_id": "rf_alpha",
+                        "amount_usd": 42.5,
+                        "currency": "USD",
+                        "status": "posted",
+                    },
+                },
+            )
+            assert alpha_test.status_code == 201
+            body = alpha_test.json()
+            assert body["ok"] is True
+            assert body["check"]["project_id"] == "proj_sor_alpha"
+            assert body["check"]["verdict"] == "matched"
+            assert (
+                body["connector"]["base_url"]
+                == "https://alpha-ledger.example.com/api"
+            )
+            assert body["connector"]["readiness"]["status"] == "ready"
+            assert fetches == [("https://alpha-ledger.example.com/api", "rf_alpha")]
+            assert "alpha-secret-token" not in json.dumps(body)
+
+            beta_status_after = client.get(
+                "/v1/integrations/system-of-record/ledger-refund/status",
+                headers=beta_headers,
+            )
+            assert beta_status_after.status_code == 200
+            assert beta_status_after.json()["connected"] is False
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)

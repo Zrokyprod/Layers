@@ -32,6 +32,11 @@ on:
         required: true
         type: boolean
         default: false
+      run_backend_deployment_smoke:
+        description: Run backend API-key/ingest deployment smoke after readiness
+        required: true
+        type: boolean
+        default: true
       timeout_seconds:
         description: HTTP timeout used by smoke and rollback verification scripts
         required: true
@@ -62,6 +67,7 @@ jobs:
       ROLLBACK_REVISION: ${{ github.event.inputs.rollback_revision }}
       TIMEOUT_SECONDS: ${{ github.event.inputs.timeout_seconds }}
       ALLOW_SKIPPED_READY_CHECKS: ${{ github.event.inputs.allow_skipped_ready_checks }}
+      RUN_BACKEND_DEPLOYMENT_SMOKE: ${{ github.event.inputs.run_backend_deployment_smoke }}
       STAGING_ADMIN_JWT: ${{ secrets.ZROKY_STAGING_ADMIN_JWT }}
       STAGING_PROVISIONING_TOKEN: ${{ secrets.ZROKY_STAGING_PROVISIONING_TOKEN }}
 
@@ -83,6 +89,11 @@ jobs:
 
           if [ -z "${STAGING_PROVISIONING_TOKEN}" ]; then
             echo "::error::Missing secret ZROKY_STAGING_PROVISIONING_TOKEN"
+            exit 1
+          fi
+
+          if echo "${BASE_URL}" | grep -q "example.com"; then
+            echo "::error::base_url must be a real staging backend URL, not example.com"
             exit 1
           fi
 
@@ -112,6 +123,15 @@ jobs:
             --provisioning-token "${STAGING_PROVISIONING_TOKEN}" \
             --timeout-seconds "${TIMEOUT_SECONDS}" \
             ${EXTRA_ARGS}
+
+      - name: Run backend deployment smoke
+        if: ${{ github.event.inputs.run_backend_deployment_smoke == 'true' }}
+        run: |
+          python ../scripts/run_deployment_smoke.py \
+            --api-base-url "${BASE_URL}" \
+            --provisioning-token "${STAGING_PROVISIONING_TOKEN}" \
+            --timeout-seconds "${TIMEOUT_SECONDS}" \
+            --backend-only
 
       - name: Verify deploy phase
         if: ${{ github.event.inputs.phase == 'deploy' || github.event.inputs.phase == 'both' }}

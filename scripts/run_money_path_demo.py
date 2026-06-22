@@ -1416,7 +1416,7 @@ def _collect_release_evidence(
         "owner launch readiness",
     )
     gate_statuses = {gate["code"]: gate["status"] for gate in launch.get("gates", [])}
-    expected_launch_allowed = not blocked_ci_demo
+    expected_launch_allowed = False
     expected_ci_gate = "fail" if blocked_ci_demo else "pass"
     _assert(
         launch["paid_launch_allowed"] is expected_launch_allowed,
@@ -1435,12 +1435,17 @@ def _collect_release_evidence(
         f"Launch readiness owner value proof was not green: {gate_statuses}",
     )
     _assert(
+        gate_statuses.get("real_customer_proof") == "not_verified",
+        f"Launch readiness real customer proof should stay not_verified for the local demo: {gate_statuses}",
+    )
+    _assert(
         gate_statuses.get("runtime_risk_stop") in {"pass", "fail", "not_verified"},
         "Launch readiness did not include runtime risk stop gate.",
     )
-    expected_blockers = (
-        ["durable_ci_gate:blocking_ci_failures"] if blocked_ci_demo else []
-    )
+    expected_blockers = []
+    if blocked_ci_demo:
+        expected_blockers.append("durable_ci_gate:blocking_ci_failures")
+    expected_blockers.append("real_customer_proof:real_customer_outcome_proof_missing")
     _assert(
         launch["hard_blockers"] == expected_blockers,
         f"Unexpected owner launch blockers remained: {launch['hard_blockers']}",

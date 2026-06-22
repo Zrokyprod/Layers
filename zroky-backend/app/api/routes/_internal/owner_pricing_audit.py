@@ -1,4 +1,5 @@
 from app.api.routes._internal.owner_common import *
+from app.services.owner_audit import create_owner_audit_event, resolve_owner_actor
 from app.services.entitlement_catalog import (
     CANONICAL_PLAN_CODES,
     PLAN_ALIASES,
@@ -146,27 +147,33 @@ def owner_update_pricing(
     request: Request,
     body: PricingConfigUpdateRequest,
     _: None = Depends(require_provisioning_access),
+    db: Session = Depends(get_db_session),
 ) -> PricingConfigResponse:
     if not _redis_ok():
         raise HTTPException(status_code=503, detail="Redis unavailable — cannot persist pricing config")
     try:
+        raw_previous = get_redis_client().get(_PRICING_CONFIG_KEY)
+        previous_exists = bool(raw_previous)
         get_redis_client().set(_PRICING_CONFIG_KEY, json.dumps(body.config, indent=2))
+        _owner_audit(
+            db,
+            action="owner.pricing.update",
+            actor=_resolve_actor(request),
+            target_id="pricing_config",
+            metadata={
+                "previous_exists": previous_exists,
+                "config_keys": sorted(str(key) for key in body.config.keys()),
+            },
+        )
+        db.commit()
         return PricingConfigResponse(config=body.config, path="redis", exists=True)
     except Exception as exc:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to write pricing config: {exc}")
 
 
 def _resolve_actor(request: Request) -> str:
-    from app.auth.identity import build_identity_context, decode_jwt_claims, extract_bearer_token
-    token = extract_bearer_token(request)
-    if token:
-        try:
-            ctx = build_identity_context(decode_jwt_claims(token))
-            if ctx.subject:
-                return ctx.subject
-        except Exception:
-            pass
-    return "provisioning_token"
+    return resolve_owner_actor(request)
 
 
 def _owner_audit(
@@ -177,13 +184,13 @@ def _owner_audit(
     target_id: str,
     metadata: dict[str, Any],
 ) -> None:
-    db.add(AuditLog(
-        tenant_id="PLATFORM",
-        diagnosis_id="owner_action",
+    create_owner_audit_event(
+        db,
         action=action,
-        actor_subject=actor,
-        metadata_json=json.dumps({"target_id": target_id, **metadata}, default=str),
-    ))
+        actor=actor,
+        target_id=target_id,
+        metadata=metadata,
+    )
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]

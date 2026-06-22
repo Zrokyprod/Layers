@@ -19,6 +19,7 @@ from app.schemas.feature_flags import (
     FeatureFlagUpdateRequest,
     TenantFeatureFlagsResponse,
 )
+from app.services.owner_audit import create_owner_audit_event, resolve_owner_actor
 
 router = APIRouter(prefix="/v1/feature-flags")
 
@@ -79,6 +80,14 @@ def create_feature_flag(
         disabled_tenants_json="[]",
     )
     db.add(flag)
+    db.flush()
+    create_owner_audit_event(
+        db,
+        action="owner.feature_flag.create",
+        actor=resolve_owner_actor(request),
+        target_id=flag.id,
+        metadata={"key": flag.key, "enabled_globally": flag.enabled_globally},
+    )
     db.commit()
     db.refresh(flag)
     return _response(flag)
@@ -94,6 +103,12 @@ def update_feature_flag(
     db: Session = Depends(get_db_session),
 ) -> FeatureFlagResponse:
     flag = _get_flag_or_404(db, flag_id)
+    before = {
+        "description": flag.description,
+        "enabled_globally": flag.enabled_globally,
+        "enabled_tenants": _loads_list(flag.enabled_tenants_json),
+        "disabled_tenants": _loads_list(flag.disabled_tenants_json),
+    }
 
     if body.description is not None:
         flag.description = body.description.strip() or None
@@ -112,6 +127,22 @@ def update_feature_flag(
     flag.disabled_tenants_json = _dumps_list(disabled)
 
     db.add(flag)
+    create_owner_audit_event(
+        db,
+        action="owner.feature_flag.update",
+        actor=resolve_owner_actor(request),
+        target_id=flag.id,
+        metadata={
+            "key": flag.key,
+            "before": before,
+            "after": {
+                "description": flag.description,
+                "enabled_globally": flag.enabled_globally,
+                "enabled_tenants": _loads_list(flag.enabled_tenants_json),
+                "disabled_tenants": _loads_list(flag.disabled_tenants_json),
+            },
+        },
+    )
     db.commit()
     db.refresh(flag)
     return _response(flag)
@@ -126,6 +157,13 @@ def delete_feature_flag(
     db: Session = Depends(get_db_session),
 ) -> Response:
     flag = _get_flag_or_404(db, flag_id)
+    create_owner_audit_event(
+        db,
+        action="owner.feature_flag.delete",
+        actor=resolve_owner_actor(request),
+        target_id=flag.id,
+        metadata={"key": flag.key},
+    )
     db.delete(flag)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
