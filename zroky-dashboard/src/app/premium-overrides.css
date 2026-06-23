@@ -16366,3 +16366,356 @@ body:has(.app-shell .agents-screen),
   color: var(--agents-blue) !important;
   box-shadow: none !important;
 }
+
+/* Agents right-side capture panel polish. */
+
+.app-shell:has(.agents-screen) .capture-connect-panel {
+  align-content: start !important;
+  gap: 14px !important;
+  overflow: hidden !important;
+  padding: 18px !important;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-head {
+  align-items: flex-start !important;
+  gap: 14px !important;
+  padding-bottom: 2px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-title {
+  align-items: flex-start !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-icon {
+  display: grid !important;
+  flex: 0 0 36px !important;
+  width: 36px !important;
+  height: 36px !important;
+  place-items: center !important;
+  border: 1px solid rgba(0, 8, 255, 0.18) !important;
+  border-radius: 8px !important;
+  background: #eef3ff !important;
+  color: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: currentColor !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-overline,
+.app-shell:has(.agents-screen) .capture-connect-status,
+.app-shell:has(.agents-screen) .capture-code-head small,
+.app-shell:has(.agents-screen) .onboarding-progress-item small {
+  color: var(--agents-muted) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.64rem !important;
+  font-weight: 780 !important;
+  letter-spacing: 0 !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-title h2 {
+  margin: 3px 0 5px !important;
+  color: var(--agents-text) !important;
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: clamp(1.05rem, 1.35vw, 1.26rem) !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.08 !important;
+  text-wrap: balance !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-title p {
+  max-width: 49ch !important;
+  color: var(--agents-text-soft) !important;
+  font-size: 0.84rem !important;
+  line-height: 1.45 !important;
+  text-wrap: pretty !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-head-actions {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 8px !important;
+  justify-content: flex-end !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-status {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  border: 1px solid rgba(0, 8, 255, 0.2) !important;
+  border-radius: 7px !important;
+  background: #f2f5ff !important;
+  color: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-panel[data-status="connected"] .capture-connect-status {
+  border-color: rgba(64, 255, 0, 0.55) !important;
+  background: #f6fff2 !important;
+  color: #176a00 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-panel[data-status="stale"] .capture-connect-status {
+  border-color: rgba(255, 221, 0, 0.74) !important;
+  background: #fffcec !important;
+  color: #665800 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-head .btn {
+  min-height: 32px !important;
+  padding-inline: 10px !important;
+  white-space: nowrap !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-strip {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) !important;
+  gap: 10px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-main {
+  min-height: 132px !important;
+  border-left: 3px solid var(--agents-yellow) !important;
+  padding: 14px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-strip.connected .capture-verification-main {
+  border-left-color: var(--agents-green) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-strip.stale .capture-verification-main {
+  border-left-color: var(--agents-red) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-main svg {
+  width: 19px !important;
+  height: 19px !important;
+  margin-top: 1px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-main strong {
+  font-size: 0.92rem !important;
+  line-height: 1.18 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-main span {
+  margin-top: 6px !important;
+  font-size: 0.8rem !important;
+  line-height: 1.48 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-health-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-health-metric {
+  min-height: 76px !important;
+  align-content: start !important;
+  gap: 5px !important;
+  padding: 10px 11px !important;
+  background: #fbfdff !important;
+}
+
+.app-shell:has(.agents-screen) .capture-health-link {
+  grid-column: span 2 !important;
+  min-height: 62px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-health-metric span,
+.app-shell:has(.agents-screen) .capture-health-metric small {
+  font-size: 0.68rem !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-health-metric strong {
+  font-size: 0.92rem !important;
+  line-height: 1.16 !important;
+  text-transform: none !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-panel .onboarding-progress {
+  gap: 10px !important;
+  padding: 12px !important;
+  background: #fbfdff !important;
+}
+
+.app-shell:has(.agents-screen) .onboarding-progress-track {
+  height: 7px !important;
+  border-radius: 999px !important;
+  background: #edf2f8 !important;
+}
+
+.app-shell:has(.agents-screen) .onboarding-progress-fill {
+  background: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .onboarding-progress-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+.app-shell:has(.agents-screen) .onboarding-progress-item {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  gap: 7px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  background: #ffffff !important;
+  padding: 7px 8px !important;
+  color: var(--agents-text-soft) !important;
+}
+
+.app-shell:has(.agents-screen) .onboarding-progress-item small {
+  width: 38px !important;
+  color: var(--agents-muted) !important;
+}
+
+.app-shell:has(.agents-screen) .onboarding-progress-item.done small {
+  color: #176a00 !important;
+}
+
+.app-shell:has(.agents-screen) .onboarding-progress-item span {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: var(--agents-text-soft) !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell:has(.agents-screen) .capture-method-toggle {
+  width: 100% !important;
+  gap: 5px !important;
+  padding: 5px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-method-toggle button {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  height: 34px !important;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease !important;
+}
+
+.app-shell:has(.agents-screen) .capture-method-toggle button:active {
+  transform: translateY(1px) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-block {
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: #ffffff !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-block[data-density="single"] {
+  grid-column: span 2 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-head {
+  min-height: 40px !important;
+  gap: 8px !important;
+  padding: 8px 10px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-head > span {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: var(--agents-text) !important;
+  font-size: 0.8rem !important;
+  font-weight: 760 !important;
+  line-height: 1.2 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-head small {
+  margin-left: auto !important;
+  color: var(--agents-muted) !important;
+  white-space: nowrap !important;
+}
+
+.app-shell:has(.agents-screen) .capture-copy-btn {
+  min-height: 28px !important;
+  padding-inline: 8px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-block pre {
+  max-height: 180px !important;
+  padding: 12px !important;
+  border-top: 1px solid var(--agents-border) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-block[data-density="single"] pre {
+  max-height: 70px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-block code {
+  display: block !important;
+  color: #142033 !important;
+  font-size: 0.73rem !important;
+  line-height: 1.5 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-actions {
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding-top: 2px !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-actions .btn {
+  min-height: 34px !important;
+  padding-inline: 12px !important;
+}
+
+@media (max-width: 1220px) {
+  .app-shell:has(.agents-screen) .capture-verification-strip,
+  .app-shell:has(.agents-screen) .capture-connect-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell:has(.agents-screen) .capture-code-block[data-density="single"],
+  .app-shell:has(.agents-screen) .capture-health-link {
+    grid-column: auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell:has(.agents-screen) .capture-connect-head,
+  .app-shell:has(.agents-screen) .capture-connect-head-actions {
+    width: 100% !important;
+  }
+
+  .app-shell:has(.agents-screen) .capture-connect-head {
+    display: grid !important;
+  }
+
+  .app-shell:has(.agents-screen) .capture-connect-head-actions,
+  .app-shell:has(.agents-screen) .capture-health-metrics,
+  .app-shell:has(.agents-screen) .onboarding-progress-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell:has(.agents-screen) .capture-connect-head-actions {
+    display: grid !important;
+  }
+
+  .app-shell:has(.agents-screen) .capture-connect-status {
+    justify-content: center !important;
+  }
+}

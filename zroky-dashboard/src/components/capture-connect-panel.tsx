@@ -64,10 +64,13 @@ function CodeBlock({
   value: string;
   onCopy: () => void;
 }) {
+  const lineCount = value.split("\n").length;
+
   return (
-    <div className="capture-code-block">
+    <div className="capture-code-block" data-density={lineCount > 3 ? "multi" : "single"}>
       <div className="capture-code-head">
         <span>{title}</span>
+        <small>{lineCount === 1 ? "single command" : `${lineCount} lines`}</small>
         <CopyButton value={value} label="Copy" onCopy={onCopy} />
       </div>
       <pre>
@@ -179,6 +182,8 @@ X-Zroky-Prompt-Version: support-v42`;
   const gatewayStatus = captureHealth?.gateway_worst_status ?? "unknown";
   const gatewayBacklog = captureHealth?.gateway_spool_backlog ?? 0;
   const gatewayLoss = captureHealth?.gateway_loss_count ?? 0;
+  const statusTone = connected ? "connected" : stale ? "stale" : "waiting";
+  const statusBadge = connected ? "Live" : stale ? "Stale" : "No data";
 
   function selectMethod(nextMethod: CaptureMethod) {
     setMethod(nextMethod);
@@ -186,24 +191,30 @@ X-Zroky-Prompt-Version: support-v42`;
   }
 
   return (
-    <section className="panel capture-connect-panel">
+    <section className="panel capture-connect-panel" data-status={statusTone}>
       <div className="capture-connect-head">
         <div className="capture-connect-title">
-          <Server aria-hidden="true" />
+          <span className="capture-connect-icon">
+            <Server aria-hidden="true" />
+          </span>
           <div>
+            <span className="capture-connect-overline">Capture setup</span>
             <h2>{statusLabel}</h2>
             <p>
               Send one real agent call through Zroky. The dashboard will switch to live mode after the first event lands.
             </p>
           </div>
         </div>
-        <button type="button" className="btn btn-soft" onClick={onRefresh}>
-          <RefreshCw aria-hidden="true" />
-          Check again
-        </button>
+        <div className="capture-connect-head-actions">
+          <span className="capture-connect-status">{statusBadge}</span>
+          <button type="button" className="btn btn-soft" onClick={onRefresh}>
+            <RefreshCw aria-hidden="true" />
+            Check again
+          </button>
+        </div>
       </div>
 
-      <div className={`capture-verification-strip ${connected ? "connected" : stale ? "stale" : "waiting"}`}>
+      <div className={`capture-verification-strip ${statusTone}`}>
         <div className="capture-verification-main">
           {connected ? <ShieldCheck aria-hidden="true" /> : <Activity aria-hidden="true" />}
           <div>
@@ -269,7 +280,8 @@ X-Zroky-Prompt-Version: support-v42`;
         <div className="onboarding-progress-grid">
           {checklistItems.map((item) => (
             <span key={item.label} className={`onboarding-progress-item${item.done ? " done" : ""}`}>
-              {item.done ? "Done" : "Todo"}: {item.label}
+              <small>{item.done ? "Done" : "Todo"}</small>
+              <span>{item.label}</span>
             </span>
           ))}
         </div>
@@ -300,8 +312,8 @@ X-Zroky-Prompt-Version: support-v42`;
 
       {method === "gateway" ? (
         <div className="capture-connect-grid">
-          <CodeBlock title="Run gateway in direct HTTP mode" value={snippets.gatewayEnv} onCopy={onMarkOpened} />
-          <CodeBlock title="Point your agent at the gateway" value={snippets.gatewayClient} onCopy={onMarkOpened} />
+          <CodeBlock title="Run gateway" value={snippets.gatewayEnv} onCopy={onMarkOpened} />
+          <CodeBlock title="Point agent" value={snippets.gatewayClient} onCopy={onMarkOpened} />
           <CodeBlock title="Local smoke check" value={snippets.smoke} onCopy={onMarkOpened} />
         </div>
       ) : (
