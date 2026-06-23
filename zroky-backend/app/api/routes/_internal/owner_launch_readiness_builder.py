@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -50,6 +52,11 @@ LOCAL_PROOF_MODES = {
     "sandbox",
     "synthetic",
 }
+
+SOURCE_TRUTH_MARKER = "single product and implementation source of truth"
+_DEFAULT_SOURCE_TRUTH_MANIFEST_PATH = (
+    Path(__file__).resolve().parents[4] / "source_truth_manifest.json"
+)
 
 
 def _evidence(
@@ -378,9 +385,18 @@ def _repo_root_for_source_truth() -> Path | None:
     return None
 
 
-def _source_truth_status() -> tuple[str, list[str], list[OwnerLaunchGateEvidence]]:
-    root = _repo_root_for_source_truth()
-    if root is None:
+def _source_truth_manifest_path() -> Path:
+    env_path = os.environ.get("SOURCE_TRUTH_MANIFEST_PATH", "").strip()
+    if env_path:
+        return Path(env_path)
+    return _DEFAULT_SOURCE_TRUTH_MANIFEST_PATH
+
+
+def _source_truth_status_from_manifest() -> tuple[
+    str, list[str], list[OwnerLaunchGateEvidence]
+]:
+    path = _source_truth_manifest_path()
+    if not path.exists():
         return (
             "not_verified",
             ["repo_root_not_found"],
@@ -389,14 +405,69 @@ def _source_truth_status() -> tuple[str, list[str], list[OwnerLaunchGateEvidence
                     "README marker",
                     "missing",
                     status="not_verified",
-                    detail="Backend could not locate the repository root to verify product source of truth.",
+                    detail="Backend could not locate the repository root or runtime source manifest.",
                 )
             ],
         )
 
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return (
+            "not_verified",
+            ["source_truth_manifest_unreadable"],
+            [
+                _evidence(
+                    "runtime source manifest",
+                    "unreadable",
+                    status="not_verified",
+                    detail=str(exc),
+                )
+            ],
+        )
+
+    marker = str(manifest.get("readme_marker") or "")
+    readme_sha = str(manifest.get("readme_sha256") or "")
+    stale_docs = [
+        str(path)
+        for path in manifest.get("stale_product_doc_paths_present", [])
+        if str(path)
+    ]
+    evidence = [
+        _evidence(
+            "runtime source manifest",
+            "present",
+            status="pass" if marker == SOURCE_TRUTH_MARKER else "not_verified",
+            detail=str(manifest.get("source") or "README.md"),
+        ),
+        _evidence(
+            "README sha256",
+            readme_sha[:12] if readme_sha else "missing",
+            status="pass" if readme_sha else "not_verified",
+        ),
+        _evidence(
+            "stale planning docs",
+            len(stale_docs),
+            status="fail" if stale_docs else "pass",
+        ),
+    ]
+    if stale_docs:
+        return "fail", [f"stale_doc:{rel}" for rel in stale_docs], evidence
+    if marker != SOURCE_TRUTH_MARKER:
+        return "not_verified", ["readme_source_marker_missing"], evidence
+    if not readme_sha:
+        return "not_verified", ["readme_hash_missing"], evidence
+    return "pass", [], evidence
+
+
+def _source_truth_status() -> tuple[str, list[str], list[OwnerLaunchGateEvidence]]:
+    root = _repo_root_for_source_truth()
+    if root is None:
+        return _source_truth_status_from_manifest()
+
     readme = root / "README.md"
     text = readme.read_text(encoding="utf-8", errors="replace")
-    has_marker = "single product and implementation source of truth" in text
+    has_marker = SOURCE_TRUTH_MARKER in text
     stale_docs = [rel for rel in STALE_PRODUCT_DOC_PATHS if (root / rel).exists()]
     evidence = [
         _evidence(
