@@ -53,6 +53,7 @@ export function KpiCard({
   value,
   helper,
   trend,
+  tone,
   active,
   onClick,
 }: {
@@ -61,6 +62,7 @@ export function KpiCard({
   value: string;
   helper: string;
   trend?: string | null;
+  tone?: "danger" | "warning" | "success" | "info" | "neutral";
   active?: boolean;
   onClick?: () => void;
 }) {
@@ -79,13 +81,14 @@ export function KpiCard({
   );
 
   if (!onClick) {
-    return <div className={`fi-kpi-card${active ? " is-active" : ""}`}>{body}</div>;
+    return <div className={`fi-kpi-card${active ? " is-active" : ""}`} data-tone={tone ?? "neutral"}>{body}</div>;
   }
 
   return (
     <button
       type="button"
       className={`fi-kpi-card${active ? " is-active" : ""}`}
+      data-tone={tone ?? "neutral"}
       onClick={onClick}
       aria-pressed={active}
     >
@@ -222,8 +225,8 @@ export function FirstRunOnboarding({
       : {
           href: "/trace",
           label: "Review trace",
-          title: "Trace capture is ready",
-          detail: "When a run fails, this page promotes it into an issue and the next proof action.",
+          title: "First agent action is captured",
+          detail: "When Zroky sees risk, this page turns the action into a decision, outcome check, and Evidence Pack.",
           icon: <CheckCircle2 aria-hidden="true" />,
         };
   const captureLabel =
@@ -252,7 +255,7 @@ export function FirstRunOnboarding({
     },
     {
       label: "First issue/replay ready",
-      detail: hasCapture && replayUnlocked ? "Ready when issue appears" : replayUnlocked ? "Waiting" : "Upgrade later",
+      detail: hasCapture && replayUnlocked ? "Ready when risk appears" : replayUnlocked ? "Waiting" : "Upgrade later",
       state: hasCapture && replayUnlocked ? "current" : "locked",
     },
   ];
@@ -339,7 +342,7 @@ export function FirstRunOnboarding({
         </article>
       </div>
 
-      <div className="fi-onboarding-flow" aria-label="Command Center setup path">
+      <div className="fi-onboarding-flow" aria-label="Agent protection setup path">
         <h3>Setup progress</h3>
         {setupSteps.map((step, index) => (
           <div className="fi-onboarding-flow-step" data-state={step.state} key={step.label}>
@@ -391,22 +394,22 @@ export function FirstRunOnboarding({
 
       <div className="fi-onboarding-checklist" aria-label="What happens next">
         <h3>What happens next</h3>
-        <div className="fi-proof-preview" aria-label="Command Center operating model">
+        <div className="fi-proof-preview" aria-label="Agent protection operating model">
           <div>
             <Code2 aria-hidden="true" />
-            <span>Trace appears</span>
+            <span>Agent action captured</span>
           </div>
           <div>
             <Terminal aria-hidden="true" />
-            <span>Failure becomes issue</span>
+            <span>Risk becomes decision</span>
           </div>
           <div>
             <ShieldCheck aria-hidden="true" />
-            <span>{canShowReplayNext ? "Replay verifies fix" : "Replay unlocks after upgrade"}</span>
+            <span>{canShowReplayNext ? "Outcome gets verified" : "Outcome proof unlocks later"}</span>
           </div>
           <div>
             <GitPullRequest aria-hidden="true" />
-            <span>Contract blocks regression</span>
+            <span>Evidence Pack exports</span>
           </div>
         </div>
       </div>

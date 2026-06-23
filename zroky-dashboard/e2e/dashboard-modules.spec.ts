@@ -8,13 +8,13 @@ test.describe("dashboard modules", () => {
 
     const seed = readSeed();
     const routes = [
-      { path: "/home", labels: ["Home", "selecting the wrong tool", "refund-support-agent"] },
+      { path: "/home", labels: ["Agent safety status", "Needs your decision", "Evidence Pack", "Action accountability loop"] },
       { path: "/agents", labels: ["Agent accountability ledger", "Protected agents", "capture stream"] },
       { path: "/calls", labels: ["Call Evidence", "refund-support-agent", "failed"] },
       { path: `/calls/${seed.call_id}`, labels: [seed.call_id, "refund-support-agent", "Where is my refund?"] },
       { path: "/issues", labels: ["Failures", "selecting the wrong tool", "Tool Not Called"] },
       { path: `/issues/${seed.issue_id}`, labels: ["selecting the wrong tool", "Tool Not Called", "get_refund_status"] },
-      { path: "/goldens", labels: ["Goldens", "Refund status protected flow"] },
+      { path: "/goldens", labels: ["Fixtures", "Refund status protected flow"] },
       { path: `/goldens/${seed.golden_set_id}`, labels: ["Refund status protected flow", "RF-1001"] },
       { path: "/ci-gates", labels: ["CI Gates", "demo-break-r"] },
       { path: `/ci-gates/${seed.ci_run_id}`, labels: ["Regression CI", "Regression CI blocked this change.", "demo-break-r"] },

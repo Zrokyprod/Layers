@@ -208,7 +208,10 @@ function rowForIssueTitle(title: string): HTMLElement {
 }
 
 function summaryCard(label: string): HTMLElement {
-  const card = screen.getByText(label).closest(".fi-kpi-card");
+  const card = screen
+    .getAllByText(label)
+    .map((element) => element.closest(".fi-kpi-card"))
+    .find(Boolean);
   if (!card) throw new Error(`Missing summary card ${label}`);
   return card as HTMLElement;
 }
@@ -371,56 +374,56 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Evidence ledger", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Agent safety status", level: 1 })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Release blocked")).toBeInTheDocument();
-    expect(screen.getByText("1 gate failing on regression-ci:proj_1.")).toBeInTheDocument();
+    expect(screen.getByText("Deployment blocked")).toBeInTheDocument();
+    expect(screen.getByText("1 verification gate failing on regression-ci:proj_1.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Run replay" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Verify outcome" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Open gate" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Open issues" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Review decisions" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Loaded open issues")).toBeNull();
     expect(screen.queryByText("Replay mode")).toBeNull();
     expect(screen.queryByText("Silent failures detected")).toBeNull();
 
     const summary = screen.getByLabelText("Home summary");
     expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(5);
-    expect(within(summaryCard("Failed evidence")).getByText("2")).toBeInTheDocument();
-    expect(within(summaryCard("Open proof gaps")).getByText("2")).toBeInTheDocument();
-    expect(within(summaryCard("Outcome verified")).getByText("0% verified")).toBeInTheDocument();
-    expect(within(summaryCard("Blocked exports")).getByText("1")).toBeInTheDocument();
-    expect(within(summaryCard("Spend drift")).getByText("+25% cost")).toBeInTheDocument();
+    expect(within(summaryCard("Action signals")).getByText("2")).toBeInTheDocument();
+    expect(within(summaryCard("Needs review")).getByText("3")).toBeInTheDocument();
+    expect(within(summaryCard("Verified outcomes")).getByText("0% verified")).toBeInTheDocument();
+    expect(within(summaryCard("Protected agents")).getByText("1")).toBeInTheDocument();
+    expect(within(summaryCard("Evidence packs")).getByText("2")).toBeInTheDocument();
     expect(summary).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Evidence ledger", level: 3 })).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Evidence ledger focus" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Needs your decision", level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Decision queue focus" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "All" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tab", { name: "P0/P1" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Proof gaps" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Impact" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "High risk" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Missing proof" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Exposure" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Verified" })).toBeInTheDocument();
-    expect(screen.getByText("Sorted by severity, exposure, and proof gaps.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Impact" }));
-    expect(screen.getByRole("tab", { name: "Impact" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText("Showing evidence rows sorted by spend exposure.")).toBeInTheDocument();
+    expect(screen.getByText("The highest-risk actions, missing proof, and customer-impact signals in one queue.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Exposure" }));
+    expect(screen.getByRole("tab", { name: "Exposure" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("The same queue sorted by estimated customer or spend exposure.")).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Priority",
-      "Proof type",
-      "Evidence item",
-      "Exposure",
-      "State",
-      "Proof",
+      "Urgency",
+      "Signal",
+      "Agent / action",
+      "Risk",
+      "Outcome state",
+      "Next step",
     ]);
-    expect(within(rowForIssueTitle("Checkout loop")).getByText("Critical failure")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText("High-risk action")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("Loop repeated the same checkout tool call.")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("No trusted replay")).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Evidence packs" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Evidence Pack" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Download JSON" }).getAttribute("href")).toBe("/evidence");
-    expect(screen.getByRole("heading", { name: "Proof gaps by connector" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Outcome verification chain" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "System-of-record proof" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Action accountability loop" })).toBeInTheDocument();
     expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 
@@ -439,7 +442,7 @@ describe("Command Center home", () => {
     render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Create a project key" })).toBeInTheDocument();
-    expect(screen.getByText("Capture your first agent run to start outcome proof.")).toBeInTheDocument();
+    expect(screen.getByText("Connect your first agent and system of record to start outcome proof.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("link", { name: /Create project key/i })[0]?.getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("heading", { name: "Connection health" })).toBeInTheDocument();
@@ -456,7 +459,7 @@ describe("Command Center home", () => {
     expect(screen.getByRole("link", { name: /Use Gateway/i }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("link", { name: /Send test capture/i }).getAttribute("href")).toBe("/trace");
     expect(screen.getByRole("heading", { name: "What happens next" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Evidence ledger", level: 3 })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Needs your decision", level: 3 })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open issues" })).toBeNull();
   });
 
@@ -480,8 +483,8 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Evidence ledger", level: 3 })).toBeInTheDocument();
-    expect(screen.getByText("No proof gaps right now.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Needs your decision", level: 3 })).toBeInTheDocument();
+    expect(screen.getByText("No high-risk action needs review right now.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Setup progress" })).toBeNull();
   });
@@ -508,7 +511,7 @@ describe("Command Center home", () => {
     expect(screen.queryByText(/Partial refresh:/)).toBeNull();
   });
 
-  it("renders Cost Impact values in priority rows and keeps cost trend visible", async () => {
+  it("renders Cost Impact values in priority rows and keeps evidence pack count visible", async () => {
     mockInbox(
       {
         "pilot.root_cause_diagnosis": true,
@@ -534,7 +537,7 @@ describe("Command Center home", () => {
     await screen.findAllByText("Checkout loop");
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Schema drift")).getByText("$7.50")).toBeInTheDocument();
-    expect(within(summaryCard("Spend drift")).getByText("+25% cost")).toBeInTheDocument();
+    expect(within(summaryCard("Evidence packs")).getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Capture traces to calculate latency.")).toBeInTheDocument();
   });
 
@@ -577,7 +580,7 @@ describe("Command Center home", () => {
 
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upgrade").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Proof gaps by connector" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "System-of-record proof" })).toBeInTheDocument();
   });
 
   it("enables pilot replay and golden actions only for verified fixes", async () => {
@@ -590,9 +593,9 @@ describe("Command Center home", () => {
     render(<HomePage />);
 
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Run replay").length).toBeGreaterThan(0);
-    expect(within(rowForIssueTitle("Answer drift")).getByText("Open Contracts")).toBeInTheDocument();
-    expect(within(rowForIssueTitle("Checkout loop")).queryByText("Open Contracts")).toBeNull();
+    expect(screen.getAllByText("Verify outcome").length).toBeGreaterThan(0);
+    expect(within(rowForIssueTitle("Answer drift")).getByText("Open evidence")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).queryByText("Open evidence")).toBeNull();
   });
 
   it.each([
@@ -623,8 +626,8 @@ describe("Command Center home", () => {
 
     await screen.findAllByText("Checkout loop");
     const row = rowForIssueTitle("Checkout loop");
-    expect(within(row).queryByText("Open Contracts")).toBeNull();
-    expect(within(row).getByRole("button", { name: /Run replay/i })).toBeInTheDocument();
+    expect(within(row).queryByText("Open evidence")).toBeNull();
+    expect(within(row).getByRole("button", { name: /Verify outcome/i })).toBeInTheDocument();
     expect(within(row).getByText(label)).toBeInTheDocument();
   });
 
@@ -639,7 +642,7 @@ describe("Command Center home", () => {
     render(<HomePage />);
 
     expect(await screen.findByText("Not verified")).toBeInTheDocument();
-    expect(screen.getByText("CI failing")).toBeInTheDocument();
+    expect(screen.getByText("Release gate")).toBeInTheDocument();
     expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 });
