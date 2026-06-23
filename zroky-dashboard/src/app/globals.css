@@ -40676,20 +40676,27 @@ body:has(.app-shell),
   --text-primary: #f3f7fb;
   --text-secondary: #aeb9c8;
   --text-tertiary: #728095;
-  --status-success: #36d99a;
+  --status-success: #7aa8ff;
   --status-warning: #efc75e;
   --status-error: #ff6685;
   --shadow-soft: 0 20px 80px rgba(0, 0, 0, 0.34);
 }
 
+.app-shell .content-inner:has(.fi-home-v5) {
+  max-width: none;
+  padding-right: 0;
+  padding-left: 0;
+}
+
 .fi-home-v5 {
   --fi-blue: #68a7ff;
-  --fi-green: #36d99a;
   --fi-yellow: #efc75e;
   --fi-red: #ff6685;
   --fi-neutral: #aeb9c8;
-  max-width: 1480px;
-  margin: 0 auto;
+  --fi-success: #7aa8ff;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   gap: 18px;
 }
 
@@ -40723,7 +40730,7 @@ body:has(.app-shell),
 }
 
 .fi-home-v5 .fi-command-hero[data-tone="success"] {
-  border-color: rgba(54, 217, 154, 0.24);
+  border-color: rgba(122, 168, 255, 0.24);
 }
 
 .fi-home-v5 .fi-hero-main {
@@ -40872,13 +40879,13 @@ body:has(.app-shell),
 }
 
 .fi-home-status-tile[data-tone="success"] {
-  border-color: rgba(54, 217, 154, 0.24);
+  border-color: rgba(122, 168, 255, 0.24);
 }
 
 .fi-home-status-tile[data-tone="success"] .fi-home-status-icon,
 .fi-home-v5 .fi-kpi-card[data-tone="success"] .fi-kpi-icon {
-  color: var(--fi-green);
-  background: rgba(54, 217, 154, 0.1);
+  color: var(--fi-success);
+  background: rgba(122, 168, 255, 0.1);
 }
 
 .fi-home-status-tile[data-tone="info"] {
@@ -40922,7 +40929,7 @@ body:has(.app-shell),
 }
 
 .fi-home-v5 .fi-kpi-card[data-tone="success"] {
-  border-color: rgba(54, 217, 154, 0.2);
+  border-color: rgba(122, 168, 255, 0.2);
 }
 
 .fi-home-v5 .fi-kpi-card[data-tone="info"] {
@@ -41028,7 +41035,7 @@ body:has(.app-shell),
 }
 
 .fi-home-v5 .fi-status-text[data-tone="success"] {
-  color: var(--fi-green);
+  color: var(--fi-success);
 }
 
 .fi-home-v5 .fi-evidence-row,
@@ -41057,7 +41064,7 @@ body:has(.app-shell),
 }
 
 .fi-home-v5 .fi-pipeline-stage[data-tone="success"] .fi-pipeline-node {
-  color: var(--fi-green);
+  color: var(--fi-success);
 }
 
 .fi-home-v5 .fi-empty {
