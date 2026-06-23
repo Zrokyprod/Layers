@@ -8,8 +8,8 @@ test.describe("dashboard modules", () => {
 
     const seed = readSeed();
     const routes = [
-      { path: "/home", labels: ["Agent action accountability", "Decision queue", "Evidence Pack", "Action accountability loop"] },
-      { path: "/agents", labels: ["Outcome mismatch", "Needs your decision", "Selected agent proof"] },
+      { path: "/home", labels: ["Agent action accountability", "Decision queue", "Evidence Pack", "System-of-record health"] },
+      { path: "/agents", labels: ["Outcome mismatch", "Needs your decision", "Selected agent proof", "System-of-record health"] },
       { path: "/calls", labels: ["Call Evidence", "refund-support-agent", "failed"] },
       { path: `/calls/${seed.call_id}`, labels: [seed.call_id, "refund-support-agent", "Where is my refund?"] },
       { path: "/issues", labels: ["Failures", "selecting the wrong tool", "Tool Not Called"] },

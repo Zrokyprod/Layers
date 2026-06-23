@@ -26,6 +26,8 @@ const leaderboardRefetch = vi.hoisted(() => ({
 
 const store = vi.hoisted(() => ({
   setSdkConnected: vi.fn(),
+  dateRange: { from: null as Date | null, to: null as Date | null },
+  realTimeEnabled: true,
 }));
 
 vi.mock("next/link", () => ({
@@ -61,8 +63,16 @@ vi.mock("@/lib/hooks", () => ({
 }));
 
 vi.mock("@/lib/store", () => ({
-  useDashboardStore: <T,>(selector: (state: { setSdkConnected: (value: boolean) => void }) => T) =>
-    selector({ setSdkConnected: store.setSdkConnected }),
+  useDashboardStore: <T,>(selector: (state: {
+    setSdkConnected: (value: boolean) => void;
+    dateRange: { from: Date | null; to: Date | null };
+    realTimeEnabled: boolean;
+  }) => T) =>
+    selector({
+      setSdkConnected: store.setSdkConnected,
+      dateRange: store.dateRange,
+      realTimeEnabled: store.realTimeEnabled,
+    }),
 }));
 
 const now = "2026-06-20T09:00:00.000Z";
@@ -356,6 +366,8 @@ describe("AgentsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     leaderboardState.items = [];
+    store.dateRange = { from: null, to: null };
+    store.realTimeEnabled = true;
   });
 
   it("renders the protected-agent workflow with proof-first sections", async () => {
@@ -377,18 +389,23 @@ describe("AgentsPage", () => {
 
     expect(screen.getByText("Needs your decision")).toBeInTheDocument();
     expect(screen.getByText("Accountability loop")).toBeInTheDocument();
-    expect(screen.getByText("Behavior drift by agent")).toBeInTheDocument();
-    expect(screen.getByText("Proof gap clusters")).toBeInTheDocument();
-    expect(screen.getByText("Evidence trail")).toBeInTheDocument();
+    expect(screen.getByText("System-of-record health")).toBeInTheDocument();
+    expect(screen.getByText("Capture stream")).toBeInTheDocument();
+    expect(screen.getByText("Outcome events")).toBeInTheDocument();
+    expect(screen.getByText("Gateway backlog")).toBeInTheDocument();
+    expect(screen.getByText("Capture warnings")).toBeInTheDocument();
     expect(screen.getByText("Selected agent proof")).toBeInTheDocument();
     expect((await screen.findAllByText("Refund action exceeded mandate")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Runtime decision").length).toBeGreaterThan(0);
     expect(screen.getByText("Outcome verdict")).toBeInTheDocument();
     expect((await screen.findAllByText("ledger_refund_api - ledger:RF-1001")).length).toBeGreaterThan(0);
     expect(screen.getByText("No evidence capture warnings.")).toBeInTheDocument();
+    expect(screen.queryByText("Behavior drift by agent")).toBeNull();
+    expect(screen.queryByText("Proof gap clusters")).toBeNull();
+    expect(screen.queryByText("Evidence trail")).toBeNull();
 
     expect(screen.getAllByRole("link", { name: /Run replay/i })[0]?.getAttribute("href")).toBe("/replay");
-    expect(screen.getByRole("link", { name: "Open incidents" }).getAttribute("href")).toBe("/issues");
+    expect(screen.getByRole("link", { name: /Open connectors/i }).getAttribute("href")).toBe("/integrations");
     expect(screen.getByRole("link", { name: "View evidence trace" }).getAttribute("href")).toBe("/calls/call_1");
     expect(screen.getAllByRole("link", { name: "Review held action" })[0]?.getAttribute("href")).toBe("/approvals");
     expect(screen.getAllByRole("link", { name: /Evidence Pack/i })[0]?.getAttribute("href")).toBe(
@@ -428,6 +445,46 @@ describe("AgentsPage", () => {
     expect(within(protectedMatrix()).getByRole("link", { name: "Review held action" }).getAttribute("href")).toBe(
       "/approvals",
     );
+  });
+
+  it("uses the global dashboard date window for the agents summary", async () => {
+    store.dateRange = {
+      from: new Date("2026-06-01T00:00:00.000Z"),
+      to: new Date("2026-06-15T00:00:00.000Z"),
+    };
+    store.realTimeEnabled = false;
+    mockAgents();
+
+    renderAgentsPage();
+
+    await screen.findByText("Needs your decision");
+    expect(api.getAnalyticsSummary.mock.calls[0]?.[0]).toBe(14);
+  });
+
+  it("shows protected agents instead of an empty default review queue", async () => {
+    mockAgents({
+      scores: [agentScore({ health_score: 91, fail_rate: 0.01, call_count: 1 })],
+      calls: [call()],
+      issues: [],
+      decisions: [
+        runtimeDecision({
+          decision: "allow",
+          status: "allowed",
+          allowed: true,
+          requires_approval: false,
+        }),
+      ],
+      outcomes: [outcomeCheck()],
+      summary: analyticsSummary({ open_issues: 0 }),
+    });
+
+    renderAgentsPage();
+
+    expect(await screen.findByRole("heading", { name: "Protected", level: 1 })).toBeInTheDocument();
+    expect(await within(protectedMatrix()).findByText("Refund Agent")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("ALLOW")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("matched")).toBeInTheDocument();
+    expect(screen.queryByText("No agents match this filter.")).toBeNull();
   });
 
   it("prioritizes mismatched outcomes over newer not verified checks", async () => {
