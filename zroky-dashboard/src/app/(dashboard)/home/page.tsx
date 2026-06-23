@@ -7,13 +7,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
-  Bot,
   CheckCircle2,
   Clock3,
   FileJson,
   GitPullRequest,
   ListChecks,
   LockKeyhole,
+  Plug,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -21,14 +21,10 @@ import {
 } from "lucide-react";
 
 import {
-  EmptyQueue,
   FirstRunOnboarding,
-  KpiCard,
   LockedUpgradeLink,
-  SectionHeader,
 } from "@/components/command-center-primitives";
 import { hasPlanEntitlement } from "@/components/feature-gate";
-import { StatusPill } from "@/components/status-pill";
 import {
   ApiError,
   createReplayRunFromIssue,
@@ -45,7 +41,6 @@ import {
   type ReplayQuotaResponse,
   type ReplayRunItem,
 } from "@/lib/api";
-import { detectorLabel } from "@/lib/detector-meta";
 import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel, severityRank } from "@/lib/issue-format";
 import { DEFAULT_VERIFICATION_REPLAY_MODE } from "@/lib/replay-mode";
@@ -74,24 +69,30 @@ type InboxData = {
 type IssueAction = "view" | "replay" | "open_goldens" | "upgrade";
 type InboxLoadKey = keyof InboxData;
 type InboxLoadErrors = Partial<Record<InboxLoadKey, string>>;
-type InboxQueueFocus = "all" | "critical_high" | "replay_gap" | "impact" | "verified";
+type HomeSnapshotFilter = "action_signals" | "needs_decision" | "unverified_outcomes" | "failing_gates" | "evidence_readiness";
 type PriorityTone = "danger" | "warning" | "success" | "neutral";
-type QueueFocusControl = {
-  id: InboxQueueFocus;
-  label: string;
-};
+type DecisionKind = "ci_gate" | "issue" | "pending_replay" | "capture" | "evidence";
 
-type PriorityRow = {
+type DecisionRow = {
   id: string;
-  priority: string;
-  type: string;
-  title: string;
+  kind: DecisionKind;
+  urgency: string;
+  signal: string;
+  agentAction: string;
   detail: string;
   impact: string;
-  status: string;
-  tone: PriorityTone;
+  proofState: string;
+  proofTone: PriorityTone;
+  nextStep: string;
   action: ReactNode;
   issueId?: string;
+  runId?: string;
+};
+
+type ProofCheck = {
+  label: string;
+  value: string;
+  tone: PriorityTone;
 };
 
 const refreshIntervalMs = 30_000;
@@ -124,14 +125,6 @@ const REPLAY_GAP_STATUSES = new Set([
   "real_replay_passed",
   "covered_passed",
 ]);
-
-const queueFocusControls: QueueFocusControl[] = [
-  { id: "all", label: "All" },
-  { id: "critical_high", label: "High risk" },
-  { id: "replay_gap", label: "Missing proof" },
-  { id: "impact", label: "Exposure" },
-  { id: "verified", label: "Verified" },
-];
 
 function normalizedReplayStatus(issue: IssueItem): string {
   return issue.replay_coverage_status.trim().toLowerCase();
@@ -231,13 +224,6 @@ function chooseIssueAction(
   return "view";
 }
 
-function planLimitText(quota: ReplayQuotaResponse | null): string {
-  if (!quota) return "Replay quota unavailable";
-  if (!quota.enabled) return "Replay disabled on current plan";
-  if (quota.limit === -1) return `${formatCount(quota.used)} used / unlimited`;
-  return `${formatCount(quota.used)} used / ${formatCount(quota.limit)} runs`;
-}
-
 function captureStatusLabel(status: CaptureHealthResponse["status"] | "unknown", capturedCallCount: number): string {
   if (capturedCallCount > 0) return `${formatCount(capturedCallCount)} captured`;
   if (status === "connected") return "Live capture";
@@ -255,32 +241,6 @@ function evidenceSummary(issue: IssueItem): string {
   );
 }
 
-function filterIssuesForFocus(items: IssueItem[], focus: InboxQueueFocus): IssueItem[] {
-  if (focus === "critical_high") {
-    return items.filter((issue) => ["critical", "high"].includes(issue.severity.toLowerCase()));
-  }
-  if (focus === "replay_gap") {
-    return items.filter((issue) => !hasTrustedGoldenReplay(issue));
-  }
-  if (focus === "impact") {
-    return [...items]
-      .filter((issue) => issueImpactUsd(issue) != null)
-      .sort((a, b) => (issueImpactUsd(b) ?? 0) - (issueImpactUsd(a) ?? 0));
-  }
-  if (focus === "verified") {
-    return items.filter(hasTrustedGoldenReplay);
-  }
-  return items;
-}
-
-function queueFocusDescription(focus: InboxQueueFocus): string {
-  if (focus === "critical_high") return "High-risk agent actions that need a decision before anyone trusts the outcome.";
-  if (focus === "replay_gap") return "Actions where the agent reported success but Zroky cannot prove the real outcome yet.";
-  if (focus === "impact") return "The same queue sorted by estimated customer or spend exposure.";
-  if (focus === "verified") return "Actions with verified outcome proof ready for an Evidence Pack.";
-  return "The highest-risk actions, missing proof, and customer-impact signals in one queue.";
-}
-
 function formatLastUpdated(value: number | null): string {
   if (!value) return "Not refreshed yet";
   return new Intl.DateTimeFormat(undefined, {
@@ -288,13 +248,6 @@ function formatLastUpdated(value: number | null): string {
     minute: "2-digit",
     second: "2-digit",
   }).format(new Date(value));
-}
-
-function percentDelta(current: number | null | undefined, previous: number | null | undefined): number | null {
-  if (typeof current !== "number" || typeof previous !== "number" || !Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) {
-    return null;
-  }
-  return Math.round(((current - previous) / previous) * 100);
 }
 
 function statusLabel(value: string): string {
@@ -317,24 +270,47 @@ function runFailed(run: ReplayRunItem): boolean {
   return status.includes("fail") || status.includes("error") || status === "not_verified";
 }
 
-function averageLatencyMs(calls: CallListItem[]): number | null {
-  const latencies = calls.map((call) => call.latency_ms).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  if (latencies.length === 0) return null;
-  return Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length);
+function coerceDate(value: unknown): Date | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
 }
 
-function KpiSkeletonRow() {
-  return (
-    <section className="fi-kpi-grid fi-command-metrics fi-kpi-skeleton-grid" aria-label="Loading Home summary" aria-busy="true">
-      {Array.from({ length: 5 }, (_, index) => (
-        <div className="fi-kpi-card fi-kpi-skeleton-card" key={index}>
-          <div className="fi-skeleton-line is-label" />
-          <div className="fi-skeleton-line is-value" />
-          <div className="fi-skeleton-line is-helper" />
-        </div>
-      ))}
-    </section>
-  );
+function analyticsWindowDays(dateRange: { from?: unknown; to?: unknown } | null | undefined): number {
+  const from = coerceDate(dateRange?.from);
+  const to = coerceDate(dateRange?.to) ?? new Date();
+  if (!from || from.getTime() >= to.getTime()) return 7;
+  return Math.max(1, Math.min(90, Math.ceil((to.getTime() - from.getTime()) / 86_400_000)));
+}
+
+function verdictBadgeLabel(tone: PriorityTone): string {
+  if (tone === "danger") return "Blocked";
+  if (tone === "warning") return "Action required";
+  if (tone === "success") return "Protected";
+  return "Checking";
+}
+
+function filterDecisionRows(rows: DecisionRow[], focus: HomeSnapshotFilter): DecisionRow[] {
+  if (focus === "action_signals") {
+    return rows.filter((row) => row.kind === "issue" || row.kind === "capture");
+  }
+  if (focus === "unverified_outcomes") {
+    return rows.filter((row) => row.proofTone !== "success" && row.kind !== "ci_gate");
+  }
+  if (focus === "failing_gates") {
+    return rows.filter((row) => row.kind === "ci_gate");
+  }
+  if (focus === "evidence_readiness") {
+    return rows.filter((row) => row.kind === "evidence" || row.proofTone !== "success");
+  }
+  return rows;
+}
+
+function readinessLabel(ready: number, total: number): string {
+  return `${formatCount(ready)}/${formatCount(total)} ready`;
 }
 
 function PriorityTableSkeleton() {
@@ -408,6 +384,9 @@ function StatusText({ value, tone }: { value: string; tone: PriorityTone }) {
 export default function HomePage() {
   const router = useRouter();
   const selectedProject = useDashboardStore((state) => state.selectedProject);
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
+  const summaryWindowDays = useMemo(() => analyticsWindowDays(dateRange), [dateRange]);
   const [data, setData] = useState<InboxData>({
     issues: [],
     replayRuns: [],
@@ -426,8 +405,8 @@ export default function HomePage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyIssueId, setBusyIssueId] = useState<string | null>(null);
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
-  const [queueFocus, setQueueFocus] = useState<InboxQueueFocus>("all");
+  const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
+  const [queueFocus, setQueueFocus] = useState<HomeSnapshotFilter>("needs_decision");
   const loadInFlightRef = useRef(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -445,7 +424,7 @@ export default function HomePage() {
         settleLoad("goldenSets", listGoldenSets({ limit: 50 }, signal)),
         settleLoad("billing", getBillingMe(signal)),
         settleLoad("quota", getReplayQuota(signal)),
-        settleLoad("summary", getAnalyticsSummary(1, signal)),
+        settleLoad("summary", getAnalyticsSummary(summaryWindowDays, signal)),
         settleLoad("calls", listCalls({ limit: 10, sort_by: "created_at", sort_order: "desc" }, signal)),
         settleLoad("captureHealth", getCaptureHealth(signal)),
         settleLoad("apiKeys", selectedProject ? listProjectApiKeys(selectedProject, signal) : Promise.resolve([])),
@@ -517,20 +496,22 @@ export default function HomePage() {
         setRefreshing(false);
       }
     }
-  }, [selectedProject]);
+  }, [selectedProject, summaryWindowDays]);
 
   useEffect(() => {
     const ctrl = new AbortController();
     void load(ctrl.signal);
 
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void load();
-      }
-    }, refreshIntervalMs);
+    const timer = realTimeEnabled
+      ? window.setInterval(() => {
+          if (document.visibilityState === "visible") {
+            void load();
+          }
+        }, refreshIntervalMs)
+      : null;
 
     function onVisibilityChange() {
-      if (document.visibilityState === "visible") {
+      if (realTimeEnabled && document.visibilityState === "visible") {
         void load();
       }
     }
@@ -539,10 +520,10 @@ export default function HomePage() {
     return () => {
       ctrl.abort();
       loadInFlightRef.current = false;
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [load]);
+  }, [load, realTimeEnabled]);
 
   const planTemplate = data.billing?.plan_template;
   const caps = useMemo(
@@ -558,28 +539,6 @@ export default function HomePage() {
   );
 
   const sortedIssues = useMemo(() => sortIssues(data.issues), [data.issues]);
-  const focusedIssues = useMemo(() => filterIssuesForFocus(sortedIssues, queueFocus), [queueFocus, sortedIssues]);
-  const protectedAgentCount = useMemo(() => {
-    const names = new Set<string>();
-    for (const call of data.calls) {
-      const name = call.agent_name?.trim();
-      if (name) names.add(name);
-    }
-    for (const issue of data.issues) {
-      const name = issue.affected_agent?.trim() || issue.agent_name?.trim();
-      if (name) names.add(name);
-    }
-    return names.size;
-  }, [data.calls, data.issues]);
-
-  useEffect(() => {
-    if (loading || sortedIssues.length === 0) return;
-    const selectedStillVisible = focusedIssues.some((issue) => issue.id === selectedIssueId);
-    if (!selectedIssueId || !selectedStillVisible) {
-      setSelectedIssueId(focusedIssues[0]?.id ?? sortedIssues[0].id);
-    }
-  }, [focusedIssues, loading, selectedIssueId, sortedIssues]);
-
   const criticalHighCount = data.issues.filter((issue) =>
     ["critical", "high"].includes(issue.severity.toLowerCase()),
   ).length;
@@ -609,20 +568,12 @@ export default function HomePage() {
       : openIssuesCount > 0
         ? Math.round((trustedReplayCount / openIssuesCount) * 100)
         : 0;
-  const costTrend = percentDelta(data.summary?.cost_today_usd, data.summary?.cost_yesterday_usd);
-  const latencyAverage = averageLatencyMs(data.calls);
   const protectedGoldenCount = data.goldenSets.filter((set) => set.blocks_ci && !set.is_flaky).length;
   const openDecisionCount =
     needsTrustedReplayCount +
     pendingRuns.length +
     failedCiRuns.length +
     (captureHasProblem ? 1 : 0);
-  const evidenceReadyCount = [
-    capturedCallCount > 0,
-    sortedIssues.length > 0,
-    data.replayRuns.length > 0,
-    protectedGoldenCount > 0,
-  ].filter(Boolean).length;
   const hasLoadedIssues = sortedIssues.length > 0;
   const hasWorkspaceActivity = capturedCallCount > 0 || hasLoadedIssues || data.replayRuns.length > 0 || data.goldenSets.length > 0;
   const headerSubtitle = hasWorkspaceActivity
@@ -658,7 +609,6 @@ export default function HomePage() {
             tone: "danger" as const,
             action: caps.canCi ? (
               <Link href={`/ci-gates/${blockingCiRun.id}`} className="btn btn-primary btn-sm fi-btn-primary">
-                <GitPullRequest aria-hidden="true" />
                 Open gate
               </Link>
             ) : (
@@ -704,41 +654,59 @@ export default function HomePage() {
   const issuesLoadFailed = loadErrorKeys.includes("issues");
   const showFirstRunOnboarding = !loading && !error && !issuesLoadFailed && !hasWorkspaceActivity;
   const lastUpdatedLabel = formatLastUpdated(lastUpdatedAt);
-  const homeStatusTiles = [
+  const evidenceChecklistReady = [
+    capturedCallCount > 0,
+    openIssuesCount > 0,
+    trustedReplayCount > 0 || replayPassCount > 0,
+    protectedGoldenCount > 0,
+    protectedGoldenCount > 0 && failedCiRuns.length === 0,
+  ].filter(Boolean).length;
+  const evidenceReadinessPercent = Math.round((evidenceChecklistReady / 5) * 100);
+  const snapshotFilters = [
     {
+      id: "action_signals" as const,
       label: "Action signals",
       value: formatCount(failedRunsCount),
-      helper: "Blocked, failed, or high-risk records loaded.",
+      helper: "Critical drift, failed calls, or stale capture.",
       tone: "danger" as const,
       icon: <ShieldAlert aria-hidden="true" />,
     },
     {
-      label: "Needs review",
+      id: "needs_decision" as const,
+      label: "Needs decision",
       value: formatCount(openDecisionCount),
-      helper: "Held actions, missing proof, stale capture, or failing gates.",
+      helper: "Unified queue requiring owner action.",
       tone: "warning" as const,
       icon: <LockKeyhole aria-hidden="true" />,
     },
     {
-      label: "Verified outcomes",
-      value: replayCompletedCount > 0 || openIssuesCount > 0 ? `${formatCount(replayPassRate)}%` : formatCount(trustedReplayCount),
-      helper: replayCompletedCount > 0 ? "Replay-backed outcome verification." : "Verified records in the loaded queue.",
-      tone: "success" as const,
+      id: "unverified_outcomes" as const,
+      label: "Unverified outcomes",
+      value: formatCount(needsTrustedReplayCount),
+      helper: "Actions missing trusted real outcome proof.",
+      tone: "warning" as const,
       icon: <CheckCircle2 aria-hidden="true" />,
     },
     {
-      label: "Protected agents",
-      value: formatCount(protectedAgentCount),
-      helper: protectedAgentCount > 0 ? `${formatCount(capturedCallCount)} captured actions in scope.` : "Waiting for the first captured agent.",
-      tone: "info" as const,
-      icon: <Bot aria-hidden="true" />,
+      id: "failing_gates" as const,
+      label: "Failing gates",
+      value: formatCount(failedCiRuns.length),
+      helper: "Promotion gates currently blocking release.",
+      tone: failedCiRuns.length > 0 ? ("danger" as const) : ("success" as const),
+      icon: <GitPullRequest aria-hidden="true" />,
+    },
+    {
+      id: "evidence_readiness" as const,
+      label: "Evidence readiness",
+      value: `${formatCount(evidenceReadinessPercent)}%`,
+      helper: readinessLabel(evidenceChecklistReady, 5),
+      tone: evidenceReadinessPercent >= 80 ? ("success" as const) : evidenceReadinessPercent >= 40 ? ("warning" as const) : ("neutral" as const),
+      icon: <FileJson aria-hidden="true" />,
     },
   ];
 
-  function focusQueue(nextFocus: InboxQueueFocus) {
+  function focusQueue(nextFocus: HomeSnapshotFilter) {
     setQueueFocus(nextFocus);
-    const nextItems = filterIssuesForFocus(sortedIssues, nextFocus);
-    setSelectedIssueId(nextItems[0]?.id ?? sortedIssues[0]?.id ?? null);
   }
 
   async function onReplay(issue: IssueItem) {
@@ -790,178 +758,269 @@ export default function HomePage() {
     );
   }
 
-  function onIssueRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, issue: IssueItem) {
+  function onDecisionRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, row: DecisionRow) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    setSelectedIssueId(issue.id);
+    setSelectedDecisionId(row.id);
   }
 
-  const priorityIssueSource = queueFocus === "all" ? sortedIssues : focusedIssues;
-  const priorityRows: PriorityRow[] = [
-    ...priorityIssueSource.slice(0, 3).map((issue) => {
-      const severity = issue.severity.toLowerCase();
-      const priority = severity === "critical" ? "P0" : severity === "high" ? "P1" : "P2";
-      return {
-        id: issue.id,
-        priority,
-        type: severity === "critical" || severity === "high" ? "High-risk action" : "Needs proof",
-        title: issue.title,
-        detail: evidenceSummary(issue),
-        impact: issueImpactUsd(issue) != null ? formatIssueImpact(issue) : `${formatCount(issue.occurrence_count)} calls`,
-        status: replayLabel(issue.replay_coverage_status),
-        tone: severity === "critical" ? "danger" : isReplayGap(issue) ? "warning" : "neutral",
-        action: renderIssueAction(issue, { replayLabel: "Verify outcome", viewLabel: "View proof" }),
-        issueId: issue.id,
-      } satisfies PriorityRow;
-    }),
-    ...pendingRuns.slice(0, 1).map((run) => ({
-      id: run.id,
-      priority: "P1",
-      type: "Verification running",
-      title: run.golden_set_id,
-      detail: `${run.replay_mode.replace(/_/g, " ")} verification created ${formatDateTime(run.created_at)}`,
-      impact: "Pending proof",
-      status: statusLabel(run.status),
-      tone: "warning" as const,
-      action: (
-        <Link href={`/replay/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
-          Review proof
-        </Link>
-      ),
-    })),
-    ...failedCiRuns.slice(0, 1).map((run) => ({
-      id: run.id,
-      priority: "P2",
-      type: "Release gate",
-      title: run.golden_set_id,
-      detail: run.git_sha ? `Blocking ${run.git_sha}` : "Verification gate needs review",
-      impact: "1 gate",
-      status: statusLabel(run.status),
-      tone: "danger" as const,
-      action: caps.canCi ? (
-        <Link href={`/ci-gates/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
-          Open gate
-        </Link>
-      ) : (
-        <LockedUpgradeLink label="Upgrade to unlock CI gates" />
-      ),
-    })),
-    ...(captureHasProblem
+  const issueRows = sortedIssues.map((issue) => {
+    const severity = issue.severity.toLowerCase();
+    const urgency = severity === "critical" ? "P0" : severity === "high" ? "P1" : "P2";
+    const replayGap = isReplayGap(issue);
+    const agentLabel = issue.affected_agent?.trim() || issue.agent_name?.trim() || "Agent unknown";
+    return {
+      id: `issue:${issue.id}`,
+      kind: "issue" as const,
+      urgency,
+      signal: severity === "critical" || severity === "high" ? "Critical action drift" : replayGap ? "Outcome proof missing" : "Evidence incomplete",
+      agentAction: issue.title,
+      detail: `${agentLabel}: ${evidenceSummary(issue)}`,
+      impact: issueImpactUsd(issue) != null ? formatIssueImpact(issue) : `${formatCount(issue.occurrence_count)} calls`,
+      proofState: replayLabel(issue.replay_coverage_status),
+      proofTone: severity === "critical" ? ("danger" as const) : replayGap ? ("warning" as const) : hasTrustedGoldenReplay(issue) ? ("success" as const) : ("neutral" as const),
+      nextStep: replayGap ? "Verify outcome" : hasTrustedGoldenReplay(issue) ? "Open evidence" : "Review proof",
+      action: renderIssueAction(issue, { replayLabel: "Verify outcome", viewLabel: "View proof" }),
+      issueId: issue.id,
+    };
+  });
+  const ciRows = failedCiRuns.map((run) => ({
+    id: `ci:${run.id}`,
+    kind: "ci_gate" as const,
+    urgency: "P0",
+    signal: "CI gate failed",
+    agentAction: run.golden_set_id,
+    detail: run.git_sha ? `Blocking ${run.git_sha}` : "Verification gate needs review before promotion.",
+    impact: "1 gate",
+    proofState: statusLabel(run.status),
+    proofTone: "danger" as const,
+    nextStep: "Open gate",
+    action: caps.canCi ? (
+      <Link href={`/ci-gates/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
+        Open gate
+      </Link>
+    ) : (
+      <LockedUpgradeLink label="Upgrade to unlock CI gates" />
+    ),
+    runId: run.id,
+  }));
+  const pendingReplayRows = pendingRuns.map((run) => ({
+    id: `replay:${run.id}`,
+    kind: "pending_replay" as const,
+    urgency: "P1",
+    signal: "Replay running",
+    agentAction: run.golden_set_id,
+    detail: `${run.replay_mode.replace(/_/g, " ")} verification created ${formatDateTime(run.created_at)}`,
+    impact: "Pending proof",
+    proofState: statusLabel(run.status),
+    proofTone: "warning" as const,
+    nextStep: "Review proof",
+    action: (
+      <Link href={`/replay/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
+        Review proof
+      </Link>
+    ),
+    runId: run.id,
+  }));
+  const captureRows: DecisionRow[] = captureHasProblem
+    ? [
+        {
+          id: "capture:health",
+          kind: "capture",
+          urgency: "P2",
+          signal: captureStatus === "stale" ? "Capture stale" : "Connector backlog",
+          agentAction: captureStatus === "stale" ? "Agent signal stale" : "Capture pipeline",
+          detail: captureStatus === "stale" ? "No recent agent action captured for this project." : "Events are waiting to become outcome proof.",
+          impact: captureBacklog > 0 ? `${formatCount(captureBacklog)} events` : captureLabel,
+          proofState: captureStatus === "stale" ? "Stale" : "Backlog",
+          proofTone: "warning",
+          nextStep: "Inspect capture",
+          action: (
+            <Link href="/trace" className="btn btn-soft btn-sm fi-btn-secondary">
+              Inspect capture
+            </Link>
+          ),
+        },
+      ]
+    : [];
+  const evidenceRows: DecisionRow[] =
+    hasWorkspaceActivity && protectedGoldenCount === 0
       ? [
           {
-            id: "capture-health",
-            priority: "P2",
-            type: "Connector health",
-            title: captureStatus === "stale" ? "Agent signal stale" : "Gateway backlog",
-            detail: captureStatus === "stale" ? "No recent agent action captured." : "Events not yet processed into proof.",
-            impact: captureBacklog > 0 ? `${formatCount(captureBacklog)} events` : captureLabel,
-            status: captureStatus === "stale" ? "stale" : "backlog",
-            tone: "warning" as const,
+            id: "evidence:incomplete",
+            kind: "evidence",
+            urgency: "P3",
+            signal: "Evidence incomplete",
+            agentAction: "Evidence export",
+            detail: "No exportable proof pack is ready until replay proof is promoted into a blocking contract.",
+            impact: `${formatCount(evidenceReadinessPercent)}% ready`,
+            proofState: "Needs proof",
+            proofTone: "neutral",
+            nextStep: "Open evidence",
             action: (
-              <Link href="/trace" className="btn btn-soft btn-sm fi-btn-secondary">
-                Inspect capture
+              <Link href="/evidence" className="btn btn-soft btn-sm fi-btn-secondary">
+                Open evidence
               </Link>
             ),
           },
         ]
-      : []),
-  ].slice(0, 5);
+      : [];
+  const decisionRows: DecisionRow[] = [...ciRows, ...issueRows, ...pendingReplayRows, ...captureRows, ...evidenceRows].slice(0, 12);
+  const filteredDecisionRows = filterDecisionRows(decisionRows, queueFocus);
+
+  useEffect(() => {
+    if (loading) return;
+    const selectedStillVisible = filteredDecisionRows.some((row) => row.id === selectedDecisionId);
+    if (!selectedDecisionId || !selectedStillVisible) {
+      setSelectedDecisionId(filteredDecisionRows[0]?.id ?? decisionRows[0]?.id ?? null);
+    }
+  }, [decisionRows, filteredDecisionRows, loading, selectedDecisionId]);
   const latestReplayRun = [...data.replayRuns].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   )[0];
-  const latestGoldenSet = [...data.goldenSets].sort(
-    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-  )[0];
   const latestCall = data.calls[0] ?? null;
-  const recentEvidenceRows = [
+  const selectedDecision = decisionRows.find((row) => row.id === selectedDecisionId) ?? decisionRows[0] ?? null;
+  const selectedIssue = selectedDecision?.issueId ? sortedIssues.find((issue) => issue.id === selectedDecision.issueId) ?? null : null;
+  const selectedRun = selectedDecision?.runId ? data.replayRuns.find((run) => run.id === selectedDecision.runId) ?? null : null;
+  const selectedEvidenceTrace = selectedIssue?.evidence_traces[0] ?? null;
+  const selectedProofTitle = selectedDecision?.agentAction ?? "No selected decision";
+  const selectedProofSummary = selectedIssue
+    ? evidenceSummary(selectedIssue)
+    : selectedRun
+      ? `${selectedRun.replay_mode.replace(/_/g, " ")} run ${statusLabel(selectedRun.status).toLowerCase()} for ${selectedRun.golden_set_id}.`
+      : selectedDecision?.kind === "capture"
+        ? selectedDecision.detail
+        : selectedDecision?.kind === "evidence"
+          ? selectedDecision.detail
+          : "Select a decision row to inspect evidence, outcome proof, and the recommended next action.";
+  const selectedProofChecks: ProofCheck[] = selectedIssue
+    ? [
+        {
+          label: "Affected agent",
+          value: selectedIssue.affected_agent?.trim() || selectedIssue.agent_name?.trim() || "Unknown agent",
+          tone: "neutral",
+        },
+        {
+          label: "Sample trace",
+          value: selectedEvidenceTrace?.trace_id ?? selectedEvidenceTrace?.call_id ?? selectedIssue.sample_call_id ?? "Missing",
+          tone: selectedEvidenceTrace || selectedIssue.sample_call_id ? "success" : "warning",
+        },
+        {
+          label: "Replay status",
+          value: replayLabel(selectedIssue.replay_coverage_status),
+          tone: hasTrustedGoldenReplay(selectedIssue) ? "success" : "warning",
+        },
+        {
+          label: "System-of-record proof",
+          value: hasTrustedGoldenReplay(selectedIssue) ? "Matched outcome" : "Outcome proof missing",
+          tone: hasTrustedGoldenReplay(selectedIssue) ? "success" : "warning",
+        },
+        {
+          label: "Evidence readiness",
+          value: hasTrustedGoldenReplay(selectedIssue) && protectedGoldenCount > 0 ? "Export ready" : "Incomplete",
+          tone: hasTrustedGoldenReplay(selectedIssue) && protectedGoldenCount > 0 ? "success" : "neutral",
+        },
+      ]
+    : [
+        {
+          label: "Affected surface",
+          value: selectedDecision?.agentAction ?? "Waiting for activity",
+          tone: selectedDecision ? "neutral" : "warning",
+        },
+        {
+          label: "Replay status",
+          value: selectedRun ? statusLabel(selectedRun.status) : latestReplayRun ? statusLabel(latestReplayRun.status) : "No run",
+          tone: selectedRun ? selectedDecision?.proofTone ?? "neutral" : latestReplayRun ? "neutral" : "warning",
+        },
+        {
+          label: "System-of-record proof",
+          value: captureHasProblem ? captureLabel : captureStatus === "connected" ? "Connected" : "Waiting",
+          tone: captureHasProblem ? "warning" : captureStatus === "connected" ? "success" : "neutral",
+        },
+        {
+          label: "Evidence readiness",
+          value: `${formatCount(evidenceReadinessPercent)}%`,
+          tone: evidenceReadinessPercent >= 80 ? "success" : evidenceReadinessPercent >= 40 ? "warning" : "neutral",
+        },
+        {
+          label: "Recommended action",
+          value: selectedDecision?.nextStep ?? "Connect capture",
+          tone: selectedDecision?.proofTone ?? "neutral",
+        },
+      ];
+  const systemHealthRows: ProofCheck[] = [
     {
-      label: "Runtime decision",
-      title: latestCall?.agent_name ?? latestCall?.call_id ?? "No agent action yet",
-      detail: latestCall ? formatDateTime(latestCall.created_at) : "Waiting for capture",
-      status: latestCall?.status ?? "waiting",
+      label: "Connector state",
+      value: captureStatus === "connected" ? "Connected" : captureStatus === "stale" ? "Stale" : captureStatus === "no_data" ? "No data" : "Checking",
+      tone: captureHasProblem ? "warning" : captureStatus === "connected" ? "success" : "neutral",
     },
     {
-      label: "Outcome record",
-      title: sortedIssues[0]?.title ?? "No outcome mismatch",
-      detail: sortedIssues[0] ? detectorLabel(sortedIssues[0].failure_code) : "No open proof gaps",
-      status: sortedIssues[0]?.severity ?? "stable",
+      label: "Last verified outcome",
+      value: latestCall ? formatDateTime(latestCall.created_at) : "Waiting",
+      tone: latestCall ? "success" : "neutral",
     },
     {
-      label: "Verification proof",
-      title: latestReplayRun?.golden_set_id ?? "No verification run",
-      detail: latestReplayRun ? formatDateTime(latestReplayRun.created_at) : planLimitText(data.quota),
-      status: latestReplayRun?.status ?? (caps.canReplay ? "pending" : "locked"),
+      label: "Capture backlog",
+      value: formatCount(captureBacklog),
+      tone: captureBacklog > 0 ? "warning" : "success",
     },
     {
-      label: "Evidence hash",
-      title: latestGoldenSet?.name ?? "No exportable pack",
-      detail: latestGoldenSet ? `${formatCount(latestGoldenSet.trace_count)} records` : "Waiting for verified outcome",
-      status: latestGoldenSet?.blocks_ci ? "protected" : latestGoldenSet ? "review" : "waiting",
+      label: "Failed preflight",
+      value: formatCount(data.captureHealth?.projection_failures_24h ?? data.captureHealth?.gateway_unhealthy_count ?? 0),
+      tone: (data.captureHealth?.projection_failures_24h ?? data.captureHealth?.gateway_unhealthy_count ?? 0) > 0 ? "warning" : "success",
     },
-  ];
-  const releaseReadinessRows = [
-    { label: "Agent capture", value: captureHasProblem ? captureLabel : "linked", tone: captureHasProblem ? "warning" : "success" },
-    { label: "Outcome verifier", value: formatCount(needsTrustedReplayCount), tone: needsTrustedReplayCount > 0 ? "warning" : "success" },
-    { label: "Release guard", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocking` : "healthy", tone: failedCiRuns.length > 0 ? "danger" : "success" },
-    { label: "Audit export", value: protectedGoldenCount > 0 ? "ready" : "needs proof", tone: protectedGoldenCount > 0 ? "success" : "neutral" },
   ];
   const pipelineStages = [
-    { label: "Attempt", value: formatCount(capturedCallCount), helper: `${captureLabel}`, tone: captureHasProblem ? "warning" : capturedCallCount > 0 ? "success" : "neutral" },
-    { label: "Decision", value: `${formatCount(openIssuesCount)} open`, helper: `${formatCount(needsTrustedReplayCount)} need proof`, tone: openIssuesCount > 0 ? "warning" : "success" },
-    { label: "Outcome", value: `${formatCount(replayPassRate)}% verified`, helper: `${formatCount(replayFailCount)} failed checks`, tone: replayFailCount > 0 || needsTrustedReplayCount > 0 ? "warning" : "success" },
-    { label: "Evidence", value: `${formatCount(protectedGoldenCount)} ready`, helper: `${formatCount(goldensNeedingReview.length)} need review`, tone: goldensNeedingReview.length > 0 ? "warning" : protectedGoldenCount > 0 ? "success" : "neutral" },
-    { label: "Export", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocked` : "ready", helper: caps.canCi ? "audit proof active" : "upgrade required", tone: failedCiRuns.length > 0 ? "danger" : caps.canCi ? "success" : "neutral" },
+    { label: "Capture", value: formatCount(capturedCallCount), helper: captureLabel, tone: captureHasProblem ? "warning" : capturedCallCount > 0 ? "success" : "neutral", href: "/trace" },
+    { label: "Detect", value: `${formatCount(openIssuesCount)} open`, helper: `${formatCount(criticalHighCount)} critical/high`, tone: openIssuesCount > 0 ? "warning" : "success", href: "/issues" },
+    { label: "Verify", value: `${formatCount(replayPassRate)}%`, helper: `${formatCount(needsTrustedReplayCount)} missing proof`, tone: replayFailCount > 0 || needsTrustedReplayCount > 0 ? "warning" : "success", href: "/replay" },
+    { label: "Promote", value: `${formatCount(protectedGoldenCount)} ready`, helper: `${formatCount(goldensNeedingReview.length)} need review`, tone: goldensNeedingReview.length > 0 ? "warning" : protectedGoldenCount > 0 ? "success" : "neutral", href: "/contracts" },
+    { label: "Gate", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocked` : "clear", helper: caps.canCi ? "release guard active" : "upgrade required", tone: failedCiRuns.length > 0 ? "danger" : caps.canCi ? "success" : "neutral", href: "/ci-gates" },
+    { label: "Export", value: `${formatCount(evidenceReadinessPercent)}%`, helper: protectedGoldenCount > 0 ? "Evidence Pack ready" : "proof incomplete", tone: protectedGoldenCount > 0 ? "success" : "neutral", href: "/evidence" },
   ];
 
   return (
-    <div className="fi-screen fi-home-v5" aria-busy={loading || refreshing}>
-      <section className="fi-hero fi-command-hero" data-tone={heroSignal.tone}>
-        <div className="fi-hero-main">
-          <h1>Agent safety status</h1>
-          <div className="fi-hero-signal" aria-live="polite">
-            <span className="fi-hero-eyebrow">{heroSignal.eyebrow}</span>
-            <strong>{heroSignal.title}</strong>
+    <div className="fi-screen fi-home-v5 fi-home-option-a" aria-busy={loading || refreshing}>
+      <section className="fi-a-verdict" data-tone={heroSignal.tone} aria-label="Current Home verdict">
+        <div className="fi-a-verdict-copy">
+          <span className="fi-a-kicker">{heroSignal.eyebrow}</span>
+          <div className="fi-a-verdict-line" aria-live="polite">
+            <h1>Agent action accountability</h1>
+            <span className="fi-a-status-badge" data-tone={heroSignal.tone}>
+              {verdictBadgeLabel(heroSignal.tone)}
+            </span>
           </div>
+          <strong>{heroSignal.title}</strong>
           <p>{heroSignal.summary}</p>
-          {heroSignal.action ? <div className="fi-hero-primary-action">{heroSignal.action}</div> : null}
         </div>
-        <div className="fi-hero-actions">
-          <div className="fi-home-status-grid" aria-label="Agent safety snapshot">
-            {homeStatusTiles.map((tile) => (
-              <div className="fi-home-status-tile" data-tone={tile.tone} key={tile.label}>
-                <span className="fi-home-status-icon">{tile.icon}</span>
-                <div>
-                  <span>{tile.label}</span>
-                  <strong>{tile.value}</strong>
-                  <small>{tile.helper}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="fi-refresh-meta" aria-live="polite">
+        <div className="fi-a-verdict-side">
+          <div className="fi-a-refresh-meta" aria-live="polite">
             <span>
               <Clock3 aria-hidden="true" />
               Updated {lastUpdatedLabel}
             </span>
             <span>
-              <span className={`fi-live-dot${refreshing ? " is-refreshing" : ""}`} />
-              Auto-refresh 30s
+              <span className={`fi-a-live-dot${refreshing ? " is-refreshing" : ""}`} />
+              {realTimeEnabled ? "Live refresh 30s" : "Live paused"}
             </span>
           </div>
-          <button
-            type="button"
-            className="btn btn-soft btn-sm fi-btn-secondary"
-            onClick={() => void load()}
-            disabled={refreshing}
-          >
-            <RefreshCw aria-hidden="true" className={refreshing ? "fi-spin" : undefined} />
-            {refreshing ? "Refreshing" : "Refresh"}
-          </button>
-          {hasWorkspaceActivity ? (
-            <Link href="/approvals" className="btn btn-soft btn-sm fi-btn-secondary">
-              Review decisions
-            </Link>
-          ) : null}
+          <div className="fi-a-verdict-actions">
+            {heroSignal.action}
+            {hasWorkspaceActivity && heroSignal.title !== "Evidence ready" && heroSignal.title !== "Safety loop ready" ? (
+              <Link href="/evidence" className="btn btn-soft btn-sm fi-btn-secondary">
+                Open evidence
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-soft btn-sm fi-btn-secondary"
+              onClick={() => void load()}
+              disabled={refreshing}
+            >
+              <RefreshCw aria-hidden="true" className={refreshing ? "fi-spin" : undefined} />
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -992,221 +1051,197 @@ export default function HomePage() {
       ) : null}
 
       {showFirstRunOnboarding ? (
-        <FirstRunOnboarding
-          projectKeyCount={activeProjectKeyCount}
-          capturedCallCount={capturedCallCount}
-          captureStatus={captureStatus}
-          replayUnlocked={caps.canReplay}
-          goldensUnlocked={caps.canGoldens}
-          ciUnlocked={caps.canCi}
-        />
+        <div className="fi-a-first-run">
+          <FirstRunOnboarding
+            projectKeyCount={activeProjectKeyCount}
+            capturedCallCount={capturedCallCount}
+            captureStatus={captureStatus}
+            replayUnlocked={caps.canReplay}
+            goldensUnlocked={caps.canGoldens}
+            ciUnlocked={caps.canCi}
+          />
+        </div>
       ) : (
         <>
-      {loading ? (
-        <KpiSkeletonRow />
-      ) : (
-        <section className="fi-kpi-grid fi-command-metrics" aria-label="Home summary">
-          <KpiCard
-            icon={<ShieldAlert aria-hidden="true" />}
-            label="Action signals"
-            value={formatCount(failedRunsCount)}
-            helper={data.calls.length > 0 ? "Failed or errored traces in the latest sample." : "Highest-risk loaded records."}
-            tone="danger"
-            active={queueFocus === "critical_high"}
-            onClick={() => focusQueue("critical_high")}
-          />
-          <KpiCard
-            icon={<LockKeyhole aria-hidden="true" />}
-            label="Needs review"
-            value={formatCount(openDecisionCount)}
-            helper={`${formatCount(needsTrustedReplayCount)} actions still need outcome proof.`}
-            tone="warning"
-            active={queueFocus === "all"}
-            onClick={() => focusQueue("all")}
-          />
-          <KpiCard
-            icon={<CheckCircle2 aria-hidden="true" />}
-            label="Verified outcomes"
-            value={replayCompletedCount > 0 || openIssuesCount > 0 ? `${formatCount(replayPassRate)}% verified` : "Replay pending"}
-            helper={replayCompletedCount > 0 || openIssuesCount > 0 ? `${formatCount(replayFailCount)} failing or not verified.` : "Run a replay to protect this flow."}
-            tone="success"
-            active={queueFocus === "replay_gap"}
-            onClick={() => focusQueue("replay_gap")}
-          />
-          <KpiCard
-            icon={<Bot aria-hidden="true" />}
-            label="Protected agents"
-            value={formatCount(protectedAgentCount)}
-            helper={protectedAgentCount > 0 ? `${formatCount(capturedCallCount)} captured actions in scope.` : "Connect an agent to start live protection."}
-            tone="info"
-          />
-          <KpiCard
-            icon={<FileJson aria-hidden="true" />}
-            label="Evidence packs"
-            value={formatCount(evidenceReadyCount)}
-            helper={latencyAverage == null ? "Capture traces to calculate latency." : `${formatCount(latencyAverage)}ms average latency.`}
-            tone="neutral"
-            trend={costTrend == null ? null : "vs yesterday"}
-          />
-        </section>
-      )}
-
-      <section className="fi-ops-layout">
-        <section className="fi-section fi-priority-section">
-          <SectionHeader
-            title="Needs your decision"
-            description={queueFocusDescription(queueFocus)}
-            action={
-              <div className="fi-queue-tabs" role="tablist" aria-label="Decision queue focus">
-                {queueFocusControls.map((control) => (
-                  <button
-                    type="button"
-                    key={control.id}
-                    role="tab"
-                    aria-selected={queueFocus === control.id}
-                    className={`fi-queue-tab${queueFocus === control.id ? " is-active" : ""}`}
-                    onClick={() => focusQueue(control.id)}
-                  >
-                    {control.label}
-                  </button>
-                ))}
-              </div>
-            }
-          />
-
           {loading ? (
-            <PriorityTableSkeleton />
-          ) : priorityRows.length === 0 ? (
-            <EmptyQueue>No high-risk action needs review right now.</EmptyQueue>
+            <section className="fi-a-snapshot-grid" aria-label="Loading Home summary" aria-busy="true">
+              {Array.from({ length: 5 }, (_, index) => (
+                <div className="fi-a-snapshot-card is-loading" key={index}>
+                  <span />
+                  <strong />
+                  <small />
+                </div>
+              ))}
+            </section>
           ) : (
-            <div className="fi-table-wrap">
-              <table className="fi-issues-table">
-                <thead>
-                  <tr>
-                    <th>Urgency</th>
-                    <th>Signal</th>
-                    <th>Agent / action</th>
-                    <th>Risk</th>
-                    <th>Outcome state</th>
-                    <th>Next step</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {priorityRows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className={row.issueId && selectedIssueId === row.issueId ? "is-selected" : undefined}
-                      aria-selected={row.issueId ? selectedIssueId === row.issueId : undefined}
-                      tabIndex={row.issueId ? 0 : undefined}
-                      onClick={row.issueId ? () => setSelectedIssueId(row.issueId ?? null) : undefined}
-                      onKeyDown={
-                        row.issueId
-                          ? (event) => {
-                              const issue = sortedIssues.find((item) => item.id === row.issueId);
-                              if (issue) onIssueRowKeyDown(event, issue);
-                            }
-                          : undefined
-                      }
-                    >
-                      <td>
-                        <span className="fi-priority-pill">{row.priority}</span>
-                      </td>
-                      <td>
-                        <span className="fi-row-type">{row.type}</span>
-                      </td>
-                      <td>
-                        <div className="fi-issue-cell">
-                          <strong>{row.title}</strong>
-                          <span>{row.detail}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <strong className="fi-impact-value">{row.impact}</strong>
-                      </td>
-                      <td>
-                        <StatusText value={row.status} tone={row.tone} />
-                      </td>
-                      <td>
-                        <div className="fi-row-actions">{row.action}</div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <section className="fi-a-snapshot-grid" aria-label="Home snapshot filters">
+              {snapshotFilters.map((filter) => (
+                <button
+                  type="button"
+                  className={`fi-a-snapshot-card${queueFocus === filter.id ? " is-active" : ""}`}
+                  data-tone={filter.tone}
+                  aria-pressed={queueFocus === filter.id}
+                  onClick={() => focusQueue(filter.id)}
+                  key={filter.id}
+                >
+                  <span className="fi-a-snapshot-icon">{filter.icon}</span>
+                  <span className="fi-a-snapshot-label">{filter.label}</span>
+                  <strong>{filter.value}</strong>
+                  <small>{filter.helper}</small>
+                </button>
+              ))}
+            </section>
+          )}
+
+          <section className="fi-a-workspace">
+            <div className="fi-a-main-column">
+              <section className="fi-a-queue-panel" aria-label="Decision queue">
+                <div className="fi-a-panel-head">
+                  <div>
+                    <span className="fi-a-kicker">Decision queue</span>
+                    <h2>Highest-risk agent actions</h2>
+                  </div>
+                  <p>CI blocks, critical drift, missing outcome proof, stale capture, and incomplete evidence in one queue.</p>
+                </div>
+
+                {loading ? (
+                  <PriorityTableSkeleton />
+                ) : filteredDecisionRows.length === 0 ? (
+                  <div className="fi-a-empty">
+                    <strong>No decision rows for this filter.</strong>
+                    <span>Switch filters or wait for the next captured production action.</span>
+                  </div>
+                ) : (
+                  <div className="fi-a-table-wrap">
+                    <table className="fi-a-decision-table">
+                      <thead>
+                        <tr>
+                          <th>Urgency</th>
+                          <th>Signal</th>
+                          <th>Agent / action</th>
+                          <th>Impact</th>
+                          <th>Proof state</th>
+                          <th>Next step</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredDecisionRows.map((row) => (
+                          <tr
+                            key={row.id}
+                            className={selectedDecisionId === row.id ? "is-selected" : undefined}
+                            aria-selected={selectedDecisionId === row.id}
+                            tabIndex={0}
+                            onClick={() => setSelectedDecisionId(row.id)}
+                            onKeyDown={(event) => onDecisionRowKeyDown(event, row)}
+                          >
+                            <td>
+                              <span className="fi-a-priority-pill">{row.urgency}</span>
+                            </td>
+                            <td>
+                              <span className="fi-a-row-signal">{row.signal}</span>
+                            </td>
+                            <td>
+                              <div className="fi-a-agent-cell">
+                                <strong>{row.agentAction}</strong>
+                                <span>{row.detail}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <strong className="fi-a-impact-value">{row.impact}</strong>
+                            </td>
+                            <td>
+                              <StatusText value={row.proofState} tone={row.proofTone} />
+                            </td>
+                            <td>
+                              <div className="fi-a-row-actions">{row.action}</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              {loading ? (
+                <PipelineSkeleton />
+              ) : (
+                <section className="fi-a-loop-panel" aria-label="Action accountability loop">
+                  <div className="fi-a-panel-head">
+                    <div>
+                      <span className="fi-a-kicker">Accountability loop</span>
+                      <h2>Capture to export</h2>
+                    </div>
+                    <p>Each step links to the surface that owns the proof.</p>
+                  </div>
+                  <div className="fi-a-loop">
+                    {pipelineStages.map((stage, index) => (
+                      <Link className="fi-a-loop-step" data-tone={stage.tone} href={stage.href} key={stage.label}>
+                        <span className="fi-a-loop-node">
+                          {index === 0 ? <ListChecks aria-hidden="true" /> : null}
+                          {index === 1 ? <AlertTriangle aria-hidden="true" /> : null}
+                          {index === 2 ? <RotateCcw aria-hidden="true" /> : null}
+                          {index === 3 ? <ShieldCheck aria-hidden="true" /> : null}
+                          {index === 4 ? <GitPullRequest aria-hidden="true" /> : null}
+                          {index === 5 ? <FileJson aria-hidden="true" /> : null}
+                        </span>
+                        <span>{stage.label}</span>
+                        <strong>{stage.value}</strong>
+                        <small>{stage.helper}</small>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
-          )}
-        </section>
 
-        <aside className="fi-ops-rail" aria-label="Evidence proof rail">
-          {loading ? (
-            <RailSkeleton />
-          ) : (
-            <>
-              <section className="fi-section fi-recent-evidence fi-evidence-pack-rail" aria-label="Evidence packs">
-                <SectionHeader
-                  title="Evidence Pack"
-                  description="Latest decision, outcome proof, and audit export status."
-                  action={
-                    <Link href="/evidence" className="btn btn-soft btn-sm fi-btn-secondary">
-                      Download JSON
-                    </Link>
-                  }
-                />
-                <div className="fi-evidence-list">
-                  {recentEvidenceRows.map((row) => (
-                    <div className="fi-evidence-row" key={row.label}>
-                      <div>
-                        <span>{row.label}</span>
-                        <strong>{row.title}</strong>
-                        <small>{row.detail}</small>
+            <aside className="fi-a-proof-panel" aria-label="Selected proof">
+              {loading ? (
+                <RailSkeleton />
+              ) : (
+                <>
+                  <div className="fi-a-panel-head">
+                    <div>
+                      <span className="fi-a-kicker">Selected proof</span>
+                      <h2>{selectedProofTitle}</h2>
+                    </div>
+                    {selectedDecision ? (
+                      <span className="fi-a-status-badge" data-tone={selectedDecision.proofTone}>
+                        {selectedDecision.proofState}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="fi-a-proof-summary">{selectedProofSummary}</p>
+
+                  <div className="fi-a-proof-list" aria-label="Selected proof details">
+                    {selectedProofChecks.map((check) => (
+                      <div className="fi-a-proof-row" data-tone={check.tone} key={check.label}>
+                        <span>{check.label}</span>
+                        <strong>{check.value}</strong>
                       </div>
-                      <StatusPill value={row.status} />
-                    </div>
-                  ))}
-                </div>
-              </section>
+                    ))}
+                  </div>
 
-              <section className="fi-section fi-release-readiness fi-proof-gap-rail" aria-label="Proof gaps by connector">
-                <SectionHeader title="System-of-record proof" description="Signals that decide pass, warn, fail, or not_verified." />
-                <div className="fi-readiness-list">
-                  {releaseReadinessRows.map((row) => (
-                    <div className="fi-readiness-row" data-tone={row.tone} key={row.label}>
-                      <span>{row.label}</span>
-                      <strong>{row.value}</strong>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </>
-          )}
-        </aside>
-      </section>
+                  {selectedDecision ? <div className="fi-a-proof-action">{selectedDecision.action}</div> : null}
 
-      {loading ? (
-        <PipelineSkeleton />
-      ) : (
-        <section className="fi-section fi-pipeline-section" aria-label="Outcome verification chain">
-          <SectionHeader title="Action accountability loop" description="Attempt, decision, outcome proof, evidence, export." />
-          <div className="fi-pipeline">
-            {pipelineStages.map((stage, index) => (
-              <div className="fi-pipeline-stage" data-tone={stage.tone} key={stage.label}>
-                <div className="fi-pipeline-node">
-                  {index === 0 ? <ListChecks aria-hidden="true" /> : null}
-                  {index === 1 ? <AlertTriangle aria-hidden="true" /> : null}
-                  {index === 2 ? <RotateCcw aria-hidden="true" /> : null}
-                  {index === 3 ? <ShieldCheck aria-hidden="true" /> : null}
-                  {index === 4 ? <GitPullRequest aria-hidden="true" /> : null}
-                </div>
-                <div>
-                  <span>{stage.label}</span>
-                  <strong>{stage.value}</strong>
-                  <small>{stage.helper}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+                  <section className="fi-a-system-health" aria-label="System-of-record health">
+                    <div className="fi-a-mini-head">
+                      <Plug aria-hidden="true" />
+                      <h3>System-of-record health</h3>
+                    </div>
+                    <div className="fi-a-proof-list">
+                      {systemHealthRows.map((row) => (
+                        <div className="fi-a-proof-row" data-tone={row.tone} key={row.label}>
+                          <span>{row.label}</span>
+                          <strong>{row.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              )}
+            </aside>
+          </section>
         </>
       )}
     </div>
