@@ -114,7 +114,7 @@ const NAV_ITEMS: NavItem[] = [
     subtitle: "Unsafe actions, wrong outcomes, connector failures, and proof gaps needing review.",
     Icon: AlertTriangle,
     badgeKey: "issues",
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "policies",
@@ -131,7 +131,7 @@ const NAV_ITEMS: NavItem[] = [
     subtitle: "Replay failures and verify whether a fix is trusted, failed, or not verified.",
     Icon: RotateCcw,
     requiredEntitlement: "pilot.replay_stub",
-    visibleInNav: true,
+    visibleInNav: false,
   },
   {
     id: "traces",

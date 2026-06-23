@@ -23,18 +23,21 @@ const EXPECTED_NAV = [
   { href: "/owner", label: "Overview" },
   { href: "/owner/money-path", label: "Money Path" },
   { href: "/owner/launch-readiness", label: "Launch Gate" },
+  { href: "/owner/projects", label: "Projects" },
+  { href: "/owner/pricing", label: "Billing" },
+  { href: "/owner/audit", label: "Audit Log" },
+  { href: "/owner/settings", label: "Settings" },
+];
+
+const HIDDEN_SUPPORT_NAV = [
   { href: "/owner/ops", label: "Ops" },
   { href: "/owner/infrastructure", label: "Infrastructure" },
   { href: "/owner/support", label: "Support" },
   { href: "/owner/users", label: "Users" },
-  { href: "/owner/projects", label: "Projects" },
-  { href: "/owner/pricing", label: "Billing" },
   { href: "/owner/rate-limits", label: "Rate Limits" },
   { href: "/owner/platform-llm", label: "LLM Usage" },
   { href: "/owner/feature-flags", label: "Feature Flags" },
   { href: "/owner/feature-votes", label: "Feature Interest" },
-  { href: "/owner/audit", label: "Audit Log" },
-  { href: "/owner/settings", label: "Settings" },
 ];
 
 function routeFileFor(href: string): string {
@@ -68,8 +71,11 @@ describe("OwnerLayout regression guard", () => {
     expect(actual).toEqual(EXPECTED_NAV);
     expect(actual.some((item) => item.href === "/owner/issues-ci-risk")).toBe(false);
     expect(actual.some((item) => item.href === "/owner/revenue-entitlements")).toBe(false);
+    for (const item of HIDDEN_SUPPORT_NAV) {
+      expect(actual.some((navItem) => navItem.href === item.href || navItem.label === item.label)).toBe(false);
+    }
 
-    for (const item of EXPECTED_NAV) {
+    for (const item of [...EXPECTED_NAV, ...HIDDEN_SUPPORT_NAV]) {
       expect(fs.existsSync(routeFileFor(item.href))).toBe(true);
     }
   });

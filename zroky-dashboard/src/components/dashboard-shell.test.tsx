@@ -264,22 +264,20 @@ describe("DashboardShell primary navigation", () => {
       "Outcomes",
       "Evidence",
       "Connectors",
-      "Incidents",
       "Policies",
-      "Replay",
       "Settings",
     ]);
     expect(screen.queryByText("Provider Drift")).toBeNull();
     expect(navItem("failure-inbox").getAttribute("href")).toBe("/home");
   });
 
-  it("keeps Overview badge-free while showing incident counts only on Incidents", () => {
+  it("keeps incident counts out of the minimal primary nav", () => {
     navState.issueCount = 3;
 
     render(<DashboardShell>content</DashboardShell>);
 
     expect(within(navItem("failure-inbox") as HTMLElement).queryByText("3")).toBeNull();
-    expect(within(navItem("issues") as HTMLElement).getByText("3")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Primary" }).querySelector('[data-nav-id="issues"]')).toBeNull();
   });
 
   it("shows Settings child links only while Settings is active", () => {
@@ -326,6 +324,8 @@ describe("DashboardShell primary navigation", () => {
     expect(labels).toContain("Evidence");
     expect(labels).toContain("Connectors");
     expect(labels).toContain("Policies");
+    expect(labels).not.toContain("Incidents");
+    expect(labels).not.toContain("Replay");
     expect(labels).not.toContain("Contracts");
     expect(labels).not.toContain("CI");
     expect(labels).not.toContain("Traces");
@@ -458,15 +458,15 @@ describe("DashboardShell primary navigation", () => {
     expect(storeState.setSelectedProject).not.toHaveBeenCalled();
   });
 
-  it("keeps gated nav entries clickable while showing the locked badge", () => {
+  it("does not surface hidden gated modules as locked primary nav noise", () => {
     navState.planTemplate = {};
     navState.planCode = "free";
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(navItem("replay").getAttribute("aria-disabled")).toBeNull();
-    expect(navItem("replay").getAttribute("href")).toBe("/replay");
-    expect(within(navItem("replay") as HTMLElement).getByText("locked")).toBeInTheDocument();
+    const primaryNav = screen.getByRole("navigation", { name: "Primary" });
+    expect(primaryNav.querySelector('[data-nav-id="replay"]')).toBeNull();
+    expect(primaryNav.textContent).not.toContain("locked");
   });
 
   it("uses the actual billing plan code for the sidebar plan badge", () => {
@@ -503,15 +503,13 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
   });
 
-  it("keeps Replay locked when the explicit replay entitlement is absent", () => {
+  it("keeps Replay available as a deep route without promoting it to primary nav", () => {
     navState.planTemplate = {};
     navState.planCode = "pro";
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(navItem("replay").getAttribute("aria-disabled")).toBeNull();
-    expect(navItem("replay").getAttribute("href")).toBe("/replay");
-    expect(within(navItem("replay") as HTMLElement).getByText("locked")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Primary" }).querySelector('[data-nav-id="replay"]')).toBeNull();
   });
 
   it("opens an account menu from the topbar profile control instead of logging out immediately", () => {
