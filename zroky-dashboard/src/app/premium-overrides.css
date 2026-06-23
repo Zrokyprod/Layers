@@ -1201,25 +1201,29 @@ body:has(.app-shell) {
   --dashboard-accent-pressed: #d7dde8;
   --dashboard-accent-soft: rgba(248, 250, 252, 0.085);
   --dashboard-accent-glow: rgba(248, 250, 252, 0.16);
-  --dashboard-warning: #8a812a;
-  --dashboard-warning-soft: rgba(87, 81, 24, 0.2);
-  --dashboard-warning-border: rgba(138, 129, 42, 0.38);
-  --dashboard-warning-text: #c5bd64;
+  --dashboard-red: #FF0000;
+  --dashboard-yellow: #FFDD00;
+  --dashboard-green: #40FF00;
+  --dashboard-blue: #0008FF;
+  --dashboard-warning: var(--dashboard-yellow);
+  --dashboard-warning-soft: rgba(255, 221, 0, 0.12);
+  --dashboard-warning-border: rgba(255, 221, 0, 0.34);
+  --dashboard-warning-text: var(--dashboard-yellow);
   --dashboard-warning-bg: var(--dashboard-warning-soft);
-  --dashboard-success: #3a9663;
-  --dashboard-success-soft: rgba(38, 115, 76, 0.18);
-  --dashboard-success-border: rgba(58, 150, 99, 0.34);
-  --dashboard-success-text: #79c99d;
+  --dashboard-success: var(--dashboard-green);
+  --dashboard-success-soft: rgba(64, 255, 0, 0.12);
+  --dashboard-success-border: rgba(64, 255, 0, 0.3);
+  --dashboard-success-text: var(--dashboard-green);
   --dashboard-success-bg: var(--dashboard-success-soft);
-  --dashboard-info: #5088b7;
-  --dashboard-info-soft: rgba(42, 86, 124, 0.18);
-  --dashboard-info-border: rgba(80, 136, 183, 0.34);
-  --dashboard-info-text: #8bb9dd;
+  --dashboard-info: var(--dashboard-blue);
+  --dashboard-info-soft: rgba(0, 8, 255, 0.12);
+  --dashboard-info-border: rgba(0, 8, 255, 0.34);
+  --dashboard-info-text: var(--dashboard-blue);
   --dashboard-info-bg: var(--dashboard-info-soft);
-  --dashboard-danger: #c94b5f;
-  --dashboard-danger-soft: rgba(132, 40, 55, 0.2);
-  --dashboard-danger-border: rgba(201, 75, 95, 0.34);
-  --dashboard-danger-text: #e28a98;
+  --dashboard-danger: var(--dashboard-red);
+  --dashboard-danger-soft: rgba(255, 0, 0, 0.12);
+  --dashboard-danger-border: rgba(255, 0, 0, 0.34);
+  --dashboard-danger-text: var(--dashboard-red);
   --dashboard-danger-bg: var(--dashboard-danger-soft);
 
   --bg-canvas: var(--dashboard-bg);
@@ -1256,6 +1260,7 @@ body:has(.app-shell) {
   --color-green: var(--dashboard-success);
   --color-warning: var(--dashboard-warning);
   --color-danger: var(--dashboard-danger);
+  --color-blue: var(--dashboard-info);
 
   --brand-orange: var(--dashboard-accent);
   --brand-orange-hover: var(--dashboard-accent-hover);
@@ -8857,9 +8862,9 @@ body:has(.app-shell) {
 }
 
 .app-shell .keys-capture-path span.is-done {
-  border-color: rgba(34, 197, 94, 0.28) !important;
-  background: rgba(34, 197, 94, 0.08) !important;
-  color: #86efac !important;
+  border-color: rgba(64, 255, 0, 0.28) !important;
+  background: rgba(64, 255, 0, 0.08) !important;
+  color: #40FF00 !important;
 }
 
 .app-shell .keys-capture-path strong,
@@ -13376,6 +13381,44 @@ body:has(.app-shell) {
   .app-shell .evidence-ledger-page .evidence-row-actions {
     min-width: 0;
   }
+}
+
+.app-shell .btn,
+.app-shell a.btn {
+  min-height: 34px !important;
+  border-radius: 7px !important;
+  padding: 0 12px !important;
+  font-size: 0.78rem !important;
+  line-height: 1 !important;
+}
+
+.app-shell .btn-sm,
+.app-shell a.btn-sm {
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 0.72rem !important;
+}
+
+.app-shell .panel,
+.app-shell .module-hero,
+.app-shell .metric-card,
+.app-shell .settings-summary-card,
+.app-shell .fi-section,
+.app-shell .fi-kpi-card,
+.app-shell .agents-kpi-card,
+.app-shell .approval-metric-card,
+.app-shell .outcome-metric-card {
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.app-shell .module-hero {
+  padding: 18px !important;
+}
+
+.app-shell .settings-summary-card {
+  min-height: auto !important;
+  padding: 14px !important;
 }
 
 @media print {
