@@ -10,7 +10,6 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
-  FileJson,
   Gauge,
   RefreshCw,
   RotateCcw,
@@ -23,7 +22,6 @@ import {
   buildCostExposureRows,
   buildSignalClusters,
   buildTimelineEntries,
-  verifiedCostCoverage,
 } from "@/lib/agents-console";
 import {
   getAnalyticsSummary,
@@ -66,6 +64,9 @@ type AgentLaunchpadRow = {
   latestDecision: RuntimePolicyDecisionResponse | null;
   latestOutcome: OutcomeReconciliationView | null;
 };
+
+type AgentsFilter = "all" | "needs_review" | "held" | "missing_outcome" | "evidence_ready";
+type AgentHeroTone = "setup" | "danger" | "warning" | "success" | "neutral";
 
 function agentNameFromCall(call: CallListItem): string {
   return call.agent_name?.trim() || "Unassigned agent";
@@ -198,11 +199,128 @@ function issuePriority(a: IssueItem, b: IssueItem): number {
   return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime();
 }
 
-function healthTone(score: number | null): { label: string; className: string } {
-  if (score == null) return { label: "No score", className: "badge-gray" };
-  if (score >= 80) return { label: "Healthy", className: "badge-green" };
-  if (score >= 55) return { label: "Watch", className: "badge-yellow" };
-  return { label: "At risk", className: "badge-red" };
+function rowHasHeldDecision(row: AgentLaunchpadRow): boolean {
+  const decision = row.latestDecision;
+  return Boolean(
+    decision &&
+      (
+        decision.decision === "block" ||
+        decision.decision === "requires_approval" ||
+        decision.status === "blocked" ||
+        decision.status === "pending_approval" ||
+        decision.status === "rejected"
+      ),
+  );
+}
+
+function rowHasMissingOutcome(row: AgentLaunchpadRow): boolean {
+  return Boolean(row.latestDecision && (!row.latestOutcome || row.latestOutcome.verdict === "not_verified"));
+}
+
+function rowHasEvidenceReady(row: AgentLaunchpadRow): boolean {
+  return Boolean(row.latestDecision && row.latestOutcome?.verdict === "matched");
+}
+
+function rowNeedsReview(row: AgentLaunchpadRow): boolean {
+  return rowHasHeldDecision(row) ||
+    row.latestOutcome?.verdict === "mismatched" ||
+    rowHasMissingOutcome(row) ||
+    Boolean(row.latestIssue) ||
+    (row.healthScore != null && row.healthScore < 55);
+}
+
+function agentPriority(row: AgentLaunchpadRow): number {
+  if (row.latestOutcome?.verdict === "mismatched") return 700;
+  if (rowHasHeldDecision(row)) return 600;
+  if (rowHasMissingOutcome(row)) return 500;
+  if (row.latestIssue) return 300 + severityRank(row.latestIssue.severity);
+  if (row.healthScore != null && row.healthScore < 55) return 200;
+  if (rowHasEvidenceReady(row)) return 100;
+  return 0;
+}
+
+function sortAgentRows(rows: AgentLaunchpadRow[]): AgentLaunchpadRow[] {
+  return [...rows].sort((a, b) => {
+    const priorityDelta = agentPriority(b) - agentPriority(a);
+    if (priorityDelta !== 0) return priorityDelta;
+    return timestamp(b.lastEventAt) - timestamp(a.lastEventAt);
+  });
+}
+
+function mandateRiskLabel(row: AgentLaunchpadRow): string {
+  if (row.latestOutcome?.verdict === "mismatched") return "Outcome mismatch";
+  if (rowHasHeldDecision(row)) return "Held / blocked";
+  if (rowHasMissingOutcome(row)) return "Proof missing";
+  if (row.latestIssue) return row.latestIssue.severity;
+  if (row.healthScore != null && row.healthScore < 55) return "At risk";
+  if (rowHasEvidenceReady(row)) return "Protected";
+  return "Watching";
+}
+
+function mandateRiskTone(row: AgentLaunchpadRow): string {
+  if (row.latestOutcome?.verdict === "mismatched") return "badge-red";
+  if (rowHasHeldDecision(row)) return "badge-yellow";
+  if (rowHasMissingOutcome(row)) return "badge-yellow";
+  if (row.latestIssue) return severityTone(row.latestIssue.severity);
+  if (row.healthScore != null && row.healthScore < 55) return "badge-red";
+  if (rowHasEvidenceReady(row)) return "badge-green";
+  return "badge-gray";
+}
+
+function evidenceReadyLabel(row: AgentLaunchpadRow): string {
+  if (rowHasEvidenceReady(row)) return "Export ready";
+  if (row.latestDecision && !row.latestOutcome) return "Outcome missing";
+  if (row.latestOutcome?.verdict === "mismatched") return "Failed proof";
+  if (row.latestOutcome?.verdict === "not_verified") return "Not verified";
+  if (row.latestDecision) return "Needs proof";
+  return "No decision";
+}
+
+function evidenceReadyTone(row: AgentLaunchpadRow): string {
+  if (rowHasEvidenceReady(row)) return "badge-green";
+  if (row.latestOutcome?.verdict === "mismatched") return "badge-red";
+  if (row.latestDecision) return "badge-yellow";
+  return "badge-gray";
+}
+
+function impactLabel(row: AgentLaunchpadRow): string {
+  const issueImpact = row.latestIssue?.cost_impact_usd || row.latestIssue?.blast_radius_usd;
+  if (issueImpact) return formatUsd(issueImpact);
+  if (row.callCount > 0) return `${formatCount(row.callCount)} actions`;
+  return "No action data";
+}
+
+function nextStepLabel(row: AgentLaunchpadRow): string {
+  if (row.latestOutcome?.verdict === "mismatched") return "Inspect outcome";
+  if (rowHasHeldDecision(row)) return "Review held action";
+  if (rowHasMissingOutcome(row)) return "Verify outcome";
+  if (row.latestIssue) return "Open proof gap";
+  if (rowHasEvidenceReady(row)) return "Open evidence";
+  return "Inspect capture";
+}
+
+function nextStepHref(row: AgentLaunchpadRow): string {
+  if (row.latestOutcome?.verdict === "mismatched" || rowHasMissingOutcome(row)) return "/outcomes";
+  if (rowHasHeldDecision(row)) return "/approvals";
+  if (row.latestIssue) return `/issues/${encodeURIComponent(row.latestIssue.id)}`;
+  if (row.latestDecision) return evidencePackHref(row.latestDecision.id);
+  return `/calls?agent_name=${encodeURIComponent(row.agentName)}`;
+}
+
+function filterAgentRows(rows: AgentLaunchpadRow[], filter: AgentsFilter): AgentLaunchpadRow[] {
+  if (filter === "all") return rows;
+  if (filter === "needs_review") return rows.filter(rowNeedsReview);
+  if (filter === "held") return rows.filter(rowHasHeldDecision);
+  if (filter === "missing_outcome") return rows.filter(rowHasMissingOutcome);
+  return rows.filter(rowHasEvidenceReady);
+}
+
+function agentFilterLabel(filter: AgentsFilter): string {
+  if (filter === "needs_review") return "Agents needing review";
+  if (filter === "held") return "Held/runtime decisions";
+  if (filter === "missing_outcome") return "Missing outcome proof";
+  if (filter === "evidence_ready") return "Evidence-ready agents";
+  return "Protected agents";
 }
 
 function severityTone(severity: string | null | undefined): string {
@@ -259,18 +377,6 @@ function formatLatency(value: number | null): string {
   if (value == null) return "-";
   if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
   return `${Math.round(value)}ms`;
-}
-
-function averageScore(rows: AgentLaunchpadRow[]): number | null {
-  const scores = rows
-    .map((row) => row.healthScore)
-    .filter((score): score is number => typeof score === "number");
-  if (scores.length === 0) return null;
-  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
-}
-
-function sumIssueCost(rows: AgentLaunchpadRow[]): number {
-  return rows.reduce((sum, row) => sum + (row.latestIssue?.cost_impact_usd ?? 0), 0);
 }
 
 function buildAgentRows(
@@ -438,6 +544,7 @@ function AgentsSetupState({
   const checklistItems = [
     { label: "Capture stream connected", done: connected },
     { label: "At least one agent action ingested", done: callsToday > 0 || (captureHealth?.calls_24h ?? 0) > 0 },
+    { label: "System-of-record connector selected", done: (captureHealth?.outcome_events_24h ?? 0) > 0 },
     { label: "Setup path opened", done: setupOpened },
   ];
   const completed = checklistItems.filter((item) => item.done).length;
@@ -451,7 +558,7 @@ function AgentsSetupState({
         </div>
         <h2>Connect one real agent action to start proof.</h2>
         <p>
-          Once capture starts, Zroky ranks agents by mandate health, open proof gaps, outcome evidence, replay coverage, latency, and risk exposure.
+          Once capture starts, Zroky ranks agents by mandate health, held actions, outcome proof, Evidence Pack readiness, and system-of-record coverage.
         </p>
         <button type="button" className="btn btn-soft" onClick={onRefresh}>
           <RefreshCw aria-hidden="true" />
@@ -476,11 +583,11 @@ function AgentsLoadingState() {
     <div className="agents-screen">
       <section className="agents-hero-panel agents-skeleton-card">
         <div className="agents-hero-copy">
-          <div className="agents-eyebrow">
-            <Activity aria-hidden="true" />
-            Protected agents
-          </div>
-          <h1>Agent accountability ledger</h1>
+        <div className="agents-eyebrow">
+          <Activity aria-hidden="true" />
+          Protected agents
+        </div>
+          <h1>Protected agents</h1>
           <p>Loading mandate health, runtime decisions, outcome checks, and replay proof for this workspace.</p>
         </div>
       </section>
@@ -500,18 +607,6 @@ function AgentsLoadingState() {
         </div>
         <aside className="agents-inspector-panel agents-skeleton-card" />
       </section>
-    </div>
-  );
-}
-
-function AgentHealthBadge({ score }: { score: number | null }) {
-  const tone = healthTone(score);
-  return (
-    <div className="agent-health-pill">
-      <span className={`alert-cat-badge ${tone.className}`}>
-        {tone.label}
-      </span>
-      <strong>{score == null ? "-" : Math.round(score)}</strong>
     </div>
   );
 }
@@ -695,9 +790,27 @@ function TraceTimeline({ focusRow, calls }: { focusRow: AgentLaunchpadRow | null
   );
 }
 
-function AgentRow({ row }: { row: AgentLaunchpadRow }) {
+function AgentRow({
+  row,
+  selected,
+  onSelect,
+}: {
+  row: AgentLaunchpadRow;
+  selected: boolean;
+  onSelect: (agentName: string) => void;
+}) {
   return (
-    <tr className="agents-table-row">
+    <tr
+      className={`agents-table-row${selected ? " is-selected" : ""}`}
+      aria-selected={selected}
+      tabIndex={0}
+      onClick={() => onSelect(row.agentName)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onSelect(row.agentName);
+      }}
+    >
       <td>
         <div className="agents-name-cell">
           <span className="agents-agent-icon" aria-hidden="true">
@@ -707,6 +820,16 @@ function AgentRow({ row }: { row: AgentLaunchpadRow }) {
             <strong>{row.agentName}</strong>
             <span>{formatCount(row.callCount)} recent call{row.callCount === 1 ? "" : "s"}</span>
           </div>
+        </div>
+      </td>
+      <td>
+        <div className="agents-proof-cell">
+          <span className={`alert-cat-badge ${mandateRiskTone(row)}`}>
+            {mandateRiskLabel(row)}
+          </span>
+          <span className="agents-cell-note">
+            {row.healthScore == null ? "No baseline yet" : `Health ${Math.round(row.healthScore)}`}
+          </span>
         </div>
       </td>
       <td>
@@ -726,50 +849,29 @@ function AgentRow({ row }: { row: AgentLaunchpadRow }) {
         </div>
       </td>
       <td>
-        {row.latestDecision ? (
-          <div className="agents-proof-cell">
+        <div className="agents-proof-cell">
+          <span className={`alert-cat-badge ${evidenceReadyTone(row)}`}>
+            {evidenceReadyLabel(row)}
+          </span>
+          {row.latestDecision ? (
             <Link href={evidencePackHref(row.latestDecision.id)} className="agents-text-link">
-              <FileJson aria-hidden="true" />
               Evidence Pack
             </Link>
-            <span className="agents-cell-note">{row.latestDecision.id}</span>
-          </div>
-        ) : (
-          <span className="agents-muted">No decision id</span>
-        )}
+          ) : (
+            <span className="agents-cell-note">No decision id</span>
+          )}
+        </div>
       </td>
       <td>
-        <AgentHealthBadge score={row.healthScore} />
+        <strong>{impactLabel(row)}</strong>
+        <span className="agents-cell-note">
+          {row.latestIssue?.title ?? `${row.successRate == null ? "-" : formatPercent(row.successRate)} success`}
+        </span>
       </td>
       <td>
-        <strong>{row.successRate == null ? "-" : formatPercent(row.successRate)}</strong>
-        <span className="agents-cell-note">{row.successfulCalls > 0 ? `${formatCount(row.successfulCalls)} successful` : "No success sample"}</span>
-      </td>
-      <td>
-        <strong>{row.costPerSuccessfulTask == null ? "-" : formatUsd(row.costPerSuccessfulTask)}</strong>
-        <span className="agents-cell-note">per verified success</span>
-      </td>
-      <td>
-        <strong>{formatLatency(row.p95LatencyMs)}</strong>
-        <span className="agents-cell-note">p95 latency</span>
-      </td>
-      <td>
-        {row.latestIssue ? (
-          <Link href={`/issues/${encodeURIComponent(row.latestIssue.id)}`} className="agents-issue-link">
-            <span className={`alert-cat-badge ${severityTone(row.latestIssue.severity)}`}>
-              {row.latestIssue.severity}
-            </span>
-            {row.latestIssue.title}
-          </Link>
-        ) : (
-          <span className="agents-muted">No open issue</span>
-        )}
-      </td>
-      <td>
-        <span className="agents-muted">{row.replayCoverage}</span>
-      </td>
-      <td>
-        <span className="agents-muted">{formatDateTime(row.lastEventAt)}</span>
+        <Link href={nextStepHref(row)} className="btn btn-soft btn-sm agents-row-action">
+          {nextStepLabel(row)}
+        </Link>
       </td>
     </tr>
   );
@@ -807,35 +909,96 @@ function AgentsProofChain({ row }: { row: AgentLaunchpadRow }) {
 function AgentsHero({
   captureHealth,
   callsToday,
-  openIssues,
   rows,
   onRefresh,
 }: {
   captureHealth: CaptureHealthResponse | null;
   callsToday: number;
-  openIssues: number;
   rows: AgentLaunchpadRow[];
   onRefresh: () => void;
 }) {
   const connected = captureHealth?.status === "connected";
-  const avgHealth = averageScore(rows);
+  const needsReview = rows.filter(rowNeedsReview).length;
+  const held = rows.filter(rowHasHeldDecision).length;
+  const missingOutcome = rows.filter(rowHasMissingOutcome).length;
+  const mismatched = rows.filter((row) => row.latestOutcome?.verdict === "mismatched").length;
+  const evidenceReady = rows.filter(rowHasEvidenceReady).length;
+  const firstEvidenceDecision = rows.find(rowHasEvidenceReady)?.latestDecision?.id ?? rows.find((row) => row.latestDecision)?.latestDecision?.id;
+  const verdict: {
+    tone: AgentHeroTone;
+    eyebrow: string;
+    title: string;
+    body: string;
+    ctaLabel: string;
+    ctaHref: string;
+  } = rows.length === 0
+    ? {
+        tone: "setup",
+        eyebrow: "Agent safety status",
+        title: "Setup required",
+        body: "Connect a captured agent action and a system-of-record connector before this fleet can produce outcome proof.",
+        ctaLabel: "Connect agent",
+        ctaHref: "/settings",
+      }
+    : mismatched > 0
+      ? {
+          tone: "danger",
+          eyebrow: "Current safety verdict",
+          title: "Outcome mismatch",
+          body: `${formatCount(mismatched)} protected agent${mismatched === 1 ? "" : "s"} reported success, but the system-of-record proof does not match.`,
+          ctaLabel: "Inspect outcome",
+          ctaHref: "/outcomes",
+        }
+      : held > 0
+        ? {
+            tone: "warning",
+            eyebrow: "Current safety verdict",
+            title: "Held actions pending",
+            body: `${formatCount(held)} runtime decision${held === 1 ? "" : "s"} stopped or paused action before commit.`,
+            ctaLabel: "Review held action",
+            ctaHref: "/approvals",
+          }
+        : missingOutcome > 0
+          ? {
+              tone: "warning",
+              eyebrow: "Current safety verdict",
+              title: "Proof missing",
+              body: `${formatCount(missingOutcome)} decision${missingOutcome === 1 ? "" : "s"} still need outcome reconciliation before export proof is honest.`,
+              ctaLabel: "Verify outcome",
+              ctaHref: "/outcomes",
+            }
+          : needsReview > 0
+            ? {
+                tone: "warning",
+                eyebrow: "Current safety verdict",
+                title: "Protection gaps",
+                body: `${formatCount(needsReview)} agent${needsReview === 1 ? "" : "s"} need mandate, replay, or proof review before unattended operation.`,
+                ctaLabel: "Review agents",
+                ctaHref: "/agents",
+              }
+            : {
+                tone: "success",
+                eyebrow: "Current safety verdict",
+                title: "Protected",
+                body: "Runtime decisions and outcome proof are clean for the loaded agent fleet.",
+                ctaLabel: "Open evidence",
+                ctaHref: firstEvidenceDecision ? evidencePackHref(firstEvidenceDecision) : "/evidence",
+              };
 
   return (
-    <section className="agents-hero-panel">
+    <section className="agents-hero-panel" data-tone={verdict.tone}>
       <div className="agents-hero-copy">
         <div className="agents-eyebrow">
           <Activity aria-hidden="true" />
-          Protected agents
+          {verdict.eyebrow}
         </div>
-        <h1>Agent accountability ledger</h1>
-        <p>
-          Fleet view for autonomous agents that touch systems of record: mandate health, proof gaps, outcome evidence, replay coverage, and risk exposure.
-        </p>
+        <h1>{verdict.title}</h1>
+        <p>{verdict.body}</p>
       </div>
       <div className="agents-hero-actions">
-        <Link href="/replay" className="btn btn-primary">
-          <RotateCcw aria-hidden="true" />
-          Run replay
+        <Link href={verdict.ctaHref} className="btn btn-primary">
+          {verdict.ctaLabel}
+          <ArrowRight aria-hidden="true" />
         </Link>
         <button type="button" className="btn btn-soft" onClick={onRefresh}>
           <RefreshCw aria-hidden="true" />
@@ -853,12 +1016,12 @@ function AgentsHero({
           <small>actions today</small>
         </div>
         <div>
-          <strong>{formatCount(openIssues)}</strong>
-          <small>open proof gaps</small>
+          <strong>{formatCount(needsReview)}</strong>
+          <small>needs review</small>
         </div>
         <div>
-          <strong>{avgHealth == null ? "-" : Math.round(avgHealth)}</strong>
-          <small>avg mandate health</small>
+          <strong>{formatCount(evidenceReady)}</strong>
+          <small>evidence ready</small>
         </div>
       </div>
     </section>
@@ -867,55 +1030,74 @@ function AgentsHero({
 
 function AgentsKpis({
   rows,
-  openIssues,
-  atRiskAgents,
+  activeFilter,
+  onFilterChange,
 }: {
   rows: AgentLaunchpadRow[];
-  openIssues: number;
-  atRiskAgents: number;
+  activeFilter: AgentsFilter;
+  onFilterChange: (filter: AgentsFilter) => void;
 }) {
-  const issueCost = sumIssueCost(rows);
-  const protectedCost = verifiedCostCoverage(rows);
-  const runtimeHoldOrBlock = rows.filter((row) => {
-    const decision = row.latestDecision;
-    return decision?.decision === "block" || decision?.decision === "requires_approval" || decision?.status === "pending_approval";
-  }).length;
-  const outcomeRows = rows.filter((row) => row.latestOutcome);
-  const matchedOutcomes = outcomeRows.filter((row) => row.latestOutcome?.verdict === "matched").length;
-  const missingOutcomes = rows.filter((row) => row.latestDecision && !row.latestOutcome).length;
+  const needsReview = rows.filter(rowNeedsReview).length;
+  const held = rows.filter(rowHasHeldDecision).length;
+  const missingOutcome = rows.filter(rowHasMissingOutcome).length;
+  const evidenceReady = rows.filter(rowHasEvidenceReady).length;
+  const failingGates = rows.filter((row) => row.latestOutcome?.verdict === "mismatched").length;
   const cards = [
     {
+      filter: "all" as const,
+      icon: Bot,
+      label: "Protected agents",
+      value: formatCount(rows.length),
+      helper: "Captured agents in this workspace",
+      tone: "neutral",
+    },
+    {
+      filter: "needs_review" as const,
       icon: AlertTriangle,
-      label: "Open proof gaps",
-      value: formatCount(openIssues),
-      helper: `${formatCount(atRiskAgents)} agents need attention`,
+      label: "Needs review",
+      value: formatCount(needsReview),
+      helper: `${formatCount(failingGates)} failing outcome gate${failingGates === 1 ? "" : "s"}`,
+      tone: needsReview > 0 ? "danger" : "success",
     },
     {
+      filter: "held" as const,
       icon: RotateCcw,
-      label: "Held / blocked",
-      value: formatCount(runtimeHoldOrBlock),
-      helper: "runtime decisions that stopped or paused action",
+      label: "Held decisions",
+      value: formatCount(held),
+      helper: "Runtime block or approval queue",
+      tone: held > 0 ? "warning" : "neutral",
     },
     {
+      filter: "missing_outcome" as const,
+      icon: Clock3,
+      label: "Missing outcome proof",
+      value: formatCount(missingOutcome),
+      helper: "Decision exists, proof not verified",
+      tone: missingOutcome > 0 ? "warning" : "success",
+    },
+    {
+      filter: "evidence_ready" as const,
       icon: ShieldCheck,
-      label: "Outcomes matched",
-      value: outcomeRows.length > 0 ? `${formatCount(matchedOutcomes)}/${formatCount(outcomeRows.length)}` : "0",
-      helper: `${formatCount(missingOutcomes)} decision${missingOutcomes === 1 ? "" : "s"} still not_verified`,
-    },
-    {
-      icon: Gauge,
-      label: "Risk exposure",
-      value: formatUsd(issueCost),
-      helper: protectedCost > 0 ? `${formatUsd(protectedCost)} covered by verified proof` : "no verified cost coverage yet",
+      label: "Evidence ready",
+      value: formatCount(evidenceReady),
+      helper: "Matched outcome with export path",
+      tone: "success",
     },
   ];
 
   return (
-    <section className="agents-kpi-grid" aria-label="Agent health metrics">
+    <section className="agents-kpi-grid" aria-label="Agent safety filters">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <article key={card.label} className="agents-kpi-card">
+          <button
+            key={card.label}
+            type="button"
+            className={`agents-kpi-card${activeFilter === card.filter ? " is-active" : ""}`}
+            data-tone={card.tone}
+            aria-pressed={activeFilter === card.filter}
+            onClick={() => onFilterChange(card.filter)}
+          >
             <span className="agents-kpi-icon" aria-hidden="true">
               <Icon />
             </span>
@@ -924,7 +1106,7 @@ function AgentsKpis({
               <strong>{card.value}</strong>
               <small>{card.helper}</small>
             </div>
-          </article>
+          </button>
         );
       })}
     </section>
@@ -945,7 +1127,7 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
     <aside className="agents-inspector-panel">
       <div className="agents-panel-head">
         <div>
-          <span>Agent proof focus</span>
+          <span>Selected agent proof</span>
           <strong>{focusRow?.agentName ?? "No agent selected"}</strong>
         </div>
         {issue ? <span className={`alert-cat-badge ${severityTone(issue.severity)}`}>{issue.severity}</span> : null}
@@ -1068,6 +1250,37 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
   );
 }
 
+function AgentsAccountabilityLoop() {
+  const stages = [
+    { label: "Capture", detail: "Agent action enters Zroky", href: "/calls" },
+    { label: "Detect", detail: "Mandate and risk signal", href: "/issues" },
+    { label: "Verify", detail: "System-of-record proof", href: "/outcomes" },
+    { label: "Promote", detail: "Golden behavior contract", href: "/contracts" },
+    { label: "Gate", detail: "Policy stops unsafe action", href: "/policies" },
+    { label: "Export", detail: "Evidence Pack for audit", href: "/evidence" },
+  ];
+
+  return (
+    <article className="agents-loop-panel" aria-label="Accountability loop">
+      <div className="agents-panel-head">
+        <div>
+          <span>Accountability loop</span>
+          <strong>{"Capture -> Detect -> Verify -> Promote -> Gate -> Export"}</strong>
+        </div>
+      </div>
+      <div className="agents-loop-chain">
+        {stages.map((stage, index) => (
+          <Link key={stage.label} href={stage.href} className="agents-loop-step">
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <strong>{stage.label}</strong>
+            <small>{stage.detail}</small>
+          </Link>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function AgentsOperations({
   scores,
   rows,
@@ -1119,6 +1332,8 @@ function AgentsOperations({
 
 export default function AgentsPage() {
   const [setupOpened, setSetupOpened] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<AgentsFilter>("needs_review");
+  const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
   const setSdkConnected = useDashboardStore((state) => state.setSdkConnected);
   const leaderboardQuery = useReliabilityLeaderboard(100);
   const callsQuery = useQuery({
@@ -1199,19 +1414,25 @@ export default function AgentsPage() {
       runtimeDecisionsQuery.data?.items,
     ],
   );
+  const sortedRows = useMemo(() => sortAgentRows(rows), [rows]);
+  const filteredRows = useMemo(() => filterAgentRows(sortedRows, activeFilter), [activeFilter, sortedRows]);
+
+  useEffect(() => {
+    if (!selectedAgentName) return;
+    if (!rows.some((row) => row.agentName === selectedAgentName)) {
+      setSelectedAgentName(null);
+    }
+  }, [rows, selectedAgentName]);
 
   const primaryQueries = [leaderboardQuery, callsQuery, issuesQuery, runtimeDecisionsQuery, outcomeChecksQuery];
   const loading = primaryQueries.every((query) => query.isLoading && query.data === undefined);
   const hasRows = rows.length > 0;
   const callsToday = summaryQuery.data?.calls_today ?? 0;
-  const openIssues = issuesQuery.data?.items.length ?? 0;
-  const atRiskAgents = rows.filter((row) => row.healthScore != null && row.healthScore < 55).length;
+  const priorityFocusRow = sortedRows[0] ?? null;
   const focusRow =
-    rows.find((row) => row.latestOutcome?.verdict === "mismatched") ??
-    rows.find((row) => row.latestDecision?.status === "pending_approval") ??
-    rows.find((row) => row.latestIssue) ??
-    rows.find((row) => row.healthScore != null && row.healthScore < 55) ??
-    rows[0] ??
+    sortedRows.find((row) => row.agentName === selectedAgentName) ??
+    filteredRows[0] ??
+    priorityFocusRow ??
     null;
 
   if (loading && !hasRows) {
@@ -1224,7 +1445,6 @@ export default function AgentsPage() {
         <AgentsHero
           captureHealth={captureHealthQuery.data ?? null}
           callsToday={callsToday}
-          openIssues={openIssues}
           rows={rows}
           onRefresh={refreshAll}
         />
@@ -1244,26 +1464,70 @@ export default function AgentsPage() {
       <AgentsHero
         captureHealth={captureHealthQuery.data ?? null}
         callsToday={callsToday}
-        openIssues={openIssues}
         rows={rows}
         onRefresh={refreshAll}
       />
 
       <AgentsKpis
         rows={rows}
-        openIssues={openIssues}
-        atRiskAgents={atRiskAgents}
-      />
-
-      <AgentsOperations
-        scores={leaderboardQuery.data ?? []}
-        rows={rows}
-        focusRow={focusRow}
-        calls={callsQuery.data?.items ?? []}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
       />
 
       <section className="agents-layout-grid">
         <div className="agents-main-column">
+          <article className="agents-chart-panel">
+            <div className="agents-panel-head">
+              <div>
+                <span>{agentFilterLabel(activeFilter)}</span>
+                <strong>Needs your decision</strong>
+              </div>
+              <span className="agents-table-count">{formatCount(filteredRows.length)} of {formatCount(rows.length)} agents</span>
+            </div>
+            <div className="agents-table-wrap">
+              <table className="agents-table">
+                <thead>
+                  <tr>
+                    <th>Agent</th>
+                    <th>Mandate / risk</th>
+                    <th>Runtime decision</th>
+                    <th>Outcome proof</th>
+                    <th>Evidence readiness</th>
+                    <th>Impact</th>
+                    <th>Next step</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.length > 0 ? (
+                    filteredRows.map((row) => (
+                      <AgentRow
+                        key={row.agentName}
+                        row={row}
+                        selected={focusRow?.agentName === row.agentName}
+                        onSelect={setSelectedAgentName}
+                      />
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7}>
+                        <div className="agents-empty-filter">
+                          <strong>No agents match this filter.</strong>
+                          <span>
+                            {activeFilter === "needs_review"
+                              ? "No loaded agent currently needs a runtime decision, outcome fix, or proof review."
+                              : "Switch filters to inspect the rest of the loaded protected-agent fleet."}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <AgentsAccountabilityLoop />
+
           <article className="agents-table-panel">
             <div className="agents-panel-head">
               <div>
@@ -1277,44 +1541,17 @@ export default function AgentsPage() {
             </div>
             <SignalClustersTable issues={issuesQuery.data?.items ?? []} />
           </article>
-
-          <article className="agents-chart-panel">
-            <div className="agents-panel-head">
-              <div>
-                <span>Protected agent matrix</span>
-                <strong>Runtime decision, outcome verdict, Evidence Pack, and reliability context</strong>
-              </div>
-              <span className="agents-table-count">{formatCount(rows.length)} agents</span>
-            </div>
-            <div className="agents-table-wrap">
-              <table className="agents-table">
-                <thead>
-                  <tr>
-                    <th>Agent</th>
-                    <th>Runtime decision</th>
-                    <th>Outcome</th>
-                    <th>Evidence Pack</th>
-                    <th>Mandate health</th>
-                    <th>Success</th>
-                    <th>Cost / success</th>
-                    <th>Latency</th>
-                    <th>Proof gap</th>
-                    <th>Replay proof</th>
-                    <th>Last evidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <AgentRow key={row.agentName} row={row} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
         </div>
 
         <AgentsInspector focusRow={focusRow} />
       </section>
+
+      <AgentsOperations
+        scores={leaderboardQuery.data ?? []}
+        rows={rows}
+        focusRow={focusRow}
+        calls={callsQuery.data?.items ?? []}
+      />
 
       {captureHealthQuery.data?.validation_warnings?.length ? (
         <section className="agents-warning-panel" id="capture-warnings">

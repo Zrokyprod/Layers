@@ -26,10 +26,10 @@ test.describe("action accountability cockpits", () => {
       await expectDashboardShell(page);
       await expectNoHorizontalOverflow(page);
       await expectVisibleTexts(page, [
-        "Agent accountability ledger",
+        "Outcome mismatch",
         "Protected agents",
-        "Protected agent matrix",
-        "Agent proof focus",
+        "Needs your decision",
+        "Selected agent proof",
         "refund-support-agent",
         seed.runtime_policy_decision_id ?? "demo-runtime-refund-hold",
         "HOLD",
@@ -40,7 +40,7 @@ test.describe("action accountability cockpits", () => {
       const expectedEvidenceHref = `/evidence?decision_id=${encodeURIComponent(
         seed.runtime_policy_decision_id ?? "demo-runtime-refund-hold",
       )}`;
-      const protectedMatrix = page.locator("article").filter({ hasText: "Protected agent matrix" });
+      const protectedMatrix = page.locator("article").filter({ hasText: "Needs your decision" });
       await expect(protectedMatrix.getByRole("link", { name: "Evidence Pack" })).toHaveAttribute(
         "href",
         expectedEvidenceHref,
