@@ -39684,8 +39684,7 @@ body:has(.app-shell),
   align-items: center;
   border-color: var(--fi-border);
   background:
-    linear-gradient(135deg, rgba(248, 250, 252, 0.055), rgba(248, 250, 252, 0) 34%),
-    radial-gradient(circle at 92% 0%, rgba(104, 167, 255, 0.075), rgba(104, 167, 255, 0) 28%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.048), rgba(248, 250, 252, 0) 34%),
     linear-gradient(180deg, rgba(18, 23, 34, 0.98), rgba(10, 14, 21, 0.98));
   padding: 20px 22px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 22px 70px rgba(0, 0, 0, 0.34);
@@ -39710,22 +39709,19 @@ body:has(.app-shell),
 
 .fi-command-hero[data-tone="danger"] {
   background:
-    radial-gradient(circle at 92% 0%, rgba(255, 93, 131, 0.12), rgba(255, 93, 131, 0) 30%),
-    linear-gradient(135deg, rgba(248, 250, 252, 0.055), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.048), rgba(248, 250, 252, 0) 34%),
     linear-gradient(180deg, rgba(18, 23, 34, 0.98), rgba(10, 14, 21, 0.98));
 }
 
 .fi-command-hero[data-tone="warning"] {
   background:
-    radial-gradient(circle at 92% 0%, rgba(244, 201, 93, 0.12), rgba(244, 201, 93, 0) 30%),
-    linear-gradient(135deg, rgba(248, 250, 252, 0.055), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.048), rgba(248, 250, 252, 0) 34%),
     linear-gradient(180deg, rgba(18, 23, 34, 0.98), rgba(10, 14, 21, 0.98));
 }
 
 .fi-command-hero[data-tone="success"] {
   background:
-    radial-gradient(circle at 92% 0%, rgba(122, 168, 255, 0.11), rgba(122, 168, 255, 0) 30%),
-    linear-gradient(135deg, rgba(248, 250, 252, 0.055), rgba(248, 250, 252, 0) 34%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.048), rgba(248, 250, 252, 0) 34%),
     linear-gradient(180deg, rgba(18, 23, 34, 0.98), rgba(10, 14, 21, 0.98));
 }
 
@@ -39884,8 +39880,7 @@ body:has(.app-shell),
   min-height: 258px;
   padding: 18px;
   background:
-    radial-gradient(circle at 88% 12%, rgba(104, 167, 255, 0.09), rgba(104, 167, 255, 0) 30%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.01)),
     var(--fi-surface-raised);
 }
 
@@ -40124,8 +40119,8 @@ body:has(.app-shell),
 }
 
 .fi-onboarding-flow-step[data-state="done"] {
-  border-color: rgba(122, 168, 255, 0.26);
-  background: rgba(122, 168, 255, 0.085);
+  border-color: rgba(63, 135, 107, 0.28);
+  background: rgba(63, 135, 107, 0.085);
 }
 
 .fi-onboarding-flow-step[data-state="done"] > span,
@@ -40342,8 +40337,8 @@ body:has(.app-shell),
 }
 
 .fi-status-tag[data-tone="success"] {
-  border-color: rgba(122, 168, 255, 0.26);
-  background: rgba(122, 168, 255, 0.095);
+  border-color: rgba(63, 135, 107, 0.28);
+  background: rgba(63, 135, 107, 0.095);
   color: var(--fi-success);
 }
 
@@ -40676,24 +40671,25 @@ body:has(.app-shell),
   --text-primary: #f3f7fb;
   --text-secondary: #aeb9c8;
   --text-tertiary: #728095;
-  --status-success: #7aa8ff;
-  --status-warning: #efc75e;
-  --status-error: #ff6685;
+  --status-success: #3f876b;
+  --status-warning: #a98635;
+  --status-error: #b6465e;
   --shadow-soft: 0 20px 80px rgba(0, 0, 0, 0.34);
 }
 
 .app-shell .content-inner:has(.fi-home-v5) {
   max-width: none;
-  padding-right: 0;
-  padding-left: 0;
+  padding-right: 12px;
+  padding-left: 12px;
 }
 
 .fi-home-v5 {
-  --fi-blue: #68a7ff;
-  --fi-yellow: #efc75e;
-  --fi-red: #ff6685;
+  --fi-blue: #4f83c7;
+  --fi-green: #3f876b;
+  --fi-yellow: #a98635;
+  --fi-red: #b6465e;
   --fi-neutral: #aeb9c8;
-  --fi-success: #7aa8ff;
+  --fi-success: var(--fi-green);
   width: 100%;
   max-width: none;
   margin: 0;
@@ -40718,19 +40714,19 @@ body:has(.app-shell),
 .fi-home-v5 .fi-command-hero::after {
   inset: auto 24px 0 24px;
   width: auto;
-  background: linear-gradient(90deg, transparent, rgba(104, 167, 255, 0.42), transparent);
+  background: linear-gradient(90deg, transparent, rgba(79, 131, 199, 0.34), transparent);
 }
 
 .fi-home-v5 .fi-command-hero[data-tone="danger"] {
-  border-color: rgba(255, 102, 133, 0.26);
+  border-color: rgba(182, 70, 94, 0.34);
 }
 
 .fi-home-v5 .fi-command-hero[data-tone="warning"] {
-  border-color: rgba(239, 199, 94, 0.26);
+  border-color: rgba(169, 134, 53, 0.34);
 }
 
 .fi-home-v5 .fi-command-hero[data-tone="success"] {
-  border-color: rgba(122, 168, 255, 0.24);
+  border-color: rgba(63, 135, 107, 0.34);
 }
 
 .fi-home-v5 .fi-hero-main {
@@ -40859,43 +40855,43 @@ body:has(.app-shell),
 }
 
 .fi-home-status-tile[data-tone="danger"] {
-  border-color: rgba(255, 102, 133, 0.26);
+  border-color: rgba(182, 70, 94, 0.34);
 }
 
 .fi-home-status-tile[data-tone="danger"] .fi-home-status-icon,
 .fi-home-v5 .fi-kpi-card[data-tone="danger"] .fi-kpi-icon {
   color: var(--fi-red);
-  background: rgba(255, 102, 133, 0.1);
+  background: rgba(182, 70, 94, 0.14);
 }
 
 .fi-home-status-tile[data-tone="warning"] {
-  border-color: rgba(239, 199, 94, 0.26);
+  border-color: rgba(169, 134, 53, 0.34);
 }
 
 .fi-home-status-tile[data-tone="warning"] .fi-home-status-icon,
 .fi-home-v5 .fi-kpi-card[data-tone="warning"] .fi-kpi-icon {
   color: var(--fi-yellow);
-  background: rgba(239, 199, 94, 0.1);
+  background: rgba(169, 134, 53, 0.14);
 }
 
 .fi-home-status-tile[data-tone="success"] {
-  border-color: rgba(122, 168, 255, 0.24);
+  border-color: rgba(63, 135, 107, 0.34);
 }
 
 .fi-home-status-tile[data-tone="success"] .fi-home-status-icon,
 .fi-home-v5 .fi-kpi-card[data-tone="success"] .fi-kpi-icon {
   color: var(--fi-success);
-  background: rgba(122, 168, 255, 0.1);
+  background: rgba(63, 135, 107, 0.14);
 }
 
 .fi-home-status-tile[data-tone="info"] {
-  border-color: rgba(104, 167, 255, 0.25);
+  border-color: rgba(79, 131, 199, 0.34);
 }
 
 .fi-home-status-tile[data-tone="info"] .fi-home-status-icon,
 .fi-home-v5 .fi-kpi-card[data-tone="info"] .fi-kpi-icon {
   color: var(--fi-blue);
-  background: rgba(104, 167, 255, 0.1);
+  background: rgba(79, 131, 199, 0.14);
 }
 
 .fi-home-v5 .fi-refresh-meta {
@@ -40921,19 +40917,19 @@ body:has(.app-shell),
 }
 
 .fi-home-v5 .fi-kpi-card[data-tone="danger"] {
-  border-color: rgba(255, 102, 133, 0.22);
+  border-color: rgba(182, 70, 94, 0.3);
 }
 
 .fi-home-v5 .fi-kpi-card[data-tone="warning"] {
-  border-color: rgba(239, 199, 94, 0.22);
+  border-color: rgba(169, 134, 53, 0.3);
 }
 
 .fi-home-v5 .fi-kpi-card[data-tone="success"] {
-  border-color: rgba(122, 168, 255, 0.2);
+  border-color: rgba(63, 135, 107, 0.3);
 }
 
 .fi-home-v5 .fi-kpi-card[data-tone="info"] {
-  border-color: rgba(104, 167, 255, 0.22);
+  border-color: rgba(79, 131, 199, 0.3);
 }
 
 .fi-home-v5 .fi-kpi-card:hover,
@@ -41047,7 +41043,7 @@ body:has(.app-shell),
 
 .fi-home-v5 .fi-evidence-row:hover,
 .fi-home-v5 .fi-pipeline-stage:hover {
-  border-color: rgba(104, 167, 255, 0.25);
+  border-color: rgba(79, 131, 199, 0.3);
 }
 
 .fi-home-v5 .fi-pipeline {
