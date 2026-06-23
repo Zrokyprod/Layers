@@ -42,7 +42,18 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/store", () => ({
-  useDashboardStore: <T,>(selector: (state: { selectedProject: string }) => T) => selector({ selectedProject: "proj_1" }),
+  useDashboardStore: <T,>(
+    selector: (state: {
+      selectedProject: string;
+      dateRange: { from: Date | null; to: Date | null };
+      realTimeEnabled: boolean;
+    }) => T,
+  ) =>
+    selector({
+      selectedProject: "proj_1",
+      dateRange: { from: null, to: null },
+      realTimeEnabled: true,
+    }),
 }));
 
 vi.mock("@/lib/api", async () => {
@@ -207,12 +218,12 @@ function rowForIssueTitle(title: string): HTMLElement {
   return row;
 }
 
-function summaryCard(label: string): HTMLElement {
+function snapshotCard(label: string): HTMLElement {
   const card = screen
     .getAllByText(label)
-    .map((element) => element.closest(".fi-kpi-card"))
+    .map((element) => element.closest(".fi-a-snapshot-card"))
     .find(Boolean);
-  if (!card) throw new Error(`Missing summary card ${label}`);
+  if (!card) throw new Error(`Missing snapshot card ${label}`);
   return card as HTMLElement;
 }
 
@@ -374,56 +385,55 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Agent safety status", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Agent action accountability", level: 1 })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("Deployment blocked")).toBeInTheDocument();
     expect(screen.getByText("1 verification gate failing on regression-ci:proj_1.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Verify outcome" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Open gate" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Review decisions" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Loaded open issues")).toBeNull();
     expect(screen.queryByText("Replay mode")).toBeNull();
     expect(screen.queryByText("Silent failures detected")).toBeNull();
+    expect(api.getAnalyticsSummary.mock.calls[0]?.[0]).toBe(7);
 
-    const summary = screen.getByLabelText("Home summary");
-    expect(document.querySelectorAll(".fi-kpi-card")).toHaveLength(5);
-    expect(within(summaryCard("Action signals")).getByText("2")).toBeInTheDocument();
-    expect(within(summaryCard("Needs review")).getByText("3")).toBeInTheDocument();
-    expect(within(summaryCard("Verified outcomes")).getByText("0% verified")).toBeInTheDocument();
-    expect(within(summaryCard("Protected agents")).getByText("1")).toBeInTheDocument();
-    expect(within(summaryCard("Evidence packs")).getByText("2")).toBeInTheDocument();
+    const summary = screen.getByLabelText("Home snapshot filters");
+    expect(document.querySelectorAll(".fi-a-snapshot-card")).toHaveLength(5);
+    expect(within(snapshotCard("Action signals")).getByText("2")).toBeInTheDocument();
+    expect(within(snapshotCard("Needs decision")).getByText("3")).toBeInTheDocument();
+    expect(within(snapshotCard("Unverified outcomes")).getByText("1")).toBeInTheDocument();
+    expect(within(snapshotCard("Failing gates")).getByText("1")).toBeInTheDocument();
+    expect(within(snapshotCard("Evidence readiness")).getByText("40%")).toBeInTheDocument();
     expect(summary).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Needs your decision", level: 3 })).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: "Decision queue focus" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "All" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tab", { name: "High risk" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Missing proof" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Exposure" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Verified" })).toBeInTheDocument();
-    expect(screen.getByText("The highest-risk actions, missing proof, and customer-impact signals in one queue.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Exposure" }));
-    expect(screen.getByRole("tab", { name: "Exposure" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText("The same queue sorted by estimated customer or spend exposure.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Highest-risk agent actions", level: 2 })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Decision queue focus" })).toBeNull();
+    const failingGateCard = snapshotCard("Failing gates");
+    fireEvent.click(failingGateCard);
+    expect(failingGateCard.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(snapshotCard("Needs decision"));
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "Urgency",
       "Signal",
       "Agent / action",
-      "Risk",
-      "Outcome state",
+      "Impact",
+      "Proof state",
       "Next step",
     ]);
-    expect(within(rowForIssueTitle("Checkout loop")).getByText("High-risk action")).toBeInTheDocument();
-    expect(within(rowForIssueTitle("Checkout loop")).getByText("Loop repeated the same checkout tool call.")).toBeInTheDocument();
+    expect(within(table).getByText("CI gate failed")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText("Critical action drift")).toBeInTheDocument();
+    expect(within(rowForIssueTitle("Checkout loop")).getByText(/Loop repeated the same checkout tool call/)).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("No trusted replay")).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Evidence Pack" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Download JSON" }).getAttribute("href")).toBe("/evidence");
-    expect(screen.getByRole("heading", { name: "System-of-record proof" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Action accountability loop" })).toBeInTheDocument();
+    const proofPanel = screen.getByLabelText("Selected proof");
+    expect(within(proofPanel).getByText("System-of-record health")).toBeInTheDocument();
+    fireEvent.click(rowForIssueTitle("Checkout loop"));
+    expect(within(proofPanel).getByText("Sample trace")).toBeInTheDocument();
+    expect(within(proofPanel).getByText("Outcome proof missing")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Capture to export" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Action accountability loop")).toBeInTheDocument();
     expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 
@@ -459,7 +469,7 @@ describe("Command Center home", () => {
     expect(screen.getByRole("link", { name: /Use Gateway/i }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("link", { name: /Send test capture/i }).getAttribute("href")).toBe("/trace");
     expect(screen.getByRole("heading", { name: "What happens next" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Needs your decision", level: 3 })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Highest-risk agent actions", level: 2 })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open issues" })).toBeNull();
   });
 
@@ -483,8 +493,9 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Needs your decision", level: 3 })).toBeInTheDocument();
-    expect(screen.getByText("No high-risk action needs review right now.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Highest-risk agent actions", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText("Evidence incomplete")).toBeInTheDocument();
+    expect(screen.getAllByText("No exportable proof pack is ready until replay proof is promoted into a blocking contract.").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Setup progress" })).toBeNull();
   });
@@ -511,7 +522,7 @@ describe("Command Center home", () => {
     expect(screen.queryByText(/Partial refresh:/)).toBeNull();
   });
 
-  it("renders Cost Impact values in priority rows and keeps evidence pack count visible", async () => {
+  it("renders Cost Impact values in decision rows and keeps evidence readiness visible", async () => {
     mockInbox(
       {
         "pilot.root_cause_diagnosis": true,
@@ -537,8 +548,8 @@ describe("Command Center home", () => {
     await screen.findAllByText("Checkout loop");
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Schema drift")).getByText("$7.50")).toBeInTheDocument();
-    expect(within(summaryCard("Evidence packs")).getByText("2")).toBeInTheDocument();
-    expect(screen.getByText("Capture traces to calculate latency.")).toBeInTheDocument();
+    expect(within(snapshotCard("Evidence readiness")).getByText("40%")).toBeInTheDocument();
+    expect(within(snapshotCard("Evidence readiness")).getByText("2/5 ready")).toBeInTheDocument();
   });
 
   it("uses estimated wasted AI cost when blast radius is missing", async () => {
@@ -580,7 +591,7 @@ describe("Command Center home", () => {
 
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upgrade").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "System-of-record proof" })).toBeInTheDocument();
+    expect(screen.getByText("System-of-record health")).toBeInTheDocument();
   });
 
   it("enables pilot replay and golden actions only for verified fixes", async () => {
@@ -641,8 +652,8 @@ describe("Command Center home", () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByText("Not verified")).toBeInTheDocument();
-    expect(screen.getByText("Release gate")).toBeInTheDocument();
+    expect((await screen.findAllByText("Not verified")).length).toBeGreaterThan(0);
+    expect(screen.getByText("CI gate failed")).toBeInTheDocument();
     expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 });
