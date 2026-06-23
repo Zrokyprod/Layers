@@ -16057,3 +16057,312 @@ body:has(.app-shell .agents-screen),
     justify-content: center !important;
   }
 }
+
+/* Agents light hardening: keep legacy dark cockpit styles from bleeding through. */
+
+.app-shell:has(.agents-screen) {
+  --agent-bg: var(--agents-canvas) !important;
+  --agent-bg-2: var(--agents-canvas) !important;
+  --agent-panel: var(--agents-surface) !important;
+  --agent-panel-2: var(--agents-surface-soft) !important;
+  --agent-line: var(--agents-border) !important;
+  --agent-line-strong: var(--agents-border-strong) !important;
+  --agent-text: var(--agents-text) !important;
+  --agent-soft: var(--agents-text-soft) !important;
+  --agent-muted: var(--agents-muted) !important;
+  --agent-accent: var(--agents-blue) !important;
+  --agent-success: var(--agents-green) !important;
+  --agent-warning: var(--agents-yellow) !important;
+  --agent-danger: var(--agents-red) !important;
+  background: var(--agents-canvas) !important;
+}
+
+html:has(.app-shell .agents-screen),
+body:has(.app-shell .agents-screen),
+.app-shell:has(.agents-screen) .content,
+.app-shell:has(.agents-screen) .content-area,
+.app-shell:has(.agents-screen) .content-inner,
+.app-shell .agents-screen,
+.app-shell .agents-layout-grid,
+.app-shell .agents-main-column,
+.app-shell .agents-evidence-grid,
+.app-shell .agents-setup-grid {
+  background: var(--agents-canvas) !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell .agents-screen::before {
+  display: none !important;
+  content: none !important;
+}
+
+.app-shell .agents-hero-panel,
+.app-shell .agents-kpi-card,
+.app-shell .agents-chart-panel,
+.app-shell .agents-table-panel,
+.app-shell .agents-inspector-panel,
+.app-shell .agents-mini-panel,
+.app-shell .agents-warning-panel,
+.app-shell .agents-quality-panel,
+.app-shell .agents-footnote-panel,
+.app-shell .agents-empty-card,
+.app-shell .agents-loop-panel,
+.app-shell .agents-system-health-panel {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface) !important;
+  color: var(--agents-text) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.app-shell .agents-hero-panel {
+  background: #ffffff !important;
+}
+
+.app-shell .agents-hero-actions .btn-primary,
+.app-shell .agents-inspector-actions .btn-primary {
+  border-color: rgba(0, 8, 255, 0.28) !important;
+  background: #eef3ff !important;
+  color: var(--agents-blue) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .agents-hero-actions .btn-primary:hover,
+.app-shell .agents-hero-actions .btn-primary:focus-visible,
+.app-shell .agents-inspector-actions .btn-primary:hover,
+.app-shell .agents-inspector-actions .btn-primary:focus-visible {
+  border-color: var(--agents-blue) !important;
+  background: #e6edff !important;
+  color: var(--agents-blue) !important;
+}
+
+.app-shell .agents-table-wrap,
+.app-shell .agents-trend-chart,
+.app-shell .agents-bar-list,
+.app-shell .agents-timeline-list,
+.app-shell .agents-clusters-wrap,
+.app-shell .agents-inspector-score,
+.app-shell .agents-inspector-list,
+.app-shell .agents-issue-summary,
+.app-shell .agents-evidence-list,
+.app-shell .agents-proof-chain {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface-soft) !important;
+}
+
+.app-shell .agents-table,
+.app-shell .agents-clusters-table {
+  background: #ffffff !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell .agents-table thead,
+.app-shell .agents-clusters-table thead,
+.app-shell .agents-table th,
+.app-shell .agents-clusters-table th {
+  background: #f8fafc !important;
+  color: var(--agents-muted) !important;
+}
+
+.app-shell .agents-table tbody,
+.app-shell .agents-clusters-table tbody,
+.app-shell .agents-table tr,
+.app-shell .agents-clusters-table tr,
+.app-shell .agents-table td,
+.app-shell .agents-clusters-table td {
+  background: #ffffff !important;
+  color: var(--agents-text-soft) !important;
+}
+
+.app-shell .agents-table-row:hover td,
+.app-shell .agents-table-row.is-selected td {
+  background: #f2f6ff !important;
+}
+
+.app-shell .agents-inspector-score div,
+.app-shell .agents-inspector-list div,
+.app-shell .agents-issue-summary,
+.app-shell .agents-evidence-row,
+.app-shell .agents-bar-row,
+.app-shell .agents-timeline-row,
+.app-shell .agents-action-list div,
+.app-shell .agents-contract-list div,
+.app-shell .agents-call-feed a,
+.app-shell .agents-proof-chain > div,
+.app-shell .agents-loop-step,
+.app-shell .agents-system-health-card {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface-soft) !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell .agents-system-health-card[data-tone="danger"] {
+  border-left-color: var(--agents-red) !important;
+}
+
+.app-shell .agents-system-health-card[data-tone="warning"] {
+  border-left-color: var(--agents-yellow) !important;
+}
+
+.app-shell .agents-system-health-card[data-tone="success"] {
+  border-left-color: var(--agents-green) !important;
+}
+
+.app-shell .agents-system-health-card[data-tone="neutral"] {
+  border-left-color: var(--agents-blue) !important;
+}
+
+/* Agents shared-shell light reset. */
+
+.app-shell:has(.agents-screen) .sidebar-logo-word,
+.app-shell:has(.agents-screen) .topbar-bc-page,
+.app-shell:has(.agents-screen) .topbar-account-name,
+.app-shell:has(.agents-screen) .org-name,
+.app-shell:has(.agents-screen) .plan-badge,
+.app-shell:has(.agents-screen) .plan-card strong,
+.app-shell:has(.agents-screen) .org-widget strong {
+  color: var(--agents-text) !important;
+}
+
+.app-shell:has(.agents-screen) .sidebar-logo-image {
+  filter: brightness(0) saturate(100%) !important;
+  opacity: 0.96 !important;
+}
+
+.app-shell:has(.agents-screen) .topbar-route-trigger,
+.app-shell:has(.agents-screen) .topbar-account-btn,
+.app-shell:has(.agents-screen) .org-widget,
+.app-shell:has(.agents-screen) .plan-card {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface) !important;
+  color: var(--agents-text) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.app-shell:has(.agents-screen) .topbar-bc-org,
+.app-shell:has(.agents-screen) .topbar-bc-sep,
+.app-shell:has(.agents-screen) .topbar-bc-icon,
+.app-shell:has(.agents-screen) .topbar-bc-chevron,
+.app-shell:has(.agents-screen) .topbar-search-hint,
+.app-shell:has(.agents-screen) .topbar-search-icon,
+.app-shell:has(.agents-screen) .plan-status,
+.app-shell:has(.agents-screen) .plan-renew,
+.app-shell:has(.agents-screen) .plan-usage-total,
+.app-shell:has(.agents-screen) .plan-usage-link,
+.app-shell:has(.agents-screen) .org-env,
+.app-shell:has(.agents-screen) .org-meta {
+  color: var(--agents-muted) !important;
+}
+
+.app-shell:has(.agents-screen) .sidebar-foot {
+  border-top-color: var(--agents-border) !important;
+  background: transparent !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell:has(.agents-screen) .plan-badge,
+.app-shell:has(.agents-screen) .org-avatar {
+  border-color: rgba(0, 8, 255, 0.24) !important;
+  background: #eef3ff !important;
+  color: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .plan-usage-track {
+  background: var(--agents-surface-inset) !important;
+}
+
+.app-shell:has(.agents-screen) .plan-usage-fill {
+  background: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .agents-screen .btn-soft,
+.app-shell:has(.agents-screen) .capture-connect-panel .btn-soft {
+  border-color: var(--agents-border) !important;
+  background: #ffffff !important;
+  color: var(--agents-text) !important;
+  box-shadow: none !important;
+}
+
+.app-shell:has(.agents-screen) .agents-screen .btn-soft:hover,
+.app-shell:has(.agents-screen) .agents-screen .btn-soft:focus-visible,
+.app-shell:has(.agents-screen) .capture-connect-panel .btn-soft:hover,
+.app-shell:has(.agents-screen) .capture-connect-panel .btn-soft:focus-visible {
+  border-color: rgba(0, 8, 255, 0.28) !important;
+  background: #eef3ff !important;
+  color: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-panel,
+.app-shell:has(.agents-screen) .capture-verification-main,
+.app-shell:has(.agents-screen) .capture-health-metric,
+.app-shell:has(.agents-screen) .capture-code-block,
+.app-shell:has(.agents-screen) .capture-connect-panel .onboarding-progress {
+  border-color: var(--agents-border) !important;
+  background: #ffffff !important;
+  color: var(--agents-text) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-title h2,
+.app-shell:has(.agents-screen) .capture-verification-main strong,
+.app-shell:has(.agents-screen) .capture-health-metric strong,
+.app-shell:has(.agents-screen) .capture-code-head,
+.app-shell:has(.agents-screen) .capture-connect-panel .onboarding-progress-head strong,
+.app-shell:has(.agents-screen) .capture-connect-panel .onboarding-progress-head .mono {
+  color: var(--agents-text) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-title p,
+.app-shell:has(.agents-screen) .capture-verification-main span,
+.app-shell:has(.agents-screen) .capture-health-metric span,
+.app-shell:has(.agents-screen) .capture-health-metric small,
+.app-shell:has(.agents-screen) .capture-connect-panel .onboarding-progress-item {
+  color: var(--agents-text-soft) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-title svg {
+  color: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-verification-strip.waiting .capture-verification-main svg,
+.app-shell:has(.agents-screen) .capture-verification-strip.stale .capture-verification-main svg {
+  color: #8a7600 !important;
+}
+
+.app-shell:has(.agents-screen) .capture-health-link:hover,
+.app-shell:has(.agents-screen) .capture-method-toggle button:hover {
+  border-color: rgba(0, 8, 255, 0.28) !important;
+  background: #eef3ff !important;
+}
+
+.app-shell:has(.agents-screen) .capture-method-toggle {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface-inset) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-method-toggle button {
+  background: transparent !important;
+  color: var(--agents-text-soft) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-method-toggle button.active {
+  background: #eef3ff !important;
+  color: var(--agents-blue) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-head {
+  border-bottom-color: var(--agents-border) !important;
+  background: var(--agents-surface-soft) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-code-block pre,
+.app-shell:has(.agents-screen) .capture-code-block code {
+  background: #f8fafc !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell:has(.agents-screen) .capture-connect-actions .btn-primary {
+  border-color: rgba(0, 8, 255, 0.28) !important;
+  background: #eef3ff !important;
+  color: var(--agents-blue) !important;
+  box-shadow: none !important;
+}
