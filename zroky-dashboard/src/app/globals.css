@@ -40901,6 +40901,11 @@ body:has(.app-shell),
   padding: 9px 10px;
 }
 
+.fi-home-v5 .fi-live-dot {
+  background: var(--fi-green);
+  box-shadow: 0 0 0 4px rgba(63, 135, 107, 0.1);
+}
+
 .fi-home-v5 .fi-command-metrics {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;

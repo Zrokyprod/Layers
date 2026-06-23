@@ -10895,21 +10895,18 @@ body:has(.app-shell) {
 
 .app-shell .fi-screen .fi-command-hero[data-tone="danger"] {
   background:
-    radial-gradient(circle at 92% 0%, rgba(255, 93, 131, 0.14), rgba(255, 93, 131, 0) 30%),
     linear-gradient(135deg, rgba(248, 250, 252, 0.064), rgba(248, 250, 252, 0) 34%),
     linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 11, 16, 0.98)) !important;
 }
 
 .app-shell .fi-screen .fi-command-hero[data-tone="warning"] {
   background:
-    radial-gradient(circle at 92% 0%, rgba(244, 201, 93, 0.14), rgba(244, 201, 93, 0) 30%),
     linear-gradient(135deg, rgba(248, 250, 252, 0.064), rgba(248, 250, 252, 0) 34%),
     linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 11, 16, 0.98)) !important;
 }
 
 .app-shell .fi-screen .fi-command-hero[data-tone="success"] {
   background:
-    radial-gradient(circle at 92% 0%, rgba(45, 212, 163, 0.14), rgba(45, 212, 163, 0) 30%),
     linear-gradient(135deg, rgba(248, 250, 252, 0.064), rgba(248, 250, 252, 0) 34%),
     linear-gradient(180deg, rgba(18, 22, 30, 0.98), rgba(8, 11, 16, 0.98)) !important;
 }
@@ -11010,7 +11007,7 @@ body:has(.app-shell) {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(45, 212, 163, 0.11), rgba(45, 212, 163, 0) 42%),
+    linear-gradient(90deg, rgba(248, 250, 252, 0.045), rgba(248, 250, 252, 0) 42%),
     linear-gradient(180deg, rgba(248, 250, 252, 0.045), transparent 32%);
   content: "";
 }
@@ -11021,9 +11018,24 @@ body:has(.app-shell) {
   bottom: 18px;
   left: 20px;
   height: 1px;
-  background: linear-gradient(90deg, rgba(45, 212, 163, 0), rgba(45, 212, 163, 0.42), rgba(45, 212, 163, 0));
+  background: linear-gradient(90deg, transparent, rgba(248, 250, 252, 0.16), transparent);
   content: "";
   opacity: 0.72;
+}
+
+.app-shell .fi-home-v5 .fi-next-setup {
+  border-color: rgba(190, 207, 231, 0.16) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.01)),
+    #121a24 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 20px 70px rgba(0, 0, 0, 0.36) !important;
+}
+
+.app-shell .fi-home-v5 .fi-next-setup::before,
+.app-shell .fi-home-v5 .fi-next-setup::after {
+  display: none !important;
+  background: none !important;
+  content: none !important;
 }
 
 .app-shell .fi-screen .fi-next-setup > * {
