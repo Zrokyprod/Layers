@@ -10,7 +10,6 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
-  Gauge,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -18,11 +17,6 @@ import {
 } from "lucide-react";
 
 import { CaptureConnectPanel } from "@/components/capture-connect-panel";
-import {
-  buildCostExposureRows,
-  buildSignalClusters,
-  buildTimelineEntries,
-} from "@/lib/agents-console";
 import {
   getAnalyticsSummary,
   getCaptureHealth,
@@ -67,6 +61,22 @@ type AgentLaunchpadRow = {
 
 type AgentsFilter = "all" | "needs_review" | "held" | "missing_outcome" | "evidence_ready";
 type AgentHeroTone = "setup" | "danger" | "warning" | "success" | "neutral";
+
+function coerceDate(value: unknown): Date | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
+function analyticsWindowDays(dateRange: { from?: unknown; to?: unknown } | null | undefined): number {
+  const from = coerceDate(dateRange?.from);
+  const to = coerceDate(dateRange?.to) ?? new Date();
+  if (!from || from.getTime() >= to.getTime()) return 7;
+  return Math.max(1, Math.min(90, Math.ceil((to.getTime() - from.getTime()) / 86_400_000)));
+}
 
 function agentNameFromCall(call: CallListItem): string {
   return call.agent_name?.trim() || "Unassigned agent";
@@ -611,185 +621,6 @@ function AgentsLoadingState() {
   );
 }
 
-function FailureRateChart({ scores }: { scores: AgentScoreView[] }) {
-  const source = scores.length > 0 ? [...scores].sort((a, b) => b.fail_rate - a.fail_rate).slice(0, 7) : [];
-  const points = source.map((score) => ({
-    agent: score.agent_name,
-    current: score.fail_rate * 100,
-    previous: (score.prev_week_fail_rate ?? score.fail_rate) * 100,
-  }));
-
-  if (points.length === 0) {
-    return (
-      <div className="agents-trend-chart" aria-label="Behavior drift by agent">
-        <p className="agents-muted">No scored agent drift yet.</p>
-      </div>
-    );
-  }
-
-  const width = 640;
-  const height = 240;
-  const step = width / Math.max(points.length - 1, 1);
-
-  const mapSeries = (values: number[]) =>
-    values.map((value, index) => {
-      const y = height - (Math.max(0, Math.min(12, value)) / 12) * 170 - 28;
-      return [Math.round(index * step), Math.round(y)] as const;
-    });
-
-  const currentCoords = mapSeries(points.map((point) => point.current));
-  const previousCoords = mapSeries(points.map((point) => point.previous));
-  const buildPath = (coords: readonly (readonly [number, number])[]) =>
-    coords.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x} ${y}`).join(" ");
-  const currentLine = buildPath(currentCoords);
-  const previousLine = buildPath(previousCoords);
-  const currentArea = `${currentLine} L${width} ${height} L0 ${height} Z`;
-
-  return (
-    <div className="agents-trend-chart" aria-label="Behavior drift by agent">
-      <div className="agents-chart-legend">
-        <span>
-          <i className="agents-legend-swatch is-current" aria-hidden="true" />
-          Current risk
-        </span>
-        <span>
-          <i className="agents-legend-swatch is-previous" aria-hidden="true" />
-          Previous 7 days
-        </span>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        <path className="agents-trend-area" d={currentArea} />
-        <path className="agents-trend-line agents-trend-line-previous" d={previousLine} />
-        <path className="agents-trend-line" d={currentLine} />
-        {currentCoords.map(([x, y]) => (
-          <circle key={`${x}-${y}`} cx={x} cy={y} r="4" />
-        ))}
-      </svg>
-      <div className="agents-chart-footer agents-chart-labels">
-        {points.map((point) => (
-          <span key={point.agent}>{point.agent}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CostOfFailureChart({ rows }: { rows: AgentLaunchpadRow[] }) {
-  const costRows = buildCostExposureRows(rows);
-  const maxCost = Math.max(...costRows.map((row) => row.costUsd), 1);
-
-  return (
-    <div className="agents-bar-list">
-      {costRows.length > 0 ? (
-        costRows.map((row) => {
-          const content = (
-            <>
-              <div className="agents-bar-copy">
-                <strong>{row.agentName}</strong>
-                <span>{row.issueTitle ?? "Open issue impact"}</span>
-              </div>
-              <div className="agents-bar-track" aria-hidden="true">
-                <span className="agents-bar-fill" style={{ width: `${Math.max(10, (row.costUsd / maxCost) * 100)}%` }} />
-              </div>
-              <strong className="agents-bar-value">{formatUsd(row.costUsd)}</strong>
-            </>
-          );
-
-          return row.issueId ? (
-            <Link key={`${row.agentName}-${row.issueId}`} href={`/issues/${encodeURIComponent(row.issueId)}`} className="agents-bar-row">
-              {content}
-            </Link>
-          ) : (
-            <div key={`${row.agentName}-${row.costUsd}`} className="agents-bar-row">
-              {content}
-            </div>
-          );
-        })
-      ) : (
-        <p className="agents-muted">No open outcome risk yet.</p>
-      )}
-    </div>
-  );
-}
-
-function SignalClustersTable({ issues }: { issues: IssueItem[] }) {
-  const clusters = buildSignalClusters(issues);
-
-  return (
-    <div className="agents-clusters-wrap">
-      {clusters.length > 0 ? (
-        <table className="agents-clusters-table">
-          <thead>
-            <tr>
-              <th>Proof gap</th>
-              <th>Events</th>
-              <th>Affected agents</th>
-              <th>First seen</th>
-              <th>Risk</th>
-              <th>Replay proof</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clusters.map((cluster) => (
-              <tr key={cluster.key}>
-                <td>
-                  <Link href={`/issues/${encodeURIComponent(cluster.issueId)}`} className="agents-cluster-link">
-                    <span className={`alert-cat-badge ${severityTone(cluster.severity)}`}>{cluster.severity}</span>
-                    <div>
-                      <strong>{cluster.title}</strong>
-                      <small>{cluster.failureCode.replace(/_/g, " ").toLowerCase()}</small>
-                    </div>
-                  </Link>
-                </td>
-                <td>{formatCount(cluster.occurrences)}</td>
-                <td>{formatCount(cluster.affectedAgents)}</td>
-                <td>{formatDateTime(cluster.firstSeenAt)}</td>
-                <td>{cluster.severity}</td>
-                <td>{cluster.replayCoverage}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p className="agents-muted">No proof gap clusters detected yet.</p>
-      )}
-    </div>
-  );
-}
-
-function TraceTimeline({ focusRow, calls }: { focusRow: AgentLaunchpadRow | null; calls: CallListItem[] }) {
-  const entries = buildTimelineEntries(focusRow?.latestIssue ?? null, focusRow?.agentName ?? null, calls);
-  const maxLatency = Math.max(...entries.map((entry) => entry.latencyMs), 1);
-
-  return (
-    <div className="agents-timeline-list">
-      {entries.length > 0 ? (
-        entries.map((entry) => (
-          <Link key={entry.key} href={entry.href} className="agents-timeline-row">
-            <div className="agents-timeline-copy">
-              <strong>{entry.label}</strong>
-              <span>{entry.detail}</span>
-            </div>
-            <div className="agents-timeline-track" aria-hidden="true">
-              <span
-                className="agents-timeline-fill"
-                style={{ width: `${Math.max(12, (entry.latencyMs / maxLatency) * 100)}%` }}
-              />
-            </div>
-            <div className="agents-timeline-meta">
-              <span>{entry.status}</span>
-              <strong>{formatLatency(entry.latencyMs)}</strong>
-              <small>{formatDateTime(entry.startedAt)}</small>
-            </div>
-          </Link>
-        ))
-      ) : (
-        <p className="agents-muted">No evidence trail captured yet.</p>
-      )}
-    </div>
-  );
-}
-
 function AgentRow({
   row,
   selected,
@@ -1281,52 +1112,86 @@ function AgentsAccountabilityLoop() {
   );
 }
 
-function AgentsOperations({
-  scores,
-  rows,
+function captureHealthTone(captureHealth: CaptureHealthResponse | null): string {
+  if (!captureHealth || captureHealth.status === "no_data") return "warning";
+  if (captureHealth.status === "stale") return "danger";
+  return "success";
+}
+
+function AgentsSystemHealth({
+  captureHealth,
   focusRow,
-  calls,
 }: {
-  scores: AgentScoreView[];
-  rows: AgentLaunchpadRow[];
+  captureHealth: CaptureHealthResponse | null;
   focusRow: AgentLaunchpadRow | null;
-  calls: CallListItem[];
 }) {
+  const warningCount = captureHealth?.validation_warnings?.length ?? 0;
+  const backlogCount = captureHealth?.gateway_spool_backlog ?? 0;
+  const lossCount = captureHealth?.gateway_loss_count ?? 0;
+  const outcomeEvents = captureHealth?.outcome_events_24h ?? 0;
+  const latestOutcome = focusRow?.latestOutcome ?? null;
+  const connectorLabel = latestOutcome
+    ? outcomeDetail(latestOutcome)
+    : outcomeEvents > 0
+      ? `${formatCount(outcomeEvents)} outcome event${outcomeEvents === 1 ? "" : "s"} in window`
+      : "Connector proof not loaded";
+  const streamLabel = captureHealth?.status === "connected"
+    ? "Connected"
+    : captureHealth?.status === "stale"
+      ? "Stale"
+      : "Missing";
+
   return (
-    <section className="agents-evidence-grid">
-      <article className="agents-mini-panel">
-        <div className="agents-panel-head">
-          <div>
-            <span>Behavior drift by agent</span>
-            <strong>Failure-rate movement from captured runs</strong>
-          </div>
-          <Activity aria-hidden="true" />
+    <article className="agents-system-health-panel" aria-label="System-of-record health">
+      <div className="agents-panel-head">
+        <div>
+          <span>System-of-record health</span>
+          <strong>Capture, connector proof, and export readiness</strong>
         </div>
-        <FailureRateChart scores={scores} />
-      </article>
-
-      <article className="agents-mini-panel">
-        <div className="agents-panel-head">
-          <div>
-            <span>Risk exposure</span>
-            <strong>Open proof gap blast radius by agent</strong>
+        <Link href="/integrations" className="agents-text-link">
+          Open connectors
+          <ArrowRight aria-hidden="true" />
+        </Link>
+      </div>
+      <div className="agents-system-health-grid">
+        <Link href="/calls" className="agents-system-health-card" data-tone={captureHealthTone(captureHealth)}>
+          <span>Capture stream</span>
+          <strong>{streamLabel}</strong>
+          <small>
+            {captureHealth?.last_seen_at
+              ? `Last event ${formatDateTime(captureHealth.last_seen_at)}`
+              : "No captured action loaded"}
+          </small>
+        </Link>
+        <Link
+          href="/outcomes"
+          className="agents-system-health-card"
+          data-tone={latestOutcome?.verdict === "mismatched" ? "danger" : latestOutcome ? "success" : "warning"}
+        >
+          <span>Outcome events</span>
+          <strong>{formatCount(outcomeEvents)}</strong>
+          <small>{connectorLabel}</small>
+        </Link>
+        <Link href="/integrations" className="agents-system-health-card" data-tone={backlogCount + lossCount > 0 ? "danger" : "neutral"}>
+          <span>Gateway backlog</span>
+          <strong>{formatCount(backlogCount + lossCount)}</strong>
+          <small>{formatCount(backlogCount)} queued, {formatCount(lossCount)} lost</small>
+        </Link>
+        {warningCount > 0 ? (
+          <a href="#capture-warnings" className="agents-system-health-card" data-tone="warning">
+            <span>Capture warnings</span>
+            <strong>{formatCount(warningCount)}</strong>
+            <small>Proof quality needs review</small>
+          </a>
+        ) : (
+          <div className="agents-system-health-card" data-tone="success">
+            <span>Capture warnings</span>
+            <strong>0</strong>
+            <small>Attribution fields are clean</small>
           </div>
-          <Gauge aria-hidden="true" />
-        </div>
-        <CostOfFailureChart rows={rows} />
-      </article>
-
-      <article className="agents-mini-panel">
-        <div className="agents-panel-head">
-          <div>
-            <span>Evidence trail</span>
-            <strong>System evidence from the selected proof gap</strong>
-          </div>
-          <Clock3 aria-hidden="true" />
-        </div>
-        <TraceTimeline focusRow={focusRow} calls={calls} />
-      </article>
-    </section>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -1335,37 +1200,41 @@ export default function AgentsPage() {
   const [activeFilter, setActiveFilter] = useState<AgentsFilter>("needs_review");
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
   const setSdkConnected = useDashboardStore((state) => state.setSdkConnected);
+  const dateRange = useDashboardStore((state) => state.dateRange);
+  const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
+  const summaryWindowDays = useMemo(() => analyticsWindowDays(dateRange), [dateRange]);
+  const refreshInterval = realTimeEnabled ? 30_000 : false;
   const leaderboardQuery = useReliabilityLeaderboard(100);
   const callsQuery = useQuery({
     queryKey: ["agents", "recent-calls"],
     queryFn: ({ signal }) =>
       listCalls({ limit: 200, sort_by: "created_at", sort_order: "desc" }, signal),
-    refetchInterval: 30_000,
+    refetchInterval: refreshInterval,
   });
   const issuesQuery = useQuery({
     queryKey: ["agents", "open-issues"],
     queryFn: ({ signal }) => listIssues({ status: "open", limit: 100 }, signal),
-    refetchInterval: 30_000,
+    refetchInterval: refreshInterval,
   });
   const captureHealthQuery = useQuery({
     queryKey: ["agents", "capture-health"],
     queryFn: ({ signal }) => getCaptureHealth(signal),
-    refetchInterval: 30_000,
+    refetchInterval: refreshInterval,
   });
   const summaryQuery = useQuery({
-    queryKey: ["agents", "analytics-summary", 1],
-    queryFn: ({ signal }) => getAnalyticsSummary(1, signal),
-    refetchInterval: 30_000,
+    queryKey: ["agents", "analytics-summary", summaryWindowDays],
+    queryFn: ({ signal }) => getAnalyticsSummary(summaryWindowDays, signal),
+    refetchInterval: refreshInterval,
   });
   const runtimeDecisionsQuery = useQuery({
     queryKey: ["agents", "runtime-policy", "decisions", "all"],
     queryFn: ({ signal }) => listRuntimePolicyApprovals("all", signal),
-    refetchInterval: 30_000,
+    refetchInterval: refreshInterval,
   });
   const outcomeChecksQuery = useQuery({
     queryKey: ["agents", "outcomes", "reconciliation"],
     queryFn: ({ signal }) => listOutcomeReconciliations({ limit: 50 }, signal),
-    refetchInterval: 30_000,
+    refetchInterval: refreshInterval,
   });
 
   useEffect(() => {
@@ -1416,6 +1285,7 @@ export default function AgentsPage() {
   );
   const sortedRows = useMemo(() => sortAgentRows(rows), [rows]);
   const filteredRows = useMemo(() => filterAgentRows(sortedRows, activeFilter), [activeFilter, sortedRows]);
+  const reviewRowsCount = useMemo(() => sortedRows.filter(rowNeedsReview).length, [sortedRows]);
 
   useEffect(() => {
     if (!selectedAgentName) return;
@@ -1423,6 +1293,12 @@ export default function AgentsPage() {
       setSelectedAgentName(null);
     }
   }, [rows, selectedAgentName]);
+
+  useEffect(() => {
+    if (activeFilter === "needs_review" && sortedRows.length > 0 && reviewRowsCount === 0) {
+      setActiveFilter("all");
+    }
+  }, [activeFilter, reviewRowsCount, sortedRows.length]);
 
   const primaryQueries = [leaderboardQuery, callsQuery, issuesQuery, runtimeDecisionsQuery, outcomeChecksQuery];
   const loading = primaryQueries.every((query) => query.isLoading && query.data === undefined);
@@ -1528,30 +1404,14 @@ export default function AgentsPage() {
 
           <AgentsAccountabilityLoop />
 
-          <article className="agents-table-panel">
-            <div className="agents-panel-head">
-              <div>
-                <span>Proof gap clusters</span>
-                <strong>Failure patterns grouped from production agent actions</strong>
-              </div>
-              <Link href="/issues" className="agents-text-link">
-                Open incidents
-                <ArrowRight aria-hidden="true" />
-              </Link>
-            </div>
-            <SignalClustersTable issues={issuesQuery.data?.items ?? []} />
-          </article>
+          <AgentsSystemHealth
+            captureHealth={captureHealthQuery.data ?? null}
+            focusRow={focusRow}
+          />
         </div>
 
         <AgentsInspector focusRow={focusRow} />
       </section>
-
-      <AgentsOperations
-        scores={leaderboardQuery.data ?? []}
-        rows={rows}
-        focusRow={focusRow}
-        calls={callsQuery.data?.items ?? []}
-      />
 
       {captureHealthQuery.data?.validation_warnings?.length ? (
         <section className="agents-warning-panel" id="capture-warnings">
@@ -1581,13 +1441,6 @@ export default function AgentsPage() {
           </div>
         </section>
       )}
-
-      <section className="agents-footnote-panel">
-        <Clock3 aria-hidden="true" />
-        <span>
-          Recommendations use issue objects when available, then fall back to mandate health, success rate, latency, and replay coverage.
-        </span>
-      </section>
     </div>
   );
 }
