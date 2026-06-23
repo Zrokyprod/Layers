@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -10,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
+from app.api.routes._internal import owner_launch_readiness_builder
 from app.db.base import Base
 from app.db.models import (
     Anomaly,
@@ -435,6 +437,87 @@ def test_owner_money_path_health_reports_deployment_smoke_evidence(
     assert smoke["call_id"] == "call_smoke"
     assert smoke["golden_trace_id"] == "gt_smoke"
     assert smoke["ci_run_id"] == "rr_smoke_ci"
+
+
+def test_source_truth_manifest_matches_root_readme() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    readme = repo_root / "README.md"
+    manifest = json.loads(
+        (repo_root / "zroky-backend" / "source_truth_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert owner_launch_readiness_builder.SOURCE_TRUTH_MARKER in readme.read_text(
+        encoding="utf-8"
+    )
+    assert manifest["source"] == "README.md"
+    assert (
+        manifest["readme_marker"]
+        == owner_launch_readiness_builder.SOURCE_TRUTH_MARKER
+    )
+    assert manifest["readme_sha256"] == hashlib.sha256(readme.read_bytes()).hexdigest()
+
+
+def test_source_truth_status_uses_runtime_manifest_when_repo_root_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = tmp_path / "source_truth_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source": "README.md",
+                "readme_marker": owner_launch_readiness_builder.SOURCE_TRUTH_MARKER,
+                "readme_sha256": "a" * 64,
+                "stale_product_doc_paths_present": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        owner_launch_readiness_builder, "_repo_root_for_source_truth", lambda: None
+    )
+    monkeypatch.setenv("SOURCE_TRUTH_MANIFEST_PATH", str(manifest))
+
+    status, blockers, evidence = owner_launch_readiness_builder._source_truth_status()
+
+    assert status == "pass"
+    assert blockers == []
+    assert [item.label for item in evidence] == [
+        "runtime source manifest",
+        "README sha256",
+        "stale planning docs",
+    ]
+
+
+def test_source_truth_status_fails_closed_when_runtime_manifest_has_stale_docs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = tmp_path / "source_truth_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "source": "README.md",
+                "readme_marker": owner_launch_readiness_builder.SOURCE_TRUTH_MARKER,
+                "readme_sha256": "b" * 64,
+                "stale_product_doc_paths_present": [".kiro/specs/old-plan.md"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        owner_launch_readiness_builder, "_repo_root_for_source_truth", lambda: None
+    )
+    monkeypatch.setenv("SOURCE_TRUTH_MANIFEST_PATH", str(manifest))
+
+    status, blockers, _ = owner_launch_readiness_builder._source_truth_status()
+
+    assert status == "fail"
+    assert blockers == ["stale_doc:.kiro/specs/old-plan.md"]
 
 
 def test_owner_launch_readiness_allows_paid_launch_only_when_every_gate_has_proof(
