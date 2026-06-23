@@ -66,11 +66,7 @@ describe("CommandPalette", () => {
     expect(screen.getByText("Go to Outcomes")).toBeInTheDocument();
     expect(screen.getByText("Go to Evidence")).toBeInTheDocument();
     expect(screen.getByText("Go to Connectors")).toBeInTheDocument();
-    expect(screen.getByText("Go to Incidents")).toBeInTheDocument();
     expect(screen.getByText("Go to Policies")).toBeInTheDocument();
-    expect(screen.getByText("Go to Replays")).toBeInTheDocument();
-    expect(screen.getByText("Engineering - Contracts")).toBeInTheDocument();
-    expect(screen.getByText("Engineering - CI")).toBeInTheDocument();
     expect(screen.getByText("Go to Projects")).toBeInTheDocument();
     expect(screen.getByText("Go to Settings")).toBeInTheDocument();
     expect(screen.getByText(/Settings.*API Keys/)).toBeInTheDocument();
@@ -79,6 +75,11 @@ describe("CommandPalette", () => {
     expect(screen.queryByText(/Settings.*Providers/)).not.toBeInTheDocument();
 
     expect(screen.queryByText("Go to Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Incidents")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Replays")).not.toBeInTheDocument();
+    expect(screen.queryByText("Engineering - Contracts")).not.toBeInTheDocument();
+    expect(screen.queryByText("Engineering - CI")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Settings.*Evaluation/)).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Traces")).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Failures")).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Goldens")).not.toBeInTheDocument();

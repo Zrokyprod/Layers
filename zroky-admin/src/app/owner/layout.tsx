@@ -35,6 +35,7 @@ type OwnerNavItem = {
   label: string;
   icon: LucideIcon;
   description: string;
+  visibleInNav?: boolean;
 };
 
 const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<OwnerNavItem> }> = [
@@ -44,31 +45,36 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<OwnerNavIt
       { href: "/owner", label: "Overview", icon: Home, description: "Regression firewall health" },
       { href: "/owner/money-path", label: "Money Path", icon: GitBranch, description: "Capture to CI proof" },
       { href: "/owner/launch-readiness", label: "Launch Gate", icon: Rocket, description: "Final paid launch decision" },
-      { href: "/owner/ops", label: "Ops", icon: Gauge, description: "Founder operating queue" },
-      { href: "/owner/infrastructure", label: "Infrastructure", icon: ServerCog, description: "Workers and queues" },
-      { href: "/owner/support", label: "Support", icon: MessageSquare, description: "Tickets and replies" },
+      { href: "/owner/ops", label: "Ops", icon: Gauge, description: "Founder operating queue", visibleInNav: false },
+      { href: "/owner/infrastructure", label: "Infrastructure", icon: ServerCog, description: "Workers and queues", visibleInNav: false },
+      { href: "/owner/support", label: "Support", icon: MessageSquare, description: "Tickets and replies", visibleInNav: false },
     ],
   },
   {
     label: "Customers",
     items: [
-      { href: "/owner/users", label: "Users", icon: Users, description: "Accounts and access" },
+      { href: "/owner/users", label: "Users", icon: Users, description: "Accounts and access", visibleInNav: false },
       { href: "/owner/projects", label: "Projects", icon: Activity, description: "Tenants and spend" },
       { href: "/owner/pricing", label: "Billing", icon: BadgeDollarSign, description: "Plans and status" },
-      { href: "/owner/rate-limits", label: "Rate Limits", icon: SlidersHorizontal, description: "Global and tenant caps" },
+      { href: "/owner/rate-limits", label: "Rate Limits", icon: SlidersHorizontal, description: "Global and tenant caps", visibleInNav: false },
     ],
   },
   {
     label: "Platform",
     items: [
-      { href: "/owner/platform-llm", label: "LLM Usage", icon: Cpu, description: "Internal model cost" },
-      { href: "/owner/feature-flags", label: "Feature Flags", icon: Flag, description: "Rollouts and overrides" },
-      { href: "/owner/feature-votes", label: "Feature Interest", icon: Vote, description: "Demand signals" },
+      { href: "/owner/platform-llm", label: "LLM Usage", icon: Cpu, description: "Internal model cost", visibleInNav: false },
+      { href: "/owner/feature-flags", label: "Feature Flags", icon: Flag, description: "Rollouts and overrides", visibleInNav: false },
+      { href: "/owner/feature-votes", label: "Feature Interest", icon: Vote, description: "Demand signals", visibleInNav: false },
       { href: "/owner/audit", label: "Audit Log", icon: ShieldCheck, description: "Owner action trail" },
       { href: "/owner/settings", label: "Settings", icon: Settings, description: "Session and guardrails" },
     ],
   },
 ];
+
+const VISIBLE_NAV_GROUPS = NAV_GROUPS.map((group) => ({
+  ...group,
+  items: group.items.filter((item) => item.visibleInNav !== false),
+})).filter((group) => group.items.length > 0);
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/owner" ? pathname === "/owner" : pathname.startsWith(href);
@@ -175,7 +181,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
         </div>
 
         <nav className="owner-nav">
-          {NAV_GROUPS.map((group) => (
+          {VISIBLE_NAV_GROUPS.map((group) => (
             <div key={group.label} className="owner-nav-group">
               <span className="owner-nav-group-label">{group.label}</span>
               {group.items.map((item) => {
