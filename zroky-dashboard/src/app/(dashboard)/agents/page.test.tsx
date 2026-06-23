@@ -347,7 +347,7 @@ function mockAgents({
 }
 
 function protectedMatrix(): HTMLElement {
-  const panel = screen.getByText("Protected agent matrix").closest("article");
+  const panel = screen.getByText("Needs your decision").closest("article");
   if (!panel) throw new Error("Missing protected agent matrix");
   return panel as HTMLElement;
 }
@@ -358,27 +358,29 @@ describe("AgentsPage", () => {
     leaderboardState.items = [];
   });
 
-  it("renders the agent accountability ledger with proof-first sections", async () => {
+  it("renders the protected-agent workflow with proof-first sections", async () => {
     mockAgents();
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Agent accountability ledger", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Held actions pending", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Protected agents")).toBeInTheDocument();
     expect(screen.getByText("capture stream")).toBeInTheDocument();
     expect(screen.getByText("actions today")).toBeInTheDocument();
-    expect(screen.getByText("open proof gaps")).toBeInTheDocument();
-    expect(screen.getByText("avg mandate health")).toBeInTheDocument();
+    expect(screen.getByText("needs review")).toBeInTheDocument();
+    expect(screen.getByText("evidence ready")).toBeInTheDocument();
 
-    expect(screen.getByText("Open proof gaps")).toBeInTheDocument();
-    expect(screen.getByText("Held / blocked")).toBeInTheDocument();
-    expect(screen.getByText("Outcomes matched")).toBeInTheDocument();
-    expect(screen.getAllByText("Risk exposure").length).toBeGreaterThan(0);
+    expect(screen.getByText("Needs review")).toBeInTheDocument();
+    expect(screen.getByText("Held decisions")).toBeInTheDocument();
+    expect(screen.getByText("Missing outcome proof")).toBeInTheDocument();
+    expect(screen.getByText("Evidence ready")).toBeInTheDocument();
 
+    expect(screen.getByText("Needs your decision")).toBeInTheDocument();
+    expect(screen.getByText("Accountability loop")).toBeInTheDocument();
     expect(screen.getByText("Behavior drift by agent")).toBeInTheDocument();
     expect(screen.getByText("Proof gap clusters")).toBeInTheDocument();
     expect(screen.getByText("Evidence trail")).toBeInTheDocument();
-    expect(screen.getByText("Agent proof focus")).toBeInTheDocument();
+    expect(screen.getByText("Selected agent proof")).toBeInTheDocument();
     expect((await screen.findAllByText("Refund action exceeded mandate")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Runtime decision").length).toBeGreaterThan(0);
     expect(screen.getByText("Outcome verdict")).toBeInTheDocument();
@@ -388,6 +390,7 @@ describe("AgentsPage", () => {
     expect(screen.getAllByRole("link", { name: /Run replay/i })[0]?.getAttribute("href")).toBe("/replay");
     expect(screen.getByRole("link", { name: "Open incidents" }).getAttribute("href")).toBe("/issues");
     expect(screen.getByRole("link", { name: "View evidence trace" }).getAttribute("href")).toBe("/calls/call_1");
+    expect(screen.getAllByRole("link", { name: "Review held action" })[0]?.getAttribute("href")).toBe("/approvals");
     expect(screen.getAllByRole("link", { name: /Evidence Pack/i })[0]?.getAttribute("href")).toBe(
       "/evidence?decision_id=decision_1",
     );
@@ -405,27 +408,26 @@ describe("AgentsPage", () => {
     const headers = within(protectedMatrix()).getAllByRole("columnheader").map((header) => header.textContent);
     expect(headers).toEqual([
       "Agent",
+      "Mandate / risk",
       "Runtime decision",
-      "Outcome",
-      "Evidence Pack",
-      "Mandate health",
-      "Success",
-      "Cost / success",
-      "Latency",
-      "Proof gap",
-      "Replay proof",
-      "Last evidence",
+      "Outcome proof",
+      "Evidence readiness",
+      "Impact",
+      "Next step",
     ]);
     expect(within(protectedMatrix()).getByText("Refund Agent")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Held / blocked")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Health 42")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("HOLD")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("matched")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Export ready")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByRole("link", { name: /Evidence Pack/i }).getAttribute("href")).toBe(
       "/evidence?decision_id=decision_1",
     );
-    expect(within(protectedMatrix()).getByText("decision_1")).toBeInTheDocument();
-    expect(within(protectedMatrix()).getByText("per verified success")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("Refund action exceeded mandate")).toBeInTheDocument();
-    expect(within(protectedMatrix()).getByText("Covered, needs review")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByRole("link", { name: "Review held action" }).getAttribute("href")).toBe(
+      "/approvals",
+    );
   });
 
   it("prioritizes mismatched outcomes over newer not verified checks", async () => {
@@ -458,7 +460,7 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    await screen.findByText("Protected agent matrix");
+    await screen.findByText("Needs your decision");
     await screen.findAllByText("decision_1");
     expect(within(protectedMatrix()).getByText("mismatched")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("ledger_refund_api - ledger:RF-1001")).toBeInTheDocument();
@@ -507,10 +509,11 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Agent accountability ledger", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Setup required", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Protection setup")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connect one real agent action to start proof." })).toBeInTheDocument();
     expect(screen.getByText(/At least one agent action ingested/)).toBeInTheDocument();
-    expect(screen.queryByText("Protected agent matrix")).toBeNull();
+    expect(screen.getByText(/System-of-record connector selected/)).toBeInTheDocument();
+    expect(screen.queryByText("Needs your decision")).toBeNull();
   });
 });

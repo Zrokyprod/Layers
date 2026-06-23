@@ -15435,3 +15435,567 @@ body:has(.fi-home-option-a),
     width: 100% !important;
   }
 }
+
+/* Agents Mockup A production: light operator workflow, no dark cockpit bleed. */
+
+.app-shell:has(.agents-screen) {
+  --agents-red: #ff0000;
+  --agents-yellow: #ffdd00;
+  --agents-green: #40ff00;
+  --agents-blue: #0008ff;
+  --agents-canvas: #f5f7fb;
+  --agents-surface: #ffffff;
+  --agents-surface-soft: #f9fbff;
+  --agents-surface-inset: #f1f4f9;
+  --agents-border: #dce3ee;
+  --agents-border-strong: #c8d2e0;
+  --agents-text: #07111f;
+  --agents-text-soft: #3f4b5c;
+  --agents-muted: #748194;
+  background: var(--agents-canvas) !important;
+  color: var(--agents-text) !important;
+}
+
+html:has(.app-shell .agents-screen),
+body:has(.app-shell .agents-screen),
+.app-shell:has(.agents-screen) .content,
+.app-shell:has(.agents-screen) .content-area {
+  background: var(--agents-canvas) !important;
+}
+
+.app-shell:has(.agents-screen) .content-inner {
+  width: min(100%, 1480px) !important;
+  margin-inline: auto !important;
+  padding: 14px clamp(14px, 2vw, 22px) 28px !important;
+}
+
+.app-shell:has(.agents-screen) .sidebar,
+.app-shell:has(.agents-screen) .topbar {
+  border-color: var(--agents-border) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--agents-text) !important;
+  box-shadow: none !important;
+}
+
+.app-shell:has(.agents-screen) .sidebar-logo,
+.app-shell:has(.agents-screen) .nav-link,
+.app-shell:has(.agents-screen) .nav-link-placeholder,
+.app-shell:has(.agents-screen) .sidebar-section-title,
+.app-shell:has(.agents-screen) .topbar,
+.app-shell:has(.agents-screen) .topbar-title,
+.app-shell:has(.agents-screen) .topbar-title h2,
+.app-shell:has(.agents-screen) .topbar-title p {
+  color: var(--agents-text) !important;
+}
+
+.app-shell:has(.agents-screen) .nav-link,
+.app-shell:has(.agents-screen) .topbar-search,
+.app-shell:has(.agents-screen) .topbar-ctrl-btn,
+.app-shell:has(.agents-screen) .topbar-env-btn,
+.app-shell:has(.agents-screen) .topbar-account-btn {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface-soft) !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell:has(.agents-screen) .nav-link.is-active,
+.app-shell:has(.agents-screen) .nav-link:hover {
+  border-color: var(--agents-blue) !important;
+  background: #eef3ff !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell .agents-screen {
+  display: grid !important;
+  gap: 12px !important;
+  color: var(--agents-text) !important;
+  font-family: var(--font-manrope), var(--font-inter), system-ui, sans-serif !important;
+}
+
+.app-shell .agents-screen::before {
+  display: none !important;
+  content: none !important;
+}
+
+.app-shell .agents-hero-panel,
+.app-shell .agents-kpi-card,
+.app-shell .agents-chart-panel,
+.app-shell .agents-table-panel,
+.app-shell .agents-inspector-panel,
+.app-shell .agents-mini-panel,
+.app-shell .agents-warning-panel,
+.app-shell .agents-quality-panel,
+.app-shell .agents-footnote-panel,
+.app-shell .agents-empty-card,
+.app-shell .agents-loop-panel {
+  border: 1px solid var(--agents-border) !important;
+  border-radius: 8px !important;
+  background: var(--agents-surface) !important;
+  color: var(--agents-text) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.app-shell .agents-hero-panel {
+  min-height: 178px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: start !important;
+  padding: clamp(18px, 2.1vw, 26px) !important;
+  border-left: 4px solid var(--agents-blue) !important;
+  background: linear-gradient(180deg, #ffffff, #f9fbff) !important;
+}
+
+.app-shell .agents-hero-panel[data-tone="danger"] {
+  border-left-color: var(--agents-red) !important;
+}
+
+.app-shell .agents-hero-panel[data-tone="warning"] {
+  border-left-color: var(--agents-yellow) !important;
+}
+
+.app-shell .agents-hero-panel[data-tone="success"] {
+  border-left-color: var(--agents-green) !important;
+}
+
+.app-shell .agents-hero-panel[data-tone="setup"] {
+  border-left-color: var(--agents-blue) !important;
+}
+
+.app-shell .agents-eyebrow {
+  border: 1px solid var(--agents-border) !important;
+  border-radius: 7px !important;
+  background: var(--agents-surface-soft) !important;
+  color: var(--agents-muted) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.68rem !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell .agents-hero-panel h1 {
+  max-width: 15ch !important;
+  margin: 0 !important;
+  color: var(--agents-text) !important;
+  font-family: var(--font-space-grotesk), var(--font-manrope), system-ui, sans-serif !important;
+  font-size: clamp(2.25rem, 4.2vw, 4.1rem) !important;
+  font-weight: 780 !important;
+  letter-spacing: 0 !important;
+  line-height: 0.94 !important;
+}
+
+.app-shell .agents-hero-panel p {
+  max-width: 60ch !important;
+  margin: 0 !important;
+  color: var(--agents-text-soft) !important;
+  font-size: 0.98rem !important;
+  font-weight: 560 !important;
+  line-height: 1.55 !important;
+}
+
+.app-shell .agents-hero-actions {
+  align-content: start !important;
+  justify-content: end !important;
+}
+
+.app-shell .agents-hero-actions .btn,
+.app-shell .agents-inspector-actions .btn,
+.app-shell .agents-row-action {
+  min-height: 36px !important;
+  border-radius: 7px !important;
+  font-weight: 780 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .agents-hero-actions .btn-primary,
+.app-shell .agents-inspector-actions .btn-primary {
+  border-color: #07111f !important;
+  background: #07111f !important;
+  color: #ffffff !important;
+}
+
+.app-shell .agents-hero-actions .btn-soft,
+.app-shell .agents-inspector-actions .btn-soft,
+.app-shell .agents-row-action {
+  border-color: var(--agents-border) !important;
+  background: #ffffff !important;
+  color: var(--agents-text) !important;
+}
+
+.app-shell .agents-hero-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 1px !important;
+  border: 1px solid var(--agents-border) !important;
+  background: var(--agents-border) !important;
+}
+
+.app-shell .agents-hero-strip div {
+  background: var(--agents-surface-soft) !important;
+  padding: 12px !important;
+}
+
+.app-shell .agents-hero-strip strong {
+  color: var(--agents-text) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.app-shell .agents-hero-strip small,
+.app-shell .agents-kpi-card span:not(.agents-kpi-icon),
+.app-shell .agents-panel-head span,
+.app-shell .agents-table th,
+.app-shell .agents-clusters-table th,
+.app-shell .agents-inspector-list dt,
+.app-shell .agents-inspector-score span,
+.app-shell .agents-issue-summary span,
+.app-shell .agents-proof-chain span,
+.app-shell .agents-proof-chain small,
+.app-shell .agents-loop-step span {
+  color: var(--agents-muted) !important;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace !important;
+  font-size: 0.66rem !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell .agents-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.app-shell .agents-kpi-card {
+  appearance: none !important;
+  display: flex !important;
+  min-height: 104px !important;
+  gap: 12px !important;
+  padding: 14px !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease !important;
+}
+
+.app-shell .agents-kpi-card:hover,
+.app-shell .agents-kpi-card:focus-visible,
+.app-shell .agents-kpi-card.is-active {
+  border-color: var(--agents-blue) !important;
+  background: #f5f8ff !important;
+  transform: translateY(-1px) !important;
+  outline: none !important;
+}
+
+.app-shell .agents-kpi-card[data-tone="danger"] {
+  border-left: 3px solid var(--agents-red) !important;
+}
+
+.app-shell .agents-kpi-card[data-tone="warning"] {
+  border-left: 3px solid var(--agents-yellow) !important;
+}
+
+.app-shell .agents-kpi-card[data-tone="success"] {
+  border-left: 3px solid var(--agents-green) !important;
+}
+
+.app-shell .agents-kpi-card[data-tone="neutral"] {
+  border-left: 3px solid var(--agents-blue) !important;
+}
+
+.app-shell .agents-kpi-card strong {
+  color: var(--agents-text) !important;
+  font-size: clamp(1.45rem, 2vw, 2rem) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.app-shell .agents-kpi-card small,
+.app-shell .agents-panel-head strong,
+.app-shell .agents-muted,
+.app-shell .agents-cell-note,
+.app-shell .agents-issue-summary p,
+.app-shell .agents-empty-filter span {
+  color: var(--agents-text-soft) !important;
+}
+
+.app-shell .agents-kpi-icon,
+.app-shell .agents-agent-icon {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface-inset) !important;
+  color: var(--agents-blue) !important;
+}
+
+.app-shell .agents-kpi-card[data-tone="danger"] .agents-kpi-icon {
+  color: var(--agents-red) !important;
+}
+
+.app-shell .agents-kpi-card[data-tone="warning"] .agents-kpi-icon {
+  color: #8a7600 !important;
+}
+
+.app-shell .agents-kpi-card[data-tone="success"] .agents-kpi-icon,
+.app-shell .agents-live-dot.is-live {
+  color: #1d7a00 !important;
+}
+
+.app-shell .agents-layout-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(336px, 390px) !important;
+  gap: 12px !important;
+}
+
+.app-shell .agents-main-column {
+  gap: 12px !important;
+}
+
+.app-shell .agents-chart-panel,
+.app-shell .agents-table-panel,
+.app-shell .agents-inspector-panel,
+.app-shell .agents-mini-panel,
+.app-shell .agents-warning-panel,
+.app-shell .agents-quality-panel,
+.app-shell .agents-footnote-panel,
+.app-shell .agents-empty-card,
+.app-shell .agents-loop-panel {
+  padding: 16px !important;
+}
+
+.app-shell .agents-table-wrap,
+.app-shell .agents-trend-chart,
+.app-shell .agents-bar-list,
+.app-shell .agents-timeline-list,
+.app-shell .agents-clusters-wrap,
+.app-shell .agents-inspector-score,
+.app-shell .agents-inspector-list,
+.app-shell .agents-evidence-list,
+.app-shell .agents-proof-chain {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface-soft) !important;
+}
+
+.app-shell .agents-table {
+  min-width: 1100px !important;
+}
+
+.app-shell .agents-table th,
+.app-shell .agents-table td,
+.app-shell .agents-clusters-table th,
+.app-shell .agents-clusters-table td {
+  border-color: var(--agents-border) !important;
+}
+
+.app-shell .agents-table td,
+.app-shell .agents-clusters-table td {
+  color: var(--agents-text-soft) !important;
+  background: #ffffff !important;
+}
+
+.app-shell .agents-table-row {
+  cursor: pointer !important;
+}
+
+.app-shell .agents-table-row:hover td,
+.app-shell .agents-table-row.is-selected td {
+  background: #f2f6ff !important;
+}
+
+.app-shell .agents-table-row.is-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--agents-blue) !important;
+}
+
+.app-shell .agents-name-cell strong,
+.app-shell .agents-table td > strong,
+.app-shell .agents-proof-cell strong,
+.app-shell .agents-proof-chain strong,
+.app-shell .agents-cluster-link strong,
+.app-shell .agents-bar-copy strong,
+.app-shell .agents-timeline-copy strong,
+.app-shell .agents-inspector-score strong,
+.app-shell .agents-inspector-list dd,
+.app-shell .agents-issue-summary h2,
+.app-shell .agents-empty-card h2,
+.app-shell .agents-empty-filter strong,
+.app-shell .agents-loop-step strong {
+  color: var(--agents-text) !important;
+}
+
+.app-shell .agents-proof-cell {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+}
+
+.app-shell .agents-text-link,
+.app-shell .agents-issue-link {
+  color: #0008ff !important;
+}
+
+.app-shell .agents-empty-filter {
+  display: grid !important;
+  gap: 4px !important;
+  padding: 18px !important;
+}
+
+.app-shell .agents-inspector-panel {
+  position: sticky !important;
+  top: 82px !important;
+  border-left: 4px solid var(--agents-blue) !important;
+  background: #ffffff !important;
+}
+
+.app-shell .agents-inspector-score div,
+.app-shell .agents-inspector-list div,
+.app-shell .agents-evidence-row,
+.app-shell .agents-bar-row,
+.app-shell .agents-timeline-row,
+.app-shell .agents-action-list div,
+.app-shell .agents-contract-list div,
+.app-shell .agents-call-feed a,
+.app-shell .agents-proof-chain > div,
+.app-shell .agents-loop-step {
+  border-color: var(--agents-border) !important;
+  background: var(--agents-surface-soft) !important;
+}
+
+.app-shell .agents-proof-chain {
+  grid-template-columns: 1fr !important;
+  gap: 8px !important;
+  padding: 8px !important;
+}
+
+.app-shell .agents-loop-panel {
+  display: grid !important;
+  gap: 14px !important;
+}
+
+.app-shell .agents-loop-chain {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.app-shell .agents-loop-step {
+  display: grid !important;
+  gap: 5px !important;
+  min-height: 88px !important;
+  border: 1px solid var(--agents-border) !important;
+  border-radius: 8px !important;
+  padding: 11px !important;
+  color: var(--agents-text) !important;
+  text-decoration: none !important;
+}
+
+.app-shell .agents-loop-step:hover {
+  border-color: var(--agents-blue) !important;
+  background: #f2f6ff !important;
+}
+
+.app-shell .agents-loop-step small {
+  color: var(--agents-text-soft) !important;
+  font-size: 0.74rem !important;
+  line-height: 1.3 !important;
+}
+
+.app-shell .agents-trend-area {
+  fill: rgba(0, 8, 255, 0.06) !important;
+}
+
+.app-shell .agents-trend-line,
+.app-shell .agents-trend-chart circle {
+  stroke: var(--agents-blue) !important;
+}
+
+.app-shell .agents-legend-swatch.is-current,
+.app-shell .agents-bar-fill,
+.app-shell .agents-timeline-fill {
+  background: var(--agents-blue) !important;
+}
+
+.app-shell .agents-quality-panel {
+  border-color: rgba(64, 255, 0, 0.62) !important;
+  background: #fbfff9 !important;
+}
+
+.app-shell .agents-quality-panel svg {
+  color: #1d7a00 !important;
+}
+
+.app-shell .agents-warning-panel,
+.app-shell .agents-warning-list div {
+  border-color: rgba(255, 221, 0, 0.75) !important;
+  background: #fffdf0 !important;
+}
+
+.app-shell .agents-warning-list strong,
+.app-shell .agents-warning-list span,
+.app-shell .agents-warning-list small {
+  color: #665800 !important;
+}
+
+.app-shell .agents-screen .badge-red {
+  border-color: var(--agents-red) !important;
+  background: #fff5f5 !important;
+  color: #970000 !important;
+}
+
+.app-shell .agents-screen .badge-yellow {
+  border-color: var(--agents-yellow) !important;
+  background: #fffcec !important;
+  color: #6d5e00 !important;
+}
+
+.app-shell .agents-screen .badge-green {
+  border-color: var(--agents-green) !important;
+  background: #f6fff2 !important;
+  color: #176a00 !important;
+}
+
+.app-shell .agents-screen .badge-blue,
+.app-shell .agents-screen .badge-gray {
+  border-color: var(--agents-blue) !important;
+  background: #f2f5ff !important;
+  color: #0004a3 !important;
+}
+
+@media (max-width: 1220px) {
+  .app-shell .agents-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell .agents-loop-chain {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell .agents-hero-panel,
+  .app-shell .agents-layout-grid,
+  .app-shell .agents-hero-strip {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .agents-inspector-panel {
+    position: static !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell:has(.agents-screen) .content-inner {
+    padding: 10px !important;
+  }
+
+  .app-shell .agents-kpi-grid,
+  .app-shell .agents-evidence-grid,
+  .app-shell .agents-setup-grid,
+  .app-shell .agents-loop-chain {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .agents-bar-row,
+  .app-shell .agents-timeline-row,
+  .app-shell .agents-evidence-row,
+  .app-shell .agents-warning-list div {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell .agents-hero-actions .btn,
+  .app-shell .agents-inspector-actions .btn,
+  .app-shell .agents-row-action {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
