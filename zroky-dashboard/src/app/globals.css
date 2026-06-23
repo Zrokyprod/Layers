@@ -40679,8 +40679,8 @@ body:has(.app-shell),
 
 .app-shell .content-inner:has(.fi-home-v5) {
   max-width: none;
-  padding-right: 0;
-  padding-left: 0;
+  padding-right: 12px;
+  padding-left: 12px;
 }
 
 .fi-home-v5 {
