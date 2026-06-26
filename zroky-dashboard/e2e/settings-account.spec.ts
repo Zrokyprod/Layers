@@ -9,14 +9,14 @@ test.describe("settings and account", () => {
     test.setTimeout(180_000);
 
     const pages = [
-      { path: "/settings", labels: ["Settings", "Projects", "capture keys"] },
+      { path: "/settings", labels: ["Settings", "Workspace control plane", "Capture key"] },
       { path: "/settings/keys", labels: ["Project key setup", "Create project key"] },
       { path: "/settings/providers", labels: ["BYOK replay", "Provider key vault", "OpenAI"] },
       { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
       { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },
       { path: "/settings/evaluation", labels: ["Evaluation", "Calibration"] },
       { path: "/settings/integrations", labels: ["Integrations", "Slack"] },
-      { path: "/settings/integrations/slack", labels: ["Slack", "Not connected", "Install"] },
+      { path: "/settings/integrations/slack", labels: ["Slack", "Not connected", "Connect Slack"] },
       { path: "/account", labels: ["Your Identity", "Account Security"] },
     ];
 

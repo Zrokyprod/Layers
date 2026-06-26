@@ -71,6 +71,7 @@ export default defineConfig({
         ENABLE_READY_REDIS_CHECK: "false",
         PROVIDER_KEY_VAULT_KEK: process.env.PROVIDER_KEY_VAULT_KEK ?? "zroky-e2e-provider-key-vault-kek-32-chars",
         PROVIDER_KEY_VAULT_KEY_ID: process.env.PROVIDER_KEY_VAULT_KEY_ID ?? "zroky-e2e-local-kek-v1",
+        ZROKY_DISABLE_SLOWAPI_LIMITS: "1",
         TESTING: "true",
       },
     },

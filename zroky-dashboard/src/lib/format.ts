@@ -14,11 +14,13 @@ const shortDateTime = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
+  timeZone: "UTC",
 });
 
 const shortDate = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "2-digit",
+  timeZone: "UTC",
 });
 
 export function formatUsd(value: number | null | undefined): string {

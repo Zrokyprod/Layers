@@ -17,7 +17,16 @@ def _build_limiter() -> Limiter:
     # Always use in-memory storage in test mode so tests don't need a Redis
     # server and rate counters are reset between test runs via conftest.py.
     if os.getenv("TESTING", "").lower() == "true":
-        return Limiter(key_func=get_remote_address, storage_uri="memory://")
+        disable_limits = os.getenv("ZROKY_DISABLE_SLOWAPI_LIMITS", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        return Limiter(
+            key_func=get_remote_address,
+            storage_uri="memory://",
+            enabled=not disable_limits,
+        )
     try:
         from app.core.config import get_settings
         settings = get_settings()

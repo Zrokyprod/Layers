@@ -203,7 +203,11 @@ function formatMoney(value: number): string {
 }
 
 function formatDateShort(date: Date): string {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function clampPercent(value: number): number {
