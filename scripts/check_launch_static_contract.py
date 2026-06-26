@@ -114,6 +114,7 @@ SCAN_ROOTS = [
 ]
 
 EXPECTED_DASHBOARD_ROUTE_DIRS = [
+    "account",
     "actions",
     "agents",
     "approvals",

@@ -26,6 +26,7 @@ def _load_script() -> ModuleType:
 def _write_minimal_repo(root: Path) -> None:
     dashboard_root = root / "zroky-dashboard" / "src" / "app" / "(dashboard)"
     for route in [
+        "account",
         "actions",
         "agents",
         "approvals",
