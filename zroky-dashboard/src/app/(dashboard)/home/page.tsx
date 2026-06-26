@@ -28,8 +28,10 @@ import {
   ApiError,
   createReplayRunFromIssue,
   getAnalyticsSummary,
+  getBillingUsage,
   getBillingMe,
   getCaptureHealth,
+  getSourceMutationSummary,
   getReplayQuota,
   listCalls,
   listGoldenSets,
@@ -39,6 +41,7 @@ import {
   type GoldenSetView,
   type ReplayQuotaResponse,
   type ReplayRunItem,
+  type SourceMutationSummaryResponse,
 } from "@/lib/api";
 import { formatCount, formatDateTime, formatUsd } from "@/lib/format";
 import { replayLabel, severityRank } from "@/lib/issue-format";
@@ -48,6 +51,8 @@ import type {
   AnalyticsSummaryResponse,
   ApiKeyResponse,
   BillingMeResponse,
+  BillingUsageMeter,
+  BillingUsageResponse,
   CallListItem,
   CaptureHealthResponse,
   IssueItem,
@@ -58,19 +63,27 @@ type InboxData = {
   replayRuns: ReplayRunItem[];
   goldenSets: GoldenSetView[];
   billing: BillingMeResponse | null;
+  billingUsage: BillingUsageResponse | null;
   quota: ReplayQuotaResponse | null;
   summary: AnalyticsSummaryResponse | null;
   calls: CallListItem[];
   captureHealth: CaptureHealthResponse | null;
   apiKeys: ApiKeyResponse[];
+  sourceMutations: SourceMutationSummaryResponse | null;
 };
 
 type IssueAction = "view" | "replay" | "open_goldens" | "upgrade";
 type InboxLoadKey = keyof InboxData;
 type InboxLoadErrors = Partial<Record<InboxLoadKey, string>>;
-type HomeSnapshotFilter = "action_signals" | "needs_decision" | "unverified_outcomes" | "failing_gates" | "evidence_readiness";
+type HomeSnapshotFilter =
+  | "action_signals"
+  | "needs_decision"
+  | "unverified_outcomes"
+  | "failing_gates"
+  | "bypass_risk"
+  | "evidence_readiness";
 type PriorityTone = "danger" | "warning" | "success" | "neutral";
-type DecisionKind = "ci_gate" | "issue" | "pending_replay" | "capture" | "evidence";
+type DecisionKind = "ci_gate" | "issue" | "pending_replay" | "capture" | "evidence" | "bypass";
 
 type DecisionRow = {
   id: string;
@@ -96,15 +109,17 @@ type ProofCheck = {
 
 const refreshIntervalMs = 30_000;
 const loadSourceLabels: Record<InboxLoadKey, string> = {
-  issues: "Action signals",
+  issues: "High-risk actions",
   replayRuns: "Verification runs",
   goldenSets: "Evidence contracts",
   billing: "Billing",
+  billingUsage: "Billing usage",
   quota: "Replay quota",
   summary: "Usage summary",
   calls: "Agent captures",
   captureHealth: "Capture health",
   apiKeys: "Project keys",
+  sourceMutations: "Bypass risk",
 };
 
 const GOLDEN_ELIGIBLE_REPLAY_STATUSES = new Set(["verified_fix"]);
@@ -290,7 +305,7 @@ function verdictBadgeLabel(tone: PriorityTone): string {
 
 function filterDecisionRows(rows: DecisionRow[], focus: HomeSnapshotFilter): DecisionRow[] {
   if (focus === "action_signals") {
-    return rows.filter((row) => row.kind === "issue" || row.kind === "capture");
+    return rows.filter((row) => row.kind === "issue" || row.kind === "capture" || row.kind === "bypass");
   }
   if (focus === "unverified_outcomes") {
     return rows.filter((row) => row.proofTone !== "success" && row.kind !== "ci_gate");
@@ -298,14 +313,38 @@ function filterDecisionRows(rows: DecisionRow[], focus: HomeSnapshotFilter): Dec
   if (focus === "failing_gates") {
     return rows.filter((row) => row.kind === "ci_gate");
   }
+  if (focus === "bypass_risk") {
+    return rows.filter((row) => row.kind === "bypass");
+  }
   if (focus === "evidence_readiness") {
-    return rows.filter((row) => row.kind === "evidence" || row.proofTone !== "success");
+    return rows.filter((row) => row.kind === "evidence" || row.kind === "bypass" || row.proofTone !== "success");
   }
   return rows;
 }
 
 function readinessLabel(ready: number, total: number): string {
   return `${formatCount(ready)}/${formatCount(total)} ready`;
+}
+
+function formatMeterUsage(meter: BillingUsageMeter | null | undefined, fallback: string): string {
+  if (!meter) return fallback;
+  if (meter.unlimited) return `${formatCount(meter.used)} used`;
+  if (typeof meter.limit === "number") return `${formatCount(meter.used)}/${formatCount(meter.limit)}`;
+  return `${formatCount(meter.used)} used`;
+}
+
+function meterTone(meter: BillingUsageMeter | null | undefined): PriorityTone {
+  if (!meter) return "neutral";
+  if (meter.state === "blocked" || meter.state === "exceeded") return "danger";
+  if (meter.state === "warn" || meter.state === "warning" || meter.state === "approaching_limit") return "warning";
+  if (meter.unlimited || meter.state === "ok" || meter.state === "active") return "success";
+  if (typeof meter.limit === "number" && meter.limit > 0) {
+    const percent = (meter.used / meter.limit) * 100;
+    if (percent >= 100) return "danger";
+    if (percent >= 80) return "warning";
+    return "success";
+  }
+  return "neutral";
 }
 
 function PriorityTableSkeleton() {
@@ -387,11 +426,13 @@ export default function HomePage() {
     replayRuns: [],
     goldenSets: [],
     billing: null,
+    billingUsage: null,
     quota: null,
     summary: null,
     calls: [],
     captureHealth: null,
     apiKeys: [],
+    sourceMutations: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -418,11 +459,13 @@ export default function HomePage() {
         settleLoad("replayRuns", listReplayRuns({ limit: 50 }, signal)),
         settleLoad("goldenSets", listGoldenSets({ limit: 50 }, signal)),
         settleLoad("billing", getBillingMe(signal)),
+        settleLoad("billingUsage", getBillingUsage(signal)),
         settleLoad("quota", getReplayQuota(signal)),
         settleLoad("summary", getAnalyticsSummary(summaryWindowDays, signal)),
         settleLoad("calls", listCalls({ limit: 10, sort_by: "created_at", sort_order: "desc" }, signal)),
         settleLoad("captureHealth", getCaptureHealth(signal)),
         settleLoad("apiKeys", selectedProject ? listProjectApiKeys(selectedProject, signal) : Promise.resolve([])),
+        settleLoad("sourceMutations", getSourceMutationSummary(signal)),
       ]);
 
       if (signal?.aborted || results.every((result) => result.status === "rejected" && isAbortError(result.reason))) {
@@ -460,6 +503,8 @@ export default function HomePage() {
           updates.goldenSets = (result.value as { items: GoldenSetView[] }).items;
         } else if (result.key === "billing") {
           updates.billing = result.value as BillingMeResponse;
+        } else if (result.key === "billingUsage") {
+          updates.billingUsage = result.value as BillingUsageResponse;
         } else if (result.key === "quota") {
           updates.quota = result.value as ReplayQuotaResponse;
         } else if (result.key === "summary") {
@@ -470,6 +515,8 @@ export default function HomePage() {
           updates.captureHealth = result.value as CaptureHealthResponse;
         } else if (result.key === "apiKeys") {
           updates.apiKeys = result.value as ApiKeyResponse[];
+        } else if (result.key === "sourceMutations") {
+          updates.sourceMutations = result.value as SourceMutationSummaryResponse;
         }
       }
 
@@ -552,6 +599,17 @@ export default function HomePage() {
     (data.captureHealth?.gateway_unhealthy_count ?? 0) > 0 ||
     captureBacklog > 0 ||
     (data.captureHealth?.gateway_loss_count ?? 0) > 0;
+  const sourceMutationSummary = data.sourceMutations;
+  const bypassRiskCount =
+    (sourceMutationSummary?.policy_bypass ?? 0) +
+    (sourceMutationSummary?.unknown_actor ?? 0) +
+    (sourceMutationSummary?.unmanaged_agent_action ?? 0);
+  const unreceiptedMutationCount = sourceMutationSummary?.unreceipted ?? 0;
+  const sourceMutationTotal = sourceMutationSummary?.total ?? 0;
+  const protectedActionMeter = data.billingUsage?.protected_actions;
+  const receiptMeter = data.billingUsage?.action_receipts;
+  const verificationMeter = data.billingUsage?.verification_checks;
+  const runnerMeter = data.billingUsage?.runner_executions;
   const failedRunsCount = Math.max(data.calls.filter(isFailureCall).length, criticalHighCount);
   const replayPassCount = data.replayRuns.filter(runPassed).length;
   const replayFailCount = data.replayRuns.filter(runFailed).length;
@@ -567,7 +625,8 @@ export default function HomePage() {
     needsTrustedReplayCount +
     pendingRuns.length +
     failedCiRuns.length +
-    (captureHasProblem ? 1 : 0);
+    (captureHasProblem ? 1 : 0) +
+    (bypassRiskCount > 0 || unreceiptedMutationCount > 0 ? 1 : 0);
   const hasLoadedIssues = sortedIssues.length > 0;
   const hasWorkspaceActivity = capturedCallCount > 0 || hasLoadedIssues || data.replayRuns.length > 0 || data.goldenSets.length > 0;
   const headerSubtitle = hasWorkspaceActivity
@@ -598,8 +657,8 @@ export default function HomePage() {
       : blockingCiRun
         ? {
             eyebrow: "Highest priority",
-            title: "Deployment blocked",
-            summary: `${formatCount(failedCiRuns.length)} verification gate${failedCiRuns.length === 1 ? "" : "s"} failing on ${blockingCiRun.golden_set_id}.`,
+            title: "Production promotion blocked",
+            summary: `${formatCount(failedCiRuns.length)} verification gate${failedCiRuns.length === 1 ? "" : "s"} failing on ${blockingCiRun.golden_set_id}. Resolve the proof failure before release.`,
             tone: "danger" as const,
             action: caps.canCi ? (
               <Link href="/policies" className="btn btn-primary btn-sm fi-btn-primary">
@@ -612,8 +671,8 @@ export default function HomePage() {
       : needsTrustedReplayCount > 0 && firstUnprotectedIssue
         ? {
             eyebrow: "Outcome proof missing",
-            title: `${formatCount(needsTrustedReplayCount)} action${needsTrustedReplayCount === 1 ? "" : "s"} not verified`,
-            summary: "Verify the real-world outcome before this action becomes audit-ready evidence.",
+            title: `${formatCount(needsTrustedReplayCount)} production action${needsTrustedReplayCount === 1 ? "" : "s"} need verification`,
+            summary: "Check the source-of-record before these agent actions become audit-ready evidence.",
             tone: "warning" as const,
             action: renderIssueAction(firstUnprotectedIssue, { replayLabel: "Verify outcome", viewLabel: "View proof" }),
           }
@@ -629,12 +688,12 @@ export default function HomePage() {
                   </Link>
                 ),
               }
-        : {
+          : {
             eyebrow: "Protected",
-            title: protectedGoldenCount > 0 ? "Evidence ready" : "Safety loop ready",
+            title: protectedGoldenCount > 0 ? "Verified action loop healthy" : "Safety loop ready",
             summary:
               protectedGoldenCount > 0
-                ? "Loaded actions have verified proof and no high-risk production signal needs review."
+                ? "Protected actions have source-of-record proof and no high-risk production signal needs review."
                 : headerSubtitle,
             tone: "success" as const,
             action: (
@@ -656,10 +715,49 @@ export default function HomePage() {
     protectedGoldenCount > 0 && failedCiRuns.length === 0,
   ].filter(Boolean).length;
   const evidenceReadinessPercent = Math.round((evidenceChecklistReady / 5) * 100);
+  const launchGuardrails = [
+    {
+      label: "Protected actions",
+      value: formatMeterUsage(protectedActionMeter, formatCount(capturedCallCount)),
+      helper: protectedActionMeter ? "metered this billing period" : "captured by Zroky",
+      tone: meterTone(protectedActionMeter) === "neutral" && capturedCallCount > 0 ? ("success" as const) : meterTone(protectedActionMeter),
+      href: "/actions",
+      icon: <ShieldCheck aria-hidden="true" />,
+    },
+    {
+      label: "Action receipts",
+      value: formatMeterUsage(receiptMeter, `${formatCount(evidenceReadinessPercent)}%`),
+      helper: receiptMeter ? "signed proof artifacts" : "evidence coverage fallback",
+      tone: meterTone(receiptMeter) === "neutral" && evidenceReadinessPercent >= 80 ? ("success" as const) : meterTone(receiptMeter),
+      href: "/evidence",
+      icon: <FileJson aria-hidden="true" />,
+    },
+    {
+      label: "Bypass risk",
+      value: formatCount(bypassRiskCount),
+      helper:
+        bypassRiskCount > 0
+          ? `${formatCount(unreceiptedMutationCount)} unreceipted mutations`
+          : sourceMutationTotal > 0
+            ? "mutations matched or authorized"
+            : "no source mutations ingested",
+      tone: bypassRiskCount > 0 ? ("danger" as const) : unreceiptedMutationCount > 0 ? ("warning" as const) : ("success" as const),
+      href: "/actions",
+      icon: <ShieldAlert aria-hidden="true" />,
+    },
+    {
+      label: "Verification quota",
+      value: formatMeterUsage(verificationMeter, `${formatCount(replayPassRate)}%`),
+      helper: runnerMeter ? `${formatMeterUsage(runnerMeter, "0")} runner executions` : "source-of-record checks",
+      tone: meterTone(verificationMeter) === "neutral" && replayPassRate > 0 ? ("success" as const) : meterTone(verificationMeter),
+      href: "/outcomes",
+      icon: <ListChecks aria-hidden="true" />,
+    },
+  ];
   const snapshotFilters = [
     {
       id: "action_signals" as const,
-      label: "Action signals",
+      label: "High-risk actions",
       value: formatCount(failedRunsCount),
       helper: "Critical drift, failed calls, or stale capture.",
       tone: "danger" as const,
@@ -667,7 +765,7 @@ export default function HomePage() {
     },
     {
       id: "needs_decision" as const,
-      label: "Needs decision",
+      label: "Owner decisions",
       value: formatCount(openDecisionCount),
       helper: "Unified queue requiring owner action.",
       tone: "warning" as const,
@@ -683,15 +781,23 @@ export default function HomePage() {
     },
     {
       id: "failing_gates" as const,
-      label: "Failing gates",
+      label: "Blocked releases",
       value: formatCount(failedCiRuns.length),
       helper: "Promotion gates currently blocking release.",
       tone: failedCiRuns.length > 0 ? ("danger" as const) : ("success" as const),
       icon: <GitPullRequest aria-hidden="true" />,
     },
     {
+      id: "bypass_risk" as const,
+      label: "Bypass risk",
+      value: formatCount(bypassRiskCount),
+      helper: `${formatCount(unreceiptedMutationCount)} unreceipted mutations.`,
+      tone: bypassRiskCount > 0 ? ("danger" as const) : unreceiptedMutationCount > 0 ? ("warning" as const) : ("success" as const),
+      icon: <ShieldAlert aria-hidden="true" />,
+    },
+    {
       id: "evidence_readiness" as const,
-      label: "Evidence readiness",
+      label: "Evidence coverage",
       value: `${formatCount(evidenceReadinessPercent)}%`,
       helper: readinessLabel(evidenceChecklistReady, 5),
       tone: evidenceReadinessPercent >= 80 ? ("success" as const) : evidenceReadinessPercent >= 40 ? ("warning" as const) : ("neutral" as const),
@@ -837,6 +943,31 @@ export default function HomePage() {
         },
       ]
     : [];
+  const bypassRows: DecisionRow[] =
+    bypassRiskCount > 0 || unreceiptedMutationCount > 0
+      ? [
+          {
+            id: "bypass:source-mutations",
+            kind: "bypass",
+            urgency: bypassRiskCount > 0 ? "P0" : "P1",
+            signal: bypassRiskCount > 0 ? "Policy bypass" : "Unreceipted mutation",
+            agentAction: "Source-of-record mutation outside receipt path",
+            detail:
+              bypassRiskCount > 0
+                ? "A business system changed without a matching Zroky action receipt."
+                : "Source mutations are waiting to be classified against Zroky receipts.",
+            impact: `${formatCount(unreceiptedMutationCount)} unreceipted`,
+            proofState: bypassRiskCount > 0 ? "Bypass risk" : "Needs match",
+            proofTone: bypassRiskCount > 0 ? "danger" : "warning",
+            nextStep: "Open bypass watch",
+            action: (
+              <Link href="/actions" className="btn btn-primary btn-sm fi-btn-primary">
+                Open bypass watch
+              </Link>
+            ),
+          },
+        ]
+      : [];
   const evidenceRows: DecisionRow[] =
     hasWorkspaceActivity && protectedGoldenCount === 0
       ? [
@@ -859,7 +990,7 @@ export default function HomePage() {
           },
         ]
       : [];
-  const decisionRows: DecisionRow[] = [...ciRows, ...issueRows, ...pendingReplayRows, ...captureRows, ...evidenceRows].slice(0, 12);
+  const decisionRows: DecisionRow[] = [...bypassRows, ...ciRows, ...issueRows, ...pendingReplayRows, ...captureRows, ...evidenceRows].slice(0, 12);
   const filteredDecisionRows = filterDecisionRows(decisionRows, queueFocus);
 
   useEffect(() => {
@@ -910,7 +1041,7 @@ export default function HomePage() {
           tone: hasTrustedGoldenReplay(selectedIssue) ? "success" : "warning",
         },
         {
-          label: "Evidence readiness",
+          label: "Evidence coverage",
           value: hasTrustedGoldenReplay(selectedIssue) && protectedGoldenCount > 0 ? "Export ready" : "Incomplete",
           tone: hasTrustedGoldenReplay(selectedIssue) && protectedGoldenCount > 0 ? "success" : "neutral",
         },
@@ -932,7 +1063,7 @@ export default function HomePage() {
           tone: captureHasProblem ? "warning" : captureStatus === "connected" ? "success" : "neutral",
         },
         {
-          label: "Evidence readiness",
+          label: "Evidence coverage",
           value: `${formatCount(evidenceReadinessPercent)}%`,
           tone: evidenceReadinessPercent >= 80 ? "success" : evidenceReadinessPercent >= 40 ? "warning" : "neutral",
         },
@@ -959,6 +1090,16 @@ export default function HomePage() {
       tone: captureBacklog > 0 ? "warning" : "success",
     },
     {
+      label: "Bypass risk",
+      value: bypassRiskCount > 0 ? `${formatCount(bypassRiskCount)} open` : "Clear",
+      tone: bypassRiskCount > 0 ? "danger" : "success",
+    },
+    {
+      label: "Unreceipted mutations",
+      value: formatCount(unreceiptedMutationCount),
+      tone: unreceiptedMutationCount > 0 ? "warning" : "success",
+    },
+    {
       label: "Failed preflight",
       value: formatCount(data.captureHealth?.projection_failures_24h ?? data.captureHealth?.gateway_unhealthy_count ?? 0),
       tone: (data.captureHealth?.projection_failures_24h ?? data.captureHealth?.gateway_unhealthy_count ?? 0) > 0 ? "warning" : "success",
@@ -976,7 +1117,7 @@ export default function HomePage() {
     {
       label: "Policies",
       value: openIssuesCount > 0 ? `${formatCount(criticalHighCount)} critical/high` : "clear",
-      helper: `${formatCount(openIssuesCount)} action signals`,
+      helper: `${formatCount(openIssuesCount)} action signal${openIssuesCount === 1 ? "" : "s"}`,
       tone: openIssuesCount > 0 ? "warning" : "success",
       href: "/policies",
       Icon: ShieldAlert,
@@ -1099,9 +1240,29 @@ export default function HomePage() {
         </div>
       ) : (
         <>
+          <section className="fi-a-launch-strip" aria-label="Paid launch guardrails">
+            <div className="fi-a-launch-head">
+              <span className="fi-a-kicker">Paid launch guardrails</span>
+              <h2>Control, proof, quota, and bypass risk</h2>
+              <p>These are the four signals a design partner checks before trusting agent actions in production.</p>
+            </div>
+            <div className="fi-a-launch-metrics">
+              {launchGuardrails.map((metric) => (
+                <Link className="fi-a-launch-card" data-tone={metric.tone} href={metric.href} key={metric.label}>
+                  <span className="fi-a-launch-icon">{metric.icon}</span>
+                  <span className="fi-a-launch-copy">
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                    <small>{metric.helper}</small>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+
           {loading ? (
             <section className="fi-a-snapshot-grid" aria-label="Loading Home summary" aria-busy="true">
-              {Array.from({ length: 5 }, (_, index) => (
+              {Array.from({ length: 6 }, (_, index) => (
                 <div className="fi-a-snapshot-card is-loading" key={index}>
                   <span />
                   <strong />

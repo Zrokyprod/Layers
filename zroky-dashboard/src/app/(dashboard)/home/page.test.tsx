@@ -8,8 +8,10 @@ import HomePage from "./page";
 const api = vi.hoisted(() => ({
   createReplayRunFromIssue: vi.fn(),
   getAnalyticsSummary: vi.fn(),
+  getBillingUsage: vi.fn(),
   getBillingMe: vi.fn(),
   getCaptureHealth: vi.fn(),
+  getSourceMutationSummary: vi.fn(),
   getReplayQuota: vi.fn(),
   listCalls: vi.fn(),
   listGoldenSets: vi.fn(),
@@ -227,6 +229,18 @@ function snapshotCard(label: string): HTMLElement {
   return card as HTMLElement;
 }
 
+function usageMeter(overrides: Partial<import("@/lib/types").BillingUsageMeter> = {}): import("@/lib/types").BillingUsageMeter {
+  return {
+    used: 0,
+    limit: 250,
+    unlimited: false,
+    overage: null,
+    state: "ok",
+    resets_at: now,
+    ...overrides,
+  };
+}
+
 function mockInbox(
   planTemplate: Record<string, unknown>,
   issueItems: import("@/lib/types").IssueItem[] = [
@@ -278,6 +292,35 @@ function mockInbox(
     sla_tier: "standard",
     plan_template: planTemplate,
   });
+  api.getBillingUsage.mockResolvedValue({
+    tenant_id: "tenant_1",
+    org_id: "org_1",
+    period_month: "2026-05",
+    period_start: now,
+    period_end: now,
+    plan_code: "pro",
+    plan_name: "Pro",
+    subscription_status: "active",
+    calls: usageMeter({ used: 1200, limit: 10_000 }),
+    replay: usageMeter({ used: 4, limit: 100 }),
+    goldens: usageMeter({ used: 1, limit: 50 }),
+    golden_sets: usageMeter({ used: 1, limit: 20 }),
+    protected_actions: usageMeter({ used: 12, limit: 250 }),
+    policy_checks: usageMeter({ used: 18, limit: 500 }),
+    runner_executions: usageMeter({ used: 4, limit: 100 }),
+    action_receipts: usageMeter({ used: 3, limit: 250 }),
+    verification_checks: usageMeter({ used: 7, limit: 250 }),
+    source_mutations: usageMeter({ used: 2, limit: 250 }),
+    active_connectors: usageMeter({ used: 2, limit: 10 }),
+    metering_health: {
+      state: "ok",
+      failure_count: 0,
+      last_failure_at: null,
+      last_failure_type: null,
+      failure_policy: "fail_closed",
+      detail: null,
+    },
+  });
   api.getReplayQuota.mockResolvedValue({
     enabled: Boolean(planTemplate["pilot.replay_stub"]),
     limit: 100,
@@ -314,6 +357,16 @@ function mockInbox(
     items: [],
   });
   api.getCaptureHealth.mockResolvedValue(captureHealth());
+  api.getSourceMutationSummary.mockResolvedValue({
+    total: 2,
+    matched_receipt: 2,
+    authorized_external: 0,
+    legacy_path: 0,
+    unmanaged_agent_action: 0,
+    policy_bypass: 0,
+    unknown_actor: 0,
+    unreceipted: 0,
+  });
   api.listProjectApiKeys.mockResolvedValue([
     {
       key_id: "key_1",
@@ -387,8 +440,16 @@ describe("Command Center home", () => {
 
     expect(screen.getByRole("heading", { name: "Agent action accountability", level: 1 })).toBeInTheDocument();
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Deployment blocked")).toBeInTheDocument();
-    expect(screen.getByText("1 verification gate failing on regression-ci:proj_1.")).toBeInTheDocument();
+    expect(screen.getByText("Production promotion blocked")).toBeInTheDocument();
+    expect(screen.getByText("1 verification gate failing on regression-ci:proj_1. Resolve the proof failure before release.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Paid launch guardrails" })).toBeInTheDocument();
+    expect(screen.getByText("Control, proof, quota, and bypass risk")).toBeInTheDocument();
+    expect(screen.getByText("Protected actions")).toBeInTheDocument();
+    expect(screen.getByText("12/250")).toBeInTheDocument();
+    expect(screen.getByText("Action receipts")).toBeInTheDocument();
+    expect(screen.getByText("3/250")).toBeInTheDocument();
+    expect(screen.getAllByText("Bypass risk").length).toBeGreaterThan(0);
+    expect(screen.queryByText("no source mutations ingested")).toBeNull();
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Verify outcome" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Open gate" }).length).toBeGreaterThan(0);
@@ -398,20 +459,21 @@ describe("Command Center home", () => {
     expect(api.getAnalyticsSummary.mock.calls[0]?.[0]).toBe(7);
 
     const summary = screen.getByLabelText("Home snapshot filters");
-    expect(document.querySelectorAll(".fi-a-snapshot-card")).toHaveLength(5);
-    expect(within(snapshotCard("Action signals")).getByText("2")).toBeInTheDocument();
-    expect(within(snapshotCard("Needs decision")).getByText("3")).toBeInTheDocument();
+    expect(document.querySelectorAll(".fi-a-snapshot-card")).toHaveLength(6);
+    expect(within(snapshotCard("High-risk actions")).getByText("2")).toBeInTheDocument();
+    expect(within(snapshotCard("Owner decisions")).getByText("3")).toBeInTheDocument();
     expect(within(snapshotCard("Unverified outcomes")).getByText("1")).toBeInTheDocument();
-    expect(within(snapshotCard("Failing gates")).getByText("1")).toBeInTheDocument();
-    expect(within(snapshotCard("Evidence readiness")).getByText("40%")).toBeInTheDocument();
+    expect(within(snapshotCard("Blocked releases")).getByText("1")).toBeInTheDocument();
+    expect(within(snapshotCard("Bypass risk")).getByText("0")).toBeInTheDocument();
+    expect(within(snapshotCard("Evidence coverage")).getByText("40%")).toBeInTheDocument();
     expect(summary).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Highest-risk agent actions", level: 2 })).toBeInTheDocument();
     expect(screen.queryByRole("tablist", { name: "Decision queue focus" })).toBeNull();
-    const failingGateCard = snapshotCard("Failing gates");
+    const failingGateCard = snapshotCard("Blocked releases");
     fireEvent.click(failingGateCard);
     expect(failingGateCard.getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(snapshotCard("Needs decision"));
+    fireEvent.click(snapshotCard("Owner decisions"));
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "Urgency",
@@ -435,6 +497,7 @@ describe("Command Center home", () => {
 
     const proofPanel = screen.getByLabelText("Selected proof");
     expect(within(proofPanel).getByText("System-of-record health")).toBeInTheDocument();
+    expect(within(proofPanel).getByText("Unreceipted mutations")).toBeInTheDocument();
     fireEvent.click(rowForIssueTitle("Checkout loop"));
     expect(within(proofPanel).getByText("Sample trace")).toBeInTheDocument();
     expect(within(proofPanel).getByText("Outcome proof missing")).toBeInTheDocument();
@@ -561,8 +624,8 @@ describe("Command Center home", () => {
     await screen.findAllByText("Checkout loop");
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Schema drift")).getByText("$7.50")).toBeInTheDocument();
-    expect(within(snapshotCard("Evidence readiness")).getByText("40%")).toBeInTheDocument();
-    expect(within(snapshotCard("Evidence readiness")).getByText("2/5 ready")).toBeInTheDocument();
+    expect(within(snapshotCard("Evidence coverage")).getByText("40%")).toBeInTheDocument();
+    expect(within(snapshotCard("Evidence coverage")).getByText("2/5 ready")).toBeInTheDocument();
   });
 
   it("uses estimated wasted AI cost when blast radius is missing", async () => {
