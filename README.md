@@ -1,7 +1,7 @@
 # Zroky Product Operating Contract
 
-This is the single product, implementation, and execution source of truth for
-Zroky.
+This is the single product and implementation source of truth for Zroky.
+It is also the execution source of truth for paid-launch engineering work.
 
 Old planning docs, broad dashboards, speculative roadmaps, and stale Markdown
 files must not guide future implementation. Code should be changed only when it

@@ -354,7 +354,7 @@ def _contract_response(row) -> ActionContractResponse:
         operation_kind=row.operation_kind,
         domain_family=row.domain_family,
         schema_digest=row.schema_digest,
-        schema_=_loads(row.schema_json, {}),
+        schema=_loads(row.schema_json, {}),
         risk_class=row.risk_class,
         verification_profile=_loads(row.verification_profile_json, {}),
         connector_family=row.connector_family,

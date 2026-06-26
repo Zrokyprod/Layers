@@ -220,7 +220,7 @@ def increment_usage_meter(
         bind = db.get_bind()
         dialect = bind.dialect.name if bind is not None else ""
         if dialect == "postgresql":
-            stmt = (
+            pg_stmt = (
                 pg_insert(UsageMeterCount)
                 .values(
                     id=str(uuid4()),
@@ -238,9 +238,9 @@ def increment_usage_meter(
                     },
                 )
             )
-            db.execute(stmt)
+            db.execute(pg_stmt)
         elif dialect == "sqlite":
-            stmt = (
+            sqlite_stmt = (
                 sqlite_insert(UsageMeterCount)
                 .values(
                     id=str(uuid4()),
@@ -258,7 +258,7 @@ def increment_usage_meter(
                     },
                 )
             )
-            db.execute(stmt)
+            db.execute(sqlite_stmt)
         else:
             row = db.execute(
                 select(UsageMeterCount).where(
