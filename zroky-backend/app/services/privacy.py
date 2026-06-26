@@ -39,7 +39,14 @@ _NON_SECRET_TOKEN_KEYS = {
     "token_unit",
 }
 _PASSTHROUGH_KEYS = {
+    "approval_scope_hash",
+    "event_digest",
+    "evidence_hash",
+    "intent_digest",
+    "plan_digest",
     "prompt_fingerprint",
+    "receipt_digest",
+    "schema_digest",
     "output_fingerprint",
 }
 _STREET_SUFFIXES = (

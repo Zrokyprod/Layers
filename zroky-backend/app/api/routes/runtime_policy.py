@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -13,8 +14,10 @@ from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.db.models import RuntimePolicyDecision
 from app.db.session import get_db_session
 from app.services.evidence_pack import build_runtime_policy_evidence_pack
+from app.services.notification_dispatch import dispatch_runtime_policy_approval_slack_request
 from app.services.pilot import PolicyValidationError, get_or_create_policy, parse_policy_json, upsert_policy
 from app.services.runtime_policy import (
+    RuntimePolicyApprovalConflict,
     evaluate_runtime_policy,
     list_runtime_policy_audit_events,
     list_runtime_policy_decisions,
@@ -23,6 +26,7 @@ from app.services.runtime_policy import (
 
 
 router = APIRouter(prefix="/v1/runtime-policy")
+logger = logging.getLogger(__name__)
 
 VALID_DECISION_STATUSES = {
     "allowed",
@@ -106,6 +110,9 @@ class RuntimePolicyDecisionResponse(BaseModel):
     resolution_reason: str | None
     consumed_at: datetime | None
     consumed_by_decision_id: str | None
+    required_approval_count: int
+    approval_count: int
+    approver_subjects: list[str]
 
 
 class RuntimePolicyListResponse(BaseModel):
@@ -210,6 +217,9 @@ def _decision_to_response(
         resolution_reason=row.resolution_reason,
         consumed_at=row.consumed_at,
         consumed_by_decision_id=row.consumed_by_decision_id,
+        required_approval_count=row.required_approval_count or 0,
+        approval_count=row.approval_count or 0,
+        approver_subjects=_parse_json(row.approver_subjects_json, []),
     )
 
 
@@ -241,6 +251,14 @@ def check_runtime_policy(
             result.decision,
             audit_events=audit.get(result.decision.id, []),
         )
+        try:
+            dispatch_runtime_policy_approval_slack_request(
+                db,
+                tenant_id=context.tenant_id,
+                decision=result.decision,
+            )
+        except Exception:
+            logger.debug("runtime_policy.slack_approval_dispatch_failed", exc_info=True)
     return response
 
 
@@ -303,14 +321,17 @@ def approve_runtime_policy_decision(
     db: Session = Depends(get_db_session),
 ) -> RuntimePolicyDecisionResponse:
     _require_role(context, "admin")
-    row = resolve_runtime_policy_decision(
-        db,
-        project_id=context.tenant_id,
-        decision_id=decision_id,
-        approved=True,
-        actor=context.subject,
-        reason=body.reason,
-    )
+    try:
+        row = resolve_runtime_policy_decision(
+            db,
+            project_id=context.tenant_id,
+            decision_id=decision_id,
+            approved=True,
+            actor=context.subject,
+            reason=body.reason,
+        )
+    except RuntimePolicyApprovalConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

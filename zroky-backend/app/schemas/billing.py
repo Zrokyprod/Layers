@@ -144,4 +144,11 @@ class BillingUsageResponse(BaseModel):
     replay: BillingUsageMeter
     goldens: BillingUsageMeter
     golden_sets: BillingUsageMeter
+    protected_actions: BillingUsageMeter
+    policy_checks: BillingUsageMeter
+    runner_executions: BillingUsageMeter
+    action_receipts: BillingUsageMeter
+    verification_checks: BillingUsageMeter
+    source_mutations: BillingUsageMeter
+    active_connectors: BillingUsageMeter
     metering_health: BillingMeteringHealthResponse

@@ -147,6 +147,8 @@ class Settings(BaseSettings):
     OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS: bool = False
     OUTCOME_CONNECTOR_TIMEOUT_SECONDS: float = 5.0
     OUTCOME_CONNECTOR_MAX_ATTEMPTS: int = 2
+    ACTION_RECEIPT_SIGNING_SECRET: Optional[str] = None
+    ACTION_RECEIPT_SIGNING_KEY_ID: str = "zroky-action-receipt-v1"
 
     # â”€â”€ Replay worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Shared secret between the control plane and the customer-hosted replay worker.

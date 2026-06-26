@@ -27,17 +27,35 @@ def _summary() -> dict:
         "mode": "live",
         "project_id": "proj_partner_001",
         "scenario": "refund_outcome_proof_v1",
+        "call_id": "call_live_001",
+        "trace_id": "trace_live_001",
         "runtime_policy": {
             "decision_id": "rpd_live_001",
             "allowed": False,
         },
         "outcome_reconciliation": {
             "verdict": "matched",
+            "connector_request_url": "https://ledger.partner.test/api/refunds/RF-1001",
+            "connector_http_status": 200,
+            "connector_error": None,
+            "connector_retryable": False,
+            "system_ref": "ledger:RF-1001",
+        },
+        "connector_setup": {
+            "connected": True,
+            "config_saved": True,
+            "health_status": "healthy",
+            "last_verdict": "matched",
+            "readiness_status": "ready",
+            "secrets_redacted": True,
         },
         "evidence_pack": {
             "decision_id": "rpd_live_001",
             "verification_status": "pass",
             "evidence_hash": VALID_HASH,
+            "hash_algorithm": "sha256",
+            "outcome_count": 1,
+            "audit_event_count": 1,
         },
         "launch_readiness": {
             "owner_gate": "real_customer_proof",
@@ -67,8 +85,12 @@ def _summary() -> dict:
 def _evidence() -> dict:
     return {
         "decision_id": "rpd_live_001",
+        "project_id": "proj_partner_001",
         "verification_status": "pass",
         "evidence_hash": VALID_HASH,
+        "hash_algorithm": "sha256",
+        "call": {"id": "call_live_001"},
+        "audit_log": [{"event": "owner_proof_checked"}],
         "outcome_reconciliation": [{"verdict": "matched"}],
     }
 
@@ -133,3 +155,34 @@ def test_owner_proof_artifact_rejects_tampered_evidence_hash(
     ) == 1
 
     assert "evidence_hash must match summary evidence_hash" in capsys.readouterr().err
+
+
+def test_owner_proof_artifact_rejects_missing_required_proof_flag(
+    tmp_path: Path, capsys
+) -> None:
+    module = _load_script()
+    summary = _summary()
+    del summary["proof"]["real_connector_ready"]
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    assert module.main(["--summary", str(summary_path)]) == 1
+
+    assert "proof object missing required keys: real_connector_ready" in capsys.readouterr().err
+
+
+def test_owner_proof_artifact_rejects_demo_connector_url(
+    tmp_path: Path, capsys
+) -> None:
+    module = _load_script()
+    summary = _summary()
+    summary["outcome_reconciliation"][
+        "connector_request_url"
+    ] = "https://ledger.example.com/api/refunds/RF-1001"
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    assert module.main(["--summary", str(summary_path)]) == 1
+
+    error_output = capsys.readouterr().err
+    assert "connector_request_url must be a real https URL" in error_output

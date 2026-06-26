@@ -1071,7 +1071,7 @@ class TestCreateReplayFromIssueRoute:
         assert response.status_code == 202
         body = response.json()
         assert body["replay_mode"] == "stub"
-        assert body["summary_url"].endswith(f"/replay/{body['id']}")
+        assert body["summary_url"].endswith(f"/evidence?replay_run_id={body['id']}")
         assert enqueued == [(body["id"], "proj-1")]
 
         with factory() as session:

@@ -46,7 +46,7 @@ def build_summary_url(run: ReplayRun) -> str:
 
     settings = get_settings()
     base = (settings.FRONTEND_URL or "https://zroky.com").rstrip("/")
-    return f"{base}/replay/{run.id}"
+    return f"{base}/evidence?replay_run_id={run.id}"
 
 
 # ── monthly quota ─────────────────────────────────────────────────────────────

@@ -11,6 +11,8 @@ from fastapi import APIRouter
 
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.analytics import router as analytics_router
+from app.api.routes.action_intents import router as action_intents_router
+from app.api.routes.agents import router as agents_router
 from app.api.routes.ask import router as ask_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.calls import router as calls_router
@@ -36,6 +38,7 @@ from app.api.routes.realtime_ws import router as realtime_ws_router
 from app.api.routes.security import router as security_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.traces import router as traces_router
+from app.api.routes.tool_registry import router as tool_registry_router
 from app.api.routes.anomalies import router as anomalies_router
 from app.api.routes.detectors import router as detectors_router
 from app.api.routes.feature_interest import (
@@ -79,6 +82,9 @@ api_router.include_router(calls_router, tags=["calls"])
 api_router.include_router(traces_router, tags=["traces"])
 api_router.include_router(live_router, tags=["live"])
 api_router.include_router(analytics_router, tags=["analytics"])
+api_router.include_router(action_intents_router, tags=["verified-actions"])
+api_router.include_router(agents_router, tags=["agents"])  # Agent tool-control profiles
+api_router.include_router(tool_registry_router, tags=["tool-registry"])  # Agent runtime and verifier catalog
 api_router.include_router(ask_router, tags=["ask"])  # Ask Zroky — natural-language Q&A
 api_router.include_router(alerts_router, tags=["alerts"])
 api_router.include_router(integrations_router, tags=["integrations"])

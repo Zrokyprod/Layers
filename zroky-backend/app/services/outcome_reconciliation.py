@@ -19,12 +19,31 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import OutcomeReconciliationCheck
+from app.services.protected_action_billing import (
+    METER_VERIFICATION_CHECKS,
+    reserve_usage_meter,
+)
 
 
 VERDICT_MATCHED = "matched"
 VERDICT_MISMATCHED = "mismatched"
 VERDICT_NOT_VERIFIED = "not_verified"
 VALID_VERDICTS = frozenset({VERDICT_MATCHED, VERDICT_MISMATCHED, VERDICT_NOT_VERIFIED})
+
+VERIFICATION_VERIFIED = "verified"
+VERIFICATION_MISMATCHED = "mismatched"
+VERIFICATION_PENDING = "pending"
+VERIFICATION_UNVERIFIABLE = "unverifiable"
+VERIFICATION_CANCELLED = "cancelled"
+VALID_VERIFICATION_STATUSES = frozenset(
+    {
+        VERIFICATION_VERIFIED,
+        VERIFICATION_MISMATCHED,
+        VERIFICATION_PENDING,
+        VERIFICATION_UNVERIFIABLE,
+        VERIFICATION_CANCELLED,
+    }
+)
 
 DEFAULT_MATCH_FIELDS = (
     "status",
@@ -100,6 +119,10 @@ class ReconciliationSummary:
     matched: int
     mismatched: int
     not_verified: int
+    verified: int = 0
+    pending: int = 0
+    unverifiable: int = 0
+    cancelled: int = 0
 
 
 def _now() -> datetime:
@@ -301,6 +324,7 @@ def reconcile_outcome(
         if existing is not None:
             return existing
 
+    reserve_usage_meter(db, project_id, METER_VERIFICATION_CHECKS)
     source = connector.fetch()
     comparison = compare_claim_to_actual(
         claimed=claimed,
@@ -406,13 +430,56 @@ def get_reconciliation_summary(
     matched = counts.get(VERDICT_MATCHED, 0)
     mismatched = counts.get(VERDICT_MISMATCHED, 0)
     not_verified = counts.get(VERDICT_NOT_VERIFIED, 0)
+    all_rows = db.execute(
+        select(OutcomeReconciliationCheck).where(
+            OutcomeReconciliationCheck.project_id == project_id,
+            OutcomeReconciliationCheck.checked_at >= since,
+        )
+    ).scalars().all()
+    verification_counts = {
+        status: 0
+        for status in VALID_VERIFICATION_STATUSES
+    }
+    for row in all_rows:
+        verification_counts[verification_status_for_check(row)] += 1
     return ReconciliationSummary(
         window_days=days,
         total=matched + mismatched + not_verified,
         matched=matched,
         mismatched=mismatched,
         not_verified=not_verified,
+        verified=verification_counts[VERIFICATION_VERIFIED],
+        pending=verification_counts[VERIFICATION_PENDING],
+        unverifiable=verification_counts[VERIFICATION_UNVERIFIABLE],
+        cancelled=verification_counts[VERIFICATION_CANCELLED],
     )
+
+
+def verification_status_for_check(row: OutcomeReconciliationCheck) -> str:
+    metadata = _json_loads(row.metadata_json, {}) or {}
+    if isinstance(metadata, Mapping):
+        if metadata.get("cancelled") is True or str(metadata.get("status") or "").strip().lower() == "cancelled":
+            return VERIFICATION_CANCELLED
+        connector = metadata.get("connector")
+        if isinstance(connector, Mapping):
+            status_code = connector.get("http_status")
+            retryable = connector.get("retryable")
+            try:
+                status_code_int = int(status_code)
+            except (TypeError, ValueError):
+                status_code_int = None
+            if retryable is True or (status_code_int is not None and status_code_int >= 500):
+                return VERIFICATION_PENDING
+
+    if row.verdict == VERDICT_MATCHED:
+        return VERIFICATION_VERIFIED
+    if row.verdict == VERDICT_MISMATCHED:
+        return VERIFICATION_MISMATCHED
+    if row.verdict == VERDICT_NOT_VERIFIED:
+        if row.reason in {"system_of_record_missing", "actual_fields_missing", "no_comparable_fields"}:
+            return VERIFICATION_UNVERIFIABLE
+        return VERIFICATION_PENDING
+    return VERIFICATION_UNVERIFIABLE
 
 
 def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:
@@ -426,6 +493,7 @@ def reconciliation_to_dict(row: OutcomeReconciliationCheck) -> dict[str, Any]:
         "connector_type": row.connector_type,
         "system_ref": row.system_ref,
         "verdict": row.verdict,
+        "verification_status": verification_status_for_check(row),
         "reason": row.reason,
         "amount_usd": float(row.amount_usd) if row.amount_usd is not None else None,
         "currency": row.currency,

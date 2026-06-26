@@ -139,6 +139,12 @@ def validate_runtime_settings(settings: Any) -> None:
     )
 
     require_secret(
+        "ACTION_RECEIPT_SIGNING_SECRET",
+        "ACTION_RECEIPT_SIGNING_SECRET must be configured in production for signed action receipts",
+        min_length=32,
+    )
+
+    require_secret(
         "PROVIDER_KEY_VAULT_KEK",
         "PROVIDER_KEY_VAULT_KEK must be configured in production for provider key vault encryption",
         min_length=32,

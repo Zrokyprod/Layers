@@ -55,7 +55,7 @@ Rules:
    that word first.
 3. Stay under 4 sentences for the answer.
 4. Suggested actions must be imperative and immediately actionable
-   (e.g. "Open call abc-123 to see the prompt", "Switch to claude-3-haiku for the checkout agent").
+   (e.g. "Open the Evidence Pack for abc-123", "Switch to claude-3-haiku for the checkout agent").
 5. Output ONLY valid JSON with these exact keys:
    {
      "answer": "<2-4 sentences in plain English>",
@@ -178,7 +178,7 @@ def _fallback(intent: Intent, evidence: EvidenceBundle, *, reason: str) -> AskAn
             if blast > 0
             else f"{occurrences} affected call(s)"
         )
-        actions = [f"Open issue {issue_id} and inspect the evidence trace"]
+        actions = [f"Open approval context for {issue_id} and inspect the Evidence Pack"]
         if sample_call_id:
             actions.append(f"Replay sample call {sample_call_id} before shipping a fix")
         else:
@@ -211,7 +211,7 @@ def _fallback(intent: Intent, evidence: EvidenceBundle, *, reason: str) -> AskAn
                 f"It cost ${cost_usd:.4f}. Open the call evidence and compare it with nearby failures before changing runtime behavior."
             ),
             suggested_actions=[
-                f"Open call {call_id} to inspect prompt, response, and tool spans",
+                f"Open the Evidence Pack for {call_id} to inspect prompt, response, and tool spans",
                 "Compare this call against recent failures from the same agent",
             ],
             confidence=0.6,

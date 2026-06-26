@@ -186,6 +186,13 @@ class ProjectAlert(Base):
     source: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("diagnosis_engine"))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    slack_delivery_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        server_default=text("'not_attempted'"),
+    )
+    slack_delivery_attempted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    slack_delivery_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
     acknowledged_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -260,6 +267,7 @@ class TenantSlackInstall(Base):
     bot_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     scope: Mapped[str | None] = mapped_column(Text, nullable=True)
     installed_by_user: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approval_user_ids_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
     installed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime,

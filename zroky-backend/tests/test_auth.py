@@ -639,7 +639,7 @@ def test_github_callback_returns_token_and_default_project(client, monkeypatch):
 
     monkeypatch.setenv("GITHUB_CLIENT_ID", "github-client-id")
     monkeypatch.setenv("GITHUB_CLIENT_SECRET", "github-client-secret")
-    monkeypatch.setenv("GITHUB_OAUTH_REDIRECT_URL", "https://app.zroky.com/auth/github/callback")
+    monkeypatch.setenv("GITHUB_OAUTH_REDIRECT_URL", "https://zroky.com/auth/github/callback")
     monkeypatch.setenv("OAUTH_STATE_SECRET", "github-state-secret")
     get_settings.cache_clear()
 
@@ -694,7 +694,7 @@ def test_google_session_callback_returns_token_bundle(client, monkeypatch):
 
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "google-client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "google-client-secret")
-    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URL", "https://app.zroky.com/auth/google/callback")
+    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URL", "https://zroky.com/auth/google/callback")
     monkeypatch.setenv("OAUTH_STATE_SECRET", "google-state-secret")
     get_settings.cache_clear()
 

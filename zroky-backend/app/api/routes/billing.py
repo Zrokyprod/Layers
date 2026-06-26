@@ -76,6 +76,16 @@ from app.services.billing_plans import (
 )
 from app.services.billing_quota import get_usage as _quota_get_usage
 from app.services.billing_metering import get_metering_health
+from app.services.protected_action_billing import (
+    METER_ACTION_RECEIPTS,
+    METER_POLICY_CHECKS,
+    METER_PROTECTED_ACTIONS,
+    METER_RUNNER_EXECUTIONS,
+    METER_SOURCE_MUTATIONS,
+    METER_VERIFICATION_CHECKS,
+    active_connector_decision,
+    usage_meter_decisions,
+)
 from app.services import entitlements_resolver
 from app.services.entitlements import seed_plan_entitlements
 from app.services.replay_runs import check_replay_monthly_quota
@@ -733,6 +743,8 @@ def get_billing_usage(
         db, org_id, "goldens.max_sets", default=0
     )
     metering = get_metering_health(db, tenant_id)
+    protected_usage = usage_meter_decisions(db, tenant_id)
+    connector_usage = active_connector_decision(db, tenant_id)
 
     return BillingUsageResponse(
         tenant_id=tenant_id,
@@ -761,6 +773,41 @@ def get_billing_usage(
         golden_sets=_usage_meter(
             used=golden_set_used,
             limit=golden_set_limit,
+            resets_at=None,
+        ),
+        protected_actions=_usage_meter(
+            used=protected_usage[METER_PROTECTED_ACTIONS].current_count,
+            limit=protected_usage[METER_PROTECTED_ACTIONS].plan_limit,
+            resets_at=protected_usage[METER_PROTECTED_ACTIONS].resets_at,
+        ),
+        policy_checks=_usage_meter(
+            used=protected_usage[METER_POLICY_CHECKS].current_count,
+            limit=protected_usage[METER_POLICY_CHECKS].plan_limit,
+            resets_at=protected_usage[METER_POLICY_CHECKS].resets_at,
+        ),
+        runner_executions=_usage_meter(
+            used=protected_usage[METER_RUNNER_EXECUTIONS].current_count,
+            limit=protected_usage[METER_RUNNER_EXECUTIONS].plan_limit,
+            resets_at=protected_usage[METER_RUNNER_EXECUTIONS].resets_at,
+        ),
+        action_receipts=_usage_meter(
+            used=protected_usage[METER_ACTION_RECEIPTS].current_count,
+            limit=protected_usage[METER_ACTION_RECEIPTS].plan_limit,
+            resets_at=protected_usage[METER_ACTION_RECEIPTS].resets_at,
+        ),
+        verification_checks=_usage_meter(
+            used=protected_usage[METER_VERIFICATION_CHECKS].current_count,
+            limit=protected_usage[METER_VERIFICATION_CHECKS].plan_limit,
+            resets_at=protected_usage[METER_VERIFICATION_CHECKS].resets_at,
+        ),
+        source_mutations=_usage_meter(
+            used=protected_usage[METER_SOURCE_MUTATIONS].current_count,
+            limit=protected_usage[METER_SOURCE_MUTATIONS].plan_limit,
+            resets_at=protected_usage[METER_SOURCE_MUTATIONS].resets_at,
+        ),
+        active_connectors=_usage_meter(
+            used=connector_usage.current_count,
+            limit=connector_usage.plan_limit,
             resets_at=None,
         ),
         metering_health=BillingMeteringHealthResponse(

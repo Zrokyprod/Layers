@@ -211,6 +211,33 @@ class EventCount(Base):
     )
 
 
+class UsageMeterCount(Base):
+    """Per-tenant per-month named usage meter ledger."""
+
+    __tablename__ = "usage_meter_counts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    month: Mapped[str] = mapped_column(String(7), nullable=False, comment="YYYY-MM")
+    meter_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    usage_count: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    last_usage_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "month",
+            "meter_key",
+            name="ux_usage_meter_counts_tenant_month_meter",
+        ),
+        Index("ix_usage_meter_counts_tenant_month", "tenant_id", "month"),
+        Index("ix_usage_meter_counts_tenant_meter_month", "tenant_id", "meter_key", "month"),
+    )
+
+
 class ReplayJob(Base):
     """Replay jobs dispatched to the customer-hosted replay-worker."""
 
@@ -300,6 +327,9 @@ class RuntimePolicyDecision(Base):
     policy_hit_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     business_impact_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     approval_scope_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    required_approval_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    approval_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    approver_subjects_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         nullable=False,

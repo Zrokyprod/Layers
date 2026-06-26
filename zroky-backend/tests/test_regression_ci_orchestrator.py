@@ -327,7 +327,7 @@ class TestOrchestrator:
             inputs, db=db_session,
             candidate_resolver=_resolver_echoes_baseline,
         )
-        md = format_markdown(report, dashboard_base="https://app.zroky.com")
+        md = format_markdown(report, dashboard_base="https://zroky.com")
         assert report.run_id in md
         assert "Replay CI" in md
-        assert "https://app.zroky.com" in md
+        assert "https://zroky.com" in md

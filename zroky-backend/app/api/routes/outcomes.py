@@ -9,11 +9,13 @@ Surface:
   POST /v1/outcomes/webhooks/salesforce  — Salesforce Opportunity stage-change
 """
 
+import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -43,24 +45,60 @@ from app.services.outcome_reconciliation import (
     reconcile_outcome,
     reconciliation_to_dict,
 )
+from app.services.protected_action_billing import (
+    ProtectedActionMeteringUnavailable,
+    ProtectedActionQuotaExceeded,
+    quota_error_detail,
+)
 from app.services.system_of_record_connectors import (
     ConnectorConfigError,
     CustomerRecordApiConnector,
     LedgerRefundApiConnector,
+    PostgresReadOnlyConnector,
 )
 from app.services.system_of_record_connector_config import (
     CUSTOMER_RECORD_CONNECTOR_TYPE,
+    GENERIC_REST_CONNECTOR_TYPE,
     LEDGER_REFUND_CONNECTOR_TYPE,
+    POSTGRES_READ_CONNECTOR_TYPE,
     EnvelopeFormatError,
     VaultCipherUnavailable,
     build_customer_record_connector,
+    build_generic_rest_connector,
     build_ledger_refund_connector,
+    build_postgres_read_connector,
     decrypt_connector_bearer_token,
+    decrypt_connector_database_url,
     get_connector_config,
+)
+from app.services.source_mutations import (
+    ingest_source_mutation,
+    list_source_mutations,
+    source_mutation_summary,
+    source_mutation_to_dict,
 )
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
 logger = logging.getLogger(__name__)
+
+
+def _map_protected_action_billing_error(
+    exc: ProtectedActionQuotaExceeded | ProtectedActionMeteringUnavailable,
+) -> HTTPException:
+    if isinstance(exc, ProtectedActionQuotaExceeded):
+        detail = quota_error_detail(exc)
+        headers = {}
+        if detail.get("current_plan"):
+            headers["X-Zroky-Plan-Hint"] = str(detail["current_plan"])
+        return HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=detail,
+            headers=headers,
+        )
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=str(exc),
+    )
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -274,6 +312,136 @@ class SavedCustomerRecordReconciliationIngest(BaseModel):
         return value.upper() if value else value
 
 
+class SavedGenericRestReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="custom", max_length=64)
+    record_ref: str = Field(..., min_length=1, max_length=255)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+    @field_validator("record_ref")
+    @classmethod
+    def _normalise_record_ref(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("record_ref is required.")
+        return cleaned
+
+
+class PostgresReadConnectorIngest(BaseModel):
+    database_url: str = Field(..., min_length=1, max_length=4096)
+    query: str = Field(..., min_length=1, max_length=8000)
+    params: dict[str, str | int | float | bool | None] | None = None
+    timeout_seconds: float | None = Field(default=None, ge=0.1, le=30)
+
+    @field_validator("database_url", "query")
+    @classmethod
+    def _strip_required_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("value is required.")
+        return cleaned
+
+
+class PostgresReadReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="internal_record_verification", max_length=64)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+    connector: PostgresReadConnectorIngest
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
+class SavedPostgresReadReconciliationIngest(BaseModel):
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="internal_record_verification", max_length=64)
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, str | int | float | bool | None] | None = None
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
+_SAVED_RECONCILIATION_BRIDGE_CONNECTORS = {
+    "ledger_refund": LEDGER_REFUND_CONNECTOR_TYPE,
+    "ledger_refund_api": LEDGER_REFUND_CONNECTOR_TYPE,
+    "crm_record": CUSTOMER_RECORD_CONNECTOR_TYPE,
+    "customer_record": CUSTOMER_RECORD_CONNECTOR_TYPE,
+    "customer_record_api": CUSTOMER_RECORD_CONNECTOR_TYPE,
+    "generic_rest": GENERIC_REST_CONNECTOR_TYPE,
+    "generic_rest_api": GENERIC_REST_CONNECTOR_TYPE,
+    "postgres": POSTGRES_READ_CONNECTOR_TYPE,
+    "postgres_read": POSTGRES_READ_CONNECTOR_TYPE,
+}
+
+
+class SavedConnectorReconciliationIngest(BaseModel):
+    connector: str = Field(..., min_length=1, max_length=64)
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default=None, max_length=64)
+    refund_id: str | None = Field(None, max_length=255)
+    customer_id: str | None = Field(None, max_length=255)
+    record_ref: str | None = Field(None, max_length=255)
+    params: dict[str, str | int | float | bool | None] | None = None
+    system_ref: str | None = Field(None, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("connector")
+    @classmethod
+    def _normalise_connector(cls, value: str) -> str:
+        key = value.strip().lower().replace("-", "_")
+        connector = _SAVED_RECONCILIATION_BRIDGE_CONNECTORS.get(key)
+        if connector is None:
+            allowed = ", ".join(sorted(_SAVED_RECONCILIATION_BRIDGE_CONNECTORS))
+            raise ValueError(f"connector must be one of: {allowed}.")
+        return connector
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
 class OutcomeReconciliationView(BaseModel):
     id: str
     project_id: str
@@ -284,6 +452,7 @@ class OutcomeReconciliationView(BaseModel):
     connector_type: str
     system_ref: str | None
     verdict: str
+    verification_status: str
     reason: str | None
     amount_usd: float | None
     currency: str | None
@@ -307,6 +476,70 @@ class OutcomeReconciliationSummaryResponse(BaseModel):
     matched: int
     mismatched: int
     not_verified: int
+    verified: int
+    pending: int
+    unverifiable: int
+    cancelled: int
+
+
+class SourceMutationIngest(BaseModel):
+    source_system: str = Field(..., min_length=1, max_length=64)
+    mutation_id: str = Field(..., min_length=1, max_length=255)
+    action_type: str | None = Field(default=None, max_length=64)
+    resource_type: str | None = Field(default=None, max_length=64)
+    resource_id: str | None = Field(default=None, max_length=255)
+    system_ref: str | None = Field(default=None, max_length=255)
+    actor_type: str | None = Field(default=None, max_length=64)
+    actor_id: str | None = Field(default=None, max_length=255)
+    zroky_action_id: str | None = Field(default=None, max_length=36)
+    action_receipt_id: str | None = Field(default=None, max_length=36)
+    idempotency_key: str | None = Field(default=None, max_length=255)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    occurred_at: datetime | None = None
+
+    @field_validator("source_system", "mutation_id")
+    @classmethod
+    def _strip_required(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("value is required.")
+        return cleaned
+
+
+class SourceMutationView(BaseModel):
+    id: str
+    project_id: str
+    source_system: str
+    mutation_id: str
+    action_type: str | None
+    resource_type: str | None
+    resource_id: str | None
+    system_ref: str | None
+    actor_type: str | None
+    actor_id: str | None
+    zroky_action_id: str | None
+    action_receipt_id: str | None
+    idempotency_key: str | None
+    classification: str
+    metadata: dict[str, Any]
+    occurred_at: datetime
+    created_at: datetime
+
+
+class SourceMutationListResponse(BaseModel):
+    items: list[SourceMutationView]
+    total_in_page: int
+
+
+class SourceMutationSummaryResponse(BaseModel):
+    total: int
+    matched_receipt: int
+    authorized_external: int
+    legacy_path: int
+    unmanaged_agent_action: int
+    policy_bypass: int
+    unknown_actor: int
+    unreceipted: int
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -359,6 +592,10 @@ def _serialize_summary(s: OutcomeSummary) -> SummaryResponse:
 
 def _serialize_reconciliation(row) -> OutcomeReconciliationView:
     return OutcomeReconciliationView(**reconciliation_to_dict(row))
+
+
+def _serialize_source_mutation(row) -> SourceMutationView:
+    return SourceMutationView(**source_mutation_to_dict(row))
 
 
 def _optional_float(value: Any) -> float | None:
@@ -439,6 +676,26 @@ def _customer_record_match_fields(
     return fields or ["customer_id"]
 
 
+def _generic_rest_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["record_ref"]
+    fields = [field for field in claimed.keys() if field != "record_ref"]
+    return fields or ["record_ref"]
+
+
+def _postgres_read_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str] | None:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or None
+    fields = [field for field in claimed.keys() if field]
+    return fields or None
+
+
 def _ledger_refund_idempotency_key(
     body: LedgerRefundReconciliationIngest,
     *,
@@ -491,7 +748,64 @@ def _saved_customer_record_idempotency_key(
     return f"saved_customer_record:{scope}:{customer_id}"
 
 
+def _saved_generic_rest_idempotency_key(
+    body: SavedGenericRestReconciliationIngest,
+    *,
+    record_ref: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_generic_rest:{scope}:{record_ref}"
+
+
+def _postgres_read_idempotency_key(body: PostgresReadReconciliationIngest) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    query_material = json.dumps(
+        {
+            "query": body.connector.query.strip(),
+            "params": body.connector.params or {},
+        },
+        default=str,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(query_material.encode("utf-8")).hexdigest()[:16]
+    return f"postgres_read:{scope}:{digest}"
+
+
+def _saved_postgres_read_idempotency_key(
+    body: SavedPostgresReadReconciliationIngest,
+    *,
+    read_query: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    query_material = json.dumps(
+        {
+            "query": read_query.strip(),
+            "params": body.params or {},
+        },
+        default=str,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(query_material.encode("utf-8")).hexdigest()[:16]
+    return f"saved_postgres_read:{scope}:{digest}"
+
+
 def _map_saved_connector_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, (ProtectedActionQuotaExceeded, ProtectedActionMeteringUnavailable)):
+        return _map_protected_action_billing_error(exc)
     if isinstance(exc, VaultCipherUnavailable):
         return HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, EnvelopeFormatError):
@@ -500,6 +814,302 @@ def _map_saved_connector_error(exc: Exception) -> HTTPException:
             detail="Connector secret could not be decrypted.",
         )
     return HTTPException(status_code=422, detail=str(exc))
+
+
+def _bridge_record_ref(body: SavedConnectorReconciliationIngest) -> str:
+    record_ref = (
+        body.record_ref
+        or _claim_text(body.claimed, "record_ref")
+        or _claim_text(body.claimed, "id")
+        or _claim_text(body.claimed, "external_ref")
+        or ""
+    ).strip()
+    if not record_ref:
+        raise HTTPException(
+            status_code=422,
+            detail="record_ref is required for Generic REST saved reconciliation.",
+        )
+    return record_ref
+
+
+def _bridge_metadata(body: SavedConnectorReconciliationIngest) -> dict[str, Any]:
+    return {
+        **(body.metadata or {}),
+        "runtime_path": "webhook_bridge",
+        "bridge_connector": body.connector,
+    }
+
+
+def _create_saved_ledger_refund_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedLedgerRefundReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=LEDGER_REFUND_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Ledger refund connector is not configured.",
+        )
+
+    refund_id = _refund_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("refund_id", refund_id)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_ledger_refund_connector(
+            config,
+            refund_id=refund_id,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "refund",
+            system_ref=body.system_ref or f"ledger:{refund_id}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(claimed.get("amount_usd")),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_ledger_refund_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_ledger_refund_idempotency_key(
+                body, refund_id=refund_id
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "ledger_refund_api",
+                "connector_config_id": config.id,
+                "refund_id": refund_id,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_customer_record_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedCustomerRecordReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer record connector is not configured.",
+        )
+
+    customer_id = _customer_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("customer_id", customer_id)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_customer_record_connector(
+            config,
+            customer_id=customer_id,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "customer_record_update",
+            system_ref=body.system_ref or f"crm:{customer_id}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_customer_record_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_customer_record_idempotency_key(
+                body, customer_id=customer_id
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "customer_record_api",
+                "connector_config_id": config.id,
+                "customer_id": customer_id,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_generic_rest_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedGenericRestReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=GENERIC_REST_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Generic REST connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_generic_rest_connector(
+            config,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "custom",
+            system_ref=body.system_ref or f"generic:{record_ref}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_generic_rest_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_generic_rest_idempotency_key(
+                body, record_ref=record_ref
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": GENERIC_REST_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "record_ref": record_ref,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_postgres_read_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedPostgresReadReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=POSTGRES_READ_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="PostgreSQL read connector is not configured.",
+        )
+    if not config.read_query:
+        raise HTTPException(
+            status_code=422,
+            detail="PostgreSQL read connector query is not configured.",
+        )
+
+    settings = get_settings()
+    try:
+        database_url = decrypt_connector_database_url(config, project_id=tenant_id)
+        if not database_url:
+            raise ValueError("PostgreSQL database URL is not configured.")
+        connector = build_postgres_read_connector(
+            config,
+            database_url=database_url,
+            params=body.params,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=body.claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "internal_record_verification",
+            system_ref=body.system_ref or "postgres:source-record",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_postgres_read_match_fields(body.claimed, body.match_fields),
+            idempotency_key=_saved_postgres_read_idempotency_key(
+                body,
+                read_query=config.read_query,
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": POSTGRES_READ_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -553,26 +1163,81 @@ def create_reconciliation(
     tenant_id: str = Depends(require_tenant_id),
 ) -> OutcomeReconciliationView:
     """Reconcile an agent's claimed outcome against system-of-record evidence."""
-    row = reconcile_outcome(
-        db,
-        project_id=tenant_id,
-        claimed=body.claimed,
-        connector=ApiRecordConnector(
-            record=body.actual,
-            record_found=body.actual_record_found,
-            connector_type=body.connector_type,
-        ),
-        call_id=body.call_id,
-        trace_id=body.trace_id,
-        runtime_policy_decision_id=body.runtime_policy_decision_id,
-        action_type=body.action_type,
-        system_ref=body.system_ref,
-        amount_usd=body.amount_usd,
-        currency=body.currency,
-        match_fields=body.match_fields,
-        idempotency_key=body.idempotency_key,
-        metadata=body.metadata,
+    try:
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=body.claimed,
+            connector=ApiRecordConnector(
+                record=body.actual,
+                record_found=body.actual_record_found,
+                connector_type=body.connector_type,
+            ),
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type,
+            system_ref=body.system_ref,
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=body.match_fields,
+            idempotency_key=body.idempotency_key,
+            metadata=body.metadata,
+        )
+    except (ProtectedActionQuotaExceeded, ProtectedActionMeteringUnavailable) as exc:
+        raise _map_protected_action_billing_error(exc) from exc
+    return _serialize_reconciliation(row)
+
+
+@router.post(
+    "/reconciliation/postgres-read",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("30/minute")
+def create_postgres_read_reconciliation(
+    request: Request,
+    body: PostgresReadReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Verify a claimed state against one read-only PostgreSQL source row."""
+    settings = get_settings()
+    timeout = body.connector.timeout_seconds or settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS
+    connector = PostgresReadOnlyConnector(
+        database_url=body.connector.database_url,
+        query=body.connector.query,
+        params=body.connector.params,
+        timeout_seconds=timeout,
+        allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
     )
+
+    try:
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=body.claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "internal_record_verification",
+            system_ref=body.system_ref or "postgres:source-record",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_postgres_read_match_fields(body.claimed, body.match_fields),
+            idempotency_key=_postgres_read_idempotency_key(body),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": "postgres_read",
+                "source": "postgres_read_verifier",
+            },
+        )
+    except ConnectorConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ProtectedActionQuotaExceeded, ProtectedActionMeteringUnavailable) as exc:
+        raise _map_protected_action_billing_error(exc) from exc
+
     return _serialize_reconciliation(row)
 
 
@@ -637,6 +1302,8 @@ def create_ledger_refund_reconciliation(
         )
     except ConnectorConfigError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ProtectedActionQuotaExceeded, ProtectedActionMeteringUnavailable) as exc:
+        raise _map_protected_action_billing_error(exc) from exc
 
     return _serialize_reconciliation(row)
 
@@ -654,67 +1321,11 @@ def create_saved_ledger_refund_reconciliation(
     tenant_id: str = Depends(require_tenant_id),
 ) -> OutcomeReconciliationView:
     """Use the saved ledger connector to verify a refund without resending its secret."""
-    config = get_connector_config(
-        db,
-        project_id=tenant_id,
-        connector_type=LEDGER_REFUND_CONNECTOR_TYPE,
+    return _create_saved_ledger_refund_reconciliation(
+        db=db,
+        tenant_id=tenant_id,
+        body=body,
     )
-    if config is None or not config.is_active:
-        raise HTTPException(
-            status_code=404,
-            detail="Ledger refund connector is not configured.",
-        )
-
-    refund_id = _refund_id(body)
-    claimed = dict(body.claimed)
-    claimed.setdefault("refund_id", refund_id)
-    settings = get_settings()
-
-    try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
-        connector = build_ledger_refund_connector(
-            config,
-            refund_id=refund_id,
-            bearer_token=bearer_token,
-            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
-            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
-            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
-        )
-        row = reconcile_outcome(
-            db,
-            project_id=tenant_id,
-            claimed=claimed,
-            connector=connector,
-            call_id=body.call_id,
-            trace_id=body.trace_id,
-            runtime_policy_decision_id=body.runtime_policy_decision_id,
-            action_type=body.action_type or "refund",
-            system_ref=body.system_ref or f"ledger:{refund_id}",
-            amount_usd=body.amount_usd
-            if body.amount_usd is not None
-            else _optional_float(claimed.get("amount_usd")),
-            currency=body.currency or _claim_text(claimed, "currency"),
-            match_fields=_ledger_refund_match_fields(claimed, body.match_fields),
-            idempotency_key=_saved_ledger_refund_idempotency_key(
-                body, refund_id=refund_id
-            ),
-            metadata={
-                **(body.metadata or {}),
-                "connector_kind": "ledger_refund_api",
-                "connector_config_id": config.id,
-                "refund_id": refund_id,
-                "source": "saved_connector_runtime",
-            },
-        )
-    except (
-        ConnectorConfigError,
-        EnvelopeFormatError,
-        VaultCipherUnavailable,
-        ValueError,
-    ) as exc:
-        raise _map_saved_connector_error(exc) from exc
-
-    return _serialize_reconciliation(row)
 
 
 @router.post(
@@ -778,6 +1389,8 @@ def create_customer_record_reconciliation(
         )
     except ConnectorConfigError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ProtectedActionQuotaExceeded, ProtectedActionMeteringUnavailable) as exc:
+        raise _map_protected_action_billing_error(exc) from exc
 
     return _serialize_reconciliation(row)
 
@@ -795,65 +1408,118 @@ def create_saved_customer_record_reconciliation(
     tenant_id: str = Depends(require_tenant_id),
 ) -> OutcomeReconciliationView:
     """Use the saved CRM connector to verify a customer record without resending its secret."""
-    config = get_connector_config(
-        db,
-        project_id=tenant_id,
-        connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE,
+    return _create_saved_customer_record_reconciliation(
+        db=db,
+        tenant_id=tenant_id,
+        body=body,
     )
-    if config is None or not config.is_active:
-        raise HTTPException(
-            status_code=404,
-            detail="Customer record connector is not configured.",
-        )
 
-    customer_id = _customer_id(body)
-    claimed = dict(body.claimed)
-    claimed.setdefault("customer_id", customer_id)
-    settings = get_settings()
 
-    try:
-        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
-        connector = build_customer_record_connector(
-            config,
-            customer_id=customer_id,
-            bearer_token=bearer_token,
-            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
-            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
-            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
-        )
-        row = reconcile_outcome(
-            db,
-            project_id=tenant_id,
-            claimed=claimed,
-            connector=connector,
-            call_id=body.call_id,
-            trace_id=body.trace_id,
-            runtime_policy_decision_id=body.runtime_policy_decision_id,
-            action_type=body.action_type or "customer_record_update",
-            system_ref=body.system_ref or f"crm:{customer_id}",
-            amount_usd=body.amount_usd,
-            currency=body.currency,
-            match_fields=_customer_record_match_fields(claimed, body.match_fields),
-            idempotency_key=_saved_customer_record_idempotency_key(
-                body, customer_id=customer_id
+@router.post(
+    "/reconciliation/generic-rest/saved",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_saved_generic_rest_reconciliation(
+    request: Request,
+    body: SavedGenericRestReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Use the saved Generic REST connector to verify a custom system record."""
+    return _create_saved_generic_rest_reconciliation(
+        db=db,
+        tenant_id=tenant_id,
+        body=body,
+    )
+
+
+@router.post(
+    "/reconciliation/postgres-read/saved",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_saved_postgres_read_reconciliation(
+    request: Request,
+    body: SavedPostgresReadReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Use the saved PostgreSQL connector to verify one source-of-record row."""
+    return _create_saved_postgres_read_reconciliation(
+        db=db,
+        tenant_id=tenant_id,
+        body=body,
+    )
+
+
+@router.post(
+    "/reconciliation/saved",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_saved_connector_reconciliation(
+    request: Request,
+    body: SavedConnectorReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Bridge webhook/HTTP agents into the saved connector verification runtime."""
+    common = {
+        "call_id": body.call_id,
+        "trace_id": body.trace_id,
+        "runtime_policy_decision_id": body.runtime_policy_decision_id,
+        "action_type": body.action_type,
+        "system_ref": body.system_ref,
+        "claimed": body.claimed,
+        "match_fields": body.match_fields,
+        "amount_usd": body.amount_usd,
+        "currency": body.currency,
+        "idempotency_key": body.idempotency_key,
+        "metadata": _bridge_metadata(body),
+    }
+
+    if body.connector == LEDGER_REFUND_CONNECTOR_TYPE:
+        return _create_saved_ledger_refund_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedLedgerRefundReconciliationIngest(
+                refund_id=body.refund_id,
+                **common,
             ),
-            metadata={
-                **(body.metadata or {}),
-                "connector_kind": "customer_record_api",
-                "connector_config_id": config.id,
-                "customer_id": customer_id,
-                "source": "saved_connector_runtime",
-            },
         )
-    except (
-        ConnectorConfigError,
-        EnvelopeFormatError,
-        VaultCipherUnavailable,
-        ValueError,
-    ) as exc:
-        raise _map_saved_connector_error(exc) from exc
+    if body.connector == CUSTOMER_RECORD_CONNECTOR_TYPE:
+        return _create_saved_customer_record_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedCustomerRecordReconciliationIngest(
+                customer_id=body.customer_id,
+                **common,
+            ),
+        )
+    if body.connector == GENERIC_REST_CONNECTOR_TYPE:
+        return _create_saved_generic_rest_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedGenericRestReconciliationIngest(
+                record_ref=_bridge_record_ref(body),
+                **common,
+            ),
+        )
+    if body.connector == POSTGRES_READ_CONNECTOR_TYPE:
+        return _create_saved_postgres_read_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedPostgresReadReconciliationIngest(
+                params=body.params,
+                **common,
+            ),
+        )
 
-    return _serialize_reconciliation(row)
+    raise HTTPException(status_code=422, detail="Unsupported saved connector.")
 
 
 @router.get("/reconciliation", response_model=OutcomeReconciliationListResponse)
@@ -896,6 +1562,10 @@ def get_reconciliation_kpis(
         matched=summary.matched,
         mismatched=summary.mismatched,
         not_verified=summary.not_verified,
+        verified=summary.verified,
+        pending=summary.pending,
+        unverifiable=summary.unverifiable,
+        cancelled=summary.cancelled,
     )
 
 
@@ -916,6 +1586,102 @@ def get_reconciliations_for_call(
         items=[_serialize_reconciliation(row) for row in rows],
         total_in_page=len(rows),
     )
+
+
+@router.post(
+    "/reconciliation/source-mutations",
+    response_model=SourceMutationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def ingest_source_mutation_record(
+    request: Request,
+    body: SourceMutationIngest,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> SourceMutationView:
+    try:
+        row = ingest_source_mutation(
+            db,
+            project_id=tenant_id,
+            source_system=body.source_system,
+            mutation_id=body.mutation_id,
+            action_type=body.action_type,
+            resource_type=body.resource_type,
+            resource_id=body.resource_id,
+            system_ref=body.system_ref,
+            actor_type=body.actor_type,
+            actor_id=body.actor_id,
+            zroky_action_id=body.zroky_action_id,
+            action_receipt_id=body.action_receipt_id,
+            idempotency_key=body.idempotency_key,
+            metadata=body.metadata,
+            occurred_at=body.occurred_at,
+        )
+    except (ProtectedActionQuotaExceeded, ProtectedActionMeteringUnavailable) as exc:
+        raise _map_protected_action_billing_error(exc) from exc
+    db.commit()
+    return _serialize_source_mutation(row)
+
+
+@router.get(
+    "/reconciliation/source-mutations",
+    response_model=SourceMutationListResponse,
+)
+@limiter.limit("60/minute")
+def list_source_mutation_records(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+    classification: str | None = Query(default=None, max_length=32),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> SourceMutationListResponse:
+    rows = list_source_mutations(
+        db,
+        project_id=tenant_id,
+        classification=classification,
+        limit=limit,
+    )
+    return SourceMutationListResponse(
+        items=[_serialize_source_mutation(row) for row in rows],
+        total_in_page=len(rows),
+    )
+
+
+@router.get(
+    "/reconciliation/source-mutations/unreceipted",
+    response_model=SourceMutationListResponse,
+)
+@limiter.limit("60/minute")
+def list_unreceipted_source_mutations(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> SourceMutationListResponse:
+    rows = list_source_mutations(
+        db,
+        project_id=tenant_id,
+        unreceipted_only=True,
+        limit=limit,
+    )
+    return SourceMutationListResponse(
+        items=[_serialize_source_mutation(row) for row in rows],
+        total_in_page=len(rows),
+    )
+
+
+@router.get(
+    "/reconciliation/source-mutations/summary",
+    response_model=SourceMutationSummaryResponse,
+)
+@limiter.limit("60/minute")
+def get_source_mutation_summary(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> SourceMutationSummaryResponse:
+    return SourceMutationSummaryResponse(**source_mutation_summary(db, project_id=tenant_id))
 
 
 @router.get("/reconciliation/{check_id}", response_model=OutcomeReconciliationView)

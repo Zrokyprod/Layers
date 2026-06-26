@@ -35,11 +35,11 @@ def _env_values(module: ModuleType, text: str) -> dict[str, list[object]]:
 def _valid_backend_env() -> str:
     return """
 APP_ENV=production
-DATABASE_URL=postgresql+psycopg://zroky:secret@db.zroky.ai:5432/zroky
-REDIS_URL=rediss://redis.zroky.ai:6379/0
-ALLOWED_ORIGINS=https://app.zroky.ai
-TRUSTED_HOSTS=api.zroky.ai
-FRONTEND_URL=https://app.zroky.ai
+DATABASE_URL=postgresql+psycopg://zroky:secret@db.zroky.com:5432/zroky
+REDIS_URL=rediss://redis.zroky.com:6379/0
+ALLOWED_ORIGINS=https://zroky.com
+TRUSTED_HOSTS=api.zroky.com
+FRONTEND_URL=https://zroky.com
 ALLOW_PROJECT_HEADER_CONTEXT=false
 REQUIRE_PROVISIONING_TOKEN=true
 ENABLE_READY_DB_CHECK=true
@@ -60,14 +60,14 @@ OPENROUTER_API_KEY=openrouter-platform-key
 SMTP_HOST=smtp.resend.com
 SMTP_USER=resend
 SMTP_PASSWORD=smtp-password-with-enough-length
-ALERTS_FROM_EMAIL=noreply@zroky.ai
+ALERTS_FROM_EMAIL=noreply@zroky.com
 GOOGLE_CLIENT_ID=google-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=google-client-secret-with-enough-length
-GOOGLE_OAUTH_REDIRECT_URL=https://app.zroky.ai/auth/google/callback
+GOOGLE_OAUTH_REDIRECT_URL=https://zroky.com/auth/google/callback
 GITHUB_CLIENT_ID=github-client-id
 GITHUB_CLIENT_SECRET=github-client-secret-with-enough-length
-GITHUB_OAUTH_REDIRECT_URL=https://app.zroky.ai/auth/github/callback
-GITHUB_CONNECT_OAUTH_REDIRECT_URL=https://app.zroky.ai/auth/github/connect/callback
+GITHUB_OAUTH_REDIRECT_URL=https://zroky.com/auth/github/callback
+GITHUB_CONNECT_OAUTH_REDIRECT_URL=https://zroky.com/auth/github/connect/callback
 GITHUB_PR_BOT_TOKEN=github-pr-bot-token-with-enough-length
 BILLING_ENABLED=true
 BILLING_PROVIDER=razorpay
@@ -75,9 +75,9 @@ RAZORPAY_KEY_ID=rzp_live_launchready
 RAZORPAY_KEY_SECRET=razorpay-secret-with-enough-length
 RAZORPAY_WEBHOOK_SECRET=razorpay-webhook-secret-with-enough-length
 RAZORPAY_DASHBOARD_URL=https://dashboard.razorpay.com/
-BILLING_CHECKOUT_SUCCESS_URL=https://app.zroky.ai/settings/billing?checkout=success
-BILLING_CHECKOUT_CANCEL_URL=https://app.zroky.ai/settings/billing?checkout=cancel
-BILLING_PORTAL_RETURN_URL=https://app.zroky.ai/settings/billing
+BILLING_CHECKOUT_SUCCESS_URL=https://zroky.com/settings/billing?checkout=success
+BILLING_CHECKOUT_CANCEL_URL=https://zroky.com/settings/billing?checkout=cancel
+BILLING_PORTAL_RETURN_URL=https://zroky.com/settings/billing
 """
 
 
@@ -148,8 +148,8 @@ def test_gateway_launch_env_requires_fail_closed_spool_config() -> None:
     values = _env_values(
         validator,
         """
-ZROKY_API_URL=https://api.zroky.ai
-ZROKY_INGEST_URL=https://api.zroky.ai/api/v1/ingest
+ZROKY_API_URL=https://api.zroky.com
+ZROKY_INGEST_URL=https://api.zroky.com/api/v1/ingest
 ZROKY_GATEWAY_API_KEY=zk_live_gateway_key
 ZROKY_GATEWAY_AUTH_TOKEN=gateway-auth-token
 ZROKY_ALLOWED_PROJECT_IDS=proj_launch
@@ -170,7 +170,7 @@ def test_replay_worker_launch_env_requires_signatures_but_not_global_provider_ke
     values = _env_values(
         validator,
         """
-CONTROL_PLANE_URL=https://api.zroky.ai
+CONTROL_PLANE_URL=https://api.zroky.com
 WORKER_TOKEN=worker-token-with-enough-length
 ARTIFACT_SIGNING_KEY=artifact-signing-key-with-enough-length
 ARTIFACT_SIGNATURE_REQUIRED=true
@@ -185,7 +185,7 @@ def test_replay_worker_launch_env_rejects_unsigned_artifacts() -> None:
     values = _env_values(
         validator,
         """
-CONTROL_PLANE_URL=https://api.zroky.ai
+CONTROL_PLANE_URL=https://api.zroky.com
 WORKER_TOKEN=worker-token-with-enough-length
 ARTIFACT_SIGNING_KEY=artifact-signing-key-with-enough-length
 ARTIFACT_SIGNATURE_REQUIRED=false

@@ -7,6 +7,7 @@ dashboard can surface silent-update alerts without authentication.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from html import escape
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -280,11 +281,14 @@ def get_history(
 # ── RSS / Atom feeds ──────────────────────────────────────────────────────────
 
 
+_DASHBOARD_PROVIDER_DRIFT_URL = "https://zroky.com/home?source=provider_drift"
+
+
 _RSS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title>Zroky Provider Drift Watch</title>
-    <link>https://zroky.com/drift</link>
+    <link>{dashboard_url}</link>
     <description>Silent-update alerts for major LLM providers.</description>
     <language>en-us</language>
     <lastBuildDate>{build_date}</lastBuildDate>
@@ -296,7 +300,7 @@ _RSS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 _ATOM_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Zroky Provider Drift Watch</title>
-  <link href="https://zroky.com/drift" />
+  <link href="{dashboard_url}" />
   <updated>{updated}</updated>
   <id>tag:zroky.com,2026:/drift</id>
 {entries}
@@ -312,8 +316,12 @@ def _iso8601(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _xml_url(url: str) -> str:
+    return escape(url, quote=True)
+
+
 def _rss_item(a: ProviderDriftAlert) -> str:
-    url = f"https://zroky.com/drift?alert={a.id}"
+    url = _xml_url(f"{_DASHBOARD_PROVIDER_DRIFT_URL}&provider_drift_alert_id={a.id}")
     return f"""    <item>
       <title>{a.headline}</title>
       <link>{url}</link>
@@ -325,7 +333,7 @@ def _rss_item(a: ProviderDriftAlert) -> str:
 
 
 def _atom_entry(a: ProviderDriftAlert) -> str:
-    url = f"https://zroky.com/drift?alert={a.id}"
+    url = _xml_url(f"{_DASHBOARD_PROVIDER_DRIFT_URL}&provider_drift_alert_id={a.id}")
     return f"""  <entry>
     <title>{a.headline}</title>
     <link href="{url}" />
@@ -350,7 +358,11 @@ def rss_feed(request: Request) -> Response:
 
         items = "\n".join(_rss_item(a) for a in alerts) if alerts else ""
         build_date = _rfc822(datetime.now(timezone.utc))
-        body = _RSS_TEMPLATE.format(build_date=build_date, items=items)
+        body = _RSS_TEMPLATE.format(
+            dashboard_url=_xml_url(_DASHBOARD_PROVIDER_DRIFT_URL),
+            build_date=build_date,
+            items=items,
+        )
         return Response(content=body, media_type="application/rss+xml")
     finally:
         db.close()
@@ -371,7 +383,11 @@ def atom_feed(request: Request) -> Response:
 
         entries = "\n".join(_atom_entry(a) for a in alerts) if alerts else ""
         updated = _iso8601(datetime.now(timezone.utc))
-        body = _ATOM_TEMPLATE.format(updated=updated, entries=entries)
+        body = _ATOM_TEMPLATE.format(
+            dashboard_url=_xml_url(_DASHBOARD_PROVIDER_DRIFT_URL),
+            updated=updated,
+            entries=entries,
+        )
         return Response(content=body, media_type="application/atom+xml")
     finally:
         db.close()

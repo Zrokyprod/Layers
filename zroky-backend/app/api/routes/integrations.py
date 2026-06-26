@@ -17,7 +17,8 @@ from app.db.models import TenantSlackInstall
 from app.db.session import get_db_session, get_db_session_read
 from app.services.dashboard_config import ensure_project_exists, get_or_create_dashboard_config, set_notification_settings, get_notification_settings
 from app.services.security import generate_oauth_state_with_payload, verify_oauth_state_with_payload
-from app.services.slack_integration import build_slack_status, encrypt_slack_token, encrypt_slack_webhook_url, ensure_slack_token_encryption_ready, get_slack_install, send_slack_message
+from app.services.slack_integration import build_slack_status, encrypt_slack_token, encrypt_slack_webhook_url, ensure_slack_token_encryption_ready, get_slack_install, send_slack_message, slack_approval_user_ids
+from app.services.slack_approvals import SLACK_APPROVAL_ACTION_IDS, resolve_slack_approval_action
 from app.services.slack_judgment import (
     answer_and_post_slack_question,
     answer_slack_action,
@@ -230,6 +231,8 @@ async def complete_slack_install(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Slack OAuth response missing access token.")
     bot_user_id_raw = payload.get("bot_user_id")
     bot_user_id = str(bot_user_id_raw).strip() if isinstance(bot_user_id_raw, str) and bot_user_id_raw.strip() else None
+    authed_user = payload.get("authed_user") if isinstance(payload.get("authed_user"), dict) else {}
+    authed_user_id = str(authed_user.get("id") or "").strip() or None
     scope_raw = payload.get("scope")
     scope = str(scope_raw).strip() if isinstance(scope_raw, str) and scope_raw.strip() else settings.SLACK_OAUTH_SCOPES
     now = datetime.now(timezone.utc)
@@ -245,6 +248,10 @@ async def complete_slack_install(
     install.bot_user_id = bot_user_id
     install.scope = scope
     install.installed_by_user = str(state_payload.get("subject") or "").strip() or None
+    existing_approval_users = slack_approval_user_ids(install)
+    if authed_user_id and authed_user_id not in existing_approval_users:
+        existing_approval_users.append(authed_user_id)
+    install.approval_user_ids_json = json.dumps(existing_approval_users, separators=(",", ":"))
     install.updated_at = now
     db.add(install)
     config = get_or_create_dashboard_config(db, tenant_id)
@@ -371,6 +378,18 @@ async def handle_slack_actions(
         )
     action = actions[0] if isinstance(actions[0], dict) else {}
     action_id = str(action.get("action_id") or "").strip()
+    if action_id in SLACK_APPROVAL_ACTION_IDS:
+        user = payload.get("user") if isinstance(payload.get("user"), dict) else {}
+        return resolve_slack_approval_action(
+            db,
+            project_id=resolution.install.tenant_id,
+            action_id=action_id,
+            value=str(action.get("value") or ""),
+            slack_user_id=str(user.get("id") or "").strip() or None,
+            slack_user_name=str(user.get("username") or user.get("name") or "").strip() or None,
+            allowed_slack_user_ids=slack_approval_user_ids(resolution.install),
+        )
+
     if action_id not in {"judgment_investigate", "judgment_root_cause", "judgment_similar"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

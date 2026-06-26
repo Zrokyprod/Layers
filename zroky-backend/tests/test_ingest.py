@@ -909,4 +909,6 @@ def test_sustained_ingest_breach_enables_backpressure_alert(
     alerts = client.get("/v1/alerts", headers=headers)
     assert alerts.status_code == 200
     items = alerts.json()["items"]
-    assert any(item["category"] == "INGEST_BACKPRESSURE" for item in items)
+    backpressure = next(item for item in items if item["category"] == "INGEST_BACKPRESSURE")
+    assert backpressure["slack_delivery_status"] == "not_connected"
+    assert backpressure["slack_delivery_attempted_at"] is not None

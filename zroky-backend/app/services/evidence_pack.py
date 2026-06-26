@@ -71,6 +71,9 @@ def _decision_to_evidence(row: RuntimePolicyDecision) -> dict[str, Any]:
         "resolution_reason": row.resolution_reason,
         "consumed_at": _iso(row.consumed_at),
         "consumed_by_decision_id": row.consumed_by_decision_id,
+        "required_approval_count": row.required_approval_count,
+        "approval_count": row.approval_count,
+        "approver_subjects": _json_loads(row.approver_subjects_json, []),
     }
 
 

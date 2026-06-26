@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.models import EventCount, ProjectAlert
+from app.services.alerts import auto_send_pending_alerts_to_slack, reset_slack_delivery_for_new_occurrence
 
 logger = logging.getLogger(__name__)
 
@@ -99,14 +100,27 @@ def record_metering_failure(
                 evidence_json=json.dumps(evidence, separators=(",", ":"), sort_keys=True),
             )
         else:
+            was_resolved = row.status == "RESOLVED"
             row.status = "OPEN"
             row.resolved_at = None
             row.updated_at = now
             row.source = source
             row.title = title
             row.evidence_json = json.dumps(evidence, separators=(",", ":"), sort_keys=True)
+            if was_resolved:
+                reset_slack_delivery_for_new_occurrence(row)
         db.add(row)
         db.commit()
+        try:
+            auto_send_pending_alerts_to_slack(
+                db,
+                tenant_id=tenant_id,
+                diagnosis_id=METERING_ALERT_DIAGNOSIS_ID,
+                categories=[METERING_ALERT_CATEGORY],
+                agent_name="billing_metering",
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("billing_metering.slack_delivery_failed tenant=%s", tenant_id)
     except Exception:
         try:
             db.rollback()

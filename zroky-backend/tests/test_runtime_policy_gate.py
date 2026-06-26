@@ -63,9 +63,10 @@ def client(tmp_path: Path):
     engine.dispose()
 
 
-def _set_tenant(client: TestClient, *, tenant_id: str, role: str = "admin") -> None:
+def _set_tenant(client: TestClient, *, tenant_id: str, role: str = "admin", subject: str = "user-runtime") -> None:
     client._tenant_state["tenant_id"] = tenant_id  # type: ignore[attr-defined]
     client._tenant_state["role"] = role  # type: ignore[attr-defined]
+    client._tenant_state["subject"] = subject  # type: ignore[attr-defined]
 
 
 def _set_policy(client: TestClient, tenant_id: str, **overrides) -> None:
@@ -231,6 +232,175 @@ def test_kill_switch_blocks_every_runtime_action(client: TestClient) -> None:
     assert response.json()["allowed"] is False
     assert response.json()["status"] == "blocked"
     assert "project kill switch is enabled" in response.json()["reasons"]
+
+
+def test_refund_amount_threshold_requires_approval_then_allows_after_bound_approval(client: TestClient) -> None:
+    pending = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-refund-threshold",
+            "agent_name": "refund-agent",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "tool_args": {"order_id": "ord_threshold", "amount_minor": 75000, "currency": "USD"},
+            "external_action": True,
+            "business_impact": {"summary": "Refund customer", "estimated_value_usd": 750.0},
+        },
+    )
+    assert pending.status_code == 200
+    body = pending.json()
+    assert body["status"] == "pending_approval"
+    assert body["requires_approval"] is True
+    assert "exceeds approval threshold" in " ".join(body["reasons"])
+    assert body["policy_hit"]["first_launch_rules"]["amount_usd"] == 750.0
+
+    approved = client.post(
+        f"/v1/runtime-policy/approvals/{body['id']}/approve",
+        json={"reason": "Refund amount reviewed."},
+    )
+    assert approved.status_code == 200
+
+    allowed = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-refund-threshold",
+            "agent_name": "refund-agent",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "tool_args": {"order_id": "ord_threshold", "amount_minor": 75000, "currency": "USD"},
+            "external_action": True,
+            "approval_id": body["id"],
+            "business_impact": {"summary": "Refund customer", "estimated_value_usd": 750.0},
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "allowed"
+    assert allowed.json()["allowed"] is True
+
+
+def test_high_value_refund_requires_two_distinct_approvals_before_allow(client: TestClient) -> None:
+    response = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-refund-dual",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "tool_args": {"order_id": "ord_dual", "amount_minor": 600000, "currency": "USD"},
+            "external_action": True,
+            "business_impact": {"summary": "High-value refund", "estimated_value_usd": 6000.0},
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "pending_approval"
+    assert body["allowed"] is False
+    assert body["requires_approval"] is True
+    assert body["required_approval_count"] == 2
+    assert body["approval_count"] == 0
+    assert "dual-approval threshold" in " ".join(body["reasons"])
+
+    first = client.post(
+        f"/v1/runtime-policy/approvals/{body['id']}/approve",
+        json={"reason": "Support manager reviewed refund evidence."},
+    )
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert first_body["status"] == "pending_approval"
+    assert first_body["allowed"] is False
+    assert first_body["requires_approval"] is True
+    assert first_body["approval_count"] == 1
+    assert first_body["required_approval_count"] == 2
+    assert first_body["approver_subjects"] == ["user-runtime"]
+    assert [event["event_type"] for event in first_body["audit_log"]] == [
+        "approval_requested",
+        "approval_recorded",
+    ]
+
+    duplicate = client.post(
+        f"/v1/runtime-policy/approvals/{body['id']}/approve",
+        json={"reason": "Same manager tries to approve twice."},
+    )
+    assert duplicate.status_code == 409
+    assert "distinct approver" in duplicate.json()["detail"]
+
+    _set_tenant(client, tenant_id="proj_runtime_a", subject="finance-lead")
+    second = client.post(
+        f"/v1/runtime-policy/approvals/{body['id']}/approve",
+        json={"reason": "Finance lead independently approved high-value refund."},
+    )
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert second_body["status"] == "approved"
+    assert second_body["allowed"] is True
+    assert second_body["requires_approval"] is False
+    assert second_body["approval_count"] == 2
+    assert second_body["required_approval_count"] == 2
+    assert second_body["approver_subjects"] == ["user-runtime", "finance-lead"]
+    assert second_body["resolved_by"] == "finance-lead"
+    assert [event["event_type"] for event in second_body["audit_log"]] == [
+        "approval_requested",
+        "approval_recorded",
+        "approved",
+    ]
+
+    allowed = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-refund-dual",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "tool_args": {"order_id": "ord_dual", "amount_minor": 600000, "currency": "USD"},
+            "external_action": True,
+            "approval_id": body["id"],
+            "business_impact": {"summary": "High-value refund", "estimated_value_usd": 6000.0},
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "allowed"
+    assert allowed.json()["allowed"] is True
+    assert allowed.json()["reasons"] == [f"human approval {body['id']} accepted"]
+
+
+def test_production_deploy_requires_approval(client: TestClient) -> None:
+    response = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-prod-deploy",
+            "agent_name": "release-agent",
+            "action_type": "deploy_change",
+            "operation_kind": "DEPLOY",
+            "tool_name": "deploy_service",
+            "environment": "production",
+            "tool_args": {"service": "api", "version": "2026.06.26"},
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "pending_approval"
+    assert body["requires_approval"] is True
+    assert body["reasons"] == ["production deploy requires human approval before execution"]
+
+
+def test_changed_recipient_is_denied(client: TestClient) -> None:
+    response = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-recipient-change",
+            "action_type": "customer_message",
+            "tool_name": "send_email",
+            "tool_args": {
+                "previous_recipient": "alice@example.com",
+                "new_recipient": "mallory@example.com",
+                "subject": "Account update",
+            },
+            "external_action": True,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert body["allowed"] is False
+    assert "recipient changed" in " ".join(body["reasons"])
 
 
 def test_limits_and_allowed_tools_block_before_execution(client: TestClient) -> None:

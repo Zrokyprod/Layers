@@ -73,6 +73,13 @@ EXPECTED_LIMITS = {
 
 LEGACY_COMPATIBILITY_KEYS = {
     "events.monthly_quota",
+    "actions.protected.monthly_quota",
+    "actions.policy_checks.monthly_quota",
+    "actions.runner_executions.monthly_quota",
+    "actions.receipts.monthly_quota",
+    "actions.verifications.monthly_quota",
+    "actions.source_mutations.monthly_quota",
+    "connectors.system_of_record.max",
     "retention.days",
     "goldens.max_sets",
     "replay.monthly_runs",

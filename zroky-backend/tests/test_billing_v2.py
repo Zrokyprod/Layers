@@ -24,6 +24,7 @@ from app.db.models import (
     ProjectAlert,
     ReplayRun,
     Subscription,
+    SystemOfRecordConnectorConfig,
 )
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
@@ -48,6 +49,16 @@ from app.services.entitlement_catalog import (
     CANONICAL_PLAN_CODES,
     PLAN_ALIASES,
     load_pricing_contract,
+)
+from app.services.protected_action_billing import (
+    METER_ACTION_RECEIPTS,
+    METER_POLICY_CHECKS,
+    METER_PROTECTED_ACTIONS,
+    METER_RUNNER_EXECUTIONS,
+    METER_SOURCE_MUTATIONS,
+    METER_VERIFICATION_CHECKS,
+    current_usage_count,
+    increment_usage_meter,
 )
 from app.services.razorpay_reconciliation import reconcile_pending_razorpay_orders
 
@@ -537,6 +548,8 @@ class TestBillingQuota:
             ).scalar_one()
             assert alert.status == "OPEN"
             assert alert.source == "billing_quota"
+            assert alert.slack_delivery_status == "not_connected"
+            assert alert.slack_delivery_attempted_at is not None
 
     def test_event_counter_increment_is_portable_and_accumulates_once(
         self, client: TestClient
@@ -567,7 +580,12 @@ class TestBillingQuota:
                 seats=3,
             )
             golden_set = GoldenSet(project_id="org-alpha", name="Launch goldens")
-            session.add_all([sub, golden_set])
+            connector = SystemOfRecordConnectorConfig(
+                project_id="org-alpha",
+                connector_type="ledger_refund_api",
+                base_url="https://ledger.test",
+            )
+            session.add_all([sub, golden_set, connector])
             session.flush()
             session.add_all(
                 [
@@ -594,6 +612,13 @@ class TestBillingQuota:
             session.commit()
             entitlements_resolver.invalidate("org-alpha")
             assert increment_event_count(session, "org-alpha", amount=42) is True
+            assert increment_usage_meter(session, "org-alpha", METER_PROTECTED_ACTIONS, amount=7) is True
+            assert increment_usage_meter(session, "org-alpha", METER_POLICY_CHECKS, amount=11) is True
+            assert increment_usage_meter(session, "org-alpha", METER_RUNNER_EXECUTIONS, amount=5) is True
+            assert increment_usage_meter(session, "org-alpha", METER_ACTION_RECEIPTS, amount=4) is True
+            assert increment_usage_meter(session, "org-alpha", METER_VERIFICATION_CHECKS, amount=9) is True
+            assert increment_usage_meter(session, "org-alpha", METER_SOURCE_MUTATIONS, amount=13) is True
+            session.commit()
 
         response = client.get("/v1/billing/usage")
         assert response.status_code == 200
@@ -608,7 +633,35 @@ class TestBillingQuota:
         assert body["goldens"]["limit"] == 2_500
         assert body["golden_sets"]["used"] == 1
         assert body["golden_sets"]["limit"] == 25
+        assert body["protected_actions"]["used"] == 7
+        assert body["protected_actions"]["limit"] == 25_000
+        assert body["policy_checks"]["used"] == 11
+        assert body["policy_checks"]["limit"] == 100_000
+        assert body["runner_executions"]["used"] == 5
+        assert body["runner_executions"]["limit"] == 25_000
+        assert body["action_receipts"]["used"] == 4
+        assert body["action_receipts"]["limit"] == 25_000
+        assert body["verification_checks"]["used"] == 9
+        assert body["verification_checks"]["limit"] == 50_000
+        assert body["source_mutations"]["used"] == 13
+        assert body["source_mutations"]["limit"] == 100_000
+        assert body["active_connectors"]["used"] == 1
+        assert body["active_connectors"]["limit"] == 10
         assert body["metering_health"]["state"] == "ok"
+
+    def test_named_usage_meter_increment_is_portable_and_accumulates_once(
+        self, client: TestClient
+    ) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            assert increment_usage_meter(session, "org-alpha", METER_PROTECTED_ACTIONS, amount=2) is True
+            assert increment_usage_meter(session, "org-alpha", METER_PROTECTED_ACTIONS, amount=3) is True
+            session.commit()
+
+            assert (
+                current_usage_count(session, "org-alpha", METER_PROTECTED_ACTIONS)
+                == 5
+            )
 
 
 class TestWebhookRoute:

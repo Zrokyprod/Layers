@@ -10,9 +10,12 @@ import logging
 from typing import Any
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models import ProjectAlert
 from app.services.slack_integration import decrypt_slack_webhook_url, get_slack_install
+from app.services.slack_approvals import build_runtime_policy_approval_slack_payload
 from app.services.slack_judgment import (
     build_ci_gate_failed_alert_payload,
     build_judgment_alert_payload,
@@ -66,6 +69,52 @@ def _post_sync(url: str, payload: dict[str, Any]) -> bool:
     except Exception as exc:  # noqa: BLE001
         logger.error("notification_dispatch: POST failed for %s: %s", url[:60], exc)
         return False
+
+
+def _alert_context_for_slack(
+    db: Session,
+    *,
+    tenant_id: str,
+    diagnosis_id: str | None,
+    categories: list[str],
+) -> dict[str, str]:
+    diagnosis = (diagnosis_id or "").strip()
+    normalized_categories = sorted({category.strip().upper() for category in categories if category.strip()})
+    if not diagnosis or not normalized_categories:
+        return {}
+    try:
+        rows = db.execute(
+            select(ProjectAlert).where(
+                ProjectAlert.tenant_id == tenant_id,
+                ProjectAlert.diagnosis_id == diagnosis,
+                ProjectAlert.category.in_(normalized_categories),
+            )
+        ).scalars().all()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "notification_dispatch: alert context lookup failed tenant=%s diagnosis=%s: %s",
+            tenant_id,
+            diagnosis,
+            exc,
+        )
+        return {}
+    rows = list(rows)
+    if not rows:
+        return {}
+    severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    selected = sorted(
+        rows,
+        key=lambda row: (
+            severity_rank.get(str(row.severity or "").lower(), 99),
+            row.created_at,
+            row.id,
+        ),
+    )[0]
+    return {
+        "alert_id": str(selected.id),
+        "alert_title": str(selected.title or "").strip(),
+        "severity": str(selected.severity or "").strip(),
+    }
 
 
 def dispatch_slack_payload_to_tenant_channel(
@@ -223,6 +272,20 @@ def dispatch_ci_gate_failed_slack_alert(
     )
 
 
+def dispatch_runtime_policy_approval_slack_request(
+    db: Session,
+    *,
+    tenant_id: str,
+    decision: Any,
+) -> bool:
+    return dispatch_slack_payload_to_tenant_channel(
+        db,
+        tenant_id,
+        build_runtime_policy_approval_slack_payload(decision),
+        event_name="runtime_policy_approval",
+    )
+
+
 def _optional_str(value: Any) -> str | None:
     if value is None:
         return None
@@ -266,6 +329,12 @@ def dispatch_alert_to_tenant_channels(
     if not categories:
         return {"slack": False}
 
+    alert_context = _alert_context_for_slack(
+        db,
+        tenant_id=tenant_id,
+        diagnosis_id=diagnosis_id,
+        categories=categories,
+    )
     msg = _build_message(categories, agent_name, diagnosis_id)
     result: dict[str, bool] = {"slack": False}
 
@@ -282,6 +351,9 @@ def dispatch_alert_to_tenant_channels(
                         categories=categories,
                         agent_name=agent_name,
                         diagnosis_id=diagnosis_id,
+                        severity=alert_context.get("severity"),
+                        alert_id=alert_context.get("alert_id"),
+                        alert_title=alert_context.get("alert_title"),
                     ),
                 )
                 if result["slack"]:

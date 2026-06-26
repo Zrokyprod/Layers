@@ -19,21 +19,33 @@ from app.services.outcome_reconciliation import (
     reconcile_outcome,
     reconciliation_to_dict,
 )
+from app.services.protected_action_billing import (
+    ProtectedActionMeteringUnavailable,
+    ProtectedActionQuotaExceeded,
+    quota_error_detail,
+)
 from app.services.system_of_record_connector_config import (
     CUSTOMER_RECORD_CONNECTOR_TYPE,
+    GENERIC_REST_CONNECTOR_TYPE,
     LEDGER_REFUND_CONNECTOR_TYPE,
+    POSTGRES_READ_CONNECTOR_TYPE,
     EnvelopeFormatError,
     InvalidSystemOfRecordConnectorError,
     VaultCipherUnavailable,
     build_customer_record_connector,
+    build_generic_rest_connector,
     build_ledger_refund_connector,
+    build_postgres_read_connector,
     decrypt_connector_bearer_token,
+    decrypt_connector_database_url,
     get_connector_config,
     get_connector_health_snapshot,
     mark_connector_tested,
     serialize_connector_config,
     upsert_customer_record_connector_config,
+    upsert_generic_rest_connector_config,
     upsert_ledger_refund_connector_config,
+    upsert_postgres_read_connector_config,
 )
 
 router = APIRouter(prefix="/v1/integrations/system-of-record")
@@ -177,6 +189,152 @@ class CustomerRecordConnectorTestResponse(BaseModel):
     connector: CustomerRecordConnectorStatusResponse
 
 
+class GenericRestConnectorStatusResponse(BaseModel):
+    connected: bool
+    connector_type: str
+    base_url: str | None = None
+    path_template: str | None = None
+    record_path: str | None = None
+    query: dict[str, Any] | None = None
+    has_bearer_token: bool
+    bearer_token_last4: str | None = None
+    last_tested_at: Any | None = None
+    health_status: str = "not_configured"
+    last_verdict: str | None = None
+    last_error: str | None = None
+    last_error_code: str | None = None
+    last_http_status: int | None = None
+    last_attempts: int | None = None
+    last_retryable: bool | None = None
+    last_checked_at: Any | None = None
+    readiness: dict[str, Any] = Field(default_factory=dict)
+    created_at: Any | None = None
+    updated_at: Any | None = None
+
+
+class GenericRestConnectorConfigRequest(BaseModel):
+    base_url: str = Field(..., max_length=2048)
+    path_template: str = Field(default="/records/{record_ref}", max_length=512)
+    record_path: str | None = Field(default=None, max_length=255)
+    query: dict[str, str | int | float | bool] | None = None
+    bearer_token: str | None = Field(default=None, max_length=4096)
+    clear_bearer_token: bool = False
+
+    @field_validator("bearer_token")
+    @classmethod
+    def _normalize_token(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if len(cleaned) < 8:
+            raise ValueError("bearer_token must be at least 8 characters")
+        return cleaned
+
+
+class GenericRestConnectorTestRequest(BaseModel):
+    record_ref: str = Field(..., min_length=1, max_length=255)
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="custom", max_length=64)
+    system_ref: str | None = Field(default=None, max_length=255)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
+class GenericRestConnectorTestResponse(BaseModel):
+    ok: bool
+    check: dict[str, Any]
+    connector: GenericRestConnectorStatusResponse
+
+
+class PostgresReadConnectorStatusResponse(BaseModel):
+    connected: bool
+    connector_type: str
+    base_url: str | None = None
+    path_template: str | None = None
+    record_path: str | None = None
+    query: dict[str, Any] | None = None
+    has_database_url: bool = False
+    database_url_last4: str | None = None
+    has_read_query: bool = False
+    read_query_digest: str | None = None
+    has_bearer_token: bool = False
+    bearer_token_last4: str | None = None
+    last_tested_at: Any | None = None
+    health_status: str = "not_configured"
+    last_verdict: str | None = None
+    last_error: str | None = None
+    last_error_code: str | None = None
+    last_http_status: int | None = None
+    last_attempts: int | None = None
+    last_retryable: bool | None = None
+    last_checked_at: Any | None = None
+    readiness: dict[str, Any] = Field(default_factory=dict)
+    created_at: Any | None = None
+    updated_at: Any | None = None
+
+
+class PostgresReadConnectorConfigRequest(BaseModel):
+    database_url: str | None = Field(default=None, max_length=4096)
+    read_query: str = Field(..., min_length=1, max_length=8000)
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        return cleaned
+
+    @field_validator("read_query")
+    @classmethod
+    def _normalize_read_query(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("read_query is required.")
+        return cleaned
+
+
+class PostgresReadConnectorTestRequest(BaseModel):
+    claimed: dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, str | int | float | bool | None] | None = None
+    call_id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=128)
+    runtime_policy_decision_id: str | None = Field(None, max_length=36)
+    action_type: str | None = Field(default="internal_record_verification", max_length=64)
+    system_ref: str | None = Field(default=None, max_length=255)
+    match_fields: list[str] | None = None
+    amount_usd: float | None = Field(None, ge=0)
+    currency: str | None = Field(None, min_length=3, max_length=3)
+    idempotency_key: str | None = Field(None, max_length=255)
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _normalise_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value else value
+
+
+class PostgresReadConnectorTestResponse(BaseModel):
+    ok: bool
+    check: dict[str, Any]
+    connector: PostgresReadConnectorStatusResponse
+
+
 def _ledger_status_response(
     row,
     *,
@@ -216,6 +374,50 @@ def _customer_status_response(
         **serialize_connector_config(
             row,
             connector_type=CUSTOMER_RECORD_CONNECTOR_TYPE,
+            health=health,
+        )
+    )
+
+
+def _generic_status_response(
+    row,
+    *,
+    db: Session | None = None,
+    project_id: str | None = None,
+) -> GenericRestConnectorStatusResponse:
+    health = (
+        get_connector_health_snapshot(
+            db, project_id=project_id, connector_type=GENERIC_REST_CONNECTOR_TYPE
+        )
+        if row is not None and db is not None and project_id
+        else None
+    )
+    return GenericRestConnectorStatusResponse(
+        **serialize_connector_config(
+            row,
+            connector_type=GENERIC_REST_CONNECTOR_TYPE,
+            health=health,
+        )
+    )
+
+
+def _postgres_status_response(
+    row,
+    *,
+    db: Session | None = None,
+    project_id: str | None = None,
+) -> PostgresReadConnectorStatusResponse:
+    health = (
+        get_connector_health_snapshot(
+            db, project_id=project_id, connector_type=POSTGRES_READ_CONNECTOR_TYPE
+        )
+        if row is not None and db is not None and project_id
+        else None
+    )
+    return PostgresReadConnectorStatusResponse(
+        **serialize_connector_config(
+            row,
+            connector_type=POSTGRES_READ_CONNECTOR_TYPE,
             health=health,
         )
     )
@@ -263,7 +465,40 @@ def _customer_match_fields(
     return fields or ["customer_id"]
 
 
+def _generic_match_fields(claimed: dict[str, Any], explicit: list[str] | None) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["record_ref"]
+    fields = [field for field in claimed.keys() if field != "record_ref"]
+    return fields or ["record_ref"]
+
+
+def _postgres_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str] | None:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or None
+    fields = [field for field in claimed.keys() if field]
+    return fields or None
+
+
 def _map_config_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, ProtectedActionQuotaExceeded):
+        detail = quota_error_detail(exc)
+        headers = {}
+        if detail.get("current_plan"):
+            headers["X-Zroky-Plan-Hint"] = str(detail["current_plan"])
+        return HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=detail,
+            headers=headers,
+        )
+    if isinstance(exc, ProtectedActionMeteringUnavailable):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
     if isinstance(exc, VaultCipherUnavailable):
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -325,7 +560,12 @@ def save_ledger_refund_connector_config(
             updated_by_subject=context.subject,
             allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
         )
-    except (InvalidSystemOfRecordConnectorError, VaultCipherUnavailable) as exc:
+    except (
+        InvalidSystemOfRecordConnectorError,
+        ProtectedActionMeteringUnavailable,
+        ProtectedActionQuotaExceeded,
+        VaultCipherUnavailable,
+    ) as exc:
         raise _map_config_error(exc) from exc
     return _ledger_status_response(row, db=db, project_id=context.tenant_id)
 
@@ -452,7 +692,12 @@ def save_customer_record_connector_config(
             updated_by_subject=context.subject,
             allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
         )
-    except (InvalidSystemOfRecordConnectorError, VaultCipherUnavailable) as exc:
+    except (
+        InvalidSystemOfRecordConnectorError,
+        ProtectedActionMeteringUnavailable,
+        ProtectedActionQuotaExceeded,
+        VaultCipherUnavailable,
+    ) as exc:
         raise _map_config_error(exc) from exc
     return _customer_status_response(row, db=db, project_id=context.tenant_id)
 
@@ -527,6 +772,263 @@ def test_customer_record_connector(
         ok=row.verdict == "matched",
         check=reconciliation_to_dict(row),
         connector=_customer_status_response(
+            updated_config, db=db, project_id=tenant_id
+        ),
+    )
+
+
+@router.get(
+    "/generic-rest/status",
+    response_model=GenericRestConnectorStatusResponse,
+)
+@limiter.limit("60/minute")
+def get_generic_rest_connector_status(
+    request: Request,
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session_read),
+) -> GenericRestConnectorStatusResponse:
+    row = get_connector_config(
+        db, project_id=tenant_id, connector_type=GENERIC_REST_CONNECTOR_TYPE
+    )
+    return _generic_status_response(row, db=db, project_id=tenant_id)
+
+
+@router.put(
+    "/generic-rest/config",
+    response_model=GenericRestConnectorStatusResponse,
+)
+@limiter.limit("12/minute")
+def save_generic_rest_connector_config(
+    request: Request,
+    body: GenericRestConnectorConfigRequest = Body(...),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> GenericRestConnectorStatusResponse:
+    if context.role not in {"admin", "owner"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant admin role is required.",
+        )
+    ensure_project_exists(db, context.tenant_id)
+    settings = get_settings()
+    try:
+        row = upsert_generic_rest_connector_config(
+            db,
+            project_id=context.tenant_id,
+            base_url=body.base_url,
+            path_template=body.path_template,
+            record_path=body.record_path,
+            query=body.query,
+            bearer_token=body.bearer_token,
+            clear_bearer_token=body.clear_bearer_token,
+            updated_by_subject=context.subject,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+    except (
+        InvalidSystemOfRecordConnectorError,
+        ProtectedActionMeteringUnavailable,
+        ProtectedActionQuotaExceeded,
+        VaultCipherUnavailable,
+    ) as exc:
+        raise _map_config_error(exc) from exc
+    return _generic_status_response(row, db=db, project_id=context.tenant_id)
+
+
+@router.post(
+    "/generic-rest/test",
+    response_model=GenericRestConnectorTestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/minute")
+def test_generic_rest_connector(
+    request: Request,
+    body: GenericRestConnectorTestRequest = Body(...),
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
+) -> GenericRestConnectorTestResponse:
+    config = get_connector_config(
+        db, project_id=tenant_id, connector_type=GENERIC_REST_CONNECTOR_TYPE
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Generic REST connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    settings = get_settings()
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_generic_rest_connector(
+            config,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "custom",
+            system_ref=body.system_ref or f"generic:{record_ref}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_generic_match_fields(claimed, body.match_fields),
+            idempotency_key=body.idempotency_key,
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": GENERIC_REST_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "record_ref": record_ref,
+                "source": "saved_connector_test",
+            },
+        )
+        updated_config = mark_connector_tested(db, config, tested_at=row.checked_at)
+    except (
+        InvalidSystemOfRecordConnectorError,
+        VaultCipherUnavailable,
+        EnvelopeFormatError,
+        ValueError,
+    ) as exc:
+        raise _map_config_error(exc) from exc
+
+    return GenericRestConnectorTestResponse(
+        ok=row.verdict == "matched",
+        check=reconciliation_to_dict(row),
+        connector=_generic_status_response(updated_config, db=db, project_id=tenant_id),
+    )
+
+
+@router.get(
+    "/postgres-read/status",
+    response_model=PostgresReadConnectorStatusResponse,
+)
+@limiter.limit("60/minute")
+def get_postgres_read_connector_status(
+    request: Request,
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session_read),
+) -> PostgresReadConnectorStatusResponse:
+    row = get_connector_config(
+        db, project_id=tenant_id, connector_type=POSTGRES_READ_CONNECTOR_TYPE
+    )
+    return _postgres_status_response(row, db=db, project_id=tenant_id)
+
+
+@router.put(
+    "/postgres-read/config",
+    response_model=PostgresReadConnectorStatusResponse,
+)
+@limiter.limit("12/minute")
+def save_postgres_read_connector_config(
+    request: Request,
+    body: PostgresReadConnectorConfigRequest = Body(...),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> PostgresReadConnectorStatusResponse:
+    if context.role not in {"admin", "owner"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant admin role is required.",
+        )
+    ensure_project_exists(db, context.tenant_id)
+    settings = get_settings()
+    try:
+        row = upsert_postgres_read_connector_config(
+            db,
+            project_id=context.tenant_id,
+            database_url=body.database_url,
+            read_query=body.read_query,
+            updated_by_subject=context.subject,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+    except (
+        InvalidSystemOfRecordConnectorError,
+        ProtectedActionMeteringUnavailable,
+        ProtectedActionQuotaExceeded,
+        VaultCipherUnavailable,
+    ) as exc:
+        raise _map_config_error(exc) from exc
+    return _postgres_status_response(row, db=db, project_id=context.tenant_id)
+
+
+@router.post(
+    "/postgres-read/test",
+    response_model=PostgresReadConnectorTestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/minute")
+def test_postgres_read_connector(
+    request: Request,
+    body: PostgresReadConnectorTestRequest = Body(...),
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
+) -> PostgresReadConnectorTestResponse:
+    config = get_connector_config(
+        db, project_id=tenant_id, connector_type=POSTGRES_READ_CONNECTOR_TYPE
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PostgreSQL read connector is not configured.",
+        )
+
+    settings = get_settings()
+    try:
+        database_url = decrypt_connector_database_url(config, project_id=tenant_id)
+        if not database_url:
+            raise InvalidSystemOfRecordConnectorError(
+                "PostgreSQL database URL is not configured."
+            )
+        connector = build_postgres_read_connector(
+            config,
+            database_url=database_url,
+            params=body.params,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            allow_private_hosts=settings.OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=body.claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "internal_record_verification",
+            system_ref=body.system_ref or "postgres:source-record",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_postgres_match_fields(body.claimed, body.match_fields),
+            idempotency_key=body.idempotency_key,
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": POSTGRES_READ_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "source": "saved_connector_test",
+            },
+        )
+        updated_config = mark_connector_tested(db, config, tested_at=row.checked_at)
+    except (
+        InvalidSystemOfRecordConnectorError,
+        VaultCipherUnavailable,
+        EnvelopeFormatError,
+        ValueError,
+    ) as exc:
+        raise _map_config_error(exc) from exc
+
+    return PostgresReadConnectorTestResponse(
+        ok=row.verdict == "matched",
+        check=reconciliation_to_dict(row),
+        connector=_postgres_status_response(
             updated_config, db=db, project_id=tenant_id
         ),
     )

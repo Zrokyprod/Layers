@@ -178,6 +178,7 @@ def test_design_partner_connector_templates_are_customer_safe() -> None:
 
 def test_design_partner_handoff_guide_covers_customer_run_contract() -> None:
     guide = HANDOFF_GUIDE_PATH.read_text(encoding="utf-8")
+    compact_guide = " ".join(guide.split())
 
     assert "python scripts/run_design_partner_install_kit.py --scenario refund --json" in guide
     assert (
@@ -190,15 +191,15 @@ def test_design_partner_handoff_guide_covers_customer_run_contract() -> None:
     assert "--write-evidence artifacts/design-partner-crm-evidence.json" in guide
     assert "ledger_refund_connector_config.example.json" in guide
     assert "customer_record_connector_config.example.json" in guide
-    assert "--preflight-only --api-base-url https://api.zroky.ai" in guide
+    assert "--preflight-only --api-base-url https://api.zroky.com" in compact_guide
     assert "--write-summary artifacts/design-partner-refund-preflight-summary.json" in guide
     assert "--write-summary artifacts/design-partner-crm-preflight-summary.json" in guide
-    assert "--use-saved-connector --api-base-url https://api.zroky.ai" in guide
+    assert "--use-saved-connector --api-base-url https://api.zroky.com" in compact_guide
     assert "--write-summary artifacts/design-partner-refund-saved-live-summary.json" in guide
     assert "--write-evidence artifacts/design-partner-refund-saved-live-evidence.json" in guide
     assert "--write-summary artifacts/design-partner-crm-saved-live-summary.json" in guide
     assert "--write-evidence artifacts/design-partner-crm-saved-live-evidence.json" in guide
-    assert "--api-base-url https://api.zroky.ai" in guide
+    assert "--api-base-url https://api.zroky.com" in compact_guide
     assert "--ledger-base-url https://ledger.example.com/api" in guide
     assert "--crm-base-url https://crm.example.com/api" in guide
     assert "runtime_policy.allowed" in guide
@@ -233,6 +234,8 @@ def test_design_partner_owner_proof_workflow_runs_live_gate_with_required_secret
     assert "name: Zroky Design Partner Owner Proof" in workflow
     assert "workflow_dispatch:" in workflow
     assert "api_base_url:" in workflow
+    assert "default: https://api-staging.zroky.com" in workflow
+    assert ("https://api-staging." + "example" + ".com") not in workflow
     assert "project_id:" in workflow
     assert "call_id:" in workflow
     assert "trace_id:" in workflow
@@ -510,7 +513,7 @@ def test_design_partner_live_preflight_runs_connector_test_without_evidence(
 
     class FakeClient:
         def __init__(self, *, base_url, timeout):
-            assert base_url == "https://api.zroky.ai"
+            assert base_url == "https://api.zroky.com"
             assert timeout == 10.0
             self.saved = False
             self.tested = False
@@ -564,7 +567,7 @@ def test_design_partner_live_preflight_runs_connector_test_without_evidence(
             "refund",
             "--preflight-only",
             "--api-base-url",
-            "https://api.zroky.ai",
+            "https://api.zroky.com",
             "--api-key",
             "zroky-live-key",
             "--ledger-base-url",
@@ -631,7 +634,7 @@ def test_design_partner_live_preflight_can_use_saved_connector_without_partner_s
 
     class FakeClient:
         def __init__(self, *, base_url, timeout):
-            assert base_url == "https://api.zroky.ai"
+            assert base_url == "https://api.zroky.com"
             assert timeout == 10.0
 
         def __enter__(self):
@@ -701,7 +704,7 @@ def test_design_partner_live_preflight_can_use_saved_connector_without_partner_s
             "--preflight-only",
             "--use-saved-connector",
             "--api-base-url",
-            "https://api.zroky.ai",
+            "https://api.zroky.com",
             "--api-key",
             "zroky-live-key",
             "--refund-id",
@@ -858,7 +861,7 @@ def test_design_partner_live_full_proof_can_use_saved_connector_with_evidence_ha
 
     class FakeClient:
         def __init__(self, *, base_url, timeout):
-            assert base_url == "https://api.zroky.ai"
+            assert base_url == "https://api.zroky.com"
             assert timeout == 10.0
 
         def __enter__(self):
@@ -904,7 +907,7 @@ def test_design_partner_live_full_proof_can_use_saved_connector_with_evidence_ha
             "refund",
             "--use-saved-connector",
             "--api-base-url",
-            "https://api.zroky.ai",
+            "https://api.zroky.com",
             "--api-key",
             "zroky-live-key",
             "--verify-owner-launch-readiness",

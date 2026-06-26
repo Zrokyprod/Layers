@@ -683,6 +683,9 @@ class AlertItemResponse(BaseModel):
     source: str
     title: str
     evidence: dict[str, Any] | None = None
+    slack_delivery_status: Literal["not_attempted", "sent", "failed", "not_connected", "skipped"] = "not_attempted"
+    slack_delivery_attempted_at: datetime | None = None
+    slack_delivery_error: str | None = None
     created_at: datetime
     updated_at: datetime
     resolved_at: datetime | None = None

@@ -165,6 +165,20 @@ class PilotPolicyPayload(BaseModel):
         default=DEFAULT_POLICY["runtime_approval_ttl_minutes"],
         gt=0,
     )
+    runtime_amount_approval_threshold_usd: float | None = Field(
+        default=DEFAULT_POLICY["runtime_amount_approval_threshold_usd"],
+        ge=0,
+    )
+    runtime_amount_deny_threshold_usd: float | None = Field(
+        default=DEFAULT_POLICY["runtime_amount_deny_threshold_usd"],
+        ge=0,
+    )
+    runtime_production_deploys_require_approval: bool = Field(
+        default=DEFAULT_POLICY["runtime_production_deploys_require_approval"]
+    )
+    runtime_changed_recipient_deny: bool = Field(
+        default=DEFAULT_POLICY["runtime_changed_recipient_deny"]
+    )
 
 
 class PilotPolicyResponse(BaseModel):

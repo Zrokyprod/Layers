@@ -17,7 +17,10 @@ from app.observability.metrics import (
     record_retention_rows,
     record_retention_run,
 )
-from app.services.alerts import sync_alerts_from_jobs
+from app.services.alerts import (
+    auto_send_pending_alerts_to_slack,
+    sync_alerts_from_jobs,
+)
 from app.services.diagnosis_engine import (
     build_diagnosis_result,
     evaluate_fast_rules,

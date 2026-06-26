@@ -214,16 +214,16 @@ class TestFooter:
     def test_dashboard_link_when_base_provided(self, base_blast, base_spec) -> None:
         md = format_markdown(
             _mk_report(base_blast=base_blast, base_spec=base_spec),
-            dashboard_base="https://app.zroky.com",
+            dashboard_base="https://zroky.com",
         )
-        assert "https://app.zroky.com/replay-runs/run-abc" in md
+        assert "https://zroky.com/evidence?replay_run_id=run-abc" in md
 
     def test_placeholder_when_no_base(self, base_blast, base_spec) -> None:
         md = format_markdown(_mk_report(
             base_blast=base_blast, base_spec=base_spec,
         ))
         # When base not set, footer keeps a textual reference
-        assert "/replay-runs/run-abc" in md
+        assert "/evidence?replay_run_id=run-abc" in md
 
     def test_footer_metadata(self, base_blast, base_spec) -> None:
         md = format_markdown(_mk_report(

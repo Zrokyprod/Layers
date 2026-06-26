@@ -73,6 +73,22 @@ def _register_judge_drift_alert_sink() -> None:
                 )
             )
             db.commit()
+            try:
+                from app.services.alerts import auto_send_pending_alerts_to_slack
+
+                auto_send_pending_alerts_to_slack(
+                    db,
+                    tenant_id=status.project_id,
+                    diagnosis_id=diagnosis_id,
+                    categories=["JUDGE_DRIFT"],
+                    agent_name=status.judge_model,
+                )
+            except Exception:  # noqa: BLE001
+                _startup_logger.exception(
+                    "judge_drift_alert_sink: failed to deliver Slack alert project=%s model=%s",
+                    status.project_id,
+                    status.judge_model,
+                )
         except IntegrityError:
             db.rollback()  # alert already open — ignore duplicate
         except Exception:

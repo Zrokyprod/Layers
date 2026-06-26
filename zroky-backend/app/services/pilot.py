@@ -81,6 +81,10 @@ DEFAULT_POLICY: dict[str, Any] = {
     "runtime_block_pii_leak": True,
     "runtime_block_prompt_injected_external_action": True,
     "runtime_approval_ttl_minutes": 60,
+    "runtime_amount_approval_threshold_usd": 500.0,
+    "runtime_amount_deny_threshold_usd": 5000.0,
+    "runtime_production_deploys_require_approval": True,
+    "runtime_changed_recipient_deny": True,
 }
 
 # Keys + their expected types (validation contract — see validate_policy_payload)
@@ -107,6 +111,10 @@ _POLICY_FIELDS: dict[str, tuple[type | tuple[type, ...], str]] = {
     "runtime_block_pii_leak": (bool, "boolean"),
     "runtime_block_prompt_injected_external_action": (bool, "boolean"),
     "runtime_approval_ttl_minutes": (int, "positive integer"),
+    "runtime_amount_approval_threshold_usd": ((int, float, type(None)), "non-negative number or null"),
+    "runtime_amount_deny_threshold_usd": ((int, float, type(None)), "non-negative number or null"),
+    "runtime_production_deploys_require_approval": (bool, "boolean"),
+    "runtime_changed_recipient_deny": (bool, "boolean"),
 }
 
 
@@ -136,11 +144,8 @@ def validate_policy_payload(payload: dict[str, Any]) -> dict[str, Any]:
         value = payload[key]
 
         # Reject bools where number is expected (Python: bool ⊂ int)
-        if expected_type == (int, float) and isinstance(value, bool):
-            raise PolicyValidationError(
-                f"{key!r} must be a {description}, got bool"
-            )
-        if expected_type is int and isinstance(value, bool):
+        expected_types = expected_type if isinstance(expected_type, tuple) else (expected_type,)
+        if isinstance(value, bool) and any(item in expected_types for item in (int, float)):
             raise PolicyValidationError(
                 f"{key!r} must be a {description}, got bool"
             )
@@ -207,9 +212,16 @@ def validate_policy_payload(payload: dict[str, Any]) -> dict[str, Any]:
             out[key] = int(value)
             continue
 
-        if key == "runtime_max_cost_usd":
+        if key in {
+            "runtime_max_cost_usd",
+            "runtime_amount_approval_threshold_usd",
+            "runtime_amount_deny_threshold_usd",
+        }:
+            if value is None:
+                out[key] = None
+                continue
             if float(value) < 0:
-                raise PolicyValidationError("'runtime_max_cost_usd' must be non-negative")
+                raise PolicyValidationError(f"{key!r} must be non-negative")
             out[key] = float(value)
             continue
 

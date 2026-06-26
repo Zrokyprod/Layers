@@ -53,7 +53,7 @@ LOCAL_PROOF_MODES = {
     "synthetic",
 }
 
-SOURCE_TRUTH_MARKER = "single product and implementation source of truth"
+SOURCE_TRUTH_MARKER = "single product, implementation, and execution source of truth"
 _DEFAULT_SOURCE_TRUTH_MANIFEST_PATH = (
     Path(__file__).resolve().parents[4] / "source_truth_manifest.json"
 )

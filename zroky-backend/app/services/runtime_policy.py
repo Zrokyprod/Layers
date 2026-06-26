@@ -40,10 +40,11 @@ _AUDIT_EVENT_ORDER = {
     "allowed": 0,
     "blocked": 0,
     "approval_requested": 0,
-    "approved": 1,
-    "rejected": 1,
-    "expired": 1,
-    "approval_consumed": 2,
+    "approval_recorded": 1,
+    "approved": 2,
+    "rejected": 2,
+    "expired": 2,
+    "approval_consumed": 3,
 }
 
 
@@ -53,6 +54,10 @@ class RuntimePolicyResult:
     allowed: bool
     requires_approval: bool
     reasons: list[str]
+
+
+class RuntimePolicyApprovalConflict(ValueError):
+    """Raised when a pending approval cannot accept the supplied approver."""
 
 
 def _now() -> datetime:
@@ -204,6 +209,125 @@ def _business_impact_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return impact
 
 
+def _tool_args(payload: dict[str, Any]) -> dict[str, Any]:
+    value = payload.get("tool_args")
+    return value if isinstance(value, dict) else {}
+
+
+def _amount_usd(payload: dict[str, Any]) -> float | None:
+    candidates: list[Any] = [
+        payload.get("amount_usd"),
+        payload.get("impact_usd"),
+    ]
+    business_impact = payload.get("business_impact")
+    if isinstance(business_impact, dict):
+        candidates.extend(
+            [
+                business_impact.get("amount_usd"),
+                business_impact.get("estimated_value_usd"),
+                business_impact.get("impact_usd"),
+            ]
+        )
+    tool_args = _tool_args(payload)
+    candidates.extend([tool_args.get("amount_usd"), tool_args.get("amount")])
+    nested_parameters = tool_args.get("parameters")
+    if isinstance(nested_parameters, dict):
+        candidates.extend([nested_parameters.get("amount_usd"), nested_parameters.get("amount")])
+    for candidate in candidates:
+        amount = _as_float(candidate)
+        if amount is not None:
+            return amount
+
+    amount_minor = _as_float(tool_args.get("amount_minor"))
+    currency = str(tool_args.get("currency") or payload.get("currency") or "").strip().upper()
+    if amount_minor is not None and currency in {"USD", ""}:
+        return amount_minor / 100.0
+    if isinstance(nested_parameters, dict):
+        nested_amount_minor = _as_float(nested_parameters.get("amount_minor"))
+        nested_currency = str(nested_parameters.get("currency") or payload.get("currency") or "").strip().upper()
+        if nested_amount_minor is not None and nested_currency in {"USD", ""}:
+            return nested_amount_minor / 100.0
+    return None
+
+
+def _is_refund_or_transfer(payload: dict[str, Any]) -> bool:
+    action = _normalize_tool(_bounded(payload.get("action_type"), max_length=64))
+    tool = _normalize_tool(_bounded(payload.get("tool_name"), max_length=255))
+    operation = _normalize_tool(_bounded(payload.get("operation_kind"), max_length=32))
+    return any(marker in action or marker in tool or marker in operation for marker in ("refund", "transfer", "payment"))
+
+
+def _is_production_deploy(payload: dict[str, Any]) -> bool:
+    environment = str(payload.get("environment") or "").strip().lower()
+    if environment not in {"prod", "production"}:
+        return False
+    action = _normalize_tool(_bounded(payload.get("action_type"), max_length=64))
+    tool = _normalize_tool(_bounded(payload.get("tool_name"), max_length=255))
+    operation = _normalize_tool(_bounded(payload.get("operation_kind"), max_length=32))
+    return "deploy" in action or "deploy" in tool or operation == "deploy"
+
+
+def _changed_recipient(payload: dict[str, Any]) -> bool:
+    if payload.get("recipient_changed") is True or payload.get("changed_recipient") is True:
+        return True
+    tool_args = _tool_args(payload)
+    if tool_args.get("recipient_changed") is True or tool_args.get("changed_recipient") is True:
+        return True
+    before = tool_args.get("previous_recipient") or tool_args.get("old_recipient") or payload.get("previous_recipient")
+    after = tool_args.get("new_recipient") or tool_args.get("recipient") or payload.get("new_recipient")
+    return before is not None and after is not None and str(before).strip().lower() != str(after).strip().lower()
+
+
+def _first_launch_block_reasons(payload: dict[str, Any], policy: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    if policy.get("runtime_changed_recipient_deny") is True and _changed_recipient(payload):
+        reasons.append("customer-visible recipient changed; deny until a new action intent is created")
+    return reasons
+
+
+def _first_launch_approval_reasons(payload: dict[str, Any], policy: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    amount = _amount_usd(payload)
+    approval_threshold = _as_float(policy.get("runtime_amount_approval_threshold_usd"))
+    deny_threshold = _as_float(policy.get("runtime_amount_deny_threshold_usd"))
+    if (
+        amount is not None
+        and approval_threshold is not None
+        and _is_refund_or_transfer(payload)
+        and amount > approval_threshold
+        and (deny_threshold is None or amount <= deny_threshold)
+    ):
+        reasons.append(f"refund or transfer amount ${amount:.2f} exceeds approval threshold ${approval_threshold:.2f}")
+    if (
+        amount is not None
+        and deny_threshold is not None
+        and _is_refund_or_transfer(payload)
+        and amount > deny_threshold
+    ):
+        reasons.append(
+            f"refund or transfer amount ${amount:.2f} exceeds dual-approval threshold ${deny_threshold:.2f}; two distinct approvals required"
+        )
+
+    if policy.get("runtime_production_deploys_require_approval") is True and _is_production_deploy(payload):
+        reasons.append("production deploy requires human approval before execution")
+    return reasons
+
+
+def _required_approval_count(payload: dict[str, Any], policy: dict[str, Any], approval_reasons: list[str]) -> int:
+    if not approval_reasons:
+        return 0
+    amount = _amount_usd(payload)
+    deny_threshold = _as_float(policy.get("runtime_amount_deny_threshold_usd"))
+    if (
+        amount is not None
+        and deny_threshold is not None
+        and _is_refund_or_transfer(payload)
+        and amount > deny_threshold
+    ):
+        return 2
+    return 1
+
+
 def _intended_action_payload(payload: dict[str, Any]) -> dict[str, Any]:
     action_type = _bounded(payload.get("action_type"), max_length=64)
     tool_name = _bounded(payload.get("tool_name"), max_length=255)
@@ -269,6 +393,7 @@ def _policy_hit_payload(
     decision: str,
     status: str,
     reasons: list[str],
+    required_approval_count: int = 0,
 ) -> dict[str, Any]:
     return {
         "policy": "runtime_policy_gate",
@@ -283,6 +408,17 @@ def _policy_hit_payload(
             "max_cost_usd": policy.get("runtime_max_cost_usd"),
         },
         "requires_human_approval": status == "pending_approval",
+        "first_launch_rules": {
+            "amount_usd": _amount_usd(payload),
+            "amount_approval_threshold_usd": policy.get("runtime_amount_approval_threshold_usd"),
+            "amount_deny_threshold_usd": policy.get("runtime_amount_deny_threshold_usd"),
+            "production_deploys_require_approval": policy.get("runtime_production_deploys_require_approval"),
+            "changed_recipient_deny": policy.get("runtime_changed_recipient_deny"),
+        },
+        "approval_requirements": {
+            "required_approval_count": required_approval_count,
+            "dual_approval_required": required_approval_count >= 2,
+        },
     }
 
 
@@ -321,6 +457,9 @@ def _decision_snapshot(row: RuntimePolicyDecision) -> dict[str, Any]:
         "resolved_by": row.resolved_by,
         "consumed_at": row.consumed_at.isoformat() if row.consumed_at else None,
         "consumed_by_decision_id": row.consumed_by_decision_id,
+        "required_approval_count": row.required_approval_count,
+        "approval_count": row.approval_count,
+        "approver_subjects": _json_loads(row.approver_subjects_json, []),
     }
 
 
@@ -402,6 +541,8 @@ def _valid_approval(
         return None
     if approval.consumed_at is not None:
         return None
+    if (approval.required_approval_count or 0) > 0 and approval.approval_count < approval.required_approval_count:
+        return None
     if approval.expires_at is not None:
         expires_at = approval.expires_at
         if expires_at.tzinfo is None:
@@ -425,6 +566,17 @@ def _valid_approval(
     if approval.approval_scope_hash != expected_scope_hash:
         return None
     return approval
+
+
+def _approver_subjects(row: RuntimePolicyDecision) -> list[str]:
+    loaded = _json_loads(row.approver_subjects_json, [])
+    if not isinstance(loaded, list):
+        return []
+    return [str(item) for item in loaded if str(item).strip()]
+
+
+def _set_approver_subjects(row: RuntimePolicyDecision, subjects: list[str]) -> None:
+    row.approver_subjects_json = _json_dumps(subjects)
 
 
 def _persist_trace_policy_span(
@@ -552,6 +704,7 @@ def _create_decision(
     status: str,
     reasons: list[str],
     expires_at: datetime | None = None,
+    required_approval_count: int = 0,
 ) -> RuntimePolicyDecision:
     masked_request = mask_payload(payload)
     intended_action = _intended_action_payload(payload)
@@ -563,6 +716,7 @@ def _create_decision(
         decision=decision,
         status=status,
         reasons=reasons,
+        required_approval_count=required_approval_count,
     )
     row = RuntimePolicyDecision(
         id=str(uuid4()),
@@ -587,6 +741,9 @@ def _create_decision(
         policy_hit_json=_json_dumps(policy_hit),
         business_impact_json=_json_dumps(business_impact),
         approval_scope_hash=_approval_scope_hash(project_id, payload),
+        required_approval_count=required_approval_count,
+        approval_count=0,
+        approver_subjects_json=_json_dumps([]),
         expires_at=expires_at,
     )
     db.add(row)
@@ -662,6 +819,8 @@ def evaluate_runtime_policy(
     ):
         reasons.append("prompt-injection-shaped instruction attempted an external action")
 
+    reasons.extend(_first_launch_block_reasons(payload, policy))
+
     if reasons:
         row = _create_decision(
             db,
@@ -676,7 +835,12 @@ def evaluate_runtime_policy(
         db.refresh(row)
         return RuntimePolicyResult(row, allowed=False, requires_approval=False, reasons=reasons)
 
+    approval_reasons = _first_launch_approval_reasons(payload, policy)
     if _is_sensitive_action(payload, policy) and policy.get("runtime_sensitive_actions_require_approval") is True:
+        approval_reasons.insert(0, "sensitive action requires human approval before execution")
+    required_approval_count = _required_approval_count(payload, policy, approval_reasons)
+
+    if approval_reasons:
         approval = _valid_approval(
             db,
             project_id=project_id,
@@ -715,10 +879,9 @@ def evaluate_runtime_policy(
 
         pending = _find_reusable_pending_approval(db, project_id=project_id, payload=payload)
         if pending is not None:
-            reasons = _json_loads(pending.reasons_json, ["sensitive action requires human approval"])
+            reasons = _json_loads(pending.reasons_json, approval_reasons)
             return RuntimePolicyResult(pending, allowed=False, requires_approval=True, reasons=reasons)
 
-        reasons = ["sensitive action requires human approval before execution"]
         row = _create_decision(
             db,
             project_id=project_id,
@@ -726,12 +889,13 @@ def evaluate_runtime_policy(
             policy=policy,
             decision="requires_approval",
             status="pending_approval",
-            reasons=reasons,
+            reasons=approval_reasons,
             expires_at=_approval_expiry(policy),
+            required_approval_count=required_approval_count,
         )
         db.commit()
         db.refresh(row)
-        return RuntimePolicyResult(row, allowed=False, requires_approval=True, reasons=reasons)
+        return RuntimePolicyResult(row, allowed=False, requires_approval=True, reasons=approval_reasons)
 
     row = _create_decision(
         db,
@@ -815,18 +979,101 @@ def resolve_runtime_policy_decision(
     if row is None:
         return None
     before = _decision_snapshot(row)
-    row.status = "approved" if approved else "rejected"
-    row.decision = "allow" if approved else "block"
+    actor_key = _bounded(actor, max_length=128) or "anonymous-approver"
+    cleaned_reason = mask_text(reason.strip())[:1000]
+    if not approved:
+        row.status = "rejected"
+        row.decision = "block"
+        row.resolved_at = _now()
+        row.resolved_by = actor_key
+        row.resolution_reason = cleaned_reason
+        db.add(row)
+        db.flush()
+        _log_audit_event(
+            db,
+            decision=row,
+            event_type="rejected",
+            actor=actor_key,
+            reason=reason,
+            before=before,
+            after=_decision_snapshot(row),
+        )
+        _update_trace_policy_span(db, project_id=project_id, decision=row)
+        db.commit()
+        db.refresh(row)
+        return row
+
+    approvers = _approver_subjects(row)
+    if actor_key in approvers:
+        raise RuntimePolicyApprovalConflict("A second approval must come from a distinct approver.")
+
+    approvers.append(actor_key)
+    required_count = max(1, row.required_approval_count or 1)
+    row.required_approval_count = required_count
+    row.approval_count = len(approvers)
+    _set_approver_subjects(row, approvers)
+    if row.approval_count >= required_count:
+        row.status = "approved"
+        row.decision = "allow"
+        row.resolved_at = _now()
+        row.resolved_by = actor_key
+        row.resolution_reason = cleaned_reason
+        event_type = "approved"
+    else:
+        row.status = "pending_approval"
+        row.decision = "requires_approval"
+        row.resolved_at = None
+        row.resolved_by = None
+        row.resolution_reason = None
+        event_type = "approval_recorded"
+    db.add(row)
+    db.flush()
+    _log_audit_event(
+        db,
+        decision=row,
+        event_type=event_type,
+        actor=actor_key,
+        reason=reason,
+        before=before,
+        after=_decision_snapshot(row),
+    )
+    _update_trace_policy_span(db, project_id=project_id, decision=row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def expire_runtime_policy_decision(
+    db: Session,
+    *,
+    project_id: str,
+    decision_id: str,
+    actor: str | None,
+    reason: str,
+) -> RuntimePolicyDecision | None:
+    row = db.execute(
+        select(RuntimePolicyDecision).where(
+            RuntimePolicyDecision.project_id == project_id,
+            RuntimePolicyDecision.id == decision_id,
+            RuntimePolicyDecision.status == "pending_approval",
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    before = _decision_snapshot(row)
+    actor_key = _bounded(actor, max_length=128) or "system"
+    row.status = "expired"
+    row.decision = "block"
     row.resolved_at = _now()
-    row.resolved_by = actor
+    row.resolved_by = actor_key
     row.resolution_reason = mask_text(reason.strip())[:1000]
     db.add(row)
     db.flush()
     _log_audit_event(
         db,
         decision=row,
-        event_type="approved" if approved else "rejected",
-        actor=actor,
+        event_type="expired",
+        actor=actor_key,
         reason=reason,
         before=before,
         after=_decision_snapshot(row),

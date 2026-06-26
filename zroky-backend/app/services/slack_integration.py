@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from typing import Any
 
@@ -142,6 +143,23 @@ def build_slack_status(install: TenantSlackInstall | None) -> dict[str, Any]:
         "installed_at": install.installed_at,
         "updated_at": install.updated_at,
     }
+
+
+def slack_approval_user_ids(install: TenantSlackInstall | None) -> list[str]:
+    if install is None:
+        return []
+    try:
+        loaded = json.loads(install.approval_user_ids_json or "[]")
+    except Exception:
+        loaded = []
+    if not isinstance(loaded, list):
+        return []
+    user_ids: list[str] = []
+    for item in loaded:
+        user_id = str(item or "").strip()
+        if user_id and user_id not in user_ids:
+            user_ids.append(user_id)
+    return user_ids
 
 
 async def send_slack_message(

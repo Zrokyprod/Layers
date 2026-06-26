@@ -42,6 +42,21 @@ class Agent(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    runtime_path: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'sdk'"))
+    framework: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    environment: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    tool_names_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    allowed_action_types_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    blocked_action_types_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    default_policy_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    risk_limits_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    verification_connectors_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'[]'"))
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, server_default=func.now()
     )
@@ -58,6 +73,11 @@ class Agent(Base):
 
     __table_args__ = (
         UniqueConstraint("project_id", "slug", name="ux_agents_project_slug"),
+        CheckConstraint(
+            "runtime_path IN ('sdk','http_gateway','mcp_gateway','webhook')",
+            name="ck_agents_runtime_path",
+        ),
+        Index("ix_agents_project_active_updated", "project_id", "is_active", "updated_at"),
         Index("ix_agents_project_created", "project_id", "created_at"),
     )
 

@@ -421,7 +421,7 @@ class TestBuildSummaryUrl:
         s = get_settings()
         monkeypatch.setattr(s, "FRONTEND_URL", "https://app.example.com")
         url = build_summary_url(run)
-        assert url == f"https://app.example.com/replay/{run.id}"
+        assert url == f"https://app.example.com/evidence?replay_run_id={run.id}"
 
     def test_strips_trailing_slash(self, db_session, monkeypatch) -> None:
         gs = _seed_set_with_traces(db_session, project_id="proj-1", name="x")
@@ -431,7 +431,7 @@ class TestBuildSummaryUrl:
         assert run is not None
         s = get_settings()
         monkeypatch.setattr(s, "FRONTEND_URL", "https://app.example.com/")
-        assert build_summary_url(run).startswith("https://app.example.com/replay/")
+        assert build_summary_url(run).startswith("https://app.example.com/evidence?replay_run_id=")
         assert "//replay" not in build_summary_url(run)
 
 
@@ -614,7 +614,7 @@ class TestReplayDispatchRoute:
         assert body["trigger"] == "github"  # default for this surface
         assert body["git_sha"] == "sha-aaa"
         assert body["idempotent"] is False
-        assert body["summary_url"].endswith(f"/replay/{body['id']}")
+        assert body["summary_url"].endswith(f"/evidence?replay_run_id={body['id']}")
 
     def test_resolves_default_golden_set(self, client: TestClient) -> None:
         factory = client._session_factory  # type: ignore[attr-defined]
@@ -832,7 +832,7 @@ class TestGoldensRunBackwardCompat:
         assert response.status_code == 202
         body = response.json()
         assert "summary_url" in body
-        assert body["summary_url"].endswith(f"/replay/{body['id']}")
+        assert body["summary_url"].endswith(f"/evidence?replay_run_id={body['id']}")
         assert body["idempotent"] is False
 
     def test_idempotent_dispatch_via_legacy_endpoint(

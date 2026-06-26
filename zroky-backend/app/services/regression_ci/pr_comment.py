@@ -44,7 +44,7 @@ def format_markdown(report: RegressionCIReport, *, dashboard_base: str = "") -> 
     """Render a `RegressionCIReport` as a PR-comment markdown body.
 
     `dashboard_base` is the URL prefix for links into the Zroky dashboard
-    (e.g. `https://app.zroky.com`). Empty string yields placeholder text
+    (e.g. `https://zroky.com`). Empty string yields placeholder text
     that the customer can still copy-paste.
     """
     lines: list[str] = [COMMENT_MARKER, ""]
@@ -304,7 +304,7 @@ def _notes_section(report: RegressionCIReport) -> list[str]:
 
 
 def _footer(report: RegressionCIReport, dashboard_base: str) -> list[str]:
-    detail_path = f"/replay-runs/{report.run_id}"
+    detail_path = f"/evidence?replay_run_id={report.run_id}"
     if dashboard_base and dashboard_base != _DASHBOARD_BASE:
         link = f"{dashboard_base.rstrip('/')}{detail_path}"
         link_md = f"[Inspect run in Zroky dashboard →]({link})"

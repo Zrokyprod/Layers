@@ -22,15 +22,20 @@ from app.services.outcome_reconciliation import (
     compare_claim_to_actual,
     get_reconciliation_summary,
     reconcile_outcome,
+    verification_status_for_check,
 )
 from app.services.system_of_record_connectors import (
     ConnectorConfigError,
     CustomerRecordApiConnector,
+    GenericRestApiConnector,
     LedgerRefundApiConnector,
+    PostgresReadOnlyConnector,
 )
 from app.services.system_of_record_connector_config import (
     upsert_customer_record_connector_config,
+    upsert_generic_rest_connector_config,
     upsert_ledger_refund_connector_config,
+    upsert_postgres_read_connector_config,
 )
 
 
@@ -306,6 +311,114 @@ def test_ledger_refund_connector_rejects_traversal_in_refund_id() -> None:
         ).fetch()
 
 
+def test_generic_rest_connector_fetches_selected_record_and_redacts_secret() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "order": {
+                        "id": "ord_123",
+                        "status": "approved",
+                        "total_usd": "118.42",
+                    }
+                }
+            },
+        )
+
+    source = GenericRestApiConnector(
+        base_url="https://internal-api.example.com/api",
+        record_ref="ord_123",
+        bearer_token="generic-secret-token",
+        path_template="/orders/{record_ref}",
+        query={"include": "state"},
+        record_path="data.order",
+        transport=httpx.MockTransport(handler),
+    ).fetch()
+
+    assert str(requests[0].url) == (
+        "https://internal-api.example.com/api/orders/ord_123?include=state"
+    )
+    assert requests[0].headers["authorization"] == "Bearer generic-secret-token"
+    assert source.record_found is True
+    assert source.record == {
+        "id": "ord_123",
+        "status": "approved",
+        "total_usd": "118.42",
+        "record_ref": "ord_123",
+    }
+    assert source.metadata is not None
+    assert source.metadata["request_url"] == (
+        "https://internal-api.example.com/api/orders/ord_123"
+    )
+    assert source.metadata["record_path"] == "data.order"
+    assert "generic-secret-token" not in json.dumps(source.metadata)
+
+
+def test_postgres_read_only_connector_fetches_row_and_sanitizes_dsn(
+    tmp_path: Path,
+) -> None:
+    source_db = tmp_path / "source_of_record.db"
+    engine = create_engine(f"sqlite:///{source_db}", future=True)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE refunds (refund_id TEXT PRIMARY KEY, status TEXT, amount_usd REAL, currency TEXT)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO refunds (refund_id, status, amount_usd, currency) VALUES (?, ?, ?, ?)",
+            ("rf_pg", "posted", 42.5, "USD"),
+        )
+    engine.dispose()
+
+    source = PostgresReadOnlyConnector(
+        database_url=f"sqlite:///{source_db}",
+        query=(
+            "SELECT refund_id, status, amount_usd, currency "
+            "FROM refunds WHERE refund_id = :refund_id"
+        ),
+        params={"refund_id": "rf_pg"},
+        timeout_seconds=1.5,
+        allow_sqlite_for_tests=True,
+    ).fetch()
+
+    assert source.record_found is True
+    assert source.record == {
+        "refund_id": "rf_pg",
+        "status": "posted",
+        "amount_usd": 42.5,
+        "currency": "USD",
+    }
+    assert source.metadata is not None
+    assert source.metadata["connector_type"] == "postgres_read"
+    assert source.metadata["adapter"] == "postgresql_readonly"
+    assert source.metadata["read_only"] is True
+    assert source.metadata["record_found"] is True
+    assert source.metadata["timeout_seconds"] == 1.5
+    assert "query_digest" in source.metadata
+    assert str(source_db) not in json.dumps(source.metadata)
+
+
+def test_postgres_read_only_connector_rejects_non_read_queries() -> None:
+    database_url = "postgresql://readonly:secret@db.example.com/app"
+    blocked_queries = [
+        "UPDATE refunds SET status = 'posted'",
+        "DELETE FROM refunds",
+        "SELECT * FROM refunds FOR UPDATE",
+        "SELECT * FROM refunds; SELECT * FROM users",
+        "SELECT * FROM refunds -- hidden mutation",
+    ]
+
+    for query in blocked_queries:
+        with pytest.raises(ConnectorConfigError):
+            PostgresReadOnlyConnector(
+                database_url=database_url,
+                query=query,
+            ).fetch()
+
+
 def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> None:
     engine = create_engine(
         f"sqlite:///{tmp_path / 'reconcile.db'}",
@@ -356,6 +469,65 @@ def test_reconcile_outcome_persists_match_and_is_idempotent(tmp_path: Path) -> N
         assert first.connector_type == "ledger_api"
         assert summary.total == 1
         assert summary.matched == 1
+    finally:
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_reconciliation_launch_verification_statuses(tmp_path: Path) -> None:
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'verification_status.db'}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    try:
+        with session_factory() as session:
+            verified = reconcile_outcome(
+                session,
+                project_id="proj_verify_status",
+                claimed={"refund_id": "rf_1", "amount_usd": 10},
+                connector=ApiRecordConnector(record={"refund_id": "rf_1", "amount_usd": 10}, record_found=True),
+                idempotency_key="verify:matched",
+            )
+            unverifiable = reconcile_outcome(
+                session,
+                project_id="proj_verify_status",
+                claimed={"refund_id": "rf_2", "amount_usd": 10},
+                connector=ApiRecordConnector(record=None, record_found=None),
+                idempotency_key="verify:unverifiable",
+            )
+            pending = reconcile_outcome(
+                session,
+                project_id="proj_verify_status",
+                claimed={"refund_id": "rf_3", "amount_usd": 10},
+                connector=ApiRecordConnector(
+                    record=None,
+                    record_found=None,
+                    connector_type="ledger_api",
+                ),
+                metadata={"connector": {"http_status": 503, "retryable": True}},
+                idempotency_key="verify:pending",
+            )
+            cancelled = reconcile_outcome(
+                session,
+                project_id="proj_verify_status",
+                claimed={"refund_id": "rf_4", "amount_usd": 10},
+                connector=ApiRecordConnector(record=None, record_found=None),
+                metadata={"status": "cancelled"},
+                idempotency_key="verify:cancelled",
+            )
+            summary = get_reconciliation_summary(session, project_id="proj_verify_status")
+
+        assert verification_status_for_check(verified) == "verified"
+        assert verification_status_for_check(unverifiable) == "unverifiable"
+        assert verification_status_for_check(pending) == "pending"
+        assert verification_status_for_check(cancelled) == "cancelled"
+        assert summary.verified == 1
+        assert summary.pending == 1
+        assert summary.unverifiable == 1
+        assert summary.cancelled == 1
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
@@ -426,6 +598,323 @@ def test_reconciliation_api_creates_mismatch_and_lists_by_call(tmp_path: Path) -
             summary = client.get("/v1/outcomes/reconciliation/summary")
             assert summary.status_code == 200
             assert summary.json()["mismatched"] == 1
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_postgres_read_reconciliation_api_wires_verified_state_and_redacts_dsn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "postgres_read_api.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_postgres_read",
+            role="admin",
+            subject="user-postgres-read",
+        )
+
+    def fake_fetch(self: PostgresReadOnlyConnector) -> SourceRecord:
+        assert self.database_url == "postgresql://readonly:supersecret@db.example.com/app"
+        assert self.query == (
+            "SELECT ticket_id, status FROM tickets WHERE ticket_id = :ticket_id"
+        )
+        assert self.params == {"ticket_id": "t_123"}
+        return SourceRecord(
+            record={"ticket_id": "t_123", "status": "closed"},
+            record_found=True,
+            metadata={
+                "connector_type": "postgres_read",
+                "adapter": "postgresql_readonly",
+                "database_host": "db.example.com",
+                "query_digest": "fake-digest",
+                "read_only": True,
+                "record_found": True,
+            },
+        )
+
+    monkeypatch.setattr(PostgresReadOnlyConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/postgres-read",
+                json={
+                    "call_id": "call_postgres_read",
+                    "trace_id": "trace_postgres_read",
+                    "runtime_policy_decision_id": "decision_postgres_read",
+                    "action_type": "ticket_update",
+                    "system_ref": "postgres:tickets:t_123",
+                    "claimed": {"ticket_id": "t_123", "status": "closed"},
+                    "connector": {
+                        "database_url": (
+                            "postgresql://readonly:supersecret@db.example.com/app"
+                        ),
+                        "query": (
+                            "SELECT ticket_id, status FROM tickets "
+                            "WHERE ticket_id = :ticket_id"
+                        ),
+                        "params": {"ticket_id": "t_123"},
+                    },
+                },
+            )
+
+            assert created.status_code == 201, created.text
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["verification_status"] == "verified"
+            assert body["connector_type"] == "postgres_read"
+            assert body["system_ref"] == "postgres:tickets:t_123"
+            assert body["metadata"]["source"] == "postgres_read_verifier"
+            assert body["metadata"]["connector"]["read_only"] is True
+            assert body["metadata"]["connector"]["database_host"] == "db.example.com"
+            assert body["idempotency_key"].startswith(
+                "postgres_read:decision_postgres_read:"
+            )
+            assert "supersecret" not in json.dumps(body)
+            assert "readonly:supersecret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_saved_postgres_read_reconciliation_uses_encrypted_connector(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-saved-postgres-read-123456789"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_postgres_read.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_saved_postgres_read")
+    with session_factory() as session:
+        upsert_postgres_read_connector_config(
+            session,
+            project_id="proj_saved_postgres_read",
+            database_url="postgresql://readonly:pg-secret@db.example.com/app",
+            read_query=(
+                "SELECT ticket_id, status FROM tickets "
+                "WHERE ticket_id = :ticket_id"
+            ),
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_saved_postgres_read",
+            role="member",
+            subject=None,
+        )
+
+    def fake_fetch(self: PostgresReadOnlyConnector) -> SourceRecord:
+        assert self.database_url == (
+            "postgresql://readonly:pg-secret@db.example.com/app"
+        )
+        assert self.query == (
+            "SELECT ticket_id, status FROM tickets WHERE ticket_id = :ticket_id"
+        )
+        assert self.params == {"ticket_id": "t_saved"}
+        return SourceRecord(
+            record={"ticket_id": "t_saved", "status": "closed"},
+            record_found=True,
+            metadata={
+                "connector_type": "postgres_read",
+                "adapter": "postgresql_readonly",
+                "database_host": "db.example.com",
+                "query_digest": "test-query-digest",
+                "read_only": True,
+                "record_found": True,
+                "attempts": 1,
+                "retryable": False,
+            },
+        )
+
+    monkeypatch.setattr(PostgresReadOnlyConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/postgres-read/saved",
+                json={
+                    "call_id": "call_saved_postgres",
+                    "trace_id": "trace_saved_postgres",
+                    "runtime_policy_decision_id": "decision_saved_postgres",
+                    "action_type": "ticket_update",
+                    "system_ref": "postgres:tickets:t_saved",
+                    "claimed": {"ticket_id": "t_saved", "status": "closed"},
+                    "params": {"ticket_id": "t_saved"},
+                    "metadata": {"partner_run_id": "pilot_postgres"},
+                },
+            )
+
+            assert created.status_code == 201, created.text
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["verification_status"] == "verified"
+            assert body["connector_type"] == "postgres_read"
+            assert body["system_ref"] == "postgres:tickets:t_saved"
+            assert body["runtime_policy_decision_id"] == "decision_saved_postgres"
+            assert body["idempotency_key"].startswith(
+                "saved_postgres_read:decision_saved_postgres:"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_postgres"
+            assert body["metadata"]["connector"]["read_only"] is True
+            assert body["metadata"]["connector"]["database_host"] == "db.example.com"
+            assert "pg-secret" not in json.dumps(body)
+            assert "SELECT ticket_id" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_source_mutation_api_classifies_unreceipted_bypass_and_known_exceptions(tmp_path: Path) -> None:
+    db_path = tmp_path / "source_mutations.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_source_mutations", role="admin", subject="user-source-mutation"
+        )
+
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            bypass = client.post(
+                "/v1/outcomes/reconciliation/source-mutations",
+                json={
+                    "source_system": "stripe",
+                    "mutation_id": "evt_refund_bypass",
+                    "action_type": "refund",
+                    "resource_type": "refund",
+                    "resource_id": "rf_bypass",
+                    "actor_type": "ai_agent",
+                    "actor_id": "refund-agent",
+                    "metadata": {"protected_action": True},
+                },
+            )
+            assert bypass.status_code == 201, bypass.text
+            assert bypass.json()["classification"] == "policy_bypass"
+
+            authorized = client.post(
+                "/v1/outcomes/reconciliation/source-mutations",
+                json={
+                    "source_system": "stripe",
+                    "mutation_id": "evt_manual_refund",
+                    "action_type": "refund",
+                    "resource_type": "refund",
+                    "resource_id": "rf_manual",
+                    "actor_type": "human",
+                    "actor_id": "ops-user",
+                    "metadata": {"authorized_external": True},
+                },
+            )
+            assert authorized.status_code == 201
+            assert authorized.json()["classification"] == "authorized_external"
+
+            legacy = client.post(
+                "/v1/outcomes/reconciliation/source-mutations",
+                json={
+                    "source_system": "zendesk",
+                    "mutation_id": "ticket_legacy_update",
+                    "action_type": "ticket_update",
+                    "resource_type": "ticket",
+                    "resource_id": "t_legacy",
+                    "actor_type": "service",
+                    "metadata": {"legacy_path": True},
+                },
+            )
+            assert legacy.status_code == 201
+            assert legacy.json()["classification"] == "legacy_path"
+
+            repeated = client.post(
+                "/v1/outcomes/reconciliation/source-mutations",
+                json={
+                    "source_system": "stripe",
+                    "mutation_id": "evt_refund_bypass",
+                    "action_type": "refund",
+                    "resource_type": "refund",
+                    "resource_id": "rf_bypass",
+                    "actor_type": "ai_agent",
+                    "actor_id": "refund-agent",
+                    "metadata": {"protected_action": True},
+                },
+            )
+            assert repeated.status_code == 201
+            assert repeated.json()["id"] == bypass.json()["id"]
+
+            unreceipted = client.get("/v1/outcomes/reconciliation/source-mutations/unreceipted")
+            assert unreceipted.status_code == 200
+            assert [item["classification"] for item in unreceipted.json()["items"]] == ["policy_bypass"]
+
+            summary = client.get("/v1/outcomes/reconciliation/source-mutations/summary")
+            assert summary.status_code == 200
+            assert summary.json()["policy_bypass"] == 1
+            assert summary.json()["authorized_external"] == 1
+            assert summary.json()["legacy_path"] == 1
+            assert summary.json()["unreceipted"] == 1
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)
@@ -883,6 +1372,227 @@ def test_saved_customer_record_reconciliation_uses_stored_connector(
             assert body["metadata"]["connector_config_id"]
             assert body["metadata"]["connector"]["http_status"] == 200
             assert "stored-crm-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_generic_rest_reconciliation_uses_stored_connector(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-saved-generic-connectors-123456"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_generic_runtime.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_saved_generic")
+    with session_factory() as session:
+        upsert_generic_rest_connector_config(
+            session,
+            project_id="proj_saved_generic",
+            base_url="https://internal-api.example.com/api",
+            path_template="/orders/{record_ref}",
+            record_path="data",
+            bearer_token="stored-generic-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_saved_generic", role="member", subject=None
+        )
+
+    def fake_fetch(self: GenericRestApiConnector) -> SourceRecord:
+        assert self.base_url == "https://internal-api.example.com/api"
+        assert self.path_template == "/orders/{record_ref}"
+        assert self.record_path == "data"
+        assert self.bearer_token == "stored-generic-secret"
+        return SourceRecord(
+            record={
+                "record_ref": self.record_ref,
+                "status": "approved",
+                "total_usd": "118.42",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "generic_rest_api",
+                "request_url": (
+                    f"https://internal-api.example.com/api/orders/{self.record_ref}"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+            },
+        )
+
+    monkeypatch.setattr(GenericRestApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/generic-rest/saved",
+                json={
+                    "call_id": "call_saved_generic",
+                    "trace_id": "trace_saved_generic",
+                    "runtime_policy_decision_id": "decision_saved_generic",
+                    "action_type": "internal_api_mutation",
+                    "record_ref": "ord_saved",
+                    "claimed": {
+                        "record_ref": "ord_saved",
+                        "status": "APPROVED",
+                        "total_usd": 118.42,
+                    },
+                    "metadata": {"partner_run_id": "pilot_generic"},
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "generic_rest_api"
+            assert body["system_ref"] == "generic:ord_saved"
+            assert body["runtime_policy_decision_id"] == "decision_saved_generic"
+            assert body["action_type"] == "internal_api_mutation"
+            assert body["idempotency_key"] == (
+                "saved_generic_rest:decision_saved_generic:ord_saved"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["record_ref"] == "ord_saved"
+            assert body["metadata"]["partner_run_id"] == "pilot_generic"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-generic-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_generic_rest_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-generic-connectors-12345"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_generic")
+    with session_factory() as session:
+        upsert_generic_rest_connector_config(
+            session,
+            project_id="proj_bridge_generic",
+            base_url="https://internal-api.example.com/api",
+            path_template="/orders/{record_ref}",
+            record_path="data",
+            bearer_token="stored-bridge-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_generic", role="member", subject=None
+        )
+
+    def fake_fetch(self: GenericRestApiConnector) -> SourceRecord:
+        assert self.bearer_token == "stored-bridge-secret"
+        return SourceRecord(
+            record={
+                "record_ref": self.record_ref,
+                "status": "approved",
+                "total_usd": "118.42",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "generic_rest_api",
+                "request_url": (
+                    f"https://internal-api.example.com/api/orders/{self.record_ref}"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+            },
+        )
+
+    monkeypatch.setattr(GenericRestApiConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "generic_rest",
+                    "call_id": "call_bridge_generic",
+                    "trace_id": "trace_bridge_generic",
+                    "runtime_policy_decision_id": "decision_bridge_generic",
+                    "action_type": "internal_api_mutation",
+                    "record_ref": "ord_bridge",
+                    "claimed": {
+                        "record_ref": "ord_bridge",
+                        "status": "APPROVED",
+                        "total_usd": 118.42,
+                    },
+                    "metadata": {"partner_run_id": "pilot_bridge"},
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "generic_rest_api"
+            assert body["system_ref"] == "generic:ord_bridge"
+            assert body["idempotency_key"] == (
+                "saved_generic_rest:decision_bridge_generic:ord_bridge"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["runtime_path"] == "webhook_bridge"
+            assert body["metadata"]["bridge_connector"] == "generic_rest_api"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_bridge"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-bridge-secret" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)

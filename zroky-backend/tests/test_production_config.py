@@ -8,9 +8,9 @@ def _hardened_production_settings(**overrides: object) -> Settings:
         "APP_ENV": "production",
         "DATABASE_URL": "postgresql+psycopg://zroky:secret@db.example.com:5432/zroky",
         "REDIS_URL": "redis://redis.example.com:6379/0",
-        "ALLOWED_ORIGINS": "https://app.zroky.com",
+        "ALLOWED_ORIGINS": "https://zroky.com",
         "TRUSTED_HOSTS": "api.zroky.com",
-        "FRONTEND_URL": "https://app.zroky.com",
+        "FRONTEND_URL": "https://zroky.com",
         "ALLOW_PROJECT_HEADER_CONTEXT": False,
         "REQUIRE_PROVISIONING_TOKEN": True,
         "PROVISIONING_TOKEN": "super-secret",
@@ -24,15 +24,16 @@ def _hardened_production_settings(**overrides: object) -> Settings:
         "AUTH_JWT_SECRET": "auth-secret-with-enough-entropy",
         "OAUTH_STATE_SECRET": "oauth-state-secret-with-enough-entropy",
         "GITHUB_WEBHOOK_SECRET": "github-webhook-secret",
+        "ACTION_RECEIPT_SIGNING_SECRET": "action-receipt-signing-secret-with-enough-entropy",
         "PROVIDER_KEY_VAULT_KEK": "x" * 32,
         "PII_ENCRYPTION_KEY": "x" * 32,
         "BILLING_PROVIDER": "razorpay",
         "RAZORPAY_KEY_ID": "rzp_live_real_key",
         "RAZORPAY_KEY_SECRET": "razorpay-live-secret-with-enough-length",
         "RAZORPAY_WEBHOOK_SECRET": "razorpay-webhook-secret-with-enough-length",
-        "BILLING_CHECKOUT_SUCCESS_URL": "https://app.zroky.com/settings/billing?checkout=success",
-        "BILLING_CHECKOUT_CANCEL_URL": "https://app.zroky.com/settings/billing?checkout=cancel",
-        "BILLING_PORTAL_RETURN_URL": "https://app.zroky.com/settings/billing",
+        "BILLING_CHECKOUT_SUCCESS_URL": "https://zroky.com/settings/billing?checkout=success",
+        "BILLING_CHECKOUT_CANCEL_URL": "https://zroky.com/settings/billing?checkout=cancel",
+        "BILLING_PORTAL_RETURN_URL": "https://zroky.com/settings/billing",
         "JWT_JWKS_URL": None,
         "JWT_SIGNING_KEY": None,
     }
@@ -69,6 +70,7 @@ def test_production_config_rejects_insecure_defaults() -> None:
     assert "AUTH_JWT_SECRET" in error_text
     assert "OAUTH_STATE_SECRET" in error_text
     assert "GITHUB_WEBHOOK_SECRET" in error_text
+    assert "ACTION_RECEIPT_SIGNING_SECRET" in error_text
     assert "PROVIDER_KEY_VAULT_KEK" in error_text
     assert "OPENROUTER_API_KEY or OPENAI_API_KEY" in error_text
     assert "BILLING_ENFORCE_QUOTA" in error_text

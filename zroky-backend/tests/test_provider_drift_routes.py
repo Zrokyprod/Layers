@@ -28,6 +28,8 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.main import app
 
+RETIRED_DRIFT_DASHBOARD_URL = "https://zroky.com/" + "drift"
+
 
 @pytest.fixture()
 def db(tmp_path: Path):
@@ -214,6 +216,8 @@ def test_rss_empty(client):
     assert resp.status_code == 200
     assert "application/rss+xml" in resp.headers["content-type"]
     assert "<rss version=\"2.0\">" in resp.text
+    assert "<link>https://zroky.com/home?source=provider_drift</link>" in resp.text
+    assert RETIRED_DRIFT_DASHBOARD_URL not in resp.text
 
 
 def test_rss_with_alert(client, db):
@@ -222,6 +226,8 @@ def test_rss_with_alert(client, db):
     assert resp.status_code == 200
     assert "Drift detected" in resp.text
     assert "<guid>" in resp.text
+    assert "https://zroky.com/home?source=provider_drift&amp;provider_drift_alert_id=" in resp.text
+    assert RETIRED_DRIFT_DASHBOARD_URL not in resp.text
 
 
 # ── /atom ───────────────────────────────────────────────────────────────────────
@@ -232,6 +238,8 @@ def test_atom_empty(client):
     assert resp.status_code == 200
     assert "application/atom+xml" in resp.headers["content-type"]
     assert "<feed xmlns=\"http://www.w3.org/2005/Atom\">" in resp.text
+    assert '<link href="https://zroky.com/home?source=provider_drift" />' in resp.text
+    assert RETIRED_DRIFT_DASHBOARD_URL not in resp.text
 
 
 def test_atom_with_alert(client, db):
@@ -240,3 +248,5 @@ def test_atom_with_alert(client, db):
     assert resp.status_code == 200
     assert "Drift detected" in resp.text
     assert "<entry>" in resp.text
+    assert "https://zroky.com/home?source=provider_drift&amp;provider_drift_alert_id=" in resp.text
+    assert RETIRED_DRIFT_DASHBOARD_URL not in resp.text

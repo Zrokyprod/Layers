@@ -336,40 +336,57 @@ def build_judgment_alert_payload(
     categories: list[str],
     agent_name: str | None,
     diagnosis_id: str | None,
+    severity: str | None = None,
+    alert_id: str | None = None,
+    alert_title: str | None = None,
 ) -> dict[str, Any]:
     """Build a Slack webhook payload with one-click Judgment investigations."""
     cats = [str(category).strip() for category in categories if str(category).strip()]
     agent = (agent_name or "").strip() or "unknown agent"
+    severity_text = _clean_optional(severity)
+    alert = _clean_optional(alert_id)
+    title = _clean_optional(alert_title)
+    headline = title or text
+    if severity_text and title:
+        headline = f"{severity_text.title()} alert: {title}"
     value = _action_value(
         {
+            "alert_id": alert,
             "categories": cats,
             "agent_name": agent_name,
             "diagnosis_id": diagnosis_id,
         }
     )
     fields = [
-        {"type": "mrkdwn", "text": f"*Agent*\n`{_escape_mrkdwn(agent)}`"},
-        {"type": "mrkdwn", "text": f"*Failure*\n`{_escape_mrkdwn(', '.join(cats) or 'Unknown')}`"},
+        _field("Severity", severity_text or "unknown"),
+        _field("Category", ", ".join(cats) or "Unknown"),
+        _field("Agent/source", agent),
     ]
+    if alert:
+        fields.append(_field("Alert", alert))
     if diagnosis_id:
-        fields.append(
-            {"type": "mrkdwn", "text": f"*Diagnosis*\n`{_escape_mrkdwn(diagnosis_id)}`"}
-        )
+        fields.append(_field("Diagnosis", diagnosis_id))
+    actions = [
+        _button("Ask judgment", "judgment_investigate", value, style="primary"),
+        _button("Root cause", "judgment_root_cause", value),
+        _button("Similar cases", "judgment_similar", value),
+    ]
+    if alert:
+        actions.append(_link_button("Open approval", _dashboard_url(f"/approvals?alert_id={alert}")))
+        actions.append(_link_button("View evidence", _dashboard_url(f"/evidence?alert_id={alert}")))
+    elif diagnosis_id:
+        actions.append(_link_button("View evidence", _dashboard_url(f"/evidence?diagnosis_id={diagnosis_id}")))
     return {
-        "text": text,
+        "text": headline,
         "blocks": [
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": _escape_mrkdwn(text)},
+                "text": {"type": "mrkdwn", "text": _escape_mrkdwn(f"*{headline}*")},
             },
             {"type": "section", "fields": fields},
             {
                 "type": "actions",
-                "elements": [
-                    _button("Investigate", "judgment_investigate", value, style="primary"),
-                    _button("Root cause", "judgment_root_cause", value),
-                    _button("Similar cases", "judgment_similar", value),
-                ],
+                "elements": actions,
             },
         ],
     }
@@ -420,7 +437,7 @@ def build_new_issue_alert_payload(
                     _button("Investigate", "judgment_investigate", value, style="primary"),
                     _button("Root cause", "judgment_root_cause", value),
                     _button("Similar cases", "judgment_similar", value),
-                    _link_button("Open issue", _dashboard_url(f"/issues/{issue}")),
+                    _link_button("Open approval", _dashboard_url(f"/approvals?issue_id={issue}")),
                 ],
             },
         ],
@@ -465,7 +482,7 @@ def build_replay_verified_alert_payload(
                 "type": "actions",
                 "elements": [
                     _button("Investigate", "judgment_investigate", value, style="primary"),
-                    _link_button("Open replay", _dashboard_url(f"/replay/{run}")),
+                    _link_button("View evidence", _dashboard_url(f"/evidence?replay_run_id={run}")),
                 ],
             },
         ],
@@ -520,7 +537,7 @@ def build_replay_failed_alert_payload(
                 "elements": [
                     _button("Investigate", "judgment_investigate", value, style="primary"),
                     _button("Root cause", "judgment_root_cause", value),
-                    _link_button("Open replay", _dashboard_url(f"/replay/{run}")),
+                    _link_button("View evidence", _dashboard_url(f"/evidence?replay_run_id={run}")),
                 ],
             },
         ],
@@ -576,7 +593,7 @@ def build_ci_gate_failed_alert_payload(
                 "type": "actions",
                 "elements": [
                     _button("Investigate", "judgment_investigate", value, style="primary"),
-                    _link_button("Open CI gate", _dashboard_url(f"/ci-gates/{run}")),
+                    _link_button("Open policies", _dashboard_url(f"/policies?ci_run_id={run}")),
                 ],
             },
         ],

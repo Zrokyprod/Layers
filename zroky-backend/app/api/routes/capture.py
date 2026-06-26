@@ -1,5 +1,6 @@
 import json
 import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
@@ -11,8 +12,10 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.tenant import require_tenant_role
 from app.db.models import Call, GatewayCaptureHealth, OutcomeEvent, ProjectAlert, TraceRun, TraceSpan
 from app.db.session import get_db_session
+from app.services.alerts import auto_send_pending_alerts_to_slack, reset_slack_delivery_for_new_occurrence
 
 router = APIRouter(prefix="/v1/capture")
+logger = logging.getLogger(__name__)
 
 CaptureStatus = Literal["connected", "stale", "no_data"]
 
@@ -227,7 +230,7 @@ def _upsert_gateway_capture_alert(
     severity: str,
     title: str,
     evidence: dict[str, Any],
-) -> None:
+) -> str:
     diagnosis_prefix = "gateway-loss" if category == "CAPTURE_LOSS" else "gateway-backpressure"
     diagnosis_id = _gateway_alert_id(diagnosis_prefix, gateway_id)
     alert = db.execute(
@@ -252,13 +255,17 @@ def _upsert_gateway_capture_alert(
                 evidence_json=evidence_json,
             )
         )
-        return
+        return diagnosis_id
+    was_resolved = alert.status == "RESOLVED"
     alert.status = "OPEN"
     alert.resolved_at = None
     alert.updated_at = now
     alert.title = title
     alert.evidence_json = evidence_json
+    if was_resolved:
+        reset_slack_delivery_for_new_occurrence(alert)
     db.add(alert)
+    return diagnosis_id
 
 
 @router.post("/gateway-heartbeat", response_model=GatewayCaptureHeartbeatResponse)
@@ -308,8 +315,9 @@ def gateway_capture_heartbeat(
     db.add(row)
 
     alert_categories: list[str] = []
+    slack_alerts: list[tuple[str, str]] = []
     if body.loss_count > previous_loss or body.capture_status == "loss_detected":
-        _upsert_gateway_capture_alert(
+        diagnosis_id = _upsert_gateway_capture_alert(
             db=db,
             tenant_id=tenant_id,
             gateway_id=body.gateway_id,
@@ -326,12 +334,13 @@ def gateway_capture_heartbeat(
             },
         )
         alert_categories.append("CAPTURE_LOSS")
+        slack_alerts.append((diagnosis_id, "CAPTURE_LOSS"))
     if (
         body.backpressure_rejections > previous_backpressure
         or body.capture_status == "backpressure"
         or body.spool.high_watermark
     ):
-        _upsert_gateway_capture_alert(
+        diagnosis_id = _upsert_gateway_capture_alert(
             db=db,
             tenant_id=tenant_id,
             gateway_id=body.gateway_id,
@@ -350,8 +359,25 @@ def gateway_capture_heartbeat(
             },
         )
         alert_categories.append("CAPTURE_BACKPRESSURE")
+        slack_alerts.append((diagnosis_id, "CAPTURE_BACKPRESSURE"))
 
     db.commit()
+    for diagnosis_id, category in slack_alerts:
+        try:
+            auto_send_pending_alerts_to_slack(
+                db,
+                tenant_id=tenant_id,
+                diagnosis_id=diagnosis_id,
+                categories=[category],
+                agent_name=body.gateway_id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "gateway_capture_slack_delivery_failed tenant=%s gateway=%s category=%s",
+                tenant_id,
+                body.gateway_id,
+                category,
+            )
     return GatewayCaptureHeartbeatResponse(
         project_id=tenant_id,
         gateway_id=body.gateway_id,

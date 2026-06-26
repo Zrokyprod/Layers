@@ -153,17 +153,23 @@ def process_diagnosis(self, tenant_id: str, diagnosis_id: str, payload: dict | N
                 sync_alerts_from_jobs(session, tenant_id, [job])
                 session.commit()
 
-                # Deliver alert to the tenant's connected Slack channel.
-                # Fires only when there are real diagnoses (not healthy traces).
+                # Deliver new high/critical alerts to the tenant's connected Slack channel.
+                # Fires only once per pending project_alert row; dashboard reads never notify Slack.
                 if diagnosis_categories:
-                    from app.services.notification_dispatch import dispatch_alert_to_tenant_channels
-                    dispatch_alert_to_tenant_channels(
-                        db=session,
-                        tenant_id=tenant_id,
-                        categories=diagnosis_categories,
-                        agent_name=job.agent_name,
-                        diagnosis_id=diagnosis_id,
-                    )
+                    try:
+                        auto_send_pending_alerts_to_slack(
+                            session,
+                            tenant_id=tenant_id,
+                            diagnosis_id=diagnosis_id,
+                            categories=diagnosis_categories,
+                            agent_name=job.agent_name,
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "diagnosis_task_slack_delivery_failed tenant=%s diagnosis=%s",
+                            tenant_id,
+                            diagnosis_id,
+                        )
 
                 # Group each detected failure code into the canonical anomalies
                 # table. The public `/v1/issues` API projects these grouped

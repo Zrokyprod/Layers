@@ -898,7 +898,7 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
             body="The refund support agent skipped get_refund_status.",
             category="issue",
             is_read=False,
-            action_url=f"/issues/{ids['issue']}",
+            action_url=f"/approvals?issue_id={ids['issue']}",
             created_at=base_time + timedelta(minutes=8),
         )
     )
@@ -1202,14 +1202,14 @@ def seed_money_path_demo(db: Session, *, fixture_path: Path = FIXTURE_PATH) -> d
         "outcome_matched_id": "demo-outcome-refund-matched",
         "outcome_not_verified_id": "demo-outcome-email-not-verified",
         "trace_id": str(scenario["trace_id"]),
-        "issue_url": f"http://localhost:3000/issues/{ids['issue']}",
-        "call_url": f"http://localhost:3000/calls/{ids['bad_call']}",
-        "replay_url": f"http://localhost:3000/replay/{ids['verified_replay']}",
-        "golden_set_url": f"http://localhost:3000/goldens/{ids['golden_set']}",
-        "ci_gate_url": f"http://localhost:3000/ci-gates/{ids['regression_ci_run']}",
-        "trace_url": f"http://localhost:3000/trace/{scenario['trace_id']}",
-        "goldens_url": "http://localhost:3000/goldens",
-        "ci_gates_url": "http://localhost:3000/ci-gates",
+        "issue_url": f"http://localhost:3000/approvals?issue_id={ids['issue']}",
+        "call_url": f"http://localhost:3000/evidence?call_id={ids['bad_call']}",
+        "replay_url": f"http://localhost:3000/evidence?replay_run_id={ids['verified_replay']}",
+        "golden_set_url": f"http://localhost:3000/policies?golden_set_id={ids['golden_set']}",
+        "ci_gate_url": f"http://localhost:3000/policies?ci_run_id={ids['regression_ci_run']}",
+        "trace_url": f"http://localhost:3000/evidence?trace_id={scenario['trace_id']}",
+        "goldens_url": "http://localhost:3000/policies?view=contracts",
+        "ci_gates_url": "http://localhost:3000/policies?view=ci",
         "failure_inbox_url": "http://localhost:3000/home",
     }
 

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,9 +15,18 @@ from app.schemas.dashboard import (
     AlertItemResponse,
     AlertListResponse,
 )
-from app.services.alerts import alert_to_payload, sync_alerts_from_jobs
+from app.services.alerts import (
+    ACTIONABLE_SLACK_SEVERITIES,
+    PENDING_SLACK_DELIVERY_STATUS,
+    alert_to_payload,
+    auto_send_all_pending_alerts_to_slack,
+    auto_send_pending_alerts_to_slack,
+    sync_alerts_from_jobs,
+)
+from app.services.slack_integration import get_slack_install, send_slack_message
 
 router = APIRouter(prefix="/v1/alerts")
+logger = logging.getLogger(__name__)
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -50,6 +60,11 @@ def _sync_recent_alerts(db: Session, tenant_id: str) -> None:
         except IntegrityError:
             # Concurrent request already inserted the same alert; safe to ignore.
             db.rollback()
+            return
+        try:
+            auto_send_all_pending_alerts_to_slack(db, tenant_id=tenant_id, limit=500)
+        except Exception:  # noqa: BLE001
+            logger.exception("alerts.lazy_sync_slack_delivery_failed tenant=%s", tenant_id)
 
 
 @router.get("", response_model=AlertListResponse)
@@ -152,12 +167,76 @@ def reopen_alert(
     return AlertItemResponse.model_validate(alert_to_payload(alert))
 
 
+@router.post("/{alert_id}/retry-slack", response_model=AlertItemResponse)
+def retry_alert_slack_delivery(
+    alert_id: str,
+    tenant_id: str = Depends(require_tenant_role("member")),
+    db: Session = Depends(get_db_session),
+) -> AlertItemResponse:
+    alert = _get_alert_or_404(db, tenant_id, alert_id)
+    if alert.status != "OPEN":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only open alerts can retry Slack notification.",
+        )
+    if alert.severity.lower() not in ACTIONABLE_SLACK_SEVERITIES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only high and critical alerts can retry Slack notification.",
+        )
+    if alert.slack_delivery_status not in {"failed", "not_connected"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Slack notification can only be retried after a failed or missing notification.",
+        )
+
+    alert.slack_delivery_status = PENDING_SLACK_DELIVERY_STATUS
+    alert.slack_delivery_attempted_at = None
+    alert.slack_delivery_error = None
+    db.add(alert)
+    db.flush()
+
+    auto_send_pending_alerts_to_slack(
+        db,
+        tenant_id=tenant_id,
+        diagnosis_id=alert.diagnosis_id,
+        categories=[alert.category],
+        agent_name=alert.source,
+    )
+    db.refresh(alert)
+    return AlertItemResponse.model_validate(alert_to_payload(alert))
+
+
 @router.post("/channel-test", response_model=AlertChannelTestResponse)
-def send_alert_channel_test(
+async def send_alert_channel_test(
     body: AlertChannelTestRequest,
-    _: str = Depends(require_tenant_role("admin")),
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
 ) -> AlertChannelTestResponse:
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=f"Alert channel test dispatch is not yet configured for channel '{body.channel}'.",
+    if body.channel != "slack":
+        return AlertChannelTestResponse(
+            channel=body.channel,
+            status="queued",
+            message=f"{body.channel} alert channel test queued.",
+        )
+
+    install = get_slack_install(db, tenant_id)
+    if install is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Slack is not connected for this project.",
+        )
+
+    ok = await send_slack_message(
+        db,
+        tenant_id,
+        "Zroky alert channel test: Slack notifications are connected for this project.",
+    )
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Slack alert channel test failed.")
+
+    return AlertChannelTestResponse(
+        channel="slack",
+        status="sent",
+        message="Slack alert channel test sent.",
     )

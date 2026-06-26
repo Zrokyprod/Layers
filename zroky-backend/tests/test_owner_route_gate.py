@@ -101,7 +101,7 @@ def test_owner_production_readiness_passes_with_required_launch_config(monkeypat
         "APP_ENV": "production",
         "DATABASE_URL": "postgresql://zroky:secret@db.example.com/zroky",
         "REDIS_URL": "redis://redis.example.com:6379/0",
-        "ALLOWED_ORIGINS": "https://app.zroky.com,https://admin.zroky.com",
+        "ALLOWED_ORIGINS": "https://zroky.com,https://admin.zroky.com",
         "TRUSTED_HOSTS": "api.zroky.com",
         "FEATURE_LEGACY_OWNER": "true",
         "ALLOW_PROJECT_HEADER_CONTEXT": "false",

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -19,6 +20,14 @@ from app.services.issue_projection import issue_projection_from_anomaly
 from .intent_router import Intent
 
 _MAX_ROWS = 8
+
+
+def _approval_href(key: str, value: str) -> str:
+    return f"/approvals?{key}={quote(value, safe='')}"
+
+
+def _evidence_href(key: str, value: str) -> str:
+    return f"/evidence?{key}={quote(value, safe='')}"
 
 
 @dataclass
@@ -142,7 +151,7 @@ def _populate_cost(
                 kind="call",
                 id=call_id,
                 label=f"${float(cost or 0):.4f} Â· {agent or model or call_id[:8]}",
-                href=f"/calls/{call_id}",
+                href=_evidence_href("call_id", call_id),
             )
         )
 
@@ -183,7 +192,7 @@ def _populate_latency(
                 kind="call",
                 id=call_id,
                 label=f"{float(latency_ms or 0):.0f}ms Â· {agent or model or call_id[:8]}",
-                href=f"/calls/{call_id}",
+                href=_evidence_href("call_id", call_id),
             )
         )
 
@@ -227,7 +236,7 @@ def _populate_failures(
                 kind="issue",
                 id=row.id,
                 label=f"{row.failure_code} Â· {row.agent_name or 'agent'} Â· {row.occurrence_count}Ã—",
-                href=f"/issues/{row.id}",
+                href=_approval_href("issue_id", row.id),
             )
         )
         if len(bundle.rows) >= _MAX_ROWS:
@@ -265,7 +274,7 @@ def _populate_recent_calls(
                 kind="call",
                 id=call.id,
                 label=f"{call.status} Â· {call.agent_name or call.model or call.id[:8]}",
-                href=f"/calls/{call.id}",
+                href=_evidence_href("call_id", call.id),
             )
         )
 
@@ -295,7 +304,7 @@ def _populate_call_context(
             kind="call",
             id=call.id,
             label=f"This call Â· {call.status}",
-            href=f"/calls/{call.id}",
+            href=_evidence_href("call_id", call.id),
         )
     )
 
@@ -342,7 +351,7 @@ def _populate_issue_context(
             kind="issue",
             id=issue.id,
             label=f"This issue - {issue.failure_code}",
-            href=f"/issues/{issue.id}",
+            href=_approval_href("issue_id", issue.id),
         )
     )
     if issue.sample_call_id:
@@ -351,7 +360,7 @@ def _populate_issue_context(
                 kind="call",
                 id=issue.sample_call_id,
                 label="Sample call",
-                href=f"/calls/{issue.sample_call_id}",
+                href=_evidence_href("call_id", issue.sample_call_id),
             )
         )
 

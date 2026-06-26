@@ -8,6 +8,9 @@ from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / "scripts" / "run_deployment_smoke.py"
+STAGING_ROLLOUT_WORKFLOW_PATH = (
+    ROOT / ".github" / "workflows" / "zroky-staging-rollout-verify.yml"
+)
 
 
 def _load_script() -> ModuleType:
@@ -18,6 +21,13 @@ def _load_script() -> ModuleType:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def test_staging_rollout_workflow_defaults_to_zroky_staging_domain() -> None:
+    workflow = STAGING_ROLLOUT_WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "default: https://api-staging.zroky.com" in workflow
+    assert ("https://api-staging." + "example" + ".com") not in workflow
 
 
 def test_backend_only_deployment_smoke_skips_frontend_surfaces(
@@ -92,7 +102,7 @@ def test_backend_only_deployment_smoke_skips_frontend_surfaces(
         module.main(
             [
                 "--api-base-url",
-                "https://api-staging.zroky.ai",
+                "https://api-staging.zroky.com",
                 "--provisioning-token",
                 "staging-provisioning-token",
                 "--timeout-seconds",
@@ -108,8 +118,8 @@ def test_backend_only_deployment_smoke_skips_frontend_surfaces(
     assert "[SKIP] landing smoke skipped" in output
     assert "[deployment-smoke] passed" in output
     assert calls == [
-        "health:https://api-staging.zroky.ai:7.0",
-        "provision:https://api-staging.zroky.ai:staging-provisioning-token:X-Zroky-Admin-Token:7.0",
+        "health:https://api-staging.zroky.com:7.0",
+        "provision:https://api-staging.zroky.com:staging-provisioning-token:X-Zroky-Admin-Token:7.0",
         "api-key-lifecycle:proj_staging_smoke:staging-provisioning-token",
         "ingest:zk_live_staging_smoke",
         "issues:zk_live_staging_smoke:None",
@@ -121,6 +131,6 @@ def test_backend_only_deployment_smoke_skips_frontend_surfaces(
 def test_deployment_smoke_requires_provisioning_token(capsys) -> None:
     module = _load_script()
 
-    assert module.main(["--api-base-url", "https://api-staging.zroky.ai"]) == 2
+    assert module.main(["--api-base-url", "https://api-staging.zroky.com"]) == 2
 
     assert "provisioning-token is required" in capsys.readouterr().out

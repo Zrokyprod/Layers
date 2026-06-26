@@ -258,6 +258,8 @@ def test_gateway_heartbeat_uses_api_key_and_creates_capture_alerts(client: TestC
         assert health.spool_backlog == 2
         alerts = db.query(ProjectAlert).filter_by(tenant_id="proj_gateway_health").all()
         assert {alert.category for alert in alerts} == {"CAPTURE_LOSS", "CAPTURE_BACKPRESSURE"}
+        assert {alert.slack_delivery_status for alert in alerts} == {"not_connected"}
+        assert all(alert.slack_delivery_attempted_at is not None for alert in alerts)
 
     health_response = client.get("/api/v1/capture/health", headers={"x-project-id": "proj_gateway_health"})
     assert health_response.status_code == 200

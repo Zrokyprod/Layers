@@ -49,6 +49,58 @@ def test_slack_delivered_when_install_present():
     assert "LOOP_DETECTED" in call_args[1]["json"]["text"]
 
 
+def test_slack_payload_uses_alert_context_with_dashboard_links():
+    db = MagicMock()
+    mock_install = MagicMock()
+    mock_install.webhook_url = "https://hooks.slack.com/T123/B456/secret"
+    mock_response = MagicMock(status_code=200)
+    alert_context = {
+        "alert_id": "alert-123",
+        "alert_title": "Refund agent loop detected.",
+        "severity": "critical",
+    }
+
+    with patch("app.services.notification_dispatch.get_slack_install", return_value=mock_install), \
+         patch("app.services.notification_dispatch._alert_context_for_slack", return_value=alert_context), \
+         patch("httpx.post", return_value=mock_response) as mock_post, \
+         patch("app.services.slack_judgment.get_settings") as get_settings:
+        get_settings.return_value.FRONTEND_URL = "https://zroky.com"
+        result = dispatch_alert_to_tenant_channels(
+            db=db,
+            tenant_id="tenant-abc",
+            categories=["LOOP_DETECTED"],
+            agent_name="refund-agent",
+            diagnosis_id="diag-001",
+        )
+
+    assert result == {"slack": True}
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["text"] == "Critical alert: Refund agent loop detected."
+    block_text = str(payload["blocks"])
+    assert "Severity" in block_text
+    assert "critical" in block_text
+    assert "LOOP_DETECTED" in block_text
+    assert "refund-agent" in block_text
+    action_labels = [
+        element["text"]["text"]
+        for block in payload["blocks"]
+        if block.get("type") == "actions"
+        for element in block["elements"]
+    ]
+    assert action_labels == ["Ask judgment", "Root cause", "Similar cases", "Open approval", "View evidence"]
+    urls = [
+        element.get("url")
+        for block in payload["blocks"]
+        if block.get("type") == "actions"
+        for element in block["elements"]
+        if element.get("url")
+    ]
+    assert urls == [
+        "https://zroky.com/approvals?alert_id=alert-123",
+        "https://zroky.com/evidence?alert_id=alert-123",
+    ]
+
+
 def test_slack_skipped_when_no_install():
     db = MagicMock()
 

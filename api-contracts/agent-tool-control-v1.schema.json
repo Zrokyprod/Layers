@@ -1,0 +1,579 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://api.zroky.com/contracts/agent-tool-control-v1.schema.json",
+  "title": "Zroky Agent Tool Control v1",
+  "description": "Canonical Phase 1 contract for agent profiles, risky tool action passports, runtime policy decisions, real-world verification results, connector templates, and evidence packs.",
+  "type": "object",
+  "required": ["schema_version", "kind"],
+  "properties": {
+    "schema_version": {
+      "const": "zroky.agent_tool_control.v1"
+    },
+    "kind": {
+      "enum": [
+        "agent_profile",
+        "tool_action_passport",
+        "policy_decision",
+        "verification_result",
+        "connector_template",
+        "evidence_pack"
+      ]
+    },
+    "agent_profile": {
+      "$ref": "#/$defs/AgentProfile"
+    },
+    "tool_action_passport": {
+      "$ref": "#/$defs/ToolActionPassport"
+    },
+    "policy_decision": {
+      "$ref": "#/$defs/PolicyDecision"
+    },
+    "verification_result": {
+      "$ref": "#/$defs/VerificationResult"
+    },
+    "connector_template": {
+      "$ref": "#/$defs/ConnectorTemplate"
+    },
+    "evidence_pack": {
+      "$ref": "#/$defs/EvidencePack"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "agent_profile"
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": {
+        "required": ["agent_profile"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "tool_action_passport"
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": {
+        "required": ["tool_action_passport"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "policy_decision"
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": {
+        "required": ["policy_decision"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "verification_result"
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": {
+        "required": ["verification_result"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "connector_template"
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": {
+        "required": ["connector_template"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "evidence_pack"
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": {
+        "required": ["evidence_pack"]
+      }
+    }
+  ],
+  "$defs": {
+    "RiskActionType": {
+      "enum": [
+        "refund",
+        "payment_adjustment",
+        "invoice_spend_approval",
+        "customer_record_update",
+        "ticket_close",
+        "email_send",
+        "deploy_change",
+        "internal_api_mutation",
+        "database_record_update",
+        "custom"
+      ]
+    },
+    "RuntimePath": {
+      "enum": ["sdk", "http_gateway", "mcp_gateway", "webhook"]
+    },
+    "VerificationConnectorType": {
+      "enum": [
+        "generic_rest",
+        "webhook_callback",
+        "database_read",
+        "ledger_refund",
+        "crm_record",
+        "ticket_status",
+        "email_delivery",
+        "github_ci"
+      ]
+    },
+    "NativeToolFamily": {
+      "enum": [
+        "stripe_refund",
+        "razorpay_refund",
+        "hubspot_customer",
+        "salesforce_customer",
+        "zendesk_ticket",
+        "freshdesk_ticket",
+        "sendgrid_email",
+        "gmail_email",
+        "github_pr_ci_deploy",
+        "slack_approval_alert"
+      ]
+    },
+    "PolicyDecisionStatus": {
+      "enum": ["allow", "block", "requires_approval"]
+    },
+    "VerificationVerdict": {
+      "enum": ["matched", "mismatched", "not_verified"]
+    },
+    "JsonObject": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "IsoDateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "AgentProfile": {
+      "type": "object",
+      "required": ["display_name", "runtime_path"],
+      "properties": {
+        "schema_version": {
+          "const": "zroky.agent_tool_control.v1"
+        },
+        "agent_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime_path": {
+          "$ref": "#/$defs/RuntimePath"
+        },
+        "framework": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "owner_user_id": {
+          "type": "string"
+        },
+        "model_provider": {
+          "type": "string"
+        },
+        "model_name": {
+          "type": "string"
+        },
+        "tool_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "allowed_action_types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RiskActionType"
+          },
+          "uniqueItems": true
+        },
+        "blocked_action_types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RiskActionType"
+          },
+          "uniqueItems": true
+        },
+        "default_policy_id": {
+          "type": "string"
+        },
+        "risk_limits": {
+          "$ref": "#/$defs/JsonObject"
+        },
+        "verification_connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VerificationConnectorType"
+          },
+          "uniqueItems": true
+        },
+        "metadata": {
+          "$ref": "#/$defs/JsonObject"
+        },
+        "created_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ToolActionPassport": {
+      "type": "object",
+      "required": ["action_type"],
+      "properties": {
+        "schema_version": {
+          "const": "zroky.agent_tool_control.v1"
+        },
+        "action_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RiskActionType"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "tool_args": true,
+        "trace_id": {
+          "type": "string"
+        },
+        "span_id": {
+          "type": "string"
+        },
+        "call_id": {
+          "type": "string"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "agent_name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "runtime_path": {
+          "$ref": "#/$defs/RuntimePath"
+        },
+        "tool_call_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retry_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_cost_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "input_text": {
+          "type": "string"
+        },
+        "user_input": {
+          "type": "string"
+        },
+        "output_text": {
+          "type": "string"
+        },
+        "external_action": {
+          "type": "boolean"
+        },
+        "prompt_injection_detected": {
+          "type": "boolean"
+        },
+        "pii_detected": {
+          "type": "boolean"
+        },
+        "approval_id": {
+          "type": "string"
+        },
+        "business_impact": true,
+        "business_impact_summary": {
+          "type": "string"
+        },
+        "impact_usd": {
+          "type": "number"
+        },
+        "customer_id": {
+          "type": "string"
+        },
+        "account_id": {
+          "type": "string"
+        },
+        "order_id": {
+          "type": "string"
+        },
+        "resource_id": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/JsonObject"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PolicyDecision": {
+      "type": "object",
+      "required": ["decision"],
+      "properties": {
+        "schema_version": {
+          "const": "zroky.agent_tool_control.v1"
+        },
+        "decision_id": {
+          "type": "string"
+        },
+        "action_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RiskActionType"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "decision": {
+          "$ref": "#/$defs/PolicyDecisionStatus"
+        },
+        "allowed": {
+          "type": "boolean"
+        },
+        "requires_approval": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy_id": {
+          "type": "string"
+        },
+        "approval_id": {
+          "type": "string"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        },
+        "created_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        },
+        "metadata": {
+          "$ref": "#/$defs/JsonObject"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VerificationResult": {
+      "type": "object",
+      "required": ["verdict", "connector_type"],
+      "properties": {
+        "schema_version": {
+          "const": "zroky.agent_tool_control.v1"
+        },
+        "verification_id": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/VerificationVerdict"
+        },
+        "connector_type": {
+          "$ref": "#/$defs/VerificationConnectorType"
+        },
+        "connector_id": {
+          "type": "string"
+        },
+        "source_system": {
+          "type": "string"
+        },
+        "expected": true,
+        "observed": true,
+        "evidence_url": {
+          "type": "string"
+        },
+        "evidence_hash": {
+          "type": "string"
+        },
+        "checked_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        },
+        "error_message": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/JsonObject"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ConnectorTemplate": {
+      "type": "object",
+      "required": ["connector_type", "display_name"],
+      "properties": {
+        "schema_version": {
+          "const": "zroky.agent_tool_control.v1"
+        },
+        "connector_type": {
+          "$ref": "#/$defs/VerificationConnectorType"
+        },
+        "native_tool_family": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeToolFamily"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purpose": {
+          "enum": ["gate", "verify", "approve", "export"]
+        },
+        "auth_mode": {
+          "enum": ["api_key", "oauth2", "webhook_secret", "basic", "database_url", "manual"]
+        },
+        "supported_action_types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RiskActionType"
+          },
+          "uniqueItems": true
+        },
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "metadata": {
+          "$ref": "#/$defs/JsonObject"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AuditEvent": {
+      "type": "object",
+      "required": ["event_type", "occurred_at"],
+      "properties": {
+        "event_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "occurred_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        },
+        "actor_type": {
+          "enum": ["agent", "human", "system"]
+        },
+        "actor_id": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/JsonObject"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidencePack": {
+      "type": "object",
+      "required": ["evidence_pack_id", "action_passport", "decision", "evidence_hash"],
+      "properties": {
+        "schema_version": {
+          "const": "zroky.agent_tool_control.v1"
+        },
+        "evidence_pack_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action_passport": {
+          "$ref": "#/$defs/ToolActionPassport"
+        },
+        "decision": {
+          "$ref": "#/$defs/PolicyDecision"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationResult"
+        },
+        "audit_events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AuditEvent"
+          }
+        },
+        "evidence_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        },
+        "export_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "metadata": {
+          "$ref": "#/$defs/JsonObject"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

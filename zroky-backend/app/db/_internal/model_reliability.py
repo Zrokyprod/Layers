@@ -111,6 +111,56 @@ class OutcomeReconciliationCheck(Base):
     )
 
 
+class SourceMutationRecord(Base):
+    """System-of-record mutation observed from webhooks/audit logs for bypass detection."""
+
+    __tablename__ = "source_mutation_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(64), nullable=False)
+    mutation_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    action_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resource_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    system_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    zroky_action_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("action_intents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action_receipt_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("action_receipts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    classification: Mapped[str] = mapped_column(String(32), nullable=False)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "classification IN ('matched_receipt','authorized_external','legacy_path','unmanaged_agent_action','policy_bypass','unknown_actor')",
+            name="ck_source_mutation_records_classification",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "source_system",
+            "mutation_id",
+            name="ux_source_mutation_project_source_mutation",
+        ),
+        Index("ix_source_mutation_project_classification", "project_id", "classification", "occurred_at"),
+        Index("ix_source_mutation_project_resource", "project_id", "resource_type", "resource_id"),
+        Index("ix_source_mutation_project_action", "project_id", "zroky_action_id"),
+        Index("ix_source_mutation_project_receipt", "project_id", "action_receipt_id"),
+        Index("ix_source_mutation_project_occurred", "project_id", "occurred_at"),
+    )
+
+
 class SystemOfRecordConnectorConfig(Base):
     """Tenant-scoped connector config for outcome verification."""
 
@@ -127,6 +177,7 @@ class SystemOfRecordConnectorConfig(Base):
     )
     record_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     query_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    read_query: Mapped[str | None] = mapped_column(Text, nullable=True)
     bearer_token_ciphertext: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True
     )
@@ -134,6 +185,13 @@ class SystemOfRecordConnectorConfig(Base):
         String(64), nullable=True
     )
     bearer_token_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    database_url_ciphertext: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    database_url_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    database_url_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
     kms_key_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
@@ -153,7 +211,7 @@ class SystemOfRecordConnectorConfig(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "connector_type IN ('ledger_refund_api','customer_record_api')",
+            "connector_type IN ('ledger_refund_api','customer_record_api','generic_rest_api','postgres_read')",
             name="ck_sor_connector_type",
         ),
         UniqueConstraint(

@@ -131,7 +131,7 @@ def _get_or_create_agent(db: Session, *, project_id: str, name: str) -> Agent:
     ).scalar_one_or_none()
     if existing is not None:
         return existing
-    row = Agent(id=str(uuid4()), project_id=project_id, name=name, slug=slug)
+    row = Agent(id=str(uuid4()), project_id=project_id, name=name, slug=slug, runtime_path="sdk")
     db.add(row)
     db.flush()
     return row

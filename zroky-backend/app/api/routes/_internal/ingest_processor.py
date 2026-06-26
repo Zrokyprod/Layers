@@ -24,6 +24,7 @@ from app.schemas.ingest import IngestBatchRequest, IngestBatchResponse
 from app.services.billing_metering import increment_event_count
 from app.services.billing_quota import check_quota
 from app.services.cost_buckets import enrich_payload_with_cost_buckets
+from app.services.alerts import auto_send_pending_alerts_to_slack, reset_slack_delivery_for_new_occurrence
 from app.services.ingest_protection import IngestRateLimitDecision, evaluate_ingest_rate_limit
 from app.services.privacy import mask_error_message, mask_payload
 from app.services.redis_client import get_redis_client
@@ -201,11 +202,14 @@ def _upsert_backpressure_alert(
         )
         db.add(alert)
     else:
+        was_resolved = alert.status == "RESOLVED"
         alert.status = "OPEN"
         alert.resolved_at = None
         alert.updated_at = now
         alert.title = title
         alert.evidence_json = json.dumps(evidence, separators=(",", ":"))
+        if was_resolved:
+            reset_slack_delivery_for_new_occurrence(alert)
         db.add(alert)
 
     try:
@@ -214,6 +218,17 @@ def _upsert_backpressure_alert(
         db.rollback()
         logger.exception("Failed to commit backpressure alert")
         raise
+
+    try:
+        auto_send_pending_alerts_to_slack(
+            db,
+            tenant_id=tenant_id,
+            diagnosis_id="ingest-backpressure",
+            categories=["INGEST_BACKPRESSURE"],
+            agent_name="ingest_rate_limiter",
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to record/send ingest backpressure Slack alert")
 
 
 def process_ingest_batch_for_tenant(
@@ -436,4 +451,3 @@ def process_ingest_batch_for_tenant(
         metering_failed=metering_failed,
         metering_warnings=metering_warnings,
     )
-

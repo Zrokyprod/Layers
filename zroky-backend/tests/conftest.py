@@ -133,15 +133,9 @@ _TRACKED_SKIPS: dict[str, str] = {
     # Cat B (JWT/role identity gap) was closed by Module 6 — see
     # `app/api/dependencies/tenant.py` (header-path role default,
     # JWT-path role default, narrowed HTTPException catch).
-    # 14 of the 15 originally-tracked tests now pass; one remained
-    # broken for an unrelated reason and was reclassified to Cat D
-    # below ("alerts/channel-test endpoint returns 501").
+    # Alerts channel-test was closed by the alerts module rewrite.
 
     # Cat D: Pre-existing logic bugs (fixed in Module 2B/7 when code is rewritten)
-    "tests/test_dashboard_phase0.py::test_alerts_lifecycle_and_channel_test": (
-        "alerts/channel-test endpoint returns 501 Not Implemented; "
-        "endpoint not yet built. Tracked for the alerts module rewrite."
-    ),
     "tests/test_diagnosis.py::test_fix_watch_detects_recurrence": _SKIP_PREEXISTING_LOGIC_BUG,
     "tests/test_dashboard_phase0.py::test_calls_list_supports_user_id_filter_alias": _SKIP_PREEXISTING_LOGIC_BUG,
     "tests/test_dashboard_phase0.py::test_onboarding_and_settings_endpoints": _SKIP_PREEXISTING_LOGIC_BUG,
