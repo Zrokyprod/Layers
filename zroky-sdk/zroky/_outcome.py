@@ -126,7 +126,7 @@ def outcome(
         return
 
     api_key = cfg.api_key
-    ingest_url = cfg.ingest_url or "https://api.zroky.ai"
+    ingest_url = cfg.ingest_url or "https://api.zroky.com"
     if not api_key:
         _logger.debug("zroky.outcome: no api_key configured — dropping")
         return

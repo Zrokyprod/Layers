@@ -18,34 +18,11 @@ split across:
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from zroky._internal.config import SDKConfig, load_config
-from zroky._internal.budget import BudgetTracker
-from zroky._internal.cache import ResponseCache
-from zroky._internal.fallback import ModelHealthRegistry
-from zroky._internal.loop_guard import LoopGuard
-from zroky._internal.metrics import (
-    register_error_callback,
-    register_event_callback,
-    register_flush_callback,
-    unregister_error_callback,
-    unregister_event_callback,
-    unregister_flush_callback,
-)
-from zroky._internal.models import CallEvent
-from zroky._internal.queue import EventQueue
-from zroky._internal.rate_limiter import RateLimiter
-from zroky._internal.timeout_manager import TimeoutManager
-from zroky._internal import validation as _validation  # noqa: F401
-
-# Re-export errors so callers can do: from zroky import ZrokyPreflightError
-from zroky._errors import (  # noqa: F401
-    ZrokyPreflightError,
-    ZrokyRuntimePolicyApprovalRequired,
-    ZrokyRuntimePolicyBlocked,
-    ZrokyRuntimePolicyError,
-)
+# Re-export async surface from _async.py
+from zroky._async import acall, aflush, ainit, ashutdown  # noqa: F401
 
 # Re-export call-surface from _call.py
 from zroky._call import (  # noqa: F401
@@ -61,29 +38,56 @@ from zroky._call import (  # noqa: F401
     trace_run,
 )
 
-from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
+# Re-export errors so callers can do: from zroky import ZrokyPreflightError
+from zroky._errors import (  # noqa: F401
+    ZrokyOutcomeVerificationError,
+    ZrokyPreflightError,
+    ZrokyRuntimePolicyApprovalRequired,
+    ZrokyRuntimePolicyBlocked,
+    ZrokyRuntimePolicyError,
+)
+from zroky._internal import validation as _validation  # noqa: F401
+
+# Re-export internal exception types
+from zroky._internal.budget import (
+    BudgetExceededError,  # noqa: F401
+    BudgetTracker,
+)
+from zroky._internal.cache import ResponseCache
+from zroky._internal.config import SDKConfig, load_config
+from zroky._internal.fallback import ModelHealthRegistry
+from zroky._internal.loop_guard import (
+    LoopDetectedError,  # noqa: F401
+    LoopGuard,
+)
+from zroky._internal.metrics import (
+    register_error_callback,
+    register_event_callback,
+    register_flush_callback,
+    unregister_error_callback,
+    unregister_event_callback,
+    unregister_flush_callback,
+)
+from zroky._internal.models import CallEvent
+from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint  # noqa: F401
+from zroky._internal.queue import EventQueue
+from zroky._internal.rate_limiter import RateLimiter
+from zroky._internal.timeout_manager import TimeoutManager
 
 # Re-export outcome() — Cost-of-Failure Attribution
 from zroky._outcome import outcome  # noqa: F401
-
-# Re-export async surface from _async.py
-from zroky._async import acall, aflush, ainit, ashutdown  # noqa: F401
-
-# Re-export preflight public API from preflight.py
-from zroky.preflight import (  # noqa: F401
-    _is_preflight_sampled_in,
-    check_rate_limit_risk,
-    check_token_overflow,
-    estimate_tokens,
-    model_context_limit_resolution,
-    print_validation,
-    validate,
+from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
+from zroky._runner import (  # noqa: F401
+    EnvCredentialResolver,
+    RUNNER_CAPABILITY_VERSION,
+    ProtectedActionRunner,
+    RunnerExecutionContext,
+    ZrokyRunnerError,
+    credential_env_name,
+    default_runner_metadata,
+    generic_rest_adapter,
+    stripe_refund_adapter,
 )
-
-# Re-export internal exception types
-from zroky._internal.budget import BudgetExceededError  # noqa: F401
-from zroky._internal.loop_guard import LoopDetectedError  # noqa: F401
-from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Backward-compat aliases for mutable test-fixture state
@@ -91,15 +95,27 @@ from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint  # no
 #  the submodules, so clear() propagates correctly)
 # ---------------------------------------------------------------------------
 from zroky._telemetry import (  # noqa: F401
-    _classify_error,
     _build_provider_kwargs,
+    _classify_error,
     _ensure_provider_payload_is_isolated,
     _get_agent,
     _local,
-    _payload_guard_logged_call_ids,
     _payload_guard_log_order,
+    _payload_guard_logged_call_ids,
 )
-from zroky.preflight import _recent_preflight_calls  # noqa: F401
+from zroky._verify import verify_outcome  # noqa: F401
+
+# Re-export preflight public API from preflight.py
+from zroky.preflight import (  # noqa: F401
+    _is_preflight_sampled_in,
+    _recent_preflight_calls,  # noqa: F401
+    check_rate_limit_risk,
+    check_token_overflow,
+    estimate_tokens,
+    model_context_limit_resolution,
+    print_validation,
+    validate,
+)
 
 _ASYNC_AVAILABLE = True
 
@@ -283,7 +299,11 @@ def _print_init_banner(cfg: SDKConfig) -> None:
         f"(threshold={cfg.circuit_breaker_failure_threshold}, "
         f"reset={cfg.circuit_breaker_reset_timeout_seconds:.0f}s)"
     )
-    retry_label = f"enabled (max {cfg.retry_max_retries})" if cfg.retry_max_retries > 0 else "disabled"
+    retry_label = (
+        f"enabled (max {cfg.retry_max_retries})"
+        if cfg.retry_max_retries > 0
+        else "disabled"
+    )
     print(f"[ZROKY] Auto-retry: {retry_label}")
     fallback_label = (
         f"enabled ({len(cfg.fallback_models)} backup model(s))"
@@ -297,7 +317,10 @@ def _print_init_banner(cfg: SDKConfig) -> None:
     cache_label = "enabled" if cfg.cache_enabled else "disabled"
     if cfg.cache_enabled:
         disk_part = f", disk: {cfg.cache_db_path}" if cfg.cache_db_path else ""
-        cache_label += f" (memory: {cfg.cache_max_memory}, TTL: {cfg.cache_default_ttl:.0f}s{disk_part})"
+        cache_label += (
+            f" (memory: {cfg.cache_max_memory}, "
+            f"TTL: {cfg.cache_default_ttl:.0f}s{disk_part})"
+        )
     print(f"[ZROKY] Cache: {cache_label}")
     budget_label = "enabled" if cfg.budget_enabled else "disabled"
     if cfg.budget_enabled:
@@ -366,12 +389,12 @@ def shutdown() -> None:
 # Public: metrics callbacks
 # ---------------------------------------------------------------------------
 
-def on_event(callback: Callable[["CallEvent"], None]) -> None:
+def on_event(callback: Callable[[CallEvent], None]) -> None:
     """Register a callback for every captured event."""
     register_event_callback(callback)
 
 
-def on_error(callback: Callable[["CallEvent", Exception], None]) -> None:
+def on_error(callback: Callable[[CallEvent, Exception], None]) -> None:
     """Register a callback when an error is captured."""
     register_error_callback(callback)
 
@@ -381,12 +404,12 @@ def on_flush(callback: Callable[[int, int], None]) -> None:
     register_flush_callback(callback)
 
 
-def off_event(callback: Callable[["CallEvent"], None]) -> None:
+def off_event(callback: Callable[[CallEvent], None]) -> None:
     """Unregister a previously registered on_event callback."""
     unregister_event_callback(callback)
 
 
-def off_error(callback: Callable[["CallEvent", Exception], None]) -> None:
+def off_error(callback: Callable[[CallEvent, Exception], None]) -> None:
     """Unregister a previously registered on_error callback."""
     unregister_error_callback(callback)
 

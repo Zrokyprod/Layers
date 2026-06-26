@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
+services:
+  zroky-protected-runner:
+    build:
+      context: ..
+      dockerfile: examples/Dockerfile.runner
+    env_file:
+      - ./.env.runner
+    restart: unless-stopped
+    command:
+      - --supported-operation-kind
+      - TRANSFER
+      - --supported-operation-kind
+      - UPDATE
+      - --supported-operation-kind
+      - SEND
+      - --supported-operation-kind
+      - EXECUTE
+      - --poll-interval-seconds
+      - "2"
+      - --idle-backoff-max-seconds
+      - "30"
+      - --heartbeat-interval-seconds
+      - "30"

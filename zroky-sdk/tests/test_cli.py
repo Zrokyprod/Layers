@@ -6,9 +6,7 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-from unittest.mock import patch
 
 import httpx
 import pytest
@@ -115,3 +113,71 @@ def test_buffer_flush_with_empty_buffer(capsys: pytest.CaptureFixture[str]) -> N
     out = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert out["flushed"] == 0
+
+
+def test_runner_once_command_uses_runner_id(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    created: dict[str, object] = {}
+
+    class _FakeRunner:
+        def __init__(self, *, runner_id: str) -> None:
+            created["runner_id"] = runner_id
+
+        def run_once(self, *, runner_metadata: dict[str, str]) -> dict[str, object]:
+            created["runner_instance_id"] = runner_metadata["runner_instance_id"]
+            return {"claimed": False, "status": "idle"}
+
+    monkeypatch.setattr(cli, "ProtectedActionRunner", _FakeRunner)
+
+    rc = cli.main(
+        ["runner", "once", "--runner-id", "runner_123", "--runner-instance-id", "local_1"]
+    )
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert out == {"claimed": False, "status": "idle"}
+    assert created["runner_id"] == "runner_123"
+    assert created["runner_instance_id"] == "local_1"
+
+
+def test_runner_daemon_command_runs_bounded_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    created: dict[str, object] = {}
+
+    class _FakeRunner:
+        def __init__(self, *, runner_id: str) -> None:
+            created["runner_id"] = runner_id
+
+        def run_daemon(self, **kwargs: object) -> dict[str, object]:
+            created.update(kwargs)
+            return {"status": "stopped", "iterations": 1, "claim_errors": 0}
+
+    monkeypatch.setattr(cli, "ProtectedActionRunner", _FakeRunner)
+
+    rc = cli.main(
+        [
+            "runner",
+            "daemon",
+            "--runner-id",
+            "runner_123",
+            "--runner-instance-id",
+            "local_1",
+            "--supported-operation-kind",
+            "TRANSFER",
+            "--max-iterations",
+            "1",
+            "--no-offline-heartbeat",
+        ]
+    )
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert out["status"] == "stopped"
+    assert created["runner_id"] == "runner_123"
+    assert created["max_iterations"] == 1
+    assert created["send_offline_heartbeat"] is False
+    assert created["supported_operation_kinds"] == ["TRANSFER"]

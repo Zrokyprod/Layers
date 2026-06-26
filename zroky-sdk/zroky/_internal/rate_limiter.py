@@ -31,6 +31,11 @@ _logger = logging.getLogger(__name__)
 # Hard ceiling to avoid a misconfigured header stalling the SDK forever.
 _MAX_WAIT_SECONDS: float = 120.0
 
+# Avoid pretending sub-tick sleeps are enforceable. On Windows especially,
+# time.sleep(0.01) can overshoot heavily under load; for tiny caller
+# deadlines the SDK should fail open immediately.
+_MIN_BLOCKING_WAIT_SECONDS: float = 0.05
+
 # Minimum bucket capacity we'll accept from headers (sanity floor).
 _MIN_CAPACITY: int = 1
 
@@ -286,7 +291,7 @@ class RateLimiter:
 
             # Need to wait — release the lock while sleeping
             wait = min(wait, timeout - total_waited)
-            if wait <= 0:
+            if wait <= 0 or wait < _MIN_BLOCKING_WAIT_SECONDS:
                 # Timeout exhausted — let the call through anyway
                 with pair.lock:
                     pair.rpm.consume(1)
@@ -332,7 +337,7 @@ class RateLimiter:
                     return total_waited
 
             wait = min(wait, timeout - total_waited)
-            if wait <= 0:
+            if wait <= 0 or wait < _MIN_BLOCKING_WAIT_SECONDS:
                 with pair.lock:
                     pair.rpm.consume(1)
                     if estimated_tokens > 0:

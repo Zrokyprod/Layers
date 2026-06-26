@@ -23,13 +23,21 @@ import argparse
 import asyncio
 import json
 import os
+import signal
 import sys
+import threading
 from pathlib import Path
 
 import httpx
 
 from zroky._internal.config import load_config
 from zroky._internal.offline_buffer import OfflineBuffer
+from zroky._runner import (
+    RUNNER_CAPABILITY_VERSION,
+    ProtectedActionRunner,
+    ZrokyRunnerError,
+    default_runner_metadata,
+)
 
 
 def _print_json(obj: object) -> None:
@@ -143,7 +151,11 @@ def cmd_tail(args: argparse.Namespace) -> int:
     try:
         import websockets  # type: ignore[import-not-found]
     except ImportError:
-        print("`zroky tail` requires the `websockets` package. Install with: pip install websockets", file=sys.stderr)
+        print(
+            "`zroky tail` requires the `websockets` package. "
+            "Install with: pip install websockets",
+            file=sys.stderr,
+        )
         return 2
 
     headers: dict[str, str] = {}
@@ -224,6 +236,65 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0 if resp.status_code < 400 else 1
 
 
+def cmd_runner_once(args: argparse.Namespace) -> int:
+    runner_id = args.runner_id or os.environ.get("ZROKY_RUNNER_ID")
+    if not runner_id:
+        print("runner id required: pass --runner-id or set ZROKY_RUNNER_ID", file=sys.stderr)
+        return 2
+    metadata = default_runner_metadata(args.runner_instance_id)
+    try:
+        runner = ProtectedActionRunner(runner_id=runner_id)
+        result = runner.run_once(runner_metadata=metadata)
+    except ZrokyRunnerError as exc:
+        _print_json({"status": "error", "error": str(exc)})
+        return 1
+    _print_json(result)
+    return 0 if result.get("status") in {"idle", "succeeded"} else 1
+
+
+def cmd_runner_daemon(args: argparse.Namespace) -> int:
+    runner_id = args.runner_id or os.environ.get("ZROKY_RUNNER_ID")
+    if not runner_id:
+        print("runner id required: pass --runner-id or set ZROKY_RUNNER_ID", file=sys.stderr)
+        return 2
+
+    stop_event = threading.Event()
+
+    def _request_stop(_signum: int, _frame: object) -> None:
+        stop_event.set()
+
+    original_sigint = signal.getsignal(signal.SIGINT)
+    original_sigterm = signal.getsignal(signal.SIGTERM) if hasattr(signal, "SIGTERM") else None
+    signal.signal(signal.SIGINT, _request_stop)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _request_stop)
+
+    metadata = default_runner_metadata(args.runner_instance_id)
+    try:
+        runner = ProtectedActionRunner(runner_id=runner_id)
+        result = runner.run_daemon(
+            runner_metadata=metadata,
+            supported_operation_kinds=args.supported_operation_kind or None,
+            capability_version=RUNNER_CAPABILITY_VERSION,
+            poll_interval_seconds=args.poll_interval_seconds,
+            idle_backoff_max_seconds=args.idle_backoff_max_seconds,
+            heartbeat_interval_seconds=args.heartbeat_interval_seconds,
+            max_iterations=args.max_iterations,
+            stop_event=stop_event,
+            send_offline_heartbeat=not args.no_offline_heartbeat,
+        )
+    except ZrokyRunnerError as exc:
+        _print_json({"status": "error", "error": str(exc)})
+        return 1
+    finally:
+        signal.signal(signal.SIGINT, original_sigint)
+        if hasattr(signal, "SIGTERM") and original_sigterm is not None:
+            signal.signal(signal.SIGTERM, original_sigterm)
+
+    _print_json(result)
+    return 0 if result.get("status") == "stopped" and result.get("claim_errors", 0) == 0 else 1
+
+
 # ------------------------------------------------------------------ argparse
 
 def build_parser() -> argparse.ArgumentParser:
@@ -235,9 +306,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     buf_parser = sub.add_parser("buffer", help="manage the offline buffer")
     buf_sub = buf_parser.add_subparsers(dest="buffer_command", required=True)
-    buf_sub.add_parser("status", help="show offline-buffer state").set_defaults(func=cmd_buffer_status)
-    buf_sub.add_parser("flush", help="replay buffered events to the backend").set_defaults(func=cmd_buffer_flush)
-    buf_sub.add_parser("clear", help="delete buffered events (irreversible)").set_defaults(func=cmd_buffer_clear)
+    buf_sub.add_parser("status", help="show offline-buffer state").set_defaults(
+        func=cmd_buffer_status
+    )
+    buf_sub.add_parser("flush", help="replay buffered events to the backend").set_defaults(
+        func=cmd_buffer_flush
+    )
+    buf_sub.add_parser("clear", help="delete buffered events (irreversible)").set_defaults(
+        func=cmd_buffer_clear
+    )
 
     tail_parser = sub.add_parser("tail", help="stream live events over websocket")
     tail_parser.add_argument("--topics", default=None, help="comma-separated topic filter")
@@ -246,6 +323,57 @@ def build_parser() -> argparse.ArgumentParser:
     replay_parser = sub.add_parser("replay", help="replay events from a JSON / NDJSON file")
     replay_parser.add_argument("file", help="path to file containing events")
     replay_parser.set_defaults(func=cmd_replay)
+
+    runner_parser = sub.add_parser("runner", help="run customer-hosted protected action jobs")
+    runner_sub = runner_parser.add_subparsers(dest="runner_command", required=True)
+    once_parser = runner_sub.add_parser(
+        "once",
+        help="claim and execute at most one protected action",
+    )
+    once_parser.add_argument("--runner-id", default=None, help="registered Zroky action runner id")
+    once_parser.add_argument(
+        "--runner-instance-id",
+        default=None,
+        help="stable id for this local runner process",
+    )
+    once_parser.set_defaults(func=cmd_runner_once)
+
+    daemon_parser = runner_sub.add_parser(
+        "daemon",
+        help="run the protected action runner continuously",
+    )
+    daemon_parser.add_argument(
+        "--runner-id",
+        default=None,
+        help="registered Zroky action runner id",
+    )
+    daemon_parser.add_argument(
+        "--runner-instance-id",
+        default=None,
+        help="stable id for this runner process",
+    )
+    daemon_parser.add_argument(
+        "--supported-operation-kind",
+        action="append",
+        default=[],
+        choices=["TRANSFER", "UPDATE", "SEND", "EXECUTE"],
+        help="operation kind this runner can execute; repeat for multiple kinds",
+    )
+    daemon_parser.add_argument("--poll-interval-seconds", type=float, default=2.0)
+    daemon_parser.add_argument("--idle-backoff-max-seconds", type=float, default=30.0)
+    daemon_parser.add_argument("--heartbeat-interval-seconds", type=float, default=30.0)
+    daemon_parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        help="optional bounded loop count for smoke tests and one-off probes",
+    )
+    daemon_parser.add_argument(
+        "--no-offline-heartbeat",
+        action="store_true",
+        help="skip the final offline heartbeat on shutdown",
+    )
+    daemon_parser.set_defaults(func=cmd_runner_daemon)
 
     return parser
 

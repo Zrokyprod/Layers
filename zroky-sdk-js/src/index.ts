@@ -10,13 +10,46 @@ export {
   ZrokyRuntimePolicyBlocked,
   ZrokyRuntimePolicyError,
 } from "./guard";
+export { verifyOutcome, ZrokyOutcomeVerificationError } from "./verify";
 export { outcome } from "./outcome";
 export { promptFingerprint } from "./fingerprint";
 export { captureHandoff, captureMemory, capturePolicyDecision, captureRetrieval, captureToolCall } from "./spans";
+export {
+  PHASE1_NATIVE_TOOL_FAMILIES,
+  PHASE1_RISKY_ACTION_TYPES,
+  PHASE1_RUNTIME_PATHS,
+  PHASE1_VERIFICATION_CONNECTORS,
+  ZROKY_AGENT_TOOL_CONTROL_SCHEMA_VERSION,
+} from "./contracts";
 export type { ZrokyConfig, CapturePayload } from "./types";
 export type { GuardOptions, RuntimePolicyDecision } from "./guard";
+export type {
+  OutcomeReconciliationView,
+  OutcomeVerificationVerdict,
+  SavedVerificationConnector,
+  VerifyCrmRecordOutcomeOptions,
+  VerifyGenericRestOutcomeOptions,
+  VerifyLedgerRefundOutcomeOptions,
+  VerifyOutcomeOptions,
+} from "./verify";
 export type { OutcomeOptions } from "./outcome";
 export type { TraceRunContext, TraceRunOptions } from "./trace";
+export type {
+  ZrokyAgentProfile,
+  ZrokyAuditEvent,
+  ZrokyConnectorTemplate,
+  ZrokyEvidencePackContract,
+  ZrokyJsonValue,
+  ZrokyNativeToolFamily,
+  ZrokyPolicyDecisionContract,
+  ZrokyPolicyDecisionStatus,
+  ZrokyRiskActionType,
+  ZrokyRuntimePath,
+  ZrokyToolActionPassport,
+  ZrokyVerificationConnectorType,
+  ZrokyVerificationResult,
+  ZrokyVerificationVerdict,
+} from "./contracts";
 export type {
   HandoffCaptureOptions,
   MemoryCaptureOptions,

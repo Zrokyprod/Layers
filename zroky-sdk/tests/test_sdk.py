@@ -9,6 +9,7 @@ import pytest
 
 import zroky
 from zroky._errors import (
+    ZrokyOutcomeVerificationError,
     ZrokyRuntimePolicyApprovalRequired,
     ZrokyRuntimePolicyBlocked,
     ZrokyRuntimePolicyError,
@@ -372,6 +373,122 @@ def test_guard_fails_closed_on_transport_error(monkeypatch):
 
     with pytest.raises(ZrokyRuntimePolicyError):
         zroky.guard(action_type="delete", tool_name="delete_customer")
+
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_verify_outcome_posts_generic_rest_saved_reconciliation(monkeypatch):
+    _reset_sdk()
+    posted: dict[str, object] = {}
+
+    class _Response:
+        status_code = 201
+
+        @staticmethod
+        def json():
+            return {
+                "id": "check_generic",
+                "verdict": "matched",
+                "connector_type": "generic_rest_api",
+                "system_ref": "generic:ord_123",
+            }
+
+    def _fake_post(url, *, headers, json, timeout):
+        posted["url"] = url
+        posted["headers"] = headers
+        posted["json"] = json
+        posted["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr("zroky._verify.httpx.post", _fake_post)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(
+            api_key="zk_live_test",
+            project="proj_runtime",
+            ingest_url="https://api.zroky.com/v1/ingest",
+        )
+
+    result = zroky.verify_outcome(
+        connector="generic_rest",
+        record_ref="ord_123",
+        runtime_policy_decision_id="decision_123",
+        action_type="internal_api_mutation",
+        claimed={"record_ref": "ord_123", "status": "approved", "total_usd": 118.42},
+        metadata={"run_id": "pilot_1"},
+    )
+
+    assert result["id"] == "check_generic"
+    assert posted["url"] == (
+        "https://api.zroky.com/v1/outcomes/reconciliation/generic-rest/saved"
+    )
+    assert posted["headers"]["x-api-key"] == "zk_live_test"  # type: ignore[index]
+    assert posted["headers"]["x-project-id"] == "proj_runtime"  # type: ignore[index]
+    assert posted["json"]["record_ref"] == "ord_123"  # type: ignore[index]
+    assert posted["json"]["runtime_policy_decision_id"] == "decision_123"  # type: ignore[index]
+    assert posted["json"]["action_type"] == "internal_api_mutation"  # type: ignore[index]
+    assert posted["json"]["claimed"]["status"] == "approved"  # type: ignore[index]
+    assert "bearer" not in str(posted["json"]).lower()
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_verify_outcome_maps_saved_ledger_and_crm_routes(monkeypatch):
+    _reset_sdk()
+    posted: list[dict[str, object]] = []
+
+    class _Response:
+        status_code = 201
+
+        @staticmethod
+        def json():
+            return {"id": "check_saved", "verdict": "matched"}
+
+    def _fake_post(url, *, headers, json, timeout):
+        posted.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return _Response()
+
+    monkeypatch.setattr("zroky._verify.httpx.post", _fake_post)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_runtime")
+
+    zroky.verify_outcome(
+        connector="ledger_refund",
+        refund_id="rf_123",
+        runtime_policy_decision_id="decision_refund",
+        claimed={"refund_id": "rf_123", "amount_usd": 42.5, "currency": "USD"},
+    )
+    zroky.verify_outcome(
+        connector="crm_record",
+        customer_id="cus_123",
+        runtime_policy_decision_id="decision_customer",
+        claimed={"customer_id": "cus_123", "status": "active"},
+    )
+
+    assert posted[0]["url"] == (
+        "https://api.zroky.com/v1/outcomes/reconciliation/ledger-refund/saved"
+    )
+    assert posted[0]["json"]["refund_id"] == "rf_123"  # type: ignore[index]
+    assert posted[1]["url"] == (
+        "https://api.zroky.com/v1/outcomes/reconciliation/customer-record/saved"
+    )
+    assert posted[1]["json"]["customer_id"] == "cus_123"  # type: ignore[index]
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_verify_outcome_fails_closed_when_credentials_are_missing(monkeypatch):
+    _reset_sdk()
+    monkeypatch.delenv("ZROKY_API_KEY", raising=False)
+    monkeypatch.delenv("ZROKY_PROJECT", raising=False)
+
+    with patch("zroky._internal.queue.IngestClient"):
+        with pytest.raises(ZrokyOutcomeVerificationError):
+            zroky.verify_outcome(
+                connector="generic_rest",
+                record_ref="ord_123",
+                claimed={"record_ref": "ord_123", "status": "approved"},
+            )
 
     zroky.shutdown()
     _reset_sdk()

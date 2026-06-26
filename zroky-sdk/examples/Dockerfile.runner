@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: FSL-1.1-MIT
+# Copyright 2026 Zroky AI
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY pyproject.toml LICENSE ./
+COPY zroky ./zroky
+
+RUN pip install --upgrade pip \
+    && pip install . \
+    && adduser --disabled-password --gecos "" zroky
+
+USER zroky
+
+ENTRYPOINT ["zroky", "runner", "daemon"]
+CMD ["--supported-operation-kind", "TRANSFER", "--supported-operation-kind", "UPDATE", "--supported-operation-kind", "SEND", "--supported-operation-kind", "EXECUTE"]

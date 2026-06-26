@@ -51,6 +51,10 @@ class ZrokyRuntimePolicyError(RuntimeError):
         super().__init__(message)
 
 
+class ZrokyOutcomeVerificationError(RuntimeError):
+    """Raised when saved connector outcome verification cannot complete."""
+
+
 class ZrokyRuntimePolicyBlocked(ZrokyRuntimePolicyError):
     """Raised when the runtime policy gate blocks or pauses an agent action."""
 
