@@ -216,15 +216,15 @@ export function FirstRunOnboarding({
       }
     : !hasCapture
       ? {
-          href: "/trace",
-          label: "Send test capture",
-          title: "Send test capture",
-          detail: "Run one agent call and confirm the first trace lands in Zroky.",
+          href: "/agents",
+          label: "Open agents",
+          title: "Confirm first agent capture",
+          detail: "Run one agent call and confirm the first protected action lands in Zroky.",
           icon: <Send aria-hidden="true" />,
         }
       : {
-          href: "/trace",
-          label: "Review trace",
+          href: "/agents",
+          label: "Review agent",
           title: "First agent action is captured",
           detail: "When Zroky sees risk, this page turns the action into a decision, outcome check, and Evidence Pack.",
           icon: <CheckCircle2 aria-hidden="true" />,
@@ -249,12 +249,12 @@ export function FirstRunOnboarding({
       state: hasCapture ? "done" : hasProjectKey ? "current" : "locked",
     },
     {
-      label: "First trace received",
+      label: "First action captured",
       detail: hasCapture ? captureLabel : "Waiting",
       state: hasCapture ? "done" : "locked",
     },
     {
-      label: "First issue/replay ready",
+      label: "First proof path ready",
       detail: hasCapture && replayUnlocked ? "Ready when risk appears" : replayUnlocked ? "Waiting" : "Upgrade later",
       state: hasCapture && replayUnlocked ? "current" : "locked",
     },
@@ -273,7 +273,7 @@ export function FirstRunOnboarding({
       icon: <Route aria-hidden="true" />,
     },
     {
-      label: "Replay proof",
+      label: "Outcome proof",
       value: hasCapture && replayUnlocked ? "Ready" : replayUnlocked ? "Waiting" : "Locked",
       state: hasCapture && replayUnlocked ? "current" : replayUnlocked ? "idle" : "locked",
       icon: <ShieldCheck aria-hidden="true" />,
@@ -373,11 +373,11 @@ export function FirstRunOnboarding({
             action: "Get gateway key",
           },
           {
-            href: "/trace",
+            href: "/agents",
             icon: <Send aria-hidden="true" />,
-            label: "Send test capture",
-            detail: "Verify setup with one trace.",
-            action: "Send test now",
+            label: "Open agents",
+            detail: "Verify setup with one protected action.",
+            action: "Check capture",
           },
         ].map((item) => (
           <Link href={item.href} className="fi-setup-action-card" key={item.label}>

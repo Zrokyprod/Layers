@@ -77,7 +77,7 @@ export function TopIssuesQueue() {
             traces.
           </p>
         </div>
-        <Link href="/issues" className="priority-queue-see-all">
+        <Link href="/approvals" className="priority-queue-see-all">
           See all open →
         </Link>
       </header>
@@ -118,7 +118,7 @@ function TopIssuesQueueItem({
   return (
     <li className="priority-queue-item">
       <Link
-        href={`/issues/${encodeURIComponent(issue.id)}`}
+        href="/approvals"
         className="priority-queue-link"
       >
         <span className="priority-queue-rank mono" aria-hidden="true">

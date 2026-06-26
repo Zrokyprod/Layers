@@ -43,7 +43,7 @@ describe("auth redirect aliases", () => {
     const cases = [
       {
         page: AuthIndexPage,
-        params: { next: "/issues" },
+        params: { next: "/approvals" },
         expected: "/login?next=%2Fissues",
       },
       {

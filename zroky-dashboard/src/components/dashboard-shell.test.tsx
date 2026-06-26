@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DASHBOARD_PRIMARY_ROUTES } from "@/lib/dashboard-route-contract";
+
 import { DashboardShell } from "./dashboard-shell";
 
 const navState = vi.hoisted(() => ({
@@ -88,14 +90,16 @@ vi.mock("next/image", () => ({
   default: ({
     alt,
     src,
+    priority,
     ...props
   }: {
     alt: string;
     src: string;
+    priority?: boolean;
     [key: string]: unknown;
   }) => (
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} src={src} {...props} />
+    <img alt={alt} src={src} data-priority={priority ? "true" : undefined} {...props} />
   ),
 }));
 
@@ -257,18 +261,15 @@ describe("DashboardShell primary navigation", () => {
   it("renders the primary nav in the required product order", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(primaryNavLabels()).toEqual([
-      "Home",
-      "Agents",
-      "Approvals",
-      "Outcomes",
-      "Evidence",
-      "Connectors",
-      "Policies",
-      "Settings",
-    ]);
+    expect(primaryNavLabels()).toEqual(DASHBOARD_PRIMARY_ROUTES.map((route) => route.label));
     expect(screen.queryByText("Provider Drift")).toBeNull();
-    expect(navItem("failure-inbox").getAttribute("href")).toBe("/home");
+    expect(navItem("home").getAttribute("href")).toBe("/home");
+  });
+
+  it("marks the shell with the new dashboard visual system", () => {
+    const { container } = render(<DashboardShell>content</DashboardShell>);
+
+    expect(container.querySelector(".app-shell")?.getAttribute("data-dashboard-system")).toBe("control-v1");
   });
 
   it("keeps incident counts out of the minimal primary nav", () => {
@@ -276,7 +277,7 @@ describe("DashboardShell primary navigation", () => {
 
     render(<DashboardShell>content</DashboardShell>);
 
-    expect(within(navItem("failure-inbox") as HTMLElement).queryByText("3")).toBeNull();
+    expect(within(navItem("home") as HTMLElement).queryByText("3")).toBeNull();
     expect(screen.getByRole("navigation", { name: "Primary" }).querySelector('[data-nav-id="issues"]')).toBeNull();
   });
 
@@ -285,16 +286,17 @@ describe("DashboardShell primary navigation", () => {
 
     expect(screen.queryByRole("group", { name: "Settings sections" })).not.toBeInTheDocument();
 
-    navState.pathname = "/settings/providers";
+    navState.pathname = "/settings/workspace";
     rerender(<DashboardShell>content</DashboardShell>);
 
     const settingsSections = screen.getByRole("group", { name: "Settings sections" });
     expect(within(settingsSections).queryByRole("link", { name: /Project/ })).not.toBeInTheDocument();
-    expect(within(settingsSections).getByRole("link", { name: /API keys/ }).getAttribute("href")).toBe("/settings/keys");
+    expect(within(settingsSections).getByRole("link", { name: /Capture keys/ }).getAttribute("href")).toBe("/settings/keys");
     expect(within(settingsSections).queryByRole("link", { name: /Providers/ })).not.toBeInTheDocument();
-    expect(within(settingsSections).getByRole("link", { name: /Connectors/ }).getAttribute("href")).toBe("/settings/integrations");
+    expect(within(settingsSections).queryByRole("link", { name: /Connectors/ })).not.toBeInTheDocument();
     expect(within(settingsSections).getByRole("link", { name: /Billing/ }).getAttribute("href")).toBe("/settings/billing");
     expect(within(settingsSections).getByRole("link", { name: /Members/ }).getAttribute("href")).toBe("/settings/team");
+    expect(within(settingsSections).getByRole("link", { name: /Workspace/ }).getAttribute("href")).toBe("/settings/workspace");
   });
 
   it("renders the dashboard logo image without the old text lockup", () => {
@@ -318,6 +320,7 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const labels = primaryNavLabels();
+    expect(labels).toContain("Actions");
     expect(labels).toContain("Agents");
     expect(labels).toContain("Approvals");
     expect(labels).toContain("Outcomes");
@@ -335,7 +338,8 @@ describe("DashboardShell primary navigation", () => {
     expect(labels).not.toContain("Trace Graphs");
     expect(labels).not.toContain("Alerts");
 
-    expect(navItem("integrations").getAttribute("href")).toBe("/integrations");
+    expect(navItem("actions").getAttribute("href")).toBe("/actions");
+    expect(navItem("connectors").getAttribute("href")).toBe("/integrations");
     expect(navItem("evidence").getAttribute("href")).toBe("/evidence");
   });
 

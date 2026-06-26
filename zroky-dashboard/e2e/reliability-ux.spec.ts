@@ -4,82 +4,59 @@ import { expectDashboardShell, expectVisibleTexts, readSeed } from "./helpers";
 
 type ReliabilityRoute = {
   path: string;
-  heading: string;
   labels: string[];
 };
 
-const RELIABILITY_ROUTES: ReliabilityRoute[] = [
-  {
-    path: "/home",
-    heading: "Overview",
-    labels: [
-      "Highest priority",
-      "What needs action now?",
-      "Replay pass/fail",
-      "Release readiness",
-      "Reliability pipeline",
-      "CI gate health",
-    ],
-  },
-  {
-    path: "/issues",
-    heading: "Incidents",
-    labels: ["Loaded failures", "Replay gaps", "Verified fixes", "Loaded impact", "Issue queue"],
-  },
-  {
-    path: "/replay",
-    heading: "Replay",
-    labels: ["Replay proof engine", "Visible runs", "Verified fixes", "Live queue", "Protected spend", "Start replay"],
-  },
-  {
-    path: "/contracts",
-    heading: "Contracts",
-    labels: ["Regression contracts", "Active", "Draft", "Fixtures", "Import fixtures"],
-  },
-  {
-    path: "/ci-gates",
-    heading: "CI Gates",
-    labels: ["Failed / blocked", "Not verified", "Running / pending", "Passed", "Protected flows", "Regression CI runs"],
-  },
-];
-
-function reliabilityDetailRoutes(): ReliabilityRoute[] {
+function reliabilityRoutes(): ReliabilityRoute[] {
   const seed = readSeed();
   return [
     {
-      path: `/issues/${seed.issue_id}`,
-      heading: "Refund support agent is selecting the wrong tool",
-      labels: [
-        "Recommended next action",
-        "Executive diagnosis",
-        "Evidence workbench",
-        "Replay, Contract, and CI readiness",
-        "Active Contract linked",
-        "CI gate readiness",
-      ],
+      path: "/home",
+      labels: ["Agent action accountability", "Decision queue", "Evidence Pack", "System-of-record health"],
     },
     {
-      path: `/replay/${seed.replay_run_id}`,
-      heading: "Replay",
-      labels: ["Replay setup", "Original Failure", "Candidate Replay", "Verification Result", "RF-1001"],
+      path: "/agents",
+      labels: ["Protected agents", "Outcome mismatch", "Needs review", "System-of-record health"],
     },
     {
-      path: `/ci-gates/${seed.ci_run_id}`,
-      heading: `Run ${seed.ci_run_id}`,
-      labels: [
-        "Regression rate",
-        "Contract gate evidence",
-        "Regression CI blocked this change.",
-        "Replay evidence",
-        "Contract",
-      ],
+      path: "/approvals",
+      labels: ["Risky actions held before commit", "Held action queue", "Risky action control"],
+    },
+    {
+      path: "/outcomes",
+      labels: ["Every risky action must end", "SDK helper and webhook bridge", "Agent claim vs real outcome"],
+    },
+    {
+      path: seed.runtime_policy_decision_id
+        ? `/evidence?decision_id=${encodeURIComponent(seed.runtime_policy_decision_id)}`
+        : "/evidence",
+      labels: ["Evidence Pack is exportable", "Policy gate recorded", "Real system checked"],
+    },
+    {
+      path: "/integrations",
+      labels: ["Connector coverage", "Generic REST/OpenAPI verifier", "System-of-record connectors"],
+    },
+    {
+      path: "/policies",
+      labels: ["Policies define what an agent may attempt", "Hold sensitive actions", "Block unsafe paths"],
     },
   ];
 }
 
-async function expectSinglePageHeading(page: Page, heading: string): Promise<void> {
-  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-  await expect(page.locator("h1")).toHaveCount(1);
+function retiredDetailRoutes(): string[] {
+  const seed = readSeed();
+  return [
+    `/issues/${seed.issue_id}`,
+    `/replay/${seed.replay_run_id}`,
+    `/ci-gates/${seed.ci_run_id}`,
+    `/calls/${seed.call_id}`,
+    `/goldens/${seed.golden_set_id}`,
+    `/trace/${seed.trace_id}`,
+  ];
+}
+
+async function expectPageHeading(page: Page): Promise<void> {
+  await expect(page.locator("h1").first()).toBeVisible();
 }
 
 async function expectMainContentFitsViewport(page: Page): Promise<void> {
@@ -92,7 +69,7 @@ async function expectMainContentFitsViewport(page: Page): Promise<void> {
 }
 
 test.describe("reliability loop UX", () => {
-  test("renders primary workflow routes with stable headings, shell, and summary copy", async ({ page }) => {
+  test("renders paid MVP control surfaces with stable shell and summary copy", async ({ page }) => {
     test.setTimeout(180_000);
 
     const consoleErrors: string[] = [];
@@ -102,12 +79,12 @@ test.describe("reliability loop UX", () => {
     });
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
-    for (const route of RELIABILITY_ROUTES) {
+    for (const route of reliabilityRoutes()) {
       await test.step(route.path, async () => {
         await page.goto(route.path);
         await expectDashboardShell(page);
         await expectMainContentFitsViewport(page);
-        await expectSinglePageHeading(page, route.heading);
+        await expectPageHeading(page);
         await expectVisibleTexts(page, route.labels);
       });
     }
@@ -116,27 +93,12 @@ test.describe("reliability loop UX", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test("renders primary workflow detail pages with stable proof sections", async ({ page }) => {
-    test.setTimeout(180_000);
-
-    const consoleErrors: string[] = [];
-    const pageErrors: string[] = [];
-    page.on("console", (message) => {
-      if (message.type() === "error") consoleErrors.push(message.text());
-    });
-    page.on("pageerror", (error) => pageErrors.push(error.message));
-
-    for (const route of reliabilityDetailRoutes()) {
-      await test.step(route.path, async () => {
-        await page.goto(route.path);
-        await expectDashboardShell(page);
-        await expectMainContentFitsViewport(page);
-        await expectSinglePageHeading(page, route.heading);
-        await expectVisibleTexts(page, route.labels);
+  test("redirects retired legacy detail routes to the new dashboard home", async ({ page }) => {
+    for (const route of retiredDetailRoutes()) {
+      await test.step(route, async () => {
+        await page.goto(route);
+        await expect(page).toHaveURL(/\/home$/);
       });
     }
-
-    expect(pageErrors).toEqual([]);
-    expect(consoleErrors).toEqual([]);
   });
 });

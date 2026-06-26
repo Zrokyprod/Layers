@@ -208,12 +208,25 @@ describe("RuntimeApprovalsPage evidence pack", () => {
   it("renders the cockpit queue, selected inspector, and loaded outcome proof", () => {
     render(<RuntimeApprovalsPage />);
 
-    expect(screen.getByRole("heading", { name: "Held actions before commit" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Approval priority queue" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Risky actions held before commit" })).toBeInTheDocument();
+    const contract = screen.getByRole("region", { name: "Approval control contract" });
+    expect(
+      within(contract).getByText("Human approval releases the action; outcome verification proves what happened."),
+    ).toBeInTheDocument();
+    expect(
+      within(contract).getByText(
+        "This page controls the before-action decision. The Evidence Pack becomes customer-ready only after matched system-of-record proof is linked.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(contract).getByText("Hold before commit")).toBeInTheDocument();
+    expect(within(contract).getByText("Release with audit")).toBeInTheDocument();
+    expect(within(contract).getByText("Keep stopped")).toBeInTheDocument();
+    expect(within(contract).getByText("Fail closed")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Held action queue" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Selected action control" })).toBeInTheDocument();
     expect(screen.getByText("P0")).toBeInTheDocument();
     expect(screen.getByText("money-action hold")).toBeInTheDocument();
-    expect(screen.getByText("Outcome proof")).toBeInTheDocument();
+    expect(screen.getByText("After-action proof")).toBeInTheDocument();
     expect(screen.getByText("Outcome verified")).toBeInTheDocument();
     expect(screen.getByText("Matched system-of-record outcome is linked.")).toBeInTheDocument();
     expect(hookState.evidenceDecisionId).toBe("decision_1");
@@ -258,7 +271,7 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     render(<RuntimeApprovalsPage />);
 
     expect(screen.getAllByText(/Financial action/).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Evidence Pack" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Evidence Pack" }));
 
     expect(hookState.evidenceDecisionId).toBe("decision_1");
     const dialog = screen.getByRole("dialog", { name: "Evidence Pack" });
@@ -267,7 +280,7 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(within(dialog).getByText("ledger:rf_100")).toBeInTheDocument();
     expect(within(dialog).getByText("matched")).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Download JSON" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Export Evidence JSON" }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:evidence-pack");
@@ -277,7 +290,7 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     hookState.evidenceMode = "missing";
 
     render(<RuntimeApprovalsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Evidence Pack" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Evidence Pack" }));
 
     const dialog = screen.getByRole("dialog", { name: "Evidence Pack" });
     expect(within(dialog).getByText("Not verified")).toBeInTheDocument();

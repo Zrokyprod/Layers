@@ -5,7 +5,7 @@ import { expectDashboardShell, expectHealthyPage, expectVisibleTexts, readSeed }
 test.describe.configure({ mode: "serial" });
 
 test.describe("dashboard money path", () => {
-  test("proves provider key to failed call to issue to replay to Golden to CI gate", async ({ page }, testInfo) => {
+  test("proves paid MVP control surfaces without legacy dashboard routes", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Mutation proof path runs once in the desktop Chromium project.");
     test.setTimeout(180_000);
 
@@ -13,7 +13,7 @@ test.describe("dashboard money path", () => {
 
     await page.goto("/settings/keys");
     await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["API Keys", "Create project key", seed.api_key_prefix ?? "zk_live_demo"]);
+    await expectVisibleTexts(page, ["Project key setup", "Create project key", seed.api_key_prefix ?? "zk_live_demo"]);
 
     const keyName = `Money path capture ${Date.now()}`;
     await page.getByLabel("Key name").fill(keyName);
@@ -28,10 +28,11 @@ test.describe("dashboard money path", () => {
     await expectDashboardShell(page);
     await expectVisibleTexts(page, [
       "BYOK replay",
-      "Save provider key for verified replay",
+      "Save provider keys only when replay needs real provider access.",
+      "Save provider key",
       "Provider key vault",
       "Vault state",
-      "Reachable",
+      "Priority providers",
     ]);
 
     const providerLabel = `money-path-e2e-${Date.now()}`;
@@ -49,91 +50,46 @@ test.describe("dashboard money path", () => {
     await expect(providerRow).toBeVisible();
     await expect(providerRow.getByText("Active", { exact: true })).toBeVisible();
 
-    await page.goto("/calls");
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["Call Evidence", seed.call_id.slice(0, 12), "refund-support-agent", "TOOL_NOT_CALLED"]);
+    const launchSurfaces = [
+      { path: "/home", labels: ["Agent action accountability", "Decision queue", "Evidence Pack", "System-of-record health"] },
+      { path: "/agents", labels: ["Outcome mismatch", "Needs review", "Protected agent queue", "System-of-record health"] },
+      { path: "/approvals", labels: ["Risky actions held before commit", "Held action queue", "Risky action control"] },
+      { path: "/outcomes", labels: ["Every risky action must end", "SDK helper and webhook bridge"] },
+      {
+        path: seed.runtime_policy_decision_id
+          ? `/evidence?decision_id=${encodeURIComponent(seed.runtime_policy_decision_id)}`
+          : "/evidence",
+        labels: ["Evidence Pack is exportable", "Policy gate recorded"],
+      },
+      { path: "/integrations", labels: ["Connector coverage", "Generic REST/OpenAPI verifier", "System-of-record connectors"] },
+      { path: "/policies", labels: ["Policies define what an agent may attempt", "Hold sensitive actions"] },
+    ];
 
-    await page.goto(`/calls/${seed.call_id}`);
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, [seed.call_id, "Where is my refund?", "TOOL_NOT_CALLED", "failed"]);
+    for (const route of launchSurfaces) {
+      await page.goto(route.path);
+      await expectDashboardShell(page);
+      await expectVisibleTexts(page, route.labels);
+      await expectHealthyPage(page);
+    }
 
-    await page.goto("/issues");
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["Failures", "selecting the wrong tool", "Tool Not Called"]);
-
-    await page.goto(`/issues/${seed.issue_id}`);
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, [
-      "selecting the wrong tool",
-      "Tool Not Called",
-      "get_refund_status",
-      "Trusted",
-      "Active Golden linked",
-      "Gate linked",
-    ]);
-
-    await page.goto("/replay");
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, [
-      "Replay proof engine",
-      seed.replay_run_id.slice(0, 16),
-      seed.issue_id,
-      "Refund status tool skipped",
-      "verified fix",
-      "mocked-tool",
-    ]);
-    await expect(page.getByRole("link", { name: seed.issue_id }).first()).toHaveAttribute("href", `/issues/${seed.issue_id}`);
-
-    const replayDispatchResponsePromise = page.waitForResponse((response) => {
-      return response.url().includes(`/v1/replay/runs/from-issue/${seed.issue_id}`)
-        && response.request().method() === "POST";
-    });
-    await page.getByRole("button", { name: "Start replay" }).click();
-    await expect(page.getByRole("dialog", { name: "Connect provider key" })).toHaveCount(0);
-    const replayDispatchResponse = await replayDispatchResponsePromise;
-    expect(replayDispatchResponse.ok()).toBeTruthy();
-
-    await page.goto(`/replay/${seed.replay_run_id}`);
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, [seed.replay_run_id, seed.issue_id, "verified_fix", "RF-1001"]);
-    await expect(page.getByRole("link", { name: seed.issue_id }).first()).toHaveAttribute("href", `/issues/${seed.issue_id}`);
-
-    await page.goto("/goldens");
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["Goldens", "Refund status protected flow", "Blocks CI"]);
-    await expect(page.getByRole("link", { name: "Refund status protected flow" })).toHaveAttribute(
-      "href",
-      `/goldens/${seed.golden_set_id}`,
-    );
-
-    await page.goto(`/goldens/${seed.golden_set_id}`);
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, [
-      "Refund status protected flow",
-      seed.call_id,
-      "RF-1001",
-      "Blocks CI",
-      "verified_fix",
-    ]);
-    await expect(page.getByRole("link", { name: "View call" }).first()).toHaveAttribute(
-      "href",
+    for (const retiredRoute of [
+      "/calls",
       `/calls/${seed.call_id}`,
-    );
-
-    await page.goto("/ci-gates");
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, ["CI Gates", seed.ci_run_id, "demo-break-r", "Failed"]);
-
-    await page.goto(`/ci-gates/${seed.ci_run_id}`);
-    await expectDashboardShell(page);
-    await expectVisibleTexts(page, [
-      "Regression CI blocked this change.",
-      seed.ci_run_id,
-      "demo-break-r",
-      "refund status tool not called",
-      seed.golden_trace_id,
-      "View Golden set",
-    ]);
-    await expectHealthyPage(page);
+      "/issues",
+      `/issues/${seed.issue_id}`,
+      "/replay",
+      `/replay/${seed.replay_run_id}`,
+      "/goldens",
+      `/goldens/${seed.golden_set_id}`,
+      "/ci-gates",
+      `/ci-gates/${seed.ci_run_id}`,
+      "/cost",
+      "/trace",
+      `/trace/${seed.trace_id}`,
+      "/alerts",
+    ]) {
+      await page.goto(retiredRoute);
+      await expect(page).toHaveURL(/\/home$/);
+    }
   });
 });

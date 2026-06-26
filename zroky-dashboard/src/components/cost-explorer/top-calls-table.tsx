@@ -108,7 +108,7 @@ export function CostTopCallsTable({ windowDays }: { windowDays: number }) {
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Link
-                      href={`/calls/${item.call_id}`}
+                      href="/evidence"
                       className="btn btn-soft btn-sm"
                       style={{ whiteSpace: "nowrap" }}
                     >

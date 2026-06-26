@@ -400,7 +400,7 @@ export function PublicLanding() {
                 <span className="zlp-tdot" aria-hidden="true" />
                 <span className="zlp-tdot" aria-hidden="true" />
                 <span className="zlp-tdot" aria-hidden="true" />
-                <span className="zlp-mono zlp-theatre-label">app.zroky.com · live run monitor</span>
+                <span className="zlp-mono zlp-theatre-label">zroky.com · live run monitor</span>
                 <span className="zlp-theatre-stat">
                   <span className="zlp-led" aria-hidden="true" />
                   support-bot · VERIFIED

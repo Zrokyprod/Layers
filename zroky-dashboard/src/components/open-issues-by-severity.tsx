@@ -47,7 +47,7 @@ export function OpenIssuesBySeverity() {
           <h3>Open Issues by Severity</h3>
           <p>Grouped product problems — click a row to triage that bucket.</p>
         </div>
-        <Link href="/issues" className="btn btn-soft">
+        <Link href="/approvals" className="btn btn-soft">
           See All
         </Link>
       </header>
@@ -63,7 +63,7 @@ export function OpenIssuesBySeverity() {
           buckets.map((bucket) => (
             <Link
               key={bucket.severity}
-              href={`/issues?severity=${bucket.severity}`}
+              href="/approvals"
               className="list-row"
               aria-label={`${bucket.count} ${bucket.severity} open issues`}
             >

@@ -167,7 +167,7 @@ X-Zroky-Prompt-Version: support-v42`;
         : "Waiting for first call";
   const connected = captureHealth?.status === "connected";
   const stale = captureHealth?.status === "stale";
-  const lastCallHref = captureHealth?.last_call_id ? `/calls/${encodeURIComponent(captureHealth.last_call_id)}` : "/calls";
+  const lastCallHref = "/evidence";
   const verificationTitle = connected
     ? "Integration verified"
     : stale
@@ -327,7 +327,7 @@ X-Zroky-Prompt-Version: support-v42`;
         <Link href="/settings/keys" className="btn btn-primary">
           Get API key
         </Link>
-        <Link href="/calls" className="btn btn-soft">
+        <Link href="/evidence" className="btn btn-soft">
           <Clock3 aria-hidden="true" />
           Open Calls
         </Link>

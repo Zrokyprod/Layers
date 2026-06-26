@@ -10,7 +10,7 @@ test.describe("settings and account", () => {
 
     const pages = [
       { path: "/settings", labels: ["Settings", "Projects", "capture keys"] },
-      { path: "/settings/keys", labels: ["API Keys", "Create project key"] },
+      { path: "/settings/keys", labels: ["Project key setup", "Create project key"] },
       { path: "/settings/providers", labels: ["BYOK replay", "Provider key vault", "OpenAI"] },
       { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
       { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },

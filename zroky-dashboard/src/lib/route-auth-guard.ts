@@ -1,54 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  isDashboardProtectedPath,
+  isDashboardRetiredPath,
+} from "./dashboard-route-contract";
+
 const ACCESS_TOKEN_COOKIE = "zroky_access_token";
-
-const PROTECTED_PREFIXES = [
-  "/account",
-  "/agents",
-  "/alerts",
-  "/approvals",
-  "/calls",
-  "/ci-gates",
-  "/contracts",
-  "/cost",
-  "/evidence",
-  "/goldens",
-  "/home",
-  "/integrations",
-  "/issues",
-  "/outcomes",
-  "/policies",
-  "/projects",
-  "/replay",
-  "/settings",
-  "/trace",
-];
-
-const RETIRED_DASHBOARD_PREFIXES = ["/drift", "/labs"];
-
-function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
-
-function isRetiredDashboardPath(pathname: string): boolean {
-  return RETIRED_DASHBOARD_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
 
 export function guardDashboardRoute(request: NextRequest): NextResponse {
   const { pathname, search } = request.nextUrl;
 
-  if (isRetiredDashboardPath(pathname)) {
+  if (isDashboardRetiredPath(pathname)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/home";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (!isProtectedPath(pathname)) {
+  if (!isDashboardProtectedPath(pathname)) {
     return NextResponse.next();
   }
 

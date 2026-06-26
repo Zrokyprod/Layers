@@ -170,11 +170,7 @@ export function buildTimelineEntries(
       label: trace.workflow_name ?? trace.trace_id ?? trace.call_id ?? "Captured trace",
       detail: [trace.provider, trace.model].filter(Boolean).join(" / ") || fallbackAgentName || "agent run",
       status: trace.status ?? "captured",
-      href: trace.call_id
-        ? `/calls/${encodeURIComponent(trace.call_id)}`
-        : trace.trace_id
-          ? `/trace/${encodeURIComponent(trace.trace_id)}`
-          : "/trace",
+      href: "/evidence",
       startedAt: trace.created_at,
       latencyMs: trace.latency_ms ?? 1,
     }));
@@ -185,7 +181,7 @@ export function buildTimelineEntries(
     label: agentNameFromCall(call),
     detail: [call.provider, call.model].filter(Boolean).join(" / ") || "captured call",
     status: call.status,
-    href: `/calls/${encodeURIComponent(call.call_id)}`,
+    href: "/evidence",
     startedAt: call.created_at,
     latencyMs: call.latency_ms ?? 1,
   }));

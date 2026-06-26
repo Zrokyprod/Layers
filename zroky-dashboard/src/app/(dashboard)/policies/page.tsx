@@ -25,7 +25,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 
 const DASH = "-";
-const ACTIVE_GUARDRAIL_COUNT = 3;
+const ACTIVE_GUARDRAIL_COUNT = 5;
 
 function listToText(values: string[]): string {
   return values.join(", ");
@@ -122,6 +122,136 @@ function policyReadiness(policy: PilotPolicyPayload | null): {
   };
 }
 
+function policyVerdict({
+  activeGuardrails,
+  blockedActions,
+  pendingApprovals,
+  policy,
+}: {
+  activeGuardrails: number;
+  blockedActions: number;
+  pendingApprovals: number;
+  policy: PilotPolicyPayload | null;
+}): {
+  badge: string;
+  copy: string;
+  title: string;
+  tone: "danger" | "neutral" | "success" | "warning";
+} {
+  if (!policy) {
+    return {
+      badge: "Loading",
+      copy: "Loading the saved runtime policy and latest decisions before showing the current action boundary.",
+      title: "Policy status loading",
+      tone: "neutral",
+    };
+  }
+  if (policy.kill_switch) {
+    return {
+      badge: "Stopped",
+      copy: "The kill switch is on. Autonomous actions should remain frozen until an operator reopens the project.",
+      title: "Autonomy stopped",
+      tone: "danger",
+    };
+  }
+  if (!policy.runtime_enabled) {
+    return {
+      badge: "Ungated",
+      copy: "Runtime checks are disabled, so agent actions can execute without the policy gate producing proof.",
+      title: "Runtime gate disabled",
+      tone: "danger",
+    };
+  }
+  if (!policy.runtime_sensitive_actions_require_approval) {
+    return {
+      badge: "Approval gap",
+      copy: "Sensitive actions are not forced through human approval, so high-impact tool calls can skip review.",
+      title: "Approval gap open",
+      tone: "warning",
+    };
+  }
+  if (activeGuardrails < ACTIVE_GUARDRAIL_COUNT) {
+    return {
+      badge: "Incomplete",
+      copy: "The runtime gate is active, but one or more high-stakes blockers are not enforcing the boundary.",
+      title: "Guardrails incomplete",
+      tone: "warning",
+    };
+  }
+  if (pendingApprovals > 0) {
+    return {
+      badge: "Review",
+      copy: "The policy gate is working and has paused sensitive actions for human approval before execution.",
+      title: "Human review waiting",
+      tone: "warning",
+    };
+  }
+  if (blockedActions > 0) {
+    return {
+      badge: "Blocked",
+      copy: "The runtime gate has blocked risky actions and kept a decision trail for audit and evidence review.",
+      title: "Policy caught risky action",
+      tone: "success",
+    };
+  }
+  return {
+    badge: "Controlled",
+    copy: "Runtime checks, approval holds, and high-stakes blockers are active before autonomous actions continue.",
+    title: "Runtime policy enforced",
+    tone: "success",
+  };
+}
+
+function PolicyMandateContract() {
+  const rules = [
+    {
+      label: "Mandate",
+      title: "Define what agents may attempt",
+      body: "Allowed tools and sensitive tools draw the action boundary before runtime execution.",
+      tone: "neutral",
+    },
+    {
+      label: "Risk limits",
+      title: "Cap blast radius",
+      body: "Tool-call count, retries, and cost limits stop runaway autonomous behavior.",
+      tone: "warning",
+    },
+    {
+      label: "Approval",
+      title: "Hold sensitive actions",
+      body: "Money, customer, message, delete, or external side effects should pause before commit.",
+      tone: "success",
+    },
+    {
+      label: "Fail closed",
+      title: "Block unsafe paths",
+      body: "PII leakage, prompt-injected external actions, and kill-switch events stop execution.",
+      tone: "danger",
+    },
+  ];
+
+  return (
+    <section className="policy-mandate-contract" aria-label="Policy mandate contract">
+      <div className="policy-mandate-contract-head">
+        <span className="eyebrow">Mandate contract</span>
+        <h2>Policies define what an agent may attempt before any risky tool call runs.</h2>
+        <p>
+          Approvals decide exceptions. Outcomes verify the real result. Evidence Packs export the proof trail.
+        </p>
+      </div>
+      <div className="policy-mandate-contract-grid">
+        {rules.map((rule) => (
+          <article key={rule.label} data-tone={rule.tone}>
+            <span className="policy-contract-tag">{rule.label}</span>
+            <strong>{rule.title}</strong>
+            <small>{rule.body}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ToggleRow({
   label,
   description,
@@ -216,11 +346,19 @@ export default function PoliciesPage() {
         policy.runtime_sensitive_actions_require_approval,
         policy.runtime_block_pii_leak,
         policy.runtime_block_prompt_injected_external_action,
+        policy.runtime_production_deploys_require_approval,
+        policy.runtime_changed_recipient_deny,
       ].filter(Boolean).length
     : 0;
   const runtimeEnabled = Boolean(policy?.runtime_enabled);
   const killSwitchEnabled = Boolean(policy?.kill_switch);
   const latestDecisions = approvals.slice(0, 5);
+  const heroVerdict = policyVerdict({
+    activeGuardrails,
+    blockedActions,
+    pendingApprovals,
+    policy,
+  });
 
   function updatePolicyField<Key extends keyof PilotPolicyPayload>(key: Key, value: PilotPolicyPayload[Key]) {
     setPolicy((current) => (current ? { ...current, [key]: value } : current));
@@ -238,17 +376,22 @@ export default function PoliciesPage() {
 
   return (
     <div className="dashboard-page policies-page">
-      <section className="page-header policy-command-hero">
-        <div>
+      <section className="page-header policy-command-hero" data-tone={heroVerdict.tone}>
+        <div className="policy-hero-copy">
           <span className="eyebrow">Runtime gate</span>
-          <h1>Policies</h1>
-          <p>Mandate Control defines what autonomous agents may do, what must pause, what gets blocked, and where proof is recorded.</p>
+          <h1>{heroVerdict.title}</h1>
+          <p>{heroVerdict.copy}</p>
         </div>
         <div className="policy-hero-side">
-          <div className="policy-flow-rail" aria-label="Runtime mandate flow">
-            <span>Mandate</span>
-            <strong>Runtime gate</strong>
-            <span>Human hold</span>
+          <div className="policy-verdict-card" aria-label="Runtime policy verdict">
+            <span>{heroVerdict.badge}</span>
+            <strong>{activeGuardrails}/{ACTIVE_GUARDRAIL_COUNT}</strong>
+            <small>guardrails active</small>
+          </div>
+          <div className="policy-flow-rail" aria-label="Runtime policy proof chain">
+            <span>Boundary</span>
+            <strong>Gate</strong>
+            <span>Hold</span>
             <span>Evidence</span>
           </div>
           <div className="page-actions">
@@ -288,32 +431,34 @@ export default function PoliciesPage() {
 
       {message ? <div className="notice" role="status">{message}</div> : null}
 
-      <section className="metric-grid compact" aria-label="Policy safety summary">
-        <article className={`metric-card ${readiness.tone}`}>
+      <section className="metric-grid compact policy-metric-grid" aria-label="Policy safety summary">
+        <article className={`metric-card policy-metric-card ${readiness.tone}`}>
           <CheckCircle2 size={18} />
           <span>Scale safety</span>
           <strong>{readiness.label}</strong>
           <small>{readiness.helper}</small>
         </article>
-        <article className={`metric-card ${statusTone(Boolean(policy?.runtime_enabled))}`}>
+        <article className={`metric-card policy-metric-card ${statusTone(Boolean(policy?.runtime_enabled))}`}>
           <SlidersHorizontal size={18} />
           <span>Runtime gate</span>
           <strong>{policy?.runtime_enabled ? "Enabled" : "Disabled"}</strong>
           <small>Applies limits before risky autonomous actions continue.</small>
         </article>
-        <article className="metric-card tone-warning">
+        <article className="metric-card policy-metric-card tone-warning">
           <Clock3 size={18} />
           <span>Pending approvals</span>
           <strong>{approvalsQuery.isLoading ? DASH : pendingApprovals}</strong>
           <small>Approval queue items waiting on a human decision.</small>
         </article>
-        <article className="metric-card tone-danger">
+        <article className="metric-card policy-metric-card tone-danger">
           <AlertTriangle size={18} />
           <span>Blocked actions</span>
           <strong>{approvalsQuery.isLoading ? DASH : blockedActions}</strong>
           <small>Rejected or blocked policy decisions visible in the audit trail.</small>
         </article>
       </section>
+
+      <PolicyMandateContract />
 
       <section className="policy-proof-strip" aria-label="Mandate proof flow">
         <article className={policyStepClass(killSwitchEnabled ? "danger" : runtimeEnabled ? "ready" : "warn")}>
@@ -408,7 +553,7 @@ export default function PoliciesPage() {
             )}
           </section>
 
-        <section className="settings-integration-grid">
+        <section className="settings-integration-grid policy-editor-grid">
           <article className="panel settings-control-panel">
             <header className="panel-header">
               <div>
@@ -450,6 +595,18 @@ export default function PoliciesPage() {
                 description="Stop external side effects triggered by suspected prompt injection."
                 checked={policy.runtime_block_prompt_injected_external_action}
                 onChange={(checked) => updatePolicyField("runtime_block_prompt_injected_external_action", checked)}
+              />
+              <ToggleRow
+                label="Production deploy approval"
+                description="Hold production deploy actions until a human approves the exact intent."
+                checked={policy.runtime_production_deploys_require_approval}
+                onChange={(checked) => updatePolicyField("runtime_production_deploys_require_approval", checked)}
+              />
+              <ToggleRow
+                label="Changed recipient deny"
+                description="Deny customer-visible messages when the recipient changes after intent creation."
+                checked={policy.runtime_changed_recipient_deny}
+                onChange={(checked) => updatePolicyField("runtime_changed_recipient_deny", checked)}
               />
             </div>
           </article>
@@ -499,6 +656,36 @@ export default function PoliciesPage() {
                   min={1}
                   value={policy.runtime_approval_ttl_minutes}
                   onChange={(event) => updatePolicyField("runtime_approval_ttl_minutes", Number(event.target.value))}
+                />
+              </label>
+              <label>
+                <span>Approval threshold (USD)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={policy.runtime_amount_approval_threshold_usd ?? ""}
+                  onChange={(event) =>
+                    updatePolicyField(
+                      "runtime_amount_approval_threshold_usd",
+                      event.target.value === "" ? null : Number(event.target.value),
+                    )
+                  }
+                />
+              </label>
+              <label>
+                <span>Dual approval threshold (USD)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={policy.runtime_amount_deny_threshold_usd ?? ""}
+                  onChange={(event) =>
+                    updatePolicyField(
+                      "runtime_amount_deny_threshold_usd",
+                      event.target.value === "" ? null : Number(event.target.value),
+                    )
+                  }
                 />
               </label>
             </div>
@@ -564,7 +751,7 @@ export default function PoliciesPage() {
                   <strong>Trace evidence</strong>
                   <span>Policy decisions are captured as trace evidence when SDK/Gateway calls the runtime gate.</span>
                 </div>
-                <Link href="/trace" className="btn btn-soft btn-sm">Open traces</Link>
+                <Link href="/evidence" className="btn btn-soft btn-sm">Open evidence</Link>
               </div>
             </div>
           </article>

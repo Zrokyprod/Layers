@@ -31,12 +31,14 @@ import {
   buildLiveSmokeCommand,
   buildMandateStarter,
   buildProtectedAgentSnippet,
+  buildWebhookBridgeCurl,
   humanizeIntent,
   pilotHandoffCriteria,
   pilotHandoffSteps,
   proofReadinessDetail,
   proofReadinessLabel,
   protectedAgentTemplates,
+  webhookBridgeDetail,
 } from "@/lib/protected-agent-setup";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
 
@@ -140,21 +142,23 @@ function ApiKeysContent() {
     protectedAgentTemplates.find((template) => template.id === selectedAgentId) ?? protectedAgentTemplates[0];
   const protectedMandateStarter = buildMandateStarter(selectedAgent);
   const protectedAgentSnippet = buildProtectedAgentSnippet(selectedAgent, snippetProjectId);
+  const webhookBridgeCurl = buildWebhookBridgeCurl(selectedAgent);
+  const webhookBridgeCopy = webhookBridgeDetail(selectedAgent);
   const liveSmokeCommand = buildLiveSmokeCommand(selectedAgent);
   const proofReadiness = proofReadinessLabel(selectedAgent);
   const proofReadinessCopy = proofReadinessDetail(selectedAgent);
   const connectorSetupHref =
     selectedAgent.liveSmokeScenario === "refund"
-      ? "/settings/integrations#ledger-refund-connector"
+      ? "/integrations#ledger-refund-connector"
       : selectedAgent.liveSmokeScenario === "customer-record"
-        ? "/settings/integrations#customer-record-connector"
-        : "/settings/integrations";
+        ? "/integrations#customer-record-connector"
+        : "/integrations";
   const connectorSetupLabel =
     selectedAgent.liveSmokeScenario === "refund"
       ? "Configure ledger connector"
       : selectedAgent.liveSmokeScenario === "customer-record"
         ? "Configure CRM connector"
-        : "Open integrations";
+        : "Open connectors";
   const jsSetupSnippet = `npm install @zroky-ai/sdk
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
@@ -212,8 +216,8 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
             <h2 id="project-key-setup-title">Project key setup</h2>
             <p>Create one key, run one SDK or Gateway call, then confirm your first trace.</p>
           </div>
-          <Link href="/trace" className="btn btn-soft">
-            Open traces
+          <Link href="/evidence" className="btn btn-soft">
+            Open evidence
             <ArrowRight aria-hidden="true" />
           </Link>
         </header>
@@ -394,8 +398,28 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
                   <Copy aria-hidden="true" />
                   Copy SDK wrapper
                 </button>
-                <Link href="/trace" className="btn btn-soft">
-                  Open traces
+                <Link href="/evidence" className="btn btn-soft">
+                  Open evidence
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </div>
+            </article>
+
+            <article className="keys-protected-block">
+              <div>
+                <h3>Webhook proof bridge</h3>
+                <p>{webhookBridgeCopy}</p>
+              </div>
+              <pre aria-label="Protected agent webhook bridge snippet">
+                <code>{webhookBridgeCurl}</code>
+              </pre>
+              <div className="keys-copy-actions">
+                <button type="button" className="btn btn-soft" onClick={() => void copyKey(webhookBridgeCurl)}>
+                  <Copy aria-hidden="true" />
+                  Copy webhook bridge
+                </button>
+                <Link href={connectorSetupHref} className="btn btn-soft">
+                  Open proof connector
                   <ArrowRight aria-hidden="true" />
                 </Link>
               </div>
@@ -456,8 +480,8 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
             <button type="button" className="btn btn-soft" onClick={() => setNewKey(null)}>
               Done
             </button>
-            <Link href="/trace" className="btn btn-primary">
-              Open traces
+            <Link href="/evidence" className="btn btn-primary">
+              Open evidence
               <ArrowRight aria-hidden="true" />
             </Link>
           </div>

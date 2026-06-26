@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useSearchParams } from "next/navigation";
@@ -75,7 +76,7 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     code: "free",
     name: "Free",
     monthlyCostUsd: 0,
-    features: ["5K events/mo", "7 day retention", "2 seats", "Capture, traces, and issue grouping"],
+    features: ["25 protected actions/mo", "100 policy checks/mo", "1 system-of-record connector", "Signed receipts and bypass watch"],
     selfServe: false,
   },
   {
@@ -83,13 +84,13 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     name: "Starter",
     monthlyCostUsd: 49,
     features: [
-      "50K events/mo",
-      "30 day retention",
+      "2K protected actions/mo",
+      "10K policy checks/mo",
       "Unlimited seats",
-      "50 repository replay runs/mo",
-      "250 fixture traces",
-      "Non-blocking CI preview",
-      "Provider key vault",
+      "2K runner executions and receipts/mo",
+      "5K verification checks/mo",
+      "3 system-of-record connectors",
+      "Dashboard and Slack approvals",
     ],
     selfServe: true,
   },
@@ -98,15 +99,13 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     name: "Pro",
     monthlyCostUsd: 199,
     features: [
-      "250K events/mo",
-      "90 day retention",
+      "25K protected actions/mo",
+      "100K policy checks/mo",
       "Unlimited seats",
-      "500 managed provider replay runs/mo",
-      "500 repository replay runs/mo",
-      "100 sandbox replay runs/mo",
-      "2,500 fixture traces",
-      "Blocking CI gates",
-      "Provider key vault and audit log",
+      "25K runner executions and receipts/mo",
+      "50K verification checks/mo",
+      "10 system-of-record connectors",
+      "Expanded reconciliation and Evidence Pack volume",
     ],
     selfServe: true,
   },
@@ -115,10 +114,10 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     name: "Enterprise",
     monthlyCostUsd: null,
     features: [
-      "Custom event and replay limits",
-      "Repository replay with fail-closed CI",
-      "Provider key vault for managed replay",
-      "Advanced audit and retention controls",
+      "Custom protected action volume",
+      "Unlimited or contracted policy and verification meters",
+      "Customer-hosted runner scale-out",
+      "Advanced audit, retention, and support controls",
     ],
     selfServe: false,
   },
@@ -402,6 +401,43 @@ function BillingSettingsContent() {
   const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
   const paymentStatus = paymentStatusLabel(billingMe);
   const pendingPaymentConfirmation = Boolean(billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref);
+  const protectedActionMeters = [
+    {
+      label: "Protected actions",
+      detailLabel: "Protected actions",
+      meter: billingUsage?.protected_actions,
+    },
+    {
+      label: "Policy checks",
+      detailLabel: "Policy checks",
+      meter: billingUsage?.policy_checks,
+    },
+    {
+      label: "Runner executions",
+      detailLabel: "Runner executions",
+      meter: billingUsage?.runner_executions,
+    },
+    {
+      label: "Receipts",
+      detailLabel: "Action receipts",
+      meter: billingUsage?.action_receipts,
+    },
+    {
+      label: "Verification checks",
+      detailLabel: "Verification checks",
+      meter: billingUsage?.verification_checks,
+    },
+    {
+      label: "Source mutations",
+      detailLabel: "Source mutations",
+      meter: billingUsage?.source_mutations,
+    },
+    {
+      label: "SOR connectors",
+      detailLabel: "System-of-record connectors",
+      meter: billingUsage?.active_connectors,
+    },
+  ];
 
   useEffect(() => {
     if (!pendingPaymentConfirmation) {
@@ -444,9 +480,9 @@ function BillingSettingsContent() {
         </article>
         <article className="panel settings-summary-card">
           <ShieldCheck aria-hidden="true" />
-          <span>SLA tier</span>
-          <strong>{billingMe?.sla_tier ?? "standard"}</strong>
-          <small>Entitlements are read from backend plan state.</small>
+          <span>Protected actions</span>
+          <strong>{formatUsageMeter(billingUsage?.protected_actions)}</strong>
+          <small>{usageDetail("Protected actions", billingUsage?.protected_actions)}</small>
         </article>
       </section>
 
@@ -535,6 +571,28 @@ function BillingSettingsContent() {
               <div className="kpi-label">Metering health</div>
               <small>{billingUsage?.metering_health.detail ?? `Policy: ${billingUsage?.metering_health.failure_policy ?? "unknown"}`}</small>
             </div>
+          </div>
+
+          <div className="kpi-grid billing-usage-kpis" role="region" aria-label="Protected action usage">
+            {protectedActionMeters.map((item) => (
+              <div className="kpi-card" key={item.label}>
+                <div className="kpi-value">{formatUsageMeter(item.meter)}</div>
+                <div className="kpi-label">{item.label}</div>
+                <small>{usageDetail(item.detailLabel, item.meter)}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="actions billing-control-links">
+            <Link href="/actions" className="btn btn-primary">
+              Open Actions
+            </Link>
+            <Link href="/outcomes" className="btn btn-secondary">
+              Open bypass risk
+            </Link>
+            <Link href="/evidence" className="btn btn-secondary">
+              Open Evidence
+            </Link>
           </div>
 
           <div className="kpi-grid billing-usage-kpis">

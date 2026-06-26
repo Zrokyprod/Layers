@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
+  Plus,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -18,14 +19,29 @@ import {
 
 import { CaptureConnectPanel } from "@/components/capture-connect-panel";
 import {
+  createAgentProfile,
   getAnalyticsSummary,
   getCaptureHealth,
+  getToolRegistry,
+  listAgentProfiles,
   listCalls,
   listIssues,
   listOutcomeReconciliations,
   listRuntimePolicyApprovals,
 } from "@/lib/api";
-import type { AgentScoreView, OutcomeReconciliationView, RuntimePolicyDecisionResponse } from "@/lib/api";
+import type {
+  AgentProfileCreatePayload,
+  AgentProfileResponse,
+  AgentRiskActionType,
+  AgentRuntimePath,
+  AgentScoreView,
+  AgentVerificationConnectorType,
+  OutcomeReconciliationView,
+  RuntimePolicyDecisionResponse,
+  ToolImplementationStatus,
+  ToolRegistryItemResponse,
+  ToolRegistryResponse,
+} from "@/lib/api";
 import { formatCount, formatDateTime, formatPercent, formatUsd } from "@/lib/format";
 import { replayLabel, severityRank } from "@/lib/issue-format";
 import { useReliabilityLeaderboard } from "@/lib/hooks";
@@ -57,10 +73,65 @@ type AgentLaunchpadRow = {
   p95LatencyMs: number | null;
   latestDecision: RuntimePolicyDecisionResponse | null;
   latestOutcome: OutcomeReconciliationView | null;
+  profile: AgentProfileResponse | null;
 };
 
 type AgentsFilter = "all" | "needs_review" | "held" | "missing_outcome" | "evidence_ready";
 type AgentHeroTone = "setup" | "danger" | "warning" | "success" | "neutral";
+
+const RISKY_ACTION_OPTIONS: { value: AgentRiskActionType; label: string }[] = [
+  { value: "refund", label: "Refund / payment reversal" },
+  { value: "payment_adjustment", label: "Payment adjustment" },
+  { value: "customer_record_update", label: "Customer record update" },
+  { value: "ticket_close", label: "Ticket close" },
+  { value: "email_send", label: "Email send" },
+  { value: "deploy_change", label: "Deploy / change" },
+  { value: "invoice_spend_approval", label: "Invoice / spend approval" },
+  { value: "internal_api_mutation", label: "Internal API mutation" },
+  { value: "database_record_update", label: "Database record update" },
+  { value: "custom", label: "Custom risky action" },
+];
+
+const VERIFICATION_CONNECTOR_OPTIONS: {
+  value: AgentVerificationConnectorType;
+  label: string;
+  status: ToolImplementationStatus;
+  helper: string;
+}[] = [
+  { value: "ledger_refund", label: "Ledger / refund record", status: "available", helper: "Refund and payment proof through a saved read endpoint." },
+  { value: "crm_record", label: "CRM customer record", status: "available", helper: "Customer, contact, and account record verification." },
+  { value: "generic_rest", label: "Generic REST verifier", status: "available", helper: "Phase 1 fallback for internal APIs and unsupported native tools." },
+  { value: "webhook_callback", label: "Webhook outcome callback", status: "template", helper: "Customer-signed callback when Zroky cannot read the source system." },
+  { value: "ticket_status", label: "Ticket status", status: "planned", helper: "Native Zendesk/Freshdesk ticket status proof." },
+  { value: "email_delivery", label: "Email delivery", status: "planned", helper: "Native Gmail, SendGrid, and SES delivery proof." },
+  { value: "github_ci", label: "GitHub CI / deploy", status: "planned", helper: "Native PR, CI, and deploy outcome proof." },
+  { value: "database_read", label: "Database read verifier", status: "planned", helper: "Verification-only database reads." },
+];
+
+const RUNTIME_PATH_OPTIONS: {
+  value: AgentRuntimePath;
+  label: string;
+  status: ToolImplementationStatus;
+  helper: string;
+}[] = [
+  { value: "sdk", label: "SDK wrapper", status: "available", helper: "Best first path for Python and JS agents." },
+  { value: "webhook", label: "Webhook bridge", status: "available", helper: "Works for no-code and legacy automations." },
+  { value: "http_gateway", label: "HTTP gateway", status: "planned", helper: "Future proxy path for arbitrary tool calls." },
+  { value: "mcp_gateway", label: "MCP gateway", status: "planned", helper: "Future MCP tool control path." },
+];
+
+const DEFAULT_CONNECTOR_BY_ACTION: Record<AgentRiskActionType, AgentVerificationConnectorType> = {
+  refund: "ledger_refund",
+  payment_adjustment: "ledger_refund",
+  invoice_spend_approval: "generic_rest",
+  customer_record_update: "crm_record",
+  ticket_close: "generic_rest",
+  email_send: "generic_rest",
+  deploy_change: "generic_rest",
+  internal_api_mutation: "generic_rest",
+  database_record_update: "generic_rest",
+  custom: "generic_rest",
+};
 
 function coerceDate(value: unknown): Date | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -227,6 +298,10 @@ function rowHasMissingOutcome(row: AgentLaunchpadRow): boolean {
   return Boolean(row.latestDecision && (!row.latestOutcome || row.latestOutcome.verdict === "not_verified"));
 }
 
+function rowHasProfileWithoutAction(row: AgentLaunchpadRow): boolean {
+  return Boolean(row.profile && row.callCount === 0 && !row.latestDecision && !row.latestOutcome);
+}
+
 function rowHasEvidenceReady(row: AgentLaunchpadRow): boolean {
   return Boolean(row.latestDecision && row.latestOutcome?.verdict === "matched");
 }
@@ -235,6 +310,7 @@ function rowNeedsReview(row: AgentLaunchpadRow): boolean {
   return rowHasHeldDecision(row) ||
     row.latestOutcome?.verdict === "mismatched" ||
     rowHasMissingOutcome(row) ||
+    rowHasProfileWithoutAction(row) ||
     Boolean(row.latestIssue) ||
     (row.healthScore != null && row.healthScore < 55);
 }
@@ -244,6 +320,7 @@ function agentPriority(row: AgentLaunchpadRow): number {
   if (rowHasHeldDecision(row)) return 600;
   if (rowHasMissingOutcome(row)) return 500;
   if (row.latestIssue) return 300 + severityRank(row.latestIssue.severity);
+  if (rowHasProfileWithoutAction(row)) return 250;
   if (row.healthScore != null && row.healthScore < 55) return 200;
   if (rowHasEvidenceReady(row)) return 100;
   return 0;
@@ -262,6 +339,7 @@ function mandateRiskLabel(row: AgentLaunchpadRow): string {
   if (rowHasHeldDecision(row)) return "Held / blocked";
   if (rowHasMissingOutcome(row)) return "Proof missing";
   if (row.latestIssue) return row.latestIssue.severity;
+  if (rowHasProfileWithoutAction(row)) return "Setup incomplete";
   if (row.healthScore != null && row.healthScore < 55) return "At risk";
   if (rowHasEvidenceReady(row)) return "Protected";
   return "Watching";
@@ -271,6 +349,7 @@ function mandateRiskTone(row: AgentLaunchpadRow): string {
   if (row.latestOutcome?.verdict === "mismatched") return "badge-red";
   if (rowHasHeldDecision(row)) return "badge-yellow";
   if (rowHasMissingOutcome(row)) return "badge-yellow";
+  if (rowHasProfileWithoutAction(row)) return "badge-yellow";
   if (row.latestIssue) return severityTone(row.latestIssue.severity);
   if (row.healthScore != null && row.healthScore < 55) return "badge-red";
   if (rowHasEvidenceReady(row)) return "badge-green";
@@ -282,6 +361,7 @@ function evidenceReadyLabel(row: AgentLaunchpadRow): string {
   if (row.latestDecision && !row.latestOutcome) return "Outcome missing";
   if (row.latestOutcome?.verdict === "mismatched") return "Failed proof";
   if (row.latestOutcome?.verdict === "not_verified") return "Not verified";
+  if (rowHasProfileWithoutAction(row)) return "Needs first action";
   if (row.latestDecision) return "Needs proof";
   return "No decision";
 }
@@ -304,7 +384,8 @@ function nextStepLabel(row: AgentLaunchpadRow): string {
   if (row.latestOutcome?.verdict === "mismatched") return "Inspect outcome";
   if (rowHasHeldDecision(row)) return "Review held action";
   if (rowHasMissingOutcome(row)) return "Verify outcome";
-  if (row.latestIssue) return "Open proof gap";
+  if (rowHasProfileWithoutAction(row)) return "Wire capture";
+  if (row.latestIssue) return "Review policy";
   if (rowHasEvidenceReady(row)) return "Open evidence";
   return "Inspect capture";
 }
@@ -312,9 +393,10 @@ function nextStepLabel(row: AgentLaunchpadRow): string {
 function nextStepHref(row: AgentLaunchpadRow): string {
   if (row.latestOutcome?.verdict === "mismatched" || rowHasMissingOutcome(row)) return "/outcomes";
   if (rowHasHeldDecision(row)) return "/approvals";
-  if (row.latestIssue) return `/issues/${encodeURIComponent(row.latestIssue.id)}`;
+  if (rowHasProfileWithoutAction(row)) return "/settings/keys";
+  if (row.latestIssue) return "/policies";
   if (row.latestDecision) return evidencePackHref(row.latestDecision.id);
-  return `/calls?agent_name=${encodeURIComponent(row.agentName)}`;
+  return "/settings/keys";
 }
 
 function filterAgentRows(rows: AgentLaunchpadRow[], filter: AgentsFilter): AgentLaunchpadRow[] {
@@ -333,6 +415,53 @@ function agentFilterLabel(filter: AgentsFilter): string {
   return "Protected agents";
 }
 
+function priorityCode(row: AgentLaunchpadRow): string {
+  if (row.latestOutcome?.verdict === "mismatched") return "P0";
+  if (rowHasHeldDecision(row) || rowHasMissingOutcome(row)) return "P1";
+  if (rowHasProfileWithoutAction(row)) return "P2";
+  if (row.latestIssue || (row.healthScore != null && row.healthScore < 55)) return "P2";
+  if (rowHasEvidenceReady(row)) return "Ready";
+  return "Watch";
+}
+
+function priorityReason(row: AgentLaunchpadRow): string {
+  if (row.latestOutcome?.verdict === "mismatched") return "Proof failed";
+  if (rowHasHeldDecision(row)) return "Action held";
+  if (rowHasMissingOutcome(row)) return "Needs proof";
+  if (rowHasProfileWithoutAction(row)) return "Profile not wired";
+  if (row.latestIssue) return "Open issue";
+  if (row.healthScore != null && row.healthScore < 55) return "Low health";
+  if (rowHasEvidenceReady(row)) return "Exportable";
+  return "No active gate";
+}
+
+function mandateContext(row: AgentLaunchpadRow): string {
+  const decisionContext = [
+    row.latestDecision?.role,
+    row.latestDecision?.action_type,
+    row.latestDecision?.tool_name,
+  ].filter(Boolean).join(" / ");
+  if (decisionContext) return decisionContext;
+  if (row.profile?.allowed_action_types.length) {
+    const action = row.profile.allowed_action_types.slice(0, 2).join(" / ");
+    return `Mandate: ${action}`;
+  }
+  if (row.profile?.tool_names.length) {
+    return `Tools: ${row.profile.tool_names.slice(0, 2).join(" / ")}`;
+  }
+  if (row.latestIssue?.affected_workflow) return row.latestIssue.affected_workflow;
+  if (row.latestIssue?.failure_code) return row.latestIssue.failure_code.replace(/_/g, " ").toLowerCase();
+  return `${formatCount(row.callCount)} captured action${row.callCount === 1 ? "" : "s"}`;
+}
+
+function latestActionLabel(row: AgentLaunchpadRow): string {
+  if (row.latestDecision?.action_type || row.latestDecision?.tool_name) {
+    return [row.latestDecision.action_type, row.latestDecision.tool_name].filter(Boolean).join(" / ");
+  }
+  if (row.latestIssue?.affected_workflow) return row.latestIssue.affected_workflow;
+  return row.lastEventAt ? formatDateTime(row.lastEventAt) : "No recent action";
+}
+
 function severityTone(severity: string | null | undefined): string {
   const value = (severity ?? "").toLowerCase();
   if (value === "critical" || value === "high") return "badge-red";
@@ -346,11 +475,16 @@ function recommendedActionFor(row: {
   healthScore: number | null;
   successRate: number | null;
   replayCoverage: string;
+  callCount: number;
+  profile?: AgentProfileResponse | null;
   latestDecision?: RuntimePolicyDecisionResponse | null;
   latestOutcome?: OutcomeReconciliationView | null;
 }): string {
   if (row.latestOutcome?.verdict === "mismatched") {
     return "Hold this agent path and review the system-of-record mismatch.";
+  }
+  if (row.profile && !row.latestDecision && row.callCount === 0) {
+    return "Wire this profile through the SDK or gateway and run one real action.";
   }
   if (!row.latestOutcome && row.latestDecision) {
     return "Run outcome reconciliation before marking this action verified.";
@@ -389,7 +523,17 @@ function formatLatency(value: number | null): string {
   return `${Math.round(value)}ms`;
 }
 
+function toolRegistryActionType(row: AgentLaunchpadRow | null): string | null {
+  return (
+    row?.profile?.allowed_action_types[0] ??
+    row?.latestDecision?.action_type ??
+    row?.latestOutcome?.action_type ??
+    null
+  );
+}
+
 function buildAgentRows(
+  profiles: AgentProfileResponse[],
   scores: AgentScoreView[],
   calls: CallListItem[],
   issues: IssueItem[],
@@ -399,6 +543,7 @@ function buildAgentRows(
   const statsByAgent = new Map<string, AgentStats>();
   const callsByAgent = new Map<string, CallListItem[]>();
   const callsById = new Map<string, CallListItem>();
+  const profileByAgent = new Map(profiles.map((profile) => [profile.display_name, profile]));
   const scoreByAgent = new Map(scores.map((score) => [score.agent_name, score]));
   const issuesByAgent = new Map<string, IssueItem[]>();
   const decisionsByAgent = new Map<string, RuntimePolicyDecisionResponse>();
@@ -407,6 +552,12 @@ function buildAgentRows(
   const decisionsByTrace = new Map<string, RuntimePolicyDecisionResponse>();
   const outcomesByAgent = new Map<string, OutcomeReconciliationView>();
   const names = new Set<string>();
+
+  for (const profile of profiles) {
+    if (profile.is_active) {
+      names.add(profile.display_name);
+    }
+  }
 
   for (const call of calls) {
     const agentName = agentNameFromCall(call);
@@ -490,6 +641,7 @@ function buildAgentRows(
   return Array.from(names)
     .map((agentName) => {
       const score = scoreByAgent.get(agentName) ?? null;
+      const profile = profileByAgent.get(agentName) ?? null;
       const stats = statsByAgent.get(agentName) ?? null;
       const sortedIssues = [...(issuesByAgent.get(agentName) ?? [])].sort(issuePriority);
       const latestIssue = sortedIssues[0] ?? null;
@@ -522,6 +674,7 @@ function buildAgentRows(
         callCount: stats?.callCount ?? score?.call_count ?? 0,
         successfulCalls: stats?.successfulCalls ?? 0,
         p95LatencyMs: stats?.p95LatencyMs ?? score?.p95_latency_ms ?? null,
+        profile,
       };
       return {
         ...row,
@@ -541,23 +694,64 @@ function AgentsSetupState({
   captureHealth,
   callsToday,
   setupOpened,
+  agentProfiles,
+  createPending,
+  createError,
   onRefresh,
   onMarkOpened,
+  onCreateProfile,
 }: {
   captureHealth: CaptureHealthResponse | null;
   callsToday: number;
   setupOpened: boolean;
+  agentProfiles: AgentProfileResponse[];
+  createPending: boolean;
+  createError: Error | null;
   onRefresh: () => void;
   onMarkOpened: () => void;
+  onCreateProfile: (payload: AgentProfileCreatePayload) => Promise<AgentProfileResponse>;
 }) {
+  const [displayName, setDisplayName] = useState("");
+  const [runtimePath, setRuntimePath] = useState<AgentRuntimePath>("sdk");
+  const [actionType, setActionType] = useState<AgentRiskActionType>("refund");
+  const [connectorType, setConnectorType] = useState<AgentVerificationConnectorType>("ledger_refund");
+  const [toolNamesText, setToolNamesText] = useState("stripe.refunds.create");
+  const [createdName, setCreatedName] = useState<string | null>(null);
+  const selectedRuntimePath = RUNTIME_PATH_OPTIONS.find((option) => option.value === runtimePath) ?? RUNTIME_PATH_OPTIONS[0];
+  const selectedConnector = VERIFICATION_CONNECTOR_OPTIONS.find((option) => option.value === connectorType) ?? VERIFICATION_CONNECTOR_OPTIONS[0];
+  const suggestedConnector = VERIFICATION_CONNECTOR_OPTIONS.find((option) => option.value === DEFAULT_CONNECTOR_BY_ACTION[actionType]) ?? selectedConnector;
   const connected = captureHealth?.status === "connected";
   const checklistItems = [
+    { label: "Agent profile defined", done: agentProfiles.length > 0 },
     { label: "Capture stream connected", done: connected },
     { label: "At least one agent action ingested", done: callsToday > 0 || (captureHealth?.calls_24h ?? 0) > 0 },
     { label: "System-of-record connector selected", done: (captureHealth?.outcome_events_24h ?? 0) > 0 },
     { label: "Setup path opened", done: setupOpened },
   ];
   const completed = checklistItems.filter((item) => item.done).length;
+  const canSubmit = displayName.trim().length > 0 && !createPending;
+
+  useEffect(() => {
+    setConnectorType(DEFAULT_CONNECTOR_BY_ACTION[actionType]);
+  }, [actionType]);
+
+  const submitProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const toolNames = toolNamesText
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const profile = await onCreateProfile({
+      display_name: displayName.trim(),
+      runtime_path: runtimePath,
+      tool_names: toolNames,
+      allowed_action_types: [actionType],
+      verification_connectors: [connectorType],
+      metadata: { setup_source: "agents_dashboard" },
+    });
+    setCreatedName(profile.display_name);
+    setDisplayName("");
+  };
 
   return (
     <section className="agents-setup-grid">
@@ -566,14 +760,104 @@ function AgentsSetupState({
           <Zap aria-hidden="true" />
           Protection setup
         </div>
-        <h2>Connect one real agent action to start proof.</h2>
+        <h2>Define one protected agent, then connect its first real action.</h2>
         <p>
           Once capture starts, Zroky ranks agents by mandate health, held actions, outcome proof, Evidence Pack readiness, and system-of-record coverage.
         </p>
-        <button type="button" className="btn btn-soft" onClick={onRefresh}>
-          <RefreshCw aria-hidden="true" />
-          Check capture
-        </button>
+        <form className="agent-profile-form" onSubmit={submitProfile}>
+          <div className="agent-profile-field">
+            <label htmlFor="agent-profile-name">Agent name</label>
+            <input
+              id="agent-profile-name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Refund Agent"
+              maxLength={255}
+            />
+          </div>
+          <div className="agent-profile-form-grid">
+            <div className="agent-profile-field">
+              <label htmlFor="agent-profile-runtime">Runtime path</label>
+              <select
+                id="agent-profile-runtime"
+                value={runtimePath}
+                onChange={(event) => setRuntimePath(event.target.value as AgentRuntimePath)}
+              >
+                {RUNTIME_PATH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{optionLabel(option.label, option.status)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="agent-profile-field">
+              <label htmlFor="agent-profile-action">Primary risky action</label>
+              <select
+                id="agent-profile-action"
+                value={actionType}
+                onChange={(event) => setActionType(event.target.value as AgentRiskActionType)}
+              >
+                {RISKY_ACTION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="agent-profile-field">
+              <label htmlFor="agent-profile-connector">Verification connector</label>
+              <select
+                id="agent-profile-connector"
+                value={connectorType}
+                onChange={(event) => setConnectorType(event.target.value as AgentVerificationConnectorType)}
+              >
+                {VERIFICATION_CONNECTOR_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{optionLabel(option.label, option.status)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="agent-profile-field">
+              <label htmlFor="agent-profile-tools">Tool names</label>
+              <input
+                id="agent-profile-tools"
+                value={toolNamesText}
+                onChange={(event) => setToolNamesText(event.target.value)}
+                placeholder="stripe.refunds.create, stripe.refunds.retrieve"
+              />
+            </div>
+          </div>
+          <div className="agent-profile-coverage-preview" aria-label="Agent coverage truth">
+            <div>
+              <span>Runtime</span>
+              <strong>{selectedRuntimePath.label}</strong>
+              <small>{statusLabel(selectedRuntimePath.status)} - {selectedRuntimePath.helper}</small>
+            </div>
+            <div>
+              <span>Verifier</span>
+              <strong>{selectedConnector.label}</strong>
+              <small>{statusLabel(selectedConnector.status)} - {selectedConnector.helper}</small>
+            </div>
+            <div>
+              <span>Suggested proof</span>
+              <strong>{suggestedConnector.label}</strong>
+              <small>{suggestedConnector.status === "available" ? "Can verify with the current saved connector runtime." : "Use Generic REST until this native connector is live."}</small>
+            </div>
+          </div>
+          {createError ? <p className="agent-profile-form-error">{createError.message}</p> : null}
+          {createdName ? <p className="agent-profile-form-success">{createdName} profile created.</p> : null}
+          {runtimePath === "webhook" ? (
+            <p className="agent-profile-form-hint">
+              Use <code>/v1/outcomes/reconciliation/saved</code> after the agent action completes. The request uses
+              <code>x-api-key</code> for Zroky and the selected saved connector for proof.
+            </p>
+          ) : null}
+          <div className="agent-profile-actions">
+            <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
+              <Plus aria-hidden="true" />
+              {createPending ? "Creating..." : "Create agent profile"}
+            </button>
+            <button type="button" className="btn btn-soft" onClick={onRefresh}>
+              <RefreshCw aria-hidden="true" />
+              Check capture
+            </button>
+          </div>
+        </form>
       </article>
       <CaptureConnectPanel
         captureHealth={captureHealth}
@@ -643,24 +927,21 @@ function AgentRow({
       }}
     >
       <td>
+        <div className="agents-priority-cell">
+          <span className={`alert-cat-badge ${mandateRiskTone(row)}`}>{priorityCode(row)}</span>
+          <span className="agents-cell-note">{priorityReason(row)}</span>
+        </div>
+      </td>
+      <td>
         <div className="agents-name-cell">
           <span className="agents-agent-icon" aria-hidden="true">
             <Bot />
           </span>
           <div>
             <strong>{row.agentName}</strong>
-            <span>{formatCount(row.callCount)} recent call{row.callCount === 1 ? "" : "s"}</span>
+            <span>{mandateContext(row)}</span>
+            <small>{formatCount(row.callCount)} recent call{row.callCount === 1 ? "" : "s"}</small>
           </div>
-        </div>
-      </td>
-      <td>
-        <div className="agents-proof-cell">
-          <span className={`alert-cat-badge ${mandateRiskTone(row)}`}>
-            {mandateRiskLabel(row)}
-          </span>
-          <span className="agents-cell-note">
-            {row.healthScore == null ? "No baseline yet" : `Health ${Math.round(row.healthScore)}`}
-          </span>
         </div>
       </td>
       <td>
@@ -697,6 +978,9 @@ function AgentRow({
         <strong>{impactLabel(row)}</strong>
         <span className="agents-cell-note">
           {row.latestIssue?.title ?? `${row.successRate == null ? "-" : formatPercent(row.successRate)} success`}
+        </span>
+        <span className="agents-cell-note">
+          {row.lastEventAt ? `Last ${formatDateTime(row.lastEventAt)}` : "No event timestamp"}
         </span>
       </td>
       <td>
@@ -754,6 +1038,7 @@ function AgentsHero({
   const missingOutcome = rows.filter(rowHasMissingOutcome).length;
   const mismatched = rows.filter((row) => row.latestOutcome?.verdict === "mismatched").length;
   const evidenceReady = rows.filter(rowHasEvidenceReady).length;
+  const captureStale = rows.length > 0 && (!captureHealth || captureHealth.status === "stale" || captureHealth.status === "no_data");
   const firstEvidenceDecision = rows.find(rowHasEvidenceReady)?.latestDecision?.id ?? rows.find((row) => row.latestDecision)?.latestDecision?.id;
   const verdict: {
     tone: AgentHeroTone;
@@ -798,12 +1083,21 @@ function AgentsHero({
               ctaLabel: "Verify outcome",
               ctaHref: "/outcomes",
             }
+          : captureStale
+            ? {
+                tone: "warning",
+                eyebrow: "Current safety verdict",
+                title: "Capture stale",
+                body: "Agent history is loaded, but the live capture stream is missing or stale. Reconnect capture before trusting unattended operation.",
+                ctaLabel: "Check capture",
+                ctaHref: "/settings/keys",
+              }
           : needsReview > 0
             ? {
                 tone: "warning",
                 eyebrow: "Current safety verdict",
                 title: "Protection gaps",
-                body: `${formatCount(needsReview)} agent${needsReview === 1 ? "" : "s"} need mandate, replay, or proof review before unattended operation.`,
+                body: `${formatCount(needsReview)} agent${needsReview === 1 ? "" : "s"} need mandate, approval, or outcome proof review before unattended operation.`,
                 ctaLabel: "Review agents",
                 ctaHref: "/agents",
               }
@@ -944,21 +1238,226 @@ function AgentsKpis({
   );
 }
 
-function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
+function toolRegistryItemsById(registry: ToolRegistryResponse): Map<string, ToolRegistryItemResponse> {
+  const items = [
+    ...registry.runtime_paths,
+    ...registry.verification_connectors,
+    ...registry.native_tool_families,
+  ];
+  return new Map(items.map((item) => [item.id, item]));
+}
+
+function toolStatusTone(status: ToolImplementationStatus): string {
+  if (status === "available") return "success";
+  if (status === "template") return "warning";
+  return "neutral";
+}
+
+function formatRegistryCategory(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+function statusLabel(status: ToolImplementationStatus): string {
+  if (status === "available") return "Available now";
+  if (status === "template") return "Template";
+  return "Planned";
+}
+
+function optionLabel(label: string, status: ToolImplementationStatus): string {
+  return `${label} - ${statusLabel(status)}`;
+}
+
+function toolStatusSummary(items: ToolRegistryItemResponse[]): Record<ToolImplementationStatus, number> {
+  return items.reduce<Record<ToolImplementationStatus, number>>(
+    (counts, item) => {
+      counts[item.implementation_status] += 1;
+      return counts;
+    },
+    { available: 0, template: 0, planned: 0 },
+  );
+}
+
+function recommendedToolItems(registry: ToolRegistryResponse): ToolRegistryItemResponse[] {
+  const itemsById = toolRegistryItemsById(registry);
+  return [
+    ...registry.recommended.runtime_path_ids,
+    ...registry.recommended.verification_connector_ids,
+    ...registry.recommended.native_tool_family_ids,
+  ]
+    .map((id) => itemsById.get(id))
+    .filter((item): item is ToolRegistryItemResponse => Boolean(item));
+}
+
+function ToolRegistryRow({ item }: { item: ToolRegistryItemResponse }) {
+  const content = (
+    <>
+      <div className="agents-tool-row-head">
+        <strong>{item.label}</strong>
+        <span className="agents-tool-status" data-tone={toolStatusTone(item.implementation_status)}>
+          {statusLabel(item.implementation_status)}
+        </span>
+      </div>
+      <p>{item.description}</p>
+      <div className="agents-tool-row-meta">
+        <span>{formatRegistryCategory(item.category)}</span>
+        {item.requires_customer_credentials ? <span>customer credentials</span> : null}
+        {item.backend_capability ? <span>{item.backend_capability}</span> : null}
+      </div>
+    </>
+  );
+
+  if (!item.dashboard_href) {
+    return <div className="agents-tool-row">{content}</div>;
+  }
+
+  return (
+    <Link href={item.dashboard_href} className="agents-tool-row">
+      {content}
+      <ArrowRight aria-hidden="true" />
+    </Link>
+  );
+}
+
+function AgentsToolPlan({
+  registry,
+  loading,
+  error,
+}: {
+  registry: ToolRegistryResponse | null | undefined;
+  loading: boolean;
+  error: Error | null;
+}) {
+  if (loading && !registry) {
+    return (
+      <section className="agents-tool-plan" aria-label="Tool coverage plan">
+        <div className="agents-tool-plan-head">
+          <span>Connect tools</span>
+          <strong>Loading tool coverage</strong>
+        </div>
+        <div className="agents-tool-row is-muted">
+          <p>Fetching runtime and verifier recommendations.</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (error && !registry) {
+    return (
+      <section className="agents-tool-plan" aria-label="Tool coverage plan">
+        <div className="agents-tool-plan-head">
+          <span>Connect tools</span>
+          <strong>Tool coverage unavailable</strong>
+        </div>
+        <div className="agents-tool-row is-muted">
+          <p>{error.message}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (!registry) return null;
+
+  const itemsById = toolRegistryItemsById(registry);
+  const statusCounts = toolStatusSummary(recommendedToolItems(registry));
+  const groups = [
+    {
+      label: "Runtime path",
+      helper: "Where Zroky sits before the action",
+      ids: registry.recommended.runtime_path_ids,
+    },
+    {
+      label: "Verifier",
+      helper: "System that proves the outcome",
+      ids: registry.recommended.verification_connector_ids,
+    },
+    {
+      label: "Native templates",
+      helper: "Native adapters stay honest until marked available",
+      ids: registry.recommended.native_tool_family_ids,
+    },
+  ];
+
+  return (
+    <section className="agents-tool-plan" aria-label="Tool coverage plan">
+      <div className="agents-tool-plan-head">
+        <div>
+          <span>Connect tools</span>
+          <strong>Recommended coverage</strong>
+        </div>
+        <small>{registry.recommended.action_types.join(" / ") || "define action type"}</small>
+      </div>
+
+      <div className="agents-tool-status-grid" aria-label="Recommended tool implementation status">
+        <div data-tone="success">
+          <span>Available now</span>
+          <strong>{statusCounts.available}</strong>
+        </div>
+        <div data-tone="warning">
+          <span>Templates</span>
+          <strong>{statusCounts.template}</strong>
+        </div>
+        <div data-tone="neutral">
+          <span>Planned native</span>
+          <strong>{statusCounts.planned}</strong>
+        </div>
+      </div>
+
+      {groups.map((group) => {
+        const items = group.ids
+          .map((id) => itemsById.get(id))
+          .filter((item): item is ToolRegistryItemResponse => Boolean(item));
+
+        return (
+          <div key={group.label} className="agents-tool-group">
+            <div className="agents-tool-group-head">
+              <span>{group.label}</span>
+              <small>{group.helper}</small>
+            </div>
+            <div className="agents-tool-row-list">
+              {items.length > 0 ? (
+                items.map((item) => <ToolRegistryRow key={item.id} item={item} />)
+              ) : (
+                <div className="agents-tool-row is-muted">
+                  <p>No native recommendation for this action yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {registry.recommended.next_steps.length > 0 ? (
+        <ol className="agents-tool-next-steps">
+          {registry.recommended.next_steps.slice(0, 3).map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
+  );
+}
+
+function AgentsInspector({
+  focusRow,
+  toolRegistry,
+  toolRegistryLoading,
+  toolRegistryError,
+}: {
+  focusRow: AgentLaunchpadRow | null;
+  toolRegistry: ToolRegistryResponse | null | undefined;
+  toolRegistryLoading: boolean;
+  toolRegistryError: Error | null;
+}) {
   const issue = focusRow?.latestIssue ?? null;
   const leadTrace = issue?.evidence_traces?.[0] ?? null;
-  const traceHref = leadTrace?.call_id
-    ? `/calls/${encodeURIComponent(leadTrace.call_id)}`
-    : leadTrace?.trace_id
-      ? `/trace/${encodeURIComponent(leadTrace.trace_id)}`
-      : "/trace";
+  const traceHref = "/evidence";
   const envLabel = (process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "staging").toUpperCase();
 
   return (
     <aside className="agents-inspector-panel">
       <div className="agents-panel-head">
         <div>
-          <span>Selected agent proof</span>
+          <span>Selected agent control</span>
           <strong>{focusRow?.agentName ?? "No agent selected"}</strong>
         </div>
         {issue ? <span className={`alert-cat-badge ${severityTone(issue.severity)}`}>{issue.severity}</span> : null}
@@ -966,7 +1465,28 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
 
       {focusRow ? (
         <>
+          <div className="agents-inspector-verdict" data-tone={rowNeedsReview(focusRow) ? "warning" : "success"}>
+            <span>Selected verdict</span>
+            <strong>{mandateRiskLabel(focusRow)}</strong>
+            <small>{focusRow.recommendedAction}</small>
+          </div>
+
+          <div className="agents-inspector-control-grid">
+            <div>
+              <span>Mandate boundary</span>
+              <strong>{mandateContext(focusRow)}</strong>
+            </div>
+            <div>
+              <span>Latest action</span>
+              <strong>{latestActionLabel(focusRow)}</strong>
+            </div>
+          </div>
+
           <div className="agents-inspector-score">
+            <div>
+              <span>Calls</span>
+              <strong>{formatCount(focusRow.callCount)}</strong>
+            </div>
             <div>
               <span>Health</span>
               <strong>{focusRow.healthScore == null ? "-" : Math.round(focusRow.healthScore)}</strong>
@@ -975,9 +1495,19 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
               <span>Success</span>
               <strong>{focusRow.successRate == null ? "-" : formatPercent(focusRow.successRate)}</strong>
             </div>
+            <div>
+              <span>P95</span>
+              <strong>{formatLatency(focusRow.p95LatencyMs)}</strong>
+            </div>
           </div>
 
           <AgentsProofChain row={focusRow} />
+
+          <AgentsToolPlan
+            registry={toolRegistry}
+            loading={toolRegistryLoading}
+            error={toolRegistryError}
+          />
 
           {issue ? (
             <>
@@ -1003,7 +1533,7 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
                   <strong>{leadTrace?.trace_id ?? "Unavailable"}</strong>
                 </div>
                 <div>
-                  <span>Replay proof</span>
+                  <span>Outcome proof</span>
                   <strong>{replayLabel(issue.replay_coverage_status)}</strong>
                 </div>
               </div>
@@ -1024,7 +1554,7 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
                   <dd>{formatUsd(issue.cost_impact_usd || issue.blast_radius_usd)}</dd>
                 </div>
                 <div>
-                  <dt>Replay proof</dt>
+                  <dt>Outcome proof</dt>
                   <dd>{focusRow.replayCoverage}</dd>
                 </div>
                 <div>
@@ -1037,7 +1567,7 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
                 {(issue.evidence_traces ?? []).slice(0, 3).map((trace) => (
                   <Link
                     key={trace.call_id}
-                    href={trace.call_id ? `/calls/${encodeURIComponent(trace.call_id)}` : "/calls"}
+                    href="/evidence"
                     className="agents-evidence-row"
                   >
                     <span>{trace.status ?? "trace"}</span>
@@ -1048,12 +1578,12 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
               </div>
 
               <div className="agents-inspector-actions">
-                <Link href="/replay" className="btn btn-primary">
-                  Run replay
-                  <RotateCcw aria-hidden="true" />
+                <Link href="/outcomes" className="btn btn-primary">
+                  Verify outcome
+                  <ShieldCheck aria-hidden="true" />
                 </Link>
-                <Link href={traceHref} className="btn btn-soft">
-                  View evidence trace
+                <Link href={focusRow.latestDecision ? evidencePackHref(focusRow.latestDecision.id) : traceHref} className="btn btn-soft">
+                  Open evidence
                 </Link>
               </div>
             </>
@@ -1063,19 +1593,19 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
               <h2>No open proof gap attached.</h2>
               <p>{focusRow.recommendedAction}</p>
               <div className="agents-inspector-actions">
-                <Link href={`/calls?agent_name=${encodeURIComponent(focusRow.agentName)}`} className="btn btn-primary">
-                  View agent calls
+                <Link href="/outcomes" className="btn btn-primary">
+                  Review outcomes
                   <ArrowRight aria-hidden="true" />
                 </Link>
-                <Link href="/contracts" className="btn btn-soft">
-                  Promote mandate
+                <Link href="/policies" className="btn btn-soft">
+                  Open policies
                 </Link>
               </div>
             </div>
           )}
         </>
       ) : (
-        <p className="agents-muted">Connect capture to populate mandate health, trace evidence, and replay guidance.</p>
+        <p className="agents-muted">Connect capture to populate mandate health, action evidence, and outcome proof guidance.</p>
       )}
     </aside>
   );
@@ -1083,12 +1613,12 @@ function AgentsInspector({ focusRow }: { focusRow: AgentLaunchpadRow | null }) {
 
 function AgentsAccountabilityLoop() {
   const stages = [
-    { label: "Capture", detail: "Agent action enters Zroky", href: "/calls" },
-    { label: "Detect", detail: "Mandate and risk signal", href: "/issues" },
-    { label: "Verify", detail: "System-of-record proof", href: "/outcomes" },
-    { label: "Promote", detail: "Golden behavior contract", href: "/contracts" },
-    { label: "Gate", detail: "Policy stops unsafe action", href: "/policies" },
-    { label: "Export", detail: "Evidence Pack for audit", href: "/evidence" },
+    { label: "Agents", detail: "Mandate and action coverage", href: "/agents" },
+    { label: "Policies", detail: "Runtime boundary and kill switch", href: "/policies" },
+    { label: "Approvals", detail: "Held action decision trail", href: "/approvals" },
+    { label: "Outcomes", detail: "System-of-record verification", href: "/outcomes" },
+    { label: "Evidence", detail: "Exportable audit proof", href: "/evidence" },
+    { label: "Connectors", detail: "System-of-record readiness", href: "/integrations" },
   ];
 
   return (
@@ -1096,7 +1626,7 @@ function AgentsAccountabilityLoop() {
       <div className="agents-panel-head">
         <div>
           <span>Accountability loop</span>
-          <strong>{"Capture -> Detect -> Verify -> Promote -> Gate -> Export"}</strong>
+          <strong>{"Agents -> Policies -> Approvals -> Outcomes -> Evidence -> Connectors"}</strong>
         </div>
       </div>
       <div className="agents-loop-chain">
@@ -1154,7 +1684,7 @@ function AgentsSystemHealth({
         </Link>
       </div>
       <div className="agents-system-health-grid">
-        <Link href="/calls" className="agents-system-health-card" data-tone={captureHealthTone(captureHealth)}>
+        <Link href="/settings/keys" className="agents-system-health-card" data-tone={captureHealthTone(captureHealth)}>
           <span>Capture stream</span>
           <strong>{streamLabel}</strong>
           <small>
@@ -1199,12 +1729,18 @@ export default function AgentsPage() {
   const [setupOpened, setSetupOpened] = useState(false);
   const [activeFilter, setActiveFilter] = useState<AgentsFilter>("needs_review");
   const [selectedAgentName, setSelectedAgentName] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const setSdkConnected = useDashboardStore((state) => state.setSdkConnected);
   const dateRange = useDashboardStore((state) => state.dateRange);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const summaryWindowDays = useMemo(() => analyticsWindowDays(dateRange), [dateRange]);
   const refreshInterval = realTimeEnabled ? 30_000 : false;
   const leaderboardQuery = useReliabilityLeaderboard(100);
+  const agentProfilesQuery = useQuery({
+    queryKey: ["agents", "profiles"],
+    queryFn: ({ signal }) => listAgentProfiles({ limit: 200 }, signal),
+    refetchInterval: refreshInterval,
+  });
   const callsQuery = useQuery({
     queryKey: ["agents", "recent-calls"],
     queryFn: ({ signal }) =>
@@ -1254,9 +1790,18 @@ export default function AgentsPage() {
     }
   }, []);
 
+  const createAgentMutation = useMutation({
+    mutationFn: createAgentProfile,
+    onSuccess: () => {
+      markSetupOpened();
+      void queryClient.invalidateQueries({ queryKey: ["agents", "profiles"] });
+    },
+  });
+
   const refreshAll = useCallback(() => {
     void Promise.all([
       leaderboardQuery.refetch(),
+      agentProfilesQuery.refetch(),
       callsQuery.refetch(),
       issuesQuery.refetch(),
       captureHealthQuery.refetch(),
@@ -1264,11 +1809,12 @@ export default function AgentsPage() {
       runtimeDecisionsQuery.refetch(),
       outcomeChecksQuery.refetch(),
     ]);
-  }, [callsQuery, captureHealthQuery, issuesQuery, leaderboardQuery, outcomeChecksQuery, runtimeDecisionsQuery, summaryQuery]);
+  }, [agentProfilesQuery, callsQuery, captureHealthQuery, issuesQuery, leaderboardQuery, outcomeChecksQuery, runtimeDecisionsQuery, summaryQuery]);
 
   const rows = useMemo(
     () =>
       buildAgentRows(
+        agentProfilesQuery.data?.items ?? [],
         leaderboardQuery.data ?? [],
         callsQuery.data?.items ?? [],
         issuesQuery.data?.items ?? [],
@@ -1276,6 +1822,7 @@ export default function AgentsPage() {
         outcomeChecksQuery.data?.items ?? [],
       ),
     [
+      agentProfilesQuery.data?.items,
       callsQuery.data?.items,
       issuesQuery.data?.items,
       leaderboardQuery.data,
@@ -1300,7 +1847,7 @@ export default function AgentsPage() {
     }
   }, [activeFilter, reviewRowsCount, sortedRows.length]);
 
-  const primaryQueries = [leaderboardQuery, callsQuery, issuesQuery, runtimeDecisionsQuery, outcomeChecksQuery];
+  const primaryQueries = [agentProfilesQuery, leaderboardQuery, callsQuery, issuesQuery, runtimeDecisionsQuery, outcomeChecksQuery];
   const loading = primaryQueries.every((query) => query.isLoading && query.data === undefined);
   const hasRows = rows.length > 0;
   const callsToday = summaryQuery.data?.calls_today ?? 0;
@@ -1310,6 +1857,18 @@ export default function AgentsPage() {
     filteredRows[0] ??
     priorityFocusRow ??
     null;
+  const focusedRegistryActionType = toolRegistryActionType(focusRow);
+  const focusedRegistryAgentId = focusRow?.profile?.id ?? null;
+  const toolRegistryQuery = useQuery({
+    queryKey: ["agents", "tool-registry", focusedRegistryAgentId, focusedRegistryActionType],
+    queryFn: ({ signal }) =>
+      getToolRegistry({
+        agentId: focusedRegistryAgentId,
+        actionType: focusedRegistryAgentId ? null : focusedRegistryActionType,
+      }, signal),
+    enabled: Boolean(focusRow),
+    refetchInterval: refreshInterval,
+  });
 
   if (loading && !hasRows) {
     return <AgentsLoadingState />;
@@ -1328,8 +1887,12 @@ export default function AgentsPage() {
           captureHealth={captureHealthQuery.data ?? null}
           callsToday={callsToday}
           setupOpened={setupOpened}
+          agentProfiles={agentProfilesQuery.data?.items ?? []}
+          createPending={createAgentMutation.isPending}
+          createError={createAgentMutation.error}
           onRefresh={refreshAll}
           onMarkOpened={markSetupOpened}
+          onCreateProfile={(payload) => createAgentMutation.mutateAsync(payload)}
         />
       </div>
     );
@@ -1356,7 +1919,7 @@ export default function AgentsPage() {
             <div className="agents-panel-head">
               <div>
                 <span>{agentFilterLabel(activeFilter)}</span>
-                <strong>Needs your decision</strong>
+                <strong>Protected agent queue</strong>
               </div>
               <span className="agents-table-count">{formatCount(filteredRows.length)} of {formatCount(rows.length)} agents</span>
             </div>
@@ -1364,12 +1927,12 @@ export default function AgentsPage() {
               <table className="agents-table">
                 <thead>
                   <tr>
-                    <th>Agent</th>
-                    <th>Mandate / risk</th>
+                    <th>Priority</th>
+                    <th>Agent / mandate</th>
                     <th>Runtime decision</th>
                     <th>Outcome proof</th>
-                    <th>Evidence readiness</th>
-                    <th>Impact</th>
+                    <th>Evidence pack</th>
+                    <th>Impact / last action</th>
                     <th>Next step</th>
                   </tr>
                 </thead>
@@ -1410,7 +1973,12 @@ export default function AgentsPage() {
           />
         </div>
 
-        <AgentsInspector focusRow={focusRow} />
+        <AgentsInspector
+          focusRow={focusRow}
+          toolRegistry={toolRegistryQuery.data}
+          toolRegistryLoading={toolRegistryQuery.isLoading}
+          toolRegistryError={toolRegistryQuery.error}
+        />
       </section>
 
       {captureHealthQuery.data?.validation_warnings?.length ? (

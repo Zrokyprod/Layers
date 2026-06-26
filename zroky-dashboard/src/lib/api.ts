@@ -152,6 +152,9 @@ export interface RuntimePolicyDecisionResponse {
   resolution_reason: string | null;
   consumed_at: string | null;
   consumed_by_decision_id: string | null;
+  required_approval_count?: number;
+  approval_count?: number;
+  approver_subjects?: string[];
 }
 
 export interface RuntimePolicyAuditEventResponse {
@@ -251,6 +254,118 @@ export interface RuntimePolicyEvidencePackResponse {
   hash_payload_excludes: string[];
 }
 
+export type AgentRuntimePath = "sdk" | "http_gateway" | "mcp_gateway" | "webhook";
+
+export type AgentRiskActionType =
+  | "refund"
+  | "payment_adjustment"
+  | "invoice_spend_approval"
+  | "customer_record_update"
+  | "ticket_close"
+  | "email_send"
+  | "deploy_change"
+  | "internal_api_mutation"
+  | "database_record_update"
+  | "custom";
+
+export type AgentVerificationConnectorType =
+  | "generic_rest"
+  | "webhook_callback"
+  | "database_read"
+  | "ledger_refund"
+  | "crm_record"
+  | "ticket_status"
+  | "email_delivery"
+  | "github_ci";
+
+export interface AgentProfileResponse {
+  schema_version: "zroky.agent_tool_control.v1" | string;
+  id: string;
+  project_id: string;
+  display_name: string;
+  slug: string;
+  description: string | null;
+  runtime_path: AgentRuntimePath;
+  framework: string | null;
+  environment: string | null;
+  model_provider: string | null;
+  model_name: string | null;
+  tool_names: string[];
+  allowed_action_types: AgentRiskActionType[];
+  blocked_action_types: AgentRiskActionType[];
+  default_policy_id: string | null;
+  risk_limits: Record<string, unknown>;
+  verification_connectors: AgentVerificationConnectorType[];
+  metadata: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentProfileListResponse {
+  items: AgentProfileResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AgentProfileCreatePayload {
+  display_name: string;
+  description?: string | null;
+  runtime_path?: AgentRuntimePath;
+  framework?: string | null;
+  environment?: string | null;
+  model_provider?: string | null;
+  model_name?: string | null;
+  tool_names?: string[];
+  allowed_action_types?: AgentRiskActionType[];
+  blocked_action_types?: AgentRiskActionType[];
+  default_policy_id?: string | null;
+  risk_limits?: Record<string, unknown>;
+  verification_connectors?: AgentVerificationConnectorType[];
+  metadata?: Record<string, unknown>;
+}
+
+export type ToolRegistryKind = "runtime_path" | "verification_connector" | "native_tool_family";
+export type ToolImplementationStatus = "available" | "template" | "planned";
+export type ToolLaunchTier = "p0" | "p1" | "p2";
+
+export interface ToolRegistryItemResponse {
+  id: string;
+  kind: ToolRegistryKind;
+  label: string;
+  description: string;
+  category: string;
+  phase: "phase1" | string;
+  implementation_status: ToolImplementationStatus;
+  launch_tier: ToolLaunchTier | string;
+  supported_action_types: string[];
+  recommended_for_action_types: string[];
+  requires_customer_credentials: boolean;
+  dashboard_href: string | null;
+  backend_capability: string | null;
+  availability_notes: string | null;
+}
+
+export interface ToolRegistryRecommendationResponse {
+  action_types: string[];
+  runtime_path_ids: string[];
+  verification_connector_ids: string[];
+  native_tool_family_ids: string[];
+  next_steps: string[];
+}
+
+export interface ToolRegistryResponse {
+  schema_version: "zroky.agent_tool_control.v1" | string;
+  project_id: string;
+  agent_id: string | null;
+  action_type: string | null;
+  runtime_paths: ToolRegistryItemResponse[];
+  verification_connectors: ToolRegistryItemResponse[];
+  native_tool_families: ToolRegistryItemResponse[];
+  recommended: ToolRegistryRecommendationResponse;
+}
+
 export interface PilotPolicyPayload {
   tier1_enabled: boolean;
   tier1_actions: string[];
@@ -273,6 +388,10 @@ export interface PilotPolicyPayload {
   runtime_block_pii_leak: boolean;
   runtime_block_prompt_injected_external_action: boolean;
   runtime_approval_ttl_minutes: number;
+  runtime_amount_approval_threshold_usd: number | null;
+  runtime_amount_deny_threshold_usd: number | null;
+  runtime_production_deploys_require_approval: boolean;
+  runtime_changed_recipient_deny: boolean;
 }
 
 export interface PilotPolicyResponse {
@@ -775,6 +894,42 @@ export function listCalls(
   return request<CallListResponse>("/v1/calls", { query, signal });
 }
 
+export function listAgentProfiles(
+  query: { include_inactive?: boolean; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<AgentProfileListResponse> {
+  return request<AgentProfileListResponse>("/v1/agents", {
+    query: {
+      include_inactive: query.include_inactive ? "true" : undefined,
+      limit: query.limit,
+      offset: query.offset,
+    },
+    signal,
+  });
+}
+
+export function createAgentProfile(
+  payload: AgentProfileCreatePayload,
+): Promise<AgentProfileResponse> {
+  return request<AgentProfileResponse>("/v1/agents", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function getToolRegistry(
+  query: { agentId?: string | null; actionType?: string | null } = {},
+  signal?: AbortSignal,
+): Promise<ToolRegistryResponse> {
+  return request<ToolRegistryResponse>("/v1/tools/registry", {
+    query: {
+      agent_id: query.agentId,
+      action_type: query.actionType,
+    },
+    signal,
+  });
+}
+
 export function exportCallsCsv(
   query: {
     status?: string;
@@ -986,6 +1141,12 @@ export function resolveAlert(alertId: string): Promise<AlertItemResponse> {
 
 export function reopenAlert(alertId: string): Promise<AlertItemResponse> {
   return request<AlertItemResponse>(`/v1/alerts/${encodeURIComponent(alertId)}/reopen`, {
+    method: "POST",
+  });
+}
+
+export function retrySlackAlert(alertId: string): Promise<AlertItemResponse> {
+  return request<AlertItemResponse>(`/v1/alerts/${encodeURIComponent(alertId)}/retry-slack`, {
     method: "POST",
   });
 }
@@ -1227,6 +1388,112 @@ export interface CustomerRecordConnectorTestResponse {
   connector: CustomerRecordConnectorStatusResponse;
 }
 
+export interface GenericRestConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "generic_rest_api" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_retryable: boolean | null;
+  last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface GenericRestConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface GenericRestConnectorTestPayload {
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface GenericRestConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: GenericRestConnectorStatusResponse;
+}
+
+export interface PostgresReadConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "postgres_read" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_database_url: boolean;
+  database_url_last4: string | null;
+  has_read_query: boolean;
+  read_query_digest: string | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_retryable: boolean | null;
+  last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PostgresReadConnectorConfigPayload {
+  database_url?: string | null;
+  read_query: string;
+}
+
+export interface PostgresReadConnectorTestPayload {
+  claimed: Record<string, unknown>;
+  params?: Record<string, string | number | boolean | null> | null;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface PostgresReadConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: PostgresReadConnectorStatusResponse;
+}
+
 export function getLedgerRefundConnectorStatus(
   signal?: AbortSignal,
 ): Promise<LedgerRefundConnectorStatusResponse> {
@@ -1287,6 +1554,74 @@ export function testCustomerRecordConnector(
 ): Promise<CustomerRecordConnectorTestResponse> {
   return request<CustomerRecordConnectorTestResponse>(
     "/v1/integrations/system-of-record/customer-record/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getGenericRestConnectorStatus(
+  signal?: AbortSignal,
+): Promise<GenericRestConnectorStatusResponse> {
+  return request<GenericRestConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/generic-rest/status",
+    { signal },
+  );
+}
+
+export function saveGenericRestConnectorConfig(
+  body: GenericRestConnectorConfigPayload,
+): Promise<GenericRestConnectorStatusResponse> {
+  return request<GenericRestConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/generic-rest/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testGenericRestConnector(
+  body: GenericRestConnectorTestPayload,
+): Promise<GenericRestConnectorTestResponse> {
+  return request<GenericRestConnectorTestResponse>(
+    "/v1/integrations/system-of-record/generic-rest/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getPostgresReadConnectorStatus(
+  signal?: AbortSignal,
+): Promise<PostgresReadConnectorStatusResponse> {
+  return request<PostgresReadConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/postgres-read/status",
+    { signal },
+  );
+}
+
+export function savePostgresReadConnectorConfig(
+  body: PostgresReadConnectorConfigPayload,
+): Promise<PostgresReadConnectorStatusResponse> {
+  return request<PostgresReadConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/postgres-read/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testPostgresReadConnector(
+  body: PostgresReadConnectorTestPayload,
+): Promise<PostgresReadConnectorTestResponse> {
+  return request<PostgresReadConnectorTestResponse>(
+    "/v1/integrations/system-of-record/postgres-read/test",
     {
       method: "POST",
       body,
@@ -2026,6 +2361,13 @@ export interface OutcomeView {
 }
 
 export type OutcomeReconciliationVerdict = "matched" | "mismatched" | "not_verified";
+export type OutcomeVerificationStatus =
+  | "verified"
+  | "mismatched"
+  | "pending"
+  | "unverifiable"
+  | "cancelled"
+  | string;
 
 export interface OutcomeReconciliationView {
   id: string;
@@ -2037,6 +2379,7 @@ export interface OutcomeReconciliationView {
   connector_type: string;
   system_ref: string | null;
   verdict: OutcomeReconciliationVerdict;
+  verification_status?: OutcomeVerificationStatus;
   reason: string | null;
   amount_usd: number | null;
   currency: string | null;
@@ -2060,6 +2403,55 @@ export interface OutcomeReconciliationSummaryResponse {
   matched: number;
   mismatched: number;
   not_verified: number;
+  verified?: number;
+  pending?: number;
+  unverifiable?: number;
+  cancelled?: number;
+}
+
+export type SourceMutationClassification =
+  | "matched_receipt"
+  | "authorized_external"
+  | "legacy_path"
+  | "unmanaged_agent_action"
+  | "policy_bypass"
+  | "unknown_actor"
+  | string;
+
+export interface SourceMutationView {
+  id: string;
+  project_id: string;
+  source_system: string;
+  mutation_id: string;
+  action_type: string | null;
+  resource_type: string | null;
+  resource_id: string | null;
+  system_ref: string | null;
+  actor_type: string | null;
+  actor_id: string | null;
+  zroky_action_id: string | null;
+  action_receipt_id: string | null;
+  idempotency_key: string | null;
+  classification: SourceMutationClassification;
+  metadata: Record<string, unknown>;
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface SourceMutationListResponse {
+  items: SourceMutationView[];
+  total_in_page: number;
+}
+
+export interface SourceMutationSummaryResponse {
+  total: number;
+  matched_receipt: number;
+  authorized_external: number;
+  legacy_path: number;
+  unmanaged_agent_action: number;
+  policy_bypass: number;
+  unknown_actor: number;
+  unreceipted: number;
 }
 
 export interface SavedLedgerRefundReconciliationPayload {
@@ -2083,6 +2475,66 @@ export interface SavedCustomerRecordReconciliationPayload {
   runtime_policy_decision_id?: string | null;
   action_type?: string | null;
   customer_id?: string | null;
+  system_ref?: string | null;
+  claimed: Record<string, unknown>;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface SavedGenericRestReconciliationPayload {
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  record_ref: string;
+  system_ref?: string | null;
+  claimed: Record<string, unknown>;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface SavedPostgresReadReconciliationPayload {
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  claimed: Record<string, unknown>;
+  params?: Record<string, string | number | boolean | null> | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export type SavedConnectorReconciliationConnector =
+  | "ledger_refund"
+  | "ledger_refund_api"
+  | "crm_record"
+  | "customer_record"
+  | "customer_record_api"
+  | "generic_rest"
+  | "generic_rest_api"
+  | "postgres"
+  | "postgres_read";
+
+export interface SavedConnectorReconciliationPayload {
+  connector: SavedConnectorReconciliationConnector;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  refund_id?: string | null;
+  customer_id?: string | null;
+  record_ref?: string | null;
+  params?: Record<string, string | number | boolean | null> | null;
   system_ref?: string | null;
   claimed: Record<string, unknown>;
   match_fields?: string[] | null;
@@ -2148,6 +2600,42 @@ export function getOutcomeReconciliation(
   );
 }
 
+export function getSourceMutationSummary(
+  signal?: AbortSignal,
+): Promise<SourceMutationSummaryResponse> {
+  return request<SourceMutationSummaryResponse>("/v1/outcomes/reconciliation/source-mutations/summary", {
+    signal,
+  });
+}
+
+export function listSourceMutations(
+  params: {
+    classification?: SourceMutationClassification | "all";
+    limit?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<SourceMutationListResponse> {
+  const classification =
+    params.classification && params.classification !== "all" ? params.classification : undefined;
+  return request<SourceMutationListResponse>("/v1/outcomes/reconciliation/source-mutations", {
+    query: {
+      ...(classification ? { classification } : {}),
+      limit: String(params.limit ?? 100),
+    },
+    signal,
+  });
+}
+
+export function listUnreceiptedSourceMutations(
+  limit = 100,
+  signal?: AbortSignal,
+): Promise<SourceMutationListResponse> {
+  return request<SourceMutationListResponse>("/v1/outcomes/reconciliation/source-mutations/unreceipted", {
+    query: { limit: String(limit) },
+    signal,
+  });
+}
+
 export function reconcileSavedLedgerRefund(
   payload: SavedLedgerRefundReconciliationPayload,
 ): Promise<OutcomeReconciliationView> {
@@ -2162,6 +2650,36 @@ export function reconcileSavedCustomerRecord(
   payload: SavedCustomerRecordReconciliationPayload,
 ): Promise<OutcomeReconciliationView> {
   return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/customer-record/saved", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 45_000,
+  });
+}
+
+export function reconcileSavedGenericRest(
+  payload: SavedGenericRestReconciliationPayload,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/generic-rest/saved", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 45_000,
+  });
+}
+
+export function reconcileSavedPostgresRead(
+  payload: SavedPostgresReadReconciliationPayload,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/postgres-read/saved", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 45_000,
+  });
+}
+
+export function reconcileSavedConnector(
+  payload: SavedConnectorReconciliationPayload,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/saved", {
     method: "POST",
     body: payload,
     timeoutMs: 45_000,

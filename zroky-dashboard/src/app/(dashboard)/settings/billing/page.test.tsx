@@ -21,6 +21,17 @@ const navigation = vi.hoisted(() => ({
   query: "upgrade_hint=replay.monthly_runs",
 }));
 
+function usageMeter(used: number, limit: number | null, state = "ok") {
+  return {
+    used,
+    limit,
+    unlimited: limit == null,
+    overage: null,
+    state,
+    resets_at: "2026-07-01",
+  };
+}
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigation.query),
 }));
@@ -80,10 +91,17 @@ describe("BillingPage", () => {
       plan_code: "free",
       plan_name: "Free",
       subscription_status: "active",
-      calls: { used: 42, limit: 5000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
-      replay: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: "2026-07-01" },
-      goldens: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: null },
-      golden_sets: { used: 0, limit: 0, unlimited: false, overage: null, state: "blocked", resets_at: null },
+      calls: usageMeter(42, 5000),
+      replay: usageMeter(0, 0, "blocked"),
+      goldens: { ...usageMeter(0, 0, "blocked"), resets_at: null },
+      golden_sets: { ...usageMeter(0, 0, "blocked"), resets_at: null },
+      protected_actions: usageMeter(7, 25),
+      policy_checks: usageMeter(18, 100),
+      runner_executions: usageMeter(4, 25),
+      action_receipts: usageMeter(4, 25),
+      verification_checks: usageMeter(9, 50),
+      source_mutations: usageMeter(11, 100),
+      active_connectors: usageMeter(1, 1, "near_limit"),
       metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
   });
@@ -100,6 +118,13 @@ describe("BillingPage", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("Plan controls")).toBeInTheDocument();
     expect(screen.getAllByText("42 / 5,000").length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
+    expect(screen.getAllByText("7 / 25").length).toBeGreaterThan(0);
+    expect(screen.getByText("Policy checks")).toBeInTheDocument();
+    expect(screen.getByText("Runner executions")).toBeInTheDocument();
+    expect(screen.getByText("Source mutations")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Actions" }).getAttribute("href")).toBe("/actions");
+    expect(screen.getByRole("link", { name: "Open bypass risk" }).getAttribute("href")).toBe("/outcomes");
   });
 
   it("renders the backend-aligned self-serve plan catalog", async () => {
@@ -107,13 +132,13 @@ describe("BillingPage", () => {
 
     expect(await screen.findByText("Starter")).toBeInTheDocument();
     const starterCard = screen.getByText("Starter").closest(".billing-plan-card") as HTMLElement;
-    expect(within(starterCard).getByText(/50K events\/mo/)).toBeInTheDocument();
-    expect(within(starterCard).getByText(/50 repository replay runs\/mo/)).toBeInTheDocument();
+    expect(within(starterCard).getByText(/2K protected actions\/mo/)).toBeInTheDocument();
+    expect(within(starterCard).getByText(/10K policy checks\/mo/)).toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
     expect(screen.getByText("$199.00")).toBeInTheDocument();
     const proCard = screen.getByText("Pro").closest(".billing-plan-card") as HTMLElement;
-    expect(within(proCard).getByText(/250K events\/mo/)).toBeInTheDocument();
-    expect(within(proCard).getByText(/500 managed provider replay runs\/mo/)).toBeInTheDocument();
+    expect(within(proCard).getByText(/25K protected actions\/mo/)).toBeInTheDocument();
+    expect(within(proCard).getByText(/100K policy checks\/mo/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pay with Razorpay for Starter" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });
@@ -146,10 +171,17 @@ describe("BillingPage", () => {
       plan_code: "pro",
       plan_name: "Pro",
       subscription_status: "active",
-      calls: { used: 1000, limit: 250000, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
-      replay: { used: 10, limit: 500, unlimited: false, overage: null, state: "ok", resets_at: "2026-07-01" },
-      goldens: { used: 20, limit: 2500, unlimited: false, overage: null, state: "ok", resets_at: null },
-      golden_sets: { used: 2, limit: 25, unlimited: false, overage: null, state: "ok", resets_at: null },
+      calls: usageMeter(1000, 250000),
+      replay: usageMeter(10, 500),
+      goldens: { ...usageMeter(20, 2500), resets_at: null },
+      golden_sets: { ...usageMeter(2, 25), resets_at: null },
+      protected_actions: usageMeter(250, 25000),
+      policy_checks: usageMeter(1800, 100000),
+      runner_executions: usageMeter(220, 25000),
+      action_receipts: usageMeter(200, 25000),
+      verification_checks: usageMeter(700, 50000),
+      source_mutations: usageMeter(900, 100000),
+      active_connectors: usageMeter(4, 10),
       metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
 

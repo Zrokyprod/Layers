@@ -28,8 +28,8 @@ test.describe("action accountability cockpits", () => {
       await expectVisibleTexts(page, [
         "Outcome mismatch",
         "Protected agents",
-        "Needs your decision",
-        "Selected agent proof",
+        "Needs review",
+        "Protected agent queue",
         "refund-support-agent",
         seed.runtime_policy_decision_id ?? "demo-runtime-refund-hold",
         "HOLD",
@@ -40,7 +40,7 @@ test.describe("action accountability cockpits", () => {
       const expectedEvidenceHref = `/evidence?decision_id=${encodeURIComponent(
         seed.runtime_policy_decision_id ?? "demo-runtime-refund-hold",
       )}`;
-      const protectedMatrix = page.locator("article").filter({ hasText: "Needs your decision" });
+      const protectedMatrix = page.locator("article").filter({ hasText: "Protected agent queue" });
       await expect(protectedMatrix.getByRole("link", { name: "Evidence Pack" })).toHaveAttribute(
         "href",
         expectedEvidenceHref,
@@ -50,24 +50,24 @@ test.describe("action accountability cockpits", () => {
       await expectDashboardShell(page);
       await expectNoHorizontalOverflow(page);
       await expectVisibleTexts(page, [
-        "Evidence ledger",
-        "Focused Evidence Pack",
+        "Evidence Pack ledger",
+        "Selected Evidence Pack",
         "Evidence Pack detail",
         "Print report",
         seed.runtime_policy_decision_id ?? "demo-runtime-refund-hold",
         "Evidence hash",
-        "Policy snapshot",
+        "Mandate snapshot",
         "Approval audit",
-        "Outcome reconciliation",
+        "Real outcome reconciliation",
       ], 120_000);
 
       await page.goto("/approvals");
       await expectDashboardShell(page);
       await expectNoHorizontalOverflow(page);
       await expectVisibleTexts(page, [
-        "Held actions before commit",
-        "Priority queue",
-        "Selected action control",
+        "Risky actions held before commit",
+        "Held action queue",
+        "Risky action control",
         seed.runtime_policy_decision_id ?? "demo-runtime-refund-hold",
         "Refund RF-1001 for customer cus_demo_001",
         "Outcome failed",
@@ -80,9 +80,9 @@ test.describe("action accountability cockpits", () => {
       await expectDashboardShell(page);
       await expectNoHorizontalOverflow(page);
       await expectVisibleTexts(page, [
-        "Outcomes",
-        "Verification queue",
-        "Selected outcome",
+        "Outcome verification",
+        "Real outcome queue",
+        "Agent claim vs real outcome",
         seed.outcome_mismatch_id ?? "demo-outcome-refund-mismatch",
         "Refund RF-1001 for customer cus_demo_001",
         "Outcome mismatch",

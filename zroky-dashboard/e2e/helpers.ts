@@ -55,11 +55,11 @@ export async function expectHealthyPage(page: Page): Promise<void> {
 }
 
 export async function expectDashboardShell(page: Page): Promise<void> {
-  await expect(page.getByRole("button", { name: "Search (Command Palette)" })).toBeVisible();
   const viewport = page.viewportSize();
   if (viewport && viewport.width <= 640) {
     await expect(page.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
   } else {
+    await expect(page.getByRole("button", { name: "Search (Command Palette)" })).toBeVisible();
     await expect(page.locator("img[alt='Zroky']")).toBeVisible();
   }
   await expectHealthyPage(page);

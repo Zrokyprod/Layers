@@ -1,15 +1,24 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentScoreView, OutcomeReconciliationView, RuntimePolicyDecisionResponse } from "@/lib/api";
+import type {
+  AgentProfileResponse,
+  AgentScoreView,
+  OutcomeReconciliationView,
+  RuntimePolicyDecisionResponse,
+  ToolRegistryResponse,
+} from "@/lib/api";
 import type { AnalyticsSummaryResponse, CallListItem, CaptureHealthResponse, IssueItem } from "@/lib/types";
 import AgentsPage from "./page";
 
 const api = vi.hoisted(() => ({
   getAnalyticsSummary: vi.fn(),
   getCaptureHealth: vi.fn(),
+  getToolRegistry: vi.fn(),
+  createAgentProfile: vi.fn(),
+  listAgentProfiles: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
   listRuntimePolicyApprovals: vi.fn(),
   listCalls: vi.fn(),
@@ -247,6 +256,123 @@ function outcomeCheck(overrides: Partial<OutcomeReconciliationView> = {}): Outco
   };
 }
 
+function agentProfile(overrides: Partial<AgentProfileResponse> = {}): AgentProfileResponse {
+  return {
+    schema_version: "zroky.agent_tool_control.v1",
+    id: "agent_profile_1",
+    project_id: "proj_1",
+    display_name: "Refund Agent",
+    slug: "refund-agent",
+    description: "Issues refunds with Zroky proof.",
+    runtime_path: "sdk",
+    framework: "langgraph",
+    environment: "production",
+    model_provider: "openai",
+    model_name: "gpt-4.1",
+    tool_names: ["stripe.refunds.create"],
+    allowed_action_types: ["refund"],
+    blocked_action_types: [],
+    default_policy_id: null,
+    risk_limits: { max_refund_usd: 100 },
+    verification_connectors: ["ledger_refund"],
+    metadata: {},
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  };
+}
+
+function toolRegistry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryResponse {
+  return {
+    schema_version: "zroky.agent_tool_control.v1",
+    project_id: "proj_1",
+    agent_id: null,
+    action_type: "refund",
+    runtime_paths: [
+      {
+        id: "sdk",
+        kind: "runtime_path",
+        label: "SDK wrapper",
+        description: "Wrap JS or Python agent tool calls with Zroky runtime policy checks.",
+        category: "agent_runtime",
+        phase: "phase1",
+        implementation_status: "available",
+        launch_tier: "p0",
+        supported_action_types: ["refund"],
+        recommended_for_action_types: [],
+        requires_customer_credentials: false,
+        dashboard_href: "/settings/keys",
+        backend_capability: "runtime_policy.check",
+        availability_notes: "Available for launch.",
+      },
+    ],
+    verification_connectors: [
+      {
+        id: "ledger_refund",
+        kind: "verification_connector",
+        label: "Ledger / refund verifier",
+        description: "Verify refund claims against a saved ledger or payment-provider read endpoint.",
+        category: "system_of_record",
+        phase: "phase1",
+        implementation_status: "available",
+        launch_tier: "p0",
+        supported_action_types: ["refund"],
+        recommended_for_action_types: ["refund"],
+        requires_customer_credentials: true,
+        dashboard_href: "/integrations",
+        backend_capability: "system_of_record.ledger_refund_api",
+        availability_notes: "Available for launch.",
+      },
+    ],
+    native_tool_families: [
+      {
+        id: "stripe_refund",
+        kind: "native_tool_family",
+        label: "Stripe refunds",
+        description: "Template for guarding and verifying Stripe refund actions.",
+        category: "payments",
+        phase: "phase1",
+        implementation_status: "planned",
+        launch_tier: "p1",
+        supported_action_types: ["refund"],
+        recommended_for_action_types: ["refund"],
+        requires_customer_credentials: true,
+        dashboard_href: "/integrations",
+        backend_capability: null,
+        availability_notes: "Planned after launch partner demand.",
+      },
+      {
+        id: "slack_approval_alert",
+        kind: "native_tool_family",
+        label: "Slack approval and alert",
+        description: "Approval and alert surface for held actions.",
+        category: "approval",
+        phase: "phase1",
+        implementation_status: "available",
+        launch_tier: "p0",
+        supported_action_types: ["refund"],
+        recommended_for_action_types: ["refund"],
+        requires_customer_credentials: true,
+        dashboard_href: "/integrations/slack",
+        backend_capability: "slack.approval_alert",
+        availability_notes: "Available for launch.",
+      },
+    ],
+    recommended: {
+      action_types: ["refund"],
+      runtime_path_ids: ["sdk"],
+      verification_connector_ids: ["ledger_refund"],
+      native_tool_family_ids: ["stripe_refund", "slack_approval_alert"],
+      next_steps: [
+        "Wrap this agent's tool call with the SDK or route it through a gateway.",
+        "Choose one verifier that can prove the real system outcome.",
+      ],
+    },
+    ...overrides,
+  };
+}
+
 function captureHealth(
   overrides: Partial<CaptureHealthResponse> = {},
 ): CaptureHealthResponse {
@@ -316,6 +442,7 @@ function analyticsSummary(overrides: Partial<AnalyticsSummaryResponse> = {}): An
 }
 
 function mockAgents({
+  profiles = [],
   scores = [agentScore()],
   calls = [call(), call({ call_id: "call_2", status: "failed", cost_usd: 0.31, latency_ms: 1600 })],
   issues = [issue()],
@@ -323,7 +450,9 @@ function mockAgents({
   outcomes = [outcomeCheck()],
   capture = captureHealth(),
   summary = analyticsSummary(),
+  registry = toolRegistry(),
 }: {
+  profiles?: AgentProfileResponse[];
   scores?: AgentScoreView[];
   calls?: CallListItem[];
   issues?: IssueItem[];
@@ -331,8 +460,16 @@ function mockAgents({
   outcomes?: OutcomeReconciliationView[];
   capture?: CaptureHealthResponse;
   summary?: AnalyticsSummaryResponse;
+  registry?: ToolRegistryResponse;
 } = {}) {
   leaderboardState.items = scores;
+  api.listAgentProfiles.mockResolvedValue({
+    items: profiles,
+    total: profiles.length,
+    limit: 200,
+    offset: 0,
+  });
+  api.createAgentProfile.mockResolvedValue(agentProfile());
   api.listCalls.mockResolvedValue({
     total: calls.length,
     limit: 200,
@@ -354,10 +491,11 @@ function mockAgents({
   });
   api.getCaptureHealth.mockResolvedValue(capture);
   api.getAnalyticsSummary.mockResolvedValue(summary);
+  api.getToolRegistry.mockResolvedValue(registry);
 }
 
 function protectedMatrix(): HTMLElement {
-  const panel = screen.getByText("Needs your decision").closest("article");
+  const panel = screen.getByText("Protected agent queue").closest("article");
   if (!panel) throw new Error("Missing protected agent matrix");
   return panel as HTMLElement;
 }
@@ -375,7 +513,9 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    expect(await screen.findByRole("heading", { name: "Held actions pending", level: 1 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Held actions pending", level: 1 }, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Protected agents")).toBeInTheDocument();
     expect(screen.getByText("capture stream")).toBeInTheDocument();
     expect(screen.getByText("actions today")).toBeInTheDocument();
@@ -387,14 +527,40 @@ describe("AgentsPage", () => {
     expect(screen.getByText("Missing outcome proof")).toBeInTheDocument();
     expect(screen.getByText("Evidence ready")).toBeInTheDocument();
 
-    expect(screen.getByText("Needs your decision")).toBeInTheDocument();
+    expect(screen.getByText("Protected agent queue")).toBeInTheDocument();
     expect(screen.getByText("Accountability loop")).toBeInTheDocument();
+    const accountabilityLoop = screen.getByLabelText("Accountability loop");
+    expect(within(accountabilityLoop).getByText("Agents -> Policies -> Approvals -> Outcomes -> Evidence -> Connectors")).toBeInTheDocument();
+    expect(within(accountabilityLoop).getByRole("link", { name: /Agents/ }).getAttribute("href")).toBe("/agents");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Policies/ }).getAttribute("href")).toBe("/policies");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Approvals/ }).getAttribute("href")).toBe("/approvals");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Outcomes/ }).getAttribute("href")).toBe("/outcomes");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Evidence/ }).getAttribute("href")).toBe("/evidence");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Connectors/ }).getAttribute("href")).toBe("/integrations");
     expect(screen.getByText("System-of-record health")).toBeInTheDocument();
     expect(screen.getByText("Capture stream")).toBeInTheDocument();
     expect(screen.getByText("Outcome events")).toBeInTheDocument();
     expect(screen.getByText("Gateway backlog")).toBeInTheDocument();
     expect(screen.getByText("Capture warnings")).toBeInTheDocument();
-    expect(screen.getByText("Selected agent proof")).toBeInTheDocument();
+    expect(screen.getByText("Selected agent control")).toBeInTheDocument();
+    expect(screen.getByText("Selected verdict")).toBeInTheDocument();
+    expect(screen.getByText("Mandate boundary")).toBeInTheDocument();
+    const toolPlan = await screen.findByLabelText("Tool coverage plan");
+    expect(within(toolPlan).getByText("Recommended coverage")).toBeInTheDocument();
+    expect(within(toolPlan).getByText("SDK wrapper")).toBeInTheDocument();
+    expect(within(toolPlan).getByText("Ledger / refund verifier")).toBeInTheDocument();
+    expect(within(toolPlan).getByText("Stripe refunds")).toBeInTheDocument();
+    expect(within(toolPlan).getByLabelText("Recommended tool implementation status")).toBeInTheDocument();
+    expect(within(toolPlan).getAllByText("Available now").length).toBeGreaterThan(0);
+    expect(within(toolPlan).getByText("Planned native")).toBeInTheDocument();
+    expect(within(toolPlan).getByText("Planned")).toBeInTheDocument();
+    expect(within(toolPlan).getByText("runtime_policy.check")).toBeInTheDocument();
+    expect(within(toolPlan).getByText("SDK wrapper").closest("a")?.getAttribute("href")).toBe("/settings/keys");
+    expect(within(toolPlan).getByText("Ledger / refund verifier").closest("a")?.getAttribute("href")).toBe("/integrations");
+    await waitFor(() => {
+      const lastCall = api.getToolRegistry.mock.calls[api.getToolRegistry.mock.calls.length - 1];
+      expect(lastCall?.[0]).toEqual({ agentId: null, actionType: "refund" });
+    });
     expect((await screen.findAllByText("Refund action exceeded mandate")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Runtime decision").length).toBeGreaterThan(0);
     expect(screen.getByText("Outcome verdict")).toBeInTheDocument();
@@ -404,9 +570,11 @@ describe("AgentsPage", () => {
     expect(screen.queryByText("Proof gap clusters")).toBeNull();
     expect(screen.queryByText("Evidence trail")).toBeNull();
 
-    expect(screen.getAllByRole("link", { name: /Run replay/i })[0]?.getAttribute("href")).toBe("/replay");
+    expect(screen.getAllByRole("link", { name: /Verify outcome/i })[0]?.getAttribute("href")).toBe("/outcomes");
     expect(screen.getByRole("link", { name: /Open connectors/i }).getAttribute("href")).toBe("/integrations");
-    expect(screen.getByRole("link", { name: "View evidence trace" }).getAttribute("href")).toBe("/calls/call_1");
+    expect(screen.getAllByRole("link", { name: "Open evidence" })[0]?.getAttribute("href")).toBe(
+      "/evidence?decision_id=decision_1",
+    );
     expect(screen.getAllByRole("link", { name: "Review held action" })[0]?.getAttribute("href")).toBe("/approvals");
     expect(screen.getAllByRole("link", { name: /Evidence Pack/i })[0]?.getAttribute("href")).toBe(
       "/evidence?decision_id=decision_1",
@@ -424,17 +592,18 @@ describe("AgentsPage", () => {
     await screen.findAllByText("Refund action exceeded mandate");
     const headers = within(protectedMatrix()).getAllByRole("columnheader").map((header) => header.textContent);
     expect(headers).toEqual([
-      "Agent",
-      "Mandate / risk",
+      "Priority",
+      "Agent / mandate",
       "Runtime decision",
       "Outcome proof",
-      "Evidence readiness",
-      "Impact",
+      "Evidence pack",
+      "Impact / last action",
       "Next step",
     ]);
     expect(within(protectedMatrix()).getByText("Refund Agent")).toBeInTheDocument();
-    expect(within(protectedMatrix()).getByText("Held / blocked")).toBeInTheDocument();
-    expect(within(protectedMatrix()).getByText("Health 42")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("P1")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Action held")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("refund_ops / refund / ledger.refund")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("HOLD")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("matched")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("Export ready")).toBeInTheDocument();
@@ -457,7 +626,7 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    await screen.findByText("Needs your decision");
+    await screen.findByText("Protected agent queue");
     expect(api.getAnalyticsSummary.mock.calls[0]?.[0]).toBe(14);
   });
 
@@ -485,6 +654,41 @@ describe("AgentsPage", () => {
     expect(within(protectedMatrix()).getByText("ALLOW")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("matched")).toBeInTheDocument();
     expect(screen.queryByText("No agents match this filter.")).toBeNull();
+  });
+
+  it("keeps configured agent profiles visible before capture is wired", async () => {
+    mockAgents({
+      profiles: [agentProfile()],
+      scores: [],
+      calls: [],
+      issues: [],
+      decisions: [],
+      outcomes: [],
+      capture: captureHealth({
+        status: "no_data",
+        last_call_id: null,
+        last_seen_at: null,
+        seconds_since_last_call: null,
+        calls_24h: 0,
+        sdk_events_24h: 0,
+        outcome_events_24h: 0,
+      }),
+      summary: analyticsSummary({ calls_today: 0, open_issues: 0 }),
+    });
+
+    renderAgentsPage();
+
+    expect(await screen.findByRole("heading", { name: "Capture stale", level: 1 })).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Refund Agent")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Profile not wired")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Mandate: refund")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByText("Needs first action")).toBeInTheDocument();
+    expect(within(protectedMatrix()).getByRole("link", { name: "Wire capture" }).getAttribute("href")).toBe("/settings/keys");
+    await screen.findByLabelText("Tool coverage plan");
+    await waitFor(() => {
+      const lastCall = api.getToolRegistry.mock.calls[api.getToolRegistry.mock.calls.length - 1];
+      expect(lastCall?.[0]).toEqual({ agentId: "agent_profile_1", actionType: null });
+    });
   });
 
   it("prioritizes mismatched outcomes over newer not verified checks", async () => {
@@ -517,7 +721,7 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    await screen.findByText("Needs your decision");
+    await screen.findByText("Protected agent queue");
     await screen.findAllByText("decision_1");
     expect(within(protectedMatrix()).getByText("mismatched")).toBeInTheDocument();
     expect(within(protectedMatrix()).getByText("ledger_refund_api - ledger:RF-1001")).toBeInTheDocument();
@@ -568,9 +772,67 @@ describe("AgentsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Setup required", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Protection setup")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Connect one real agent action to start proof." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Define one protected agent, then connect its first real action." })).toBeInTheDocument();
+    expect(screen.getByText(/Agent profile defined/)).toBeInTheDocument();
     expect(screen.getByText(/At least one agent action ingested/)).toBeInTheDocument();
     expect(screen.getByText(/System-of-record connector selected/)).toBeInTheDocument();
-    expect(screen.queryByText("Needs your decision")).toBeNull();
+    const coverageTruth = screen.getByLabelText("Agent coverage truth");
+    expect(within(coverageTruth).getByText("Runtime")).toBeInTheDocument();
+    expect(within(coverageTruth).getByText("Verifier")).toBeInTheDocument();
+    expect(within(coverageTruth).getByText("Suggested proof")).toBeInTheDocument();
+    expect(within(coverageTruth).getAllByText("Ledger / refund record").length).toBeGreaterThan(0);
+    expect(screen.getByRole("option", { name: "Webhook bridge - Available now" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Runtime path"), {
+      target: { value: "webhook" },
+    });
+    expect(screen.getByText((content) => content.includes("/v1/outcomes/reconciliation/saved"))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("x-api-key"))).toBeInTheDocument();
+    expect(screen.queryByText("Protected agent queue")).toBeNull();
+  });
+
+  it("creates an agent profile from the setup state", async () => {
+    mockAgents({
+      scores: [],
+      calls: [],
+      issues: [],
+      decisions: [],
+      outcomes: [],
+      capture: captureHealth({
+        status: "no_data",
+        last_call_id: null,
+        last_seen_at: null,
+        seconds_since_last_call: null,
+        calls_24h: 0,
+        sdk_events_24h: 0,
+        outcome_events_24h: 0,
+      }),
+      summary: analyticsSummary({ calls_today: 0, open_issues: 0 }),
+    });
+
+    renderAgentsPage();
+
+    await screen.findByRole("heading", { name: "Setup required", level: 1 });
+    fireEvent.change(screen.getByLabelText("Agent name"), {
+      target: { value: "Refund Agent" },
+    });
+    fireEvent.change(screen.getByLabelText("Primary risky action"), {
+      target: { value: "ticket_close" },
+    });
+    await waitFor(() => {
+      expect((screen.getByLabelText("Verification connector") as HTMLSelectElement).value).toBe("generic_rest");
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Create agent profile/i }));
+
+    await waitFor(() => {
+      expect(api.createAgentProfile).toHaveBeenCalled();
+      expect(api.createAgentProfile.mock.calls[0]?.[0]).toEqual({
+        display_name: "Refund Agent",
+        runtime_path: "sdk",
+        tool_names: ["stripe.refunds.create"],
+        allowed_action_types: ["ticket_close"],
+        verification_connectors: ["generic_rest"],
+        metadata: { setup_source: "agents_dashboard" },
+      });
+    });
   });
 });

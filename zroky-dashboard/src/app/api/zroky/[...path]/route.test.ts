@@ -37,7 +37,7 @@ describe("/api/zroky proxy route", () => {
   it("passes OAuth redirects back to the browser", async () => {
     vi.stubEnv("ZROKY_API_BASE_URL", "http://backend.test");
     const location =
-      "https://github.com/login/oauth/authorize?redirect_uri=https%3A%2F%2Fapp.zroky.com%2Fauth%2Fgithub%2Fcallback";
+      "https://github.com/login/oauth/authorize?redirect_uri=https%3A%2F%2Fzroky.com%2Fauth%2Fgithub%2Fcallback";
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(null, {
         status: 307,

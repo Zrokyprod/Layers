@@ -278,8 +278,8 @@ export default function ProvidersPage() {
           <p>Capture and fixture validation stay keyless. Vault keys are encrypted and used only by managed provider replay paths enabled for this workspace.</p>
         </div>
         <div className="providers-hero-actions">
-          <Link href="/replay" className="btn btn-primary">
-            Open Replay
+          <Link href="/evidence" className="btn btn-primary">
+            Open evidence
             <ArrowRight aria-hidden="true" />
           </Link>
           <Link href="/settings/keys" className="btn btn-soft">

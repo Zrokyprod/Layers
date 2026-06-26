@@ -84,10 +84,18 @@ function evidenceFor(evidence: AskEvidence[], kinds: string[]): AskEvidence | nu
   return evidence.find((ev) => kinds.includes(ev.kind.toLowerCase())) ?? null;
 }
 
-function idFromHref(href: string | undefined, prefix: string): string | null {
+function idFromHrefParam(href: string | undefined, param: string): string | null {
   if (!href) return null;
-  const match = href.match(new RegExp(`${prefix}/([^/?#]+)`));
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  try {
+    return new URL(href, "https://zroky.com").searchParams.get(param);
+  } catch {
+    return null;
+  }
+}
+
+function dashboardHref(pathname: "/approvals" | "/evidence", key: string, value: string | null): string {
+  if (!value) return pathname;
+  return `${pathname}?${key}=${encodeURIComponent(value)}`;
 }
 
 function turnRefs(turn: ChatTurn): AskTurnRefs {
@@ -99,10 +107,10 @@ function turnRefs(turn: ChatTurn): AskTurnRefs {
   const replayEvidence = evidenceFor(evidence, ["replay"]);
 
   return {
-    callId: context?.call_id ?? callEvidence?.id ?? idFromHref(callEvidence?.href, "/calls"),
-    issueId: context?.issue_id ?? context?.anomaly_id ?? issueEvidence?.id ?? idFromHref(issueEvidence?.href, "/issues"),
-    traceId: context?.trace_id ?? traceEvidence?.id ?? idFromHref(traceEvidence?.href, "/trace"),
-    replayId: replayEvidence?.id ?? idFromHref(replayEvidence?.href, "/replay"),
+    callId: context?.call_id ?? callEvidence?.id ?? idFromHrefParam(callEvidence?.href, "call_id"),
+    issueId: context?.issue_id ?? context?.anomaly_id ?? issueEvidence?.id ?? idFromHrefParam(issueEvidence?.href, "issue_id"),
+    traceId: context?.trace_id ?? traceEvidence?.id ?? idFromHrefParam(traceEvidence?.href, "trace_id"),
+    replayId: replayEvidence?.id ?? idFromHrefParam(replayEvidence?.href, "replay_run_id"),
   };
 }
 
@@ -118,9 +126,15 @@ function buildWorkflowActions(turn: ChatTurn): AskWorkflowAction[] {
     if (!kind || seen.has(kind)) continue;
     seen.add(kind);
     if (kind === "create_replay" && (issueId || callId)) actions.push({ kind, label: "Create Replay" });
-    if (kind === "open_issue" && issueId) actions.push({ kind, label: "Open Issue", href: `/issues/${encodeURIComponent(issueId)}` });
-    if (kind === "open_call" && callId) actions.push({ kind, label: "Open Call", href: `/calls/${encodeURIComponent(callId)}` });
-    if (kind === "open_trace" && traceId) actions.push({ kind, label: "Open Trace", href: `/trace/${encodeURIComponent(traceId)}` });
+    if (kind === "open_issue" && issueId) {
+      actions.push({ kind, label: "Open Issue", href: dashboardHref("/approvals", "issue_id", issueId) });
+    }
+    if (kind === "open_call" && callId) {
+      actions.push({ kind, label: "Open Call", href: dashboardHref("/evidence", "call_id", callId) });
+    }
+    if (kind === "open_trace" && traceId) {
+      actions.push({ kind, label: "Open Trace", href: dashboardHref("/evidence", "trace_id", traceId) });
+    }
     if (kind === "promote_golden" && replayId) actions.push({ kind, label: "Promote Contract" });
     if (kind === "promote_golden" && !replayId && !seen.has("create_replay") && (issueId || callId)) {
       seen.add("create_replay");
@@ -177,7 +191,7 @@ export function AskZroky() {
   const createReplayFromCall = useCreateReplayRunFromCall();
   const createReplayFromIssue = useCreateReplayRunFromIssue();
 
-  // Dynamic suggestion data — only fetched when drawer is open
+  // Dynamic suggestion data â€” only fetched when drawer is open
   const callsQuery = useQuery({
     queryKey: ["calls", "list", { limit: 1 }],
     queryFn: () => listCalls({ limit: 1 }),
@@ -288,7 +302,7 @@ export function AskZroky() {
         {
           id: uid(),
           role: "assistant",
-          text: `Sorry — I could not answer that. (${message})`,
+          text: `Sorry â€” I could not answer that. (${message})`,
           used_llm: false,
         },
       ]);
@@ -313,7 +327,7 @@ export function AskZroky() {
     try {
       await submitAskFeedback(body);
     } catch {
-      // non-critical — UI already updated optimistically
+      // non-critical â€” UI already updated optimistically
     }
   }
 
@@ -335,7 +349,7 @@ export function AskZroky() {
           return;
         }
         setOpen(false);
-        router.push(`/replay/${run.id}`);
+        router.push(dashboardHref("/evidence", "replay_run_id", run.id));
         return;
       }
 
@@ -352,7 +366,7 @@ export function AskZroky() {
         void queryClient.invalidateQueries({ queryKey: ["golden-sets"] });
         void queryClient.invalidateQueries({ queryKey: ["golden-traces", targetSet.id] });
         setOpen(false);
-        router.push("/goldens");
+        router.push(dashboardHref("/evidence", "replay_run_id", replayId));
       }
     } catch (error) {
       setActionStatus((prev) => ({
@@ -643,7 +657,7 @@ export function AskZroky() {
             ref={inputRef}
             type="text"
             className="ask-input"
-            placeholder="Ask anything about your agent…"
+            placeholder="Ask anything about your agentâ€¦"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             disabled={pending}

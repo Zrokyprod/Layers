@@ -148,7 +148,7 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
 
 export const pilotHandoffSteps = [
   "Create project key",
-  "Copy mandate and SDK wrapper",
+  "Copy mandate and SDK or webhook bridge",
   "Connect system of record",
   "Run connector preflight",
   "Run full proof command",
@@ -235,6 +235,92 @@ await traceRun(
 );`;
 }
 
+type WebhookBridgeConnector = "ledger_refund" | "crm_record" | "generic_rest";
+
+function webhookBridgeConnector(template: ProtectedAgentTemplate): WebhookBridgeConnector {
+  if (template.liveSmokeScenario === "refund") return "ledger_refund";
+  if (template.liveSmokeScenario === "customer-record") return "crm_record";
+  return "generic_rest";
+}
+
+function webhookBridgeActionType(template: ProtectedAgentTemplate): string {
+  if (template.id === "refund") return "refund";
+  if (template.id === "crm") return "customer_record_update";
+  if (template.id === "devops") return "deploy_change";
+  if (template.id === "outreach") return "email_send";
+  if (template.id === "procurement") return "invoice_spend_approval";
+  return "custom";
+}
+
+function webhookBridgeClaim(template: ProtectedAgentTemplate): Record<string, unknown> {
+  if (template.liveSmokeScenario === "refund") {
+    return {
+      refund_id: "rf_123",
+      status: "succeeded",
+      amount_usd: 250,
+      currency: "USD",
+    };
+  }
+  if (template.liveSmokeScenario === "customer-record") {
+    return {
+      customer_id: "cus_902",
+      account_id: "acct_902",
+      status: "active",
+      email: "ops@example.com",
+    };
+  }
+  return {
+    record_ref: `${template.workflowId}_record_001`,
+    status: "approved",
+    system_of_record: template.systemOfRecord,
+  };
+}
+
+export function buildWebhookBridgePayload(template: ProtectedAgentTemplate) {
+  const connector = webhookBridgeConnector(template);
+  const claimed = webhookBridgeClaim(template);
+  const payload: Record<string, unknown> = {
+    connector,
+    call_id: `${template.workflowId}_call_001`,
+    trace_id: `${template.workflowId}_trace_001`,
+    runtime_policy_decision_id: `${template.workflowId}_decision_001`,
+    action_type: webhookBridgeActionType(template),
+    claimed,
+    metadata: {
+      agent_name: template.agentName,
+      workflow_id: template.workflowId,
+      setup_source: "protected_agent_setup",
+    },
+  };
+
+  if (connector === "ledger_refund") {
+    payload.refund_id = String(claimed.refund_id);
+  } else if (connector === "crm_record") {
+    payload.customer_id = String(claimed.customer_id);
+  } else {
+    payload.record_ref = String(claimed.record_ref);
+  }
+
+  return JSON.stringify(payload, null, 2);
+}
+
+export function buildWebhookBridgeCurl(template: ProtectedAgentTemplate) {
+  return `curl -X POST "https://api.zroky.com/v1/outcomes/reconciliation/saved" \\
+  -H "content-type: application/json" \\
+  -H "x-api-key: $ZROKY_API_KEY" \\
+  --data '${buildWebhookBridgePayload(template)}'`;
+}
+
+export function webhookBridgeDetail(template: ProtectedAgentTemplate) {
+  if (template.liveSmokeScenario === "refund") {
+    return "Use after the refund tool returns success; Zroky verifies the saved ledger/refund connector before evidence is trusted.";
+  }
+  if (template.liveSmokeScenario === "customer-record") {
+    return "Use after the CRM mutation returns success; Zroky verifies the saved customer-record connector before evidence is trusted.";
+  }
+  return `Use after the action returns success; connect Generic REST so Zroky can read ${template.systemOfRecord}.`;
+}
+
 export function proofReadinessLabel(template: ProtectedAgentTemplate) {
   return template.proofStatus === "packaged_full_proof"
     ? "Packaged full proof runner"
@@ -256,7 +342,7 @@ export function buildLiveSmokeCommand(template: ProtectedAgentTemplate) {
     return [
       "python scripts/run_design_partner_install_kit.py",
       "--scenario refund",
-      "--api-base-url https://api.zroky.ai",
+      "--api-base-url https://api.zroky.com",
       "--api-key <zroky_api_key>",
       "--ledger-base-url https://ledger.example.com/api",
       "--ledger-bearer-token <ledger_token>",
@@ -271,7 +357,7 @@ export function buildLiveSmokeCommand(template: ProtectedAgentTemplate) {
     return [
       "python scripts/run_design_partner_install_kit.py",
       "--scenario customer-record",
-      "--api-base-url https://api.zroky.ai",
+      "--api-base-url https://api.zroky.com",
       "--api-key <zroky_api_key>",
       "--crm-base-url https://crm.example.com/api",
       "--crm-bearer-token <crm_token>",

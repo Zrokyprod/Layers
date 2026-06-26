@@ -30,6 +30,7 @@ import type {
 } from "@/lib/api";
 
 type Filter = RuntimePolicyDecisionStatus | "all";
+type VerdictTone = "danger" | "warning" | "success" | "neutral";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "pending_approval", label: "Pending" },
@@ -215,7 +216,7 @@ function proofStatus(pack: RuntimePolicyEvidencePackResponse | undefined, isLoad
   if (pack.outcome_reconciliation.length === 0) {
     return { label: "Not verified", detail: "No system-of-record outcome proof is linked.", tone: "warning" as const };
   }
-  return { label: humanize(pack.verification_status), detail: "Outcome proof needs review.", tone: "warning" as const };
+  return { label: humanize(pack.verification_status), detail: "Outcome verification needs review.", tone: "warning" as const };
 }
 
 function verificationCopy(pack: RuntimePolicyEvidencePackResponse): string {
@@ -223,12 +224,148 @@ function verificationCopy(pack: RuntimePolicyEvidencePackResponse): string {
     return "Outcome verified against the system of record.";
   }
   if (pack.verification_status === "fail") {
-    return "Outcome proof failed. Check the reconciliation record before trusting this action.";
+    return "Outcome verification failed. Check the reconciliation record before trusting this action.";
   }
   if (pack.outcome_reconciliation.length === 0) {
     return "No system-of-record outcome proof is linked yet.";
   }
   return "Outcome is not verified yet.";
+}
+
+function approvalsVerdict({
+  items,
+  pendingCount,
+  blockedCount,
+  killSwitchArmed,
+  isLoading,
+  isError,
+}: {
+  items: RuntimePolicyDecisionResponse[];
+  pendingCount: number;
+  blockedCount: number;
+  killSwitchArmed: boolean;
+  isLoading: boolean;
+  isError: boolean;
+}): { title: string; description: string; pill: string; tone: VerdictTone } {
+  if (killSwitchArmed) {
+    return {
+      title: "Kill switch confirmation armed",
+      description:
+        "No global hold is enabled until you confirm. Use it only when proof or mandate boundaries look unsafe.",
+      pill: "confirmation armed",
+      tone: "danger",
+    };
+  }
+  if (isError) {
+    return {
+      title: "Approval state unavailable",
+      description: "The runtime gate could not refresh this queue. Keep high-stakes decisions conservative until it recovers.",
+      pill: "refresh failed",
+      tone: "danger",
+    };
+  }
+  if (isLoading) {
+    return {
+      title: "Loading runtime gate",
+      description: "Fetching held actions, mandate hits, approval audit, and linked outcome proof.",
+      pill: "loading",
+      tone: "neutral",
+    };
+  }
+  if (pendingCount > 0) {
+    const heldCopy =
+      pendingCount === 1
+        ? "Zroky is holding one high-stakes action"
+        : `Zroky is holding ${pendingCount} high-stakes actions`;
+    return {
+      title: "Risky actions held before commit",
+      description: `${heldCopy} until approval, mandate proof, and outcome evidence are reviewed.`,
+      pill: `${pendingCount} held`,
+      tone: "warning",
+    };
+  }
+  if (blockedCount > 0) {
+    const blockedCopy =
+      blockedCount === 1
+        ? "One blocked or rejected decision is"
+        : `${blockedCount} blocked or rejected decisions are`;
+    return {
+      title: "Unsafe action stopped",
+      description: `${blockedCopy} preserved with policy, approval audit, and Evidence Pack proof.`,
+      pill: `${blockedCount} stopped`,
+      tone: "danger",
+    };
+  }
+  if (items.length === 0) {
+    return {
+      title: "Approval gate clear",
+      description: "The runtime gate is ready. High-stakes agent actions will land here before commit.",
+      pill: "clear",
+      tone: "neutral",
+    };
+  }
+  return {
+    title: "Actions controlled and proved",
+    description: "Resolved actions are linked to mandate hits, approval reasons, outcome checks, and Evidence Packs.",
+    pill: `${items.length} audited`,
+    tone: "success",
+  };
+}
+
+function ApprovalControlContract() {
+  const states: {
+    status: RuntimePolicyDecisionStatus;
+    title: string;
+    body: string;
+    tone: VerdictTone;
+  }[] = [
+    {
+      status: "pending_approval",
+      title: "Hold before commit",
+      body: "High-stakes tool calls wait here until mandate, amount, arguments, and risk are reviewed.",
+      tone: "warning",
+    },
+    {
+      status: "approved",
+      title: "Release with audit",
+      body: "Approval stores resolver, reason, timestamp, and scope; it does not replace real outcome proof.",
+      tone: "success",
+    },
+    {
+      status: "rejected",
+      title: "Keep stopped",
+      body: "Unsafe, unclear, or out-of-mandate actions stay stopped and remain visible for the Evidence Pack.",
+      tone: "danger",
+    },
+    {
+      status: "expired",
+      title: "Fail closed",
+      body: "Stale approvals are not auto-released; the agent must retry through the policy gate.",
+      tone: "neutral",
+    },
+  ];
+
+  return (
+    <section className="approval-control-contract" aria-label="Approval control contract">
+      <div className="approval-control-contract-head">
+        <span className="eyebrow">Approval contract</span>
+        <h2>Human approval releases the action; outcome verification proves what happened.</h2>
+        <p>
+          This page controls the before-action decision. The Evidence Pack becomes customer-ready only after matched
+          system-of-record proof is linked.
+        </p>
+      </div>
+      <div className="approval-control-state-grid">
+        {states.map((state) => (
+          <article key={state.status} data-tone={state.tone}>
+            <StatusPill value={state.status} />
+            <strong>{state.title}</strong>
+            <span>{state.body}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function downloadEvidencePack(pack: RuntimePolicyEvidencePackResponse) {
@@ -253,11 +390,11 @@ function ApprovalQueue({
   onSelect: (id: string) => void;
 }) {
   return (
-    <section className="approval-queue-panel" aria-label="Approval priority queue">
+    <section className="approval-queue-panel" aria-label="Held action queue">
       <div className="approval-panel-head">
         <div>
-          <span className="eyebrow">Priority queue</span>
-          <strong>{items.length} runtime decision{items.length === 1 ? "" : "s"}</strong>
+          <span className="eyebrow">Held action queue</span>
+          <strong>{items.length} action{items.length === 1 ? "" : "s"} under control</strong>
         </div>
         <span className="approval-live-dot">live</span>
       </div>
@@ -347,7 +484,7 @@ function ApprovalInspector({
       <section className="approval-inspector-panel empty-state">
         <ShieldAlert size={22} aria-hidden="true" />
         <h2>Select a held action.</h2>
-        <p>Runtime decisions will appear here after the SDK or gateway calls the policy gate.</p>
+        <p>High-stakes agent actions appear here before commit after the SDK or gateway calls the policy gate.</p>
       </section>
     );
   }
@@ -355,12 +492,23 @@ function ApprovalInspector({
   const canResolve = item.status === "pending_approval";
   const disabled = busy || !canResolve || reason.trim().length < 3;
   const proof = proofStatus(pack, packLoading, packError);
+  const requiredApprovalCount = Math.max(1, item.required_approval_count ?? 1);
+  const approvalCount = Math.max(0, item.approval_count ?? 0);
+  const remainingApprovals = Math.max(0, requiredApprovalCount - approvalCount);
+  const approvalLabel =
+    requiredApprovalCount > 1
+      ? `${approvalCount}/${requiredApprovalCount} approvals recorded`
+      : approvalCount > 0
+        ? "Approved"
+        : "Single approval required";
+  const approveButtonLabel =
+    requiredApprovalCount > 1 && remainingApprovals > 1 ? "Record Approval" : "Approve";
 
   return (
     <section className="approval-inspector-panel" aria-label="Selected action control">
       <div className="approval-inspector-header">
         <div>
-          <span className="eyebrow">Selected action control</span>
+          <span className="eyebrow">Risky action control</span>
           <h2>{titleFor(item)}</h2>
           <p>
             {item.agent_name ?? "unknown agent"} / {statusVerb(item.status)} / {actionClassFor(item)}
@@ -370,14 +518,14 @@ function ApprovalInspector({
           <StatusPill value={item.status} />
           <button className="btn btn-soft btn-sm" type="button" onClick={() => onViewEvidence(item.id)}>
             <FileText size={15} />
-            Evidence Pack
+            Open Evidence Pack
           </button>
         </div>
       </div>
 
       <section className={`approval-proof-strip tone-${proof.tone}`}>
         <div>
-          <span className="eyebrow">Outcome proof</span>
+          <span className="eyebrow">After-action proof</span>
           <strong>{proof.label}</strong>
           <p>{proof.detail}</p>
         </div>
@@ -398,15 +546,19 @@ function ApprovalInspector({
           <dd>{timeUntil(item.expires_at)}</dd>
         </div>
         <div>
-          <dt>Trace</dt>
+          <dt>Approval progress</dt>
+          <dd>{approvalLabel}</dd>
+        </div>
+        <div>
+          <dt>Trace evidence</dt>
           <dd>
-            {item.trace_id ? <Link href={`/trace/${encodeURIComponent(item.trace_id)}`}>{item.trace_id}</Link> : "-"}
+            {item.trace_id ? <Link href="/evidence">{item.trace_id}</Link> : "-"}
           </dd>
         </div>
         <div>
-          <dt>Call</dt>
+          <dt>Call evidence</dt>
           <dd>
-            {item.call_id ? <Link href={`/calls/${encodeURIComponent(item.call_id)}`}>{item.call_id}</Link> : "-"}
+            {item.call_id ? <Link href="/evidence">{item.call_id}</Link> : "-"}
           </dd>
         </div>
         <div>
@@ -417,7 +569,7 @@ function ApprovalInspector({
 
       <div className="approval-inspector-grid">
         <section>
-          <h3>Mandate hit</h3>
+          <h3>Policy mandate hit</h3>
           <ul>
             {item.reasons.length > 0 ? item.reasons.map((reasonItem) => <li key={reasonItem}>{reasonItem}</li>) : <li>-</li>}
           </ul>
@@ -450,8 +602,14 @@ function ApprovalInspector({
       <section className="approval-decision-console">
         <div>
           <span className="eyebrow">Human decision</span>
-          <strong>{canResolve ? "Approve or reject this held action." : "Decision already resolved."}</strong>
-          <p>Reason is required because it becomes part of the approval audit trail and Evidence Pack.</p>
+          <strong>
+            {canResolve
+              ? requiredApprovalCount > 1
+                ? `${remainingApprovals} more distinct approval${remainingApprovals === 1 ? "" : "s"} required.`
+                : "Approve or reject this held action."
+              : "Decision already resolved."}
+          </strong>
+          <p>This reason is written into the approval audit trail and Evidence Pack.</p>
         </div>
         <div className="approval-actions">
           <input
@@ -468,7 +626,7 @@ function ApprovalInspector({
             onClick={() => onApprove(item.id, reason)}
           >
             <Check size={16} />
-            Approve
+            {approveButtonLabel}
           </button>
           <button
             className="btn btn-secondary"
@@ -500,9 +658,9 @@ function KillSwitchPanel({
     <section className={`approval-kill-panel${armed ? " armed" : ""}`} aria-label="Runtime kill switch">
       <div>
         <span className="eyebrow">Runtime kill switch</span>
-        <strong>{armed ? "Confirm global runtime hold" : "Fail closed if policy proof is unsafe"}</strong>
+        <strong>{armed ? "Confirm global runtime hold" : "Fail closed when proof is unsafe"}</strong>
         <p>
-          This should pause high-stakes runtime approvals when evidence or mandate boundaries are unreliable.
+          Pause high-stakes runtime approvals when evidence, connector, or mandate boundaries are unreliable.
         </p>
       </div>
       {armed ? (
@@ -571,7 +729,7 @@ function EvidencePackModal({
             <>
               <section className={`evidence-pack-status tone-${queueTone(pack.verification_status)}`}>
                 <div>
-                  <span className="eyebrow">Verification</span>
+                  <span className="eyebrow">Outcome verification</span>
                   <strong>{humanize(pack.verification_status)}</strong>
                   <p>{verificationCopy(pack)}</p>
                 </div>
@@ -596,20 +754,20 @@ function EvidencePackModal({
                   <dd>{humanize(pack.decision.action_type)}</dd>
                 </div>
                 <div>
-                  <dt>Trace</dt>
+                  <dt>Trace evidence</dt>
                   <dd>
                     {pack.decision.trace_id ? (
-                      <Link href={`/trace/${encodeURIComponent(pack.decision.trace_id)}`}>{pack.decision.trace_id}</Link>
+                      <Link href="/evidence">{pack.decision.trace_id}</Link>
                     ) : (
                       "-"
                     )}
                   </dd>
                 </div>
                 <div>
-                  <dt>Call</dt>
+                  <dt>Call evidence</dt>
                   <dd>
                     {pack.decision.call_id ? (
-                      <Link href={`/calls/${encodeURIComponent(pack.decision.call_id)}`}>{pack.decision.call_id}</Link>
+                      <Link href="/evidence">{pack.decision.call_id}</Link>
                     ) : (
                       "-"
                     )}
@@ -635,12 +793,12 @@ function EvidencePackModal({
                 </div>
                 <button className="btn btn-primary btn-sm" type="button" onClick={() => downloadEvidencePack(pack)}>
                   <Download size={15} />
-                  Download JSON
+                  Export Evidence JSON
                 </button>
               </section>
 
               <section className="evidence-pack-section">
-                <h4>Decision</h4>
+                <h4>Policy decision</h4>
                 <dl className="evidence-pack-meta compact">
                   <div>
                     <dt>Status</dt>
@@ -663,7 +821,7 @@ function EvidencePackModal({
               </section>
 
               <section className="evidence-pack-section">
-                <h4>Policy snapshot</h4>
+                <h4>Mandate snapshot</h4>
                 <pre>{compactJson(pack.decision.policy_snapshot)}</pre>
               </section>
 
@@ -690,7 +848,7 @@ function EvidencePackModal({
               </section>
 
               <section className="evidence-pack-section">
-                <h4>Outcome reconciliation</h4>
+                <h4>Real outcome reconciliation</h4>
                 {outcomes.length === 0 ? (
                   <div className="evidence-pack-notice">
                     <strong>Missing evidence</strong>
@@ -789,12 +947,20 @@ export default function RuntimeApprovalsPage() {
     () => items.filter((item) => item.status === "blocked" || item.status === "rejected").length,
     [items],
   );
-  const visibleTraceCount = useMemo(() => items.filter((item) => item.trace_id).length, [items]);
+  const evidenceLinkedCount = useMemo(() => items.filter((item) => item.trace_id || item.call_id).length, [items]);
   const financialCount = useMemo(
     () => items.filter((item) => actionClassFor(item) === "Financial action").length,
     [items],
   );
   const busy = approveMutation.isPending || rejectMutation.isPending;
+  const hero = approvalsVerdict({
+    items,
+    pendingCount,
+    blockedCount,
+    killSwitchArmed,
+    isLoading: approvalsQuery.isLoading,
+    isError: approvalsQuery.isError,
+  });
 
   useEffect(() => {
     if (sortedItems.length === 0) {
@@ -828,14 +994,14 @@ export default function RuntimeApprovalsPage() {
 
   return (
     <div className="dashboard-page approvals-page approvals-cockpit">
-      <section className="approvals-hero">
+      <section className="approvals-hero" data-tone={hero.tone}>
         <div>
           <span className="eyebrow">Runtime gate</span>
-          <h1>Held actions before commit</h1>
-          <p>Approve, reject, or freeze autonomous actions with mandate proof and outcome evidence in one place.</p>
+          <h1>{hero.title}</h1>
+          <p>{hero.description}</p>
         </div>
         <div className="approvals-hero-rail">
-          <span className="approval-hero-pill">{pendingCount} pending</span>
+          <span className="approval-hero-pill">{hero.pill}</span>
           <button
             className="btn btn-secondary"
             type="button"
@@ -851,18 +1017,18 @@ export default function RuntimeApprovalsPage() {
       <section className="approvals-metric-grid">
         <article className="approval-metric-card tone-warning">
           <Clock3 size={18} />
-          <span>Waiting for owner</span>
+          <span>Pending holds</span>
           <strong>{pendingCount}</strong>
         </article>
         <article className="approval-metric-card tone-danger">
           <AlertTriangle size={18} />
-          <span>Blocked or rejected</span>
+          <span>Damage stopped</span>
           <strong>{blockedCount}</strong>
         </article>
         <article className="approval-metric-card tone-neutral">
           <LockKeyhole size={18} />
-          <span>Visible traces</span>
-          <strong>{visibleTraceCount}</strong>
+          <span>Evidence-linked</span>
+          <strong>{evidenceLinkedCount}</strong>
         </article>
         <article className="approval-metric-card tone-success">
           <FileText size={18} />
@@ -870,6 +1036,8 @@ export default function RuntimeApprovalsPage() {
           <strong>{financialCount}</strong>
         </article>
       </section>
+
+      <ApprovalControlContract />
 
       <section className="approval-cockpit-toolbar" aria-label="Approval filters">
         <div className="filter-bar">
@@ -884,7 +1052,7 @@ export default function RuntimeApprovalsPage() {
             </button>
           ))}
         </div>
-        <span>{approvalsQuery.isFetching ? "Refreshing queue..." : "Runtime queue is live"}</span>
+        <span>{approvalsQuery.isFetching ? "Refreshing held actions..." : "Live approval gate"}</span>
       </section>
 
       {message ? <div className="notice">{message}</div> : null}
@@ -896,7 +1064,7 @@ export default function RuntimeApprovalsPage() {
       ) : items.length === 0 ? (
         <section className="approval-empty-state">
           <ShieldAlert size={24} aria-hidden="true" />
-          <h2>No runtime approvals in this view.</h2>
+          <h2>No held actions in this view.</h2>
           <p>When an agent attempts a high-stakes action, Zroky will hold it here before commit.</p>
           <Link className="btn btn-secondary" href="/policies">
             Review mandates

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import "./premium-overrides.css";
+import "./dashboard-redesign.css";
 
 import { Providers } from "@/components/providers";
 

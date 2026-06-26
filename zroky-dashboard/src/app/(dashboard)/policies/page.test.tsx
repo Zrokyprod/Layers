@@ -29,15 +29,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/lib/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
-  return {
-    ...actual,
-    ...api,
-  };
-});
+vi.mock("@/lib/api", () => api);
 
 const now = "2026-06-20T09:00:00.000Z";
+let seededPolicyResponse: PilotPolicyResponse;
+let seededApprovalsResponse: { items: RuntimePolicyDecisionResponse[]; total_in_page: number };
 
 function policy(overrides: Partial<PilotPolicyPayload> = {}): PilotPolicyPayload {
   return {
@@ -62,6 +58,10 @@ function policy(overrides: Partial<PilotPolicyPayload> = {}): PilotPolicyPayload
     runtime_block_pii_leak: true,
     runtime_block_prompt_injected_external_action: true,
     runtime_approval_ttl_minutes: 15,
+    runtime_amount_approval_threshold_usd: 500,
+    runtime_amount_deny_threshold_usd: 5000,
+    runtime_production_deploys_require_approval: true,
+    runtime_changed_recipient_deny: true,
     ...overrides,
   };
 }
@@ -129,10 +129,12 @@ function mockPolicies({
   decisions?: RuntimePolicyDecisionResponse[];
 } = {}) {
   const response = policyResponse(payload);
+  seededPolicyResponse = response;
+  seededApprovalsResponse = { items: decisions, total_in_page: decisions.length };
   api.getPilotPolicy.mockResolvedValue(response);
   api.updatePilotPolicy.mockResolvedValue(response);
   api.setRuntimePolicyKillSwitch.mockResolvedValue({ project_id: "proj_1", enabled: true, policy: { kill_switch: true } });
-  api.listRuntimePolicyApprovals.mockResolvedValue({ items: decisions, total_in_page: decisions.length });
+  api.listRuntimePolicyApprovals.mockResolvedValue(seededApprovalsResponse);
 }
 
 function renderPoliciesPage() {
@@ -142,6 +144,8 @@ function renderPoliciesPage() {
       mutations: { retry: false },
     },
   });
+  client.setQueryData(["pilot-policy"], seededPolicyResponse);
+  client.setQueryData(["runtime-policy", "approvals", "all"], seededApprovalsResponse);
 
   return render(
     <QueryClientProvider client={client}>
@@ -160,12 +164,30 @@ describe("PoliciesPage mandate control", () => {
   it("surfaces mandate proof flow and latest runtime decisions", async () => {
     renderPoliciesPage();
 
-    expect(await screen.findByRole("heading", { name: "Policies" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Human review waiting" })).toBeInTheDocument();
     expect(await screen.findByText("Controlled")).toBeInTheDocument();
-    expect(screen.getByText("Mandate Control defines what autonomous agents may do, what must pause, what gets blocked, and where proof is recorded.")).toBeInTheDocument();
+    expect(screen.getByText("The policy gate is working and has paused sensitive actions for human approval before execution.")).toBeInTheDocument();
 
-    const flow = screen.getByLabelText("Runtime mandate flow");
-    for (const label of ["Mandate", "Runtime gate", "Human hold", "Evidence"]) {
+    const verdict = screen.getByLabelText("Runtime policy verdict");
+    expect(within(verdict).getByText("Review")).toBeInTheDocument();
+    expect(within(verdict).getByText("5/5")).toBeInTheDocument();
+
+    const contract = screen.getByRole("region", { name: "Policy mandate contract" });
+    expect(
+      within(contract).getByText("Policies define what an agent may attempt before any risky tool call runs."),
+    ).toBeInTheDocument();
+    expect(
+      within(contract).getByText(
+        "Approvals decide exceptions. Outcomes verify the real result. Evidence Packs export the proof trail.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(contract).getByText("Define what agents may attempt")).toBeInTheDocument();
+    expect(within(contract).getByText("Cap blast radius")).toBeInTheDocument();
+    expect(within(contract).getByText("Hold sensitive actions")).toBeInTheDocument();
+    expect(within(contract).getByText("Block unsafe paths")).toBeInTheDocument();
+
+    const flow = screen.getByLabelText("Runtime policy proof chain");
+    for (const label of ["Boundary", "Gate", "Hold", "Evidence"]) {
       expect(within(flow).getByText(label)).toBeInTheDocument();
     }
 
@@ -174,7 +196,7 @@ describe("PoliciesPage mandate control", () => {
       expect(within(proof).getByText(label)).toBeInTheDocument();
     }
     expect(within(proof).getByText("2 allowed tools, 2 sensitive tools.")).toBeInTheDocument();
-    expect(within(proof).getByText("3/3 high-stakes guardrails enabled.")).toBeInTheDocument();
+    expect(within(proof).getByText("5/5 high-stakes guardrails enabled.")).toBeInTheDocument();
     expect(within(proof).getByText("1 pending approval before execution.")).toBeInTheDocument();
     expect(within(proof).getByText("2 recent decisions loaded.")).toBeInTheDocument();
 
@@ -222,7 +244,7 @@ describe("PoliciesPage mandate control", () => {
 
     renderPoliciesPage();
 
-    expect(await screen.findByText("Stopped")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Autonomy stopped" })).toBeInTheDocument();
     const proof = screen.getByLabelText("Mandate proof flow");
     expect(within(proof).getByText("Frozen by kill switch.")).toBeInTheDocument();
     expect(screen.getByText("Kill switch on")).toBeInTheDocument();

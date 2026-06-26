@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import {
+  DASHBOARD_PRIMARY_ROUTES,
+  type DashboardPrimaryRoute,
+} from "@/lib/dashboard-route-contract";
+
 interface CommandItem {
   id: string;
   label: string;
@@ -11,23 +16,67 @@ interface CommandItem {
   action: () => void;
 }
 
+type PrimaryCommandCopy = {
+  href?: string;
+  description: string;
+  shortcut?: string;
+};
+
+const PRIMARY_COMMAND_COPY: Record<DashboardPrimaryRoute["id"], PrimaryCommandCopy> = {
+  home: {
+    description: "Protected agents, risky actions, outcome proof, approvals, and evidence gaps",
+    shortcut: "Ctrl+H",
+  },
+  actions: {
+    description: "Protected action lifecycle, quota, receipts, verification, and bypass risk",
+  },
+  agents: {
+    description: "Protected agents, mandates, safety coverage, and proof readiness",
+  },
+  approvals: {
+    description: "Held risky actions, runtime policy decisions, and approval audit",
+  },
+  outcomes: {
+    description: "System-of-record matches, mismatches, and not-verified actions",
+  },
+  evidence: {
+    description: "Evidence packs, audit hashes, linked decisions, and export proof",
+  },
+  connectors: {
+    description: "System-of-record connectors, preflight runs, and pilot handoff status",
+  },
+  policies: {
+    description: "Agent mandates, runtime limits, approval rules, and kill switch",
+  },
+  settings: {
+    href: "/settings/keys",
+    description: "Capture keys, members, billing, and workspace controls",
+    shortcut: "Ctrl+S",
+  },
+};
+
 function useCommandItems(): CommandItem[] {
   const router = useRouter();
+
+  const primaryCommands = DASHBOARD_PRIMARY_ROUTES.map((route) => {
+    const commandCopy = PRIMARY_COMMAND_COPY[route.id];
+    const href = commandCopy.href ?? route.href;
+    return {
+      id: route.id,
+      label: `Go to ${route.label}`,
+      description: commandCopy.description,
+      shortcut: commandCopy.shortcut,
+      action: () => router.push(href),
+    } satisfies CommandItem;
+  });
+
   return [
-    { id: "home", label: "Go to Home", description: "Protected agents, risky actions, outcome proof, approvals, and evidence gaps", shortcut: "Ctrl+H", action: () => router.push("/home") },
-    { id: "agents", label: "Go to Agents", description: "Protected agents, mandates, safety coverage, and proof readiness", action: () => router.push("/agents") },
-    { id: "approvals", label: "Go to Approvals", description: "Held risky actions, runtime policy decisions, and approval audit", action: () => router.push("/approvals") },
-    { id: "outcomes", label: "Go to Outcomes", description: "System-of-record matches, mismatches, and not-verified actions", action: () => router.push("/outcomes") },
-    { id: "evidence", label: "Go to Evidence", description: "Evidence packs, audit hashes, linked decisions, and export proof", action: () => router.push("/evidence") },
-    { id: "connectors", label: "Go to Connectors", description: "System-of-record connectors, preflight runs, and pilot handoff status", action: () => router.push("/integrations") },
-    { id: "policies", label: "Go to Policies", description: "Agent mandates, runtime limits, approval rules, and kill switch", action: () => router.push("/policies") },
-    { id: "projects", label: "Go to Projects", description: "Project list, active context, plan limit, and deletion controls", action: () => router.push("/projects") },
-    { id: "settings", label: "Go to Settings", description: "API keys, members, connectors, plan, and billing", shortcut: "Ctrl+S", action: () => router.push("/settings/keys") },
-    { id: "settings-keys", label: "Settings → API Keys", description: "Create and revoke API keys", action: () => router.push("/settings/keys") },
+    ...primaryCommands,
+    { id: "settings-keys", label: "Settings → Capture keys", description: "Create and revoke capture keys", action: () => router.push("/settings/keys") },
     { id: "settings-billing", label: "Settings → Plan & Billing", description: "Plan, usage, payments", action: () => router.push("/settings/billing") },
     { id: "settings-team", label: "Settings → Members", description: "Invite and remove members", action: () => router.push("/settings/team") },
-    { id: "settings-connectors", label: "Settings → Connectors", description: "Configure system-of-record, GitHub, and Slack connectors", action: () => router.push("/settings/integrations") },
-    { id: "integrations-slack", label: "Connectors → Slack", description: "Connect Slack reliability events", action: () => router.push("/settings/integrations/slack") },
+    { id: "settings-workspace", label: "Settings → Workspace", description: "Project identity and workspace metadata", action: () => router.push("/settings/workspace") },
+    { id: "integrations-slack", label: "Connectors → Slack", description: "Connect Slack reliability events", action: () => router.push("/integrations/slack") },
     { id: "account-profile", label: "Account → Profile", description: "Identity, password, sessions, and account deletion", action: () => router.push("/account") },
   ];
 }

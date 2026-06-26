@@ -616,6 +616,9 @@ export interface AlertItemResponse {
   source: string;
   title: string;
   evidence: JsonMap | null;
+  slack_delivery_status: "not_attempted" | "sent" | "failed" | "not_connected" | "skipped";
+  slack_delivery_attempted_at: string | null;
+  slack_delivery_error: string | null;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
@@ -1151,6 +1154,13 @@ export interface BillingUsageResponse {
   replay: BillingUsageMeter;
   goldens: BillingUsageMeter;
   golden_sets: BillingUsageMeter;
+  protected_actions: BillingUsageMeter;
+  policy_checks: BillingUsageMeter;
+  runner_executions: BillingUsageMeter;
+  action_receipts: BillingUsageMeter;
+  verification_checks: BillingUsageMeter;
+  source_mutations: BillingUsageMeter;
+  active_connectors: BillingUsageMeter;
   metering_health: BillingMeteringHealthResponse;
 }
 

@@ -123,7 +123,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("No model-provider setup is needed for capture.")).toBeInTheDocument();
     expect(screen.getByText("Use a project key first; advanced replay setup can come later when a protected workflow needs it.")).toBeInTheDocument();
     expect(screen.getByText("No project keys yet. Create one to start capturing calls.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open traces" }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("link", { name: "Open evidence" }).getAttribute("href")).toBe("/evidence");
     expect(screen.queryByRole("link", { name: "Provider settings" })).not.toBeInTheDocument();
     expect(screen.getByText((content) => content.includes("traceRun"))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes("zroky.trace_run"))).toBeInTheDocument();
@@ -148,12 +148,19 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("release-ops-agent")).toBeInTheDocument();
     expect(screen.getByText("CI deployment and incident status")).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes('name: "deploy_change"'))).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Webhook proof bridge" })).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("/v1/outcomes/reconciliation/saved"))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes("x-api-key: $ZROKY_API_KEY"))).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open proof connector" }).getAttribute("href")).toBe("/integrations");
 
     fireEvent.click(screen.getByRole("button", { name: "Copy mandate" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("release-ops-agent")));
 
     fireEvent.click(screen.getByRole("button", { name: "Copy SDK wrapper" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining('name: "deploy_change"')));
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy webhook bridge" }));
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("/v1/outcomes/reconciliation/saved")));
   });
 
   it("renders pilot handoff proof criteria and connector inputs after pilot signup", async () => {
@@ -179,7 +186,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("Refund and payment agents can use the packaged ledger/refund preflight and full proof runner.")).toBeInTheDocument();
     expect(screen.getByText(/--scenario refund/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configure ledger connector" }).getAttribute("href")).toBe(
-      "/settings/integrations#ledger-refund-connector"
+      "/integrations#ledger-refund-connector"
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Copy live smoke command" }));
@@ -190,7 +197,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("CRM and data agents can use the packaged customer-record preflight and full proof runner.")).toBeInTheDocument();
     expect(screen.getByText(/--scenario customer-record/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Configure CRM connector" }).getAttribute("href")).toBe(
-      "/settings/integrations#customer-record-connector"
+      "/integrations#customer-record-connector"
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "Procurement / spend" }));
@@ -198,8 +205,8 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("Custom connector required before live smoke")).toBeInTheDocument();
     expect(screen.getByText("Custom connector required:")).toBeInTheDocument();
     expect(screen.getByText("This template has mandate and SDK capture coverage. Add a connector that reads ERP purchase order before calling the pilot verified.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open integrations" }).getAttribute("href")).toBe(
-      "/settings/integrations"
+    expect(screen.getByRole("link", { name: "Open connectors" }).getAttribute("href")).toBe(
+      "/integrations"
     );
   });
 
@@ -222,7 +229,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("zk_live_created_secret")).toBeInTheDocument();
     expect(screen.getByText("proj_1")).toBeInTheDocument();
     expect(screen.getAllByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"')).length).toBe(2);
-    expect(screen.getAllByRole("link", { name: "Open traces" }).some((link) => link.getAttribute("href") === "/trace")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Open evidence" }).some((link) => link.getAttribute("href") === "/evidence")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Copy key" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("zk_live_created_secret"));

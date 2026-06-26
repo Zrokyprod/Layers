@@ -6,17 +6,14 @@ import type { ReactNode } from "react";
 import {
   ArrowRight,
   CreditCard,
-  BellRing,
+  FolderOpen,
   KeyRound,
-  Plug,
   ShieldCheck,
-  SlidersHorizontal,
   Users,
   type LucideIcon,
 } from "lucide-react";
 
-// Settings tabs per ZROKY-TECHNICAL-PLAN-V2.md §10.5 (Settings spec).
-// Support tab removed in Module 1 — support routes via founder console (Module 11).
+// Settings exposes only the workspace-control sections from the README dashboard contract.
 const SETTINGS_TABS: ReadonlyArray<{
   href: string;
   label: string;
@@ -24,15 +21,15 @@ const SETTINGS_TABS: ReadonlyArray<{
   icon: LucideIcon;
   exact?: boolean;
 }> = [
-  { href: "/settings/keys", label: "API keys", description: "Capture credentials", icon: KeyRound },
+  { href: "/settings/keys", label: "Capture keys", description: "Capture credentials", icon: KeyRound },
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },
   { href: "/settings/billing", label: "Plan & Billing", description: "Plan, usage, and budget", icon: CreditCard },
-  { href: "/settings/evaluation", label: "Evaluation", description: "Judge calibration", icon: SlidersHorizontal },
-  { href: "/settings/integrations", label: "Integrations", description: "Repos, alerts, records", icon: BellRing },
+  { href: "/settings/workspace", label: "Workspace", description: "Project metadata", icon: FolderOpen },
 ] as const;
 
 const HIDDEN_SETTINGS_TABS = [
-  { href: "/settings/providers", label: "Providers", description: "Managed replay vault", icon: Plug, exact: false },
+  { href: "/settings/evaluation", label: "Evaluation", description: "Advanced reliability defaults", icon: ShieldCheck, exact: false },
+  { href: "/settings/providers", label: "Providers", description: "Managed replay vault", icon: ShieldCheck, exact: false },
 ] as const;
 
 const SETTINGS_CONTROL_LOOP: ReadonlyArray<{
@@ -44,7 +41,7 @@ const SETTINGS_CONTROL_LOOP: ReadonlyArray<{
   { href: "/settings/keys", label: "Capture key", description: "SDK and Gateway access", icon: KeyRound },
   { href: "/settings/team", label: "Team access", description: "Members and owner guard", icon: Users },
   { href: "/settings/billing", label: "Spend guard", description: "Plan, usage, and budget", icon: CreditCard },
-  { href: "/settings/integrations", label: "Evidence route", description: "Records and alert handoff", icon: BellRing },
+  { href: "/settings/workspace", label: "Workspace record", description: "Project identity and status", icon: FolderOpen },
 ] as const;
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
@@ -64,7 +61,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               Settings
             </span>
             <h1>Workspace control plane</h1>
-            <p>Set the credentials, access, budget limits, and evidence routes that decide whether protected agents can run unattended.</p>
+            <p>Manage the admin controls that keep capture, access, billing, and project identity predictable.</p>
             <div className="settings-hero-rail" aria-label="Workspace control loop">
               {SETTINGS_CONTROL_LOOP.map((item) => {
                 const RailIcon = item.icon;

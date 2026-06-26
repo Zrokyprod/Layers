@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+import { isDashboardPrimaryPath } from "./dashboard-route-contract";
 import { useDashboardStore } from "./store";
 
 interface ShortcutConfig {
@@ -14,12 +15,23 @@ interface ShortcutConfig {
   action: () => void;
 }
 
+export const DASHBOARD_KEYBOARD_ROUTES = {
+  home: "/home",
+  settings: "/settings/keys",
+} as const;
+
 export function useKeyboardShortcuts() {
   const router = useRouter();
   const { keyboardShortcutsEnabled, toggleSidebar, lastVisitedPage } = useDashboardStore();
 
   useEffect(() => {
     if (!keyboardShortcutsEnabled) return;
+
+    const pushPrimaryRoute = (href: string) => {
+      if (isDashboardPrimaryPath(href)) {
+        router.push(href);
+      }
+    };
 
     const shortcuts: ShortcutConfig[] = [
       {
@@ -41,25 +53,19 @@ export function useKeyboardShortcuts() {
         key: "a",
         ctrl: true,
         description: "Go to Command Center",
-        action: () => router.push("/home"),
+        action: () => pushPrimaryRoute(DASHBOARD_KEYBOARD_ROUTES.home),
       },
       {
         key: "h",
         ctrl: true,
         description: "Open Command Center",
-        action: () => router.push("/home"),
-      },
-      {
-        key: "i",
-        ctrl: true,
-        description: "Go to Failures",
-        action: () => router.push("/issues"),
+        action: () => pushPrimaryRoute(DASHBOARD_KEYBOARD_ROUTES.home),
       },
       {
         key: "s",
         ctrl: true,
-        description: "Go to settings",
-        action: () => router.push("/settings"),
+        description: "Go to Settings",
+        action: () => pushPrimaryRoute(DASHBOARD_KEYBOARD_ROUTES.settings),
       },
       {
         key: "r",
@@ -123,8 +129,7 @@ export const KEYBOARD_SHORTCUTS_HELP = [
   { keys: ["Ctrl", "B"], description: "Toggle sidebar" },
   { keys: ["Ctrl", "A"], description: "Go to Command Center" },
   { keys: ["Ctrl", "H"], description: "Open Command Center" },
-  { keys: ["Ctrl", "I"], description: "Go to Failures" },
-  { keys: ["Ctrl", "S"], description: "Go to settings" },
+  { keys: ["Ctrl", "S"], description: "Go to Settings" },
   { keys: ["Ctrl", "Shift", "R"], description: "Refresh data" },
   { keys: ["Shift", "?"], description: "Show this help" },
   { keys: ["Esc"], description: "Close modals / go back" },

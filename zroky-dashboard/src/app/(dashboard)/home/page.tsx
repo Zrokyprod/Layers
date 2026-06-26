@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Clock3,
@@ -97,13 +96,13 @@ type ProofCheck = {
 
 const refreshIntervalMs = 30_000;
 const loadSourceLabels: Record<InboxLoadKey, string> = {
-  issues: "Issues",
-  replayRuns: "Replay runs",
-  goldenSets: "Contracts",
+  issues: "Action signals",
+  replayRuns: "Verification runs",
+  goldenSets: "Evidence contracts",
   billing: "Billing",
   quota: "Replay quota",
-  summary: "Analytics",
-  calls: "Traces",
+  summary: "Usage summary",
+  calls: "Agent captures",
   captureHealth: "Capture health",
   apiKeys: "Project keys",
 };
@@ -205,10 +204,6 @@ function isPendingRun(run: ReplayRunItem): boolean {
 
 function isFailedCiRun(run: ReplayRunItem): boolean {
   return isCiRun(run) && ["fail", "failed", "error", "not_verified"].includes(run.status);
-}
-
-function needsGoldenReview(set: GoldenSetView): boolean {
-  return set.trace_count === 0 || set.is_flaky || !set.blocks_ci;
 }
 
 function chooseIssueAction(
@@ -547,7 +542,6 @@ export default function HomePage() {
   const trustedReplayCount = data.issues.filter(hasTrustedGoldenReplay).length;
   const pendingRuns = data.replayRuns.filter((run) => isPendingRun(run) && !isCiRun(run)).slice(0, 6);
   const failedCiRuns = data.replayRuns.filter(isFailedCiRun).slice(0, 6);
-  const goldensNeedingReview = data.goldenSets.filter(needsGoldenReview).slice(0, 6);
   const activeProjectKeyCount = data.apiKeys.filter((key) => !key.revoked && !key.expired).length;
   const captureStatus = data.captureHealth?.status ?? "unknown";
   const capturedCallCount = Math.max(data.captureHealth?.calls_24h ?? 0, data.calls.length);
@@ -608,7 +602,7 @@ export default function HomePage() {
             summary: `${formatCount(failedCiRuns.length)} verification gate${failedCiRuns.length === 1 ? "" : "s"} failing on ${blockingCiRun.golden_set_id}.`,
             tone: "danger" as const,
             action: caps.canCi ? (
-              <Link href={`/ci-gates/${blockingCiRun.id}`} className="btn btn-primary btn-sm fi-btn-primary">
+              <Link href="/policies" className="btn btn-primary btn-sm fi-btn-primary">
                 Open gate
               </Link>
             ) : (
@@ -630,8 +624,8 @@ export default function HomePage() {
               summary: captureStatus === "stale" ? "No recent agent action was captured for this project." : "Gateway events are waiting to become outcome proof.",
               tone: "warning" as const,
               action: (
-                <Link href="/trace" className="btn btn-primary btn-sm fi-btn-primary">
-                  Inspect capture
+                <Link href="/agents" className="btn btn-primary btn-sm fi-btn-primary">
+                  Open agents
                   </Link>
                 ),
               }
@@ -713,10 +707,10 @@ export default function HomePage() {
     setActionError(null);
     setBusyIssueId(issue.id);
     try {
-      const run = await createReplayRunFromIssue(issue.id, {
+      await createReplayRunFromIssue(issue.id, {
         replay_mode: DEFAULT_VERIFICATION_REPLAY_MODE,
       });
-      router.push(`/replay/${run.id}`);
+      router.push("/evidence");
     } catch (replayError) {
       setActionError(replayError instanceof Error ? replayError.message : "Failed to create replay run.");
     } finally {
@@ -744,14 +738,14 @@ export default function HomePage() {
     }
     if (action === "open_goldens") {
       return (
-        <Link href="/contracts" className="btn btn-primary btn-sm fi-btn-primary">
+        <Link href="/evidence" className="btn btn-primary btn-sm fi-btn-primary">
           <ShieldCheck aria-hidden="true" />
           Open evidence
         </Link>
       );
     }
     return (
-      <Link href={`/issues/${issue.id}`} className="btn btn-primary btn-sm fi-btn-primary">
+      <Link href="/approvals" className="btn btn-primary btn-sm fi-btn-primary">
         <ArrowRight aria-hidden="true" />
         {options?.viewLabel ?? "View proof"}
       </Link>
@@ -778,7 +772,7 @@ export default function HomePage() {
       detail: `${agentLabel}: ${evidenceSummary(issue)}`,
       impact: issueImpactUsd(issue) != null ? formatIssueImpact(issue) : `${formatCount(issue.occurrence_count)} calls`,
       proofState: replayLabel(issue.replay_coverage_status),
-      proofTone: severity === "critical" ? ("danger" as const) : replayGap ? ("warning" as const) : hasTrustedGoldenReplay(issue) ? ("success" as const) : ("neutral" as const),
+      proofTone: hasTrustedGoldenReplay(issue) ? ("success" as const) : severity === "critical" ? ("danger" as const) : replayGap ? ("warning" as const) : ("neutral" as const),
       nextStep: replayGap ? "Verify outcome" : hasTrustedGoldenReplay(issue) ? "Open evidence" : "Review proof",
       action: renderIssueAction(issue, { replayLabel: "Verify outcome", viewLabel: "View proof" }),
       issueId: issue.id,
@@ -796,7 +790,7 @@ export default function HomePage() {
     proofTone: "danger" as const,
     nextStep: "Open gate",
     action: caps.canCi ? (
-      <Link href={`/ci-gates/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
+      <Link href="/policies" className="btn btn-soft btn-sm fi-btn-secondary">
         Open gate
       </Link>
     ) : (
@@ -816,7 +810,7 @@ export default function HomePage() {
     proofTone: "warning" as const,
     nextStep: "Review proof",
     action: (
-      <Link href={`/replay/${run.id}`} className="btn btn-soft btn-sm fi-btn-secondary">
+      <Link href="/evidence" className="btn btn-soft btn-sm fi-btn-secondary">
         Review proof
       </Link>
     ),
@@ -834,10 +828,10 @@ export default function HomePage() {
           impact: captureBacklog > 0 ? `${formatCount(captureBacklog)} events` : captureLabel,
           proofState: captureStatus === "stale" ? "Stale" : "Backlog",
           proofTone: "warning",
-          nextStep: "Inspect capture",
+          nextStep: "Open agents",
           action: (
-            <Link href="/trace" className="btn btn-soft btn-sm fi-btn-secondary">
-              Inspect capture
+            <Link href="/agents" className="btn btn-soft btn-sm fi-btn-secondary">
+              Open agents
             </Link>
           ),
         },
@@ -852,7 +846,7 @@ export default function HomePage() {
             urgency: "P3",
             signal: "Evidence incomplete",
             agentAction: "Evidence export",
-            detail: "No exportable proof pack is ready until replay proof is promoted into a blocking contract.",
+            detail: "No exportable proof pack is ready until a verified outcome and audit trail are linked.",
             impact: `${formatCount(evidenceReadinessPercent)}% ready`,
             proofState: "Needs proof",
             proofTone: "neutral",
@@ -971,12 +965,54 @@ export default function HomePage() {
     },
   ];
   const pipelineStages = [
-    { label: "Capture", value: formatCount(capturedCallCount), helper: captureLabel, tone: captureHasProblem ? "warning" : capturedCallCount > 0 ? "success" : "neutral", href: "/trace" },
-    { label: "Detect", value: `${formatCount(openIssuesCount)} open`, helper: `${formatCount(criticalHighCount)} critical/high`, tone: openIssuesCount > 0 ? "warning" : "success", href: "/issues" },
-    { label: "Verify", value: `${formatCount(replayPassRate)}%`, helper: `${formatCount(needsTrustedReplayCount)} missing proof`, tone: replayFailCount > 0 || needsTrustedReplayCount > 0 ? "warning" : "success", href: "/replay" },
-    { label: "Promote", value: `${formatCount(protectedGoldenCount)} ready`, helper: `${formatCount(goldensNeedingReview.length)} need review`, tone: goldensNeedingReview.length > 0 ? "warning" : protectedGoldenCount > 0 ? "success" : "neutral", href: "/contracts" },
-    { label: "Gate", value: failedCiRuns.length > 0 ? `${formatCount(failedCiRuns.length)} blocked` : "clear", helper: caps.canCi ? "release guard active" : "upgrade required", tone: failedCiRuns.length > 0 ? "danger" : caps.canCi ? "success" : "neutral", href: "/ci-gates" },
-    { label: "Export", value: `${formatCount(evidenceReadinessPercent)}%`, helper: protectedGoldenCount > 0 ? "Evidence Pack ready" : "proof incomplete", tone: protectedGoldenCount > 0 ? "success" : "neutral", href: "/evidence" },
+    {
+      label: "Agents",
+      value: formatCount(capturedCallCount),
+      helper: captureLabel,
+      tone: captureHasProblem ? "warning" : capturedCallCount > 0 ? "success" : "neutral",
+      href: "/agents",
+      Icon: ListChecks,
+    },
+    {
+      label: "Policies",
+      value: openIssuesCount > 0 ? `${formatCount(criticalHighCount)} critical/high` : "clear",
+      helper: `${formatCount(openIssuesCount)} action signals`,
+      tone: openIssuesCount > 0 ? "warning" : "success",
+      href: "/policies",
+      Icon: ShieldAlert,
+    },
+    {
+      label: "Approvals",
+      value: needsTrustedReplayCount > 0 ? `${formatCount(needsTrustedReplayCount)} review` : "clear",
+      helper: "held actions and owner decisions",
+      tone: needsTrustedReplayCount > 0 ? "warning" : "success",
+      href: "/approvals",
+      Icon: LockKeyhole,
+    },
+    {
+      label: "Outcomes",
+      value: `${formatCount(replayPassRate)}%`,
+      helper: `${formatCount(needsTrustedReplayCount)} missing proof`,
+      tone: replayFailCount > 0 || needsTrustedReplayCount > 0 ? "warning" : "success",
+      href: "/outcomes",
+      Icon: ShieldCheck,
+    },
+    {
+      label: "Evidence",
+      value: `${formatCount(evidenceReadinessPercent)}%`,
+      helper: protectedGoldenCount > 0 ? "Evidence Pack ready" : "proof incomplete",
+      tone: protectedGoldenCount > 0 ? "success" : "neutral",
+      href: "/evidence",
+      Icon: FileJson,
+    },
+    {
+      label: "Connectors",
+      value: captureStatus === "connected" ? "ready" : "review",
+      helper: "system-of-record health",
+      tone: captureHasProblem ? "warning" : captureStatus === "connected" ? "success" : "neutral",
+      href: "/integrations",
+      Icon: Plug,
+    },
   ];
 
   return (
@@ -1170,26 +1206,24 @@ export default function HomePage() {
                   <div className="fi-a-panel-head">
                     <div>
                       <span className="fi-a-kicker">Accountability loop</span>
-                      <h2>Capture to export</h2>
+                      <h2>Control to proof</h2>
                     </div>
-                    <p>Each step links to the surface that owns the proof.</p>
+                    <p>Each step opens the primary surface that controls, verifies, or proves the action.</p>
                   </div>
                   <div className="fi-a-loop">
-                    {pipelineStages.map((stage, index) => (
-                      <Link className="fi-a-loop-step" data-tone={stage.tone} href={stage.href} key={stage.label}>
-                        <span className="fi-a-loop-node">
-                          {index === 0 ? <ListChecks aria-hidden="true" /> : null}
-                          {index === 1 ? <AlertTriangle aria-hidden="true" /> : null}
-                          {index === 2 ? <RotateCcw aria-hidden="true" /> : null}
-                          {index === 3 ? <ShieldCheck aria-hidden="true" /> : null}
-                          {index === 4 ? <GitPullRequest aria-hidden="true" /> : null}
-                          {index === 5 ? <FileJson aria-hidden="true" /> : null}
-                        </span>
-                        <span>{stage.label}</span>
-                        <strong>{stage.value}</strong>
-                        <small>{stage.helper}</small>
-                      </Link>
-                    ))}
+                    {pipelineStages.map((stage) => {
+                      const StageIcon = stage.Icon;
+                      return (
+                        <Link className="fi-a-loop-step" data-tone={stage.tone} href={stage.href} key={stage.label}>
+                          <span className="fi-a-loop-node">
+                            <StageIcon aria-hidden="true" />
+                          </span>
+                          <span>{stage.label}</span>
+                          <strong>{stage.value}</strong>
+                          <small>{stage.helper}</small>
+                        </Link>
+                      );
+                    })}
                   </div>
                 </section>
               )}

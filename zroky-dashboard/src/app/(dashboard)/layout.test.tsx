@@ -47,18 +47,18 @@ describe("DashboardLayout", () => {
 
   it("redirects unauthenticated dashboard access to login", async () => {
     cookieState.get.mockReturnValue(undefined);
-    headerState.get.mockReturnValue("/contracts/contract_1?tab=proof");
+    headerState.get.mockReturnValue("/policies?tab=proof");
 
     await expect(DashboardLayout({ children: <main /> })).rejects.toThrow(
-      "redirect:/login?next=%2Fcontracts%2Fcontract_1%3Ftab%3Dproof",
+      "redirect:/login?next=%2Fpolicies%3Ftab%3Dproof",
     );
-    expect(redirect).toHaveBeenCalledWith("/login?next=%2Fcontracts%2Fcontract_1%3Ftab%3Dproof");
+    expect(redirect).toHaveBeenCalledWith("/login?next=%2Fpolicies%3Ftab%3Dproof");
     expect(checkDashboardSession).not.toHaveBeenCalled();
   });
 
   it("redirects unverified email sessions before rendering the dashboard", async () => {
     cookieState.get.mockReturnValue({ value: "access-token" });
-    headerState.get.mockReturnValue("/contracts/contract_1");
+    headerState.get.mockReturnValue("/policies");
     vi.mocked(checkDashboardSession).mockResolvedValue({
       status: "authenticated",
       user: {
@@ -70,9 +70,9 @@ describe("DashboardLayout", () => {
     });
 
     await expect(DashboardLayout({ children: <main /> })).rejects.toThrow(
-      "redirect:/verify-email?next=%2Fcontracts%2Fcontract_1&email=new%40example.com",
+      "redirect:/verify-email?next=%2Fpolicies&email=new%40example.com",
     );
     expect(checkDashboardSession).toHaveBeenCalledWith("access-token");
-    expect(redirect).toHaveBeenCalledWith("/verify-email?next=%2Fcontracts%2Fcontract_1&email=new%40example.com");
+    expect(redirect).toHaveBeenCalledWith("/verify-email?next=%2Fpolicies&email=new%40example.com");
   });
 });

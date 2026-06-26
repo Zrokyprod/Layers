@@ -154,7 +154,7 @@ export function PriorityQueue() {
           <h3>Today’s Priority</h3>
           <p>Top {ranked.length} ranked by severity × occurrence × blast × recency.</p>
         </div>
-        <Link href="/alerts?status=OPEN" className="priority-queue-see-all">
+        <Link href="/approvals" className="priority-queue-see-all">
           See all open →
         </Link>
       </header>
@@ -165,7 +165,7 @@ export function PriorityQueue() {
           return (
             <li key={alert.alert_id} className="priority-queue-item">
               <Link
-                href={`/alerts/${alert.alert_id}`}
+                href="/approvals"
                 className="priority-queue-link"
               >
                 <span className="priority-queue-rank mono" aria-hidden="true">

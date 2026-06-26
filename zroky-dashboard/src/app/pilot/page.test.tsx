@@ -23,13 +23,15 @@ vi.mock("next/link", () => ({
 vi.mock("next/image", () => ({
   default: ({
     alt,
+    priority,
     ...props
   }: {
     alt: string;
+    priority?: boolean;
     [key: string]: unknown;
   }) => (
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt={alt} {...props} />
+    <img alt={alt} data-priority={priority ? "true" : undefined} {...props} />
   ),
 }));
 
@@ -52,7 +54,7 @@ describe("PilotPage", () => {
       "/settings/keys?intent=protect-agent&source=pilot&plan=pro"
     );
     expect(screen.getByRole("link", { name: "Open connector setup" }).getAttribute("href")).toBe(
-      "/settings/integrations#ledger-refund-connector"
+      "/integrations#ledger-refund-connector"
     );
     expect(screen.getByRole("link", { name: "View test endpoints" }).getAttribute("href")).toBe(
       "#saved-connector-tests"
@@ -61,7 +63,7 @@ describe("PilotPage", () => {
     expect(screen.getByText(/--scenario customer-record/)).toBeInTheDocument();
     expect(screen.getByText(/\/v1\/integrations\/system-of-record\/ledger-refund\/test/)).toBeInTheDocument();
     expect(screen.getByText(/\/v1\/integrations\/system-of-record\/customer-record\/test/)).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Configure connector" }).some((link) => link.getAttribute("href") === "/settings/integrations#customer-record-connector")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Configure connector" }).some((link) => link.getAttribute("href") === "/integrations#customer-record-connector")).toBe(true);
     expect(screen.getByText("unsafe_action_stopped")).toBeInTheDocument();
     expect(screen.getByText("connector_configured")).toBeInTheDocument();
     expect(screen.getByText("connector_health_verified")).toBeInTheDocument();

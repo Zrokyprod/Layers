@@ -16,6 +16,8 @@ import {
   getOutcomeSummary,
   getOutcomeReconciliationSummary,
   listOutcomeReconciliations,
+  getSourceMutationSummary,
+  listUnreceiptedSourceMutations,
   getReplaySavings,
   ingestOutcome,
   listAblationJobs,
@@ -34,6 +36,8 @@ import {
   type OutcomeReconciliationListResponse,
   type OutcomeReconciliationSummaryResponse,
   type OutcomeReconciliationVerdict,
+  type SourceMutationListResponse,
+  type SourceMutationSummaryResponse,
   type ReplaySavingsResponse,
   type OutcomeIngestPayload,
   type OutcomeView,
@@ -78,6 +82,7 @@ import {
   acknowledgeAlert,
   resolveAlert,
   reopenAlert,
+  retrySlackAlert,
   getAlertDetail,
   getMe,
   listMyProjects,
@@ -384,6 +389,17 @@ export function useReopenAlert() {
   return useMutation<AlertItemResponse, Error, string>({
     mutationFn: reopenAlert,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+}
+
+export function useRetrySlackAlert() {
+  const qc = useQueryClient();
+  return useMutation<AlertItemResponse, Error, string>({
+    mutationFn: retrySlackAlert,
+    onSuccess: (alert) => {
+      qc.invalidateQueries({ queryKey: ["alerts"] });
+      qc.invalidateQueries({ queryKey: ["alert", alert.alert_id] });
+    },
   });
 }
 
@@ -752,6 +768,31 @@ export function useOutcomeReconciliations(
     queryFn: ({ signal }) => listOutcomeReconciliations({ verdict, limit }, signal),
     staleTime: 15_000,
     refetchInterval: verdict === "mismatched" || verdict === "not_verified" ? 15_000 : 30_000,
+    ...options,
+  });
+}
+
+export function useSourceMutationSummary(
+  options?: Partial<UseQueryOptions<SourceMutationSummaryResponse, Error>>,
+) {
+  return useQuery<SourceMutationSummaryResponse, Error>({
+    queryKey: ["outcomes", "reconciliation", "source-mutations", "summary"],
+    queryFn: ({ signal }) => getSourceMutationSummary(signal),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    ...options,
+  });
+}
+
+export function useUnreceiptedSourceMutations(
+  limit = 50,
+  options?: Partial<UseQueryOptions<SourceMutationListResponse, Error>>,
+) {
+  return useQuery<SourceMutationListResponse, Error>({
+    queryKey: ["outcomes", "reconciliation", "source-mutations", "unreceipted", limit],
+    queryFn: ({ signal }) => listUnreceiptedSourceMutations(limit, signal),
+    staleTime: 15_000,
+    refetchInterval: 15_000,
     ...options,
   });
 }

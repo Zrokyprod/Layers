@@ -1,29 +1,19 @@
 import { expect, test } from "@playwright/test";
 
-import { expectDashboardShell, expectVisibleTexts, readSeed } from "./helpers";
+import { expectDashboardShell, expectNoHorizontalOverflow, expectVisibleTexts } from "./helpers";
 
 test.describe("dashboard modules", () => {
   test("all primary dashboard routes render with seeded backend data", async ({ page }) => {
     test.setTimeout(180_000);
 
-    const seed = readSeed();
     const routes = [
       { path: "/home", labels: ["Agent action accountability", "Decision queue", "Evidence Pack", "System-of-record health"] },
-      { path: "/agents", labels: ["Outcome mismatch", "Needs your decision", "Selected agent proof", "System-of-record health"] },
-      { path: "/calls", labels: ["Call Evidence", "refund-support-agent", "failed"] },
-      { path: `/calls/${seed.call_id}`, labels: [seed.call_id, "refund-support-agent", "Where is my refund?"] },
-      { path: "/issues", labels: ["Failures", "selecting the wrong tool", "Tool Not Called"] },
-      { path: `/issues/${seed.issue_id}`, labels: ["selecting the wrong tool", "Tool Not Called", "get_refund_status"] },
-      { path: "/goldens", labels: ["Fixtures", "Refund status protected flow"] },
-      { path: `/goldens/${seed.golden_set_id}`, labels: ["Refund status protected flow", "RF-1001"] },
-      { path: "/ci-gates", labels: ["CI Gates", "demo-break-r"] },
-      { path: `/ci-gates/${seed.ci_run_id}`, labels: ["Regression CI", "Regression CI blocked this change.", "demo-break-r"] },
-      { path: "/cost", labels: ["Cost", "Budget", "refund-support-agent"] },
-      { path: "/trace", labels: ["Traces", seed.trace_id, "refund-support-agent"] },
-      { path: `/trace/${seed.trace_id}`, labels: [seed.call_id, "refund-support-agent", "Where is my refund?", "TOOL_NOT_CALLED"] },
-      { path: "/replay", labels: ["Replay", "demo-replay-refu", "verified fix"] },
-      { path: `/replay/${seed.replay_run_id}`, labels: ["verified", "Refund", "RF-1001"] },
-      { path: "/alerts", labels: ["Alerts", "Refund status tool skipped"] },
+      { path: "/agents", labels: ["Outcome mismatch", "Needs review", "Protected agent queue", "System-of-record health"] },
+      { path: "/approvals", labels: ["Risky actions held before commit", "Held action queue", "Risky action control"] },
+      { path: "/outcomes", labels: ["Every risky action must end", "SDK helper and webhook bridge"] },
+      { path: "/evidence", labels: ["Evidence Pack is exportable", "Policy gate recorded"] },
+      { path: "/integrations", labels: ["Connector coverage", "Generic REST/OpenAPI verifier", "System-of-record connectors"] },
+      { path: "/policies", labels: ["Policies define what an agent may attempt", "Hold sensitive actions"] },
     ];
 
     for (const route of routes) {
@@ -32,9 +22,60 @@ test.describe("dashboard modules", () => {
       await expectVisibleTexts(page, route.labels);
     }
 
-    for (const retiredRoute of ["/drift", "/labs", "/labs/agents", "/labs/drift"]) {
+    for (const retiredRoute of [
+      "/alerts",
+      "/calls",
+      "/ci-gates",
+      "/contracts",
+      "/cost",
+      "/goldens",
+      "/issues",
+      "/replay",
+      "/trace",
+      "/drift",
+      "/labs",
+      "/labs/agents",
+      "/labs/drift",
+    ]) {
       await page.goto(retiredRoute);
       await expect(page).toHaveURL(/\/home$/);
     }
+  });
+
+  test("system-of-record connectors expose PostgreSQL read proof controls", async ({ page }) => {
+    test.setTimeout(180_000);
+
+    await page.goto("/integrations");
+    await expectDashboardShell(page);
+
+    const postgresCard = page.locator("#postgres-read-connector");
+    await expect(postgresCard.getByRole("heading", { name: "PostgreSQL read connector" })).toBeVisible();
+    await postgresCard.scrollIntoViewIfNeeded();
+
+    await expect(postgresCard.getByLabel("PostgreSQL read connector status")).toBeVisible();
+    await expect(postgresCard.getByLabel("Database URL")).toBeVisible();
+    await expect(postgresCard.getByLabel("Read-only query")).toBeVisible();
+    await expect(postgresCard.getByLabel("System reference")).toBeVisible();
+    await expect(postgresCard.getByLabel("Query params JSON")).toBeVisible();
+    await expect(postgresCard.getByLabel("Claimed record JSON")).toBeVisible();
+    await expect(postgresCard.getByRole("button", { name: "Save PostgreSQL connector" })).toBeVisible();
+    await expect(postgresCard.getByRole("button", { name: "Run PostgreSQL test reconciliation" })).toBeVisible();
+    await expect(postgresCard.getByRole("button", { name: "Run saved PostgreSQL proof" })).toBeVisible();
+    await expect(postgresCard.getByLabel("PostgreSQL read preflight command")).toContainText(
+      "/v1/integrations/system-of-record/postgres-read/test",
+    );
+    await expect(postgresCard.getByLabel("PostgreSQL read full proof command")).toContainText(
+      "/v1/outcomes/reconciliation/postgres-read/saved",
+    );
+    await expect(postgresCard.getByLabel("PostgreSQL read saved connector test payload")).toContainText(
+      "postgres:tickets:TIC-1001",
+    );
+
+    const cardFitsViewport = await postgresCard.evaluate((card) => {
+      const rect = card.getBoundingClientRect();
+      return rect.left >= -2 && rect.right <= window.innerWidth + 2;
+    });
+    expect(cardFitsViewport).toBeTruthy();
+    await expectNoHorizontalOverflow(page);
   });
 });

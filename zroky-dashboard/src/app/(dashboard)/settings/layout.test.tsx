@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -33,16 +33,19 @@ describe("SettingsLayout", () => {
     navigation.pathname = "/settings";
   });
 
-  it("renders customer-facing settings tabs", () => {
+  it("renders only the direct workspace settings tabs", () => {
     render(
       <SettingsLayout>
         <div>Settings content</div>
       </SettingsLayout>,
     );
 
-    for (const label of ["API keys", "Members", "Plan & Billing", "Evaluation", "Integrations"]) {
+    for (const label of ["Capture keys", "Members", "Plan & Billing", "Workspace"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("link", { name: "Evaluation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Integrations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Connectors" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Providers" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Project" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
@@ -56,10 +59,12 @@ describe("SettingsLayout", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Workspace control plane" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Workspace control loop")).toBeInTheDocument();
-    for (const label of ["Capture key", "Team access", "Spend guard", "Evidence route"]) {
-      expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    const controlLoop = screen.getByLabelText("Workspace control loop");
+    expect(controlLoop).toBeInTheDocument();
+    for (const label of ["Capture key", "Team access", "Spend guard", "Workspace record"]) {
+      expect(within(controlLoop).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("link", { name: /Evidence route/ })).not.toBeInTheDocument();
     expect(screen.getByText("Current section")).toBeInTheDocument();
   });
 
@@ -77,7 +82,7 @@ describe("SettingsLayout", () => {
     expect(screen.getByText("Managed replay vault")).toBeInTheDocument();
   });
 
-  it("keeps Slack child routes active under Integrations", () => {
+  it("does not keep connector redirect aliases in the settings chrome", () => {
     navigation.pathname = "/settings/integrations/slack";
 
     render(
@@ -86,9 +91,9 @@ describe("SettingsLayout", () => {
       </SettingsLayout>,
     );
 
-    expect(screen.getByRole("link", { name: "Integrations" }).className).toContain("settings-tab-link-active");
-    expect(screen.getByRole("link", { name: "Integrations" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getAllByText("Repos, alerts, records").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Integrations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Connectors" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Moved to the Connectors module")).not.toBeInTheDocument();
   });
 
   it("does not include personal account controls in workspace settings", () => {

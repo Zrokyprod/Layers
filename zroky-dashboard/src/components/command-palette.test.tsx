@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DASHBOARD_PRIMARY_ROUTES } from "@/lib/dashboard-route-contract";
 
 import { CommandPalette } from "./command-palette";
 
@@ -21,7 +23,9 @@ describe("CommandPalette", () => {
   it("uses account profile command instead of settings profile", async () => {
     render(<CommandPalette />);
 
-    window.dispatchEvent(new CustomEvent("open-command-palette"));
+    act(() => {
+      window.dispatchEvent(new CustomEvent("open-command-palette"));
+    });
 
     const input = await screen.findByPlaceholderText(/Search pages and actions/);
     fireEvent.change(input, { target: { value: "profile" } });
@@ -36,7 +40,9 @@ describe("CommandPalette", () => {
   it("hides labs, agent console, and drift from primary command discovery", async () => {
     render(<CommandPalette />);
 
-    window.dispatchEvent(new CustomEvent("open-command-palette"));
+    act(() => {
+      window.dispatchEvent(new CustomEvent("open-command-palette"));
+    });
 
     const input = await screen.findByPlaceholderText(/Search pages and actions/);
     fireEvent.change(input, { target: { value: "agent" } });
@@ -58,23 +64,21 @@ describe("CommandPalette", () => {
   it("promotes action-accountability routes and hides deprecated customer surfaces", async () => {
     render(<CommandPalette />);
 
-    window.dispatchEvent(new CustomEvent("open-command-palette"));
+    act(() => {
+      window.dispatchEvent(new CustomEvent("open-command-palette"));
+    });
 
     expect(await screen.findByText("Go to Home")).toBeInTheDocument();
-    expect(screen.getByText("Go to Agents")).toBeInTheDocument();
-    expect(screen.getByText("Go to Approvals")).toBeInTheDocument();
-    expect(screen.getByText("Go to Outcomes")).toBeInTheDocument();
-    expect(screen.getByText("Go to Evidence")).toBeInTheDocument();
-    expect(screen.getByText("Go to Connectors")).toBeInTheDocument();
-    expect(screen.getByText("Go to Policies")).toBeInTheDocument();
-    expect(screen.getByText("Go to Projects")).toBeInTheDocument();
-    expect(screen.getByText("Go to Settings")).toBeInTheDocument();
-    expect(screen.getByText(/Settings.*API Keys/)).toBeInTheDocument();
-    expect(screen.getByText(/Settings.*Connectors/)).toBeInTheDocument();
+    for (const route of DASHBOARD_PRIMARY_ROUTES) {
+      expect(screen.getByText(`Go to ${route.label}`)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/Settings.*Capture keys/)).toBeInTheDocument();
+    expect(screen.getByText(/Settings.*Workspace/)).toBeInTheDocument();
     expect(screen.getByText(/Connectors.*Slack/)).toBeInTheDocument();
     expect(screen.queryByText(/Settings.*Providers/)).not.toBeInTheDocument();
 
     expect(screen.queryByText("Go to Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go to Projects")).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Incidents")).not.toBeInTheDocument();
     expect(screen.queryByText("Go to Replays")).not.toBeInTheDocument();
     expect(screen.queryByText("Engineering - Contracts")).not.toBeInTheDocument();

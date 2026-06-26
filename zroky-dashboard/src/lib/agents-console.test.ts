@@ -176,7 +176,7 @@ describe("buildTimelineEntries", () => {
 
     const result = buildTimelineEntries(issue, "refund-agent", [makeCall()]);
 
-    expect(result[0]?.href).toBe("/calls/call-9");
+    expect(result[0]?.href).toBe("/evidence");
     expect(result[0]?.latencyMs).toBe(2420);
     expect(result[0]?.label).toBe("refund workflow");
   });
@@ -184,7 +184,7 @@ describe("buildTimelineEntries", () => {
   it("falls back to recent calls when there is no issue evidence", () => {
     const result = buildTimelineEntries(null, null, [makeCall({ call_id: "call-7", latency_ms: 980 })]);
 
-    expect(result[0]?.href).toBe("/calls/call-7");
+    expect(result[0]?.href).toBe("/evidence");
     expect(result[0]?.latencyMs).toBe(980);
     expect(result[0]?.label).toBe("refund-agent");
   });

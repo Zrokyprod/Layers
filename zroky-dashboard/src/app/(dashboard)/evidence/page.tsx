@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileJson, Printer, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Download, FileJson, Fingerprint, Printer, ShieldCheck } from "lucide-react";
 
 import {
   getRuntimePolicyEvidencePack,
@@ -114,10 +114,10 @@ function verificationCopy(pack: RuntimePolicyEvidencePackResponse): string {
     return "Outcome verified against the system of record.";
   }
   if (pack.verification_status === "fail") {
-    return "Outcome proof failed. Check the reconciliation record before trusting this action.";
+    return "Outcome verification failed. Check the reconciliation record before trusting this action.";
   }
   if (pack.outcome_reconciliation.length === 0) {
-    return "No system-of-record outcome proof is linked yet.";
+    return "No system-of-record outcome verification is linked yet.";
   }
   return "Outcome is not verified yet.";
 }
@@ -144,6 +144,135 @@ function verificationState(value: string | null) {
 
 function pillClass(value: string | null) {
   return `evidence-state-pill evidence-state-${verificationState(value)}`;
+}
+
+type EvidenceHeroState = {
+  badge: string;
+  copy: string;
+  title: string;
+  tone: "danger" | "neutral" | "success" | "warning";
+};
+
+function evidenceHeroState({
+  error,
+  failedCount,
+  loading,
+  proofMissingCount,
+  readyPackCount,
+  totalRows,
+}: {
+  error: unknown;
+  failedCount: number;
+  loading: boolean;
+  proofMissingCount: number;
+  readyPackCount: number;
+  totalRows: number;
+}): EvidenceHeroState {
+  if (error) {
+    return {
+      badge: "Unavailable",
+      copy: "Evidence Packs cannot be trusted until the runtime decision index and outcome reconciliation index load cleanly.",
+      title: "Evidence ledger unavailable",
+      tone: "danger",
+    };
+  }
+
+  if (loading) {
+    return {
+      badge: "Syncing",
+      copy: "Loading protected decisions, outcome checks, and exportable Evidence Pack metadata.",
+      title: "Loading evidence ledger",
+      tone: "neutral",
+    };
+  }
+
+  if (totalRows === 0) {
+    return {
+      badge: "Setup required",
+      copy: "Run a protected action and connect a system-of-record reconciliation before an Evidence Pack can be exported.",
+      title: "No Evidence Packs yet",
+      tone: "warning",
+    };
+  }
+
+  if (failedCount > 0) {
+    return {
+      badge: "Exception",
+      copy: "At least one protected action has failed or mismatched outcome verification. Review the selected Evidence Pack before customer handoff.",
+      title: "Evidence exception needs review",
+      tone: "danger",
+    };
+  }
+
+  if (proofMissingCount > 0) {
+    return {
+      badge: "Needs verification",
+      copy: "Some runtime decisions are linked but still missing matched system-of-record outcome verification.",
+      title: "Evidence incomplete before handoff",
+      tone: "warning",
+    };
+  }
+
+  return {
+    badge: "Ready",
+    copy:
+      readyPackCount > 0
+        ? "Runtime decisions, approval audit, outcome reconciliation, and evidence hash are ready to export."
+        : "Evidence records are loaded. Select a linked decision to prepare an auditor-ready pack.",
+    title: readyPackCount > 0 ? "Evidence ready for handoff" : "Evidence ledger ready",
+    tone: "success",
+  };
+}
+
+function EvidenceExportContract() {
+  const items = [
+    {
+      label: "Runtime decision",
+      title: "Policy gate recorded",
+      body: "Allow, hold, block, approval, or rejection must be linked to the action.",
+      status: "pass",
+    },
+    {
+      label: "Approval audit",
+      title: "Human decision trace",
+      body: "Held actions need resolver, timestamp, reason, and scope hash.",
+      status: "pass",
+    },
+    {
+      label: "Outcome proof",
+      title: "Real system checked",
+      body: "Export-ready packs require matched outcome verification; missing proof stays not_verified.",
+      status: "not_verified",
+    },
+    {
+      label: "Evidence hash",
+      title: "Tamper-evident export",
+      body: "JSON export includes the hash and excluded fields used for regeneration.",
+      status: "pass",
+    },
+  ];
+
+  return (
+    <section className="panel evidence-export-contract" aria-label="Evidence Pack export contract">
+      <div className="evidence-export-contract-head">
+        <div>
+          <span className="eyebrow">Export contract</span>
+          <h2>Evidence Pack is exportable only when control, audit, outcome, and hash are present.</h2>
+          <p>Matched means customer-ready. Mismatched or not_verified stays visible but should not be used as proof of success.</p>
+        </div>
+      </div>
+      <div className="evidence-export-contract-grid">
+        {items.map((item) => (
+          <article key={item.label}>
+            <span className={pillClass(item.status)}>{statusLabel(item.status)}</span>
+            <strong>{item.label}</strong>
+            <em>{item.title}</em>
+            <small>{item.body}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function EvidencePackDetail({
@@ -176,7 +305,7 @@ function EvidencePackDetail({
           <p>
             {decision
               ? `${decision.agent_name ?? "unknown agent"} / ${actionClassFor(decision)} / ${decisionId}`
-              : "Loading decision, policy, approval, outcome, and hash proof."}
+              : "Loading policy decision, approval audit, real outcome, and evidence hash."}
           </p>
         </div>
         <div className="evidence-pack-actions">
@@ -196,7 +325,7 @@ function EvidencePackDetail({
             onClick={() => onDownload(decisionId, pack)}
           >
             <Download aria-hidden="true" />
-            {isDownloading ? "Downloading..." : "Download JSON"}
+            {isDownloading ? "Exporting..." : "Export Evidence JSON"}
           </button>
         </div>
       </header>
@@ -206,15 +335,15 @@ function EvidencePackDetail({
       ) : error ? (
         <div className="evidence-pack-unavailable">
           <span className={pillClass("not_verified")}>not_verified</span>
-          <strong>Proof unavailable</strong>
+          <strong>Evidence Pack unavailable</strong>
           <p>{error.message || "Evidence Pack could not load for this decision."}</p>
         </div>
       ) : pack ? (
         <>
-          <section className="evidence-print-cover" aria-label="Customer proof report">
+          <section className="evidence-print-cover" aria-label="Evidence Pack report">
             <div>
               <span>Zroky Evidence Pack</span>
-              <strong>Customer proof report</strong>
+              <strong>Evidence Pack report</strong>
               <p>{title}</p>
             </div>
             <dl>
@@ -239,7 +368,7 @@ function EvidencePackDetail({
 
           <section className={`evidence-pack-status evidence-pack-status-${verificationState(pack.verification_status)}`}>
             <div>
-              <span className="eyebrow">Verification</span>
+              <span className="eyebrow">Outcome verification</span>
               <strong>{humanize(pack.verification_status)}</strong>
               <p>{verificationCopy(pack)}</p>
             </div>
@@ -268,20 +397,28 @@ function EvidencePackDetail({
               <dd>{pack.schema_version}</dd>
             </div>
             <div>
-              <dt>Trace</dt>
+              <dt>Hash algorithm</dt>
+              <dd>{pack.hash_algorithm}</dd>
+            </div>
+            <div>
+              <dt>Hash excludes</dt>
+              <dd>{pack.hash_payload_excludes.join(", ") || "nothing"}</dd>
+            </div>
+            <div>
+              <dt>Trace evidence</dt>
               <dd>
                 {pack.decision.trace_id ? (
-                  <Link href={`/trace/${encodeURIComponent(pack.decision.trace_id)}`}>{pack.decision.trace_id}</Link>
+                  <Link href="/evidence">{pack.decision.trace_id}</Link>
                 ) : (
                   "-"
                 )}
               </dd>
             </div>
             <div>
-              <dt>Call</dt>
+              <dt>Call evidence</dt>
               <dd>
                 {pack.decision.call_id ? (
-                  <Link href={`/calls/${encodeURIComponent(pack.decision.call_id)}`}>{pack.decision.call_id}</Link>
+                  <Link href="/evidence">{pack.decision.call_id}</Link>
                 ) : (
                   "-"
                 )}
@@ -291,7 +428,7 @@ function EvidencePackDetail({
 
           <section className="evidence-pack-section">
             <div className="evidence-pack-section-heading">
-              <h3>Decision</h3>
+              <h3>Policy decision</h3>
               <span>{humanize(pack.decision.decision)} / {humanize(pack.decision.status)}</span>
             </div>
             <dl className="evidence-pack-proof-grid compact">
@@ -325,7 +462,7 @@ function EvidencePackDetail({
 
           <section className="evidence-pack-section">
             <div className="evidence-pack-section-heading">
-              <h3>Policy snapshot</h3>
+              <h3>Mandate snapshot</h3>
               <span>Mandate at decision time</span>
             </div>
             <pre>{compactJson(pack.decision.policy_snapshot)}</pre>
@@ -358,14 +495,14 @@ function EvidencePackDetail({
 
           <section className="evidence-pack-section">
             <div className="evidence-pack-section-heading">
-              <h3>Outcome reconciliation</h3>
+              <h3>Real outcome reconciliation</h3>
               <span>{outcomes.length} linked check{outcomes.length === 1 ? "" : "s"}</span>
             </div>
             {outcomes.length === 0 ? (
               <div className="evidence-pack-notice">
                 <span className={pillClass("not_verified")}>not_verified</span>
                 <strong>Missing evidence</strong>
-                <p>No matched system-of-record outcome is linked to this decision yet.</p>
+                <p>No matched system-of-record outcome verification is linked to this decision yet.</p>
               </div>
             ) : (
               <div className="evidence-pack-outcomes">
@@ -399,15 +536,15 @@ function EvidencePackDetail({
                     </dl>
                     <div className="evidence-pack-json-grid">
                       <section>
-                        <h4>Claimed</h4>
+                        <h4>Agent claim</h4>
                         <pre>{compactJson(outcome.claimed)}</pre>
                       </section>
                       <section>
-                        <h4>Actual</h4>
+                        <h4>Actual system record</h4>
                         <pre>{compactJson(outcome.actual)}</pre>
                       </section>
                       <section>
-                        <h4>Comparison</h4>
+                        <h4>Field comparison</h4>
                         <pre>{compactJson(outcome.comparison)}</pre>
                       </section>
                     </div>
@@ -515,8 +652,13 @@ export default function EvidencePage() {
     [rows, selectedDecisionId],
   );
   const linkedCount = rows.filter((row) => row.decisionId).length;
+  const readyPackCount = rows.filter((row) => row.decisionId && row.outcomeVerdict === "matched").length;
   const matchedCount = rows.filter((row) => row.outcomeVerdict === "matched").length;
-  const notVerifiedCount = rows.filter((row) => row.outcomeVerdict === "not_verified" || !row.outcomeVerdict).length;
+  const failedCount = rows.filter((row) => verificationState(row.outcomeVerdict ?? row.decisionStatus ?? row.decision) === "fail").length;
+  const unlinkedCount = rows.filter((row) => !row.decisionId).length;
+  const proofMissingCount = rows.filter(
+    (row) => !row.decisionId || row.outcomeVerdict === "not_verified" || !row.outcomeVerdict,
+  ).length;
   const loading = decisionsQuery.isLoading || outcomesQuery.isLoading;
   const error = decisionsQuery.error || outcomesQuery.error;
   const evidencePack = evidencePackQuery.data;
@@ -525,18 +667,34 @@ export default function EvidencePage() {
   const focusedDownloading = Boolean(selectedDecisionId && downloadingDecisionId === selectedDecisionId);
   const focusedActionAvailable = Boolean(focusedRow || evidencePack);
   const focusedCopy = evidencePack
-    ? "Full decision, policy, approval, outcome, and hash proof is loaded below."
+    ? "Policy decision, approval audit, real outcome, and evidence hash are loaded below."
     : evidencePackQuery.isLoading
       ? "Loading the linked Evidence Pack from runtime and outcome records."
       : evidencePackError
-        ? "Evidence Pack API could not load this decision. Keep this action not_verified until proof is available."
+        ? "Evidence Pack API could not load this decision. Keep this action not_verified until outcome verification is available."
         : focusedRow
-          ? "Linked from a protected-agent cockpit row. Download this exact customer or auditor proof pack."
+          ? "Linked from a protected-agent cockpit row. Export this exact customer or auditor Evidence Pack."
           : "This decision is not present in the current evidence window. Refresh capture data or widen backend evidence history.";
+  const heroState = evidenceHeroState({
+    error,
+    failedCount,
+    loading,
+    proofMissingCount,
+    readyPackCount,
+    totalRows: rows.length,
+  });
 
   useEffect(() => {
     setSelectedDecisionId(selectedDecisionIdFromLocation());
   }, []);
+
+  useEffect(() => {
+    if (selectedDecisionId || loading || rows.length === 0) return;
+    const firstLinkedRow = rows.find((row) => row.decisionId);
+    if (firstLinkedRow?.decisionId) {
+      setSelectedDecisionId(firstLinkedRow.decisionId);
+    }
+  }, [loading, rows, selectedDecisionId]);
 
   async function downloadEvidence(decisionId: string, pack?: RuntimePolicyEvidencePackResponse) {
     setMessage("");
@@ -544,7 +702,7 @@ export default function EvidencePage() {
     try {
       const evidencePackToDownload = pack ?? await getRuntimePolicyEvidencePack(decisionId);
       downloadJsonFile(evidencePackToDownload, `zroky-evidence-${safeFilePart(decisionId)}.json`);
-      setMessage("Evidence Pack JSON downloaded.");
+      setMessage("Evidence Pack JSON exported.");
     } catch (downloadError) {
       setMessage(downloadError instanceof Error ? downloadError.message : "Evidence Pack download failed.");
     } finally {
@@ -556,172 +714,197 @@ export default function EvidencePage() {
     <div className="dashboard-page evidence-page evidence-ledger-page">
       {message ? <div className="alert-strip evidence-alert-strip">{message}</div> : null}
 
-      <section className="page-header evidence-hero">
+      <section className="page-header evidence-hero" data-tone={heroState.tone}>
         <div className="evidence-hero-copy">
-          <span className="eyebrow">Audit proof</span>
-          <h1>Evidence ledger</h1>
-          <p>Runtime decisions, system-of-record outcomes, and exportable Evidence Packs for customer or auditor proof.</p>
+          <span className="eyebrow">Evidence Pack export</span>
+          <h1>{heroState.title}</h1>
+          <p>{heroState.copy}</p>
         </div>
-        <div className="evidence-hero-proof" aria-label="Evidence export summary">
-          <span>Export-ready packs</span>
-          <strong>{linkedCount}</strong>
-          <small>
-            {matchedCount} matched outcomes / {notVerifiedCount} not_verified
-          </small>
+        <div className="evidence-hero-rail">
+          <span className="evidence-verdict-pill">{heroState.badge}</span>
+          <div className="evidence-hero-proof" aria-label="Evidence export summary">
+            <span>Export-ready packs</span>
+            <strong>{readyPackCount}</strong>
+            <small>
+              {matchedCount} matched outcomes / {proofMissingCount} needs verification
+            </small>
+          </div>
         </div>
-        <div className="actions">
+        <div className="actions evidence-hero-actions">
           <Link href="/approvals" className="btn btn-soft">Open approvals</Link>
           <Link href="/outcomes" className="btn btn-primary">Open outcomes</Link>
         </div>
       </section>
 
-      <section className="settings-summary-grid evidence-summary-grid" aria-label="Evidence summary">
-        <article className="panel settings-summary-card evidence-summary-card">
+      <section className="settings-summary-grid evidence-summary-grid evidence-metric-grid" aria-label="Evidence summary">
+        <article className="panel settings-summary-card evidence-summary-card evidence-metric-card tone-success">
+          <ShieldCheck aria-hidden="true" />
+          <span>Export-ready packs</span>
+          <strong>{readyPackCount}</strong>
+          <small>Matched decisions ready for auditor or customer handoff.</small>
+        </article>
+        <article className="panel settings-summary-card evidence-summary-card evidence-metric-card">
           <FileJson aria-hidden="true" />
-          <span>Exportable packs</span>
+          <span>Linked decisions</span>
           <strong>{linkedCount}</strong>
           <small>Rows with a runtime policy decision id can export a full Evidence Pack.</small>
         </article>
-        <article className="panel settings-summary-card evidence-summary-card">
-          <ShieldCheck aria-hidden="true" />
-          <span>Matched outcomes</span>
-          <strong>{matchedCount}</strong>
-          <small>System-of-record checks that matched the agent claim.</small>
-        </article>
-        <article className="panel settings-summary-card evidence-summary-card">
+        <article className="panel settings-summary-card evidence-summary-card evidence-metric-card tone-warning">
           <AlertTriangle aria-hidden="true" />
-          <span>Needs proof</span>
-          <strong>{notVerifiedCount}</strong>
-          <small>Rows without matched outcome proof stay not_verified.</small>
+          <span>Needs verification</span>
+          <strong>{proofMissingCount}</strong>
+          <small>Rows without matched outcome verification stay not_verified.</small>
+        </article>
+        <article className="panel settings-summary-card evidence-summary-card evidence-metric-card">
+          <Fingerprint aria-hidden="true" />
+          <span>Ledger rows</span>
+          <strong>{rows.length}</strong>
+          <small>{unlinkedCount} unlinked outcome{unlinkedCount === 1 ? "" : "s"} still need a decision id.</small>
         </article>
       </section>
 
-      {selectedDecisionId ? (
-        <section
-          className={`panel evidence-focus-panel${!loading && !focusedRow && !evidencePack ? " is-missing" : ""}`}
-          aria-label="Focused Evidence Pack"
-        >
-          <div className="evidence-focus-copy">
-            <span className="eyebrow">Focused Evidence Pack</span>
-            <strong>{selectedDecisionId}</strong>
-            <p>{focusedCopy}</p>
-          </div>
-          <dl className="evidence-focus-meta">
-            <div>
-              <dt>Status</dt>
-              <dd>
-                <span className={pillClass(focusedStatus)}>{statusLabel(focusedStatus)}</span>
-              </dd>
-            </div>
-            <div>
-              <dt>System</dt>
-              <dd>{focusedRow?.systemRef ?? "pending"}</dd>
-            </div>
-            <div>
-              <dt>Checked</dt>
-              <dd>{formatDateTime(focusedRow?.createdAt ?? null)}</dd>
-            </div>
-          </dl>
-          <button
-            className="btn btn-primary evidence-download-button evidence-focus-download"
-            type="button"
-            disabled={!focusedActionAvailable || focusedDownloading}
-            onClick={() => selectedDecisionId && focusedActionAvailable && void downloadEvidence(selectedDecisionId, evidencePack)}
-          >
-            <Download aria-hidden="true" />
-            {focusedDownloading ? "Downloading..." : focusedActionAvailable ? "Download JSON" : "Not available"}
-          </button>
-        </section>
-      ) : null}
+      <EvidenceExportContract />
 
-      {selectedDecisionId ? (
-        <EvidencePackDetail
-          decisionId={selectedDecisionId}
-          pack={evidencePack}
-          isLoading={evidencePackQuery.isLoading}
-          error={evidencePackError}
-          isDownloading={focusedDownloading}
-          onDownload={(decisionId, pack) => void downloadEvidence(decisionId, pack)}
-        />
-      ) : null}
+      <div className="evidence-workspace">
+        <section className="panel evidence-ledger-panel">
+          <header className="panel-header evidence-ledger-head">
+            <div>
+              <span className="eyebrow">Evidence Pack queue</span>
+              <h3>Evidence Pack ledger</h3>
+              <p>Select a protected decision, then review the exact exportable Evidence Pack on the right.</p>
+            </div>
+            <strong>{rows.length} rows</strong>
+          </header>
 
-      <section className="panel evidence-ledger-panel">
-        <header className="panel-header">
-          <div>
-            <h3>Evidence library</h3>
-            <p>Download proof from linked runtime decisions and review outcome status before customer handoff.</p>
-          </div>
-        </header>
-
-        {loading ? (
-          <div className="empty-state evidence-empty-state">Loading evidence...</div>
-        ) : error ? (
-          <div className="empty-state evidence-empty-state">Evidence could not load. Verify backend connectivity and project access.</div>
-        ) : rows.length === 0 ? (
-          <div className="empty-state evidence-empty-state">No evidence yet. Run a protected action, approval, or connector reconciliation first.</div>
-        ) : (
-          <div className="list evidence-ledger-list">
-            {rows.map((row) => {
-              const status = row.outcomeVerdict ?? row.decisionStatus ?? row.decision;
-              const title = row.agentName ?? row.systemRef ?? row.decisionId ?? "Unlinked outcome";
-              const subtitle = [row.actionType, row.sourceLabel, row.systemRef].filter(Boolean).join(" - ");
-              const isDownloading = Boolean(row.decisionId) && downloadingDecisionId === row.decisionId;
-              const state = verificationState(status);
-              const isFocused = Boolean(row.decisionId && row.decisionId === selectedDecisionId);
-              return (
-                <div
-                  className="list-row evidence-ledger-row"
-                  data-focused={isFocused ? "true" : undefined}
-                  data-state={state}
-                  id={row.decisionId ? `evidence-${safeFilePart(row.decisionId)}` : undefined}
-                  aria-current={isFocused ? "true" : undefined}
-                  key={row.key}
-                >
-                  <div className="list-main evidence-ledger-main">
-                    <div className="evidence-ledger-titleline">
-                      <strong>{title}</strong>
-                      <span className={pillClass(status)}>{statusLabel(status)}</span>
+          {loading ? (
+            <div className="empty-state evidence-empty-state">Loading evidence...</div>
+          ) : error ? (
+            <div className="empty-state evidence-empty-state">Evidence could not load. Verify backend connectivity and project access.</div>
+          ) : rows.length === 0 ? (
+            <div className="empty-state evidence-empty-state">No evidence yet. Run a protected action, approval, or connector reconciliation first.</div>
+          ) : (
+            <div className="list evidence-ledger-list">
+              {rows.map((row) => {
+                const status = row.outcomeVerdict ?? row.decisionStatus ?? row.decision;
+                const title = row.agentName ?? row.systemRef ?? row.decisionId ?? "Unlinked outcome";
+                const subtitle = [row.actionType, row.sourceLabel, row.systemRef].filter(Boolean).join(" - ");
+                const isDownloading = Boolean(row.decisionId) && downloadingDecisionId === row.decisionId;
+                const state = verificationState(status);
+                const isFocused = Boolean(row.decisionId && row.decisionId === selectedDecisionId);
+                return (
+                  <div
+                    className="list-row evidence-ledger-row"
+                    data-focused={isFocused ? "true" : undefined}
+                    data-state={state}
+                    id={row.decisionId ? `evidence-${safeFilePart(row.decisionId)}` : undefined}
+                    aria-current={isFocused ? "true" : undefined}
+                    key={row.key}
+                  >
+                    <div className="list-main evidence-ledger-main">
+                      <div className="evidence-ledger-titleline">
+                        <strong>{title}</strong>
+                        <span className={pillClass(status)}>{statusLabel(status)}</span>
+                      </div>
+                      <span>{subtitle || "Evidence row"}</span>
+                      <dl className="evidence-ledger-meta">
+                        <div>
+                          <dt>Decision</dt>
+                          <dd>
+                            <code>{row.decisionId ?? "not_linked"}</code>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>System</dt>
+                          <dd>{row.systemRef ?? "pending"}</dd>
+                        </div>
+                        <div>
+                          <dt>Checked</dt>
+                          <dd>{formatDateTime(row.createdAt)}</dd>
+                        </div>
+                      </dl>
                     </div>
-                    <span>{subtitle || "Evidence row"}</span>
-                    <dl className="evidence-ledger-meta">
-                      <div>
-                        <dt>Decision</dt>
-                        <dd>
-                          <code>{row.decisionId ?? "not_linked"}</code>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>System</dt>
-                        <dd>{row.systemRef ?? "pending"}</dd>
-                      </div>
-                      <div>
-                        <dt>Checked</dt>
-                        <dd>{formatDateTime(row.createdAt)}</dd>
-                      </div>
-                    </dl>
+                    <div className="evidence-row-actions">
+                      {row.decisionId ? (
+                        <Link href={evidencePackHref(row.decisionId)} className="btn btn-soft btn-sm evidence-details-link">
+                          Open Evidence Pack
+                        </Link>
+                      ) : null}
+                      <button
+                        className="btn btn-soft btn-sm evidence-download-button"
+                        type="button"
+                        disabled={!row.decisionId || isDownloading}
+                        onClick={() => row.decisionId && void downloadEvidence(row.decisionId)}
+                      >
+                        <Download aria-hidden="true" />
+                        {isDownloading ? "Exporting..." : row.decisionId ? "Export Evidence JSON" : "Not linked"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="evidence-row-actions">
-                    {row.decisionId ? (
-                      <Link href={evidencePackHref(row.decisionId)} className="btn btn-soft btn-sm evidence-details-link">
-                        Open details
-                      </Link>
-                    ) : null}
-                    <button
-                      className="btn btn-soft btn-sm evidence-download-button"
-                      type="button"
-                      disabled={!row.decisionId || isDownloading}
-                      onClick={() => row.decisionId && void downloadEvidence(row.decisionId)}
-                    >
-                      <Download aria-hidden="true" />
-                      {isDownloading ? "Downloading..." : row.decisionId ? "Download JSON" : "Not linked"}
-                    </button>
-                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <aside className="evidence-proof-column" aria-label="Selected Evidence Pack workspace">
+          {selectedDecisionId ? (
+            <section
+              className={`panel evidence-focus-panel${!loading && !focusedRow && !evidencePack ? " is-missing" : ""}`}
+              aria-label="Focused Evidence Pack"
+            >
+              <div className="evidence-focus-copy">
+                <span className="eyebrow">Selected Evidence Pack</span>
+                <strong>{selectedDecisionId}</strong>
+                <p>{focusedCopy}</p>
+              </div>
+              <dl className="evidence-focus-meta">
+                <div>
+                  <dt>Status</dt>
+                  <dd>
+                    <span className={pillClass(focusedStatus)}>{statusLabel(focusedStatus)}</span>
+                  </dd>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                <div>
+                  <dt>System</dt>
+                  <dd>{focusedRow?.systemRef ?? "pending"}</dd>
+                </div>
+                <div>
+                  <dt>Checked</dt>
+                  <dd>{formatDateTime(focusedRow?.createdAt ?? null)}</dd>
+                </div>
+              </dl>
+              <button
+                className="btn btn-primary evidence-download-button evidence-focus-download"
+                type="button"
+                disabled={!focusedActionAvailable || focusedDownloading}
+                onClick={() => selectedDecisionId && focusedActionAvailable && void downloadEvidence(selectedDecisionId, evidencePack)}
+              >
+                <Download aria-hidden="true" />
+                {focusedDownloading ? "Exporting..." : focusedActionAvailable ? "Export Evidence JSON" : "Not available"}
+              </button>
+            </section>
+          ) : (
+            <section className="panel evidence-focus-panel is-missing" aria-label="Focused Evidence Pack">
+              <div className="evidence-focus-copy">
+                <span className="eyebrow">Selected Evidence Pack</span>
+                <strong>No pack selected</strong>
+                <p>Select a linked runtime decision to load policy decision, approval audit, real outcome, and evidence hash.</p>
+              </div>
+            </section>
+          )}
+
+          {selectedDecisionId ? (
+            <EvidencePackDetail
+              decisionId={selectedDecisionId}
+              pack={evidencePack}
+              isLoading={evidencePackQuery.isLoading}
+              error={evidencePackError}
+              isDownloading={focusedDownloading}
+              onDownload={(decisionId, pack) => void downloadEvidence(decisionId, pack)}
+            />
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }

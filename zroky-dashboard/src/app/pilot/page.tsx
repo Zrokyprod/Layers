@@ -55,7 +55,7 @@ const handoffSteps = [
     Icon: Plug,
     title: "Connect system of record",
     body: "Save a ledger/refund or CRM/customer connector once the partner gives a safe test record and API access.",
-    href: "/settings/integrations#ledger-refund-connector",
+    href: "/integrations#ledger-refund-connector",
     cta: "Open connector setup",
   },
   {
@@ -69,7 +69,7 @@ const handoffSteps = [
     Icon: FileJson,
     title: "Export evidence pack",
     body: "Open latest connector proof, confirm matched outcome and evidence hash, then download the redacted JSON pack.",
-    href: "/settings/integrations#ledger-refund-connector",
+    href: "/integrations#ledger-refund-connector",
     cta: "Open evidence proof",
   },
 ];
@@ -77,7 +77,7 @@ const handoffSteps = [
 const savedConnectorTests = [
   {
     label: "Ledger/refund saved test endpoint",
-    href: "/settings/integrations#ledger-refund-connector",
+    href: "/integrations#ledger-refund-connector",
     command: `curl -X POST "$ZROKY_API_BASE/v1/integrations/system-of-record/ledger-refund/test" \\
   -H "x-api-key: $ZROKY_API_KEY" \\
   -H "Content-Type: application/json" \\
@@ -96,7 +96,7 @@ const savedConnectorTests = [
   },
   {
     label: "CRM/customer saved test endpoint",
-    href: "/settings/integrations#customer-record-connector",
+    href: "/integrations#customer-record-connector",
     command: `curl -X POST "$ZROKY_API_BASE/v1/integrations/system-of-record/customer-record/test" \\
   -H "x-api-key: $ZROKY_API_KEY" \\
   -H "Content-Type: application/json" \\

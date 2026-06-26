@@ -8,16 +8,22 @@ import {
   getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
   getOutcomeReconciliationSummary,
+  getPostgresReadConnectorStatus,
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
   rejectRuntimePolicyDecision,
+  reconcileSavedConnector,
   reconcileSavedCustomerRecord,
+  reconcileSavedGenericRest,
   reconcileSavedLedgerRefund,
+  reconcileSavedPostgresRead,
   saveCustomerRecordConnectorConfig,
   saveLedgerRefundConnectorConfig,
+  savePostgresReadConnectorConfig,
   setRuntimePolicyKillSwitch,
   testCustomerRecordConnector,
   testLedgerRefundConnector,
+  testPostgresReadConnector,
 } from "@/lib/api";
 
 vi.mock("@/lib/auth", () => ({
@@ -417,6 +423,211 @@ describe("outcome reconciliation API client", () => {
     );
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("bearer");
   });
+
+  it("runs saved Generic REST reconciliation without connector secrets in the request", async () => {
+    const check = {
+      id: "check_saved_generic",
+      project_id: "proj_1",
+      call_id: "call_1",
+      trace_id: "trace_1",
+      runtime_policy_decision_id: "decision_1",
+      action_type: "internal_api_mutation",
+      connector_type: "generic_rest_api",
+      system_ref: "generic:ord_1",
+      verdict: "matched",
+      reason: "all_compared_fields_matched",
+      amount_usd: null,
+      currency: null,
+      claimed: {},
+      actual: {},
+      comparison: {},
+      idempotency_key: "saved_generic_rest:decision_1:ord_1",
+      metadata: { source: "saved_connector_runtime" },
+      checked_at: "2026-06-20T00:00:00Z",
+      created_at: "2026-06-20T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(check), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      reconcileSavedGenericRest({
+        runtime_policy_decision_id: "decision_1",
+        action_type: "internal_api_mutation",
+        record_ref: "ord_1",
+        claimed: { record_ref: "ord_1", status: "approved" },
+      }),
+    ).resolves.toMatchObject({ id: "check_saved_generic" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/generic-rest/saved",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          runtime_policy_decision_id: "decision_1",
+          action_type: "internal_api_mutation",
+          record_ref: "ord_1",
+          claimed: { record_ref: "ord_1", status: "approved" },
+        }),
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("bearer");
+  });
+
+  it("runs saved PostgreSQL read reconciliation without database credentials in the request", async () => {
+    const check = {
+      id: "check_saved_postgres",
+      project_id: "proj_1",
+      call_id: "call_1",
+      trace_id: "trace_1",
+      runtime_policy_decision_id: "decision_1",
+      action_type: "ticket_update",
+      connector_type: "postgres_read",
+      system_ref: "postgres:tickets:t_1",
+      verdict: "matched",
+      verification_status: "verified",
+      reason: "all_compared_fields_matched",
+      amount_usd: null,
+      currency: null,
+      claimed: {},
+      actual: {},
+      comparison: {},
+      idempotency_key: "saved_postgres_read:decision_1:digest",
+      metadata: { source: "saved_connector_runtime" },
+      checked_at: "2026-06-20T00:00:00Z",
+      created_at: "2026-06-20T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(check), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      reconcileSavedPostgresRead({
+        runtime_policy_decision_id: "decision_1",
+        action_type: "ticket_update",
+        system_ref: "postgres:tickets:t_1",
+        claimed: { ticket_id: "t_1", status: "closed" },
+        params: { ticket_id: "t_1" },
+      }),
+    ).resolves.toMatchObject({ id: "check_saved_postgres" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/postgres-read/saved",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          runtime_policy_decision_id: "decision_1",
+          action_type: "ticket_update",
+          system_ref: "postgres:tickets:t_1",
+          claimed: { ticket_id: "t_1", status: "closed" },
+          params: { ticket_id: "t_1" },
+        }),
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("postgresql://");
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("password");
+  });
+
+  it("runs the saved connector bridge without connector secrets in the request", async () => {
+    const check = {
+      id: "check_saved_bridge",
+      project_id: "proj_1",
+      call_id: "call_1",
+      trace_id: "trace_1",
+      runtime_policy_decision_id: "decision_1",
+      action_type: "internal_api_mutation",
+      connector_type: "generic_rest_api",
+      system_ref: "generic:ord_1",
+      verdict: "matched",
+      reason: "all_compared_fields_matched",
+      amount_usd: null,
+      currency: null,
+      claimed: {},
+      actual: {},
+      comparison: {},
+      idempotency_key: "saved_generic_rest:decision_1:ord_1",
+      metadata: { source: "saved_connector_runtime", runtime_path: "webhook_bridge" },
+      checked_at: "2026-06-20T00:00:00Z",
+      created_at: "2026-06-20T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(check), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      reconcileSavedConnector({
+        connector: "generic_rest",
+        runtime_policy_decision_id: "decision_1",
+        action_type: "internal_api_mutation",
+        record_ref: "ord_1",
+        claimed: { record_ref: "ord_1", status: "approved" },
+      }),
+    ).resolves.toMatchObject({ id: "check_saved_bridge" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/saved",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          connector: "generic_rest",
+          runtime_policy_decision_id: "decision_1",
+          action_type: "internal_api_mutation",
+          record_ref: "ord_1",
+          claimed: { record_ref: "ord_1", status: "approved" },
+        }),
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("bearer");
+  });
+
+  it("runs the saved connector bridge for PostgreSQL read checks", async () => {
+    const check = {
+      id: "check_saved_postgres_bridge",
+      project_id: "proj_1",
+      call_id: "call_1",
+      trace_id: "trace_1",
+      runtime_policy_decision_id: "decision_1",
+      action_type: "ticket_update",
+      connector_type: "postgres_read",
+      system_ref: "postgres:source-record",
+      verdict: "matched",
+      verification_status: "verified",
+      reason: "all_compared_fields_matched",
+      amount_usd: null,
+      currency: null,
+      claimed: {},
+      actual: {},
+      comparison: {},
+      idempotency_key: "saved_postgres_read:decision_1:digest",
+      metadata: { source: "saved_connector_runtime", runtime_path: "webhook_bridge" },
+      checked_at: "2026-06-20T00:00:00Z",
+      created_at: "2026-06-20T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(check), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      reconcileSavedConnector({
+        connector: "postgres_read",
+        runtime_policy_decision_id: "decision_1",
+        action_type: "ticket_update",
+        claimed: { ticket_id: "t_1", status: "closed" },
+        params: { ticket_id: "t_1" },
+      }),
+    ).resolves.toMatchObject({ id: "check_saved_postgres_bridge" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/outcomes/reconciliation/saved",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          connector: "postgres_read",
+          runtime_policy_decision_id: "decision_1",
+          action_type: "ticket_update",
+          claimed: { ticket_id: "t_1", status: "closed" },
+          params: { ticket_id: "t_1" },
+        }),
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("postgresql://");
+  });
 });
 
 describe("ledger refund connector API client", () => {
@@ -722,6 +933,167 @@ describe("customer record connector API client", () => {
           customer_id: "cus_1",
           claimed: { customer_id: "cus_1", email: "owner@example.com" },
           match_fields: ["customer_id", "email"],
+        }),
+      }),
+    );
+  });
+});
+
+describe("PostgreSQL read connector API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("reads saved connector status without returning the DSN", async () => {
+    const payload = {
+      connected: true,
+      connector_type: "postgres_read",
+      base_url: "postgresql://db.example.com/app",
+      path_template: "/",
+      record_path: null,
+      query: null,
+      has_database_url: true,
+      database_url_last4: "/app",
+      has_read_query: true,
+      read_query_digest: "abc123",
+      has_bearer_token: false,
+      bearer_token_last4: null,
+      last_tested_at: null,
+      readiness: {
+        status: "ready",
+        contract: { adapter: "postgresql_readonly" },
+        checks: { database_url_present: true, read_query_present: true },
+        blockers: [],
+        last_checked_at: "2026-06-21T00:00:00Z",
+      },
+      created_at: "2026-06-21T00:00:00Z",
+      updated_at: "2026-06-21T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getPostgresReadConnectorStatus()).resolves.toMatchObject({
+      connected: true,
+      connector_type: "postgres_read",
+      has_database_url: true,
+      read_query_digest: "abc123",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/postgres-read/status",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("saves encrypted connector config without transforming the DSN", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          connected: true,
+          connector_type: "postgres_read",
+          base_url: "postgresql://db.example.com/app",
+          path_template: "/",
+          record_path: null,
+          query: null,
+          has_database_url: true,
+          database_url_last4: "/app",
+          has_read_query: true,
+          read_query_digest: "abc123",
+          has_bearer_token: false,
+          bearer_token_last4: null,
+          last_tested_at: null,
+          created_at: null,
+          updated_at: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await savePostgresReadConnectorConfig({
+      database_url: "postgresql://readonly:pg-secret@db.example.com/app",
+      read_query: "SELECT ticket_id, status FROM tickets WHERE ticket_id = :ticket_id",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/postgres-read/config",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          database_url: "postgresql://readonly:pg-secret@db.example.com/app",
+          read_query: "SELECT ticket_id, status FROM tickets WHERE ticket_id = :ticket_id",
+        }),
+      }),
+    );
+  });
+
+  it("runs a saved connector test with params", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          check: {
+            id: "check_pg_1",
+            project_id: "proj_1",
+            call_id: null,
+            trace_id: null,
+            runtime_policy_decision_id: null,
+            action_type: "ticket_update",
+            connector_type: "postgres_read",
+            system_ref: "postgres:tickets:t_1",
+            verdict: "matched",
+            verification_status: "verified",
+            reason: "all_compared_fields_matched",
+            amount_usd: null,
+            currency: null,
+            claimed: {},
+            actual: {},
+            comparison: {},
+            idempotency_key: null,
+            metadata: null,
+            checked_at: "2026-06-21T00:00:00Z",
+            created_at: "2026-06-21T00:00:00Z",
+          },
+          connector: {
+            connected: true,
+            connector_type: "postgres_read",
+            base_url: "postgresql://db.example.com/app",
+            path_template: "/",
+            record_path: null,
+            query: null,
+            has_database_url: true,
+            database_url_last4: "/app",
+            has_read_query: true,
+            read_query_digest: "abc123",
+            has_bearer_token: false,
+            bearer_token_last4: null,
+            last_tested_at: "2026-06-21T00:00:00Z",
+            created_at: null,
+            updated_at: null,
+          },
+        }),
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await testPostgresReadConnector({
+      claimed: { ticket_id: "t_1", status: "closed" },
+      params: { ticket_id: "t_1" },
+      match_fields: ["ticket_id", "status"],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/integrations/system-of-record/postgres-read/test",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          claimed: { ticket_id: "t_1", status: "closed" },
+          params: { ticket_id: "t_1" },
+          match_fields: ["ticket_id", "status"],
         }),
       }),
     );

@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/notifications",
-        destination: "/issues",
+        destination: "/approvals",
         permanent: true,
       },
       {

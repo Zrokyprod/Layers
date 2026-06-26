@@ -53,7 +53,7 @@ export function RecentIssueActivity() {
           <h3>Recent Issue Activity</h3>
           <p>Issues opened, resolved, or reopened in the last 24 hours.</p>
         </div>
-        <Link href="/issues" className="btn btn-soft">
+        <Link href="/approvals" className="btn btn-soft">
           Open Issues
         </Link>
       </header>
@@ -70,7 +70,7 @@ export function RecentIssueActivity() {
             return (
               <Link
                 key={`${issue.id}-${activity.verb}`}
-                href={`/issues/${encodeURIComponent(issue.id)}`}
+                href="/approvals"
                 className="list-row"
               >
                 <div className="list-main">

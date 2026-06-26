@@ -426,14 +426,27 @@ describe("Command Center home", () => {
     expect(within(rowForIssueTitle("Checkout loop")).getByText(/Loop repeated the same checkout tool call/)).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("$12.00")).toBeInTheDocument();
     expect(within(rowForIssueTitle("Checkout loop")).getByText("No trusted replay")).toBeInTheDocument();
+    expect(
+      within(rowForIssueTitle("Answer drift"))
+        .getByText("Verified fix")
+        .closest(".fi-status-text")
+        ?.getAttribute("data-tone"),
+    ).toBe("success");
 
     const proofPanel = screen.getByLabelText("Selected proof");
     expect(within(proofPanel).getByText("System-of-record health")).toBeInTheDocument();
     fireEvent.click(rowForIssueTitle("Checkout loop"));
     expect(within(proofPanel).getByText("Sample trace")).toBeInTheDocument();
     expect(within(proofPanel).getByText("Outcome proof missing")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Capture to export" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Action accountability loop")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Control to proof" })).toBeInTheDocument();
+    const accountabilityLoop = screen.getByLabelText("Action accountability loop");
+    expect(accountabilityLoop).toBeInTheDocument();
+    expect(within(accountabilityLoop).getByRole("link", { name: /Agents/ }).getAttribute("href")).toBe("/agents");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Policies/ }).getAttribute("href")).toBe("/policies");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Approvals/ }).getAttribute("href")).toBe("/approvals");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Outcomes/ }).getAttribute("href")).toBe("/outcomes");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Evidence/ }).getAttribute("href")).toBe("/evidence");
+    expect(within(accountabilityLoop).getByRole("link", { name: /Connectors/ }).getAttribute("href")).toBe("/integrations");
     expect(screen.getAllByText("Open gate").length).toBeGreaterThan(0);
   });
 
@@ -463,11 +476,11 @@ describe("Command Center home", () => {
     expect(screen.getByRole("heading", { name: "Setup progress" })).toBeInTheDocument();
     expect(screen.getByText("Project key")).toBeInTheDocument();
     expect(screen.getByText("SDK/Gateway connected")).toBeInTheDocument();
-    expect(screen.getByText("First trace received")).toBeInTheDocument();
-    expect(screen.getByText("First issue/replay ready")).toBeInTheDocument();
+    expect(screen.getByText("First action captured")).toBeInTheDocument();
+    expect(screen.getByText("First proof path ready")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByRole("link", { name: /Use Gateway/i }).getAttribute("href")).toBe("/settings/keys");
-    expect(screen.getByRole("link", { name: /Send test capture/i }).getAttribute("href")).toBe("/trace");
+    expect(screen.getByRole("link", { name: /Open agents/i }).getAttribute("href")).toBe("/agents");
     expect(screen.getByRole("heading", { name: "What happens next" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Highest-risk agent actions", level: 2 })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open issues" })).toBeNull();
@@ -495,7 +508,7 @@ describe("Command Center home", () => {
 
     expect(await screen.findByRole("heading", { name: "Highest-risk agent actions", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("Evidence incomplete")).toBeInTheDocument();
-    expect(screen.getAllByText("No exportable proof pack is ready until replay proof is promoted into a blocking contract.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No exportable proof pack is ready until a verified outcome and audit trail are linked.").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Command Center live status")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Setup progress" })).toBeNull();
   });
