@@ -6,7 +6,7 @@ on:
       api_base_url:
         description: Staging or pilot backend base URL
         required: true
-        default: https://api-staging.example.com
+        default: https://api-staging.zroky.com
       project_id:
         description: Project id for the pilot tenant
         required: true

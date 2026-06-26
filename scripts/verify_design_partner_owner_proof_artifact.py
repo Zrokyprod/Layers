@@ -10,6 +10,19 @@ from typing import Any
 
 OWNER_PROOF_BLOCKER = "real_customer_proof:real_customer_outcome_proof_missing"
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+EXPECTED_PROOF_FLAGS = frozenset(
+    {
+        "captured_call_linked",
+        "unsafe_action_stopped",
+        "connector_configured",
+        "connector_health_verified",
+        "real_connector_ready",
+        "matched_outcome_shown",
+        "evidence_hash_visible",
+        "evidence_pack_passed",
+        "secrets_redacted",
+    }
+)
 
 
 def _load_json(path: Path) -> Any:
@@ -36,21 +49,38 @@ def _integer(value: Any) -> int | None:
         return None
 
 
+def _non_empty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _https_non_example_url(value: Any) -> bool:
+    if not _non_empty_string(value):
+        return False
+    normalized = value.strip().lower()
+    return normalized.startswith("https://") and "example.com" not in normalized
+
+
 def validate_summary(summary: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     launch_readiness = summary.get("launch_readiness") or {}
     owner_readiness = launch_readiness.get("owner_launch_readiness") or {}
     runtime_policy = summary.get("runtime_policy") or {}
     outcome = summary.get("outcome_reconciliation") or {}
+    connector_setup = summary.get("connector_setup") or {}
     evidence_pack = summary.get("evidence_pack") or {}
     proof = summary.get("proof") or {}
     hard_blockers = owner_readiness.get("hard_blockers") or []
     matched_outcomes = _integer(
         owner_readiness.get("real_customer_matched_outcomes_7d")
     )
+    connector_http_status = _integer(outcome.get("connector_http_status"))
     evidence_hash = evidence_pack.get("evidence_hash")
 
     _require(errors, summary.get("mode") == "live", "summary.mode must be live")
+    _require(errors, _non_empty_string(summary.get("project_id")), "project_id must be present")
+    _require(errors, _non_empty_string(summary.get("scenario")), "scenario must be present")
+    _require(errors, _non_empty_string(summary.get("call_id")), "call_id must be present")
+    _require(errors, _non_empty_string(summary.get("trace_id")), "trace_id must be present")
     _require(
         errors,
         launch_readiness.get("proof_mode") == "live_customer",
@@ -88,13 +118,53 @@ def validate_summary(summary: dict[str, Any]) -> list[str]:
     )
     _require(
         errors,
+        _non_empty_string(runtime_policy.get("decision_id")),
+        "runtime_policy.decision_id must be present",
+    )
+    _require(
+        errors,
         outcome.get("verdict") == "matched",
         "outcome_reconciliation.verdict must be matched",
     )
     _require(
         errors,
+        _https_non_example_url(outcome.get("connector_request_url")),
+        "outcome_reconciliation.connector_request_url must be a real https URL, not example.com",
+    )
+    _require(
+        errors,
+        connector_http_status is not None and 200 <= connector_http_status <= 299,
+        "outcome_reconciliation.connector_http_status must be 2xx",
+    )
+    _require(
+        errors,
+        outcome.get("connector_error") in (None, ""),
+        "outcome_reconciliation.connector_error must be empty",
+    )
+    _require(
+        errors,
+        outcome.get("connector_retryable") in (None, False),
+        "outcome_reconciliation.connector_retryable must not be true",
+    )
+    _require(
+        errors,
+        _non_empty_string(outcome.get("system_ref")),
+        "outcome_reconciliation.system_ref must be present",
+    )
+    _require(
+        errors,
         evidence_pack.get("verification_status") == "pass",
         "evidence_pack.verification_status must be pass",
+    )
+    _require(
+        errors,
+        evidence_pack.get("decision_id") == runtime_policy.get("decision_id"),
+        "evidence_pack.decision_id must match runtime_policy.decision_id",
+    )
+    _require(
+        errors,
+        evidence_pack.get("hash_algorithm") == "sha256",
+        "evidence_pack.hash_algorithm must be sha256",
     )
     _require(
         errors,
@@ -104,8 +174,54 @@ def validate_summary(summary: dict[str, Any]) -> list[str]:
         ),
         "evidence_pack.evidence_hash must be a lowercase sha256 hex digest",
     )
+    _require(
+        errors,
+        (_integer(evidence_pack.get("outcome_count")) or 0) >= 1,
+        "evidence_pack.outcome_count must be at least 1",
+    )
+    _require(
+        errors,
+        (_integer(evidence_pack.get("audit_event_count")) or 0) >= 1,
+        "evidence_pack.audit_event_count must be at least 1",
+    )
+    _require(
+        errors,
+        connector_setup.get("connected") is True,
+        "connector_setup.connected must be true",
+    )
+    _require(
+        errors,
+        connector_setup.get("config_saved") is True,
+        "connector_setup.config_saved must be true",
+    )
+    _require(
+        errors,
+        connector_setup.get("health_status") == "healthy",
+        "connector_setup.health_status must be healthy",
+    )
+    _require(
+        errors,
+        connector_setup.get("last_verdict") == "matched",
+        "connector_setup.last_verdict must be matched",
+    )
+    _require(
+        errors,
+        connector_setup.get("readiness_status") == "ready",
+        "connector_setup.readiness_status must be ready",
+    )
+    _require(
+        errors,
+        connector_setup.get("secrets_redacted") is True,
+        "connector_setup.secrets_redacted must be true",
+    )
     _require(errors, bool(proof), "proof object must be present")
-    false_proofs = sorted(key for key, value in proof.items() if value is not True)
+    missing_proofs = sorted(EXPECTED_PROOF_FLAGS - set(proof))
+    _require(
+        errors,
+        not missing_proofs,
+        "proof object missing required keys: " + ", ".join(missing_proofs),
+    )
+    false_proofs = sorted(key for key in EXPECTED_PROOF_FLAGS if proof.get(key) is not True)
     _require(
         errors,
         not false_proofs,
@@ -122,6 +238,7 @@ def validate_evidence(
     errors: list[str] = []
     summary_pack = summary.get("evidence_pack") or {}
     evidence_outcomes = evidence.get("outcome_reconciliation") or []
+    evidence_call = evidence.get("call") or {}
     matched_outcomes = [
         outcome
         for outcome in evidence_outcomes
@@ -135,6 +252,11 @@ def validate_evidence(
     )
     _require(
         errors,
+        evidence.get("hash_algorithm") == "sha256",
+        f"{evidence_path} hash_algorithm must be sha256",
+    )
+    _require(
+        errors,
         evidence.get("evidence_hash") == summary_pack.get("evidence_hash"),
         f"{evidence_path} evidence_hash must match summary evidence_hash",
     )
@@ -142,6 +264,21 @@ def validate_evidence(
         errors,
         evidence.get("decision_id") == summary_pack.get("decision_id"),
         f"{evidence_path} decision_id must match summary evidence_pack.decision_id",
+    )
+    _require(
+        errors,
+        evidence.get("project_id") == summary.get("project_id"),
+        f"{evidence_path} project_id must match summary project_id",
+    )
+    _require(
+        errors,
+        evidence_call.get("id") == summary.get("call_id"),
+        f"{evidence_path} call.id must match summary call_id",
+    )
+    _require(
+        errors,
+        bool(evidence.get("audit_log") or []),
+        f"{evidence_path} must include at least one audit log event",
     )
     _require(
         errors,

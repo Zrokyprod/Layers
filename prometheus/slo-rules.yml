@@ -49,7 +49,7 @@ groups:
           description: >
             Error rate {{ $value | humanizePercentage }} exceeds 14.4× SLO target.
             At this rate the 30-day error budget is exhausted in ~1 hour.
-          runbook_url: "https://docs.zroky.ai/runbooks/slo-burn-fast"
+          runbook_url: "https://docs.zroky.com/runbooks/slo-burn-fast"
 
       - alert: ZrokyBackendSLOBurnRateSlow
         expr: |
@@ -67,7 +67,7 @@ groups:
           description: >
             Error rate {{ $value | humanizePercentage }} exceeds 6× SLO target.
             At this rate the 30-day error budget is exhausted in ~5 days.
-          runbook_url: "https://docs.zroky.ai/runbooks/slo-burn-slow"
+          runbook_url: "https://docs.zroky.com/runbooks/slo-burn-slow"
 
       - alert: ZrokyBackendSLOBurnRateTicket
         expr: |
@@ -81,7 +81,7 @@ groups:
           description: >
             Error rate {{ $value | humanizePercentage }} exceeds 3× SLO target.
             File a ticket; monitor for escalation.
-          runbook_url: "https://docs.zroky.ai/runbooks/slo-burn-ticket"
+          runbook_url: "https://docs.zroky.com/runbooks/slo-burn-ticket"
 
   - name: zroky_worker_slo
     interval: 1m
@@ -113,7 +113,7 @@ groups:
           description: >
             Task failure rate {{ $value | humanizePercentage }} on diagnose/fixes queues.
             Error budget will be exhausted in ~1 hour.
-          runbook_url: "https://docs.zroky.ai/runbooks/worker-slo-fast"
+          runbook_url: "https://docs.zroky.com/runbooks/worker-slo-fast"
 
       - alert: ZrokyWorkerSLOBurnRateSlow
         expr: |
@@ -127,7 +127,7 @@ groups:
           description: >
             Task failure rate {{ $value | humanizePercentage }} on diagnose/fixes queues.
             File a ticket; monitor for escalation.
-          runbook_url: "https://docs.zroky.ai/runbooks/worker-slo-slow"
+          runbook_url: "https://docs.zroky.com/runbooks/worker-slo-slow"
 
   - name: zroky_latency_slo
     interval: 1m
@@ -152,4 +152,4 @@ groups:
           description: >
             p95 latency on /ingest is {{ $value | humanizeDuration }}.
             SLO target is 200 ms. Investigate DB/Redis/worker backlog.
-          runbook_url: "https://docs.zroky.ai/runbooks/ingest-latency"
+          runbook_url: "https://docs.zroky.com/runbooks/ingest-latency"

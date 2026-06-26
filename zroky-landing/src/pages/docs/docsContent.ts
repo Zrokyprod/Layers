@@ -139,7 +139,7 @@ export const docsArticles: Record<DocsSlug, DocsArticle> = {
     description:
       'Use this path when you want the shortest real adoption flow: create access, capture production evidence, diagnose it into an issue, run replay, promote a Golden, and wire a CI gate.',
     outcome: 'By the end, your first agent flow follows Capture -> Diagnose -> Issue -> Replay -> Golden -> CI Gate.',
-    primaryCta: { label: 'Create account', href: 'https://app.zroky.com/signup' },
+    primaryCta: { label: 'Create account', href: 'https://zroky.com/signup' },
     sections: [
       {
         id: 'before-you-start',

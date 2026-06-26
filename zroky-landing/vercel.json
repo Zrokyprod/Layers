@@ -1,17 +1,17 @@
 {
   "redirects": [
-    { "source": "/auth", "destination": "https://app.zroky.com/login", "permanent": true },
-    { "source": "/auth/login", "destination": "https://app.zroky.com/login", "permanent": true },
-    { "source": "/auth/register", "destination": "https://app.zroky.com/signup", "permanent": true },
-    { "source": "/auth/forgot-password", "destination": "https://app.zroky.com/forgot-password", "permanent": true },
-    { "source": "/auth/check-email", "destination": "https://app.zroky.com/verify-email", "permanent": true },
-    { "source": "/auth/reset-password", "destination": "https://app.zroky.com/reset-password", "permanent": true },
-    { "source": "/auth/verify-email", "destination": "https://app.zroky.com/verify-email", "permanent": true },
-    { "source": "/login", "destination": "https://app.zroky.com/login", "permanent": true },
-    { "source": "/signup", "destination": "https://app.zroky.com/signup", "permanent": true },
-    { "source": "/forgot-password", "destination": "https://app.zroky.com/forgot-password", "permanent": true },
-    { "source": "/reset-password", "destination": "https://app.zroky.com/reset-password", "permanent": true },
-    { "source": "/verify-email", "destination": "https://app.zroky.com/verify-email", "permanent": true }
+    { "source": "/auth", "destination": "https://zroky.com/login", "permanent": true },
+    { "source": "/auth/login", "destination": "https://zroky.com/login", "permanent": true },
+    { "source": "/auth/register", "destination": "https://zroky.com/signup", "permanent": true },
+    { "source": "/auth/forgot-password", "destination": "https://zroky.com/forgot-password", "permanent": true },
+    { "source": "/auth/check-email", "destination": "https://zroky.com/verify-email", "permanent": true },
+    { "source": "/auth/reset-password", "destination": "https://zroky.com/reset-password", "permanent": true },
+    { "source": "/auth/verify-email", "destination": "https://zroky.com/verify-email", "permanent": true },
+    { "source": "/login", "destination": "https://zroky.com/login", "permanent": true },
+    { "source": "/signup", "destination": "https://zroky.com/signup", "permanent": true },
+    { "source": "/forgot-password", "destination": "https://zroky.com/forgot-password", "permanent": true },
+    { "source": "/reset-password", "destination": "https://zroky.com/reset-password", "permanent": true },
+    { "source": "/verify-email", "destination": "https://zroky.com/verify-email", "permanent": true }
   ],
   "rewrites": [
     { "source": "/docs/:path*", "destination": "/index.html" },

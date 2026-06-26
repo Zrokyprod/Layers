@@ -6,7 +6,7 @@ on:
       base_url:
         description: Staging backend base URL
         required: true
-        default: https://api-staging.example.com
+        default: https://api-staging.zroky.com
       project_id:
         description: Project id used by rollback verification
         required: true

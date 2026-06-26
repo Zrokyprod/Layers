@@ -20,7 +20,7 @@ from uuid import uuid4
 
 
 DEFAULT_API_BASE_URL = "https://api.zroky.com"
-DEFAULT_DASHBOARD_URL = "https://app.zroky.com"
+DEFAULT_DASHBOARD_URL = "https://zroky.com"
 DEFAULT_LANDING_URL = "https://zroky.com"
 
 

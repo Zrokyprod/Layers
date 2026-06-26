@@ -377,7 +377,7 @@ def _next_live_command(fixture: dict[str, Any]) -> str:
     if _fixture_scenario(fixture) == "customer-record":
         return (
             "python scripts/run_design_partner_install_kit.py --scenario customer-record "
-            "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+            "--api-base-url https://api.zroky.com --api-key <zroky_api_key> "
             "--crm-base-url https://crm.example.com/api "
             "--crm-bearer-token <crm_token> --customer-id <customer_id> --json "
             "--write-summary artifacts/design-partner-crm-live-summary.json "
@@ -385,7 +385,7 @@ def _next_live_command(fixture: dict[str, Any]) -> str:
         )
     return (
         "python scripts/run_design_partner_install_kit.py --scenario refund "
-        "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+        "--api-base-url https://api.zroky.com --api-key <zroky_api_key> "
         "--ledger-base-url https://ledger.example.com/api "
         "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json "
         "--write-summary artifacts/design-partner-refund-live-summary.json "
@@ -397,14 +397,14 @@ def _next_saved_connector_live_command(fixture: dict[str, Any]) -> str:
     if _fixture_scenario(fixture) == "customer-record":
         return (
             "python scripts/run_design_partner_install_kit.py --scenario customer-record "
-            "--use-saved-connector --api-base-url https://api.zroky.ai "
+            "--use-saved-connector --api-base-url https://api.zroky.com "
             "--api-key <zroky_api_key> --customer-id <customer_id> --json "
             "--write-summary artifacts/design-partner-crm-saved-live-summary.json "
             "--write-evidence artifacts/design-partner-crm-saved-live-evidence.json"
         )
     return (
         "python scripts/run_design_partner_install_kit.py --scenario refund "
-        "--use-saved-connector --api-base-url https://api.zroky.ai "
+        "--use-saved-connector --api-base-url https://api.zroky.com "
         "--api-key <zroky_api_key> --refund-id <refund_id> --json "
         "--write-summary artifacts/design-partner-refund-saved-live-summary.json "
         "--write-evidence artifacts/design-partner-refund-saved-live-evidence.json"
@@ -415,14 +415,14 @@ def _next_live_preflight_command(fixture: dict[str, Any]) -> str:
     if _fixture_scenario(fixture) == "customer-record":
         return (
             "python scripts/run_design_partner_install_kit.py --scenario customer-record "
-            "--preflight-only --api-base-url https://api.zroky.ai "
+            "--preflight-only --api-base-url https://api.zroky.com "
             "--api-key <zroky_api_key> --crm-base-url https://crm.example.com/api "
             "--crm-bearer-token <crm_token> --customer-id <customer_id> --json "
             "--write-summary artifacts/design-partner-crm-preflight-summary.json"
         )
     return (
         "python scripts/run_design_partner_install_kit.py --scenario refund "
-        "--preflight-only --api-base-url https://api.zroky.ai "
+        "--preflight-only --api-base-url https://api.zroky.com "
         "--api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api "
         "--ledger-bearer-token <ledger_token> --refund-id <refund_id> --json "
         "--write-summary artifacts/design-partner-refund-preflight-summary.json"
@@ -434,14 +434,14 @@ def _next_saved_connector_preflight_command(fixture: dict[str, Any]) -> str:
         return (
             "python scripts/run_design_partner_install_kit.py --scenario customer-record "
             "--preflight-only --use-saved-connector "
-            "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+            "--api-base-url https://api.zroky.com --api-key <zroky_api_key> "
             "--customer-id <customer_id> --json "
             "--write-summary artifacts/design-partner-crm-preflight-summary.json"
         )
     return (
         "python scripts/run_design_partner_install_kit.py --scenario refund "
         "--preflight-only --use-saved-connector "
-        "--api-base-url https://api.zroky.ai --api-key <zroky_api_key> "
+        "--api-base-url https://api.zroky.com --api-key <zroky_api_key> "
         "--refund-id <refund_id> --json "
         "--write-summary artifacts/design-partner-refund-preflight-summary.json"
     )

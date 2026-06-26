@@ -89,6 +89,12 @@ jobs:
           - id: runtime-policy
             name: runtime policy gate
             tests: tests/test_runtime_policy_gate.py
+          - id: verified-action-kernel
+            name: verified action kernel
+            tests: >-
+              tests/test_action_intents.py
+              tests/test_agent_profiles_routes.py
+              tests/test_tool_registry_routes.py
           - id: outcome-reconciliation
             name: outcome reconciliation
             tests: tests/test_outcome_reconciliation.py
@@ -133,6 +139,11 @@ jobs:
             tests: >-
               tests/test_production_config.py
               tests/test_launch_env_validator.py
+          - id: launch-gate-contracts
+            name: launch gate contracts
+            tests: >-
+              tests/test_launch_static_contract.py
+              tests/test_paid_launch_readiness_script_contract.py
 
     steps:
       - uses: actions/checkout@v4
@@ -234,21 +245,27 @@ jobs:
         run: |
           npm test -- \
             "src/components/dashboard-shell.test.tsx" \
+            "src/components/providers.test.tsx" \
             "src/components/command-palette.test.tsx" \
+            "src/lib/dashboard-route-contract.test.ts" \
             "src/lib/route-auth-guard.test.ts" \
-            "src/app/(dashboard)/layout.test.tsx" \
+            "src/lib/keyboard-shortcuts.test.tsx" \
             "src/lib/replay-mode.test.ts" \
+            "src/app/(dashboard)/home/page.test.tsx" \
+            "src/app/(dashboard)/agents/page.test.tsx" \
+            "src/app/(dashboard)/approvals/page.test.tsx" \
+            "src/app/(dashboard)/evidence/page.test.tsx" \
             "src/app/(dashboard)/outcomes/page.test.tsx" \
+            "src/app/(dashboard)/policies/page.test.tsx" \
+            "src/app/(dashboard)/integrations/page.test.tsx" \
             "src/app/(dashboard)/settings/integrations/page.test.tsx" \
-            "src/app/(dashboard)/contracts/[id]/page.test.tsx" \
             "src/app/(dashboard)/settings/billing/page.test.tsx" \
-            "src/app/(dashboard)/goldens/page.test.tsx" \
-            "src/app/(dashboard)/ci-gates/page.test.tsx" \
-            "src/app/(dashboard)/ci-gates/[runId]/page.test.tsx"
+            "src/app/(dashboard)/settings/keys/page.test.tsx" \
+            "src/app/(dashboard)/settings/providers/page.test.tsx"
 
       - name: Build dashboard
         env:
-          NEXT_PUBLIC_API_URL: https://api.zroky.ai
+          NEXT_PUBLIC_API_URL: https://api.zroky.com
         run: npm run build
 
   admin:
@@ -286,7 +303,7 @@ jobs:
 
       - name: Build admin
         env:
-          NEXT_PUBLIC_OWNER_API_URL: https://api.zroky.ai
+          NEXT_PUBLIC_OWNER_API_URL: https://api.zroky.com
         run: npm run build
 
   gateway:
@@ -425,6 +442,9 @@ jobs:
 
       - name: Run docs drift check
         run: python scripts/check_docs_drift.py
+
+      - name: Run static launch contract check
+        run: python scripts/check_launch_static_contract.py
 
       - name: Enforce README-only planning source
         shell: bash

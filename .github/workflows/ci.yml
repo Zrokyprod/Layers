@@ -368,7 +368,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: "https://api.zroky.ai"
+          NEXT_PUBLIC_API_URL: "https://api.zroky.com"
 
   sdk-js:
     name: JS SDK Build + Size + Parity (Rule 4)
@@ -438,3 +438,6 @@ jobs:
 
       - name: Run docs drift check
         run: python scripts/check_docs_drift.py
+
+      - name: Run static launch contract check
+        run: python scripts/check_launch_static_contract.py

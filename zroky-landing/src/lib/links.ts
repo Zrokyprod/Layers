@@ -1,4 +1,4 @@
-const rawDashboardUrl = import.meta.env.VITE_DASHBOARD_URL ?? 'https://app.zroky.com';
+const rawDashboardUrl = import.meta.env.VITE_DASHBOARD_URL ?? 'https://zroky.com';
 
 export const DASHBOARD_URL = rawDashboardUrl.replace(/\/$/, '');
 export const SIGN_IN_URL = `${DASHBOARD_URL}/login`;

@@ -95,7 +95,7 @@ function Hero() {
             <div className="device-frame device-fade rotate-[0.6deg]">
               <div className="browser-bar">
                 <span className="browser-dot" /><span className="browser-dot" /><span className="browser-dot" />
-                <span className="ml-3 font-mono text-[10px] text-tertiary">app.zroky.com · replay</span>
+                <span className="ml-3 font-mono text-[10px] text-tertiary">zroky.com · replay</span>
               </div>
               <img
                 src="/product-replay-detail.png"
@@ -345,7 +345,7 @@ function ProductShowcase() {
               <div className="device-frame device-fade">
                 <div className="browser-bar">
                   <span className="browser-dot" /><span className="browser-dot" /><span className="browser-dot" />
-                  <span className="ml-3 font-mono text-[10px] text-tertiary">app.zroky.com</span>
+                  <span className="ml-3 font-mono text-[10px] text-tertiary">zroky.com</span>
                 </div>
                 {t.media}
               </div>

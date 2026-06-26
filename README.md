@@ -1,35 +1,45 @@
 # Zroky Product Operating Contract
 
-This is the single product and implementation source of truth for Zroky.
+This is the single product, implementation, and execution source of truth for
+Zroky.
 
 Old planning docs, broad dashboards, speculative roadmaps, and stale Markdown
 files must not guide future implementation. Code should be changed only when it
 serves the product loop defined here.
 
+Do not create a second active roadmap, plan, strategy, or dashboard redesign
+spec. If a future task needs planning, update this file or write the plan inside
+the issue/PR for that task only. The repository should have one current plan:
+this file.
+
 ## Product Thesis
 
-Zroky is an Agent Reliability Control Plane.
+Zroky is an Agent Reliability Control Plane: the control and proof layer for
+autonomous AI agents.
 
 Core promise:
 
-> Your AI agents may fail once in production, but the same important failure
-> should never silently ship again.
+> Companies can run autonomous agents unattended because Zroky stops risky
+> actions before damage and proves the real-world outcome after execution.
 
-The product is not a generic AI observability platform. The product is the gate
-that turns real production agent failures into replayable regression protection.
+The product is not a generic AI observability platform, eval tool, or agent IAM
+console. The product is the gate that controls high-stakes agent actions,
+verifies what actually happened, and turns important production failures into
+replayable regression protection.
 
 ## Mandatory Core Loop
 
 Every major feature must strengthen this loop:
 
 ```text
-Production agent behavior
--> captured trace
--> detected and grouped failure
--> replay against current fix
--> verified fix evidence
--> promoted Golden regression contract
--> CI/runtime gate blocks repeat failure
+Autonomous agent intends a high-stakes action
+-> SDK/Gateway preflight captures action, mandate, tool, args, risk, and context
+-> Runtime Policy Gate returns allow, hold_for_approval, or block
+-> approved/allowed action executes
+-> Zroky verifies the real-world outcome against the system of record
+-> Evidence Pack records decision, approval, outcome match, hash, and audit trail
+-> important failures become replay/golden regression contracts
+-> CI/runtime gates block repeat failures
 -> owner sees proof
 ```
 
@@ -83,6 +93,38 @@ AI Agent / App
   -> CI Gate + Runtime Policy Gate
   -> Owner Evidence + Billing
 ```
+
+## Current Dashboard Contract
+
+The paid dashboard is an action-control surface, not a general analytics app.
+
+Primary dashboard IA:
+
+- Home
+- Agents
+- Approvals
+- Outcomes
+- Evidence
+- Integrations
+- Policies
+- Settings
+
+Temporary support routes may exist while the product is being rewired:
+
+- Calls
+- Trace
+- Issues / Incidents
+- Replay
+- Goldens
+- Contracts
+- CI Gates
+- Alerts
+- Cost
+
+Support routes must not be promoted back into the main IA unless they directly
+serve pre-action control, post-action verification, evidence proof, or regression
+gating. Delete or redirect support routes only after no primary page, SDK flow,
+test, or backend contract still links to them.
 
 ## Product Objects
 
@@ -171,6 +213,32 @@ Verdicts:
 - not_verified: no real proof exists
 
 CI and runtime gates are more important than dashboards.
+
+### Verified Action
+
+A verified action is a typed, idempotent, high-stakes action intent.
+
+The public kernel is:
+
+- `GET /v1/action-packs`
+- `GET /v1/action-packs/{pack_id}`
+- `POST /v1/action-packs/{pack_id}/install`
+- `POST /v1/action-contracts`
+- `POST /v1/action-intents`
+- `GET /v1/action-intents/{action_id}`
+- `POST /v1/action-intents/{action_id}/decide`
+- `GET /v1/tools/registry`
+
+Launch action packs are the default onboarding path. A customer should not have
+to invent the first contract schema by hand. The first supported packs are:
+
+- `support-ops-v1`: customer refunds and customer-record updates
+- `devops-release-v1`: deploy/change control with CI and approval evidence
+
+Each installed pack registers immutable action contract versions into the
+tenant. Agents then create action intents against those contract versions,
+receive a runtime policy decision, execute only when allowed or approved, and
+produce source-of-record evidence.
 
 ## Build Priorities
 
@@ -400,6 +468,8 @@ The repository already contains many real pieces:
 But the product is not yet mandatory infrastructure because several guarantees
 need hardening:
 
+- the deployed dashboard still has old-dashboard styling and support-route debt
+- the new dashboard redesign must become the actual owner, not an override layer
 - dashboard project selection is not end-to-end tenant selection
 - gateway capture is best-effort and needs durable retry/spool
 - regression CI execution must move from in-process background task to durable queue
@@ -408,6 +478,100 @@ need hardening:
 - quota metering must not silently fail for paid launch
 - stale pricing/cost metadata must be visible and launch-blocking
 - stub replay must never appear as verified proof
+
+## Current Master Execution Plan
+
+Work through these phases in order. Do not skip ahead unless the current task is
+an urgent bug or security fix.
+
+### Phase 0: Single Plan Lock
+
+Goal: only this file guides product and implementation decisions.
+
+- remove active stale specs, duplicate roadmaps, and obsolete assistant plans
+- keep historical handoff docs only when they are clearly not the current plan
+- do not create a separate master-plan document
+- every future Codex task must reference this file's phase and non-goals
+
+### Phase 1: Dashboard IA Freeze
+
+Goal: the visible dashboard matches the paid product story.
+
+- make shell, command palette, settings tabs, labels, and empty states match the
+  primary dashboard IA
+- keep support routes hidden unless they are still needed for deep links
+- remove observability/analytics language from user-facing surfaces
+- make every dashboard page answer one question: what action was controlled,
+  verified, proved, or blocked?
+
+### Phase 2: New Dashboard Attach
+
+Goal: the new dashboard redesign becomes the real dashboard system.
+
+- stop treating the redesign as a global CSS patch over old dashboard styles
+- move dashboard styling toward one scoped dashboard system
+- keep public/auth/landing styles separate from dashboard control styles
+- verify desktop and mobile layouts before deleting old selectors
+
+### Phase 3: Old Dashboard Removal
+
+Goal: remove old dashboard code in dependency order.
+
+- classify each route as primary, support, legacy redirect, or delete
+- remove internal links before deleting routes
+- remove tests only after the behavior is intentionally removed or replaced
+- delete old CSS selectors only after no page depends on them
+
+### Phase 4: Core Control Loop
+
+Goal: pre-action control and post-action proof work end to end.
+
+- agent declares intended action
+- Zroky checks mandate, risk, policy, args, anomaly, and approval need
+- Zroky returns allow, hold_for_approval, or block
+- allowed action executes
+- Zroky verifies the real outcome against a system of record
+- evidence pack records the decision and verified outcome
+
+### Phase 5: Evidence And Proof Polish
+
+Goal: the customer can export and trust proof.
+
+- evidence packs must include action, policy decision, approval state, outcome
+  verification status, hash, timestamps, and audit trail
+- every status must be honest: matched, mismatched, not_verified, pass, warn, or
+  fail
+- stubbed or simulated proof must be labeled clearly
+
+### Phase 6: SDK Onboarding
+
+Goal: JS and Python SDKs show the exact paid-product workflow.
+
+- install, preflight, hold/block/allow, approval retry, outcome report, and
+  evidence id must be easy to test
+- examples must target refund, email, ticket, CRM, deploy, invoice, and spend
+  approval style actions
+- SDK docs must not describe Zroky as generic observability
+
+### Phase 7: Backend Legacy Cleanup
+
+Goal: backend APIs match the product loop without legacy aliases confusing new
+work.
+
+- remove deprecated aliases only after clients stop calling them
+- keep tenant/project isolation strict
+- fail closed for replay, CI, billing, quota, and policy enforcement
+- every removed endpoint needs a reference check and targeted test update
+
+### Phase 8: Paid Launch Hardening
+
+Goal: launch only when the control/proof product can be sold honestly.
+
+- production env validator passes
+- billing and quota enforcement are enabled for paid workspaces
+- real replay and owner proof are enabled for launch environments
+- one design-partner flow proves a risky action was controlled and verified
+- owner/admin launch-readiness has no fail or not_verified required gate
 
 ## Implementation Rules
 
@@ -423,21 +587,41 @@ Follow these rules strictly:
 8. Do not accept best-effort capture, metering, or CI execution as final production guarantees.
 9. Every implementation should include a focused test for the product guarantee it changes.
 10. Every user-facing status should be honest: pass, warn, fail, or not_verified.
+11. Do not add a new nav item without mapping it to the dashboard contract above.
+12. Do not create a CSS patch on top of another CSS patch unless it is temporary
+    and the cleanup target is documented in the same task.
+13. Do not remove a route, API, or test until references are checked.
+14. Do not mix unrelated product, UI, backend, and cleanup work in one slice.
+15. Do not leave old dashboard code active when a replacement is complete.
+
+Before a Codex implementation task starts, state:
+
+- phase from the Current Master Execution Plan
+- exact user/product outcome
+- expected files or modules touched
+- non-goals
+- risk
+- verification command or manual check
+- cleanup target, if any
+
+If a proposed change cannot fit this format, it is too broad and must be split.
 
 ## Near-Term Execution Order
 
 Work in this order:
 
-1. Fix tenant/project selection end-to-end.
-2. Make replay worker artifact signing fail closed.
-3. Move regression CI execution to durable queue.
-4. Add atomic claim/locking to replay worker polling.
-5. Add gateway durable capture retry/spool.
-6. Make billing metering failures visible and policy-controlled.
-7. Fix API-key prefix drift in UI/docs/tests.
-8. Make stale pricing evidence visible in owner health.
-9. Upgrade Goldens from output checks to behavior contracts.
-10. Add runtime policy and human approval gates.
+1. Keep this README as the only current plan and remove active stale specs.
+2. Freeze the dashboard IA around Home, Agents, Approvals, Outcomes, Evidence,
+   Connectors, Policies, and Settings.
+3. Wire the new dashboard redesign as the actual dashboard system.
+4. Remove old dashboard CSS/routes in dependency order.
+5. Make pre-action control visible end to end in SDK, backend, and dashboard.
+6. Make post-action outcome verification visible end to end.
+7. Make evidence packs exportable and honest.
+8. Align JS and Python SDK onboarding with control + proof.
+9. Remove backend legacy aliases after reference checks.
+10. Run paid-launch hardening: billing, quota, replay, tenant isolation, owner
+    proof, and design-partner verification.
 
 ## What Not To Build First
 
@@ -482,12 +666,18 @@ Owner/admin exposes this as `/owner/launch-readiness`.
 Run the local code-readiness verification:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1
+powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1 -Phase all
 ```
 
 This can pass without a live customer artifact, but it is not enough to mark
 paid launch complete. Final paid launch requires one hosted design-partner owner
 proof artifact where `real_customer_proof=pass`.
+
+The final owner proof validator fails closed unless the summary/evidence pair is
+from a live run, uses a real HTTPS system-of-record URL instead of `example.com`,
+includes the complete proof-flag set, has connector readiness `ready`, shows at
+least one matched outcome and audit event, and has matching `sha256` evidence
+hashes and decision IDs.
 
 After `.github/workflows/zroky-design-partner-owner-proof.yml` uploads the
 owner proof artifacts, validate the downloaded summary/evidence before launch:
@@ -496,7 +686,7 @@ owner proof artifacts, validate the downloaded summary/evidence before launch:
 $env:ZROKY_REQUIRE_OWNER_PROOF = "true"
 $env:ZROKY_OWNER_PROOF_SUMMARY = "artifacts/design-partner-owner-proof-summary.json"
 $env:ZROKY_OWNER_PROOF_EVIDENCE = "artifacts/design-partner-owner-proof-evidence.json"
-powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1
+powershell -ExecutionPolicy Bypass -File scripts/verify_paid_launch_readiness.ps1 -Phase final
 ```
 
 For artifact-only validation:
@@ -526,7 +716,7 @@ demos/design-partner-install-kit/HANDOFF.txt
 Live partner smoke:
 
 ```bash
-python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-live-summary.json --write-evidence artifacts/design-partner-live-evidence.json
+python scripts/run_design_partner_install_kit.py --api-base-url https://api.zroky.com --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-live-summary.json --write-evidence artifacts/design-partner-live-evidence.json
 ```
 
 Final owner-gate proof for a hosted pilot is run by:
@@ -549,7 +739,7 @@ python scripts/validate_launch_env.py --roles backend,dashboard,admin,gateway,re
 Run staging backend deployment smoke before a hosted pilot:
 
 ```bash
-python scripts/run_deployment_smoke.py --api-base-url https://api-staging.zroky.ai --provisioning-token <staging_provisioning_token> --backend-only
+python scripts/run_deployment_smoke.py --api-base-url https://api-staging.zroky.com --provisioning-token <staging_provisioning_token> --backend-only
 ```
 
 This must pass health, provisioning guard, API-key create/list/ingest/rotate/revoke,

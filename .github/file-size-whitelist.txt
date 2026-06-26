@@ -10,5 +10,9 @@
 # Adding a NEW entry requires a ticket reference comment.
 # Entries with no matching file produce a stale-whitelist warning (non-failing).
 #
-# Q2 split queue is currently empty: all previously whitelisted Python files
-# have been split below the 30 KB gate.
+# MVP split queue (ZROKY-MVP-SPLIT-ROUTES): these route modules predate the
+# verified-action MVP slice and must be split before paid GA.
+zroky-backend/app/api/routes/regression_ci.py # ZROKY-MVP-SPLIT-ROUTES
+zroky-backend/app/api/routes/outcomes.py # ZROKY-MVP-SPLIT-ROUTES
+zroky-backend/app/api/routes/auth.py # ZROKY-MVP-SPLIT-ROUTES
+zroky-backend/app/api/routes/_internal/owner_launch_readiness_builder.py # ZROKY-MVP-SPLIT-ROUTES

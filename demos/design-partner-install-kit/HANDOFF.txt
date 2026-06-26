@@ -104,13 +104,13 @@ system-of-record shape mismatches before the runtime/evidence demo.
 Refund preflight:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario refund --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-preflight-summary.json
+python scripts/run_design_partner_install_kit.py --scenario refund --preflight-only --api-base-url https://api.zroky.com --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-preflight-summary.json
 ```
 
 CRM/customer-record preflight:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-preflight-summary.json
+python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --api-base-url https://api.zroky.com --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-preflight-summary.json
 ```
 
 If the connector has already been saved in the dashboard, use the runtime-safe
@@ -118,11 +118,11 @@ saved connector path. This verifies with the stored connector secret and does
 not send the ledger or CRM bearer token in the proof run:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario refund --preflight-only --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-preflight-summary.json
+python scripts/run_design_partner_install_kit.py --scenario refund --preflight-only --use-saved-connector --api-base-url https://api.zroky.com --api-key <zroky_api_key> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-preflight-summary.json
 ```
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-preflight-summary.json
+python scripts/run_design_partner_install_kit.py --scenario customer-record --preflight-only --use-saved-connector --api-base-url https://api.zroky.com --api-key <zroky_api_key> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-preflight-summary.json
 ```
 
 Expected preflight summary:
@@ -147,14 +147,14 @@ Use this after the partner has a Zroky project, API credential, and a ledger API
 record that can be safely queried:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario refund --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-live-summary.json --write-evidence artifacts/design-partner-refund-live-evidence.json
+python scripts/run_design_partner_install_kit.py --scenario refund --api-base-url https://api.zroky.com --api-key <zroky_api_key> --ledger-base-url https://ledger.example.com/api --ledger-bearer-token <ledger_token> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-live-summary.json --write-evidence artifacts/design-partner-refund-live-evidence.json
 ```
 
 Use this after the partner has a CRM/customer API record that can be safely
 queried:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario customer-record --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-live-summary.json --write-evidence artifacts/design-partner-crm-live-evidence.json
+python scripts/run_design_partner_install_kit.py --scenario customer-record --api-base-url https://api.zroky.com --api-key <zroky_api_key> --crm-base-url https://crm.example.com/api --crm-bearer-token <crm_token> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-live-summary.json --write-evidence artifacts/design-partner-crm-live-evidence.json
 ```
 
 If the connector is already saved and healthy in Zroky, run the full proof
@@ -163,11 +163,11 @@ system-of-record reconciliation, and evidence hash without resending the
 partner ledger or CRM token:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario refund --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-saved-live-summary.json --write-evidence artifacts/design-partner-refund-saved-live-evidence.json
+python scripts/run_design_partner_install_kit.py --scenario refund --use-saved-connector --api-base-url https://api.zroky.com --api-key <zroky_api_key> --refund-id <refund_id> --json --write-summary artifacts/design-partner-refund-saved-live-summary.json --write-evidence artifacts/design-partner-refund-saved-live-evidence.json
 ```
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario customer-record --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-saved-live-summary.json --write-evidence artifacts/design-partner-crm-saved-live-evidence.json
+python scripts/run_design_partner_install_kit.py --scenario customer-record --use-saved-connector --api-base-url https://api.zroky.com --api-key <zroky_api_key> --customer-id <customer_id> --json --write-summary artifacts/design-partner-crm-saved-live-summary.json --write-evidence artifacts/design-partner-crm-saved-live-evidence.json
 ```
 
 Expected saved-connector full proof:
@@ -179,11 +179,16 @@ Expected saved-connector full proof:
 - `connector_setup.health_status`: `healthy`
 - `connector_setup.readiness_status`: `ready`
 - `outcome_reconciliation.verdict`: `matched`
+- `outcome_reconciliation.connector_request_url`: real HTTPS system-of-record URL, not `example.com`
 - `evidence_pack.verification_status`: `pass`
 - `evidence_pack.evidence_hash`: 64 hex characters
+- `evidence_pack.hash_algorithm`: `sha256`
+- `evidence_pack.outcome_count`: `1` or higher
+- `evidence_pack.audit_event_count`: `1` or higher
 - `launch_readiness.proof_mode`: `live_customer`
 - `launch_readiness.real_customer_proof_candidate`: `true`
 - `proof.secrets_redacted`: `true`
+- every required `proof.*` flag: `true`
 
 Only the live full proof can clear the owner `real_customer_proof` launch gate.
 Local demo and preflight artifacts are useful for confidence, but they must
@@ -192,7 +197,7 @@ leave `real_customer_proof:real_customer_outcome_proof_missing` blocked.
 Operator owner-gate verification:
 
 ```powershell
-python scripts/run_design_partner_install_kit.py --scenario refund --use-saved-connector --api-base-url https://api.zroky.ai --api-key <zroky_api_key> --refund-id <refund_id> --verify-owner-launch-readiness --owner-admin-token <owner_admin_token> --json --write-summary artifacts/design-partner-refund-owner-verified-summary.json --write-evidence artifacts/design-partner-refund-owner-verified-evidence.json
+python scripts/run_design_partner_install_kit.py --scenario refund --use-saved-connector --api-base-url https://api.zroky.com --api-key <zroky_api_key> --refund-id <refund_id> --verify-owner-launch-readiness --owner-admin-token <owner_admin_token> --json --write-summary artifacts/design-partner-refund-owner-verified-summary.json --write-evidence artifacts/design-partner-refund-owner-verified-evidence.json
 ```
 
 Expected owner-gate fields:
