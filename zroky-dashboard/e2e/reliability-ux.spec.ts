@@ -68,6 +68,61 @@ async function expectMainContentFitsViewport(page: Page): Promise<void> {
   expect(mainFitsViewport).toBeTruthy();
 }
 
+async function expectHomeCockpitLayout(page: Page): Promise<void> {
+  await expect(page.locator(".fi-a-verdict")).toBeVisible();
+  await expect(page.locator(".fi-a-snapshot-grid")).toBeVisible();
+  await expect(page.locator(".fi-a-workspace")).toBeVisible();
+  await expect(page.locator(".fi-a-loop")).toBeVisible();
+  await expect(page.locator(".fi-a-proof-panel")).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    function gridColumnCount(value: string): number {
+      return value.split(" ").filter(Boolean).length;
+    }
+
+    const verdict = document.querySelector<HTMLElement>(".fi-a-verdict");
+    const snapshots = document.querySelector<HTMLElement>(".fi-a-snapshot-grid");
+    const firstSnapshot = document.querySelector<HTMLElement>(".fi-a-snapshot-card");
+    const workspace = document.querySelector<HTMLElement>(".fi-a-workspace");
+    const loop = document.querySelector<HTMLElement>(".fi-a-loop");
+    const proofPanel = document.querySelector<HTMLElement>(".fi-a-proof-panel");
+
+    if (!verdict || !snapshots || !firstSnapshot || !workspace || !loop || !proofPanel) {
+      return null;
+    }
+
+    const verdictStyle = window.getComputedStyle(verdict);
+    const snapshotsStyle = window.getComputedStyle(snapshots);
+    const firstSnapshotStyle = window.getComputedStyle(firstSnapshot);
+    const workspaceStyle = window.getComputedStyle(workspace);
+    const loopStyle = window.getComputedStyle(loop);
+    const proofPanelRect = proofPanel.getBoundingClientRect();
+
+    return {
+      firstSnapshotDisplay: firstSnapshotStyle.display,
+      loopColumns: gridColumnCount(loopStyle.gridTemplateColumns),
+      loopDisplay: loopStyle.display,
+      proofPanelWidth: proofPanelRect.width,
+      snapshotColumns: gridColumnCount(snapshotsStyle.gridTemplateColumns),
+      snapshotsDisplay: snapshotsStyle.display,
+      verdictDisplay: verdictStyle.display,
+      workspaceColumns: gridColumnCount(workspaceStyle.gridTemplateColumns),
+      workspaceDisplay: workspaceStyle.display,
+    };
+  });
+
+  expect(layout).not.toBeNull();
+  expect(layout?.verdictDisplay).toBe("grid");
+  expect(layout?.snapshotsDisplay).toBe("grid");
+  expect(layout?.firstSnapshotDisplay).toBe("grid");
+  expect(layout?.snapshotColumns).toBeGreaterThanOrEqual(3);
+  expect(layout?.workspaceDisplay).toBe("grid");
+  expect(layout?.workspaceColumns).toBeGreaterThanOrEqual(2);
+  expect(layout?.loopDisplay).toBe("grid");
+  expect(layout?.loopColumns).toBeGreaterThanOrEqual(3);
+  expect(layout?.proofPanelWidth).toBeGreaterThanOrEqual(300);
+}
+
 test.describe("reliability loop UX", () => {
   test("renders paid MVP control surfaces with stable shell and summary copy", async ({ page }) => {
     test.setTimeout(180_000);
@@ -86,6 +141,9 @@ test.describe("reliability loop UX", () => {
         await expectMainContentFitsViewport(page);
         await expectPageHeading(page);
         await expectVisibleTexts(page, route.labels);
+        if (route.path === "/home") {
+          await expectHomeCockpitLayout(page);
+        }
       });
     }
 
