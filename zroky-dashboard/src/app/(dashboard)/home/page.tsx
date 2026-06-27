@@ -715,6 +715,33 @@ export default function HomePage() {
     protectedGoldenCount > 0 && failedCiRuns.length === 0,
   ].filter(Boolean).length;
   const evidenceReadinessPercent = Math.round((evidenceChecklistReady / 5) * 100);
+  const heroProofline = [
+    {
+      label: "Open decisions",
+      value: formatCount(openDecisionCount),
+      tone: openDecisionCount > 0 ? ("warning" as const) : ("success" as const),
+    },
+    {
+      label: "Evidence readiness",
+      value: `${formatCount(evidenceReadinessPercent)}%`,
+      tone:
+        evidenceReadinessPercent >= 80
+          ? ("success" as const)
+          : evidenceReadinessPercent > 0
+            ? ("warning" as const)
+            : ("neutral" as const),
+    },
+    {
+      label: "Bypass risk",
+      value: formatCount(bypassRiskCount),
+      tone:
+        bypassRiskCount > 0
+          ? ("danger" as const)
+          : unreceiptedMutationCount > 0
+            ? ("warning" as const)
+            : ("success" as const),
+    },
+  ];
   const launchGuardrails = [
     {
       label: "Protected actions",
@@ -1169,6 +1196,16 @@ export default function HomePage() {
           </div>
           <strong>{heroSignal.title}</strong>
           <p>{heroSignal.summary}</p>
+          {!loading && hasWorkspaceActivity ? (
+            <div className="fi-a-verdict-proofline" aria-label="Home proof summary">
+              {heroProofline.map((item) => (
+                <span data-tone={item.tone} key={item.label}>
+                  <small>{item.label}</small>
+                  <strong>{item.value}</strong>
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="fi-a-verdict-side">
           <div className="fi-a-refresh-meta" aria-live="polite">

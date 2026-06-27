@@ -338,8 +338,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .content {
+  grid-column: 2 !important;
   display: grid !important;
   grid-template-rows: auto minmax(0, 1fr) !important;
+  width: 100% !important;
   min-width: 0 !important;
   min-height: 100dvh !important;
   background: var(--dash-canvas) !important;
@@ -553,8 +555,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-workspace {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) minmax(330px, 390px) !important;
-  gap: 14px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px) !important;
+  gap: 16px !important;
   align-items: start !important;
 }
 
@@ -580,8 +582,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table th,
 .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td {
-  padding-right: 10px !important;
-  padding-left: 10px !important;
+  padding-right: 12px !important;
+  padding-left: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table th:nth-child(1),
@@ -795,8 +797,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1120px) {
-  .app-shell[data-dashboard-system="control-v1"] {
+  .app-shell[data-dashboard-system="control-v1"],
+  .app-shell[data-dashboard-system="control-v1"].sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .content {
+    grid-column: 1 !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .sidebar {
@@ -14329,7 +14336,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-home-option-a {
   display: grid !important;
-  gap: 14px !important;
+  gap: 16px !important;
   min-width: 0 !important;
   color: var(--dash-text) !important;
 }
@@ -14337,15 +14344,16 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .fi-a-verdict {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) auto !important;
-  gap: 18px !important;
-  align-items: end !important;
-  padding: 20px !important;
+  gap: 24px !important;
+  align-items: center !important;
+  padding: 24px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-copy {
   display: grid !important;
-  gap: 7px !important;
+  gap: 9px !important;
   min-width: 0 !important;
+  max-width: 880px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-kicker {
@@ -14361,23 +14369,23 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: flex !important;
   flex-wrap: wrap !important;
   align-items: center !important;
-  gap: 10px !important;
+  gap: 12px !important;
   min-width: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-verdict h1 {
   margin: 0 !important;
   color: var(--dash-text) !important;
-  font-size: 1.78rem !important;
+  font-size: 2.04rem !important;
   font-weight: 820 !important;
-  line-height: 1.08 !important;
+  line-height: 1.04 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-copy > strong {
   color: var(--dash-text) !important;
-  font-size: 0.92rem !important;
+  font-size: 1.04rem !important;
   font-weight: 780 !important;
-  line-height: 1.25 !important;
+  line-height: 1.2 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-verdict p,
@@ -14385,16 +14393,67 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-summary {
   margin: 0 !important;
   color: var(--dash-text-soft) !important;
-  font-size: 0.83rem !important;
+  font-size: 0.86rem !important;
   font-weight: 560 !important;
-  line-height: 1.45 !important;
+  line-height: 1.5 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-proofline {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin-top: 2px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-proofline > span {
+  display: inline-grid !important;
+  grid-template-columns: auto auto !important;
+  align-items: baseline !important;
+  gap: 8px !important;
+  min-height: 32px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 999px !important;
+  background: #f7f9fc !important;
+  padding: 6px 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-proofline > span[data-tone="success"] {
+  border-color: #b7e3ca !important;
+  background: var(--dash-green-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-proofline > span[data-tone="warning"] {
+  border-color: #efd29b !important;
+  background: var(--dash-amber-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-proofline > span[data-tone="danger"] {
+  border-color: #f0b8b3 !important;
+  background: var(--dash-red-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-proofline small {
+  color: var(--dash-text-muted) !important;
+  font-size: 0.68rem !important;
+  font-weight: 760 !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-proofline strong {
+  color: var(--dash-text) !important;
+  font-size: 0.84rem !important;
+  font-weight: 820 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-verdict-side {
   display: grid !important;
   justify-items: end !important;
-  gap: 12px !important;
-  min-width: 260px !important;
+  gap: 14px !important;
+  min-width: 286px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-refresh-meta {
@@ -14484,58 +14543,58 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-strip {
   display: grid !important;
-  grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.6fr) !important;
-  gap: 12px !important;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.7fr) !important;
+  gap: 16px !important;
   align-items: stretch !important;
   border: 1px solid var(--dash-border) !important;
   border-radius: 8px !important;
   background: #ffffff !important;
-  padding: 12px !important;
+  padding: 16px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-head {
   display: grid !important;
   align-content: center !important;
-  gap: 5px !important;
+  gap: 7px !important;
   min-width: 0 !important;
   border-right: 1px solid var(--dash-border) !important;
-  padding: 4px 14px 4px 4px !important;
+  padding: 4px 18px 4px 4px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-head h2 {
   margin: 0 !important;
   color: var(--dash-text) !important;
-  font-size: 1.05rem !important;
+  font-size: 1.16rem !important;
   font-weight: 820 !important;
-  line-height: 1.15 !important;
+  line-height: 1.12 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-head p {
   margin: 0 !important;
   color: var(--dash-text-soft) !important;
-  font-size: 0.8rem !important;
+  font-size: 0.84rem !important;
   font-weight: 560 !important;
-  line-height: 1.4 !important;
+  line-height: 1.48 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-metrics {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 8px !important;
+  gap: 10px !important;
   min-width: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-card {
   display: grid !important;
   grid-template-columns: auto minmax(0, 1fr) !important;
-  gap: 8px !important;
-  align-items: center !important;
+  gap: 10px !important;
+  align-items: start !important;
   min-width: 0 !important;
-  min-height: 82px !important;
+  min-height: 96px !important;
   border: 1px solid var(--dash-border) !important;
   border-radius: 8px !important;
   background: #f7f9fc !important;
-  padding: 10px !important;
+  padding: 12px !important;
   color: inherit !important;
   text-decoration: none !important;
 }
@@ -14584,7 +14643,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-copy {
   display: grid !important;
-  gap: 2px !important;
+  gap: 4px !important;
   min-width: 0 !important;
 }
 
@@ -14594,35 +14653,34 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-weight: 780 !important;
   line-height: 1.1 !important;
   text-transform: uppercase !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  overflow-wrap: anywhere !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-copy strong {
   color: var(--dash-text) !important;
-  font-size: 1rem !important;
+  font-size: 1.12rem !important;
   font-weight: 840 !important;
   line-height: 1.12 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  overflow-wrap: anywhere !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-copy small {
   color: var(--dash-text-soft) !important;
-  font-size: 0.7rem !important;
+  font-size: 0.73rem !important;
   font-weight: 560 !important;
-  line-height: 1.25 !important;
+  line-height: 1.32 !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  white-space: normal !important;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-snapshot-grid {
   display: grid !important;
-  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
-  gap: 10px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
   min-width: 0 !important;
 }
 
@@ -14635,8 +14693,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 5px 9px !important;
   align-items: center !important;
   min-width: 0 !important;
-  min-height: 88px !important;
-  padding: 12px !important;
+  min-height: 96px !important;
+  padding: 14px !important;
   text-align: left !important;
   cursor: pointer !important;
 }
@@ -14670,18 +14728,16 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   grid-area: label !important;
   min-width: 0 !important;
   color: var(--dash-text-soft) !important;
-  font-size: 0.76rem !important;
+  font-size: 0.8rem !important;
   font-weight: 760 !important;
   line-height: 1.2 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  overflow-wrap: anywhere !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-snapshot-card strong {
   grid-area: value !important;
   color: var(--dash-text) !important;
-  font-size: 1rem !important;
+  font-size: 1.18rem !important;
   font-weight: 820 !important;
   line-height: 1 !important;
   text-align: right !important;
@@ -14705,7 +14761,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-main-column {
   display: grid !important;
-  gap: 14px !important;
+  gap: 16px !important;
   min-width: 0 !important;
 }
 
@@ -14713,20 +14769,20 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .fi-a-loop-panel,
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-panel {
   display: grid !important;
-  gap: 14px !important;
-  padding: 14px !important;
+  gap: 16px !important;
+  padding: 16px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-panel-head {
   display: grid !important;
-  gap: 5px !important;
+  gap: 6px !important;
   min-width: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-panel-head h2 {
   margin: 0 !important;
   color: var(--dash-text) !important;
-  font-size: 1.08rem !important;
+  font-size: 1.16rem !important;
   font-weight: 800 !important;
   line-height: 1.18 !important;
 }
@@ -14764,7 +14820,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-bottom: 1px solid var(--dash-border) !important;
   background: #f7f9fc !important;
   color: var(--dash-text-muted) !important;
-  font-size: 0.68rem !important;
+  font-size: 0.7rem !important;
   font-weight: 780 !important;
   line-height: 1.2 !important;
   text-align: left !important;
@@ -14774,8 +14830,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td {
   border-bottom: 1px solid var(--dash-border) !important;
   color: var(--dash-text-soft) !important;
-  font-size: 0.78rem !important;
-  line-height: 1.35 !important;
+  font-size: 0.8rem !important;
+  line-height: 1.42 !important;
   vertical-align: middle !important;
 }
 
@@ -14815,13 +14871,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-agent-cell {
   display: grid !important;
-  gap: 3px !important;
+  gap: 4px !important;
   min-width: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-agent-cell strong {
   color: var(--dash-text) !important;
-  font-size: 0.82rem !important;
+  font-size: 0.84rem !important;
   font-weight: 780 !important;
   line-height: 1.25 !important;
   overflow-wrap: anywhere !important;
@@ -14840,20 +14896,20 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .fi-a-loop {
   display: grid !important;
   grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
-  gap: 8px !important;
+  gap: 10px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-loop-step {
   display: grid !important;
   grid-template-columns: auto minmax(0, 1fr) !important;
-  gap: 4px 8px !important;
+  gap: 5px 9px !important;
   align-items: center !important;
   min-width: 0 !important;
-  min-height: 82px !important;
+  min-height: 90px !important;
   border: 1px solid var(--dash-border) !important;
   border-radius: 8px !important;
   background: #f7f9fc !important;
-  padding: 10px !important;
+  padding: 12px !important;
   color: inherit !important;
   text-decoration: none !important;
 }
@@ -14910,6 +14966,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-panel {
   position: sticky !important;
   top: 70px !important;
+  align-content: start !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-panel .fi-a-panel-head {
@@ -14919,35 +14976,33 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-list {
   display: grid !important;
-  gap: 8px !important;
+  gap: 10px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-row {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) auto !important;
-  gap: 10px !important;
+  gap: 12px !important;
   align-items: center !important;
-  min-height: 42px !important;
+  min-height: 46px !important;
   border: 1px solid var(--dash-border) !important;
   border-radius: 8px !important;
   background: #f7f9fc !important;
-  padding: 9px 10px !important;
+  padding: 10px 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-row span {
   min-width: 0 !important;
   color: var(--dash-text-muted) !important;
-  font-size: 0.74rem !important;
+  font-size: 0.76rem !important;
   font-weight: 680 !important;
   line-height: 1.25 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  overflow-wrap: anywhere !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-row strong {
   color: var(--dash-text) !important;
-  font-size: 0.76rem !important;
+  font-size: 0.8rem !important;
   font-weight: 780 !important;
   line-height: 1.25 !important;
   text-align: right !important;
@@ -14986,10 +15041,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1380px) {
-  .app-shell[data-dashboard-system="control-v1"] .fi-a-snapshot-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-
   .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-strip {
     grid-template-columns: 1fr !important;
   }
@@ -15005,7 +15056,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1500px) {
   .app-shell[data-dashboard-system="control-v1"] .fi-a-workspace {
     grid-template-columns: 1fr !important;
   }
@@ -15013,7 +15064,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .fi-a-proof-panel {
     position: static !important;
   }
+}
 
+@media (max-width: 1120px) {
   .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -15056,6 +15109,73 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .fi-a-launch-metrics,
   .app-shell[data-dashboard-system="control-v1"] .fi-a-loop {
     grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table,
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table tbody,
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table tr,
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table thead {
+    display: none !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table tbody {
+    display: grid !important;
+    gap: 10px !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table tbody tr {
+    display: grid !important;
+    gap: 8px !important;
+    border: 1px solid var(--dash-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    padding: 12px !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 5px !important;
+    align-items: start !important;
+    border-bottom: 0 !important;
+    padding: 0 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td::before {
+    color: var(--dash-text-muted) !important;
+    font-size: 0.66rem !important;
+    font-weight: 780 !important;
+    line-height: 1.3 !important;
+    text-transform: uppercase !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td:nth-child(1)::before {
+    content: "Urgency" !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td:nth-child(2)::before {
+    content: "Signal" !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td:nth-child(3)::before {
+    content: "Agent/action" !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td:nth-child(4)::before {
+    content: "Impact" !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td:nth-child(5)::before {
+    content: "Proof" !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .fi-a-decision-table td:nth-child(6)::before {
+    content: "Next step" !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .fi-a-snapshot-card,

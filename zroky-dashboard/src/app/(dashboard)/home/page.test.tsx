@@ -442,6 +442,11 @@ describe("Command Center home", () => {
     expect((await screen.findAllByText("Checkout loop")).length).toBeGreaterThan(0);
     expect(screen.getByText("Production promotion blocked")).toBeInTheDocument();
     expect(screen.getByText("1 verification gate failing on regression-ci:proj_1. Resolve the proof failure before release.")).toBeInTheDocument();
+    const proofSummary = screen.getByLabelText("Home proof summary");
+    expect(within(proofSummary).getByText("Open decisions")).toBeInTheDocument();
+    expect(within(proofSummary).getByText("3")).toBeInTheDocument();
+    expect(within(proofSummary).getByText("Evidence readiness")).toBeInTheDocument();
+    expect(within(proofSummary).getByText("40%")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Paid launch guardrails" })).toBeInTheDocument();
     expect(screen.getByText("Control, proof, quota, and bypass risk")).toBeInTheDocument();
     expect(screen.getByText("Protected actions")).toBeInTheDocument();

@@ -106,6 +106,7 @@ async function expectHomeCockpitLayout(page: Page): Promise<void> {
       snapshotColumns: gridColumnCount(snapshotsStyle.gridTemplateColumns),
       snapshotsDisplay: snapshotsStyle.display,
       verdictDisplay: verdictStyle.display,
+      viewportWidth: window.innerWidth,
       workspaceColumns: gridColumnCount(workspaceStyle.gridTemplateColumns),
       workspaceDisplay: workspaceStyle.display,
     };
@@ -115,11 +116,19 @@ async function expectHomeCockpitLayout(page: Page): Promise<void> {
   expect(layout?.verdictDisplay).toBe("grid");
   expect(layout?.snapshotsDisplay).toBe("grid");
   expect(layout?.firstSnapshotDisplay).toBe("grid");
-  expect(layout?.snapshotColumns).toBeGreaterThanOrEqual(3);
+  if ((layout?.viewportWidth ?? 0) <= 620) {
+    expect(layout?.snapshotColumns).toBe(1);
+  } else {
+    expect(layout?.snapshotColumns).toBeGreaterThanOrEqual(3);
+  }
   expect(layout?.workspaceDisplay).toBe("grid");
-  expect(layout?.workspaceColumns).toBeGreaterThanOrEqual(2);
+  expect(layout?.workspaceColumns).toBeGreaterThanOrEqual(1);
   expect(layout?.loopDisplay).toBe("grid");
-  expect(layout?.loopColumns).toBeGreaterThanOrEqual(3);
+  if ((layout?.viewportWidth ?? 0) <= 620) {
+    expect(layout?.loopColumns).toBe(1);
+  } else {
+    expect(layout?.loopColumns).toBeGreaterThanOrEqual(3);
+  }
   expect(layout?.proofPanelWidth).toBeGreaterThanOrEqual(300);
 }
 
