@@ -304,7 +304,26 @@ export default function HomePage() {
     ? data.intents.find((intent) => intent.action_id === selectedRow.actionId) ?? null
     : null;
   const initialLoading = isLoading && lastLoadedAt == null;
+  const showFirstRun = !setupComplete && !initialLoading;
   const updatedLabel = lastLoadedAt ? `Updated ${timeSince(lastLoadedAt)}` : "Loading";
+
+  const dashboardBody = (
+    <>
+      <ProofStrip metrics={metrics} loading={initialLoading} />
+      <FleetContextLine fleet={fleet} loading={initialLoading} />
+      <div className="mc-main-grid">
+        <DecisionQueue
+          rows={rows}
+          selectedId={selectedRow?.id ?? null}
+          filter={filter}
+          onFilterChange={setFilter}
+          onSelect={(row: HomeQueueRow) => setSelectedRowId(row.id)}
+          loading={initialLoading}
+        />
+        <SelectedProofRail row={selectedRow} intent={selectedIntent} />
+      </div>
+    </>
+  );
 
   return (
     <main className="mission-control-page">
@@ -318,24 +337,15 @@ export default function HomePage() {
           onRefresh={() => void load()}
         />
 
-        {!setupComplete && !initialLoading ? (
-          <FirstRunPanel />
-        ) : (
-          <>
-            <ProofStrip metrics={metrics} loading={initialLoading} />
-            <FleetContextLine fleet={fleet} loading={initialLoading} />
-            <div className="mc-main-grid">
-              <DecisionQueue
-                rows={rows}
-                selectedId={selectedRow?.id ?? null}
-                filter={filter}
-                onFilterChange={setFilter}
-                onSelect={(row: HomeQueueRow) => setSelectedRowId(row.id)}
-                loading={initialLoading}
-              />
-              <SelectedProofRail row={selectedRow} intent={selectedIntent} />
+        {showFirstRun ? (
+          <section className="mc-locked-home" aria-label="Locked Home dashboard preview">
+            <div className="mc-locked-preview" aria-hidden="true" inert>
+              {dashboardBody}
             </div>
-          </>
+            <FirstRunPanel />
+          </section>
+        ) : (
+          dashboardBody
         )}
 
         <ControlLoopStrip />

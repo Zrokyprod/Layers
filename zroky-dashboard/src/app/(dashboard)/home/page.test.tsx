@@ -485,11 +485,19 @@ describe("Mission Control Home", () => {
   it("shows the first-run panel when no setup exists", async () => {
     mockHomeData({ apiKeys: [] });
 
-    render(<HomePage />);
+    const { container } = render(<HomePage />);
 
     expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
+    const lockedHome = container.querySelector(".mc-locked-home");
+    const lockedPreview = container.querySelector(".mc-locked-preview");
+    expect(lockedHome).toBeInTheDocument();
+    expect(lockedPreview?.getAttribute("aria-hidden")).toBe("true");
+    expect(lockedPreview?.hasAttribute("inert")).toBe(true);
+    expect(lockedPreview?.querySelector('[aria-label="Proof metrics"]')).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /Set up agent/i })[0].getAttribute("href")).toBe("/agents/setup");
+    expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByRole("link", { name: /Start agent setup/i }).getAttribute("href")).toBe("/agents/setup");
   });
 
   it("opens the mission dashboard after the agent setup wizard saves a profile", async () => {
