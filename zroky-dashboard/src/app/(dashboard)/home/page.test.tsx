@@ -496,11 +496,7 @@ describe("Mission Control Home", () => {
     mockHomeData({
       apiKeys: [],
       profiles: [
-        profile({
-          metadata: {
-            setup_source: "agent_control_setup_wizard",
-          },
-        }),
+        profile(),
       ],
     });
 

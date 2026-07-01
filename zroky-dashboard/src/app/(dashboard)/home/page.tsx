@@ -82,9 +82,8 @@ function errorCount(results: PromiseSettledResult<unknown>[]): number {
 function hasProjectSetup(data: MissionData): boolean {
   return (
     data.apiKeys.some((key) => !key.revoked && !key.expired) ||
-    data.agentProfiles.some(
-      (profile) => profile.is_active && profile.metadata?.setup_source === "agent_control_setup_wizard",
-    ) ||
+    data.agentProfiles.some((profile) => profile.is_active) ||
+    (data.agentProfileMeta?.active_count ?? 0) > 0 ||
     data.intents.length > 0 ||
     data.approvals.length > 0 ||
     data.outcomes.length > 0
