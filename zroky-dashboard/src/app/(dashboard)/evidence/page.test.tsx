@@ -332,7 +332,7 @@ describe("EvidencePage", () => {
     expect(within(row).getByText("Matched")).toBeInTheDocument();
 
     const panel = await screen.findByLabelText("Focused proof panel");
-    expect(within(panel).getByText("Action Receipt")).toBeInTheDocument();
+    expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
     expect(screen.getByText("Signature validity is verified by the backend; the browser never receives the signing secret.")).toBeInTheDocument();
     expect(screen.getAllByText("sha256:receipt_1").length).toBeGreaterThan(0);
