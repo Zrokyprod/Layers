@@ -834,7 +834,7 @@ def recommendations_for_action_types(action_types: list[str]) -> dict[str, objec
     native_ids = [
         item.id
         for item in NATIVE_TOOL_FAMILIES
-        if item.launch_tier == "p0"
+        if item.implementation_status != "planned"
         and action_set.intersection(item.recommended_for_action_types)
     ]
     if not connector_ids:

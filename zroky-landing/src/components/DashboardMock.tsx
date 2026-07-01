@@ -271,7 +271,7 @@ export function DashboardMock() {
         {/* window bar */}
         <div className="flex items-center gap-2 border-b border-[#e4e0d6] bg-white px-4 py-2.5">
           <img src="/zroky.png" alt="Zroky" className="h-4 w-4 rounded object-contain" />
-          <span className="ml-1 rounded-md bg-[#efeee7] px-2 py-0.5 font-mono text-[10px] text-[#8a867a]">app.zroky.com / {active.url}</span>
+          <span className="ml-1 rounded-md bg-[#efeee7] px-2 py-0.5 font-mono text-[10px] text-[#8a867a]">zroky.com / {active.url}</span>
           <span className="ml-auto hidden gap-1.5 sm:flex">
             <span className="h-2.5 w-2.5 rounded-full bg-[#e4e0d6]" />
             <span className="h-2.5 w-2.5 rounded-full bg-[#e4e0d6]" />

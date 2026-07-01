@@ -46,6 +46,8 @@ def test_ledger_refund_http_connector_retries_retryable_status_then_matches() ->
         "currency": "USD",
         "state": "posted",
         "refund_id": "rf_1001",
+        "amount_minor": 4250,
+        "amount_major": "42.5",
         "amount_usd": 42.5,
         "status": "posted",
     }

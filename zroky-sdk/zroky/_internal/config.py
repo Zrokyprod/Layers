@@ -21,11 +21,11 @@ class SDKConfig:
     mask_pii: bool
     ingest_url: str
     default_agent: str | None
-    default_agent_id: str | None
     verbose: bool
     batch_size: int
     flush_interval_seconds: float
     max_queue_size: int  # Max events in memory queue before dropping
+    default_agent_id: str | None = None
     agent_framework: str | None = None
     session_id: str | None = None
     workflow_id: str | None = None

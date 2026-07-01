@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from app.api.routes._internal.billing_razorpay import _razorpay_amount_for_plan
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import BillingEvent, Entitlement, Project, Subscription, SupportTicket, SupportTicketMessage
@@ -271,6 +272,7 @@ def test_owner_can_run_razorpay_reconciliation(client, monkeypatch: pytest.Monke
     get_settings.cache_clear()
     fake_razorpay = _FakeRazorpayClient()
     fake_razorpay.notes = {"org_id": "org_razorpay", "plan_code": "pro"}
+    fake_razorpay.amount, _ = _razorpay_amount_for_plan("pro")
     monkeypatch.setattr(
         "app.services.razorpay_reconciliation._razorpay_client",
         lambda: fake_razorpay,
