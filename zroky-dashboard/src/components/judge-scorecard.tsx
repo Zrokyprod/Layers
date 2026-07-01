@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 
 /**
- * Judge Scorecard — renders per-dimension judge scores in a compact, visual
- * format with bars + labels + verdict reasons.
+ * AI Advisory Scorecard - renders model-authored diagnostic scores in a compact,
+ * visual format with bars, labels, and reasons. These scores are context for
+ * review, not policy authority or proof.
  *
  * Pulls from two shapes the backend may produce:
  *
@@ -37,6 +38,9 @@ import { useMemo } from "react";
  *          ...
  *        }
  *      }
+ *
+ * This is advisory context only. It must not be treated as the policy decision
+ * or system-of-record proof for a protected action.
  *
  * Returns null if no judge data is present — safe to drop into pages that
  * may or may not have Layer 3 signals.
@@ -173,7 +177,7 @@ function colorForScore(score: number, floor: number | null): string {
   return "judge-bar-green";
 }
 
-export function JudgeScorecard({ source, title = "Judge Scorecard" }: JudgeScorecardProps) {
+export function JudgeScorecard({ source, title = "AI advisory scorecard" }: JudgeScorecardProps) {
   const dims = useMemo(
     () => (source ? extractDimensions(source as Record<string, unknown>) : []),
     [source],
@@ -208,7 +212,7 @@ export function JudgeScorecard({ source, title = "Judge Scorecard" }: JudgeScore
             )}
             {verdict ? (
               <span className={`judge-scorecard-verdict judge-scorecard-verdict-${verdict}`}>
-                {verdict}
+                Advisory: {verdict}
               </span>
             ) : null}
             {confidence !== null ? (
@@ -216,6 +220,7 @@ export function JudgeScorecard({ source, title = "Judge Scorecard" }: JudgeScore
                 confidence {(confidence * 100).toFixed(0)}%
               </span>
             ) : null}
+            <span className="judge-scorecard-muted">advisory only</span>
           </p>
         </div>
         {overall !== null ? (

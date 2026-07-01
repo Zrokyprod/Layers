@@ -1,6 +1,9 @@
 const rawDashboardUrl = import.meta.env.VITE_DASHBOARD_URL ?? 'https://zroky.com';
+const rawDemoUrl =
+  import.meta.env.VITE_DEMO_URL ?? 'mailto:hello@zroky.com?subject=Zroky%20demo';
 
 export const DASHBOARD_URL = rawDashboardUrl.replace(/\/$/, '');
+export const DEMO_URL = rawDemoUrl;
 export const SIGN_IN_URL = `${DASHBOARD_URL}/login`;
 export const FORGOT_PASSWORD_URL = `${DASHBOARD_URL}/forgot-password`;
 export const RESET_PASSWORD_URL = `${DASHBOARD_URL}/reset-password`;

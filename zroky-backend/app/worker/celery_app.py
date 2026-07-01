@@ -46,6 +46,17 @@ beat_schedule["fix-watch-recurrence-check"] = {
     "options": {"queue": "diagnosis_fast"},
 }
 
+beat_schedule["action-post-execution-sweep"] = {
+    "task": "app.worker.tasks.process_action_post_execution_jobs",
+    "schedule": max(5, int(settings.ACTION_POST_EXECUTION_SWEEP_INTERVAL_SECONDS)),
+    "options": {"queue": "diagnosis_fast"},
+}
+beat_schedule["stale-action-execution-attempt-sweep"] = {
+    "task": "app.worker.tasks.sweep_stale_action_execution_attempts",
+    "schedule": max(30, int(settings.ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS)),
+    "options": {"queue": "diagnosis_fast"},
+}
+
 # Module 12 subscription lifecycle sweeps.
 if settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
     _lifecycle_minute = min(max(int(settings.BILLING_LIFECYCLE_SWEEP_MINUTE), 0), 59)

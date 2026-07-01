@@ -1,59 +1,116 @@
 "use client";
 
-import Link from "next/link";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck,
   Copy,
-  DatabaseZap,
+  Database,
   FileJson,
+  GitBranch,
   Plug,
-  PlayCircle,
   RadioTower,
   RefreshCw,
   Save,
   ShieldCheck,
 } from "lucide-react";
 
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import {
-  getGenericRestConnectorStatus,
+  DashboardMetricStrip,
+  DashboardVerdictHero,
+  DashboardWorkspace,
+} from "@/components/dashboard-scaffold";
+import { StatusPill } from "@/components/status-pill";
+import {
   getCustomerRecordConnectorStatus,
+  getGenericRestConnectorStatus,
   getGithubConnectionStatus,
+  getHubSpotCrmConnectorStatus,
+  getJiraIssueConnectorStatus,
   getLedgerRefundConnectorStatus,
+  getNetSuiteFinanceConnectorStatus,
+  getPostgresReadConnectorStatus,
+  getRazorpayRefundConnectorStatus,
+  getSalesforceCrmConnectorStatus,
+  getZendeskTicketConnectorStatus,
+  getZohoCrmConnectorStatus,
   getSlackInstallStatus,
+  getStripeRefundConnectorStatus,
   getToolRegistry,
   listOutcomeReconciliations,
   saveGenericRestConnectorConfig,
+  saveHubSpotCrmConnectorConfig,
+  saveJiraIssueConnectorConfig,
+  saveNetSuiteFinanceConnectorConfig,
+  saveRazorpayRefundConnectorConfig,
+  saveSalesforceCrmConnectorConfig,
+  saveStripeRefundConnectorConfig,
+  saveZendeskTicketConnectorConfig,
+  saveZohoCrmConnectorConfig,
+  startZohoCrmOAuth,
   testGenericRestConnector,
+  testHubSpotCrmConnector,
+  testJiraIssueConnector,
+  testNetSuiteFinanceConnector,
+  testRazorpayRefundConnector,
+  testSalesforceCrmConnector,
+  testStripeRefundConnector,
+  testZendeskTicketConnector,
+  testZohoCrmConnector,
   type CustomerRecordConnectorStatusResponse,
   type GenericRestConnectorStatusResponse,
+  type HubSpotCrmConnectorStatusResponse,
+  type JiraIssueConnectorStatusResponse,
   type LedgerRefundConnectorStatusResponse,
+  type NetSuiteFinanceConnectorStatusResponse,
   type OutcomeReconciliationView,
-  type ToolImplementationStatus,
-  type ToolRegistryItemResponse,
+  type PostgresReadConnectorStatusResponse,
+  type RazorpayRefundConnectorStatusResponse,
+  type SalesforceCrmConnectorStatusResponse,
+  type StripeRefundConnectorStatusResponse,
   type ToolRegistryResponse,
+  type ZendeskTicketConnectorStatusResponse,
+  type ZohoCrmConnectorStatusResponse,
 } from "@/lib/api";
-import SystemOfRecordConnectors from "./system-of-record-connectors";
+import {
+  buildConnectorInventory,
+  connectorStateLabel,
+  connectorUpdatedLabel,
+  type ConnectorCoverageRow,
+  type ConnectorInventory,
+  type ConnectorInventoryId,
+  type ConnectorInventoryRow,
+  type ConnectorTransportGroup,
+} from "@/lib/connector-inventory";
+import { externalNavigator } from "@/lib/external-navigation";
+import { compactJson, formatCount, formatPercent, humanize } from "@/lib/format";
 import type {
   GithubConnectionStatusResponse,
   SlackInstallStatusResponse,
 } from "@/lib/types";
+import SystemOfRecordConnectors from "./system-of-record-connectors";
 
 type ConnectorsOverviewState = {
   github: GithubConnectionStatusResponse | null;
   slack: SlackInstallStatusResponse | null;
   ledger: LedgerRefundConnectorStatusResponse | null;
+  stripe: StripeRefundConnectorStatusResponse | null;
+  razorpay: RazorpayRefundConnectorStatusResponse | null;
   customer: CustomerRecordConnectorStatusResponse | null;
   generic: GenericRestConnectorStatusResponse | null;
+  hubspot: HubSpotCrmConnectorStatusResponse | null;
+  salesforce: SalesforceCrmConnectorStatusResponse | null;
+  zendesk: ZendeskTicketConnectorStatusResponse | null;
+  jira: JiraIssueConnectorStatusResponse | null;
+  netsuite: NetSuiteFinanceConnectorStatusResponse | null;
+  zoho: ZohoCrmConnectorStatusResponse | null;
+  postgres: PostgresReadConnectorStatusResponse | null;
   checks: OutcomeReconciliationView[];
   registry: ToolRegistryResponse | null;
 };
-
-type SystemConnectorStatus =
-  | LedgerRefundConnectorStatusResponse
-  | CustomerRecordConnectorStatusResponse
-  | GenericRestConnectorStatusResponse;
 
 type GenericRestFormState = {
   baseUrl: string;
@@ -66,22 +123,92 @@ type GenericRestFormState = {
   matchFieldsText: string;
 };
 
-type ConnectorSummary = {
-  href: string;
-  label: string;
-  title: string;
-  status: string;
-  detail: string;
-  cta: string;
-  tone: "danger" | "neutral" | "success" | "warning";
+type StripeRefundFormState = {
+  bearerToken: string;
+  refundId: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type RazorpayRefundFormState = {
+  keyId: string;
+  keySecret: string;
+  refundId: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type HubSpotFormState = {
+  bearerToken: string;
+  recordRef: string;
+  idProperty: string;
+  propertiesText: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type SalesforceFormState = {
+  baseUrl: string;
+  bearerToken: string;
+  objectType: string;
+  recordRef: string;
+  fieldsText: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type ZohoFormState = {
+  baseUrl: string;
+  bearerToken: string;
+  moduleName: string;
+  recordRef: string;
+  fieldsText: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type ZendeskFormState = {
+  baseUrl: string;
+  authUsername: string;
+  bearerToken: string;
+  recordRef: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type JiraFormState = {
+  baseUrl: string;
+  authUsername: string;
+  bearerToken: string;
+  recordRef: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type NetSuiteFormState = {
+  baseUrl: string;
+  bearerToken: string;
+  recordType: string;
+  recordRef: string;
+  claimedJson: string;
+  matchFieldsText: string;
 };
 
 const initialOverview: ConnectorsOverviewState = {
   github: null,
   slack: null,
   ledger: null,
+  stripe: null,
+  razorpay: null,
   customer: null,
   generic: null,
+  hubspot: null,
+  salesforce: null,
+  zendesk: null,
+  jira: null,
+  netsuite: null,
+  zoho: null,
+  postgres: null,
   checks: [],
   registry: null,
 };
@@ -104,281 +231,161 @@ const defaultGenericRestForm: GenericRestFormState = {
   matchFieldsText: "status",
 };
 
-function isLedgerRefundCheck(item: OutcomeReconciliationView) {
-  const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
-    ? item.metadata as Record<string, unknown>
-    : {};
-  return item.connector_type === "ledger_refund_api" || metadata.connector_kind === "ledger_refund_api";
-}
+const defaultStripeRefundForm: StripeRefundFormState = {
+  bearerToken: "",
+  refundId: "re_123",
+  claimedJson: JSON.stringify(
+    {
+      refund_id: "re_123",
+      amount_minor: 4250,
+      amount_major: "42.5",
+      currency: "USD",
+      status: "succeeded",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "refund_id,amount_minor,currency,status",
+};
 
-function isCustomerRecordCheck(item: OutcomeReconciliationView) {
-  const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
-    ? item.metadata as Record<string, unknown>
-    : {};
-  return item.connector_type === "customer_record_api" || metadata.connector_kind === "customer_record_api";
-}
+const defaultRazorpayRefundForm: RazorpayRefundFormState = {
+  keyId: "rzp_live_xxxxx",
+  keySecret: "",
+  refundId: "rfnd_123",
+  claimedJson: JSON.stringify(
+    {
+      refund_id: "rfnd_123",
+      amount_minor: 4250,
+      amount_major: "42.5",
+      currency: "INR",
+      status: "processed",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "refund_id,amount_minor,currency,status",
+};
 
-function isGenericRestCheck(item: OutcomeReconciliationView) {
-  const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
-    ? item.metadata as Record<string, unknown>
-    : {};
-  return item.connector_type === "generic_rest_api" || metadata.connector_kind === "generic_rest_api";
-}
+const defaultHubSpotForm: HubSpotFormState = {
+  bearerToken: "",
+  recordRef: "owner@example.com",
+  idProperty: "email",
+  propertiesText: "email,firstname,lastname,lifecyclestage,hs_lead_status,hs_object_id",
+  claimedJson: JSON.stringify(
+    {
+      email: "owner@example.com",
+      lifecyclestage: "customer",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "email,lifecyclestage",
+};
 
-function formatConnectorLabel(value: string | null | undefined) {
-  if (!value) return "Not verified";
-  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
+const defaultSalesforceForm: SalesforceFormState = {
+  baseUrl: "https://example.my.salesforce.com",
+  bearerToken: "",
+  objectType: "Account",
+  recordRef: "001000000000000AAA",
+  fieldsText: "Id,Name,Status,StageName,Amount",
+  claimedJson: JSON.stringify(
+    {
+      salesforce_id: "001000000000000AAA",
+      object_type: "Account",
+      Name: "Acme",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "salesforce_id,Name",
+};
 
-function connectorReady(
-  connector: SystemConnectorStatus | null,
-  latestCheck: OutcomeReconciliationView | null,
-) {
-  return Boolean(
-    connector?.connected
-      && connector.health_status === "healthy"
-      && (connector.last_verdict ?? latestCheck?.verdict) === "matched"
-      && connector.readiness?.status === "ready"
-      && !connector.last_error_code,
-  );
-}
+const defaultZohoForm: ZohoFormState = {
+  baseUrl: "https://www.zohoapis.com",
+  bearerToken: "",
+  moduleName: "Contacts",
+  recordRef: "1234567890000000001",
+  fieldsText: "id,Full_Name,Email,Phone,Company,Stage,Amount,Lead_Status,Owner,Modified_Time",
+  claimedJson: JSON.stringify(
+    {
+      zoho_record_id: "1234567890000000001",
+      module_name: "Contacts",
+      Email: "owner@example.com",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "zoho_record_id,Email",
+};
 
-function connectorNeedsProof(
-  connector: SystemConnectorStatus | null,
-  latestCheck: OutcomeReconciliationView | null,
-) {
-  return Boolean(connector?.connected && !connectorReady(connector, latestCheck));
-}
+const defaultZendeskForm: ZendeskFormState = {
+  baseUrl: "https://example.zendesk.com",
+  authUsername: "",
+  bearerToken: "",
+  recordRef: "12345",
+  claimedJson: JSON.stringify(
+    {
+      ticket_id: "12345",
+      status: "solved",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "ticket_id,status",
+};
 
-function connectorSummary({
-  connector,
-  cta,
-  href,
-  label,
-  latestCheck,
-  title,
-}: {
-  connector: SystemConnectorStatus | null;
-  cta: string;
-  href: string;
-  label: string;
-  latestCheck: OutcomeReconciliationView | null;
-  title: string;
-}): ConnectorSummary {
-  const ready = connectorReady(connector, latestCheck);
-  const connected = Boolean(connector?.connected);
-  const verdict = connector?.last_verdict ?? latestCheck?.verdict ?? null;
-  const readiness = connector?.readiness?.status ?? "not_ready";
-  const error = connector?.last_error_code ?? null;
+const defaultJiraForm: JiraFormState = {
+  baseUrl: "https://example.atlassian.net",
+  authUsername: "",
+  bearerToken: "",
+  recordRef: "JSM-123",
+  claimedJson: JSON.stringify(
+    {
+      jira_issue_key: "JSM-123",
+      status: "Done",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "jira_issue_key,status",
+};
 
-  if (!connected) {
-    return {
-      href,
-      label,
-      title,
-      status: "Not configured",
-      detail: "Save a read-scoped system-of-record connector before this action can produce buyer proof.",
-      cta,
-      tone: "warning",
-    };
-  }
-  if (ready && connector) {
-    return {
-      href,
-      label,
-      title,
-      status: "Ready",
-      detail: `${formatConnectorLabel(connector.health_status)} / ${formatConnectorLabel(verdict)} / evidence exportable.`,
-      cta,
-      tone: "success",
-    };
-  }
-  if (error || verdict === "mismatched") {
-    return {
-      href,
-      label,
-      title,
-      status: "Blocked",
-      detail: error
-        ? `${formatConnectorLabel(error)} is blocking preflight.`
-        : "Latest proof mismatched the system of record.",
-      cta,
-      tone: "danger",
-    };
-  }
-  return {
-    href,
-    label,
-    title,
-    status: "Needs preflight",
-    detail: `${formatConnectorLabel(readiness)} / ${formatConnectorLabel(verdict)}. Run saved proof before handoff.`,
-    cta,
-    tone: "warning",
-  };
-}
+const defaultNetSuiteForm: NetSuiteFormState = {
+  baseUrl: "https://example.suitetalk.api.netsuite.com",
+  bearerToken: "",
+  recordType: "vendorBill",
+  recordRef: "12345",
+  claimedJson: JSON.stringify(
+    {
+      netsuite_record_id: "12345",
+      record_type: "vendorBill",
+      tran_id: "VB1001",
+      amount_minor: 125000,
+      amount_major: "1250",
+      currency: "USD",
+      status: "approved",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "netsuite_record_id,record_type,tran_id,amount_minor,currency,status",
+};
 
-function toolStatusTone(status: ToolImplementationStatus): ConnectorSummary["tone"] {
-  if (status === "available") return "success";
-  if (status === "template") return "warning";
-  return "neutral";
-}
-
-function toolStatusLabel(status: ToolImplementationStatus) {
-  if (status === "available") return "Available now";
-  if (status === "template") return "Template";
-  return "Planned";
-}
-
-function formatRegistryCategory(value: string) {
-  return value.replace(/_/g, " ");
-}
-
-function registryItems(registry: ToolRegistryResponse | null) {
-  if (!registry) return [];
-  return [
-    ...registry.runtime_paths,
-    ...registry.verification_connectors,
-    ...registry.native_tool_families,
-  ];
-}
-
-function registryStatusCount(registry: ToolRegistryResponse | null, status: ToolImplementationStatus) {
-  return registryItems(registry).filter((item) => item.implementation_status === status).length;
-}
-
-function labelsForStatus(items: ToolRegistryItemResponse[], status: ToolImplementationStatus) {
-  return items
-    .filter((item) => item.implementation_status === status)
-    .map((item) => item.label);
-}
-
-function compactLabelList(labels: string[], fallback: string) {
-  if (labels.length === 0) return fallback;
-  if (labels.length <= 3) return labels.join(", ");
-  return `${labels.slice(0, 3).join(", ")} +${labels.length - 3} more`;
-}
-
-function ConnectorRegistryItem({ item }: { item: ToolRegistryItemResponse }) {
-  const content = (
-    <>
-      <div className="connectors-registry-item-head">
-        <h3>{item.label}</h3>
-        <span className="connectors-registry-status" data-tone={toolStatusTone(item.implementation_status)}>
-          {toolStatusLabel(item.implementation_status)}
-        </span>
-      </div>
-      <p>{item.description}</p>
-      <div className="connectors-registry-meta">
-        <span>{formatRegistryCategory(item.category)}</span>
-        {item.requires_customer_credentials ? <span>customer credentials</span> : null}
-        {item.backend_capability ? <span>{item.backend_capability}</span> : null}
-      </div>
-    </>
-  );
-
-  if (!item.dashboard_href) {
-    return <article className="connectors-registry-item">{content}</article>;
-  }
-
+function firstSelectedId(inventory: ConnectorInventory): ConnectorInventoryId | null {
   return (
-    <Link href={item.dashboard_href} className="connectors-registry-item">
-      {content}
-    </Link>
+    inventory.rows.find((row) => row.state === "failing" || row.state === "mismatched")?.id
+    ?? inventory.rows.find((row) => row.state === "not_tested")?.id
+    ?? inventory.proofRows.find((row) => row.state === "missing")?.id
+    ?? inventory.proofRows[0]?.id
+    ?? inventory.rows[0]?.id
+    ?? null
   );
 }
 
-function ConnectorRegistryCatalog({
-  loading,
-  registry,
-}: {
-  loading: boolean;
-  registry: ToolRegistryResponse | null;
-}) {
-  const groups = registry
-    ? [
-        {
-          label: "Runtime paths",
-          helper: "Where Zroky sits before an agent action.",
-          items: registry.runtime_paths,
-        },
-        {
-          label: "Proof verifiers",
-          helper: "Systems that can prove the real-world outcome.",
-          items: registry.verification_connectors,
-        },
-        {
-          label: "Native tool templates",
-          helper: "Convenience adapters for common agent tools.",
-          items: registry.native_tool_families,
-        },
-      ]
-    : [];
-  const liveVerifierLabels = registry
-    ? labelsForStatus(registry.verification_connectors, "available")
-    : [];
-  const plannedNativeLabels = registry
-    ? labelsForStatus(registry.native_tool_families, "planned")
-    : [];
-
-  return (
-    <section className="panel connectors-registry-panel" aria-label="Phase 1 connector catalog">
-      <div className="connectors-registry-head">
-        <div>
-          <span className="eyebrow">Phase 1 catalog</span>
-          <h2>Connector coverage</h2>
-          <p>Available now means usable in the current product. Template means generic setup exists. Planned means native coverage is visible but not ready to sell yet.</p>
-        </div>
-        <div className="connectors-registry-counts" aria-label="Connector implementation status">
-          <span data-tone="success">{registryStatusCount(registry, "available")} available now</span>
-          <span data-tone="warning">{registryStatusCount(registry, "template")} template</span>
-          <span>{registryStatusCount(registry, "planned")} planned</span>
-        </div>
-      </div>
-
-      {registry ? (
-        <>
-          <div className="connectors-truth-strip" aria-label="Connector launch truth">
-            <div>
-              <span>Live proof connectors</span>
-              <strong>{compactLabelList(liveVerifierLabels, "No live proof verifier")}</strong>
-              <small>These can produce matched, mismatched, or not_verified outcome checks now.</small>
-            </div>
-            <div>
-              <span>Fallback path</span>
-              <strong>Generic REST/OpenAPI verifier</strong>
-              <small>Use this for unsupported Stripe, Razorpay, Zendesk, Gmail, HubSpot, Salesforce, and internal tools.</small>
-            </div>
-            <div>
-              <span>Planned native adapters</span>
-              <strong>{compactLabelList(plannedNativeLabels, "No planned native adapters")}</strong>
-              <small>Native convenience connectors stay planned until they have real proof wiring.</small>
-            </div>
-          </div>
-
-          <div className="connectors-registry-groups">
-            {groups.map((group) => (
-              <section className="connectors-registry-group" key={group.label} aria-label={group.label}>
-                <div className="connectors-registry-group-head">
-                  <strong>{group.label}</strong>
-                  <span>{group.helper}</span>
-                </div>
-                <div className="connectors-registry-grid">
-                  {group.items.map((item) => (
-                    <ConnectorRegistryItem key={item.id} item={item} />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="connectors-registry-empty">
-          <strong>{loading ? "Loading connector catalog" : "Connector catalog unavailable"}</strong>
-          <span>{loading ? "Syncing tool coverage from the backend registry." : "Refresh after the backend registry is reachable."}</span>
-        </div>
-      )}
-    </section>
-  );
+function initialConnectorFromUrl(): ConnectorInventoryId | null {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("connector");
+  return value as ConnectorInventoryId | null;
 }
 
 function parseClaimedJson(value: string): Record<string, unknown> {
@@ -396,6 +403,45 @@ function matchFieldsFromText(value: string): string[] {
     .filter(Boolean);
 }
 
+function hubSpotQueryFromForm(form: HubSpotFormState): Record<string, string> {
+  const query: Record<string, string> = {};
+  if (form.propertiesText.trim()) {
+    query.properties = form.propertiesText
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(",");
+  }
+  if (form.idProperty.trim()) {
+    query.idProperty = form.idProperty.trim();
+  }
+  return query;
+}
+
+function salesforceQueryFromForm(form: SalesforceFormState): Record<string, string> {
+  const query: Record<string, string> = {};
+  if (form.fieldsText.trim()) {
+    query.fields = form.fieldsText
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(",");
+  }
+  return query;
+}
+
+function zohoQueryFromForm(form: ZohoFormState): Record<string, string> {
+  const query: Record<string, string> = {};
+  if (form.fieldsText.trim()) {
+    query.fields = form.fieldsText
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(",");
+  }
+  return query;
+}
+
 function safeClaimedJson(value: string, recordRef: string): Record<string, unknown> {
   try {
     return parseClaimedJson(value);
@@ -407,79 +453,192 @@ function safeClaimedJson(value: string, recordRef: string): Record<string, unkno
   }
 }
 
-function buildGenericRestBridgePayload(form: GenericRestFormState) {
-  const recordRef = form.recordRef.trim() || "record_1001";
+function buildBridgeCurl(form: GenericRestFormState) {
   const payload = {
     connector: "generic_rest",
-    record_ref: recordRef,
-    action_type: form.actionType.trim() || "internal_api_mutation",
-    claimed: safeClaimedJson(form.claimedJson, recordRef),
+    record_ref: form.recordRef,
+    action_type: form.actionType || null,
+    claimed: safeClaimedJson(form.claimedJson, form.recordRef),
     match_fields: matchFieldsFromText(form.matchFieldsText),
-    metadata: {
-      runtime_path: "webhook_bridge",
-      setup_source: "generic_rest_connector_setup",
-    },
   };
 
-  return JSON.stringify(payload, null, 2);
+  return [
+    "curl -X POST https://api.zroky.local/v1/outcomes/reconciliation/saved \\",
+    "  -H 'content-type: application/json' \\",
+    "  -H 'x-api-key: $ZROKY_API_KEY' \\",
+    `  -d '${JSON.stringify(payload, null, 2).replace(/'/g, "'\\''")}'`,
+  ].join("\n");
 }
 
-function buildGenericRestBridgeCurl(form: GenericRestFormState) {
-  return `curl -X POST "https://api.zroky.com/v1/outcomes/reconciliation/saved" \\
-  -H "content-type: application/json" \\
-  -H "x-api-key: $ZROKY_API_KEY" \\
-  --data '${buildGenericRestBridgePayload(form)}'`;
+function statusValue(row: ConnectorInventoryRow | ConnectorCoverageRow) {
+  if ("state" in row) return row.state;
+  return row.status;
+}
+
+function Fact({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | boolean | null | undefined;
+}) {
+  if (value == null || value === "") return null;
+  return (
+    <div className="connector-fact">
+      <span>{label}</span>
+      <strong>{typeof value === "boolean" ? (value ? "Yes" : "No") : value}</strong>
+    </div>
+  );
+}
+
+function CoverageMap({ rows }: { rows: ConnectorCoverageRow[] }) {
+  return (
+    <section className="panel connectors-coverage-panel" aria-label="Verifier coverage map">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Coverage map</span>
+          <h2>Which agent actions can Zroky verify?</h2>
+          <p>
+            This map is generated from observed action types and the tool registry. Actions without a healthy verifier
+            will resolve to not_verified until a REST, SQL, or bridge verifier is configured.
+          </p>
+        </div>
+        <DashboardButtonLink href="/outcomes" variant="soft" size="sm">
+          Open Outcomes
+        </DashboardButtonLink>
+      </div>
+
+      {rows.length > 0 ? (
+        <div className="connectors-coverage-grid">
+          {rows.map((row) => (
+            <article className="connectors-coverage-row" data-tone={row.tone} key={row.actionType}>
+              <div>
+                <strong>{row.actionType}</strong>
+                <span>{row.detail}</span>
+              </div>
+              <StatusPill value={row.status} label={row.label} tone={row.tone} />
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="connectors-empty-state">
+          <strong>No action types observed yet</strong>
+          <span>Run a protected action or configure an agent catalog to see verifier coverage.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ConnectorInventoryList({
+  groups,
+  selectedId,
+  onSelect,
+}: {
+  groups: ConnectorTransportGroup[];
+  selectedId: ConnectorInventoryId | null;
+  onSelect: (id: ConnectorInventoryId) => void;
+}) {
+  return (
+    <section className="panel connectors-inventory-panel" aria-label="Connector inventory">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Connector inventory</span>
+          <h2>Read-only verifier transports</h2>
+          <p>REST and SQL are proof verifiers. Slack and GitHub are workflow integrations, not evidence sources.</p>
+        </div>
+      </div>
+
+      <div className="connector-transport-list">
+        {groups.map((group) => (
+          <section className="connector-transport-group" key={group.transport} aria-label={group.label}>
+            <div className="connector-transport-head">
+              <strong>{group.label}</strong>
+              <span>{group.description}</span>
+            </div>
+            {group.rows.length > 0 ? (
+              <div className="connector-row-list">
+                {group.rows.map((row) => (
+                  <button
+                    type="button"
+                    className="connector-inventory-row"
+                    data-selected={selectedId === row.id}
+                    data-tone={row.tone}
+                    key={row.id}
+                    onClick={() => onSelect(row.id)}
+                  >
+                    <span className="connector-row-main">
+                      <strong>{row.title}</strong>
+                      <small>{row.category}</small>
+                      <span>{row.description}</span>
+                    </span>
+                    <span className="connector-row-status">
+                      <StatusPill value={statusValue(row)} label={row.statusLabel} tone={row.tone} />
+                      <small>{connectorUpdatedLabel(row)}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="connector-planned-row">
+                <strong>Planned transport</strong>
+                <span>Webhook / bridge verifiers will be added after REST and SQL verifier coverage is stable.</span>
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function GenericRestSetupPanel({
-  status,
   latestCheck,
   onStatusChange,
+  status,
 }: {
-  status: GenericRestConnectorStatusResponse | null;
   latestCheck: OutcomeReconciliationView | null;
   onStatusChange: (status: GenericRestConnectorStatusResponse) => void;
+  status: GenericRestConnectorStatusResponse | null;
 }) {
   const [form, setForm] = useState<GenericRestFormState>(defaultGenericRestForm);
-  const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [copiedBridge, setCopiedBridge] = useState(false);
-  const readiness = status?.readiness?.status ?? "not_ready";
-  const connected = Boolean(status?.connected);
-  const latestVerdict = status?.last_verdict ?? latestCheck?.verdict ?? "No run yet";
-  const bridgeCurl = buildGenericRestBridgeCurl(form);
 
   useEffect(() => {
-    if (!status?.connected) return;
-    setForm((prev) => ({
-      ...prev,
-      baseUrl: status.base_url ?? prev.baseUrl,
-      pathTemplate: status.path_template ?? prev.pathTemplate,
-      recordPath: status.record_path ?? prev.recordPath,
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      baseUrl: status.base_url ?? current.baseUrl,
+      pathTemplate: status.path_template ?? current.pathTemplate,
+      recordPath: status.record_path ?? current.recordPath,
     }));
-  }, [status?.base_url, status?.connected, status?.path_template, status?.record_path]);
+  }, [status]);
 
-  const updateForm = (field: keyof GenericRestFormState, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const updateForm = (key: keyof GenericRestFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
   };
 
   const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setMessage(null);
     setSaving(true);
+    setError(null);
+    setMessage(null);
     try {
-      const updated = await saveGenericRestConnectorConfig({
-        base_url: form.baseUrl.trim(),
-        path_template: form.pathTemplate.trim() || "/records/{record_ref}",
-        record_path: form.recordPath.trim() || null,
-        bearer_token: form.bearerToken.trim() || null,
+      const saved = await saveGenericRestConnectorConfig({
+        base_url: form.baseUrl,
+        path_template: form.pathTemplate,
+        record_path: form.recordPath || null,
+        bearer_token: form.bearerToken || null,
       });
-      onStatusChange(updated);
-      setForm((prev) => ({ ...prev, bearerToken: "" }));
-      setMessage("Generic REST verifier saved.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save Generic REST verifier.");
+      onStatusChange(saved);
+      setMessage("REST verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save REST verifier.");
     } finally {
       setSaving(false);
     }
@@ -487,57 +646,56 @@ function GenericRestSetupPanel({
 
   const runTest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setMessage(null);
     setTesting(true);
+    setError(null);
+    setMessage(null);
     try {
       const claimed = parseClaimedJson(form.claimedJson);
       const result = await testGenericRestConnector({
-        record_ref: form.recordRef.trim(),
-        action_type: form.actionType.trim() || "custom",
+        record_ref: form.recordRef,
         claimed,
+        action_type: form.actionType || null,
+        system_ref: form.recordRef,
         match_fields: matchFieldsFromText(form.matchFieldsText),
       });
       onStatusChange(result.connector);
-      setMessage(`Generic REST test recorded ${result.check.verdict}.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to run Generic REST proof test.");
+      setMessage(`REST verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run REST verifier test.");
     } finally {
       setTesting(false);
     }
   };
 
   const copyBridge = async () => {
-    try {
-      await navigator.clipboard.writeText(bridgeCurl);
-      setCopiedBridge(true);
-      window.setTimeout(() => setCopiedBridge(false), 2000);
-    } catch {
-      setMessage("Copy failed. Select the bridge request and copy it manually.");
-    }
+    await navigator.clipboard?.writeText(buildBridgeCurl(form));
+    setCopiedBridge(true);
+    window.setTimeout(() => setCopiedBridge(false), 1500);
   };
 
-  return (
-    <section className="panel connectors-generic-panel" id="generic-rest-connector" aria-label="Generic REST verifier setup">
-      <div className="connectors-generic-head">
-        <div>
-          <span className="eyebrow">Custom systems</span>
-          <h2>Generic REST/OpenAPI verifier</h2>
-          <p>Use this for internal tools, custom CRMs, billing systems, workflow APIs, and any agent action with a readable JSON outcome.</p>
-        </div>
-        <div className="connectors-generic-status">
-          <span>{connected ? "Configured" : "Not configured"}</span>
-          <strong>{connectorReady(status, latestCheck) ? "Ready" : formatConnectorLabel(readiness)}</strong>
-          <small>{formatConnectorLabel(String(latestVerdict))}</small>
-        </div>
-      </div>
+  const connected = Boolean(status?.connected);
+  const bridgeCurl = buildBridgeCurl(form);
 
-      {message ? <div className="connectors-generic-message">{message}</div> : null}
+  return (
+    <section className="connectors-generic-panel" aria-label="Generic REST verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">REST / HTTP JSON verifier</span>
+          <h2>Custom REST verifier setup</h2>
+          <p>Use this for internal APIs, SaaS APIs, and systems where Zroky can read a JSON record by reference.</p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
 
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save read endpoint</strong>
-            <span>HTTPS JSON read only</span>
+            <strong>1. Save read-only endpoint</strong>
+            <span>Secrets stay server-side. The browser never renders saved tokens.</span>
           </div>
           <div className="connectors-generic-grid">
             <label>
@@ -576,16 +734,15 @@ function GenericRestSetupPanel({
               />
             </label>
           </div>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            <Save aria-hidden="true" />
-            {saving ? "Saving..." : "Save verifier"}
-          </button>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save verifier
+          </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
             <strong>2. Run proof test</strong>
-            <span>Compare claimed fields to the real record</span>
+            <span>Compare claimed fields to the real source-of-record record.</span>
           </div>
           <div className="connectors-generic-grid">
             <label>
@@ -610,7 +767,7 @@ function GenericRestSetupPanel({
               <input
                 value={form.matchFieldsText}
                 onChange={(event) => updateForm("matchFieldsText", event.target.value)}
-                placeholder="status, amount_usd"
+                placeholder="status, amount_minor"
               />
             </label>
             <label className="connectors-generic-wide">
@@ -622,29 +779,1571 @@ function GenericRestSetupPanel({
               />
             </label>
           </div>
-          <button type="submit" className="btn btn-soft" disabled={testing || !connected}>
-            <PlayCircle aria-hidden="true" />
-            {testing ? "Testing..." : "Run proof test"}
-          </button>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run proof test
+          </DashboardButton>
         </form>
 
         <article className="connectors-generic-bridge" aria-label="Generic REST webhook bridge request">
           <div className="connectors-generic-form-head">
             <strong>3. Copy webhook bridge request</strong>
-            <span>For agents that cannot install the SDK</span>
+            <span>For agents that cannot install the SDK.</span>
           </div>
           <p>
-            Call this after the agent says the action succeeded. Zroky uses the saved Generic REST connector to verify the real record.
+            Call this after the agent reports success. Zroky uses the saved REST verifier to independently read the real record.
           </p>
           <pre aria-label="Generic REST saved connector bridge curl">
             <code>{bridgeCurl}</code>
           </pre>
-          <button type="button" className="btn btn-soft" onClick={() => void copyBridge()}>
-            <Copy aria-hidden="true" />
+          <DashboardButton icon={<Copy />} onClick={() => void copyBridge()} variant="soft">
             {copiedBridge ? "Copied" : "Copy bridge request"}
-          </button>
+          </DashboardButton>
         </article>
       </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
+function StripeRefundSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: StripeRefundConnectorStatusResponse) => void;
+  status: StripeRefundConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<StripeRefundFormState>(defaultStripeRefundForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const updateForm = (key: keyof StripeRefundFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveStripeRefundConnectorConfig({
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("Stripe verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Stripe verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testStripeRefundConnector({
+        refund_id: form.refundId,
+        claimed,
+        action_type: "refund",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Stripe verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Stripe verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Stripe refund verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Stripe refund verifier</span>
+          <h2>Native Stripe refund verification</h2>
+          <p>Read one Stripe refund by ID and compare the fields your refund or payment agent claims.</p>
+        </div>
+        <StatusPill value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"} kind="proof" />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save Stripe read access</strong>
+            <span>Use a restricted Stripe secret key with read-only refund access. Saved keys never render in the browser.</span>
+          </div>
+          <label>
+            <span>Stripe secret key</span>
+            <input
+              autoComplete="off"
+              onChange={(event) => updateForm("bearerToken", event.target.value)}
+              placeholder={status?.has_bearer_token ? "Secret key saved" : "sk_live_..."}
+              type="password"
+              value={form.bearerToken}
+            />
+          </label>
+          <DashboardButton disabled={saving || (!form.bearerToken && !status?.has_bearer_token)} icon={<Save />} loading={saving} type="submit">
+            Save Stripe verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run Stripe preflight</strong>
+            <span>Fetch one safe existing Stripe refund and compare normalized amount, currency, and status.</span>
+          </div>
+          <label>
+            <span>Refund ID</span>
+            <input onChange={(event) => updateForm("refundId", event.target.value)} required value={form.refundId} />
+          </label>
+          <label>
+            <span>Claimed JSON</span>
+            <textarea onChange={(event) => updateForm("claimedJson", event.target.value)} rows={5} value={form.claimedJson} />
+          </label>
+          <label>
+            <span>Match fields</span>
+            <input onChange={(event) => updateForm("matchFieldsText", event.target.value)} value={form.matchFieldsText} />
+          </label>
+          <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
+            Run Stripe preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      <div className="connector-fact-grid">
+        <Fact label="Connected" value={status?.connected ? "yes" : "no"} />
+        <Fact label="Secret" value={status?.has_bearer_token ? `saved${status.bearer_token_last4 ? ` (...${status.bearer_token_last4})` : ""}` : "missing"} />
+        <Fact label="Last verdict" value={status?.last_verdict ?? latestCheck?.verdict ?? null} />
+        <Fact label="Health" value={status?.health_status ?? "not configured"} />
+      </div>
+    </section>
+  );
+}
+
+function RazorpayRefundSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: RazorpayRefundConnectorStatusResponse) => void;
+  status: RazorpayRefundConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<RazorpayRefundFormState>(defaultRazorpayRefundForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status?.query) return;
+    setForm((current) => ({
+      ...current,
+      keyId: typeof status.query?.key_id === "string" ? status.query.key_id : current.keyId,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof RazorpayRefundFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveRazorpayRefundConnectorConfig({
+        key_id: form.keyId,
+        key_secret: form.keySecret || null,
+      });
+      onStatusChange(saved);
+      setMessage("Razorpay verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, keySecret: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Razorpay verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testRazorpayRefundConnector({
+        refund_id: form.refundId,
+        claimed,
+        action_type: "refund",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Razorpay verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Razorpay verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Razorpay refund verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Razorpay refund verifier</span>
+          <h2>Native Razorpay refund verification</h2>
+          <p>Read one Razorpay refund by ID and compare normalized amount, currency, payment, and status fields.</p>
+        </div>
+        <StatusPill value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"} kind="proof" />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save Razorpay read access</strong>
+            <span>Use Razorpay key id plus key secret. The key secret is encrypted and never renders in the browser.</span>
+          </div>
+          <label>
+            <span>Razorpay key id</span>
+            <input
+              autoComplete="off"
+              onChange={(event) => updateForm("keyId", event.target.value)}
+              placeholder="rzp_live_..."
+              required
+              value={form.keyId}
+            />
+          </label>
+          <label>
+            <span>Razorpay key secret</span>
+            <input
+              autoComplete="off"
+              onChange={(event) => updateForm("keySecret", event.target.value)}
+              placeholder={status?.has_bearer_token ? "Key secret saved" : "Razorpay key secret"}
+              type="password"
+              value={form.keySecret}
+            />
+          </label>
+          <DashboardButton disabled={saving || !form.keyId || (!form.keySecret && !status?.has_bearer_token)} icon={<Save />} loading={saving} type="submit">
+            Save Razorpay verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run Razorpay preflight</strong>
+            <span>Fetch one safe existing Razorpay refund and compare normalized amount, currency, payment id, and status.</span>
+          </div>
+          <label>
+            <span>Refund ID</span>
+            <input onChange={(event) => updateForm("refundId", event.target.value)} required value={form.refundId} />
+          </label>
+          <label>
+            <span>Claimed JSON</span>
+            <textarea onChange={(event) => updateForm("claimedJson", event.target.value)} rows={5} value={form.claimedJson} />
+          </label>
+          <label>
+            <span>Match fields</span>
+            <input onChange={(event) => updateForm("matchFieldsText", event.target.value)} value={form.matchFieldsText} />
+          </label>
+          <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
+            Run Razorpay preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      <div className="connector-fact-grid">
+        <Fact label="Connected" value={status?.connected ? "yes" : "no"} />
+        <Fact label="Key id" value={typeof status?.query?.key_id === "string" ? status.query.key_id : null} />
+        <Fact label="Key secret" value={status?.has_bearer_token ? `saved${status.bearer_token_last4 ? ` (...${status.bearer_token_last4})` : ""}` : "missing"} />
+        <Fact label="Last verdict" value={status?.last_verdict ?? latestCheck?.verdict ?? null} />
+        <Fact label="Health" value={status?.health_status ?? "not configured"} />
+      </div>
+    </section>
+  );
+}
+
+function HubSpotSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: HubSpotCrmConnectorStatusResponse) => void;
+  status: HubSpotCrmConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<HubSpotFormState>(defaultHubSpotForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status?.query) return;
+    setForm((current) => ({
+      ...current,
+      idProperty: typeof status.query?.idProperty === "string" ? status.query.idProperty : current.idProperty,
+      propertiesText: typeof status.query?.properties === "string" ? status.query.properties : current.propertiesText,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof HubSpotFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveHubSpotCrmConnectorConfig({
+        query: hubSpotQueryFromForm(form),
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("HubSpot verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save HubSpot verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testHubSpotCrmConnector({
+        record_ref: form.recordRef,
+        claimed,
+        action_type: "customer_record_update",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`HubSpot verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run HubSpot verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+
+  return (
+    <section className="connectors-generic-panel" aria-label="HubSpot CRM verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">HubSpot CRM verifier</span>
+          <h2>Native HubSpot contact verification</h2>
+          <p>
+            Read HubSpot contacts directly for CRM agent proof. Private app token is available now; OAuth install remains planned.
+          </p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save HubSpot read access</strong>
+            <span>Use a read-scoped HubSpot private app token. The browser never renders saved tokens.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Private app token</span>
+              <input
+                value={form.bearerToken}
+                onChange={(event) => updateForm("bearerToken", event.target.value)}
+                placeholder={status?.has_bearer_token ? "Token saved" : "HubSpot private app token"}
+                type="password"
+              />
+            </label>
+            <label>
+              <span>ID property</span>
+              <input
+                value={form.idProperty}
+                onChange={(event) => updateForm("idProperty", event.target.value)}
+                placeholder="email"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Properties</span>
+              <input
+                value={form.propertiesText}
+                onChange={(event) => updateForm("propertiesText", event.target.value)}
+                placeholder="email,firstname,lastname,lifecyclestage,hs_object_id"
+              />
+            </label>
+          </div>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save HubSpot verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run HubSpot preflight</strong>
+            <span>Fetch one existing contact and match claimed CRM fields.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Contact ref</span>
+              <input
+                value={form.recordRef}
+                onChange={(event) => updateForm("recordRef", event.target.value)}
+                placeholder="owner@example.com"
+                required
+              />
+            </label>
+            <label>
+              <span>Match fields</span>
+              <input
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+                placeholder="email,lifecyclestage"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+                rows={7}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run HubSpot preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
+function SalesforceSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: SalesforceCrmConnectorStatusResponse) => void;
+  status: SalesforceCrmConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<SalesforceFormState>(defaultSalesforceForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      baseUrl: status.base_url ?? current.baseUrl,
+      fieldsText: typeof status.query?.fields === "string" ? status.query.fields : current.fieldsText,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof SalesforceFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveSalesforceCrmConnectorConfig({
+        base_url: form.baseUrl,
+        query: salesforceQueryFromForm(form),
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("Salesforce verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Salesforce verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testSalesforceCrmConnector({
+        object_type: form.objectType,
+        record_ref: form.recordRef,
+        claimed,
+        action_type: "customer_record_update",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Salesforce verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Salesforce verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Salesforce CRM verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Salesforce CRM verifier</span>
+          <h2>Native Salesforce sObject verification</h2>
+          <p>
+            Read Accounts, Contacts, Leads, Opportunities, Cases, or custom objects for CRM and RevOps proof.
+            Bearer token setup works today; one-click OAuth remains planned.
+          </p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save Salesforce read access</strong>
+            <span>Use a read-scoped Salesforce bearer token. Saved tokens never render in the browser.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Instance URL</span>
+              <input
+                value={form.baseUrl}
+                onChange={(event) => updateForm("baseUrl", event.target.value)}
+                placeholder="https://company.my.salesforce.com"
+                required
+              />
+            </label>
+            <label>
+              <span>Fields</span>
+              <input
+                value={form.fieldsText}
+                onChange={(event) => updateForm("fieldsText", event.target.value)}
+                placeholder="Id,Name,StageName,Amount"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Bearer token</span>
+              <input
+                value={form.bearerToken}
+                onChange={(event) => updateForm("bearerToken", event.target.value)}
+                placeholder={status?.has_bearer_token ? "Token saved" : "Salesforce bearer token"}
+                type="password"
+              />
+            </label>
+          </div>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save Salesforce verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run sObject preflight</strong>
+            <span>Fetch one safe existing Salesforce record and compare the fields your CRM agent will claim.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Object type</span>
+              <input
+                value={form.objectType}
+                onChange={(event) => updateForm("objectType", event.target.value)}
+                placeholder="Account"
+                required
+              />
+            </label>
+            <label>
+              <span>Record ID</span>
+              <input
+                value={form.recordRef}
+                onChange={(event) => updateForm("recordRef", event.target.value)}
+                placeholder="001..."
+                required
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Match fields</span>
+              <input
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+                placeholder="salesforce_id,Name,StageName"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+                rows={7}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run Salesforce preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
+function ZohoSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
+  status: ZohoCrmConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<ZohoFormState>(defaultZohoForm);
+  const [connecting, setConnecting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      baseUrl: status.base_url ?? current.baseUrl,
+      fieldsText: typeof status.query?.fields === "string" ? status.query.fields : current.fieldsText,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof ZohoFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const startOAuth = async () => {
+    setConnecting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await startZohoCrmOAuth();
+      externalNavigator.assign(result.authorization_url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start Zoho OAuth.");
+      setConnecting(false);
+    }
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveZohoCrmConnectorConfig({
+        base_url: form.baseUrl,
+        query: zohoQueryFromForm(form),
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("Zoho CRM verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Zoho CRM verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testZohoCrmConnector({
+        module_name: form.moduleName,
+        record_ref: form.recordRef,
+        claimed,
+        action_type: "customer_record_update",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Zoho CRM verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Zoho CRM verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Zoho CRM verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Zoho CRM verifier</span>
+          <h2>Native Zoho CRM record verification</h2>
+          <p>
+            Read Leads, Contacts, Accounts, Deals, or custom Zoho CRM modules for CRM and RevOps proof.
+            Connect with Zoho OAuth or use a read-scoped access token as a manual fallback.
+          </p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Connect Zoho CRM read access</strong>
+            <span>
+              OAuth stores an encrypted refresh token. Manual access tokens remain supported for restricted tenants.
+            </span>
+          </div>
+          <DashboardButton
+            disabled={connecting}
+            loading={connecting}
+            onClick={startOAuth}
+            type="button"
+            variant="primary"
+          >
+            Connect Zoho CRM
+          </DashboardButton>
+          {status?.has_oauth_refresh_token ? (
+            <div className="connectors-success-strip">
+              OAuth connection saved
+              {status.oauth_refresh_token_last4 ? ` (refresh token ...${status.oauth_refresh_token_last4})` : ""}.
+            </div>
+          ) : null}
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Zoho API domain</span>
+              <input
+                value={form.baseUrl}
+                onChange={(event) => updateForm("baseUrl", event.target.value)}
+                placeholder="https://www.zohoapis.com"
+                required
+              />
+            </label>
+            <label>
+              <span>Fields</span>
+              <input
+                value={form.fieldsText}
+                onChange={(event) => updateForm("fieldsText", event.target.value)}
+                placeholder="id,Full_Name,Email,Stage"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Manual bearer token</span>
+              <input
+                value={form.bearerToken}
+                onChange={(event) => updateForm("bearerToken", event.target.value)}
+                placeholder={status?.has_bearer_token ? "Token saved" : "Optional read-scoped access token"}
+                type="password"
+              />
+            </label>
+          </div>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save Zoho CRM verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run Zoho preflight</strong>
+            <span>Fetch one safe existing Zoho CRM record and compare the fields your CRM agent will claim.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Module name</span>
+              <input
+                value={form.moduleName}
+                onChange={(event) => updateForm("moduleName", event.target.value)}
+                placeholder="Contacts"
+                required
+              />
+            </label>
+            <label>
+              <span>Record ID</span>
+              <input
+                value={form.recordRef}
+                onChange={(event) => updateForm("recordRef", event.target.value)}
+                placeholder="1234567890000000001"
+                required
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Match fields</span>
+              <input
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+                placeholder="zoho_record_id,Email,Stage"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+                rows={7}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run Zoho preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
+function ZendeskSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: ZendeskTicketConnectorStatusResponse) => void;
+  status: ZendeskTicketConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<ZendeskFormState>(defaultZendeskForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      baseUrl: status.base_url ?? current.baseUrl,
+      authUsername: typeof status.query?.auth_username === "string" ? status.query.auth_username : current.authUsername,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof ZendeskFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveZendeskTicketConnectorConfig({
+        base_url: form.baseUrl,
+        auth_username: form.authUsername || null,
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("Zendesk verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Zendesk verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testZendeskTicketConnector({
+        record_ref: form.recordRef,
+        claimed,
+        action_type: "ticket_close",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Zendesk verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Zendesk verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Zendesk ticket verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Zendesk ticket verifier</span>
+          <h2>Native Zendesk ticket verification</h2>
+          <p>
+            Read Zendesk Support tickets directly for support agent proof. OAuth bearer tokens or API token basic auth work today; one-click OAuth remains planned.
+          </p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save Zendesk read access</strong>
+            <span>Use an OAuth bearer token, or provide email for Zendesk API token basic auth. Saved tokens never render in the browser.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Zendesk URL</span>
+              <input
+                value={form.baseUrl}
+                onChange={(event) => updateForm("baseUrl", event.target.value)}
+                placeholder="https://company.zendesk.com"
+                required
+              />
+            </label>
+            <label>
+              <span>Auth email (optional)</span>
+              <input
+                value={form.authUsername}
+                onChange={(event) => updateForm("authUsername", event.target.value)}
+                placeholder="agent@example.com"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Token</span>
+              <input
+                value={form.bearerToken}
+                onChange={(event) => updateForm("bearerToken", event.target.value)}
+                placeholder={status?.has_bearer_token ? "Token saved" : "Read-scoped Zendesk token"}
+                type="password"
+              />
+            </label>
+          </div>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save Zendesk verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run ticket preflight</strong>
+            <span>Fetch one safe existing ticket and compare the fields your support agent will claim.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Ticket ID</span>
+              <input
+                value={form.recordRef}
+                onChange={(event) => updateForm("recordRef", event.target.value)}
+                placeholder="12345"
+                required
+              />
+            </label>
+            <label>
+              <span>Match fields</span>
+              <input
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+                placeholder="ticket_id,status"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+                rows={7}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run Zendesk preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
+function JiraSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: JiraIssueConnectorStatusResponse) => void;
+  status: JiraIssueConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<JiraFormState>(defaultJiraForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      baseUrl: status.base_url ?? current.baseUrl,
+      authUsername:
+        typeof status.query?.auth_username === "string"
+          ? status.query.auth_username
+          : current.authUsername,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof JiraFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveJiraIssueConnectorConfig({
+        base_url: form.baseUrl,
+        auth_username: form.authUsername || null,
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("Jira verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Jira verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testJiraIssueConnector({
+        record_ref: form.recordRef,
+        claimed,
+        action_type: "ticket_close",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Jira verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Jira verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Jira issue verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Jira / JSM verifier</span>
+          <h2>Native Jira issue verification</h2>
+          <p>
+            Read Jira or Jira Service Management issues for support, access, incident, and change proof. API token setup works today; Atlassian OAuth is planned.
+          </p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save Jira read access</strong>
+            <span>Use an Atlassian account email plus API token. Saved tokens never render in the browser.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Atlassian site URL</span>
+              <input
+                value={form.baseUrl}
+                onChange={(event) => updateForm("baseUrl", event.target.value)}
+                placeholder="https://company.atlassian.net"
+                required
+              />
+            </label>
+            <label>
+              <span>Atlassian email</span>
+              <input
+                value={form.authUsername}
+                onChange={(event) => updateForm("authUsername", event.target.value)}
+                placeholder="agent@example.com"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>API token or bearer token</span>
+              <input
+                value={form.bearerToken}
+                onChange={(event) => updateForm("bearerToken", event.target.value)}
+                placeholder={status?.has_bearer_token ? "Token saved" : "Read-scoped Jira token"}
+                type="password"
+              />
+            </label>
+          </div>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save Jira verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run issue preflight</strong>
+            <span>Fetch one safe existing issue and compare the fields your agent will claim.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Issue key</span>
+              <input
+                value={form.recordRef}
+                onChange={(event) => updateForm("recordRef", event.target.value)}
+                placeholder="JSM-123"
+                required
+              />
+            </label>
+            <label>
+              <span>Match fields</span>
+              <input
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+                placeholder="jira_issue_key,status"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+                rows={7}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run Jira preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
+function NetSuiteSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: NetSuiteFinanceConnectorStatusResponse) => void;
+  status: NetSuiteFinanceConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<NetSuiteFormState>(defaultNetSuiteForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      baseUrl: status.base_url ?? current.baseUrl,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof NetSuiteFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveNetSuiteFinanceConnectorConfig({
+        base_url: form.baseUrl,
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("NetSuite verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save NetSuite verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testNetSuiteFinanceConnector({
+        record_type: form.recordType,
+        record_ref: form.recordRef,
+        claimed,
+        action_type: "invoice_spend_approval",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`NetSuite verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run NetSuite verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+
+  return (
+    <section className="connectors-generic-panel" aria-label="NetSuite finance verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">NetSuite finance verifier</span>
+          <h2>Native NetSuite record verification</h2>
+          <p>
+            Read one NetSuite finance or procurement record for vendor-bill, purchase-order, invoice, and payment-approval proof.
+          </p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save NetSuite read access</strong>
+            <span>Use a read-scoped NetSuite bearer token. Saved tokens never render in the browser.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label className="connectors-generic-wide">
+              <span>NetSuite REST base URL</span>
+              <input
+                value={form.baseUrl}
+                onChange={(event) => updateForm("baseUrl", event.target.value)}
+                placeholder="https://ACCOUNT.suitetalk.api.netsuite.com"
+                required
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Bearer token</span>
+              <input
+                value={form.bearerToken}
+                onChange={(event) => updateForm("bearerToken", event.target.value)}
+                placeholder={status?.has_bearer_token ? "Token saved" : "Read-scoped NetSuite token"}
+                type="password"
+              />
+            </label>
+          </div>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save NetSuite verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run finance preflight</strong>
+            <span>Fetch one safe existing NetSuite record and compare the fields your finance agent will claim.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Record type</span>
+              <input
+                value={form.recordType}
+                onChange={(event) => updateForm("recordType", event.target.value)}
+                placeholder="vendorBill"
+                required
+              />
+            </label>
+            <label>
+              <span>Record ID</span>
+              <input
+                value={form.recordRef}
+                onChange={(event) => updateForm("recordRef", event.target.value)}
+                placeholder="12345"
+                required
+              />
+            </label>
+            <label>
+              <span>Match fields</span>
+              <input
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+                placeholder="netsuite_record_id,status,amount_minor"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+                rows={7}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run NetSuite preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
+function ConnectorInspector({
+  genericStatus,
+  hubspotStatus,
+  jiraStatus,
+  netsuiteStatus,
+  razorpayStatus,
+  salesforceStatus,
+  stripeStatus,
+  zendeskStatus,
+  zohoStatus,
+  onShowDetails,
+  onGenericStatusChange,
+  onHubSpotStatusChange,
+  onJiraStatusChange,
+  onNetSuiteStatusChange,
+  onRazorpayStatusChange,
+  onSalesforceStatusChange,
+  onStripeStatusChange,
+  onZendeskStatusChange,
+  onZohoStatusChange,
+  row,
+}: {
+  genericStatus: GenericRestConnectorStatusResponse | null;
+  hubspotStatus: HubSpotCrmConnectorStatusResponse | null;
+  jiraStatus: JiraIssueConnectorStatusResponse | null;
+  netsuiteStatus: NetSuiteFinanceConnectorStatusResponse | null;
+  razorpayStatus: RazorpayRefundConnectorStatusResponse | null;
+  salesforceStatus: SalesforceCrmConnectorStatusResponse | null;
+  stripeStatus: StripeRefundConnectorStatusResponse | null;
+  zendeskStatus: ZendeskTicketConnectorStatusResponse | null;
+  zohoStatus: ZohoCrmConnectorStatusResponse | null;
+  onShowDetails: () => void;
+  onGenericStatusChange: (status: GenericRestConnectorStatusResponse) => void;
+  onHubSpotStatusChange: (status: HubSpotCrmConnectorStatusResponse) => void;
+  onJiraStatusChange: (status: JiraIssueConnectorStatusResponse) => void;
+  onNetSuiteStatusChange: (status: NetSuiteFinanceConnectorStatusResponse) => void;
+  onRazorpayStatusChange: (status: RazorpayRefundConnectorStatusResponse) => void;
+  onSalesforceStatusChange: (status: SalesforceCrmConnectorStatusResponse) => void;
+  onStripeStatusChange: (status: StripeRefundConnectorStatusResponse) => void;
+  onZendeskStatusChange: (status: ZendeskTicketConnectorStatusResponse) => void;
+  onZohoStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
+  row: ConnectorInventoryRow | null;
+}) {
+  if (!row) {
+    return (
+      <section className="panel connector-inspector-panel" aria-label="Selected connector">
+        <div className="connectors-empty-state">
+          <strong>No connector selected</strong>
+          <span>Select a verifier or workflow integration to inspect its coverage.</span>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel connector-inspector-panel" aria-label="Selected connector">
+      <div className="connector-inspector-head">
+        <div>
+          <span className="dashboard-eyebrow">{row.kind === "proof" ? "Selected verifier" : "Selected workflow"}</span>
+          <h2>{row.title}</h2>
+          <p>{row.description}</p>
+        </div>
+        <StatusPill value={row.state} label={connectorStateLabel(row.state)} tone={row.tone} />
+      </div>
+
+      <div className="connector-inspector-callout" data-tone={row.tone}>
+        <strong>{row.statusLabel}</strong>
+        <span>{row.detail}</span>
+      </div>
+
+      <div className="connector-fact-grid">
+        <Fact label="Transport" value={humanize(row.transport)} />
+        <Fact label="Template" value={row.templateKind ? humanize(row.templateKind) : "Custom"} />
+        <Fact label="Connector type" value={row.metadata.connectorType} />
+        <Fact label="Endpoint" value={row.metadata.maskedEndpoint} />
+        <Fact label="Credential saved" value={row.metadata.credentialSaved} />
+        <Fact label="Health" value={row.healthStatus ? humanize(row.healthStatus) : null} />
+        <Fact label="Readiness" value={row.readinessStatus ? humanize(row.readinessStatus) : null} />
+        <Fact label="Last verdict" value={row.lastVerdict ? humanize(row.lastVerdict) : null} />
+        <Fact label="Updated" value={connectorUpdatedLabel(row)} />
+      </div>
+
+      {row.supportedActionTypes.length > 0 ? (
+        <div className="connector-action-tags" aria-label="Supported action types">
+          {row.supportedActionTypes.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+      ) : null}
+
+      {row.latestCheck ? (
+        <details className="connector-details-json">
+          <summary>Latest verification check</summary>
+          <pre>
+            <code>{compactJson(row.latestCheck)}</code>
+          </pre>
+        </details>
+      ) : null}
+
+      <div className="connector-inspector-actions">
+        <DashboardButtonLink href={row.href} variant="primary">
+          {row.ctaLabel}
+        </DashboardButtonLink>
+        <DashboardButton onClick={onShowDetails} variant="soft">
+          Detailed controls
+        </DashboardButton>
+      </div>
+
+      {row.id === "generic_rest" ? (
+        <GenericRestSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onGenericStatusChange}
+          status={genericStatus}
+        />
+      ) : null}
+      {row.id === "stripe_refund" ? (
+        <StripeRefundSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onStripeStatusChange}
+          status={stripeStatus}
+        />
+      ) : null}
+      {row.id === "razorpay_refund" ? (
+        <RazorpayRefundSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onRazorpayStatusChange}
+          status={razorpayStatus}
+        />
+      ) : null}
+      {row.id === "hubspot_crm" ? (
+        <HubSpotSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onHubSpotStatusChange}
+          status={hubspotStatus}
+        />
+      ) : null}
+      {row.id === "salesforce_crm" ? (
+        <SalesforceSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onSalesforceStatusChange}
+          status={salesforceStatus}
+        />
+      ) : null}
+      {row.id === "zoho_crm" ? (
+        <ZohoSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onZohoStatusChange}
+          status={zohoStatus}
+        />
+      ) : null}
+      {row.id === "zendesk_ticket" ? (
+        <ZendeskSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onZendeskStatusChange}
+          status={zendeskStatus}
+        />
+      ) : null}
+      {row.id === "jira_issue" ? (
+        <JiraSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onJiraStatusChange}
+          status={jiraStatus}
+        />
+      ) : null}
+      {row.id === "netsuite_finance" ? (
+        <NetSuiteSetupPanel
+          latestCheck={row.latestCheck}
+          onStatusChange={onNetSuiteStatusChange}
+          status={netsuiteStatus}
+        />
+      ) : null}
     </section>
   );
 }
@@ -653,16 +2352,44 @@ export default function IntegrationsPage() {
   const [overview, setOverview] = useState<ConnectorsOverviewState>(initialOverview);
   const [loading, setLoading] = useState(true);
   const [partialFailure, setPartialFailure] = useState(false);
+  const [selectedId, setSelectedId] = useState<ConnectorInventoryId | null>(initialConnectorFromUrl);
+  const [showDetailedControls, setShowDetailedControls] = useState(false);
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
-    const [githubResult, slackResult, ledgerResult, customerResult, genericResult, checksResult, registryResult] = await Promise.allSettled([
+    const [
+      githubResult,
+      slackResult,
+      ledgerResult,
+      customerResult,
+      genericResult,
+      stripeResult,
+      razorpayResult,
+      hubspotResult,
+      salesforceResult,
+      zendeskResult,
+      jiraResult,
+      netsuiteResult,
+      zohoResult,
+      postgresResult,
+      checksResult,
+      registryResult,
+    ] = await Promise.allSettled([
       getGithubConnectionStatus(),
       getSlackInstallStatus(),
       getLedgerRefundConnectorStatus(),
       getCustomerRecordConnectorStatus(),
       getGenericRestConnectorStatus(),
-      listOutcomeReconciliations({ limit: 25 }),
+      getStripeRefundConnectorStatus(),
+      getRazorpayRefundConnectorStatus(),
+      getHubSpotCrmConnectorStatus(),
+      getSalesforceCrmConnectorStatus(),
+      getZendeskTicketConnectorStatus(),
+      getJiraIssueConnectorStatus(),
+      getNetSuiteFinanceConnectorStatus(),
+      getZohoCrmConnectorStatus(),
+      getPostgresReadConnectorStatus(),
+      listOutcomeReconciliations({ limit: 50 }),
       getToolRegistry(),
     ]);
 
@@ -672,10 +2399,36 @@ export default function IntegrationsPage() {
       ledger: ledgerResult.status === "fulfilled" ? ledgerResult.value : null,
       customer: customerResult.status === "fulfilled" ? customerResult.value : null,
       generic: genericResult.status === "fulfilled" ? genericResult.value : null,
+      stripe: stripeResult.status === "fulfilled" ? stripeResult.value : null,
+      razorpay: razorpayResult.status === "fulfilled" ? razorpayResult.value : null,
+      hubspot: hubspotResult.status === "fulfilled" ? hubspotResult.value : null,
+      salesforce: salesforceResult.status === "fulfilled" ? salesforceResult.value : null,
+      zendesk: zendeskResult.status === "fulfilled" ? zendeskResult.value : null,
+      jira: jiraResult.status === "fulfilled" ? jiraResult.value : null,
+      netsuite: netsuiteResult.status === "fulfilled" ? netsuiteResult.value : null,
+      zoho: zohoResult.status === "fulfilled" ? zohoResult.value : null,
+      postgres: postgresResult.status === "fulfilled" ? postgresResult.value : null,
       checks: checksResult.status === "fulfilled" ? checksResult.value.items : [],
       registry: registryResult.status === "fulfilled" ? registryResult.value : null,
     });
-    setPartialFailure([githubResult, slackResult, ledgerResult, customerResult, genericResult, checksResult, registryResult].some((result) => result.status === "rejected"));
+    setPartialFailure([
+      githubResult,
+      slackResult,
+      ledgerResult,
+      customerResult,
+      genericResult,
+      stripeResult,
+      razorpayResult,
+      hubspotResult,
+      salesforceResult,
+      zendeskResult,
+      jiraResult,
+      netsuiteResult,
+      zohoResult,
+      postgresResult,
+      checksResult,
+      registryResult,
+    ].some((result) => result.status === "rejected"));
     setLoading(false);
   }, []);
 
@@ -683,205 +2436,175 @@ export default function IntegrationsPage() {
     void loadOverview();
   }, [loadOverview]);
 
-  const ledgerCheck = useMemo(() => overview.checks.find(isLedgerRefundCheck) ?? null, [overview.checks]);
-  const customerCheck = useMemo(() => overview.checks.find(isCustomerRecordCheck) ?? null, [overview.checks]);
-  const genericCheck = useMemo(() => overview.checks.find(isGenericRestCheck) ?? null, [overview.checks]);
-  const ledgerReady = connectorReady(overview.ledger, ledgerCheck);
-  const customerReady = connectorReady(overview.customer, customerCheck);
-  const genericReady = connectorReady(overview.generic, genericCheck);
-  const proofReadyCount = Number(ledgerReady) + Number(customerReady) + Number(genericReady);
-  const needsProofCount =
-    Number(connectorNeedsProof(overview.ledger, ledgerCheck)) +
-    Number(connectorNeedsProof(overview.customer, customerCheck)) +
-    Number(connectorNeedsProof(overview.generic, genericCheck));
-  const configuredProofCount =
-    Number(Boolean(overview.ledger?.connected)) +
-    Number(Boolean(overview.customer?.connected)) +
-    Number(Boolean(overview.generic?.connected));
-  const supportConnectedCount = Number(Boolean(overview.github?.connected)) + Number(Boolean(overview.slack?.connected));
-  const matchedChecks = overview.checks.filter((check) => check.verdict === "matched").length;
-  const blockedProof = Boolean(
-    overview.ledger?.last_error_code
-      || overview.customer?.last_error_code
-      || overview.generic?.last_error_code
-      || ledgerCheck?.verdict === "mismatched"
-      || customerCheck?.verdict === "mismatched"
-      || genericCheck?.verdict === "mismatched",
+  const inventory = useMemo(
+    () => buildConnectorInventory({ ...overview, partialFailure }),
+    [overview, partialFailure],
   );
-  const heroTone = partialFailure || blockedProof
-    ? "danger"
-    : proofReadyCount === 3
-      ? "success"
-      : configuredProofCount > 0
-        ? "warning"
-        : "neutral";
-  const heroTitle = partialFailure
-    ? "Connector status unavailable"
-    : blockedProof
-      ? "Proof connector blocked"
-      : proofReadyCount === 3
-        ? "Systems of record ready"
-        : configuredProofCount > 0
-          ? "Proof connectors need preflight"
-          : "Connect systems of record";
-  const heroBadge = loading ? "Syncing" : heroTone === "success" ? "Ready" : heroTone === "danger" ? "Blocked" : "Setup";
-  const heroCopy = proofReadyCount === 3
-    ? "Ledger, customer record, and generic REST systems can now produce matched outcome proof and export Evidence Packs."
-    : "Connect read-scoped source systems, run saved proof, and keep customer evidence exportable before pilot handoff.";
-  const connectorCards = [
-    connectorSummary({
-      connector: overview.ledger,
-      cta: "Configure ledger",
-      href: "/integrations#ledger-refund-connector",
-      label: "Money action proof",
-      latestCheck: ledgerCheck,
-      title: "Ledger refund",
-    }),
-    connectorSummary({
-      connector: overview.customer,
-      cta: "Configure CRM",
-      href: "/integrations#customer-record-connector",
-      label: "Record mutation proof",
-      latestCheck: customerCheck,
-      title: "Customer record",
-    }),
-    connectorSummary({
-      connector: overview.generic,
-      cta: "Configure Generic REST",
-      href: "/integrations#generic-rest-connector",
-      label: "Custom tool proof",
-      latestCheck: genericCheck,
-      title: "Generic REST",
-    }),
+
+  useEffect(() => {
+    if (selectedId && inventory.rows.some((row) => row.id === selectedId)) return;
+    setSelectedId(firstSelectedId(inventory));
+  }, [inventory, selectedId]);
+
+  const selectedRow = inventory.rows.find((row) => row.id === selectedId) ?? null;
+
+  const metrics = [
     {
-      href: "/policies",
-      label: "Change control",
-      title: "GitHub",
-      status: overview.github?.connected ? "Connected" : "Not connected",
-      detail: overview.github?.github_login ? `@${overview.github.github_login} can support generated fix PRs.` : "Connect repository access before fix proof can gate changes.",
-      cta: "Open policies",
-      tone: overview.github?.connected ? "success" : "neutral",
-    } satisfies ConnectorSummary,
+      id: "healthy",
+      label: "Healthy verifiers",
+      value: formatCount(inventory.counts.healthyVerifiers),
+      helper: "Read-only systems with matched preflight.",
+      tone: inventory.counts.healthyVerifiers > 0 ? "success" as const : "neutral" as const,
+      icon: <ShieldCheck />,
+    },
     {
-      href: "/integrations/slack",
-      label: "Ops delivery",
-      title: "Slack",
-      status: overview.slack?.connected ? "Connected" : "Not connected",
-      detail: overview.slack?.channel_name ? `Alerts route to #${overview.slack.channel_name}.` : "Connect the operating channel for failures, replay, CI, and policy events.",
-      cta: "Manage Slack",
-      tone: overview.slack?.connected ? "success" : "neutral",
-    } satisfies ConnectorSummary,
+      id: "failing",
+      label: "Failing",
+      value: formatCount(inventory.counts.failingVerifiers),
+      helper: "Mismatched or blocked verification paths.",
+      tone: inventory.counts.failingVerifiers > 0 ? "danger" as const : "neutral" as const,
+      icon: <AlertTriangle />,
+    },
+    {
+      id: "not-configured",
+      label: "Not configured",
+      value: formatCount(inventory.counts.notConfigured),
+      helper: "Verifier transports without saved credentials.",
+      tone: inventory.counts.notConfigured > 0 ? "warning" as const : "success" as const,
+      icon: <Plug />,
+    },
+    {
+      id: "coverage",
+      label: "Coverage",
+      value: formatPercent(inventory.counts.coveragePercent),
+      helper: "Observed action types with a verifier path.",
+      tone: inventory.counts.coveragePercent >= 100 ? "success" as const : "warning" as const,
+      icon: <ClipboardCheck />,
+    },
+    {
+      id: "unverifiable",
+      label: "Unverifiable actions",
+      value: formatCount(inventory.counts.unverifiableActionTypes),
+      helper: "Would resolve not_verified until covered.",
+      tone: inventory.counts.unverifiableActionTypes > 0 ? "danger" as const : "success" as const,
+      icon: <RadioTower />,
+    },
   ];
 
   return (
-    <div className="dashboard-page integrations-page">
-      <section className="page-header connectors-hero" data-tone={heroTone}>
-        <div className="connectors-hero-copy">
-          <span className="eyebrow">System-of-record proof</span>
-          <h1>{heroTitle}</h1>
-          <p>{heroCopy}</p>
-        </div>
-        <div className="connectors-hero-rail">
-          <span className="connectors-verdict-pill">{heroBadge}</span>
-          <div className="connectors-proof-meter" aria-label="System-of-record readiness">
-            <span>Proof ready</span>
-            <strong>{proofReadyCount}/3</strong>
-            <small>{matchedChecks} matched checks / {needsProofCount} need action</small>
-          </div>
-        </div>
-        <div className="actions connectors-hero-actions">
-          <button type="button" className="btn btn-soft" onClick={() => void loadOverview()} disabled={loading}>
-            <RefreshCw aria-hidden="true" />
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-          <Link href="/evidence" className="btn btn-primary">
-            Open evidence
-          </Link>
-        </div>
-      </section>
-
-      <section className="connectors-metric-grid" aria-label="Connector readiness">
-        <article className="panel connectors-metric-card" data-tone={proofReadyCount === 3 ? "success" : "warning"}>
-          <ShieldCheck aria-hidden="true" />
-          <span>Proof connectors</span>
-          <strong>{proofReadyCount}/3</strong>
-          <small>Ledger, CRM, and Generic REST cover core proof paths.</small>
-        </article>
-        <article className="panel connectors-metric-card">
-          <DatabaseZap aria-hidden="true" />
-          <span>Configured</span>
-          <strong>{configuredProofCount}/3</strong>
-          <small>Read-scoped system-of-record connectors saved.</small>
-        </article>
-        <article className="panel connectors-metric-card" data-tone={needsProofCount > 0 ? "warning" : "success"}>
-          <RadioTower aria-hidden="true" />
-          <span>Needs action</span>
-          <strong>{needsProofCount}</strong>
-          <small>Configured connectors that still need matched proof.</small>
-        </article>
-        <article className="panel connectors-metric-card">
-          <Plug aria-hidden="true" />
-          <span>Support links</span>
-          <strong>{supportConnectedCount}/2</strong>
-          <small>GitHub for change proof, Slack for operations delivery.</small>
-        </article>
-      </section>
-
-      <div className="connectors-workspace">
-        <section className="panel connectors-command-panel">
-          <div>
-            <span className="eyebrow">Decision path</span>
-            <h2>Get connector proof to handoff</h2>
-            <p>Every customer-facing proof pack depends on a runtime decision linked to a matched system-of-record check.</p>
-          </div>
-          <div className="connectors-action-chain" aria-label="Connector proof chain">
-            <Link href="/integrations#ledger-refund-connector">Configure source system</Link>
-            <Link href="/integrations#ledger-refund-connector">Run saved proof</Link>
-            <Link href="/outcomes">Review reconciliation</Link>
-            <Link href="/evidence">Export Evidence Pack</Link>
-          </div>
-        </section>
-
-        <section className="connectors-source-grid" aria-label="Connector source status">
-          {connectorCards.map((card) => (
-            <article className="panel connector-source-card" data-tone={card.tone} key={card.title}>
-              <span>{card.label}</span>
-              <div>
-                <h3>{card.title}</h3>
-                <strong>{card.status}</strong>
-              </div>
-              <p>{card.detail}</p>
-              <Link href={card.href} className="btn btn-soft btn-sm">{card.cta}</Link>
-            </article>
-          ))}
-        </section>
-      </div>
-
-      <ConnectorRegistryCatalog registry={overview.registry} loading={loading} />
-
-      <GenericRestSetupPanel
-        status={overview.generic}
-        latestCheck={genericCheck}
-        onStatusChange={(generic) => setOverview((prev) => ({ ...prev, generic }))}
+    <div className="dashboard-page integrations-page connectors-page">
+      <DashboardVerdictHero
+        actions={
+          <>
+            <DashboardButton icon={<RefreshCw />} loading={loading} onClick={() => void loadOverview()} variant="soft">
+              Refresh
+            </DashboardButton>
+            <DashboardButtonLink href={inventory.verdict.ctaHref} variant="primary">
+              {inventory.verdict.ctaLabel}
+            </DashboardButtonLink>
+          </>
+        }
+        copy={inventory.verdict.copy}
+        eyebrow="Connectors"
+        icon={<Database />}
+        pill={inventory.verdict.pill}
+        tone={inventory.verdict.tone}
+        title={inventory.verdict.title}
+        updatedLabel={loading ? "Refreshing" : "Updated live"}
       />
+
+      <DashboardMetricStrip
+        ariaLabel="Connector readiness metrics"
+        columns={5}
+        metrics={metrics}
+      />
+
+      <CoverageMap rows={inventory.coverageRows} />
+
+      <DashboardWorkspace
+        className="connectors-workspace"
+        left={
+          <ConnectorInventoryList
+            groups={inventory.transportGroups}
+            onSelect={setSelectedId}
+            selectedId={selectedId}
+          />
+        }
+        right={
+          <ConnectorInspector
+            genericStatus={overview.generic}
+            hubspotStatus={overview.hubspot}
+            jiraStatus={overview.jira}
+            netsuiteStatus={overview.netsuite}
+            razorpayStatus={overview.razorpay}
+            salesforceStatus={overview.salesforce}
+            stripeStatus={overview.stripe}
+            zendeskStatus={overview.zendesk}
+            zohoStatus={overview.zoho}
+            onShowDetails={() => setShowDetailedControls(true)}
+            onGenericStatusChange={(generic) => setOverview((current) => ({ ...current, generic }))}
+            onHubSpotStatusChange={(hubspot) => setOverview((current) => ({ ...current, hubspot }))}
+            onJiraStatusChange={(jira) => setOverview((current) => ({ ...current, jira }))}
+            onNetSuiteStatusChange={(netsuite) => setOverview((current) => ({ ...current, netsuite }))}
+            onRazorpayStatusChange={(razorpay) => setOverview((current) => ({ ...current, razorpay }))}
+            onSalesforceStatusChange={(salesforce) => setOverview((current) => ({ ...current, salesforce }))}
+            onStripeStatusChange={(stripe) => setOverview((current) => ({ ...current, stripe }))}
+            onZendeskStatusChange={(zendesk) => setOverview((current) => ({ ...current, zendesk }))}
+            onZohoStatusChange={(zoho) => setOverview((current) => ({ ...current, zoho }))}
+            row={selectedRow}
+          />
+        }
+      />
+
+      <section className="panel connectors-support-panel" aria-label="Connector implementation truth">
+        <div className="connectors-section-head">
+          <div>
+            <span className="dashboard-eyebrow">Launch truth</span>
+            <h2>Backend coverage stays honest</h2>
+            <p>
+              The UI is transport-first, but the current backend still exposes one saved config per verifier type.
+              Templates are quick-start presets under REST, not unlimited named connector instances.
+            </p>
+          </div>
+        </div>
+        <div className="connector-launch-grid">
+          <article>
+            <CheckCircle2 aria-hidden="true" />
+            <strong>{formatCount(inventory.registry.available)} available now</strong>
+            <span>Usable in the current product.</span>
+          </article>
+          <article>
+            <FileJson aria-hidden="true" />
+            <strong>{formatCount(inventory.registry.template)} templates</strong>
+            <span>Guided setup on generic transports.</span>
+          </article>
+          <article>
+            <GitBranch aria-hidden="true" />
+            <strong>{formatCount(inventory.registry.planned)} planned</strong>
+            <span>Visible roadmap, not sold as live coverage.</span>
+          </article>
+        </div>
+      </section>
 
       {partialFailure ? (
         <div className="alert-strip connectors-alert">
           <AlertTriangle aria-hidden="true" />
-          Some connector status checks could not load. Detailed setup below may show the failing source.
+          Some connector status checks could not load. Coverage is shown from the sources that responded.
         </div>
       ) : null}
 
-      <section className="connectors-detail-section" aria-label="Connector setup and proof controls">
-        <header className="connectors-section-head">
+      <section className="panel connectors-detail-section" aria-label="Detailed connector controls">
+        <div className="connectors-section-head">
           <div>
-            <span className="eyebrow">Operator setup</span>
-            <h2>System-of-record connectors</h2>
-            <p>Save read-scoped endpoints, run preflight, download summaries, and expose linked Evidence Packs.</p>
+            <span className="dashboard-eyebrow">Detailed setup</span>
+            <h2>System-of-record connector controls</h2>
+            <p>Open the existing backend-specific controls for ledger, customer record, SQL read, GitHub, and Slack setup.</p>
           </div>
-          <FileJson aria-hidden="true" />
-        </header>
-        <SystemOfRecordConnectors />
+          <DashboardButton onClick={() => setShowDetailedControls((open) => !open)} variant="soft">
+            {showDetailedControls ? "Hide controls" : "Show controls"}
+          </DashboardButton>
+        </div>
+        {showDetailedControls ? <SystemOfRecordConnectors /> : null}
       </section>
     </div>
   );

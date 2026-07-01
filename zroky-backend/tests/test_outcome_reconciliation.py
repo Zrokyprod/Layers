@@ -28,14 +28,30 @@ from app.services.system_of_record_connectors import (
     ConnectorConfigError,
     CustomerRecordApiConnector,
     GenericRestApiConnector,
+    HubSpotCrmConnector,
+    JiraIssueConnector,
     LedgerRefundApiConnector,
+    NetSuiteFinanceConnector,
     PostgresReadOnlyConnector,
+    RazorpayRefundConnector,
+    SalesforceCrmConnector,
+    StripeRefundConnector,
+    ZendeskTicketConnector,
+    ZohoCrmConnector,
 )
 from app.services.system_of_record_connector_config import (
     upsert_customer_record_connector_config,
     upsert_generic_rest_connector_config,
+    upsert_hubspot_crm_connector_config,
+    upsert_jira_issue_connector_config,
     upsert_ledger_refund_connector_config,
+    upsert_netsuite_finance_connector_config,
     upsert_postgres_read_connector_config,
+    upsert_razorpay_refund_connector_config,
+    upsert_salesforce_crm_connector_config,
+    upsert_stripe_refund_connector_config,
+    upsert_zendesk_ticket_connector_config,
+    upsert_zoho_crm_connector_config,
 )
 
 
@@ -153,6 +169,83 @@ def test_ledger_refund_connector_handles_real_ledger_array_and_alias_shapes() ->
     assert source.record["amount_usd"] == 42.18
     assert source.record["currency"] == "USD"
     assert source.record["status"] == "posted"
+
+
+def test_payment_refund_connectors_normalize_exact_money_fields() -> None:
+    stripe = StripeRefundConnector(
+        refund_id="re_123",
+        bearer_token="sk_test",
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "id": "re_123",
+                    "amount": 4250,
+                    "currency": "usd",
+                    "status": "succeeded",
+                },
+            )
+        ),
+    )
+    stripe_source = stripe.fetch()
+
+    assert stripe_source.record is not None
+    assert stripe_source.record["amount_minor"] == 4250
+    assert stripe_source.record["amount_major"] == "42.5"
+    assert stripe_source.record["amount_usd"] == 42.5
+    assert stripe_source.record["currency"] == "USD"
+
+    razorpay = RazorpayRefundConnector(
+        refund_id="rfnd_123",
+        key_id="rzp_test_key",
+        key_secret="rzp_secret",
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "id": "rfnd_123",
+                    "amount": 4250,
+                    "currency": "INR",
+                    "status": "processed",
+                },
+            )
+        ),
+    )
+    razorpay_source = razorpay.fetch()
+
+    assert razorpay_source.record is not None
+    assert razorpay_source.record["amount_minor"] == 4250
+    assert razorpay_source.record["amount_major"] == "42.5"
+    assert razorpay_source.record["currency"] == "INR"
+    assert "amount_usd" not in razorpay_source.record
+
+
+def test_netsuite_finance_connector_normalizes_major_money_to_minor_units() -> None:
+    connector = NetSuiteFinanceConnector(
+        record_type="vendorBill",
+        record_ref="12345",
+        bearer_token="netsuite-token",
+        base_url="https://example.suitetalk.api.netsuite.com",
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "id": "12345",
+                    "tranId": "VB1001",
+                    "total": "1250.75",
+                    "currency": {"refName": "USD"},
+                    "status": {"refName": "approved"},
+                },
+            )
+        ),
+    )
+    source = connector.fetch()
+
+    assert source.record is not None
+    assert source.record["amount_major"] == "1250.75"
+    assert source.record["amount_minor"] == 125075
+    assert source.record["amount_usd"] == 1250.75
+    assert source.record["currency"] == "USD"
 
 
 def test_ledger_refund_connector_retries_transient_failure_and_records_metadata() -> (
@@ -1593,6 +1686,947 @@ def test_saved_connector_bridge_reconciles_generic_rest_runtime(
             assert body["metadata"]["partner_run_id"] == "pilot_bridge"
             assert body["metadata"]["connector"]["http_status"] == 200
             assert "stored-bridge-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_hubspot_crm_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-hubspot-connectors-123"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_hubspot.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_hubspot")
+    with session_factory() as session:
+        upsert_hubspot_crm_connector_config(
+            session,
+            project_id="proj_bridge_hubspot",
+            query={
+                "properties": "email,firstname,lifecyclestage,hs_object_id",
+                "idProperty": "email",
+            },
+            bearer_token="stored-hubspot-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_hubspot", role="member", subject=None
+        )
+
+    def fake_fetch(self: HubSpotCrmConnector) -> SourceRecord:
+        assert self.bearer_token == "stored-hubspot-secret"
+        assert self.query is not None
+        assert self.query["idProperty"] == "email"
+        return SourceRecord(
+            record={
+                "id": "12345",
+                "properties": {
+                    "email": self.record_ref,
+                    "firstname": "Ada",
+                    "lifecyclestage": "customer",
+                    "hs_object_id": "12345",
+                },
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "hubspot_crm",
+                "request_url": (
+                    "https://api.hubapi.com/crm/v3/objects/contacts/"
+                    f"{self.record_ref}"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "record_ref": self.record_ref,
+            },
+        )
+
+    monkeypatch.setattr(HubSpotCrmConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "hubspot_crm",
+                    "call_id": "call_bridge_hubspot",
+                    "trace_id": "trace_bridge_hubspot",
+                    "runtime_policy_decision_id": "decision_bridge_hubspot",
+                    "action_type": "customer_record_update",
+                    "record_ref": "owner@example.com",
+                    "claimed": {
+                        "email": "owner@example.com",
+                        "firstname": "Ada",
+                        "lifecyclestage": "customer",
+                    },
+                    "match_fields": ["email", "firstname", "lifecyclestage"],
+                    "metadata": {"partner_run_id": "pilot_hubspot"},
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "hubspot_crm"
+            assert body["system_ref"] == "hubspot:contact:owner@example.com"
+            assert body["idempotency_key"] == (
+                "saved_hubspot_crm:decision_bridge_hubspot:owner@example.com"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["runtime_path"] == "webhook_bridge"
+            assert body["metadata"]["bridge_connector"] == "hubspot_crm"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_hubspot"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-hubspot-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_salesforce_crm_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-salesforce-connectors-123"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_salesforce.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_salesforce")
+    with session_factory() as session:
+        upsert_salesforce_crm_connector_config(
+            session,
+            project_id="proj_bridge_salesforce",
+            base_url="https://example.my.salesforce.com",
+            query={"fields": "Id,Name,StageName,Amount"},
+            bearer_token="stored-salesforce-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_salesforce", role="member", subject=None
+        )
+
+    def fake_fetch(self: SalesforceCrmConnector) -> SourceRecord:
+        assert self.bearer_token == "stored-salesforce-secret"
+        assert self.object_type == "Opportunity"
+        assert self.record_ref == "006000000000000AAA"
+        assert self.query is not None
+        assert self.query["fields"] == "Id,Name,StageName,Amount"
+        return SourceRecord(
+            record={
+                "Id": self.record_ref,
+                "salesforce_id": self.record_ref,
+                "record_ref": self.record_ref,
+                "object_type": "Opportunity",
+                "Name": "Renewal",
+                "StageName": "Closed Won",
+                "Amount": 1200,
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "salesforce_crm",
+                "request_url": (
+                    "https://example.my.salesforce.com/services/data/v60.0/"
+                    f"sobjects/Opportunity/{self.record_ref}"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "record_ref": self.record_ref,
+                "salesforce_object": "Opportunity",
+            },
+        )
+
+    monkeypatch.setattr(SalesforceCrmConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "salesforce_crm",
+                    "call_id": "call_bridge_salesforce",
+                    "trace_id": "trace_bridge_salesforce",
+                    "runtime_policy_decision_id": "decision_bridge_salesforce",
+                    "action_type": "customer_record_update",
+                    "record_ref": "006000000000000AAA",
+                    "claimed": {
+                        "salesforce_id": "006000000000000AAA",
+                        "Name": "Renewal",
+                        "StageName": "Closed Won",
+                        "Amount": 1200,
+                    },
+                    "match_fields": ["salesforce_id", "Name", "StageName", "Amount"],
+                    "metadata": {
+                        "partner_run_id": "pilot_salesforce",
+                        "object_type": "Opportunity",
+                    },
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "salesforce_crm"
+            assert body["system_ref"] == "salesforce:Opportunity:006000000000000AAA"
+            assert body["idempotency_key"] == (
+                "saved_salesforce_crm:decision_bridge_salesforce:Opportunity:"
+                "006000000000000AAA"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["runtime_path"] == "webhook_bridge"
+            assert body["metadata"]["bridge_connector"] == "salesforce_crm"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["object_type"] == "Opportunity"
+            assert body["metadata"]["partner_run_id"] == "pilot_salesforce"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-salesforce-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+def test_saved_connector_bridge_reconciles_zoho_crm_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-zoho-connectors-123"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_zoho.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_zoho")
+    with session_factory() as session:
+        upsert_zoho_crm_connector_config(
+            session,
+            project_id="proj_bridge_zoho",
+            base_url="https://www.zohoapis.com",
+            query={"fields": "id,Full_Name,Email,Stage,Amount"},
+            bearer_token="stored-zoho-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_zoho", role="member", subject=None
+        )
+
+    def fake_fetch(self: ZohoCrmConnector) -> SourceRecord:
+        assert self.bearer_token == "stored-zoho-secret"
+        assert self.module_name == "Deals"
+        assert self.record_ref == "1234567890000000001"
+        assert self.query is not None
+        assert self.query["fields"] == "id,Full_Name,Email,Stage,Amount"
+        return SourceRecord(
+            record={
+                "id": self.record_ref,
+                "zoho_record_id": self.record_ref,
+                "record_ref": self.record_ref,
+                "module_name": "Deals",
+                "Full_Name": "Renewal",
+                "Stage": "Closed Won",
+                "Amount": 1200,
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "zoho_crm",
+                "request_url": (
+                    "https://www.zohoapis.com/crm/v8/"
+                    f"Deals/{self.record_ref}"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "record_ref": self.record_ref,
+                "zoho_module": "Deals",
+            },
+        )
+
+    monkeypatch.setattr(ZohoCrmConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "zoho_crm",
+                    "call_id": "call_bridge_zoho",
+                    "trace_id": "trace_bridge_zoho",
+                    "runtime_policy_decision_id": "decision_bridge_zoho",
+                    "action_type": "customer_record_update",
+                    "record_ref": "1234567890000000001",
+                    "claimed": {
+                        "zoho_record_id": "1234567890000000001",
+                        "Full_Name": "Renewal",
+                        "Stage": "Closed Won",
+                        "Amount": 1200,
+                    },
+                    "match_fields": ["zoho_record_id", "Full_Name", "Stage", "Amount"],
+                    "metadata": {
+                        "partner_run_id": "pilot_zoho",
+                        "module_name": "Deals",
+                    },
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "zoho_crm"
+            assert body["system_ref"] == "zoho:Deals:1234567890000000001"
+            assert body["idempotency_key"] == (
+                "saved_zoho_crm:decision_bridge_zoho:Deals:"
+                "1234567890000000001"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["runtime_path"] == "webhook_bridge"
+            assert body["metadata"]["bridge_connector"] == "zoho_crm"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["module_name"] == "Deals"
+            assert body["metadata"]["partner_run_id"] == "pilot_zoho"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-zoho-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_zendesk_ticket_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-zendesk-connectors-123"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_zendesk.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_zendesk")
+    with session_factory() as session:
+        upsert_zendesk_ticket_connector_config(
+            session,
+            project_id="proj_bridge_zendesk",
+            base_url="https://example.zendesk.com",
+            auth_username="agent@example.com",
+            bearer_token="stored-zendesk-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_zendesk", role="member", subject=None
+        )
+
+    def fake_fetch(self: ZendeskTicketConnector) -> SourceRecord:
+        assert self.basic_auth_username == "agent@example.com/token"
+        assert self.basic_auth_password == "stored-zendesk-secret"
+        return SourceRecord(
+            record={
+                "id": 12345,
+                "ticket_id": "12345",
+                "status": "solved",
+                "subject": "Order question",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "zendesk_ticket",
+                "request_url": (
+                    "https://example.zendesk.com/api/v2/tickets/"
+                    f"{self.record_ref}.json"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "record_ref": self.record_ref,
+            },
+        )
+
+    monkeypatch.setattr(ZendeskTicketConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "zendesk_ticket",
+                    "call_id": "call_bridge_zendesk",
+                    "trace_id": "trace_bridge_zendesk",
+                    "runtime_policy_decision_id": "decision_bridge_zendesk",
+                    "action_type": "ticket_close",
+                    "record_ref": "12345",
+                    "claimed": {
+                        "ticket_id": "12345",
+                        "status": "solved",
+                        "subject": "Order question",
+                    },
+                    "match_fields": ["ticket_id", "status", "subject"],
+                    "metadata": {"partner_run_id": "pilot_zendesk"},
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "zendesk_ticket"
+            assert body["system_ref"] == "zendesk:ticket:12345"
+            assert body["idempotency_key"] == (
+                "saved_zendesk_ticket:decision_bridge_zendesk:12345"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["runtime_path"] == "webhook_bridge"
+            assert body["metadata"]["bridge_connector"] == "zendesk_ticket"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_zendesk"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-zendesk-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_jira_issue_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-jira-connectors-123"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_jira.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_jira")
+    with session_factory() as session:
+        upsert_jira_issue_connector_config(
+            session,
+            project_id="proj_bridge_jira",
+            base_url="https://example.atlassian.net",
+            auth_username="agent@example.com",
+            bearer_token="stored-jira-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_jira", role="member", subject=None
+        )
+
+    def fake_fetch(self: JiraIssueConnector) -> SourceRecord:
+        assert self.basic_auth_username == "agent@example.com"
+        assert self.basic_auth_password == "stored-jira-secret"
+        return SourceRecord(
+            record={
+                "jira_issue_key": "JSM-123",
+                "issue_key": "JSM-123",
+                "status": "Done",
+                "summary": "Provision access",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "jira_issue",
+                "source_url": (
+                    "https://example.atlassian.net/rest/api/3/issue/"
+                    f"{self.record_ref}"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "record_ref": self.record_ref,
+            },
+        )
+
+    monkeypatch.setattr(JiraIssueConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "jira_issue",
+                    "call_id": "call_bridge_jira",
+                    "trace_id": "trace_bridge_jira",
+                    "runtime_policy_decision_id": "decision_bridge_jira",
+                    "action_type": "ticket_close",
+                    "record_ref": "JSM-123",
+                    "claimed": {
+                        "jira_issue_key": "JSM-123",
+                        "status": "Done",
+                        "summary": "Provision access",
+                    },
+                    "match_fields": ["jira_issue_key", "status", "summary"],
+                    "metadata": {"partner_run_id": "pilot_jira"},
+                },
+            )
+
+            assert created.status_code == 201
+            body = created.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "jira_issue"
+            assert body["system_ref"] == "jira:issue:JSM-123"
+            assert body["idempotency_key"] == (
+                "saved_jira_issue:decision_bridge_jira:JSM-123"
+            )
+            assert body["metadata"]["source"] == "saved_connector_runtime"
+            assert body["metadata"]["runtime_path"] == "webhook_bridge"
+            assert body["metadata"]["bridge_connector"] == "jira_issue"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_jira"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-jira-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_stripe_refund_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-stripe-connectors-123"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_stripe.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_stripe")
+    with session_factory() as session:
+        upsert_stripe_refund_connector_config(
+            session,
+            project_id="proj_bridge_stripe",
+            bearer_token="stored-stripe-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_stripe", role="member", subject=None
+        )
+
+    def fake_fetch(self: StripeRefundConnector) -> SourceRecord:
+        assert self.bearer_token == "stored-stripe-secret"
+        return SourceRecord(
+            record={
+                "id": self.refund_id,
+                "refund_id": self.refund_id,
+                "stripe_refund_id": self.refund_id,
+                "object": "refund",
+                "amount": 4250,
+                "amount_usd": 42.5,
+                "currency": "usd",
+                "status": "succeeded",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "stripe_refund",
+                "request_url": f"https://api.stripe.com/v1/refunds/{self.refund_id}",
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "stripe_object": "refund",
+            },
+        )
+
+    monkeypatch.setattr(StripeRefundConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "stripe_refund",
+                    "call_id": "call_bridge_stripe",
+                    "trace_id": "trace_bridge_stripe",
+                    "runtime_policy_decision_id": "decision_bridge_stripe",
+                    "refund_id": "re_123",
+                    "claimed": {
+                        "refund_id": "re_123",
+                        "amount_usd": 42.5,
+                        "currency": "USD",
+                        "status": "succeeded",
+                    },
+                    "match_fields": ["refund_id", "amount_usd", "currency", "status"],
+                    "metadata": {"partner_run_id": "pilot_stripe"},
+                },
+            )
+
+            assert response.status_code == 201, response.text
+            body = response.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "stripe_refund"
+            assert body["system_ref"] == "stripe:refund:re_123"
+            assert body["runtime_policy_decision_id"] == "decision_bridge_stripe"
+            assert body["actual"]["amount_usd"] == 42.5
+            assert body["metadata"]["bridge_connector"] == "stripe_refund"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_stripe"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-stripe-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_razorpay_refund_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-razorpay-connectors"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_razorpay.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_razorpay")
+    with session_factory() as session:
+        upsert_razorpay_refund_connector_config(
+            session,
+            project_id="proj_bridge_razorpay",
+            key_id="rzp_test_key",
+            key_secret="stored-razorpay-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_razorpay", role="member", subject=None
+        )
+
+    def fake_fetch(self: RazorpayRefundConnector) -> SourceRecord:
+        assert self.key_id == "rzp_test_key"
+        assert self.key_secret == "stored-razorpay-secret"
+        return SourceRecord(
+            record={
+                "id": self.refund_id,
+                "refund_id": self.refund_id,
+                "razorpay_refund_id": self.refund_id,
+                "amount": 4250,
+                "amount_minor": 4250,
+                "amount_major": "42.5",
+                "currency": "INR",
+                "status": "processed",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "razorpay_refund",
+                "request_url": f"https://api.razorpay.com/v1/refunds/{self.refund_id}",
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "razorpay_object": "refund",
+            },
+        )
+
+    monkeypatch.setattr(RazorpayRefundConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "razorpay_refund",
+                    "call_id": "call_bridge_razorpay",
+                    "trace_id": "trace_bridge_razorpay",
+                    "runtime_policy_decision_id": "decision_bridge_razorpay",
+                    "refund_id": "rfnd_123",
+                    "claimed": {
+                        "refund_id": "rfnd_123",
+                        "amount_minor": 4250,
+                        "amount_major": "42.5",
+                        "currency": "INR",
+                        "status": "processed",
+                    },
+                    "match_fields": ["refund_id", "amount_minor", "currency", "status"],
+                    "metadata": {"partner_run_id": "pilot_razorpay"},
+                },
+            )
+
+            assert response.status_code == 201, response.text
+            body = response.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "razorpay_refund"
+            assert body["system_ref"] == "razorpay:refund:rfnd_123"
+            assert body["runtime_policy_decision_id"] == "decision_bridge_razorpay"
+            assert body["actual"]["amount_minor"] == 4250
+            assert body["metadata"]["bridge_connector"] == "razorpay_refund"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_razorpay"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-razorpay-secret" not in json.dumps(body)
+    finally:
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_saved_connector_bridge_reconciles_netsuite_finance_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PROVIDER_KEY_VAULT_KEK", "test-kek-for-bridge-netsuite-connectors-123"
+    )
+    get_settings.cache_clear()
+    db_path = tmp_path / "saved_connector_bridge_netsuite.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, future=True
+    )
+    _seed_project(session_factory, "proj_bridge_netsuite")
+    with session_factory() as session:
+        upsert_netsuite_finance_connector_config(
+            session,
+            project_id="proj_bridge_netsuite",
+            base_url="https://example.suitetalk.api.netsuite.com",
+            bearer_token="stored-netsuite-secret",
+            updated_by_subject="admin@example.com",
+        )
+
+    def override_db():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    def override_tenant():
+        return TenantContext(
+            tenant_id="proj_bridge_netsuite", role="member", subject=None
+        )
+
+    def fake_fetch(self: NetSuiteFinanceConnector) -> SourceRecord:
+        assert self.bearer_token == "stored-netsuite-secret"
+        assert self.record_type == "vendorBill"
+        assert self.record_ref == "12345"
+        return SourceRecord(
+            record={
+                "id": self.record_ref,
+                "netsuite_record_id": self.record_ref,
+                "record_ref": self.record_ref,
+                "record_type": self.record_type,
+                "tran_id": "VB1001",
+                "amount_minor": 125000,
+                "amount_major": "1250",
+                "currency": "USD",
+                "status": "approved",
+            },
+            record_found=True,
+            metadata={
+                "connector_type": "netsuite_finance",
+                "request_url": (
+                    "https://example.suitetalk.api.netsuite.com/services/rest/"
+                    f"record/v1/{self.record_type}/{self.record_ref}"
+                ),
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+                "record_type": self.record_type,
+            },
+        )
+
+    monkeypatch.setattr(NetSuiteFinanceConnector, "fetch", fake_fetch)
+    app.dependency_overrides[get_db_session] = override_db
+    app.dependency_overrides[get_db_session_read] = override_db
+    app.dependency_overrides[require_tenant_context] = override_tenant
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/outcomes/reconciliation/saved",
+                json={
+                    "connector": "netsuite_finance",
+                    "call_id": "call_bridge_netsuite",
+                    "trace_id": "trace_bridge_netsuite",
+                    "runtime_policy_decision_id": "decision_bridge_netsuite",
+                    "record_ref": "12345",
+                    "claimed": {
+                        "netsuite_record_id": "12345",
+                        "record_type": "vendorBill",
+                        "tran_id": "VB1001",
+                        "amount_minor": 125000,
+                        "amount_major": "1250",
+                        "currency": "USD",
+                        "status": "approved",
+                    },
+                    "match_fields": [
+                        "netsuite_record_id",
+                        "record_type",
+                        "tran_id",
+                        "amount_minor",
+                        "currency",
+                        "status",
+                    ],
+                    "params": {"record_type": "vendorBill"},
+                    "metadata": {"partner_run_id": "pilot_netsuite"},
+                },
+            )
+
+            assert response.status_code == 201, response.text
+            body = response.json()
+            assert body["verdict"] == "matched"
+            assert body["connector_type"] == "netsuite_finance"
+            assert body["system_ref"] == "netsuite:vendorBill:12345"
+            assert body["runtime_policy_decision_id"] == "decision_bridge_netsuite"
+            assert body["actual"]["amount_minor"] == 125000
+            assert body["metadata"]["bridge_connector"] == "netsuite_finance"
+            assert body["metadata"]["connector_config_id"]
+            assert body["metadata"]["partner_run_id"] == "pilot_netsuite"
+            assert body["metadata"]["connector"]["http_status"] == 200
+            assert "stored-netsuite-secret" not in json.dumps(body)
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)

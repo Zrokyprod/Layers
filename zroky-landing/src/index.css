@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
     font-synthesis: none;
     text-rendering: geometricPrecision;
     -webkit-font-smoothing: antialiased;
@@ -15,24 +15,88 @@
   html {
     scroll-behavior: smooth;
     scroll-padding-top: 96px;
-    background: #0A0A0A;
+    background: #fbfcfa;
   }
 
   body {
-    @apply bg-ink text-primary antialiased;
+    background: #fbfcfa;
+    color: #20231f;
+    -webkit-font-smoothing: antialiased;
     min-width: 320px;
     overflow-x: hidden;
   }
 
-  #root { min-height: 100vh; background: #0A0A0A; }
+  #root { min-height: 100vh; background: #fbfcfa; }
 
   button, a { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
-  ::selection { background: #FAFAFA; color: #0A0A0A; }
+  ::selection { background: #4f5a52; color: #ffffff; }
 }
 
 @layer utilities {
-  /* ---- Monochrome surfaces ---- */
+  .text-balance { text-wrap: balance; }
+
+  .mesh-rocket {
+    background:
+      radial-gradient(50% 44% at 78% 4%, rgba(79,90,82,0.18), transparent 70%),
+      radial-gradient(42% 38% at 14% 20%, rgba(162,166,156,0.16), transparent 72%),
+      radial-gradient(34% 32% at 60% 88%, rgba(184,121,34,0.06), transparent 74%);
+  }
+
+  /* ---- Faint precision grid (light) ---- */
+  .grid-light {
+    background-image:
+      linear-gradient(rgba(42,45,40,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(42,45,40,0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(circle at 50% -10%, #000, transparent 70%);
+  }
+
+  /* ---- Subtle film grain for premium texture ---- */
+  .hero-grain::before {
+    content: '';
+    position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    opacity: 0.4;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
+  }
+
+  /* ---- Marquee (infinite logo scroll) ---- */
+  .marquee-track {
+    display: flex; width: max-content;
+    animation: marquee 32s linear infinite;
+  }
+  .marquee-mask {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+::-webkit-scrollbar { width: 9px; }
+::-webkit-scrollbar-track { background: #eef0eb; }
+::-webkit-scrollbar-thumb { background: rgba(42,45,40,0.18); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(79,90,82,0.48); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Legacy utilities retained for secondary pages (Pricing/Changelog/ */
+/* Docs) until they are migrated to the rocket-light system.         */
+/* Home/landing does NOT use these.                                  */
+/* ---------------------------------------------------------------- */
+@layer utilities {
   .card {
     border: 1px solid theme('colors.line');
     background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.012) 50%, rgba(0,0,0,0.4));
@@ -57,7 +121,6 @@
     @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white/[0.03] px-5 py-2.5 text-sm font-semibold text-primary transition hover:border-line-strong hover:bg-white/[0.06] active:scale-[0.98];
   }
 
-  /* ---- Background grid (subtle, monochrome) ---- */
   .grid-bg {
     background-image:
       linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
@@ -66,26 +129,14 @@
     mask-image: radial-gradient(circle at 50% 0%, rgba(0,0,0,0.9), transparent 75%);
   }
 
-  /* ---- Animated headline shimmer (white→grey→white) ---- */
-  .text-shimmer {
-    background: linear-gradient(110deg, #FFFFFF 0%, rgba(255,255,255,0.55) 46%, #FFFFFF 100%);
-    background-size: 220% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: shimmer 8s linear infinite;
-  }
-
-  .text-balance { text-wrap: balance; }
-
-  /* ---- Semantic badges (reused from app vocabulary) ---- */
   .badge { @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold; }
   .badge-discovered { @apply border-discovered/30 bg-discovered/10 text-discovered; }
   .badge-verified   { @apply border-verified/30 bg-verified/10 text-verified; }
   .badge-blocked    { @apply border-blocked/30 bg-blocked/10 text-blocked; }
   .badge-review     { @apply border-review/30 bg-review/10 text-review; }
 
-  /* ---- Browser frame for product screenshots ---- */
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent); }
+
   .browser-frame {
     border: 1px solid theme('colors.line-strong');
     border-radius: 14px;
@@ -93,28 +144,18 @@
     background: #0F0F10;
     box-shadow: 0 50px 120px -50px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04);
   }
-  .browser-bar {
-    @apply flex items-center gap-1.5 border-b border-line bg-white/[0.03] px-3 py-2.5;
-  }
+  .browser-bar { @apply flex items-center gap-1.5 border-b border-line bg-white/[0.03] px-3 py-2.5; }
   .browser-dot { @apply h-2.5 w-2.5 rounded-full bg-white/20; }
 
-  .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent); }
-
-  /* ---- Premium device frame (crops the screenshot, adds depth) ---- */
   .device-frame {
     position: relative;
     border: 1px solid theme('colors.line-strong');
     border-radius: 16px;
     overflow: hidden;
     background: #0C0C0D;
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.08) inset,
-      0 60px 140px -60px rgba(0,0,0,0.95),
-      0 0 0 1px rgba(255,255,255,0.04);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 60px 140px -60px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04);
   }
-  /* crop screenshots from the top instead of stretching them long */
   .device-shot { display: block; width: 100%; height: auto; object-fit: cover; object-position: top; }
-  /* fade the bottom of a cropped screenshot so the crop looks intentional */
   .device-fade::after {
     content: '';
     position: absolute; inset: auto 0 0 0; height: 38%;
@@ -122,23 +163,12 @@
     pointer-events: none;
   }
 
-  /* ---- Ambient mesh glow (monochrome) ---- */
   .mesh-glow {
     background:
       radial-gradient(40% 36% at 72% 18%, rgba(255,255,255,0.10), transparent 70%),
       radial-gradient(34% 30% at 22% 28%, rgba(255,255,255,0.06), transparent 70%);
   }
 
-  /* ---- Subtle film grain for premium texture ---- */
-  .grain::before {
-    content: '';
-    position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    opacity: 0.45;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-    mix-blend-mode: overlay;
-  }
-
-  /* ---- Bento cell ---- */
   .bento {
     position: relative;
     border: 1px solid theme('colors.line');
@@ -148,33 +178,4 @@
     transition: border-color .25s ease, transform .25s ease;
   }
   .bento:hover { border-color: theme('colors.line-strong'); transform: translateY(-2px); }
-
-  /* ---- Marquee (infinite logo scroll) ---- */
-  .marquee-track {
-    display: flex; width: max-content;
-    animation: marquee 32s linear infinite;
-  }
-  .marquee-mask {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  }
-}
-
-@keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #0A0A0A; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.36); }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 0.001ms !important;
-  }
 }

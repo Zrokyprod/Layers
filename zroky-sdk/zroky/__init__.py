@@ -45,6 +45,9 @@ from zroky._errors import (  # noqa: F401
     ZrokyRuntimePolicyApprovalRequired,
     ZrokyRuntimePolicyBlocked,
     ZrokyRuntimePolicyError,
+    ZrokyVerifiedActionApprovalRequired,
+    ZrokyVerifiedActionBlocked,
+    ZrokyVerifiedActionError,
 )
 from zroky._internal import validation as _validation  # noqa: F401
 
@@ -77,6 +80,7 @@ from zroky._internal.timeout_manager import TimeoutManager
 # Re-export outcome() — Cost-of-Failure Attribution
 from zroky._outcome import outcome  # noqa: F401
 from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
+from zroky._verified_action import await_action_proof, verified_action  # noqa: F401
 from zroky._runner import (  # noqa: F401
     EnvCredentialResolver,
     RUNNER_CAPABILITY_VERSION,
@@ -151,6 +155,7 @@ def init(
     mode: str | None = None,
     mask_pii: bool | None = None,
     ingest_url: str | None = None,
+    agent_id: str | None = None,
     agent_framework: str | None = None,
     session_id: str | None = None,
     workflow_id: str | None = None,
@@ -217,7 +222,7 @@ def init(
 
         cfg = load_config(
             api_key=api_key, project=project, mode=mode, mask_pii=mask_pii,
-            ingest_url=ingest_url, agent_framework=agent_framework,
+            ingest_url=ingest_url, agent_id=agent_id, agent_framework=agent_framework,
             session_id=session_id, workflow_id=workflow_id,
             workflow_name=workflow_name, prompt_version=prompt_version,
             environment=environment, code_sha=code_sha,

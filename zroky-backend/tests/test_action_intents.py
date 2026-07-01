@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -8,21 +9,28 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+import app.services.action_post_execution as action_post_execution_service
 from app.core.config import get_settings
 from app.api.routes import action_intents, tool_registry
 from app.db.base import Base
 from app.db.models import (
     ActionExecutionAttempt,
     ActionIntent,
+    ActionPostExecutionJob,
     ActionReceipt,
     ActionRunner,
     ActionTimelineEvent,
+    OutcomeReconciliationCheck,
     Project,
     RuntimePolicyDecision,
+    SystemOfRecordConnectorConfig,
 )
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
+from app.services.action_post_execution import process_action_post_execution_jobs, sweep_stale_execution_attempts
 from app.services.entitlements import set_override_entitlement
+from app.services.outcome_reconciliation import SourceRecord
+from app.services.system_of_record_connectors import GenericRestApiConnector
 
 
 def test_verified_action_public_routes_are_rate_limited() -> None:
@@ -38,6 +46,11 @@ def test_verified_action_public_routes_are_rate_limited() -> None:
 
     assert action_intents_source.count("@limiter.limit(") >= 7
     assert '@limiter.limit("120/minute")' in tool_registry_source
+
+
+def test_planned_verifier_labels_alias_to_generic_rest_connector() -> None:
+    for label in ["ticket_status", "email_delivery", "github_ci", "webhook_callback"]:
+        assert action_post_execution_service._connector_alias(label) == "generic_rest_api"
 
 
 @pytest.fixture()
@@ -70,6 +83,27 @@ def _seed_project(client: TestClient, project_id: str) -> None:
     with client._session_factory() as session:  # type: ignore[attr-defined]
         session.add(Project(id=project_id, name=f"Project {project_id}", is_active=True))
         session.commit()
+
+
+def _create_agent_profile(
+    client: TestClient,
+    project_id: str,
+    *,
+    display_name: str = "Inventory Agent",
+    environment: str = "production",
+) -> dict:
+    response = client.post(
+        "/v1/agents",
+        headers={"X-Project-Id": project_id},
+        json={
+            "display_name": display_name,
+            "runtime_path": "sdk",
+            "environment": environment,
+            "framework": "langgraph",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
 def _register_contract(client: TestClient, project_id: str) -> dict:
@@ -128,6 +162,101 @@ def _refund_execution_plan(*, amount_minor: int = 50000) -> dict:
         "arguments": {"amount_minor": amount_minor, "currency": "USD"},
         "verification": {"source_of_record": "ledger_refund"},
     }
+
+
+def _register_inventory_contract(
+    client: TestClient,
+    project_id: str,
+    *,
+    action_type: str = "inventory.item.update",
+) -> dict:
+    response = client.post(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+        json={
+            "contract_key": action_type,
+            "version": "1.0",
+            "action_type": action_type,
+            "operation_kind": "UPDATE",
+            "domain_family": "inventory_operations",
+            "risk_class": "R3",
+            "connector_family": "generic_rest",
+            "schema": {
+                "type": "object",
+                "required": ["resource", "parameters"],
+                "properties": {
+                    "resource": {"type": "object"},
+                    "parameters": {"type": "object"},
+                },
+            },
+            "verification_profile": {"minimum_level": "V3", "source_of_record": "generic_rest_api"},
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _inventory_intent_payload(*, action_type: str = "inventory.item.update", **overrides) -> dict:
+    payload = {
+        "contract_version": f"{action_type}/1.0",
+        "action_type": action_type,
+        "operation_kind": "UPDATE",
+        "environment": "production",
+        "principal": {"type": "agent", "id": "inventory-agent"},
+        "actor_chain": [{"type": "agent", "id": "inventory-agent", "version": "1.0.0"}],
+        "purpose": {"code": "inventory_update", "summary": "Update inventory item through controlled path"},
+        "resource": {"type": "inventory_item", "id": "item_123", "sku": "SKU-123"},
+        "parameters": {"fields": {"status": "active"}},
+        "trace_context": {"trace_id": "trace_inventory_123", "agent_name": "inventory-agent"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _generic_rest_execution_request(*, credential_pointer: str | None = "ops-default") -> dict:
+    request = {
+        "capability": {
+            "adapter": "generic_rest",
+            "operation": "rest.patch",
+            "operation_kind": "UPDATE",
+        },
+        "execution_plan": {
+            "adapter": "generic_rest",
+            "operation": "rest.patch",
+            "target": {"resource_ref": "item_123"},
+            "arguments": {"fields": {"status": "active"}},
+            "verification": {
+                "connector": "generic_rest_api",
+                "record_ref": "item_123",
+                "claimed": {"record_ref": "item_123", "status": "active"},
+                "match_fields": ["record_ref", "status"],
+            },
+        },
+    }
+    if credential_pointer is not None:
+        request["credential_pointer"] = credential_pointer
+    return request
+
+
+def _register_auto_runner(client: TestClient, project_id: str, *, name: str = "inventory-runner") -> dict:
+    response = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": name,
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["UPDATE"],
+            "credential_scope": {
+                "allowed_prefixes": ["customer-runner-secret://ops"],
+                "default_credential_ref": "customer-runner-secret://ops/default",
+                "credential_refs": {"ops-default": "customer-runner-secret://ops/default"},
+            },
+            "capability_version": "manual-smoke.v1",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
 def _create_intent(
@@ -198,6 +327,150 @@ def test_action_intent_create_is_digest_bound_and_idempotent(client: TestClient)
     assert second.status_code == 201
     assert second.json()["action_id"] == body["action_id"]
     assert second.json()["intent_digest"] == body["intent_digest"]
+
+
+def test_action_intent_list_filters_and_paginates(client: TestClient) -> None:
+    project_id = "proj_action_kernel_list"
+    _seed_project(client, project_id)
+    _register_contract(client, project_id)
+    first = _create_intent(client, project_id, idempotency_key="list_refund_1")
+    second = _create_intent(
+        client,
+        project_id,
+        idempotency_key="list_refund_2",
+        resource={"type": "payment.refund", "id": "rf_456", "account": "stripe_prod"},
+        trace_context={"trace_id": "trace_list_2", "agent_name": "refund-agent"},
+    )
+    decided = client.post(
+        f"/v1/action-intents/{first['action_id']}/decide",
+        headers={"X-Project-Id": project_id},
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["status"] == "approval_pending"
+
+    listed = client.get("/v1/action-intents", headers={"X-Project-Id": project_id})
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert body["total_in_page"] == 2
+    assert body["limit"] == 50
+    assert body["offset"] == 0
+    assert {item["action_id"] for item in body["items"]} == {first["action_id"], second["action_id"]}
+
+    approval_pending = client.get(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id},
+        params={"status": "approval_pending"},
+    )
+    assert approval_pending.status_code == 200, approval_pending.text
+    assert [item["action_id"] for item in approval_pending.json()["items"]] == [first["action_id"]]
+
+    validated = client.get(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id},
+        params={"status": "validated", "proof_status": "not_started", "receipt_status": "missing"},
+    )
+    assert validated.status_code == 200, validated.text
+    assert [item["action_id"] for item in validated.json()["items"]] == [second["action_id"]]
+
+    paged = client.get(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id},
+        params={"limit": 1, "offset": 1},
+    )
+    assert paged.status_code == 200, paged.text
+    assert paged.json()["total_in_page"] == 1
+
+    invalid = client.get(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id},
+        params={"proof_status": "unverifiable"},
+    )
+    assert invalid.status_code == 422
+
+
+def test_action_intent_binds_active_agent_profile(client: TestClient) -> None:
+    project_id = "proj_action_agent_binding"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id)
+    agent = _create_agent_profile(client, project_id, display_name="Inventory Agent")
+
+    created = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "inventory_agent_bound"},
+        json=_inventory_intent_payload(
+            agent_id=agent["id"],
+            trace_context={"trace_id": "trace_bound", "agent_name": "inventory-agent"},
+        ),
+    )
+
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["agent_id"] == agent["id"]
+    assert body["agent_profile"] == {
+        "id": agent["id"],
+        "display_name": "Inventory Agent",
+        "slug": "inventory-agent",
+        "runtime_path": "sdk",
+        "environment": "production",
+    }
+    assert body["canonical_intent"]["agent_id"] == agent["id"]
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        row = session.get(ActionIntent, body["action_id"])
+        assert row is not None
+        assert row.agent_id == agent["id"]
+
+
+def test_action_intent_rejects_agent_identity_mismatch(client: TestClient) -> None:
+    project_id = "proj_action_agent_mismatch"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id)
+    agent = _create_agent_profile(client, project_id, display_name="Inventory Agent")
+
+    created = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "inventory_agent_mismatch"},
+        json=_inventory_intent_payload(
+            agent_id=agent["id"],
+            trace_context={"trace_id": "trace_mismatch", "agent_name": "manual-ops-agent"},
+        ),
+    )
+
+    assert created.status_code == 422, created.text
+    assert "agent_id does not match" in created.json()["detail"]
+
+
+def test_action_intent_list_filters_by_bound_agent_id(client: TestClient) -> None:
+    project_id = "proj_action_agent_filter"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id)
+    agent = _create_agent_profile(client, project_id, display_name="Inventory Agent")
+
+    bound = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "inventory_agent_filter_bound"},
+        json=_inventory_intent_payload(
+            agent_id=agent["id"],
+            trace_context={"trace_id": "trace_filter_bound", "agent_name": "inventory-agent"},
+        ),
+    )
+    assert bound.status_code == 201, bound.text
+    unbound = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "inventory_agent_filter_unbound"},
+        json=_inventory_intent_payload(
+            trace_context={"trace_id": "trace_filter_unbound", "agent_name": "inventory-agent"}
+        ),
+    )
+    assert unbound.status_code == 201, unbound.text
+
+    listed = client.get(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id},
+        params={"agent_id": agent["id"]},
+    )
+
+    assert listed.status_code == 200, listed.text
+    assert [item["action_id"] for item in listed.json()["items"]] == [bound.json()["action_id"]]
 
 
 def test_protected_action_meters_lifecycle_usage(client: TestClient) -> None:
@@ -428,6 +701,188 @@ def test_action_intent_decision_links_runtime_policy_approval(client: TestClient
         assert decision.action_type == "customer.refund.transfer"
 
 
+def test_execution_request_auto_plans_after_direct_authorize(client: TestClient) -> None:
+    project_id = "proj_action_kernel_auto_direct"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id)
+    runner = _register_auto_runner(client, project_id)
+
+    created = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "inventory_auto_direct"},
+        json=_inventory_intent_payload(execution_request=_generic_rest_execution_request()),
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["canonical_intent"]["execution_request"]["credential_pointer"] == "ops-default"
+
+    decided = client.post(
+        f"/v1/action-intents/{created.json()['action_id']}/decide",
+        headers={"X-Project-Id": project_id},
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["status"] == "authorized"
+
+    attempts = client.get(
+        f"/v1/action-intents/{created.json()['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id},
+    )
+    assert attempts.status_code == 200, attempts.text
+    items = attempts.json()["items"]
+    assert len(items) == 1
+    attempt = items[0]
+    assert attempt["status"] == "planned"
+    assert attempt["runner_id"] == runner["runner_id"]
+    assert attempt["credential_ref"] == "customer-runner-secret://ops/default"
+    assert attempt["idempotency_key"] == f"auto-execution:{created.json()['action_id']}"
+    assert attempt["protected_credential_returned"] is False
+    assert attempt["execution_plan"]["execution_plan"]["adapter"] == "generic_rest"
+    assert attempt["execution_plan"]["execution_plan"]["adapter_contract"]["credential_boundary"] == "runner_resolves_credential_ref"
+
+    claimed = client.post(
+        f"/v1/action-runners/{runner['runner_id']}/execution-attempts/claim",
+        headers={"X-Project-Id": project_id},
+        json={"runner_metadata": {"worker": "test-runner"}},
+    )
+    assert claimed.status_code == 200, claimed.text
+    assert claimed.json()["attempt_id"] == attempt["attempt_id"]
+    assert claimed.json()["status"] == "running"
+
+
+def test_execution_request_auto_plans_after_approval_auto_advance(client: TestClient) -> None:
+    project_id = "proj_action_kernel_auto_approval"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id, action_type="inventory.item.delete")
+    runner = _register_auto_runner(client, project_id)
+
+    created = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "inventory_auto_approval"},
+        json=_inventory_intent_payload(
+            action_type="inventory.item.delete",
+            purpose={"code": "inventory_delete", "summary": "Delete inventory item through controlled path"},
+            execution_request=_generic_rest_execution_request(),
+        ),
+    )
+    assert created.status_code == 201, created.text
+
+    pending = client.post(
+        f"/v1/action-intents/{created.json()['action_id']}/decide",
+        headers={"X-Project-Id": project_id},
+    )
+    assert pending.status_code == 200, pending.text
+    assert pending.json()["status"] == "approval_pending"
+    assert pending.json()["runtime_policy_decision_id"]
+
+    empty_attempts = client.get(
+        f"/v1/action-intents/{created.json()['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id},
+    )
+    assert empty_attempts.status_code == 200, empty_attempts.text
+    assert empty_attempts.json()["items"] == []
+
+    approved = client.post(
+        f"/v1/runtime-policy/approvals/{pending.json()['runtime_policy_decision_id']}/approve",
+        headers={"X-Project-Id": project_id},
+        json={"reason": "Inventory owner approved this exact digest."},
+    )
+    assert approved.status_code == 200, approved.text
+
+    fetched = client.get(
+        f"/v1/action-intents/{created.json()['action_id']}",
+        headers={"X-Project-Id": project_id},
+    )
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["status"] == "authorized"
+
+    attempts = client.get(
+        f"/v1/action-intents/{created.json()['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id},
+    )
+    assert attempts.status_code == 200, attempts.text
+    items = attempts.json()["items"]
+    assert len(items) == 1
+    assert items[0]["status"] == "planned"
+    assert items[0]["runner_id"] == runner["runner_id"]
+    assert items[0]["idempotency_key"] == f"auto-execution:{created.json()['action_id']}"
+
+
+@pytest.mark.parametrize(
+    "execution_request",
+    [
+        {**_generic_rest_execution_request(), "runner_id": "runner-forbidden"},
+        {**_generic_rest_execution_request(), "credential_ref": "customer-runner-secret://ops/default"},
+        _generic_rest_execution_request(credential_pointer="customer-runner-secret://ops/default"),
+        {
+            **_generic_rest_execution_request(),
+            "credential": {"pointer": "ops-default", "protected_credential_ref": "customer-runner-secret://ops/default"},
+        },
+    ],
+)
+def test_execution_request_rejects_runner_and_credential_pins(
+    client: TestClient,
+    execution_request: dict,
+) -> None:
+    project_id = "proj_action_kernel_auto_rejects_pins"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id)
+
+    response = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": f"pin_reject_{len(str(execution_request))}"},
+        json=_inventory_intent_payload(execution_request=execution_request),
+    )
+
+    assert response.status_code == 422
+    assert "execution_request" in response.json()["detail"]
+
+
+def test_stale_planned_execution_attempt_resolves_not_verified_receipt(client: TestClient) -> None:
+    project_id = "proj_action_kernel_auto_stale_planned"
+    _seed_project(client, project_id)
+    _register_inventory_contract(client, project_id)
+    _register_auto_runner(client, project_id)
+
+    created = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "inventory_auto_stale"},
+        json=_inventory_intent_payload(execution_request=_generic_rest_execution_request()),
+    )
+    assert created.status_code == 201, created.text
+    decided = client.post(
+        f"/v1/action-intents/{created.json()['action_id']}/decide",
+        headers={"X-Project-Id": project_id},
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["status"] == "authorized"
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        attempt = session.query(ActionExecutionAttempt).filter_by(
+            project_id=project_id,
+            action_intent_id=created.json()["action_id"],
+        ).one()
+        attempt.updated_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        session.add(attempt)
+        session.commit()
+
+        swept = sweep_stale_execution_attempts(
+            session,
+            stale_after_seconds=60,
+            now=datetime.now(timezone.utc),
+            actor="test-stale-planned-sweeper",
+        )
+        assert swept["resolved"] == 1
+        processed = process_action_post_execution_jobs(session, worker_id="test-stale-planned-worker", limit=10)
+        assert processed["processed"] == 2
+
+        resolved_attempt = session.query(ActionExecutionAttempt).filter_by(id=attempt.id).one()
+        intent = session.query(ActionIntent).filter_by(id=created.json()["action_id"]).one()
+        receipt = session.query(ActionReceipt).filter_by(action_intent_id=created.json()["action_id"]).one_or_none()
+        assert resolved_attempt.status == "ambiguous"
+        assert intent.proof_status == "not_verified"
+        assert intent.receipt_status == "generated"
+        assert receipt is not None
+
+
 def test_high_value_action_intent_requires_dual_runtime_approval(client: TestClient) -> None:
     project_id = "proj_action_kernel_dual_approval"
     _seed_project(client, project_id)
@@ -483,6 +938,14 @@ def test_action_intent_authorizes_after_linked_runtime_approval(client: TestClie
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["status"] == "approved"
+
+    fetched_after_approval = client.get(
+        f"/v1/action-intents/{intent['action_id']}",
+        headers={"X-Project-Id": project_id},
+    )
+    assert fetched_after_approval.status_code == 200, fetched_after_approval.text
+    assert fetched_after_approval.json()["status"] == "authorized"
+    assert fetched_after_approval.json()["runtime_policy_decision_id"] != pending["runtime_policy_decision_id"]
 
     authorized = client.post(
         f"/v1/action-intents/{intent['action_id']}/decide",
@@ -549,11 +1012,13 @@ def test_action_intent_rejects_approval_bound_to_different_intent_digest(client:
 
     with client._session_factory() as session:  # type: ignore[attr-defined]
         original_approval = session.get(RuntimePolicyDecision, first_pending["runtime_policy_decision_id"])
+        first_row = session.get(ActionIntent, first_intent["action_id"])
         second_row = session.get(ActionIntent, second_intent["action_id"])
         second_pending = session.get(RuntimePolicyDecision, body["runtime_policy_decision_id"])
         assert original_approval.status == "approved"
-        assert original_approval.consumed_at is None
-        assert original_approval.consumed_by_decision_id is None
+        assert original_approval.consumed_at is not None
+        assert original_approval.consumed_by_decision_id == first_row.runtime_policy_decision_id
+        assert first_row.status == "authorized"
         assert second_row.status == "approval_pending"
         assert second_row.runtime_policy_decision_id == second_pending.id
         assert second_pending.status == "pending_approval"
@@ -623,6 +1088,13 @@ def test_action_intent_denies_after_linked_runtime_rejection(client: TestClient)
     )
     assert rejected.status_code == 200, rejected.text
     assert rejected.json()["status"] == "rejected"
+
+    fetched_after_rejection = client.get(
+        f"/v1/action-intents/{intent['action_id']}",
+        headers={"X-Project-Id": project_id},
+    )
+    assert fetched_after_rejection.status_code == 200, fetched_after_rejection.text
+    assert fetched_after_rejection.json()["status"] == "denied"
 
     denied = client.post(
         f"/v1/action-intents/{intent['action_id']}/decide",
@@ -942,11 +1414,520 @@ def test_execution_attempt_dispatch_start_and_finish_lifecycle(client: TestClien
         f"/v1/action-intents/{intent['action_id']}/timeline",
         headers={"X-Project-Id": project_id},
     ).json()["items"]
-    assert [item["event_type"] for item in timeline][-3:] == [
-        "execution_dispatched",
-        "execution_running",
-        "execution_succeeded",
-    ]
+    event_types = [item["event_type"] for item in timeline]
+    assert "execution_dispatched" in event_types
+    assert "execution_running" in event_types
+    assert "execution_succeeded" in event_types
+    assert "post_execution_queued" in event_types
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        job = session.query(ActionPostExecutionJob).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+            execution_attempt_id=attempt["attempt_id"],
+            job_type="verify_outcome",
+        ).one()
+        action = session.get(ActionIntent, intent["action_id"])
+        assert job.status == "pending"
+        assert action.proof_status == "pending"
+        assert action.receipt_status == "pending"
+
+
+def test_post_execution_worker_resolves_missing_connector_to_not_verified_receipt(client: TestClient) -> None:
+    project_id = "proj_action_post_execution_not_verified"
+    _seed_project(client, project_id)
+    _register_contract(client, project_id)
+    intent = _create_intent(client, project_id)
+    _authorize_intent(client, project_id, intent["action_id"])
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "post-exec-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+        },
+    ).json()
+    attempt = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "post_exec_missing_connector"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    ).json()
+    finished = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts/{attempt['attempt_id']}/finish",
+        headers={"X-Project-Id": project_id},
+        json={
+            "final_status": "succeeded",
+            "result_summary": {
+                "provider_ref": "rf_live_123",
+                "claimed": {"refund_id": "rf_123", "status": "succeeded"},
+                "match_fields": ["refund_id", "status"],
+            },
+        },
+    )
+    assert finished.status_code == 200, finished.text
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        stuck = session.query(ActionPostExecutionJob).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+            execution_attempt_id=attempt["attempt_id"],
+            job_type="verify_outcome",
+        ).one()
+        stuck.status = "running"
+        stuck.claimed_by = "dead-worker"
+        stuck.claimed_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        stuck.lease_expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        stuck.attempt_count = 1
+        session.commit()
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        processed = process_action_post_execution_jobs(session, worker_id="test-post-exec", limit=5)
+    assert processed["processed"] == 2
+    assert [item["job_type"] for item in processed["jobs"]] == ["verify_outcome", "generate_receipt"]
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        action = session.get(ActionIntent, intent["action_id"])
+        assert action.proof_status == "not_verified"
+        assert action.receipt_status == "generated"
+        outcomes = session.query(OutcomeReconciliationCheck).filter_by(project_id=project_id).all()
+        assert len(outcomes) == 1
+        assert outcomes[0].verdict == "not_verified"
+        assert outcomes[0].connector_type == "ledger_refund_api"
+        assert "connector_not_configured" in outcomes[0].metadata_json
+        jobs = session.query(ActionPostExecutionJob).filter_by(project_id=project_id).order_by(
+            ActionPostExecutionJob.created_at.asc()
+        ).all()
+        assert [(job.job_type, job.status) for job in jobs] == [
+            ("verify_outcome", "succeeded"),
+            ("generate_receipt", "succeeded"),
+        ]
+        receipt = session.query(ActionReceipt).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+        ).one()
+        assert receipt.receipt_digest.startswith("sha256:")
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        repeated = process_action_post_execution_jobs(session, worker_id="test-post-exec", limit=5)
+    assert repeated["processed"] == 0
+
+
+def test_post_execution_worker_verifies_generic_rest_action_and_generates_receipt(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = "proj_action_post_execution_generic_rest"
+    _seed_project(client, project_id)
+    created = client.post(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+        json={
+            "contract_key": "internal.workflow.execute",
+            "version": "1.0",
+            "action_type": "internal.workflow.execute",
+            "operation_kind": "EXECUTE",
+            "domain_family": "internal_operations",
+            "risk_class": "R2",
+            "connector_family": "generic_rest",
+            "schema": {"type": "object"},
+            "verification_profile": {"minimum_level": "V3"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    intent_response = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "workflow_exec_1"},
+        json={
+            "contract_version": "internal.workflow.execute/1.0",
+            "action_type": "internal.workflow.execute",
+            "operation_kind": "EXECUTE",
+            "environment": "production",
+            "principal": {"type": "agent", "id": "workflow-agent"},
+            "actor_chain": [{"type": "agent", "id": "workflow-agent"}],
+            "purpose": {"code": "workflow_execute", "summary": "Execute internal workflow"},
+            "resource": {"type": "workflow", "id": "wf_123"},
+            "parameters": {"workflow_id": "wf_123"},
+            "verification_profile": "generic_rest/workflow_state/v1",
+            "trace_context": {"trace_id": "trace_workflow_1", "agent_name": "workflow-agent"},
+        },
+    )
+    assert intent_response.status_code == 201, intent_response.text
+    intent = intent_response.json()
+    decided = client.post(
+        f"/v1/action-intents/{intent['action_id']}/decide",
+        headers={"X-Project-Id": project_id},
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["status"] == "authorized"
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        session.add(
+            SystemOfRecordConnectorConfig(
+                project_id=project_id,
+                connector_type="generic_rest_api",
+                base_url="https://records.example.com/api",
+                path_template="/records/{record_ref}",
+                is_active=True,
+            )
+        )
+        session.commit()
+
+    def fake_fetch(self: GenericRestApiConnector) -> SourceRecord:
+        assert self.record_ref == "wf_123"
+        return SourceRecord(
+            record={"record_ref": "wf_123", "status": "completed"},
+            record_found=True,
+            metadata={
+                "connector_type": "generic_rest_api",
+                "request_url": "https://records.example.com/api/records/wf_123",
+                "http_status": 200,
+                "attempts": 1,
+                "retryable": False,
+            },
+        )
+
+    monkeypatch.setattr(GenericRestApiConnector, "fetch", fake_fetch)
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "generic-rest-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["EXECUTE"],
+        },
+    ).json()
+    attempt = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "workflow_exec_attempt_1"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://ops/workflow",
+            "execution_plan": {
+                "adapter": "generic_rest",
+                "operation": "workflow.execute",
+                "target": {"resource_ref": "wf_123"},
+                "arguments": {"requested_state": "completed"},
+                "verification": {
+                    "connector": "generic_rest_api",
+                    "record_ref": "wf_123",
+                    "claimed": {"record_ref": "wf_123", "status": "completed"},
+                    "match_fields": ["record_ref", "status"],
+                },
+            },
+        },
+    )
+    assert attempt.status_code == 201, attempt.text
+    finish = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts/{attempt.json()['attempt_id']}/finish",
+        headers={"X-Project-Id": project_id},
+        json={"final_status": "succeeded", "result_summary": {"provider_ref": "wf_123", "status": "completed"}},
+    )
+    assert finish.status_code == 200, finish.text
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        processed = process_action_post_execution_jobs(session, worker_id="test-generic-post-exec", limit=5)
+    assert processed["processed"] == 2
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        action = session.get(ActionIntent, intent["action_id"])
+        assert action.proof_status == "matched"
+        assert action.receipt_status == "generated"
+        outcome = session.query(OutcomeReconciliationCheck).filter_by(project_id=project_id).one()
+        assert outcome.verdict == "matched"
+        assert outcome.connector_type == "generic_rest_api"
+        assert outcome.action_type == "internal.workflow.execute"
+        receipt = session.query(ActionReceipt).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+        ).one()
+        assert receipt.receipt_digest.startswith("sha256:")
+
+
+def test_post_execution_connector_exception_resolves_not_verified_receipt(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = "proj_action_post_execution_connector_exception"
+    _seed_project(client, project_id)
+    created = client.post(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+        json={
+            "contract_key": "internal.workflow.execute",
+            "version": "1.0",
+            "action_type": "internal.workflow.execute",
+            "operation_kind": "EXECUTE",
+            "domain_family": "internal_operations",
+            "risk_class": "R2",
+            "connector_family": "generic_rest",
+            "schema": {"type": "object"},
+            "verification_profile": {"minimum_level": "V3"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    intent_response = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "workflow_exec_connector_exception"},
+        json={
+            "contract_version": "internal.workflow.execute/1.0",
+            "action_type": "internal.workflow.execute",
+            "operation_kind": "EXECUTE",
+            "environment": "production",
+            "principal": {"type": "agent", "id": "workflow-agent"},
+            "actor_chain": [{"type": "agent", "id": "workflow-agent"}],
+            "purpose": {"code": "workflow_execute", "summary": "Execute internal workflow"},
+            "resource": {"type": "workflow", "id": "wf_exception"},
+            "parameters": {"workflow_id": "wf_exception"},
+            "verification_profile": "generic_rest/workflow_state/v1",
+            "trace_context": {"trace_id": "trace_workflow_exception", "agent_name": "workflow-agent"},
+        },
+    )
+    assert intent_response.status_code == 201, intent_response.text
+    intent = intent_response.json()
+    decided = client.post(
+        f"/v1/action-intents/{intent['action_id']}/decide",
+        headers={"X-Project-Id": project_id},
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["status"] == "authorized"
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        session.add(
+            SystemOfRecordConnectorConfig(
+                project_id=project_id,
+                connector_type="generic_rest_api",
+                base_url="https://records.example.com/api",
+                path_template="/records/{record_ref}",
+                is_active=True,
+            )
+        )
+        session.commit()
+
+    def broken_fetch(self: GenericRestApiConnector) -> SourceRecord:
+        raise RuntimeError("source-of-record timed out")
+
+    monkeypatch.setattr(GenericRestApiConnector, "fetch", broken_fetch)
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "generic-rest-runner-exception",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["EXECUTE"],
+        },
+    ).json()
+    attempt = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "workflow_exec_attempt_exception"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://ops/workflow",
+            "execution_plan": {
+                "adapter": "generic_rest",
+                "operation": "workflow.execute",
+                "target": {"resource_ref": "wf_exception"},
+                "arguments": {"requested_state": "completed"},
+                "verification": {
+                    "connector": "generic_rest_api",
+                    "record_ref": "wf_exception",
+                    "claimed": {"record_ref": "wf_exception", "status": "completed"},
+                    "match_fields": ["record_ref", "status"],
+                },
+            },
+        },
+    )
+    assert attempt.status_code == 201, attempt.text
+    finish = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts/{attempt.json()['attempt_id']}/finish",
+        headers={"X-Project-Id": project_id},
+        json={"final_status": "succeeded", "result_summary": {"provider_ref": "wf_exception", "status": "completed"}},
+    )
+    assert finish.status_code == 200, finish.text
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        processed = process_action_post_execution_jobs(session, worker_id="test-connector-exception", limit=5)
+    assert processed["processed"] == 2
+    assert [item["job_type"] for item in processed["jobs"]] == ["verify_outcome", "generate_receipt"]
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        action = session.get(ActionIntent, intent["action_id"])
+        assert action.proof_status == "not_verified"
+        assert action.receipt_status == "generated"
+        outcome = session.query(OutcomeReconciliationCheck).filter_by(project_id=project_id).one()
+        assert outcome.verdict == "not_verified"
+        assert outcome.connector_type == "generic_rest_api"
+        assert "connector_exception:RuntimeError" in outcome.metadata_json
+        jobs = session.query(ActionPostExecutionJob).filter_by(project_id=project_id).order_by(
+            ActionPostExecutionJob.created_at.asc()
+        ).all()
+        assert [(job.job_type, job.status) for job in jobs] == [
+            ("verify_outcome", "succeeded"),
+            ("generate_receipt", "succeeded"),
+        ]
+        receipt = session.query(ActionReceipt).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+        ).one()
+        assert receipt.receipt_digest.startswith("sha256:")
+
+
+def test_verify_job_dead_resolves_not_verified_and_receipt(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = "proj_action_post_execution_verify_dead"
+    _seed_project(client, project_id)
+    _register_contract(client, project_id)
+    intent = _create_intent(client, project_id)
+    _authorize_intent(client, project_id, intent["action_id"])
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "verify-dead-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+        },
+    ).json()
+    attempt = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "verify_dead_attempt"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    ).json()
+    finished = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts/{attempt['attempt_id']}/finish",
+        headers={"X-Project-Id": project_id},
+        json={
+            "final_status": "succeeded",
+            "result_summary": {
+                "provider_ref": "rf_live_dead",
+                "claimed": {"refund_id": "rf_123", "status": "succeeded"},
+                "match_fields": ["refund_id", "status"],
+            },
+        },
+    )
+    assert finished.status_code == 200, finished.text
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        job = session.query(ActionPostExecutionJob).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+            execution_attempt_id=attempt["attempt_id"],
+            job_type="verify_outcome",
+        ).one()
+        job.max_attempts = 1
+        session.commit()
+
+    def broken_verify(db, job):  # noqa: ANN001
+        raise RuntimeError("verification worker crashed")
+
+    monkeypatch.setattr(action_post_execution_service, "_run_verify_job", broken_verify)
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        processed = process_action_post_execution_jobs(session, worker_id="test-verify-dead", limit=5)
+    assert processed["processed"] == 2
+    assert [item["job_type"] for item in processed["jobs"]] == ["verify_outcome", "generate_receipt"]
+    assert processed["jobs"][0]["status"] == "dead"
+    assert processed["jobs"][1]["status"] == "succeeded"
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        action = session.get(ActionIntent, intent["action_id"])
+        assert action.proof_status == "not_verified"
+        assert action.receipt_status == "generated"
+        outcome = session.query(OutcomeReconciliationCheck).filter_by(project_id=project_id).one()
+        assert outcome.verdict == "not_verified"
+        assert "verify_job_dead:RuntimeError" in outcome.metadata_json
+        receipt = session.query(ActionReceipt).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+        ).one()
+        assert receipt.receipt_digest.startswith("sha256:")
+
+
+def test_stale_running_execution_attempt_becomes_ambiguous_not_verified_receipt(client: TestClient) -> None:
+    project_id = "proj_action_runner_stale_attempt"
+    _seed_project(client, project_id)
+    _register_contract(client, project_id)
+    intent = _create_intent(client, project_id)
+    _authorize_intent(client, project_id, intent["action_id"])
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "stale-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+        },
+    ).json()
+    attempt = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "stale_exec_attempt"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    ).json()
+    running = client.post(
+        f"/v1/action-intents/{intent['action_id']}/execution-attempts/{attempt['attempt_id']}/start",
+        headers={"X-Project-Id": project_id},
+        json={"runner_metadata": {"runner_instance_id": "stale-runner-1"}},
+    )
+    assert running.status_code == 200, running.text
+
+    stale_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        row = session.get(ActionExecutionAttempt, attempt["attempt_id"])
+        row.started_at = stale_at
+        row.updated_at = stale_at
+        session.commit()
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        resolved = sweep_stale_execution_attempts(
+            session,
+            stale_after_seconds=60,
+            limit=5,
+            actor="test-stale-sweeper",
+            now=datetime.now(timezone.utc),
+        )
+    assert resolved["resolved"] == 1
+    assert resolved["attempts"][0]["previous_status"] == "running"
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        processed = process_action_post_execution_jobs(session, worker_id="test-stale-post-exec", limit=5)
+    assert processed["processed"] == 2
+    assert [item["job_type"] for item in processed["jobs"]] == ["verify_outcome", "generate_receipt"]
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        row = session.get(ActionExecutionAttempt, attempt["attempt_id"])
+        assert row.status == "ambiguous"
+        assert row.finished_at is not None
+        assert row.error_message == "Execution attempt timed out before runner reported a terminal status."
+        action = session.get(ActionIntent, intent["action_id"])
+        assert action.proof_status == "not_verified"
+        assert action.receipt_status == "generated"
+        outcome = session.query(OutcomeReconciliationCheck).filter_by(project_id=project_id).one()
+        assert outcome.verdict == "not_verified"
+        assert "execution_ambiguous" in outcome.metadata_json
+        receipt = session.query(ActionReceipt).filter_by(
+            project_id=project_id,
+            action_intent_id=intent["action_id"],
+        ).one()
+        assert receipt.receipt_digest.startswith("sha256:")
 
 
 def test_runner_claims_next_execution_attempt(client: TestClient) -> None:
@@ -996,6 +1977,117 @@ def test_runner_claims_next_execution_attempt(client: TestClient) -> None:
     assert empty.status_code == 404
 
 
+def test_project_execution_attempts_filter_stale_claimable_attempts(client: TestClient) -> None:
+    project_id = "proj_action_attempts_stale_list"
+    other_project_id = "proj_action_attempts_stale_other"
+    _seed_project(client, project_id)
+    _seed_project(client, other_project_id)
+    _register_contract(client, project_id)
+    _register_contract(client, other_project_id)
+    runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "stale-list-runner",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+        },
+    ).json()
+
+    stale_planned_intent = _create_intent(client, project_id, idempotency_key="stale_list_planned")
+    _authorize_intent(client, project_id, stale_planned_intent["action_id"])
+    stale_planned = client.post(
+        f"/v1/action-intents/{stale_planned_intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "stale_list_planned_attempt"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    ).json()
+
+    stale_running_intent = _create_intent(client, project_id, idempotency_key="stale_list_running")
+    _authorize_intent(client, project_id, stale_running_intent["action_id"])
+    stale_running = client.post(
+        f"/v1/action-intents/{stale_running_intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "stale_list_running_attempt"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    ).json()
+    started = client.post(
+        f"/v1/action-intents/{stale_running_intent['action_id']}/execution-attempts/{stale_running['attempt_id']}/start",
+        headers={"X-Project-Id": project_id},
+        json={"runner_metadata": {"worker": "stale-list-test"}},
+    )
+    assert started.status_code == 200, started.text
+
+    fresh_intent = _create_intent(client, project_id, idempotency_key="stale_list_fresh")
+    _authorize_intent(client, project_id, fresh_intent["action_id"])
+    fresh = client.post(
+        f"/v1/action-intents/{fresh_intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "stale_list_fresh_attempt"},
+        json={
+            "runner_id": runner["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    ).json()
+
+    other_runner = client.post(
+        "/v1/action-runners",
+        headers={"X-Project-Id": other_project_id},
+        json={
+            "name": "stale-list-runner-other",
+            "runner_type": "customer_hosted",
+            "environment": "production",
+            "supported_operation_kinds": ["TRANSFER"],
+        },
+    ).json()
+    other_intent = _create_intent(client, other_project_id, idempotency_key="stale_list_other")
+    _authorize_intent(client, other_project_id, other_intent["action_id"])
+    other_attempt = client.post(
+        f"/v1/action-intents/{other_intent['action_id']}/execution-attempts",
+        headers={"X-Project-Id": other_project_id, "Idempotency-Key": "stale_list_other_attempt"},
+        json={
+            "runner_id": other_runner["runner_id"],
+            "credential_ref": "customer-runner-secret://support/stripe-refund-prod",
+            "execution_plan": _refund_execution_plan(),
+        },
+    ).json()
+
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        stale_time = datetime.now(timezone.utc) - timedelta(seconds=120)
+        for attempt_id in (stale_planned["attempt_id"], stale_running["attempt_id"], other_attempt["attempt_id"]):
+            row = session.get(ActionExecutionAttempt, attempt_id)
+            assert row is not None
+            row.updated_at = stale_time
+            session.add(row)
+        session.commit()
+
+    stale = client.get(
+        "/v1/action-execution-attempts",
+        headers={"X-Project-Id": project_id},
+        params={"status": "planned,running", "stale": "true", "stale_after_seconds": 60},
+    )
+    assert stale.status_code == 200, stale.text
+    items = stale.json()["items"]
+    assert [item["attempt_id"] for item in items] == [stale_planned["attempt_id"], stale_running["attempt_id"]]
+    assert {item["status"] for item in items} == {"planned", "running"}
+    assert fresh["attempt_id"] not in {item["attempt_id"] for item in items}
+    assert other_attempt["attempt_id"] not in {item["attempt_id"] for item in items}
+
+    invalid = client.get(
+        "/v1/action-execution-attempts",
+        headers={"X-Project-Id": project_id},
+        params={"status": "planned,unknown"},
+    )
+    assert invalid.status_code == 422
+
+
 def test_execution_attempt_rejects_raw_credentials(client: TestClient) -> None:
     project_id = "proj_action_runner_secret_reject"
     _seed_project(client, project_id)
@@ -1030,7 +2122,18 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     project_id = "proj_action_receipt"
     _seed_project(client, project_id)
     _register_contract(client, project_id)
-    intent = _create_intent(client, project_id)
+    agent = _create_agent_profile(client, project_id, display_name="Refund Agent")
+    intent = _create_intent(client, project_id, agent_id=agent["id"])
+    scoped_rule = client.post(
+        "/v1/runtime-policy/rules",
+        headers={"X-Project-Id": project_id},
+        json={
+            "name": "Receipt proof refund rule",
+            "action_type": "customer.refund.transfer",
+            "policy_patch": {"runtime_max_tool_calls": 12},
+        },
+    )
+    assert scoped_rule.status_code == 201, scoped_rule.text
     _authorize_intent(client, project_id, intent["action_id"])
     runner = client.post(
         "/v1/action-runners",
@@ -1077,9 +2180,16 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     assert receipt["signature_valid"] is True
     assert receipt["receipt"]["final_status"] == "planned"
     assert receipt["receipt"]["intent"]["intent_digest"] == intent["intent_digest"]
+    assert receipt["receipt"]["intent"]["agent_id"] == agent["id"]
+    assert receipt["receipt"]["intent"]["agent_profile"]["slug"] == "refund-agent"
     assert receipt["receipt"]["runner_execution"]["id"] == attempt.json()["attempt_id"]
     assert receipt["receipt"]["runner_execution"]["protected_credential_returned"] is False
     assert receipt["receipt"]["policy_decision"]["status"] == "allowed"
+    assert receipt["receipt"]["policy_decision"]["policy_resolution"]["matched_rules"][0]["id"] == scoped_rule.json()["id"]
+    assert (
+        receipt["receipt"]["policy_decision"]["policy_snapshot"]["_runtime_policy_resolution"]["matched_rules"][0]["id"]
+        == scoped_rule.json()["id"]
+    )
     assert receipt["receipt"]["evidence"]["evidence_hash"]
     assert receipt["receipt"]["signature"]["value"] == receipt["signature"]
 

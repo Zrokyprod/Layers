@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildProtectedAgentSnippet,
   buildLiveSmokeCommand,
   buildWebhookBridgeCurl,
   buildWebhookBridgePayload,
@@ -50,6 +51,30 @@ describe("protected-agent-setup", () => {
       "evidence_pack_passed",
       "secrets_redacted",
     ]);
+  });
+
+  it("builds control-first verified action snippets with agent identity and proof polling", () => {
+    const refund = protectedAgentTemplates.find((template) => template.id === "refund");
+    expect(refund).toBeDefined();
+
+    const snippet = buildProtectedAgentSnippet(refund!, "proj_live", {
+      agentId: "agent_refund",
+      apiBaseUrl: "https://api.zroky.test",
+    });
+
+    expect(snippet).toContain("zroky.verified_action(");
+    expect(snippet).toContain('agent_id="agent_refund"');
+    expect(snippet).toContain('project="proj_live"');
+    expect(snippet).toContain('action_type="refund"');
+    expect(snippet).toContain('operation_kind="TRANSFER"');
+    expect(snippet).toContain('"amount_minor": 25000');
+    expect(snippet).toContain('"currency": "USD"');
+    expect(snippet).toContain("zroky.await_action_proof");
+    expect(snippet).toContain('ingest_url=os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.test")');
+    expect(snippet).not.toContain("amount_usd");
+    expect(snippet).not.toContain("captureToolCall");
+    expect(snippet).not.toContain("traceRun");
+    expect(snippet).not.toContain("credential_ref");
   });
 
   it("builds saved connector bridge snippets for non-SDK agents", () => {

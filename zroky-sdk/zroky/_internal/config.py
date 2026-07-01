@@ -21,6 +21,7 @@ class SDKConfig:
     mask_pii: bool
     ingest_url: str
     default_agent: str | None
+    default_agent_id: str | None
     verbose: bool
     batch_size: int
     flush_interval_seconds: float
@@ -76,6 +77,7 @@ def load_config(
     mode: str | None = None,
     mask_pii: bool | None = None,
     ingest_url: str | None = None,
+    agent_id: str | None = None,
     agent_framework: str | None = None,
     session_id: str | None = None,
     workflow_id: str | None = None,
@@ -128,6 +130,7 @@ def load_config(
         ingest_url or os.environ.get("ZROKY_INGEST_URL", _DEFAULT_API_BASE_URL)
     )
     default_agent = os.environ.get("ZROKY_AGENT")
+    default_agent_id = agent_id or os.environ.get("ZROKY_AGENT_ID")
     verbose = _truthy(os.environ.get("ZROKY_VERBOSE", "false"))
     batch_size = int(os.environ.get("ZROKY_BATCH_SIZE", "10"))
     flush_interval = float(os.environ.get("ZROKY_FLUSH_INTERVAL", "5"))
@@ -301,6 +304,7 @@ def load_config(
         mask_pii=resolved_mask,
         ingest_url=resolved_url,
         default_agent=default_agent,
+        default_agent_id=default_agent_id,
         verbose=verbose,
         batch_size=batch_size,
         flush_interval_seconds=flush_interval,

@@ -26,7 +26,8 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
     sampleInput: "refund duplicate charge for order ord_123",
     sampleArgs: `{
         orderId: "ord_123",
-        amountUsd: 250,
+        amountMinor: 25000,
+        currency: "USD",
         reason: "duplicate_charge",
       }`,
     mandate: "Issue bounded refunds only when order, customer, amount, and reason are present.",
@@ -128,7 +129,8 @@ export const protectedAgentTemplates: ProtectedAgentTemplate[] = [
     sampleInput: "create PO for approved vendor security scan",
     sampleArgs: `{
         vendorId: "ven_118",
-        amountUsd: 4200,
+        amountMinor: 420000,
+        currency: "USD",
         budgetCode: "security-tools",
       }`,
     mandate: "Create spend commitments only inside approved vendor, budget, and amount limits.",
@@ -202,39 +204,6 @@ status_contract:
   not_verified: trusted proof missing`;
 }
 
-export function buildProtectedAgentSnippet(template: ProtectedAgentTemplate, projectId: string) {
-  return `import { init, traceRun, captureToolCall } from "@zroky-ai/sdk";
-
-init({
-  projectId: "${projectId}",
-  apiKey: process.env.ZROKY_API_KEY,
-  agentName: "${template.agentName}",
-  workflowId: "${template.workflowId}",
-  environment: "production",
-});
-
-await traceRun(
-  { name: "${template.workflowId}", userInput: "${template.sampleInput}" },
-  async () => {
-    await captureToolCall({
-      name: "${template.toolName}",
-      args: ${template.sampleArgs},
-      result: {
-        status: "not_verified",
-        systemOfRecord: "${template.systemOfRecord}",
-      },
-      policy: {
-        mandate: "${template.workflowId}",
-        failClosed: true,
-        decision: "hold_if_over_mandate",
-      },
-    });
-
-    return "submitted_for_outcome_verification";
-  },
-);`;
-}
-
 type WebhookBridgeConnector = "ledger_refund" | "crm_record" | "generic_rest";
 
 function webhookBridgeConnector(template: ProtectedAgentTemplate): WebhookBridgeConnector {
@@ -250,6 +219,102 @@ function webhookBridgeActionType(template: ProtectedAgentTemplate): string {
   if (template.id === "outreach") return "email_send";
   if (template.id === "procurement") return "invoice_spend_approval";
   return "custom";
+}
+
+function operationKindForTemplate(template: ProtectedAgentTemplate): "EXECUTE" | "SEND" | "TRANSFER" | "UPDATE" {
+  if (template.id === "refund" || template.id === "procurement") return "TRANSFER";
+  if (template.id === "outreach") return "SEND";
+  if (template.id === "devops") return "EXECUTE";
+  return "UPDATE";
+}
+
+function pythonString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function sampleResource(template: ProtectedAgentTemplate): Record<string, string> {
+  if (template.id === "refund") {
+    return { id: "ord_123", system: template.systemOfRecord, type: "refund" };
+  }
+  if (template.id === "crm") {
+    return { id: "acct_902", system: template.systemOfRecord, type: "customer_record" };
+  }
+  if (template.id === "devops") {
+    return { id: "chg_742", system: template.systemOfRecord, type: "deployment" };
+  }
+  if (template.id === "outreach") {
+    return { id: "acct_902", system: template.systemOfRecord, type: "customer_message" };
+  }
+  return { id: "ven_118", system: template.systemOfRecord, type: "purchase_order" };
+}
+
+function sampleParameters(template: ProtectedAgentTemplate): Record<string, string | number> {
+  if (template.id === "refund") {
+    return { amount_minor: 25000, currency: "USD", reason: "duplicate_charge", requested_change: template.toolName };
+  }
+  if (template.id === "crm") {
+    return { field: "billing_contact", new_value: "ops@example.com", requested_change: template.toolName };
+  }
+  if (template.id === "devops") {
+    return { environment: "production", service: "api-gateway", requested_change: template.toolName };
+  }
+  if (template.id === "outreach") {
+    return { template_id: "renewal_notice_v2", recipient: "ops@example.com", requested_change: template.toolName };
+  }
+  return { amount_minor: 420000, currency: "USD", budget_code: "security-tools", requested_change: template.toolName };
+}
+
+export type ProtectedAgentSnippetOptions = {
+  agentId?: string;
+  apiBaseUrl?: string;
+};
+
+export function buildProtectedAgentSnippet(
+  template: ProtectedAgentTemplate,
+  projectId: string,
+  options: ProtectedAgentSnippetOptions = {},
+) {
+  const agentId = options.agentId ?? "agent_profile_id";
+  const apiBaseUrl = options.apiBaseUrl ?? "https://api.zroky.com";
+  const actionType = webhookBridgeActionType(template);
+  const operationKind = operationKindForTemplate(template);
+  const resource = JSON.stringify(sampleResource(template), null, 4);
+  const parameters = JSON.stringify(sampleParameters(template), null, 4);
+
+  return `import os
+import zroky
+
+zroky.init(
+    api_key=os.environ["ZROKY_API_KEY"],
+    project=${pythonString(projectId)},
+    agent_id=${pythonString(agentId)},
+    ingest_url=os.environ.get("ZROKY_INGEST_URL", ${pythonString(apiBaseUrl)}),
+)
+
+decision = zroky.verified_action(
+    contract_version="zroky.agent_action.v1",
+    action_type=${pythonString(actionType)},
+    operation_kind=${pythonString(operationKind)},
+    environment="production",
+    purpose={"summary": ${pythonString(template.mandate)}},
+    resource=${resource},
+    parameters=${parameters},
+    execution_request={
+        "capability": ${pythonString(operationKind)},
+        "execution_plan": {
+            "tool": ${pythonString(template.toolName)},
+            "summary": ${pythonString(template.sampleInput)},
+        },
+    },
+    trace_context={
+        "agent_name": ${pythonString(template.agentName)},
+        "workflow_id": ${pythonString(template.workflowId)},
+    },
+    raise_on_approval=False,
+)
+
+proof = zroky.await_action_proof(decision["action_id"])
+print(proof["proof_status"], proof["receipt_status"])`;
 }
 
 function webhookBridgeClaim(template: ProtectedAgentTemplate): Record<string, unknown> {
@@ -334,7 +399,7 @@ export function proofReadinessDetail(template: ProtectedAgentTemplate) {
   if (template.liveSmokeScenario === "customer-record") {
     return "CRM and data agents can use the packaged customer-record preflight and full proof runner.";
   }
-  return `This template has mandate and SDK capture coverage. Add a connector that reads ${template.systemOfRecord} before calling the pilot verified.`;
+  return `This template has mandate and SDK verified-action coverage. Add a connector that reads ${template.systemOfRecord} before calling the pilot verified.`;
 }
 
 export function buildLiveSmokeCommand(template: ProtectedAgentTemplate) {

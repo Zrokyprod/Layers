@@ -208,11 +208,11 @@ export function FirstRunOnboarding({
   const hasCapture = capturedCallCount > 0 || captureStatus === "connected" || captureStatus === "stale";
   const nextAction = !hasProjectKey
     ? {
-        href: "/settings/keys",
-        label: "Create project key",
-        title: "Create a project key",
-        detail: "Use it from your SDK or Gateway so the first real trace can enter Zroky.",
-        icon: <KeyRound aria-hidden="true" />,
+        href: "/agents/setup",
+        label: "Start setup",
+        title: "Map first protected agent",
+        detail: "Define product context, risky tool calls, runner, verifier, and approval policy before issuing production keys.",
+        icon: <ShieldCheck aria-hidden="true" />,
       }
     : !hasCapture
       ? {
@@ -359,18 +359,18 @@ export function FirstRunOnboarding({
       <div className="fi-setup-action-grid" aria-label="Setup options">
         {[
           {
-            href: "/settings/keys",
+            href: "/agents/setup",
             icon: <Terminal aria-hidden="true" />,
-            label: "Install SDK",
-            detail: "Add Zroky SDK to your agent.",
-            action: "View instructions",
+            label: "Configure SDK",
+            detail: "Choose the guarded SDK path and copy the starter snippet.",
+            action: "Open setup",
           },
           {
-            href: "/settings/keys",
+            href: "/agents/setup",
             icon: <Route aria-hidden="true" />,
-            label: "Use Gateway",
-            detail: "Send traces via API Gateway.",
-            action: "Get gateway key",
+            label: "Configure Gateway",
+            detail: "Select the gateway path for protected tool execution.",
+            action: "Open setup",
           },
           {
             href: "/agents",

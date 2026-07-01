@@ -494,14 +494,15 @@ def put_policy(
     context=Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
 ) -> PilotPolicyResponse:
-    """Replace the project's pilot policy. Pydantic enforces the simple
+    """Patch the project's pilot policy. Pydantic enforces the simple
     type + range constraints (booleans, ge=0, ≤1, etc.); the service
-    layer re-validates and trims string entries before persisting."""
+    layer merges with the stored policy, re-validates, and trims string
+    entries before persisting."""
     try:
         policy = upsert_policy(
             db,
             project_id=context.tenant_id,
-            payload=body.model_dump(),
+            payload=body.model_dump(exclude_unset=True),
             updated_by=context.subject,
         )
     except PolicyValidationError as exc:

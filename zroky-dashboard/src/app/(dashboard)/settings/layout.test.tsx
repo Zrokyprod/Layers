@@ -33,20 +33,21 @@ describe("SettingsLayout", () => {
     navigation.pathname = "/settings";
   });
 
-  it("renders only the direct workspace settings tabs", () => {
+  it("renders the real workspace settings tabs without redirect aliases", () => {
     render(
       <SettingsLayout>
         <div>Settings content</div>
       </SettingsLayout>,
     );
 
-    for (const label of ["Capture keys", "Members", "Plan & Billing", "Workspace"]) {
+    for (const label of ["API Keys", "Members", "Plan & Billing", "Workspace"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
+    expect(screen.queryByText("Advanced")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Provider Vault" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Evaluation" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Integrations" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Connectors" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Providers" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Project" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Profile" })).not.toBeInTheDocument();
   });
@@ -61,14 +62,16 @@ describe("SettingsLayout", () => {
     expect(screen.getByRole("heading", { name: "Workspace control plane" })).toBeInTheDocument();
     const controlLoop = screen.getByLabelText("Workspace control loop");
     expect(controlLoop).toBeInTheDocument();
-    for (const label of ["Capture key", "Team access", "Spend guard", "Workspace record"]) {
+    for (const label of ["API access", "Team access", "Spend guard", "Workspace record"]) {
       expect(within(controlLoop).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     }
+    expect(within(controlLoop).queryByRole("link", { name: /Provider vault/ })).not.toBeInTheDocument();
+    expect(within(controlLoop).queryByRole("link", { name: /Evaluation defaults/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Evidence route/ })).not.toBeInTheDocument();
     expect(screen.getByText("Current section")).toBeInTheDocument();
   });
 
-  it("keeps direct provider settings usable without exposing a tab", () => {
+  it("does not include provider vault in the Settings chrome", () => {
     navigation.pathname = "/settings/providers";
 
     render(
@@ -77,9 +80,8 @@ describe("SettingsLayout", () => {
       </SettingsLayout>,
     );
 
-    expect(screen.queryByRole("link", { name: "Providers" })).not.toBeInTheDocument();
-    expect(screen.getByText("Providers")).toBeInTheDocument();
-    expect(screen.getByText("Managed replay vault")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Provider Vault" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Provider Vault")).not.toBeInTheDocument();
   });
 
   it("does not keep connector redirect aliases in the settings chrome", () => {

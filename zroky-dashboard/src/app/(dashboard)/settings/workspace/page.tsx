@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Copy,
@@ -11,7 +10,15 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { useMyProjects, useProjectSettings } from "@/lib/hooks";
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
+import {
+  SettingsHero,
+  SettingsMetricStrip,
+  SettingsScaffold,
+  SettingsSection,
+} from "@/components/settings-scaffold";
+import { StatusPill } from "@/components/status-pill";
+import { useMyProjects, useProjectSettings, useUpdateProjectSettings } from "@/lib/hooks";
 import { formatDateTime, safeString } from "@/lib/format";
 import { useDashboardStore } from "@/lib/store";
 
@@ -32,11 +39,19 @@ function compactIdentifier(value: string | null | undefined): string {
   return `${normalized.slice(0, 12)}...${normalized.slice(-6)}`;
 }
 
+function canRenameWorkspace(role: string | null | undefined): boolean {
+  const normalized = role?.toLowerCase();
+  return normalized === "owner" || normalized === "admin";
+}
+
 export default function WorkspaceSettingsPage() {
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const projectQuery = useProjectSettings();
   const projectsQuery = useMyProjects();
+  const updateProject = useUpdateProjectSettings();
   const [copied, setCopied] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
   const project = projectQuery.data ?? null;
   const memberships = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
@@ -46,8 +61,15 @@ export default function WorkspaceSettingsPage() {
     [memberships, projectId],
   );
   const workspaceName = safeString(project?.name ?? membership?.project_name, "Project unavailable");
-  const projectSource = project?.project_id ? "Backend" : selectedProject ? "Store fallback" : "Missing";
   const loading = projectQuery.isLoading || projectsQuery.isLoading;
+  const active = project?.is_active === false || membership?.is_active === false ? false : true;
+  const role = roleLabel(membership?.role);
+  const renameAllowed = canRenameWorkspace(membership?.role);
+  const renameDisabled = !renameAllowed || !projectId || updateProject.isPending || draftName.trim().length < 2;
+
+  useEffect(() => {
+    setDraftName(workspaceName === "Project unavailable" ? "" : workspaceName);
+  }, [workspaceName]);
 
   async function copyProjectId() {
     if (!projectId) return;
@@ -60,67 +82,133 @@ export default function WorkspaceSettingsPage() {
     }
   }
 
-  return (
-    <div className="page-content workspace-settings-page">
-      <section className="settings-summary-grid">
-        <article className="panel settings-summary-card">
-          <FolderOpen aria-hidden="true" />
-          <span>Workspace</span>
-          <strong>{workspaceName}</strong>
-          <small>{projectSource} project context.</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <ShieldCheck aria-hidden="true" />
-          <span>Status</span>
-          <strong>{project?.is_active === false || membership?.is_active === false ? "Inactive" : "Active"}</strong>
-          <small>{loading ? "Loading project state." : "Used by capture, billing, and member access."}</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <UserRound aria-hidden="true" />
-          <span>Your role</span>
-          <strong>{roleLabel(membership?.role)}</strong>
-          <small>{membership ? "Role comes from project membership." : "Membership details are not loaded."}</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <RefreshCw aria-hidden="true" />
-          <span>Updated</span>
-          <strong>{formatDateTime(project?.updated_at ?? membership?.updated_at)}</strong>
-          <small>Latest project metadata timestamp.</small>
-        </article>
-      </section>
+  async function onRename(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = draftName.trim();
+    if (renameDisabled || name === workspaceName) return;
+    setStatusMessage("");
+    try {
+      await updateProject.mutateAsync({ name });
+      setStatusMessage("Workspace name updated.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Workspace rename failed.");
+    }
+  }
 
-      <section className="panel settings-control-panel">
-        <header className="panel-header">
-          <div>
-            <h3>Workspace identity</h3>
-            <p>Basic project metadata used across the dashboard. Operational proof and alert routes live outside Settings.</p>
-          </div>
-          <div className="actions">
-            <Link href="/projects" className="btn btn-soft">
+  return (
+    <SettingsScaffold className="workspace-settings-page" aria-labelledby="workspace-settings-title">
+      <SettingsHero
+        ariaLabel="Workspace settings"
+        eyebrow="Workspace"
+        icon={<FolderOpen aria-hidden="true" />}
+        title={workspaceName}
+        copy="Project identity, role context, and the stable ID used by SDK keys, billing, receipts, and audit links."
+        tone={active ? "success" : "danger"}
+        pill={active ? "Active" : "Inactive"}
+        updatedLabel={loading ? "Loading" : "Settings live"}
+        actions={
+          <>
+            <DashboardButtonLink href="/projects" variant="soft">
               Open projects
-            </Link>
-            <Link href="/settings/team" className="btn btn-soft">
+            </DashboardButtonLink>
+            <DashboardButtonLink href="/settings/team" variant="primary">
               Manage members
-            </Link>
+            </DashboardButtonLink>
+          </>
+        }
+      />
+
+      <SettingsMetricStrip
+        ariaLabel="Workspace settings summary"
+        metrics={[
+          {
+            id: "workspace",
+            label: "Workspace",
+            value: workspaceName,
+            helper: "Stable dashboard project context",
+            tone: active ? "success" : "danger",
+            icon: <FolderOpen aria-hidden="true" />,
+          },
+          {
+            id: "status",
+            label: "Status",
+            value: active ? "Active" : "Inactive",
+            helper: "Used by SDK keys, billing, and member access",
+            tone: active ? "success" : "danger",
+            icon: <ShieldCheck aria-hidden="true" />,
+          },
+          {
+            id: "role",
+            label: "Your role",
+            value: role,
+            helper: membership ? "Role comes from project membership" : "Membership details are not loaded",
+            tone: renameAllowed ? "success" : "neutral",
+            icon: <UserRound aria-hidden="true" />,
+          },
+          {
+            id: "updated",
+            label: "Updated",
+            value: formatDateTime(project?.updated_at ?? membership?.updated_at),
+            helper: "Latest project metadata timestamp",
+            tone: "setup",
+            icon: <RefreshCw aria-hidden="true" />,
+          },
+        ]}
+      />
+
+      <SettingsSection
+        id="workspace-identity"
+        eyebrow="Identity"
+        title="Workspace identity"
+        copy="Rename the workspace shown across the dashboard. Project IDs stay stable for API keys, receipts, and audit links."
+        actions={
+          <StatusPill
+            value={renameAllowed ? "editable" : "read_only"}
+            label={renameAllowed ? "Editable" : "Read only"}
+            tone={renameAllowed ? "success" : "neutral"}
+          />
+        }
+      >
+        <form onSubmit={onRename} className="settings-workspace-form">
+          <div className="field">
+            <label htmlFor="workspace-name" className="field-label">
+              Workspace name
+            </label>
+            <input
+              id="workspace-name"
+              type="text"
+              className="input"
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+              disabled={!renameAllowed}
+              minLength={2}
+              maxLength={120}
+            />
+            <span className="field-hint">
+              {renameAllowed
+                ? "Owners and admins can rename this workspace."
+                : "Only owners and admins can rename this workspace."}
+            </span>
           </div>
-        </header>
+          <DashboardButton type="submit" variant="primary" loading={updateProject.isPending} disabled={renameDisabled || draftName.trim() === workspaceName}>
+            Save workspace name
+          </DashboardButton>
+        </form>
+        {statusMessage ? (
+          <p className={statusMessage.toLowerCase().includes("failed") ? "field-error" : "field-success"}>
+            {statusMessage}
+          </p>
+        ) : null}
 
         <div className="list">
-          <div className="list-row">
-            <div className="list-main">
-              <strong>Project name</strong>
-              <span>{workspaceName}</span>
-            </div>
-          </div>
           <div className="list-row">
             <div className="list-main">
               <strong>Project ID</strong>
               <span className="mono">{compactIdentifier(projectId)}</span>
             </div>
-            <button type="button" className="btn btn-soft btn-sm" onClick={() => void copyProjectId()} disabled={!projectId}>
-              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            <DashboardButton type="button" size="sm" variant="soft" icon={copied ? <Check /> : <Copy />} onClick={() => void copyProjectId()} disabled={!projectId}>
               {copied ? "Copied" : "Copy project ID"}
-            </button>
+            </DashboardButton>
           </div>
           <div className="list-row">
             <div className="list-main">
@@ -134,37 +222,9 @@ export default function WorkspaceSettingsPage() {
               <span>{formatDateTime(project?.created_at ?? membership?.created_at)}</span>
             </div>
           </div>
-          <div className="list-row">
-            <div className="list-main">
-              <strong>Project source</strong>
-              <span>{projectSource}</span>
-            </div>
-          </div>
         </div>
-      </section>
+      </SettingsSection>
 
-      <section className="panel settings-control-panel">
-        <header className="panel-header">
-          <div>
-            <h3>What belongs here</h3>
-            <p>Workspace Settings stays limited to project identity. Connectors, outcome proof, and alert routing stay in their own modules.</p>
-          </div>
-        </header>
-        <div className="settings-workspace-rules" aria-label="Workspace settings boundaries">
-          <div>
-            <strong>Keep in Settings</strong>
-            <span>Project name, project ID, member context, billing context.</span>
-          </div>
-          <div>
-            <strong>Use Connectors</strong>
-            <span>GitHub, Slack, ledger, and customer-record setup.</span>
-          </div>
-          <div>
-            <strong>Use Evidence</strong>
-            <span>Evidence Packs, outcome reconciliation, and exportable proof.</span>
-          </div>
-        </div>
-      </section>
-    </div>
+    </SettingsScaffold>
   );
 }

@@ -4,9 +4,18 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import EvidencePage from "./page";
+import type {
+  ActionIntentResponse,
+  ActionReceiptResponse,
+  OutcomeReconciliationView,
+  RuntimePolicyDecisionResponse,
+  RuntimePolicyEvidencePackResponse,
+} from "@/lib/api";
 
 const api = vi.hoisted(() => ({
+  getActionIntentReceipt: vi.fn(),
   getRuntimePolicyEvidencePack: vi.fn(),
+  listActionIntents: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
   listRuntimePolicyApprovals: vi.fn(),
 }));
@@ -35,11 +44,240 @@ vi.mock("@/lib/api", async () => {
   };
 });
 
+function actionIntent(overrides: Partial<ActionIntentResponse> = {}): ActionIntentResponse {
+  return {
+    action_id: "act_1",
+    project_id: "proj_1",
+    contract_version: "v1",
+    action_type: "ticket.close",
+    operation_kind: "business_mutation",
+    environment: "test",
+    status: "authorized",
+    proof_status: "matched",
+    receipt_status: "generated",
+    idempotency_key: "idem_act_1",
+    intent_digest: "sha256:intent_1",
+    canonical_intent: {
+      principal: { id: "support-agent" },
+      purpose: { summary: "Close ticket T-1001" },
+      resource: { id: "T-1001" },
+      trace_context: { agent_name: "Support agent", trace_id: "trace_1", call_id: "call_1" },
+    },
+    created_at: "2026-06-20T09:00:00Z",
+    decided_at: "2026-06-20T09:01:00Z",
+    authorized_at: "2026-06-20T09:02:00Z",
+    runtime_policy_decision_id: "decision_1",
+    deadline: null,
+    status_url: "/v1/action-intents/act_1",
+    ...overrides,
+  };
+}
+
+function runtimeDecision(overrides: Partial<RuntimePolicyDecisionResponse> = {}): RuntimePolicyDecisionResponse {
+  return {
+    id: "decision_1",
+    project_id: "proj_1",
+    trace_id: "trace_1",
+    call_id: "call_1",
+    agent_name: "Support agent",
+    role: "agent",
+    action_type: "ticket.close",
+    tool_name: "ticket.close",
+    decision: "allow",
+    status: "approved",
+    allowed: true,
+    requires_approval: false,
+    reasons: ["policy checks passed"],
+    request: {},
+    policy_snapshot: { mandate: "support-control" },
+    intended_action: { summary: "Close ticket T-1001" },
+    trace_context: {},
+    policy_hit: {},
+    business_impact: {},
+    audit_log: [],
+    created_at: "2026-06-20T09:00:00Z",
+    expires_at: null,
+    resolved_at: "2026-06-20T09:01:00Z",
+    resolved_by: "ops@example.com",
+    resolution_reason: "approved",
+    consumed_at: null,
+    consumed_by_decision_id: null,
+    ...overrides,
+  };
+}
+
+function outcome(overrides: Partial<OutcomeReconciliationView> = {}): OutcomeReconciliationView {
+  return {
+    id: "check_1",
+    project_id: "proj_1",
+    call_id: "call_1",
+    trace_id: "trace_1",
+    runtime_policy_decision_id: "decision_1",
+    action_type: "ticket.close",
+    connector_type: "generic_rest_api",
+    system_ref: "ticket:T-1001",
+    verdict: "matched",
+    reason: "matched",
+    amount_usd: null,
+    currency: null,
+    claimed: { status: "closed" },
+    actual: { status: "closed" },
+    comparison: { status: true },
+    idempotency_key: "idem_act_1",
+    metadata: {},
+    checked_at: "2026-06-20T09:03:00Z",
+    created_at: "2026-06-20T09:03:00Z",
+    ...overrides,
+  };
+}
+
+function receipt(overrides: Partial<ActionReceiptResponse> = {}): ActionReceiptResponse {
+  return {
+    receipt_id: "receipt_1",
+    project_id: "proj_1",
+    action_id: "act_1",
+    receipt_digest: "sha256:receipt_1",
+    evidence_hash: "sha256:evidence_1",
+    signature_algorithm: "hmac-sha256",
+    signature: "sig",
+    signing_key_id: "receipt-key-1",
+    signature_valid: true,
+    generated_at: "2026-06-20T09:04:00Z",
+    receipt: {
+      schema_version: "zroky.action_receipt.v1",
+      project_id: "proj_1",
+      action_id: "act_1",
+      environment: "test",
+      final_status: "matched",
+      generated_at: "2026-06-20T09:04:00Z",
+      action_contract: {
+        id: "contract_1",
+        contract_version: "ticket.close/v1",
+        action_type: "ticket.close",
+        operation_kind: "business_mutation",
+        risk_class: "medium",
+      },
+      intent: {
+        contract_version: "ticket.close/v1",
+        action_type: "ticket.close",
+        operation_kind: "business_mutation",
+        idempotency_key: "idem_act_1",
+        intent_digest: "sha256:intent_1",
+        canonical_intent: {
+          principal: { id: "support-agent" },
+          purpose: { summary: "Close ticket T-1001" },
+          resource: { id: "T-1001" },
+          trace_context: { agent_name: "Support agent", trace_id: "trace_1", call_id: "call_1" },
+        },
+        principal: { id: "support-agent" },
+        actor_chain: [{ actor: "agent" }],
+        purpose: { summary: "Close ticket T-1001" },
+        resource: { id: "T-1001" },
+        parameters: { status: "closed" },
+        verification_profile: "generic_rest",
+        created_at: "2026-06-20T09:00:00Z",
+        decided_at: "2026-06-20T09:01:00Z",
+        authorized_at: "2026-06-20T09:02:00Z",
+      },
+      policy_decision: {
+        id: "decision_1",
+        decision: "allow",
+        status: "approved",
+        reasons: ["policy checks passed"],
+        approval_scope_hash: "scope_1",
+        approval_id: null,
+        resolved_by: "ops@example.com",
+        resolved_at: "2026-06-20T09:01:00Z",
+        consumed_at: "2026-06-20T09:02:00Z",
+        required_approval_count: 1,
+        approval_count: 1,
+        approver_subjects: ["ops@example.com"],
+      },
+      runner_execution: {
+        id: "attempt_1",
+        runner_id: "runner_1",
+        attempt_number: 1,
+        status: "succeeded",
+        idempotency_key: "idem_act_1",
+        credential_ref: "support-crm",
+        plan_digest: "sha256:plan_1",
+        plan: { method: "PATCH", path: "/tickets/T-1001" },
+        protected_credential_returned: false,
+        started_at: "2026-06-20T09:02:10Z",
+        finished_at: "2026-06-20T09:02:20Z",
+      },
+      verification: {
+        status: "matched",
+        outcomes: [
+          {
+            id: "check_1",
+            verdict: "matched",
+            verification_status: "verified",
+            reason: "matched",
+            connector_type: "generic_rest_api",
+            system_ref: "ticket:T-1001",
+            idempotency_key: "idem_act_1",
+            checked_at: "2026-06-20T09:03:00Z",
+          },
+        ],
+      },
+      evidence: {
+        hash_algorithm: "sha256",
+        evidence_hash: "sha256:evidence_1",
+      },
+      timeline: [
+        {
+          id: "event_1",
+          event_type: "receipt_generated",
+          event_digest: "sha256:event_1",
+          actor: "system",
+          created_at: "2026-06-20T09:04:00Z",
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
+function evidencePack(overrides: Partial<RuntimePolicyEvidencePackResponse> = {}): RuntimePolicyEvidencePackResponse {
+  return {
+    schema_version: "zroky.evidence_pack.v1",
+    project_id: "proj_1",
+    decision_id: "decision_1",
+    verification_status: "pass",
+    decision: {
+      ...runtimeDecision(),
+      approval_scope_hash: "scope_1",
+    },
+    related_decisions: [],
+    audit_log: [
+      {
+        id: "audit_1",
+        decision_id: "decision_1",
+        event_type: "approved",
+        actor: "ops@example.com",
+        reason: "approved for support close",
+        before: null,
+        after: { status: "approved" },
+        created_at: "2026-06-20T09:01:00Z",
+      },
+    ],
+    trace_policy_spans: [],
+    outcome_reconciliation: [outcome()],
+    call: null,
+    generated_at: "2026-06-20T09:04:00Z",
+    hash_algorithm: "sha256",
+    evidence_hash: "sha256:evidence_pack_1",
+    hash_payload_excludes: ["generated_at"],
+    ...overrides,
+  };
+}
+
 function renderEvidencePage() {
   const client = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
       mutations: { retry: false },
+      queries: { retry: false },
     },
   });
   return render(
@@ -56,7 +294,7 @@ describe("EvidencePage", () => {
     window.history.pushState({}, "", "/evidence");
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
-      value: vi.fn(() => "blob:evidence-pack"),
+      value: vi.fn(() => "blob:evidence"),
     });
     Object.defineProperty(URL, "revokeObjectURL", {
       configurable: true,
@@ -67,282 +305,139 @@ describe("EvidencePage", () => {
       value: vi.fn(),
     });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    api.listRuntimePolicyApprovals.mockResolvedValue({
+    api.listActionIntents.mockResolvedValue({ total_in_page: 1, limit: 100, offset: 0, items: [actionIntent()] });
+    api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 1, items: [runtimeDecision()] });
+    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 1, items: [outcome()] });
+    api.getActionIntentReceipt.mockResolvedValue(receipt());
+    api.getRuntimePolicyEvidencePack.mockResolvedValue(evidencePack());
+  });
+
+  it("renders the receipt-first ledger and loads only the selected Action Receipt", async () => {
+    renderEvidencePage();
+
+    expect(await screen.findByRole("heading", { name: "Evidence ready" }, { timeout: 5_000 })).toBeInTheDocument();
+    const summary = screen.getByLabelText("Evidence proof summary");
+    const exportReadyCard = within(summary).getByText("Export-ready").closest(".dashboard-metric-card") as HTMLElement;
+    expect(within(exportReadyCard).getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("Total proof records")).toBeInTheDocument();
+
+    const ledger = screen.getByLabelText("Evidence ledger");
+    const row = (await within(ledger).findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
+    expect(row).not.toBeNull();
+    expect(within(row).getByText("Action receipt")).toBeInTheDocument();
+    expect(within(row).getByText("Digest")).toBeInTheDocument();
+    expect(within(row).getByText("sha256:intent_1")).toBeInTheDocument();
+    expect(within(row).getByText("System")).toBeInTheDocument();
+    expect(within(row).getByText("ticket:T-1001")).toBeInTheDocument();
+    expect(within(row).getByText("Matched")).toBeInTheDocument();
+
+    const panel = await screen.findByLabelText("Focused proof panel");
+    expect(within(panel).getByText("Action Receipt")).toBeInTheDocument();
+    expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
+    expect(screen.getByText("Signature validity is verified by the backend; the browser never receives the signing secret.")).toBeInTheDocument();
+    expect(screen.getAllByText("sha256:receipt_1").length).toBeGreaterThan(0);
+    expect(api.getActionIntentReceipt).toHaveBeenCalledTimes(1);
+    expect(api.getActionIntentReceipt.mock.calls[0]?.[0]).toBe("act_1");
+    expect(api.getRuntimePolicyEvidencePack).not.toHaveBeenCalled();
+  });
+
+  it("shows guard-only runtime decisions as secondary full Evidence Packs", async () => {
+    api.listActionIntents.mockResolvedValue({ total_in_page: 0, limit: 100, offset: 0, items: [] });
+
+    renderEvidencePage();
+
+    const row = (await screen.findByText("Close ticket T-1001")).closest(".ev-ledger-row") as HTMLElement;
+    expect(within(row).getByText("Guard-only evidence")).toBeInTheDocument();
+    expect(await screen.findByText("Mandate snapshot")).toBeInTheDocument();
+    expect(screen.getAllByText(/support-control/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Approval audit")).toBeInTheDocument();
+    expect(screen.getAllByText(/ops@example.com/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Hash algorithm").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("trace_1").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "trace_1" })).not.toBeInTheDocument();
+    expect(api.getRuntimePolicyEvidencePack).toHaveBeenCalledTimes(1);
+    expect(api.getRuntimePolicyEvidencePack.mock.calls[0]?.[0]).toBe("decision_1");
+    expect(api.getActionIntentReceipt).not.toHaveBeenCalled();
+  });
+
+  it("filters exception rows and keeps unlinked outcomes visible but non-exportable", async () => {
+    api.listActionIntents.mockResolvedValue({
       total_in_page: 1,
-      items: [
-        {
-          id: "decision_1",
-          project_id: "proj_1",
-          trace_id: "trace_1",
-          call_id: "call_1",
-          agent_name: "Refund agent",
-          role: "refund_ops",
-          action_type: "refund",
-          tool_name: "ledger.refund",
-          decision: "requires_approval",
-          status: "approved",
-          allowed: false,
-          requires_approval: true,
-          reasons: ["amount_requires_approval"],
-          request: {},
-          policy_snapshot: {},
-          intended_action: {},
-          trace_context: {},
-          policy_hit: {},
-          business_impact: {},
-          audit_log: [],
-          created_at: "2026-06-20T09:00:00Z",
-          expires_at: null,
-          resolved_at: "2026-06-20T09:05:00Z",
-          resolved_by: "ops@example.com",
-          resolution_reason: "approved for pilot",
-          consumed_at: null,
-          consumed_by_decision_id: null,
-        },
-      ],
+      limit: 100,
+      offset: 0,
+      items: [actionIntent({ action_id: "act_bad", proof_status: "mismatched", intent_digest: "sha256:mismatch" })],
     });
     api.listOutcomeReconciliations.mockResolvedValue({
-      total_in_page: 1,
+      total_in_page: 2,
       items: [
-        {
-          id: "check_1",
-          project_id: "proj_1",
-          call_id: "call_1",
-          trace_id: "trace_1",
-          runtime_policy_decision_id: "decision_1",
-          action_type: "refund",
-          connector_type: "ledger_refund_api",
-          system_ref: "ledger:RF-1001",
-          verdict: "matched",
-          reason: "all_compared_fields_matched",
-          amount_usd: 42.5,
-          currency: "USD",
-          claimed: { refund_id: "RF-1001" },
-          actual: { refund_id: "RF-1001" },
-          comparison: { compared_fields: [], mismatches: [] },
-          idempotency_key: "refund:RF-1001",
-          metadata: {},
-          checked_at: "2026-06-20T09:06:00Z",
-          created_at: "2026-06-20T09:06:00Z",
-        },
-      ],
-    });
-    api.getRuntimePolicyEvidencePack.mockImplementation(async (decisionId: string) => {
-      if (decisionId === "decision_missing") {
-        throw new Error("Evidence Pack not found");
-      }
-      return {
-        schema_version: "runtime_policy_evidence.v1",
-        project_id: "proj_1",
-        decision_id: "decision_1",
-        verification_status: "pass",
-        decision: {
-          id: "decision_1",
-          project_id: "proj_1",
-          trace_id: "trace_1",
-          call_id: "call_1",
-          agent_name: "Refund agent",
-          role: "refund_ops",
-          action_type: "refund",
-          tool_name: "ledger.refund",
-          decision: "requires_approval",
-          status: "approved",
-          allowed: false,
-          requires_approval: true,
-          reasons: ["amount_requires_approval"],
-          request: { amount_usd: 42.5 },
-          policy_snapshot: { mandate: "refunds_under_100_require_approval" },
-          intended_action: { summary: "Refund RF-1001", refund_id: "RF-1001", amount_usd: 42.5 },
-          trace_context: { agent_name: "Refund agent" },
-          policy_hit: { policy: "refund_mandate", risk_reasons: ["money_action"] },
-          business_impact: { amount_usd: 42.5 },
-          approval_scope_hash: "scope_abc",
-          created_at: "2026-06-20T09:00:00Z",
-          expires_at: null,
-          resolved_at: "2026-06-20T09:05:00Z",
-          resolved_by: "ops@example.com",
-          resolution_reason: "approved for pilot",
-          consumed_at: null,
-          consumed_by_decision_id: null,
-        },
-        related_decisions: [],
-        audit_log: [
-          {
-            id: "audit_1",
-            decision_id: "decision_1",
-            event_type: "approved",
-            actor: "ops@example.com",
-            reason: "approved for pilot",
-            before: null,
-            after: { status: "approved" },
-            created_at: "2026-06-20T09:05:00Z",
-          },
-        ],
-        trace_policy_spans: [],
-        outcome_reconciliation: [
-          {
-            id: "check_1",
-            project_id: "proj_1",
-            call_id: "call_1",
-            trace_id: "trace_1",
-            runtime_policy_decision_id: "decision_1",
-            action_type: "refund",
-            connector_type: "ledger_refund_api",
-            system_ref: "ledger:RF-1001",
-            verdict: "matched",
-            reason: "all_compared_fields_matched",
-            amount_usd: 42.5,
-            currency: "USD",
-            claimed: { refund_id: "RF-1001" },
-            actual: { refund_id: "RF-1001" },
-            comparison: { compared_fields: ["refund_id"], mismatches: [] },
-            idempotency_key: "refund:RF-1001",
-            metadata: {},
-            checked_at: "2026-06-20T09:06:00Z",
-            created_at: "2026-06-20T09:06:00Z",
-          },
-        ],
-        call: null,
-        generated_at: "2026-06-20T09:07:00Z",
-        hash_algorithm: "sha256",
-        evidence_hash: "abc123",
-        hash_payload_excludes: ["generated_at"],
-      };
-    });
-  });
-
-  it("surfaces linked runtime decisions and downloads Evidence Pack JSON", async () => {
-    renderEvidencePage();
-
-    expect(
-      await screen.findByRole("heading", { name: "Evidence ready for handoff" }, { timeout: 5_000 }),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("Refund agent")).toBeInTheDocument();
-    expect(screen.getByLabelText("Evidence export summary").textContent?.replace(/\s+/g, " ")).toContain(
-      "1 matched outcomes / 0 needs verification",
-    );
-    expect(screen.getAllByText("matched").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("decision_1").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("ledger:RF-1001").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Export-ready packs").length).toBeGreaterThan(0);
-    expect(screen.getByText("Linked decisions")).toBeInTheDocument();
-    expect(screen.getByText("ledger_refund_api", { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open approvals" }).getAttribute("href")).toBe("/approvals");
-    expect(screen.getByRole("link", { name: "Open outcomes" }).getAttribute("href")).toBe("/outcomes");
-    expect(screen.getByRole("link", { name: "Open Evidence Pack" }).getAttribute("href")).toBe(
-      "/evidence?decision_id=decision_1",
-    );
-
-    const exportContract = screen.getByRole("region", { name: "Evidence Pack export contract" });
-    expect(
-      within(exportContract).getByText(
-        "Evidence Pack is exportable only when control, audit, outcome, and hash are present.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(exportContract).getByText(
-        "Matched means customer-ready. Mismatched or not_verified stays visible but should not be used as proof of success.",
-      ),
-    ).toBeInTheDocument();
-    expect(within(exportContract).getByText("Runtime decision")).toBeInTheDocument();
-    expect(within(exportContract).getByText("Approval audit")).toBeInTheDocument();
-    expect(within(exportContract).getByText("Outcome proof")).toBeInTheDocument();
-    expect(within(exportContract).getByText("Evidence hash")).toBeInTheDocument();
-
-    const row = (await screen.findByText("Refund agent")).closest(".evidence-ledger-row") as HTMLElement;
-    fireEvent.click(within(row).getByRole("button", { name: "Export Evidence JSON" }));
-
-    await waitFor(() => expect(api.getRuntimePolicyEvidencePack).toHaveBeenCalledWith("decision_1"));
-    const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
-    expect(await blob.text()).toContain('"decision_id": "decision_1"');
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:evidence-pack");
-    expect(await screen.findByText("Evidence Pack JSON exported.")).toBeInTheDocument();
-  });
-
-  it("focuses a linked Evidence Pack from a decision_id deep link", async () => {
-    window.history.pushState({}, "", "/evidence?decision_id=decision_1");
-
-    renderEvidencePage();
-
-    const focusPanel = await screen.findByLabelText("Focused Evidence Pack");
-    expect(within(focusPanel).getByText("decision_1")).toBeInTheDocument();
-    expect(await within(focusPanel).findByText("pass")).toBeInTheDocument();
-    const row = (await screen.findByText("Refund agent")).closest(".evidence-ledger-row");
-    expect(row?.getAttribute("data-focused")).toBe("true");
-    const detail = await screen.findByLabelText("Evidence Pack detail");
-    expect(within(detail).getByText("Evidence Pack detail")).toBeInTheDocument();
-    expect(within(detail).getAllByText("Evidence hash").length).toBeGreaterThan(0);
-    expect(within(detail).getAllByText("abc123").length).toBeGreaterThan(0);
-    expect(within(detail).getByText("Mandate snapshot")).toBeInTheDocument();
-    expect(within(detail).getByText("Approval audit")).toBeInTheDocument();
-    expect(within(detail).getByText("Real outcome reconciliation")).toBeInTheDocument();
-    expect(within(detail).getByText("sha256")).toBeInTheDocument();
-    expect(within(detail).getByText("generated_at")).toBeInTheDocument();
-    expect(within(detail).getByLabelText("Evidence Pack report")).toBeInTheDocument();
-    expect(within(detail).getByText("Evidence Pack report")).toBeInTheDocument();
-    expect(within(detail).getByText("scope_abc")).toBeInTheDocument();
-    expect(within(detail).getByText(/ops@example.com: approved for pilot/i)).toBeInTheDocument();
-    expect(within(detail).getByText("ledger:RF-1001")).toBeInTheDocument();
-
-    fireEvent.click(within(detail).getByRole("button", { name: "Print report" }));
-    expect(window.print).toHaveBeenCalled();
-
-    fireEvent.click(within(focusPanel).getByRole("button", { name: "Export Evidence JSON" }));
-
-    expect(api.getRuntimePolicyEvidencePack.mock.calls.some(([decisionId]) => decisionId === "decision_1")).toBe(true);
-    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
-  });
-
-  it("shows a not available focused state when the decision_id is outside the evidence window", async () => {
-    window.history.pushState({}, "", "/evidence?decision_id=decision_missing");
-
-    renderEvidencePage();
-
-    const focusPanel = await screen.findByLabelText("Focused Evidence Pack");
-    expect(within(focusPanel).getByText("decision_missing")).toBeInTheDocument();
-    await screen.findByText("Refund agent");
-    expect(within(focusPanel).getByText(/could not load this decision/i)).toBeInTheDocument();
-    expect((within(focusPanel).getByRole("button", { name: "Not available" }) as HTMLButtonElement).disabled).toBe(true);
-    const detail = await screen.findByLabelText("Evidence Pack detail");
-    expect(within(detail).getByText("Evidence Pack unavailable")).toBeInTheDocument();
-    expect(within(detail).getByText("not_verified")).toBeInTheDocument();
-  });
-
-  it("keeps unlinked outcome rows visible but not exportable", async () => {
-    api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 0, items: [] });
-    api.listOutcomeReconciliations.mockResolvedValue({
-      total_in_page: 1,
-      items: [
-        {
+        outcome({ id: "check_bad", verdict: "mismatched", reason: "status mismatch", idempotency_key: "idem_act_1" }),
+        outcome({
           id: "check_unlinked",
-          project_id: "proj_1",
-          call_id: "call_1",
-          trace_id: "trace_1",
+          call_id: "call_unlinked",
+          trace_id: "trace_unlinked",
           runtime_policy_decision_id: null,
-          action_type: "customer_record_update",
-          connector_type: "customer_record_api",
+          idempotency_key: null,
           system_ref: "crm:CUS-1001",
           verdict: "not_verified",
-          reason: "decision_missing",
-          amount_usd: null,
-          currency: null,
-          claimed: { customer_id: "CUS-1001" },
-          actual: null,
-          comparison: { compared_fields: [], mismatches: [] },
-          idempotency_key: null,
-          metadata: {},
-          checked_at: "2026-06-20T09:06:00Z",
-          created_at: "2026-06-20T09:06:00Z",
-        },
+        }),
       ],
     });
 
     renderEvidencePage();
 
-    const row = (await screen.findAllByText("crm:CUS-1001"))[0]?.closest(".list-row");
-    expect(row).not.toBeNull();
-    expect((within(row as HTMLElement).getByRole("button", { name: "Not linked" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByText("not_verified").length).toBeGreaterThan(0);
-    expect(screen.getByText("not_linked")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Exception needs review" }, { timeout: 5_000 })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Exceptions" }));
+    expect(screen.getByText("sha256:mismatch")).toBeInTheDocument();
+    expect(screen.queryByText("crm:CUS-1001")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Needs verification" }));
+    const unlinkedRow = (await screen.findAllByText("crm:CUS-1001"))[0]?.closest(".ev-ledger-row") as HTMLElement;
+    expect(within(unlinkedRow).getByText("Unlinked outcome")).toBeInTheDocument();
+    expect(within(unlinkedRow).getByText("not linked / not exportable")).toBeInTheDocument();
+    fireEvent.click(within(unlinkedRow).getByRole("button", { name: "Not exportable" }));
+    expect(await screen.findByText("Not linked / not exportable")).toBeInTheDocument();
+  });
+
+  it("resolves action deep links to the matching ledger row", async () => {
+    window.history.pushState({}, "", "/evidence?action_id=act_1");
+
+    renderEvidencePage();
+
+    const ledger = await screen.findByLabelText("Evidence ledger");
+    await within(ledger).findByText("Close ticket T-1001");
+    const row = within(ledger).getByText("Close ticket T-1001").closest(".ev-ledger-row") as HTMLElement;
+    await waitFor(() => expect(row.getAttribute("data-focused")).toBe("true"));
+    expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
+    expect(api.getActionIntentReceipt.mock.calls[0]?.[0]).toBe("act_1");
+    expect(api.getRuntimePolicyEvidencePack).not.toHaveBeenCalled();
+  });
+
+  it("exports selected receipt JSON and prints the focused proof", async () => {
+    renderEvidencePage();
+
+    await screen.findByText("Evidence + Signature");
+    expect(screen.getByLabelText("Printable evidence report")).toBeInTheDocument();
+    expect(screen.getByAltText("Zroky")).toBeInTheDocument();
+    expect(screen.getByText("Verified Action Control Plane")).toBeInTheDocument();
+    expect(screen.getByText("Zroky Evidence Report")).toBeInTheDocument();
+    expect(screen.getAllByText("Proof seal").length).toBeGreaterThan(0);
+    expect(screen.getByText("Confidential evidence artifact")).toBeInTheDocument();
+    expect(screen.getAllByText("Tamper-evident").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Signature valid").length).toBeGreaterThan(0);
+    const panel = screen.getByLabelText("Focused proof panel");
+    fireEvent.click(within(panel).getByRole("button", { name: "Print" }));
+    expect(window.print).toHaveBeenCalled();
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Export receipt JSON" }));
+
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
+    const exported = await blob.text();
+    expect(exported).toContain('"artifact": "zroky.action_receipt"');
+    expect(exported).toContain('"receipt_id": "receipt_1"');
+    expect(exported).toContain('"receipt_digest": "sha256:receipt_1"');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:evidence");
+    expect(await screen.findByText("Action Receipt JSON exported.")).toBeInTheDocument();
+    expect(api.getActionIntentReceipt).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,14 +1,21 @@
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import {
-  ArrowRight, ArrowUpRight, EyeOff, HelpCircle, RotateCcw, Star,
-  Search, FlaskConical, ShieldCheck, Check, Copy, Sparkles,
-  Activity, GitBranch, Languages, FileSearch,
+  AlertTriangle,
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  Copy,
+  DatabaseZap,
+  LockKeyhole,
+  ShieldCheck,
 } from 'lucide-react';
-import { SIGN_UP_URL } from '../lib/links';
-
-const GITHUB_URL = 'https://github.com/zroky/zroky-watch';
+import Hero from '../components/hero/Hero';
+import { FlowDiagram } from '../components/FlowDiagram';
+import { RealtimeControl } from '../components/RealtimeControl';
+import { ScaleFleet } from '../components/ScaleFleet';
+import { DEMO_URL, SIGN_UP_URL } from '../lib/links';
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
@@ -17,563 +24,343 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
   return (
     <motion.div
       className={className}
-      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 18 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduce ? false : { y: 16 }}
+      whileInView={{ y: 0 }}
       viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.6, ease, delay }}
+      transition={{ duration: 0.55, ease, delay }}
     >
       {children}
     </motion.div>
   );
 }
 
-/* ================================================================== */
-/* HERO                                                                */
-/* ================================================================== */
-
-function DiscoveredChip() {
+function SectionHeader({
+  eyebrow,
+  title,
+  copy,
+  align = 'left',
+}: {
+  eyebrow: string;
+  title: string;
+  copy?: string;
+  align?: 'left' | 'center';
+}) {
   return (
-    <div className="w-[16rem] rounded-2xl border border-line-strong bg-ink-2/90 p-4 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.95)] backdrop-blur-xl">
-      <div className="flex items-center justify-between">
-        <span className="badge badge-discovered">DISCOVERED</span>
-        <span className="font-mono text-[10px] text-tertiary">no eval written</span>
+    <Reveal>
+      <div className={align === 'center' ? 'mx-auto max-w-2xl text-center' : 'max-w-2xl'}>
+        <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4f5a52]">{eyebrow}</p>
+        <h2 className="mt-3 text-balance text-[2rem] font-semibold leading-[1.08] tracking-[-0.025em] text-[#20231f] md:text-[2.75rem]">
+          {title}
+        </h2>
+        {copy ? <p className="mt-4 text-[1.02rem] leading-[1.6] text-[#5b615a]">{copy}</p> : null}
       </div>
-      <p className="mt-3 text-sm font-semibold text-primary">refund_agent skipped a critical tool</p>
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        {['96% of normal traces', 'outcome → failure', '×47'].map((t) => (
-          <span key={t} className="rounded-md border border-line bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] text-tertiary">{t}</span>
-        ))}
-      </div>
-      <div className="mt-3 divider" />
-      <p className="mt-2.5 font-mono text-[10px] text-tertiary">confidence 0.93 · anomaly ≠ failure (corroborated)</p>
+    </Reveal>
+  );
+}
+
+function Section({ children, className = '', id }: { children: ReactNode; className?: string; id?: string }) {
+  return (
+    <section id={id} className={`w-full scroll-mt-28 px-4 py-16 text-[#20231f] md:py-20 ${className}`}>
+      <div className="mx-auto max-w-[1340px]">{children}</div>
+    </section>
+  );
+}
+
+function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={`group rounded-[16px] border border-[#d8dbd2] bg-[#fbfcf8] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(42,45,40,0.04),0_24px_48px_-30px_rgba(42,45,40,0.18)] transition duration-200 hover:-translate-y-1 hover:border-[#c7cbc2] hover:shadow-[0_2px_4px_rgba(42,45,40,0.04),0_32px_60px_-32px_rgba(42,45,40,0.26)] ${className}`}
+    >
+      {children}
     </div>
   );
 }
 
-function Hero() {
-  const reduce = useReducedMotion();
+function StatusChip({
+  tone,
+  children,
+}: {
+  tone: 'success' | 'warning' | 'danger' | 'accent' | 'neutral';
+  children: string;
+}) {
+  const classes = {
+    success: 'border-[#2f7d50]/25 bg-[#2f7d50]/10 text-[#276844]',
+    warning: 'border-[#b87922]/25 bg-[#b87922]/10 text-[#8a5a16]',
+    danger: 'border-[#c35145]/25 bg-[#c35145]/10 text-[#9f3f36]',
+    accent: 'border-[#4f5a52]/25 bg-[#4f5a52]/10 text-[#3f4942]',
+    neutral: 'border-[#d8dbd2] bg-[#e8ebe4] text-[#5b615a]',
+  }[tone];
+  const dot = {
+    success: 'bg-[#2f7d50]',
+    warning: 'bg-[#b87922]',
+    danger: 'bg-[#c35145]',
+    accent: 'bg-[#4f5a52]',
+    neutral: 'bg-[#7c837b]',
+  }[tone];
   return (
-    <section className="grain relative w-full overflow-hidden px-6 pt-36 pb-20 md:pt-44">
-      <div className="mesh-glow pointer-events-none absolute inset-0 -z-10" />
-      <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
-        <div>
-          <Reveal>
-            <span className="eyebrow"><Sparkles size={12} /> AI Agent Failure Discovery &amp; Regression Guard</span>
-          </Reveal>
-          <Reveal delay={0.05}>
-            <h1 className="mt-6 text-balance text-5xl font-extrabold leading-[1.02] tracking-tight md:text-[4.2rem]">
-              <span className="text-shimmer">Find the AI agent failures you didn't know to test.</span>
-            </h1>
-          </Reveal>
-          <Reveal delay={0.12}>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-secondary">
-              Zroky learns your agent's normal behavior in production, surfaces the abnormal —
-              including failures you never wrote a test for — proves your fix with replay, and blocks the repeat in CI.
-            </p>
-          </Reveal>
-          <Reveal delay={0.18}>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href={SIGN_UP_URL} className="btn-primary !px-6 !py-3">Start free <ArrowUpRight size={16} /></a>
-              <a href={GITHUB_URL} className="btn-ghost !px-6 !py-3"><Star size={15} /> zroky-watch — open source</a>
-            </div>
-          </Reveal>
-          <Reveal delay={0.24}>
-            <p className="mt-5 font-mono text-xs text-tertiary">
-              5-min install · any framework · <span className="text-secondary">we never call a stub replay a verified fix.</span>
-            </p>
-          </Reveal>
-        </div>
-
-        <Reveal delay={0.1}>
-          <motion.div
-            className="relative"
-            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, rotateY: 6 }}
-            animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-            transition={{ duration: 0.8, ease }}
-            style={{ perspective: 1200 }}
-          >
-            <div className="device-frame device-fade rotate-[0.6deg]">
-              <div className="browser-bar">
-                <span className="browser-dot" /><span className="browser-dot" /><span className="browser-dot" />
-                <span className="ml-3 font-mono text-[10px] text-tertiary">zroky.com · replay</span>
-              </div>
-              <img
-                src="/product-replay-detail.png"
-                alt="Zroky Replay Lab comparing the original failure to a candidate fix"
-                className="device-shot max-h-[26rem]"
-                loading="eager"
-              />
-            </div>
-            <motion.div
-              className="absolute -bottom-8 -left-6 hidden sm:block"
-              initial={reduce ? { opacity: 0 } : { opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, ease, delay: 0.5 }}
-            >
-              <DiscoveredChip />
-            </motion.div>
-          </motion.div>
-        </Reveal>
-      </div>
-    </section>
+    <span className={`inline-flex h-7 items-center gap-2 rounded-full border px-3 text-[11px] font-semibold uppercase tracking-[0.04em] ${classes}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {children}
+    </span>
   );
 }
 
-/* ================================================================== */
-/* LOGO MARQUEE                                                         */
-/* ================================================================== */
-
-function Marquee() {
-  const logos = ['OpenAI', 'Anthropic', 'Google', 'LangChain', 'LangGraph', 'CrewAI', 'OpenTelemetry', 'Vercel AI SDK'];
-  const row = [...logos, ...logos];
+function ButtonRow({ centered = false }: { centered?: boolean }) {
   return (
-    <section className="w-full border-y border-line py-8">
-      <p className="mb-6 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-tertiary">
-        Works with any agent framework
-      </p>
-      <div className="marquee-mask relative w-full overflow-hidden">
-        <div className="marquee-track gap-12 px-6">
-          {row.map((l, i) => (
-            <span key={`${l}-${i}`} className="whitespace-nowrap text-lg font-semibold text-secondary/70">{l}</span>
-          ))}
-        </div>
-      </div>
-    </section>
+    <div className={`mt-8 flex flex-wrap items-center gap-3 ${centered ? 'justify-center' : ''}`}>
+      <a
+        href={DEMO_URL}
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[linear-gradient(180deg,#5f675f,#343a34)] px-5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_-12px_rgba(42,45,40,0.55)] transition duration-150 hover:-translate-y-px hover:bg-[#4f5a52] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[#4f5a52]/25 active:translate-y-0 active:scale-[0.98]"
+      >
+        Book a demo <ArrowRight size={16} />
+      </a>
+      <a
+        href={SIGN_UP_URL}
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-[10px] border border-[#d8dbd2] bg-[#fbfcf8] px-5 text-sm font-semibold text-[#20231f] shadow-[0_1px_2px_rgba(42,45,40,0.04)] transition duration-150 hover:-translate-y-px hover:border-[#c7cbc2] hover:bg-[#f7f8f4] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[#4f5a52]/25 active:translate-y-0 active:scale-[0.98]"
+      >
+        Start free <ArrowUpRight size={16} />
+      </a>
+    </div>
   );
 }
 
-/* ================================================================== */
-/* STATS BAND                                                           */
-/* ================================================================== */
-
-function Stats() {
-  const stats = [
-    ['<10 min', 'to first surfaced finding'],
-    ['90%+', 'precision target before we surface'],
-    ['3', 'CI verdicts — pass / block / review'],
-    ['0', 'false blocks on borderline cases'],
-  ];
-  return (
-    <section className="w-full px-6 py-16">
-      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4">
-        {stats.map(([n, label], i) => (
-          <Reveal key={label} delay={i * 0.06}>
-            <div className="h-full bg-ink p-7">
-              <div className="font-mono text-4xl font-bold tracking-tight text-primary md:text-5xl">{n}</div>
-              <p className="mt-3 text-sm leading-relaxed text-tertiary">{label}</p>
-            </div>
-          </Reveal>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ================================================================== */
-/* PROBLEM                                                              */
-/* ================================================================== */
-
-function Problem() {
+function Problems() {
   const cards = [
-    { icon: EyeOff, title: 'Silent failures', body: 'Valid-looking output, wrong result. No error fired. You find out when the customer complains.' },
-    { icon: HelpCircle, title: "Can't test the unknown", body: 'Eval-first tools only catch failures you already wrote a rubric for. The dangerous ones are the unknowns.' },
-    { icon: RotateCcw, title: 'The same bug ships twice', body: 'Fixed last sprint, regressed this one. Nobody caught it until production did.' },
-  ];
-  return (
-    <section className="w-full px-6 py-20">
-      <div className="mx-auto max-w-6xl">
-        <Reveal>
-          <h2 className="max-w-2xl text-balance text-3xl font-bold tracking-tight md:text-4xl">
-            Your agent returns <span className="font-mono text-secondary">200 OK</span> — and still fails the task.
-          </h2>
-        </Reveal>
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {cards.map((c, i) => (
-            <Reveal key={c.title} delay={i * 0.08}>
-              <div className="card h-full p-6">
-                <div className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white/[0.04]">
-                  <c.icon size={18} className="text-secondary" />
-                </div>
-                <h3 className="mt-4 text-lg font-semibold">{c.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-tertiary">{c.body}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ================================================================== */
-/* PRODUCT SHOWCASE — tabbed, single frame                             */
-/* ================================================================== */
-
-type Tab = {
-  id: string; name: string; icon: typeof Search; cls: string;
-  title: string; body: string; points: string[];
-  media: ReactNode; caption: string;
-};
-
-function MockDiscover() {
-  return (
-    <div className="p-6">
-      <div className="card p-5">
-        <div className="flex items-center justify-between">
-          <span className="badge badge-discovered">DISCOVERED</span>
-          <span className="font-mono text-[10px] text-tertiary">no eval written</span>
-        </div>
-        <p className="mt-3 text-sm font-semibold">refund_agent · status_lookup</p>
-        <p className="mt-1 text-sm text-secondary">
-          Skipped <span className="font-mono text-primary">get_refund_status</span>, present in
-          <span className="text-primary"> 96%</span> of normal traces — outcome flipped to failure.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {['missing critical tool', 'outcome mismatch', 'recurrence ×47'].map((t) => (
-            <span key={t} className="rounded-md border border-line bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] text-tertiary">{t}</span>
-          ))}
-        </div>
-        <div className="mt-4 divider" />
-        <p className="mt-3 font-mono text-[11px] text-tertiary">confidence 0.93 · tier: surfaced · anomaly ≠ failure (corroborated)</p>
-      </div>
-    </div>
-  );
-}
-
-function ProductShowcase() {
-  const [active, setActive] = useState(0);
-  const reduce = useReducedMotion();
-
-  const tabs: Tab[] = [
     {
-      id: 'discover', name: 'Discover', icon: Search, cls: 'badge-discovered',
-      title: 'Catch the failures your tests miss.',
-      body: "Zroky learns each workflow's normal behavior — tool sequences, output shape, outcomes — and surfaces deviations that matter. No rubric required.",
-      points: [
-        'Behavioral baseline learned from production, no labels needed.',
-        'Anomaly ≠ Failure — surfaced only when corroborated.',
-        'Every finding explains its own "why".',
-      ],
-      media: <MockDiscover />, caption: 'Discover — a surfaced finding with its evidence',
+      icon: AlertTriangle,
+      tag: 'Money',
+      title: 'Agents move money.',
+      copy: 'Refunds, payouts, invoices - executed with no threshold and no approval.',
+      fix: 'Zroky holds it for approval.',
     },
     {
-      id: 'prove', name: 'Prove', icon: FlaskConical, cls: 'badge-verified',
-      title: 'Prove the fix works — honestly.',
-      body: 'Replay the exact failed scenario against your candidate fix. Before/after, tool-behavior diff, cost & latency delta — and a fidelity score for how faithfully we reproduced it.',
-      points: [
-        'Real-LLM, mocked-tool, sandbox and shadow replay modes.',
-        'Fidelity score on every run — including honest "cannot reproduce".',
-        '"Verified" only ever means verified.',
-      ],
-      media: <img src="/product-replay-detail.png" alt="Replay Lab original vs candidate" className="device-shot max-h-[24rem]" loading="lazy" />,
-      caption: 'Replay Lab — original vs candidate, fidelity-scored',
+      icon: LockKeyhole,
+      tag: 'Data',
+      title: 'Agents mutate data.',
+      copy: 'CRM records, access grants, internal state - changed with no scoped authority.',
+      fix: 'Zroky scopes and audits it.',
     },
     {
-      id: 'guard', name: 'Guard', icon: ShieldCheck, cls: 'badge-blocked',
-      title: 'Stop the same failure from shipping twice.',
-      body: 'Promote a verified fix into a Golden. Zroky runs it on every PR and blocks regressions — and only blocks when it is sure. Borderline gets "review", never a false block.',
-      points: [
-        'Goldens: production-derived regression tests.',
-        'Three verdicts — pass / block / review — flake-resistant.',
-        'not_verified is never counted as a pass.',
-      ],
-      media: <img src="/product-ci-gate.png" alt="CI gate blocking a regressing PR" className="device-shot max-h-[24rem]" loading="lazy" />,
-      caption: 'CI Gate — blocking a regressing PR with replay evidence',
+      icon: DatabaseZap,
+      tag: 'Proof',
+      title: 'Agents claim success.',
+      copy: 'A tool call returns 200 - but that is not proof the real outcome happened.',
+      fix: 'Zroky verifies the system of record.',
     },
   ];
 
-  const t = tabs[active];
-
   return (
-    <section id="product" className="w-full px-6 py-20">
-      <div className="mx-auto max-w-6xl">
-        <Reveal>
-          <p className="eyebrow">The loop</p>
-          <h2 className="mt-5 text-balance text-3xl font-bold tracking-tight md:text-5xl">Discover → Prove → Guard</h2>
-          <p className="mt-4 max-w-2xl text-lg text-secondary">One loop, three jobs. Click through how a production failure becomes a blocked regression.</p>
-        </Reveal>
-
-        {/* tab bar */}
-        <Reveal delay={0.08}>
-          <div className="mt-10 inline-flex rounded-full border border-line bg-white/[0.03] p-1">
-            {tabs.map((tab, i) => (
-              <button
-                key={tab.id}
-                onClick={() => setActive(i)}
-                className={`relative flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition ${active === i ? 'text-ink' : 'text-secondary hover:text-primary'}`}
-              >
-                {active === i && (
-                  <motion.span layoutId="tabPill" className="absolute inset-0 -z-10 rounded-full bg-primary" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />
-                )}
-                <tab.icon size={15} /> {tab.name}
-              </button>
-            ))}
-          </div>
-        </Reveal>
-
-        {/* content */}
-        <div className="mt-8 grid items-center gap-10 lg:grid-cols-[0.85fr_1.15fr]">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`text-${t.id}`}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }}
-              transition={{ duration: 0.32, ease }}
-            >
-              <span className={`badge ${t.cls}`}>{t.name.toUpperCase()}</span>
-              <h3 className="mt-4 text-balance text-2xl font-bold tracking-tight md:text-3xl">{t.title}</h3>
-              <p className="mt-4 text-base leading-relaxed text-secondary">{t.body}</p>
-              <ul className="mt-6 space-y-3">
-                {t.points.map((p) => (
-                  <li key={p} className="flex items-start gap-3 text-sm text-secondary">
-                    <Check size={16} className="mt-0.5 shrink-0 text-primary" /> <span>{p}</span>
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
-          </AnimatePresence>
-
-          <AnimatePresence mode="wait">
-            <motion.figure
-              key={`media-${t.id}`}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.99 }}
-              transition={{ duration: 0.35, ease }}
-            >
-              <div className="device-frame device-fade">
-                <div className="browser-bar">
-                  <span className="browser-dot" /><span className="browser-dot" /><span className="browser-dot" />
-                  <span className="ml-3 font-mono text-[10px] text-tertiary">zroky.com</span>
-                </div>
-                {t.media}
-              </div>
-              <figcaption className="mt-3 text-center font-mono text-[11px] text-tertiary">{t.caption}</figcaption>
-            </motion.figure>
-          </AnimatePresence>
+    <section id="risk" className="relative w-full scroll-mt-28 overflow-hidden bg-[#f4f6f1] px-4 py-20 text-[#20231f] md:py-24">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(60% 50% at 50% 0%, rgba(79,90,82,0.06), transparent 70%)' }}
+      />
+      <div className="relative mx-auto max-w-[1340px]">
+        <SectionHeader
+          eyebrow="The control problem"
+          title="An agent that can act can cause real damage."
+          copy="One wrong refund, a duplicate payout, a deleted record - one bad action is enough. Autonomy without approval, verification, and a receipt is a liability, not a feature."
+          align="center"
+        />
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {cards.map((card, index) => {
+            const Icon = card.icon;
+            return (
+              <Reveal key={card.title} delay={index * 0.08}>
+                <article className="group h-full rounded-[20px] border border-[#e0e2db] bg-white p-7 shadow-[0_1px_2px_rgba(42,45,40,0.04),0_22px_48px_-34px_rgba(42,45,40,0.22)] transition duration-300 hover:-translate-y-1.5 hover:border-[#c8ccc3] hover:shadow-[0_2px_4px_rgba(42,45,40,0.05),0_34px_64px_-34px_rgba(42,45,40,0.32)]">
+                  <div className="flex items-center justify-between">
+                    <span className="grid h-12 w-12 place-items-center rounded-[14px] border border-[#e0e2db] bg-[#f4f6f1] text-[#4f5a52] transition group-hover:bg-[#eaefe8]">
+                      <Icon size={21} />
+                    </span>
+                    <span className="rounded-full border border-[#e0e2db] bg-[#f4f6f1] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8b9288]">
+                      {card.tag}
+                    </span>
+                  </div>
+                  <h3 className="mt-6 text-[1.35rem] font-semibold tracking-[-0.015em] text-[#20231f]">{card.title}</h3>
+                  <p className="mt-2.5 text-[14px] leading-relaxed text-[#5b615a]">{card.copy}</p>
+                  <div className="mt-6 flex items-center gap-2 border-t border-[#eef0eb] pt-4">
+                    <ArrowRight size={14} className="text-[#4f5a52]" />
+                    <span className="text-[12.5px] font-semibold text-[#3f4942]">{card.fix}</span>
+                  </div>
+                </article>
+              </Reveal>
+            );
+          })}
         </div>
       </div>
     </section>
   );
 }
 
-/* ================================================================== */
-/* BENTO CAPABILITIES                                                   */
-/* ================================================================== */
-
-function Bento() {
+function ControlLoop() {
   return (
-    <section className="w-full px-6 py-20">
-      <div className="mx-auto max-w-6xl">
-        <Reveal>
-          <h2 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">Under the hood</h2>
-          <p className="mt-4 max-w-2xl text-lg text-secondary">The engine behind the loop — built for precision, not noise.</p>
-        </Reveal>
-
-        <div className="mt-10 grid auto-rows-[minmax(11rem,auto)] gap-4 md:grid-cols-3">
-          {/* wide cell */}
-          <Reveal className="md:col-span-2 md:row-span-1">
-            <div className="bento grain h-full p-7">
-              <div className="relative z-10">
-                <div className="flex items-center gap-2">
-                  <Activity size={18} className="text-discovered" />
-                  <span className="badge badge-discovered">BASELINE</span>
-                </div>
-                <h3 className="mt-4 text-xl font-bold">Behavioral baseline, learned from production</h3>
-                <p className="mt-2 max-w-lg text-sm leading-relaxed text-secondary">
-                  Tool sequences, output shape, latency, and outcomes per workflow. No labels, no rubric —
-                  the baseline warms as your traffic arrives, and only corroborated deviations surface.
-                </p>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.06}>
-            <div className="bento h-full p-7">
-              <FlaskConical size={18} className="text-verified" />
-              <h3 className="mt-4 text-lg font-bold">Fidelity-scored replay</h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">Every replay reports how faithfully it reproduced the incident — including honest "cannot reproduce".</p>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.04}>
-            <div className="bento h-full p-7">
-              <ShieldCheck size={18} className="text-primary" />
-              <h3 className="mt-4 text-lg font-bold">Goldens</h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">Verified fixes become production-derived regression tests that protect the release.</p>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.06}>
-            <div className="bento h-full p-7">
-              <GitBranch size={18} className="text-blocked" />
-              <h3 className="mt-4 text-lg font-bold">CI verdict</h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">Pass, block, or review on every PR — flake-resistant, no false blocks.</p>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.04}>
-            <div className="bento h-full p-7">
-              <Languages size={18} className="text-secondary" />
-              <h3 className="mt-4 text-lg font-bold">Multilingual</h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">Failures surface across languages, not just English traffic.</p>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.06}>
-            <div className="bento h-full p-7">
-              <FileSearch size={18} className="text-secondary" />
-              <h3 className="mt-4 text-lg font-bold">Evidence trail</h3>
-              <p className="mt-2 text-sm leading-relaxed text-secondary">Every finding ships with the trace, the why, and the recurrence count behind it.</p>
-            </div>
-          </Reveal>
+    <Section id="product" className="bg-[#fbfcfa]">
+      <SectionHeader
+        eyebrow="The loop"
+        title="Policy decides. Runners execute. Systems of record prove."
+        copy="Every high-risk action moves through the same authority path: a deterministic policy decision, an approval audit, isolated execution, verification, and a receipt."
+        align="center"
+      />
+      <Reveal delay={0.1} className="mt-14">
+        <div className="rounded-[24px] border border-[#d8dbd2] bg-[linear-gradient(180deg,#fbfcf8,#f4f6f1)] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_30px_70px_-40px_rgba(42,45,40,0.28)] md:p-10">
+          <FlowDiagram />
         </div>
-      </div>
-    </section>
+      </Reveal>
+    </Section>
   );
 }
 
-/* ================================================================== */
-/* COMPARISON                                                          */
-/* ================================================================== */
-
-function Comparison() {
+function ReceiptShowcase() {
   const rows = [
-    ['You write rubrics / evals upfront', 'Learns normal from production'],
-    ['Catches known failure modes', 'Surfaces unknown failures'],
-    ['Day 1 = blank (no labels)', 'Value as traffic arrives'],
-    ['"Verified" = a judge ran', 'Fidelity-scored, honest verdicts'],
+    ['Action', 'refund.payment - $4,200.00 USD'],
+    ['Agent', 'billing-ops-agent'],
+    ['Policy', 'R4 - approval above $500 - rule: finance-agent'],
+    ['Approval', 'priya@acme.com - dual approval satisfied'],
+    ['Execution', 'isolated credential - Razorpay runner'],
+    ['Verification', 'Razorpay ledger - amount, currency, status matched'],
+    ['Evidence hash', 'sha256:9f2c...b41'],
   ];
+
   return (
-    <section className="w-full px-6 py-20">
-      <div className="mx-auto max-w-4xl">
-        <Reveal>
-          <h2 className="text-balance text-center text-3xl font-bold tracking-tight md:text-4xl">
-            Eval-first tools test what you imagine. Zroky finds what you didn't.
-          </h2>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <div className="mt-12 overflow-hidden rounded-2xl border border-line">
-            <div className="grid grid-cols-2 border-b border-line bg-white/[0.02]">
-              <div className="p-4 font-mono text-xs uppercase tracking-wider text-tertiary">Eval-first tooling</div>
-              <div className="p-4 font-mono text-xs uppercase tracking-wider text-primary">Zroky</div>
-            </div>
-            {rows.map((r, i) => (
-              <div key={i} className={`grid grid-cols-2 ${i < rows.length - 1 ? 'border-b border-line' : ''}`}>
-                <div className="p-4 text-sm text-tertiary">{r[0]}</div>
-                <div className="flex items-center gap-2 p-4 text-sm text-secondary">
-                  <Check size={15} className="shrink-0 text-primary" /> {r[1]}
-                </div>
+    <Section id="receipts" className="bg-[#f4f6f1]">
+      <div className="grid gap-12 lg:grid-cols-[0.86fr_1.14fr] lg:items-center">
+        <SectionHeader
+          eyebrow="Signed receipt"
+          title="The receipt is the artifact your auditor can inspect."
+          copy="A receipt is not an AI-written summary. It is a signed proof bundle with policy, approval, execution, verification, evidence hash, and signature context."
+        />
+        <Reveal delay={0.08}>
+          <Card className="overflow-hidden p-0 hover:translate-y-0">
+            <div className="h-[3px] bg-[linear-gradient(90deg,#4f5a52,#343a34)]" />
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#d8dbd2] bg-[#f7f8f4] p-5">
+              <div>
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8b9288]">ZROKY - ACTION RECEIPT</p>
+                <h3 className="mt-2 text-xl font-semibold tracking-[-0.01em] text-[#20231f]">Signed proof, not model opinion</h3>
               </div>
-            ))}
-          </div>
+              <StatusChip tone="success">Matched</StatusChip>
+            </div>
+            <div className="divide-y divide-[#e3e5de] p-5">
+              {rows.map(([label, value]) => (
+                <div key={label} className="grid gap-2 py-3 text-sm sm:grid-cols-[8rem_1fr]">
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b9288]">{label}</span>
+                  <span className="text-[#20231f]">{value}</span>
+                </div>
+              ))}
+              <div className="mt-4 rounded-[12px] border border-[#4f5a52]/15 bg-[#f4f6f1] p-4">
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4f5a52]">Signature</p>
+                <p className="mt-2 break-all font-mono text-sm text-[#3f4942]">HMAC-SHA256 - key zrk_live_1 - 7f3a...d92c</p>
+              </div>
+            </div>
+          </Card>
         </Reveal>
       </div>
-    </section>
+    </Section>
   );
 }
 
-/* ================================================================== */
-/* TRUST                                                               */
-/* ================================================================== */
-
-function Trust() {
-  const chips = [
-    'Stub replay is never reported as "verified".',
-    'CI blocks only at high confidence — borderline gets "review", never a false block.',
-    'We show replay fidelity, including when we cannot reproduce a case.',
+function TrustSection() {
+  const controls = [
+    ['Fail-closed gates', 'Missing policy, runner, or verifier does not become a fake success.'],
+    ['Isolated credentials', 'Agents request actions; runners execute only with scoped credentials.'],
+    ['Advisory AI boundary', 'AI can explain context, but policy decides and system proof wins.'],
+    ['Honest proof states', 'Matched, mismatched, not_verified, and receipt pending mean different things.'],
   ];
   return (
-    <section id="trust" className="w-full px-6 py-16">
-      <div className="mx-auto max-w-5xl">
-        <Reveal>
-          <h2 className="text-balance text-center text-3xl font-bold tracking-tight md:text-4xl">
-            Built to earn trust, not inflate it.
-          </h2>
-        </Reveal>
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {chips.map((c, i) => (
-            <Reveal key={c} delay={i * 0.08}>
-              <div className="card h-full p-5">
-                <ShieldCheck size={18} className="text-primary" />
-                <p className="mt-3 text-sm leading-relaxed text-secondary">{c}</p>
-              </div>
+    <Section id="trust" className="bg-[#f4f6f1]">
+      <div className="grid gap-10 lg:grid-cols-[1fr_1fr]">
+        <SectionHeader
+          eyebrow="Security and trust"
+          title="Built for operators who cannot accept model opinion as proof."
+          copy="Authority, execution, verification, and receipt signing stay separated, so the audit trail is defensible."
+        />
+        <div className="grid gap-3">
+          {controls.map(([title, copy], index) => (
+            <Reveal key={title} delay={index * 0.04}>
+              <Card className="p-5">
+                <div className="flex items-start gap-4">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[12px] border border-[#d8dbd2] bg-[#e8ebe4] text-[#4f5a52]">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-[#20231f]">{title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-[#5b615a]">{copy}</p>
+                  </div>
+                </div>
+              </Card>
             </Reveal>
           ))}
         </div>
       </div>
-    </section>
+    </Section>
   );
 }
 
-/* ================================================================== */
-/* QUICKSTART                                                          */
-/* ================================================================== */
+const SNIPPET = `decision = zroky.verified_action(
+    agent_id="agent_billing_ops",
+    action_type="refund.payment",
+    parameters={"amount_minor": 420000, "currency": "USD"},
+)
 
-const SNIPPET = `import zroky
-zroky.init(api_key=..., project="refund-agent-prod")
-
-@zroky.trace(agent="refund_agent", workflow="status_lookup")
-async def handle(query):
-    return await agent.run(query)`;
+proof = zroky.await_action_proof(decision["action_id"])
+print(proof["proof_status"], proof["receipt_status"])
+# -> matched generated`;
 
 function Quickstart() {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    navigator.clipboard?.writeText(SNIPPET);
+    void navigator.clipboard?.writeText(SNIPPET);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+    window.setTimeout(() => setCopied(false), 1600);
   };
+
   return (
-    <section className="w-full px-6 py-20">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2">
+    <Section id="quickstart" className="bg-[#f4f6f1]">
+      <div className="grid items-center gap-12 lg:grid-cols-2">
         <Reveal>
           <div>
-            <p className="eyebrow">Quickstart</p>
-            <h2 className="mt-5 text-3xl font-bold tracking-tight md:text-4xl">Live in 5 minutes.</h2>
-            <p className="mt-4 text-lg leading-relaxed text-secondary">
-              Add three lines. Capture starts immediately — structural failures surface now, and behavioral
-              discovery unlocks as Zroky learns your normal.
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4f5a52]">Quickstart</p>
+            <h2 className="mt-3 max-w-md text-balance text-[2rem] font-semibold leading-[1.08] tracking-[-0.025em] text-[#20231f] md:text-[2.75rem]">
+              One call. Held, verified, signed.
+            </h2>
+            <p className="mt-4 max-w-md text-[1.02rem] leading-[1.6] text-[#5b615a]">
+              Wrap one high-risk tool call. Zroky handles approval, execution, verification, and the receipt.
             </p>
-            <a href="/docs" className="btn-ghost mt-6">Read the docs <ArrowRight size={15} /></a>
+            <ButtonRow />
           </div>
         </Reveal>
-        <Reveal delay={0.1}>
-          <div className="card overflow-hidden p-0">
-            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-              <span className="font-mono text-[11px] text-tertiary">python</span>
-              <button onClick={copy} className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 font-mono text-[10px] text-secondary transition hover:text-primary">
-                {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'copied' : 'copy'}
+        <Reveal delay={0.08}>
+          <Card className="overflow-hidden p-0 hover:translate-y-0">
+            <div className="flex items-center justify-between border-b border-[#4b514a] bg-[#30362f] px-4 py-3">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#c5cbc1]">python</span>
+              <button
+                type="button"
+                onClick={copy}
+                className="inline-flex items-center gap-1.5 rounded-[8px] border border-white/15 bg-white/5 px-2.5 py-1.5 font-mono text-[11px] text-[#e7ebe4] transition hover:bg-white/10"
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'copied' : 'copy'}
               </button>
             </div>
-            <pre className="overflow-x-auto p-5 font-mono text-[13px] leading-relaxed text-secondary">{SNIPPET}</pre>
-          </div>
+            <pre className="overflow-auto bg-[#30362f] p-5 font-mono text-[12.5px] leading-relaxed text-[#eef1ec]">
+              {SNIPPET}
+            </pre>
+          </Card>
         </Reveal>
       </div>
-    </section>
+    </Section>
   );
 }
 
-/* ================================================================== */
-/* FINAL CTA                                                           */
-/* ================================================================== */
-
 function FinalCTA() {
   return (
-    <section className="w-full px-6 py-24">
+    <section className="w-full bg-[#fbfcfa] px-4 py-20 text-[#20231f]">
       <Reveal>
-        <div className="card grain relative mx-auto max-w-4xl overflow-hidden p-12 text-center">
-          <div className="mesh-glow pointer-events-none absolute inset-0 -z-10" />
-          <h2 className="relative z-10 text-balance text-4xl font-extrabold tracking-tight md:text-5xl">
-            Stop shipping the same agent failure twice.
-          </h2>
-          <p className="relative z-10 mx-auto mt-4 max-w-xl text-secondary">
-            Discover what your tests miss. Prove the fix. Guard against the repeat.
-          </p>
-          <div className="relative z-10 mt-8 flex flex-wrap items-center justify-center gap-3">
-            <a href={SIGN_UP_URL} className="btn-primary !px-6 !py-3">Start free <ArrowUpRight size={16} /></a>
-            <a href={GITHUB_URL} className="btn-ghost !px-6 !py-3"><Star size={15} /> Star zroky-watch</a>
+        <div className="relative mx-auto max-w-5xl overflow-hidden rounded-[24px] border border-[#d8dbd2] bg-[#fbfcf8] p-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_40px_80px_-40px_rgba(42,45,40,0.25)] md:p-16">
+          <div className="mesh-rocket pointer-events-none absolute inset-0" />
+          <div className="relative z-10">
+            <h2 className="mx-auto max-w-3xl text-balance text-[2.25rem] font-semibold leading-[1.05] tracking-[-0.03em] text-[#20231f] md:text-[3.5rem]">
+              Authority for your agents. <span className="text-[#566158]">A receipt for every action.</span>
+            </h2>
+            <ButtonRow centered />
           </div>
         </div>
       </Reveal>
@@ -581,19 +368,16 @@ function FinalCTA() {
   );
 }
 
-/* ================================================================== */
-
 export default function HomePage() {
   return (
-    <div className="w-full">
+    <div className="w-full bg-[#fbfcfa]">
       <Hero />
-      <Marquee />
-      <Stats />
-      <Problem />
-      <ProductShowcase />
-      <Bento />
-      <Comparison />
-      <Trust />
+      <RealtimeControl />
+      <Problems />
+      <ControlLoop />
+      <ScaleFleet />
+      <ReceiptShowcase />
+      <TrustSection />
       <Quickstart />
       <FinalCTA />
     </div>

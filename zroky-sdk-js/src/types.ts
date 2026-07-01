@@ -5,6 +5,7 @@ export interface ZrokyConfig {
   projectId?: string;
   apiKey?: string;
   endpoint?: string;
+  agentId?: string;
   agentName?: string;
   agentFramework?: string;
   sessionId?: string;

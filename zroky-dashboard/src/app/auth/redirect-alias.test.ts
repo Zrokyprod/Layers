@@ -44,7 +44,7 @@ describe("auth redirect aliases", () => {
       {
         page: AuthIndexPage,
         params: { next: "/approvals" },
-        expected: "/login?next=%2Fissues",
+        expected: "/login?next=%2Fapprovals",
       },
       {
         page: ForgotPasswordAliasPage,

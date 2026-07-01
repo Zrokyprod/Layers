@@ -133,6 +133,7 @@ def _as_compatibility_map(raw: Any, *, plan_code: str) -> dict[str, Any]:
         "actions.verifications.monthly_quota",
         "actions.source_mutations.monthly_quota",
         "connectors.system_of_record.max",
+        "agents.max",
         "retention.days",
         "goldens.max_sets",
         "replay.monthly_runs",

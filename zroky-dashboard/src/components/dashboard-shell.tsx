@@ -130,7 +130,7 @@ const NAV_ITEMS: NavItem[] = [
     id: "settings",
     href: "/settings/keys",
     label: "Settings",
-    subtitle: "Capture keys, members, billing, and workspace controls.",
+    subtitle: "API keys, members, billing, and workspace controls.",
     Icon: Settings2,
     visibleInNav: visibleInPrimaryNav("/settings"),
   },
@@ -138,10 +138,16 @@ const NAV_ITEMS: NavItem[] = [
 
 const VISIBLE_NAV = NAV_ITEMS.filter((n) => n.visibleInNav);
 
+const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; itemIds: string[] }> = [
+  { id: "control", label: "Control", itemIds: ["home", "approvals", "actions", "agents"] },
+  { id: "proof", label: "Proof", itemIds: ["outcomes", "evidence"] },
+  { id: "configure", label: "Configure", itemIds: ["policies", "connectors"] },
+];
+
 const SETTINGS_CHILD_LINKS = [
-  { href: "/settings/keys", label: "Capture keys", Icon: KeyRound },
+  { href: "/settings/keys", label: "API Keys", Icon: KeyRound },
   { href: "/settings/team", label: "Members", Icon: UserRound },
-  { href: "/settings/billing", label: "Billing", Icon: CreditCard },
+  { href: "/settings/billing", label: "Plan & Billing", Icon: CreditCard },
   { href: "/settings/workspace", label: "Workspace", Icon: FolderOpen },
 ];
 
@@ -636,14 +642,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const planCode = billingQuery.data?.plan_code;
   const planLabel = formatPlanLabel(planCode);
   const billingStatus = billingQuery.data?.status ?? (billingQuery.isLoading ? "loading" : "unavailable");
-  const eventsQuota = numericEntitlement(planTemplate, "events.monthly_quota");
-  const eventsQuotaLabel = eventsQuota === -1 ? "Unlimited" : eventsQuota != null ? formatCompactNumber(eventsQuota) : null;
+  const protectedActionsQuota = numericEntitlement(planTemplate, "actions.protected.monthly_quota");
+  const protectedActionsQuotaLabel = protectedActionsQuota === -1
+    ? "Unlimited"
+    : protectedActionsQuota != null
+      ? formatCompactNumber(protectedActionsQuota)
+      : null;
   const planPeriod = billingQuery.isLoading
     ? "Loading billing period"
-    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && eventsQuotaLabel
-      ? eventsQuota === -1
-        ? "Unlimited events included"
-        : `${eventsQuotaLabel} events/month included`
+    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && protectedActionsQuotaLabel
+      ? protectedActionsQuota === -1
+        ? "Unlimited protected actions"
+        : `${protectedActionsQuotaLabel} protected actions/month`
       : periodCopy(billingQuery.data?.current_period_end, billingQuery.data?.trial_end);
   const budgetStatus = budgetQuery.data;
   const hasBudgetLimit = typeof budgetStatus?.limit_usd === "number" && budgetStatus.limit_usd > 0;
@@ -652,17 +662,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     : 0;
   const planMetricMain = hasBudgetLimit
     ? formatMoney(budgetStatus!.spent_usd)
-    : eventsQuotaLabel
-      ? eventsQuotaLabel
+    : protectedActionsQuotaLabel
+      ? protectedActionsQuotaLabel
       : billingQuery.isLoading
         ? "Loading"
-        : "Quota n/a";
+      : "Quota n/a";
   const planMetricTotal = hasBudgetLimit
     ? `/ ${formatMoney(budgetStatus!.limit_usd!)} budget`
-    : eventsQuota != null
-      ? eventsQuota === -1
-        ? "events included"
-        : "events / month"
+    : protectedActionsQuota != null
+      ? protectedActionsQuota === -1
+        ? "protected actions"
+        : "protected actions / month"
       : "usage unavailable";
   const maxProjects = numericEntitlement(planTemplate, "max_projects");
   const projectLimitReached = maxProjects !== null && maxProjects !== -1 && myProjects.length >= maxProjects;
@@ -867,23 +877,33 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </Link>
 
         <nav className="nav-links" aria-label="Primary">
-          <span className="nav-section-label">Action Control</span>
-          {VISIBLE_NAV.filter((item) => item.id !== "settings").map((item) => {
-            const { badgeKey } = item;
-            const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
+          {NAV_SECTIONS.map((section, index) => {
+            const sectionItems = section.itemIds
+              .map((id) => VISIBLE_NAV.find((item) => item.id === id))
+              .filter((item): item is NavItem => Boolean(item));
+            if (sectionItems.length === 0) return null;
             return (
-              <NavFeatureGate
-                key={item.id}
-                item={item}
-                pathname={pathname}
-                badgeCount={count}
-                planTemplate={planTemplate}
-                planCode={planCode}
-                entitlementLoading={billingQuery.isLoading}
-              />
+              <div key={section.id} className="nav-section-block" data-nav-section={section.id}>
+                <span className={`nav-section-label${index > 0 ? " nav-section-label-spaced" : ""}`}>{section.label}</span>
+                {sectionItems.map((item) => {
+                  const { badgeKey } = item;
+                  const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
+                  return (
+                    <NavFeatureGate
+                      key={item.id}
+                      item={item}
+                      pathname={pathname}
+                      badgeCount={count}
+                      planTemplate={planTemplate}
+                      planCode={planCode}
+                      entitlementLoading={billingQuery.isLoading}
+                    />
+                  );
+                })}
+              </div>
             );
           })}
-          <span className="nav-section-label nav-section-label-spaced">Settings</span>
+          <span className="nav-section-label nav-section-label-spaced">Workspace</span>
           {VISIBLE_NAV.filter((item) => item.id === "settings").map((item) => {
             const { badgeKey } = item;
             const count = badgeKey ? (badges[badgeKey] ?? 0) : 0;
@@ -1033,10 +1053,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             type="button"
             className="topbar-search"
             onClick={openCommandPalette}
-            aria-label="Search (Command Palette)"
+            aria-label="Search actions, agents, and evidence"
           >
             <Search className="topbar-search-icon" size={14} aria-hidden="true" />
-            <span className="topbar-search-hint">Search agents, outcomes, evidence...</span>
+            <span className="topbar-search-hint">Search actions, agents, evidence...</span>
             <kbd className="topbar-search-kbd">⌘K</kbd>
           </button>
 
@@ -1128,9 +1148,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 className={`topbar-account-btn${accountMenuOpen ? " topbar-account-btn-active" : ""}`}
-                aria-label="Open account menu"
+                aria-label={`Open profile menu for ${accountName}`}
                 aria-haspopup="menu"
                 aria-expanded={accountMenuOpen}
+                title={accountEmail ?? accountName}
                 onClick={() => toggleMenu("account")}
               >
                 <span className="user-avatar">{accountInitials}</span>
@@ -1151,14 +1172,27 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     href="/account"
                     className="user-menu-item"
                     role="menuitem"
+                    aria-label="Profile & security"
                     onClick={() => setOpenMenu(null)}
                   >
                     <UserRound size={15} aria-hidden="true" />
-                    Account
+                    <span>
+                      <strong>Profile & security</strong>
+                      <small>Identity, password, and sessions.</small>
+                    </span>
                   </Link>
-                  <button type="button" className="user-menu-item user-menu-danger" role="menuitem" onClick={onLogout}>
+                  <button
+                    type="button"
+                    className="user-menu-item user-menu-danger"
+                    role="menuitem"
+                    aria-label="Log out"
+                    onClick={onLogout}
+                  >
                     <LogOut size={15} aria-hidden="true" />
-                    Log out
+                    <span>
+                      <strong>Log out</strong>
+                      <small>End this browser session.</small>
+                    </span>
                   </button>
                 </div>
               ) : null}

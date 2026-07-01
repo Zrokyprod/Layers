@@ -5,13 +5,14 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.authorization import ROLE_RANK
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.limiter import limiter
+from app.db.models import Agent
 from app.db.session import get_db_session
 from app.services.action_kernel import (
     ActionContractConflict,
@@ -22,6 +23,7 @@ from app.services.action_kernel import (
     create_action_intent,
     decide_action_intent,
     get_action_intent,
+    list_action_intents,
     register_action_contract,
 )
 from app.services.action_packs import (
@@ -61,6 +63,7 @@ from app.services.action_runner import (
     list_action_runners,
     list_execution_adapter_contracts,
     list_execution_attempts,
+    list_project_execution_attempts,
     record_runner_heartbeat,
     register_action_runner,
     start_execution_attempt,
@@ -76,6 +79,19 @@ from app.services.notification_dispatch import dispatch_runtime_policy_approval_
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+ACTION_INTENT_STATUSES = {"validated", "deciding", "denied", "approval_pending", "authorized", "expired"}
+ACTION_INTENT_PROOF_STATUSES = {"not_started", "pending", "matched", "mismatched", "not_verified"}
+ACTION_INTENT_RECEIPT_STATUSES = {"missing", "pending", "generated", "failed"}
+ACTION_EXECUTION_ATTEMPT_STATUSES = {
+    "planned",
+    "dispatched",
+    "running",
+    "succeeded",
+    "failed",
+    "ambiguous",
+    "cancelled",
+}
 
 
 class ActionContractRegisterRequest(BaseModel):
@@ -111,6 +127,7 @@ class ActionContractResponse(BaseModel):
 
 
 class ActionIntentCreateRequest(BaseModel):
+    agent_id: str | None = Field(default=None, max_length=36)
     contract_version: str = Field(min_length=5, max_length=200)
     action_type: str = Field(min_length=3, max_length=160)
     operation_kind: str = Field(min_length=3, max_length=32)
@@ -120,19 +137,32 @@ class ActionIntentCreateRequest(BaseModel):
     purpose: dict[str, Any] = Field(default_factory=dict)
     resource: dict[str, Any] = Field(default_factory=dict)
     parameters: dict[str, Any] = Field(default_factory=dict)
+    execution_request: dict[str, Any] | None = None
     verification_profile: str | None = Field(default=None, max_length=160)
     deadline: datetime | None = None
     trace_context: dict[str, Any] | None = None
 
 
+class ActionIntentAgentProfileResponse(BaseModel):
+    id: str
+    display_name: str
+    slug: str
+    runtime_path: str
+    environment: str | None
+
+
 class ActionIntentResponse(BaseModel):
     action_id: str
     project_id: str
+    agent_id: str | None
+    agent_profile: ActionIntentAgentProfileResponse | None
     contract_version: str
     action_type: str
     operation_kind: str
     environment: str
     status: str
+    proof_status: str
+    receipt_status: str
     idempotency_key: str
     intent_digest: str
     canonical_intent: dict[str, Any]
@@ -152,6 +182,13 @@ class ActionIntentDecisionResponse(ActionIntentResponse):
     allowed: bool
     requires_approval: bool
     reasons: list[str] = Field(default_factory=list)
+
+
+class ActionIntentListResponse(BaseModel):
+    items: list[ActionIntentResponse]
+    total_in_page: int
+    limit: int
+    offset: int
 
 
 class ActionRunnerRegisterRequest(BaseModel):
@@ -363,15 +400,34 @@ def _contract_response(row) -> ActionContractResponse:
     )
 
 
-def _intent_response(row) -> ActionIntentResponse:
+def _intent_agent_profile_response(db: Session, row) -> ActionIntentAgentProfileResponse | None:
+    if not row.agent_id:
+        return None
+    agent = db.get(Agent, row.agent_id)
+    if agent is None or agent.project_id != row.project_id:
+        return None
+    return ActionIntentAgentProfileResponse(
+        id=agent.id,
+        display_name=agent.name,
+        slug=agent.slug,
+        runtime_path=agent.runtime_path,
+        environment=agent.environment,
+    )
+
+
+def _intent_response(db: Session, row) -> ActionIntentResponse:
     return ActionIntentResponse(
         action_id=row.id,
         project_id=row.project_id,
+        agent_id=row.agent_id,
+        agent_profile=_intent_agent_profile_response(db, row),
         contract_version=f"{row.contract_key}/{row.contract_version}",
         action_type=row.action_type,
         operation_kind=row.operation_kind,
         environment=row.environment,
         status=row.status,
+        proof_status=row.proof_status,
+        receipt_status=row.receipt_status,
         idempotency_key=row.idempotency_key,
         intent_digest=row.intent_digest,
         canonical_intent=_loads(row.canonical_intent_json, {}),
@@ -473,6 +529,28 @@ def _raise_billing_error(exc: ProtectedActionQuotaExceeded | ProtectedActionMete
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail=str(exc),
     ) from exc
+
+
+def _validate_optional_filter(name: str, value: str | None, allowed: set[str]) -> None:
+    if value is not None and value not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid {name} filter.",
+        )
+
+
+def _parse_status_filter(name: str, value: str | None, allowed: set[str]) -> list[str] | None:
+    if value is None:
+        return None
+    parsed = [item.strip() for item in value.split(",") if item.strip()]
+    if not parsed:
+        return None
+    if any(item not in allowed for item in parsed):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid {name} filter.",
+        )
+    return parsed
 
 
 @router.get("/v1/action-execution-adapters", response_model=ActionExecutionAdapterListResponse)
@@ -705,6 +783,7 @@ def create_intent(
         result = create_action_intent(
             db,
             project_id=context.tenant_id,
+            agent_id=body.agent_id,
             contract_version=body.contract_version,
             action_type=body.action_type,
             operation_kind=body.operation_kind,
@@ -715,6 +794,7 @@ def create_intent(
             purpose=body.purpose,
             resource=body.resource,
             parameters=body.parameters,
+            execution_request=body.execution_request,
             verification_profile=body.verification_profile,
             deadline_at=body.deadline,
             trace_context=body.trace_context,
@@ -728,7 +808,42 @@ def create_intent(
     except ActionKernelError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     db.commit()
-    return _intent_response(result.row)
+    return _intent_response(db, result.row)
+
+
+@router.get("/v1/action-intents", response_model=ActionIntentListResponse)
+@limiter.limit("240/minute")
+def list_intents(
+    request: Request,
+    status_filter: str | None = Query(default=None, alias="status"),
+    proof_status: str | None = Query(default=None),
+    receipt_status: str | None = Query(default=None),
+    agent_id: str | None = Query(default=None, max_length=36),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10_000),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> ActionIntentListResponse:
+    _require_role(context, "viewer")
+    _validate_optional_filter("status", status_filter, ACTION_INTENT_STATUSES)
+    _validate_optional_filter("proof_status", proof_status, ACTION_INTENT_PROOF_STATUSES)
+    _validate_optional_filter("receipt_status", receipt_status, ACTION_INTENT_RECEIPT_STATUSES)
+    rows = list_action_intents(
+        db,
+        project_id=context.tenant_id,
+        agent_id=agent_id,
+        status=status_filter,
+        proof_status=proof_status,
+        receipt_status=receipt_status,
+        limit=limit,
+        offset=offset,
+    )
+    return ActionIntentListResponse(
+        items=[_intent_response(db, row) for row in rows],
+        total_in_page=len(rows),
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/v1/action-intents/{action_id}", response_model=ActionIntentResponse)
@@ -744,7 +859,7 @@ def get_intent(
         row = get_action_intent(db, project_id=context.tenant_id, action_id=action_id)
     except ActionIntentNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return _intent_response(row)
+    return _intent_response(db, row)
 
 
 @router.get("/v1/action-intents/{action_id}/timeline", response_model=ActionTimelineResponse)
@@ -812,6 +927,32 @@ def get_intent_receipt(
     except ActionReceiptNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _receipt_response(row)
+
+
+@router.get("/v1/action-execution-attempts", response_model=ActionExecutionAttemptListResponse)
+@limiter.limit("240/minute")
+def list_project_execution_attempts_route(
+    request: Request,
+    status_filter: str | None = Query(default=None, alias="status"),
+    stale: bool = Query(default=False),
+    stale_after_seconds: int = Query(default=600, ge=1, le=86_400),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10_000),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> ActionExecutionAttemptListResponse:
+    _require_role(context, "viewer")
+    statuses = _parse_status_filter("status", status_filter, ACTION_EXECUTION_ATTEMPT_STATUSES)
+    rows = list_project_execution_attempts(
+        db,
+        project_id=context.tenant_id,
+        statuses=statuses,
+        stale=stale,
+        stale_after_seconds=stale_after_seconds,
+        limit=limit,
+        offset=offset,
+    )
+    return ActionExecutionAttemptListResponse(items=[_execution_attempt_response(row) for row in rows])
 
 
 @router.post(
@@ -1011,7 +1152,7 @@ def decide_intent(
             logger.debug("action_intents.slack_approval_dispatch_failed", exc_info=True)
     db.commit()
     return ActionIntentDecisionResponse(
-        **_intent_response(result.row).model_dump(),
+        **_intent_response(db, result.row).model_dump(),
         allowed=result.allowed,
         requires_approval=result.requires_approval,
         reasons=result.reasons,

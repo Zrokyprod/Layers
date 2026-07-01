@@ -149,6 +149,11 @@ class Settings(BaseSettings):
     OUTCOME_CONNECTOR_MAX_ATTEMPTS: int = 2
     ACTION_RECEIPT_SIGNING_SECRET: Optional[str] = None
     ACTION_RECEIPT_SIGNING_KEY_ID: str = "zroky-action-receipt-v1"
+    ACTION_POST_EXECUTION_SWEEP_INTERVAL_SECONDS: int = 10
+    ACTION_POST_EXECUTION_SWEEP_LIMIT: int = 25
+    ACTION_EXECUTION_ATTEMPT_STALE_SECONDS: int = 600
+    ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS: int = 60
+    ACTION_EXECUTION_ATTEMPT_SWEEP_LIMIT: int = 50
 
     # â”€â”€ Replay worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Shared secret between the control plane and the customer-hosted replay worker.
@@ -386,6 +391,18 @@ class Settings(BaseSettings):
     SLACK_TOKEN_ENCRYPTION_KEY: Optional[str] = None
     SLACK_SIGNING_SECRET: Optional[str] = None
     MS_TEAMS_WEBHOOK_ENCRYPTION_KEY: Optional[str] = None
+
+    # Zoho CRM OAuth for system-of-record verification.  The accounts/API
+    # domains are configurable because Zoho regions use different hosts
+    # (for example .com, .in, .eu).
+    ZOHO_CLIENT_ID: Optional[str] = None
+    ZOHO_CLIENT_SECRET: Optional[str] = None
+    ZOHO_ACCOUNTS_BASE_URL: str = "https://accounts.zoho.com"
+    ZOHO_DEFAULT_API_BASE_URL: str = "https://www.zohoapis.com"
+    ZOHO_OAUTH_REDIRECT_URL: str = (
+        "http://localhost:8000/v1/integrations/system-of-record/zoho-crm/oauth/callback"
+    )
+    ZOHO_OAUTH_SCOPES: str = "ZohoCRM.modules.READ"
 
 
     # Weekly digest pipeline.

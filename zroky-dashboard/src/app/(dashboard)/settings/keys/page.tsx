@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -18,6 +16,12 @@ import {
   Terminal,
 } from "lucide-react";
 
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
+import {
+  SettingsHero,
+  SettingsMetricStrip,
+  SettingsScaffold,
+} from "@/components/settings-scaffold";
 import { formatDateTime } from "@/lib/format";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 import {
@@ -27,26 +31,20 @@ import {
   useRevokeProjectApiKey,
   useRotateProjectApiKey,
 } from "@/lib/hooks";
-import {
-  buildLiveSmokeCommand,
-  buildMandateStarter,
-  buildProtectedAgentSnippet,
-  buildWebhookBridgeCurl,
-  humanizeIntent,
-  pilotHandoffCriteria,
-  pilotHandoffSteps,
-  proofReadinessDetail,
-  proofReadinessLabel,
-  protectedAgentTemplates,
-  webhookBridgeDetail,
-} from "@/lib/protected-agent-setup";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
+import { SDK } from "@/lib/sdk";
 
-const defaultKeyName = "Production capture key";
-const capturePath = ["Create key", "Run SDK/Gateway", "First trace", "Fixture validation"];
+const defaultKeyName = "Production verified-action key";
+const controlPath = ["Create key", "Configure agent", "Run verified action", "Signed receipt"];
+const jsSdkInstall = SDK.install;
+const pythonSdkInstall = "pip install zroky";
+const jsVerifiedActionImport = SDK.verifiedActionImportStatement;
+
+function configuredApiBaseUrl() {
+  return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
+}
 
 function ApiKeysContent() {
-  const searchParams = useSearchParams();
   const projectQuery = useProjectSettings();
   const projectId = projectQuery.data?.project_id ?? "";
   const keysQuery = useListProjectApiKeys(projectId);
@@ -61,7 +59,6 @@ function ApiKeysContent() {
   const [expiresInDays, setExpiresInDays] = useState("90");
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyResponse | null>(null);
   const [rotateTarget, setRotateTarget] = useState<ApiKeyResponse | null>(null);
-  const [selectedAgentId, setSelectedAgentId] = useState(protectedAgentTemplates[0].id);
 
   const {
     register,
@@ -78,11 +75,20 @@ function ApiKeysContent() {
     setStatusMsg("");
     setNewKey(null);
     try {
-      const parsedExpiry = expiresInDays.trim() === "" ? null : Number(expiresInDays);
+      const expiryValue = expiresInDays.trim();
+      let parsedExpiry: number | null = null;
+      if (expiryValue !== "") {
+        const numericExpiry = Number(expiryValue);
+        if (!Number.isInteger(numericExpiry) || numericExpiry < 1 || numericExpiry > 3650) {
+          setStatusMsg("Failed to create key: expiry must be blank or a whole number between 1 and 3650 days.");
+          return;
+        }
+        parsedExpiry = numericExpiry;
+      }
       const created = await createMutation.mutateAsync({
         projectId,
         name: data.name.trim(),
-        expires_in_days: Number.isFinite(parsedExpiry ?? 0) ? parsedExpiry : null,
+        expires_in_days: parsedExpiry,
         scopes: ["project:member"],
       });
       setNewKey(created);
@@ -134,95 +140,171 @@ function ApiKeysContent() {
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const currentStepIndex = hasActiveKey ? 1 : 0;
   const snippetProjectId = projectId || "proj_...";
-  const protectedAgentIntent = searchParams.get("intent") === "protect-agent";
-  const planIntent = humanizeIntent(searchParams.get("plan"));
-  const sourceIntent = humanizeIntent(searchParams.get("source"));
-  const pilotHandoffIntent = searchParams.get("source") === "pilot";
-  const selectedAgent =
-    protectedAgentTemplates.find((template) => template.id === selectedAgentId) ?? protectedAgentTemplates[0];
-  const protectedMandateStarter = buildMandateStarter(selectedAgent);
-  const protectedAgentSnippet = buildProtectedAgentSnippet(selectedAgent, snippetProjectId);
-  const webhookBridgeCurl = buildWebhookBridgeCurl(selectedAgent);
-  const webhookBridgeCopy = webhookBridgeDetail(selectedAgent);
-  const liveSmokeCommand = buildLiveSmokeCommand(selectedAgent);
-  const proofReadiness = proofReadinessLabel(selectedAgent);
-  const proofReadinessCopy = proofReadinessDetail(selectedAgent);
-  const connectorSetupHref =
-    selectedAgent.liveSmokeScenario === "refund"
-      ? "/integrations#ledger-refund-connector"
-      : selectedAgent.liveSmokeScenario === "customer-record"
-        ? "/integrations#customer-record-connector"
-        : "/integrations";
-  const connectorSetupLabel =
-    selectedAgent.liveSmokeScenario === "refund"
-      ? "Configure ledger connector"
-      : selectedAgent.liveSmokeScenario === "customer-record"
-        ? "Configure CRM connector"
-        : "Open connectors";
-  const jsSetupSnippet = `npm install @zroky-ai/sdk
+  const apiBaseUrl = configuredApiBaseUrl();
+  const jsSetupSnippet = `${jsSdkInstall}
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_ENDPOINT="https://api.zroky.com/v1/ingest"`;
-  const pythonSetupSnippet = `pip install zroky
+export ZROKY_ENDPOINT="${apiBaseUrl}"`;
+  const pythonSetupSnippet = `${pythonSdkInstall}
 export ZROKY_PROJECT="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_INGEST_URL="https://api.zroky.com/v1/ingest"`;
-  const jsSmokeSnippet = `import { init, traceRun, captureToolCall } from "@zroky-ai/sdk";
+export ZROKY_INGEST_URL="${apiBaseUrl}"`;
+  const jsVerifiedActionSnippet = `${jsVerifiedActionImport}
 
 init({
-  agentName: "first-capture-agent",
-  workflowId: "first-capture",
-  environment: "production",
+  projectId: process.env.ZROKY_PROJECT_ID,
+  apiKey: process.env.ZROKY_API_KEY,
+  endpoint: process.env.ZROKY_ENDPOINT,
+  agentId: "agent_profile_id",
 });
 
-await traceRun({ name: "first-capture", userInput: "smoke test" }, async () => {
-  await captureToolCall({
-    name: "lookup_order",
-    result: { ok: true },
-  });
-  return "captured";
-});`;
-  const pythonSmokeSnippet = `import zroky
+const decision = await verifiedAction({
+  contractVersion: "zroky.agent_action.v1",
+  actionType: "inventory.item.update",
+  operationKind: "UPDATE",
+  environment: "production",
+  purpose: { summary: "Update one inventory item under policy control" },
+  resource: { type: "inventory_item", id: "item_123" },
+  parameters: { fields: { status: "archived" } },
+  executionRequest: {
+    capability: { operation: "UPDATE" },
+    executionPlan: {
+      tool: "inventory.item.update",
+      target: { resource_ref: "item_123" },
+    },
+  },
+  raiseOnApproval: false,
+});
 
-zroky.init()
+const proof = await awaitActionProof(decision.action_id);
+console.log(proof.proofStatus, proof.receiptStatus);`;
+  const pythonVerifiedActionSnippet = `import os
+import zroky
 
-with zroky.trace_run(
-    name="first-capture",
-    user_input="smoke test",
+zroky.init(
+    api_key=os.environ["ZROKY_API_KEY"],
+    project=${JSON.stringify(snippetProjectId)},
+    agent_id="agent_profile_id",
+    ingest_url=os.environ.get("ZROKY_INGEST_URL", ${JSON.stringify(apiBaseUrl)}),
+)
+
+decision = zroky.verified_action(
+    contract_version="zroky.agent_action.v1",
+    action_type="inventory.item.update",
+    operation_kind="UPDATE",
     environment="production",
-) as run:
-    zroky.capture_tool_call(
-        name="lookup_order",
-        result={"ok": True},
-    )
-    run.set_final_answer("captured")
+    purpose={"summary": "Update one inventory item under policy control"},
+    resource={"type": "inventory_item", "id": "item_123"},
+    parameters={"fields": {"status": "archived"}},
+    execution_request={
+        "capability": "UPDATE",
+        "execution_plan": {
+            "tool": "inventory.item.update",
+            "target": {"resource_ref": "item_123"},
+        },
+    },
+    raise_on_approval=False,
+)
 
-zroky.flush()`;
+proof = zroky.await_action_proof(decision["action_id"])
+print(proof["proof_status"], proof["receipt_status"])`;
   const gatewaySnippet = `docker run -p 8090:8090 \\
   -e ZROKY_API_KEY=zk_live_... \\
   ghcr.io/zroky-ai/zroky-gateway:latest
 
 export OPENAI_BASE_URL=http://localhost:8090/v1`;
+  const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
+  const keyTone: "success" | "setup" = hasActiveKey ? "success" : "setup";
+  const latestKey = activeKeys[0];
+  const latestKeyHelper = latestKey
+    ? latestKey.last_used_at
+      ? `Last used ${formatDateTime(latestKey.last_used_at)}`
+      : "Created, not used yet"
+    : "Create one before running the SDK";
 
   return (
-    <div className="page-content keys-setup-page">
+    <SettingsScaffold className="keys-setup-page" aria-labelledby="project-key-setup-title">
+      <SettingsHero
+        ariaLabel="API key setup"
+        eyebrow="API Keys"
+        icon={<KeyRound aria-hidden="true" />}
+        title={error ? "API key visibility unavailable" : "Verified action access"}
+        copy={
+          error
+            ? "Project key data did not refresh cleanly. Retry before rotating or revoking keys."
+            : "Create a project key, configure the agent boundary, run one verified action, and confirm the signed receipt."
+        }
+        tone={heroTone}
+        pill={hasActiveKey ? "Key active" : "Setup required"}
+        updatedLabel={loading ? "Loading" : "Settings live"}
+        actions={
+          <>
+            <DashboardButtonLink href="/agents/setup" icon={<ShieldCheck />} variant="primary">
+              Configure agent
+            </DashboardButtonLink>
+            <DashboardButtonLink href="/evidence" icon={<ArrowRight />} iconPosition="right" variant="soft">
+              Open evidence
+            </DashboardButtonLink>
+          </>
+        }
+      />
+
+      <SettingsMetricStrip
+        ariaLabel="API key setup metrics"
+        metrics={[
+          {
+            id: "active-keys",
+            label: "Active keys",
+            value: String(activeKeys.length),
+            helper: latestKeyHelper,
+            tone: keyTone,
+            icon: <KeyRound aria-hidden="true" />,
+          },
+          {
+            id: "agent-setup",
+            label: "Agent setup",
+            value: "Open setup",
+            helper: "Boundaries and policy live in Agent Setup",
+            tone: "setup",
+            href: "/agents/setup",
+            icon: <ShieldCheck aria-hidden="true" />,
+          },
+          {
+            id: "sdk",
+            label: "SDK path",
+            value: "verified_action()",
+            helper: "Backend-owned approve, execute, verify, receipt",
+            tone: "setup",
+            icon: <Terminal aria-hidden="true" />,
+          },
+          {
+            id: "receipt",
+            label: "Receipt proof",
+            value: "Evidence",
+            helper: "Matched proof becomes a signed receipt",
+            tone: "success",
+            href: "/evidence",
+            icon: <CheckCircle2 aria-hidden="true" />,
+          },
+        ]}
+      />
+
       <section className="panel keys-onboarding-panel" aria-labelledby="project-key-setup-title">
         <header className="keys-onboarding-header">
           <div>
             <span className="settings-section-kicker">
               <KeyRound aria-hidden="true" />
-              Capture setup
+              Control setup
             </span>
             <h2 id="project-key-setup-title">Project key setup</h2>
-            <p>Create one key, run one SDK or Gateway call, then confirm your first trace.</p>
+            <p>Create one key, configure the agent, run one verified action, then inspect the signed receipt.</p>
           </div>
-          <Link href="/evidence" className="btn btn-soft">
+          <DashboardButtonLink href="/evidence" icon={<ArrowRight />} iconPosition="right" variant="soft">
             Open evidence
-            <ArrowRight aria-hidden="true" />
-          </Link>
+          </DashboardButtonLink>
         </header>
-        <div className="keys-capture-path" aria-label="Project key to verified replay path">
-          {capturePath.map((step, index) => (
+        <div className="keys-control-path" aria-label="Project key to signed receipt path">
+          {controlPath.map((step, index) => (
             <span
               key={step}
               className={
@@ -235,198 +317,6 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
           ))}
         </div>
       </section>
-
-      {protectedAgentIntent && (
-        <section className="panel keys-protected-setup-panel" aria-labelledby="protected-agent-setup-title">
-          <header className="keys-onboarding-header">
-            <div>
-              <span className="settings-section-kicker">
-                <ShieldCheck aria-hidden="true" />
-                Protected agent
-              </span>
-              <h2 id="protected-agent-setup-title">First protected agent setup</h2>
-              <p>
-                Choose the agent type, copy the matching mandate, create a project key, then run one captured action.
-              </p>
-              <div className="keys-protected-meta" aria-label="Signup intent context">
-                {planIntent && <span>Plan intent: {planIntent}</span>}
-                {sourceIntent && <span>Source: {sourceIntent}</span>}
-                <span>{protectedAgentTemplates.length} starter mandates</span>
-              </div>
-            </div>
-            <Link href="#create-project-key" className="btn btn-primary">
-              Create project key
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </header>
-
-          <div className="keys-agent-tabs" role="tablist" aria-label="Protected agent templates">
-            {protectedAgentTemplates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                role="tab"
-                aria-selected={template.id === selectedAgent.id}
-                className={template.id === selectedAgent.id ? "keys-agent-tab is-active" : "keys-agent-tab"}
-                onClick={() => setSelectedAgentId(template.id)}
-              >
-                {template.label}
-              </button>
-            ))}
-          </div>
-
-          {pilotHandoffIntent && (
-            <div className="keys-pilot-handoff" aria-label="Pilot handoff readiness">
-              <div className="keys-pilot-copy">
-                <span className="settings-section-kicker">
-                  <Route aria-hidden="true" />
-                  Pilot handoff
-                </span>
-                <h3>Pilot handoff readiness</h3>
-                <p>
-                  Before marking this verified, prove the action was captured, stopped or held, reconciled against{" "}
-                  {selectedAgent.systemOfRecord}, and exported with a usable evidence hash.
-                </p>
-              </div>
-              <ol className="keys-pilot-steps">
-                {pilotHandoffSteps.map((step) => (
-                  <li key={step}>
-                    <CheckCircle2 aria-hidden="true" />
-                    {step}
-                  </li>
-                ))}
-              </ol>
-              <article className="keys-pilot-card">
-                <h4>System-of-record connector</h4>
-                <ul>
-                  {selectedAgent.connectorInputs.map((input) => (
-                    <li key={input}>{input}</li>
-                  ))}
-                </ul>
-                <Link href={connectorSetupHref} className="btn btn-primary btn-sm">
-                  {connectorSetupLabel}
-                  <ArrowRight aria-hidden="true" />
-                </Link>
-              </article>
-              <article className="keys-pilot-card">
-                <h4>Pass criteria</h4>
-                <ul>
-                  {pilotHandoffCriteria.map((criterion) => (
-                    <li key={criterion}>
-                      <code>{criterion}</code>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-              <article className="keys-pilot-card keys-pilot-live">
-                <h4>{liveSmokeCommand ? "Packaged full proof command" : "Custom connector required before live smoke"}</h4>
-                <p>
-                  <strong>{proofReadiness}:</strong> {proofReadinessCopy}
-                </p>
-                {liveSmokeCommand ? (
-                  <>
-                    <pre aria-label="Design-partner live smoke command">
-                      <code>{liveSmokeCommand}</code>
-                    </pre>
-                    <button type="button" className="btn btn-soft btn-sm" onClick={() => void copyKey(liveSmokeCommand)}>
-                      <Copy aria-hidden="true" />
-                      Copy live smoke command
-                    </button>
-                  </>
-                ) : (
-                  <p>
-                    No packaged live-smoke runner exists for this agent type yet. Capture the action with the SDK
-                    wrapper, then add the connector that reads {selectedAgent.systemOfRecord}.
-                  </p>
-                )}
-              </article>
-            </div>
-          )}
-
-          <div className="keys-protected-grid">
-            <article className="keys-protected-block">
-              <div>
-                <h3>Mandate starter</h3>
-                <p>{selectedAgent.mandate}</p>
-              </div>
-              <dl className="keys-mandate-facts">
-                <div>
-                  <dt>Agent</dt>
-                  <dd>{selectedAgent.agentName}</dd>
-                </div>
-                <div>
-                  <dt>Outcome source</dt>
-                  <dd>{selectedAgent.systemOfRecord}</dd>
-                </div>
-              </dl>
-              <div className="keys-mandate-lists">
-                <div>
-                  <strong>Hold if</strong>
-                  <ul>
-                    {selectedAgent.holdConditions.map((condition) => (
-                      <li key={condition}>{condition}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <strong>Evidence required</strong>
-                  <ul>
-                    {selectedAgent.requiredEvidence.map((evidence) => (
-                      <li key={evidence}>{evidence}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <div className="keys-copy-actions">
-                <button type="button" className="btn btn-soft" onClick={() => void copyKey(protectedMandateStarter)}>
-                  <Copy aria-hidden="true" />
-                  Copy mandate
-                </button>
-              </div>
-            </article>
-
-            <article className="keys-protected-block">
-              <div>
-                <h3>SDK action wrapper</h3>
-                <p>Wrap the first high-stakes tool call so Zroky can hold unsafe action and verify real outcome.</p>
-              </div>
-              <pre aria-label="Protected agent SDK snippet">
-                <code>{protectedAgentSnippet}</code>
-              </pre>
-              <div className="keys-copy-actions">
-                <button type="button" className="btn btn-soft" onClick={() => void copyKey(protectedAgentSnippet)}>
-                  <Copy aria-hidden="true" />
-                  Copy SDK wrapper
-                </button>
-                <Link href="/evidence" className="btn btn-soft">
-                  Open evidence
-                  <ArrowRight aria-hidden="true" />
-                </Link>
-              </div>
-            </article>
-
-            <article className="keys-protected-block">
-              <div>
-                <h3>Webhook proof bridge</h3>
-                <p>{webhookBridgeCopy}</p>
-              </div>
-              <pre aria-label="Protected agent webhook bridge snippet">
-                <code>{webhookBridgeCurl}</code>
-              </pre>
-              <div className="keys-copy-actions">
-                <button type="button" className="btn btn-soft" onClick={() => void copyKey(webhookBridgeCurl)}>
-                  <Copy aria-hidden="true" />
-                  Copy webhook bridge
-                </button>
-                <Link href={connectorSetupHref} className="btn btn-soft">
-                  Open proof connector
-                  <ArrowRight aria-hidden="true" />
-                </Link>
-              </div>
-            </article>
-          </div>
-        </section>
-      )}
 
       {newKey && (
         <section className="panel keys-newkey-banner" aria-label="One-time project key">
@@ -441,10 +331,9 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
           </div>
           <div className="share-url-row keys-newkey-row">
             <span className="share-url settings-key-reveal">{newKey.api_key}</span>
-            <button type="button" className="btn btn-primary" onClick={() => void copyKey(newKey.api_key)}>
-              <Copy aria-hidden="true" />
+            <DashboardButton type="button" variant="primary" icon={<Copy />} onClick={() => void copyKey(newKey.api_key)}>
               {copied ? "Copied" : "Copy key"}
-            </button>
+            </DashboardButton>
           </div>
           <div className="keys-next-grid">
             <div>
@@ -469,21 +358,18 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
             </pre>
           </div>
           <div className="keys-copy-actions">
-            <button type="button" className="btn btn-soft" onClick={() => void copyKey(jsSetupSnippet)}>
-              <Copy aria-hidden="true" />
+            <DashboardButton type="button" variant="soft" icon={<Copy />} onClick={() => void copyKey(jsSetupSnippet)}>
               Copy Node setup
-            </button>
-            <button type="button" className="btn btn-soft" onClick={() => void copyKey(pythonSetupSnippet)}>
-              <Copy aria-hidden="true" />
+            </DashboardButton>
+            <DashboardButton type="button" variant="soft" icon={<Copy />} onClick={() => void copyKey(pythonSetupSnippet)}>
               Copy Python setup
-            </button>
-            <button type="button" className="btn btn-soft" onClick={() => setNewKey(null)}>
+            </DashboardButton>
+            <DashboardButton type="button" variant="soft" onClick={() => setNewKey(null)}>
               Done
-            </button>
-            <Link href="/evidence" className="btn btn-primary">
+            </DashboardButton>
+            <DashboardButtonLink href="/evidence" icon={<ArrowRight />} iconPosition="right" variant="primary">
               Open evidence
-              <ArrowRight aria-hidden="true" />
-            </Link>
+            </DashboardButtonLink>
           </div>
         </section>
       )}
@@ -499,11 +385,11 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
           <header className="panel-header">
             <div>
               <h2>Create project key</h2>
-              <p>Use it only for Zroky capture. It does not grant model-provider access.</p>
+              <p>Use it for the SDK, Gateway, and verified-action calls. It does not grant model-provider access.</p>
             </div>
           </header>
 
-          <form onSubmit={onCreate} className="keys-create-form">
+          <form onSubmit={onCreate} className="keys-create-form" noValidate>
             <div className="field settings-key-field keys-keyname-field">
               <label htmlFor="key-name" className="field-label">
                 Key name
@@ -513,7 +399,7 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
                 type="text"
                 className="input"
                 {...register("name")}
-                placeholder="Production capture key"
+                placeholder="Production verified-action key"
                 disabled={createMutation.isPending || !projectId}
               />
               {errors.name && <span className="field-error">{errors.name.message}</span>}
@@ -535,16 +421,16 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
               />
               <span className="field-hint">Leave blank for no automatic expiry. Scope is project:member.</span>
             </div>
-            <button type="submit" className="btn btn-primary" disabled={createMutation.isPending || !projectId}>
+            <DashboardButton type="submit" variant="primary" loading={createMutation.isPending} disabled={!projectId}>
               {createMutation.isPending ? "Creating..." : "Create project key"}
-            </button>
+            </DashboardButton>
           </form>
 
           <div className="keys-provider-note">
             <Plug aria-hidden="true" />
             <div>
-              <strong>No model-provider setup is needed for capture.</strong>
-              <span>Use a project key first; advanced replay setup can come later when a protected workflow needs it.</span>
+              <strong>No model-provider setup is needed for verified actions.</strong>
+              <span>Use a project key for access; policy, runner, and verifier setup stays in Agent Setup.</span>
             </div>
           </div>
         </article>
@@ -555,9 +441,9 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
             First run
           </span>
           <h2>What to do next</h2>
-          <p>After the key exists, run one smoke capture and open Traces to verify delivery.</p>
+          <p>After the key exists, configure an agent and run one verified action until Evidence shows a receipt.</p>
           <ol className="keys-checklist">
-            {["Create project key", "Install SDK or Gateway", "Run one smoke capture", "Confirm trace"].map((step, index) => (
+            {["Create project key", "Configure agent", "Run verified action", "Confirm signed receipt"].map((step, index) => (
               <li key={step} className={index === 0 && hasActiveKey ? "is-done" : undefined}>
                 <CheckCircle2 aria-hidden="true" />
                 {step}
@@ -567,21 +453,21 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
         </aside>
       </section>
 
-      <section className="keys-snippet-grid" aria-label="Capture setup snippets">
+      <section className="keys-snippet-grid" aria-label="Verified action setup snippets">
         <article className="panel keys-snippet-card">
           <div className="keys-snippet-head">
             <Code2 aria-hidden="true" />
             <div>
-              <h2>SDK capture</h2>
-              <p>Use when you can add Zroky directly inside your app code.</p>
+              <h2>SDK verified action</h2>
+              <p>Use when your agent can call the Zroky SDK before executing a protected tool.</p>
             </div>
           </div>
           <div className="keys-code-grid">
             <pre aria-label="TypeScript SDK project key snippet">
-              <code>{jsSmokeSnippet}</code>
+              <code>{jsVerifiedActionSnippet}</code>
             </pre>
             <pre aria-label="Python SDK project key snippet">
-              <code>{pythonSmokeSnippet}</code>
+              <code>{pythonVerifiedActionSnippet}</code>
             </pre>
           </div>
         </article>
@@ -590,8 +476,8 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
           <div className="keys-snippet-head">
             <Route aria-hidden="true" />
             <div>
-              <h2>Gateway capture</h2>
-              <p>Use when you need evidence without changing agent code first.</p>
+              <h2>Gateway fallback</h2>
+              <p>Use when you need gateway-level access before moving the agent to verified_action().</p>
             </div>
           </div>
           <pre aria-label="Gateway project key snippet">
@@ -611,7 +497,7 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
         {loading && <div className="loading" />}
         {error && <p className="field-error">{error}</p>}
         {!loading && !error && keys.length === 0 && (
-          <div className="empty">No project keys yet. Create one to start capturing calls.</div>
+          <div className="empty">No project keys yet. Create one to run your first verified action.</div>
         )}
 
         {!loading && !error && keys.length > 0 && (
@@ -650,18 +536,19 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
                     <td>
                       {!key.revoked && !key.expired && (
                         <div className="actions">
-                          <button
+                          <DashboardButton
                             type="button"
-                            className="btn btn-soft btn-sm"
+                            size="sm"
+                            variant="soft"
+                            icon={<RotateCcw />}
                             disabled={rotateMutation.isPending}
                             onClick={() => setRotateTarget(key)}
                           >
-                            <RotateCcw aria-hidden="true" />
                             Rotate
-                          </button>
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setRevokeTarget(key)}>
+                          </DashboardButton>
+                          <DashboardButton type="button" size="sm" variant="danger" onClick={() => setRevokeTarget(key)}>
                             Revoke
-                          </button>
+                          </DashboardButton>
                         </div>
                       )}
                     </td>
@@ -695,17 +582,17 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
               </div>
             </header>
             <div className="actions">
-              <button type="button" className="btn btn-danger" disabled={revokeMutation.isPending} onClick={onRevoke}>
+              <DashboardButton type="button" variant="danger" loading={revokeMutation.isPending} onClick={onRevoke}>
                 {revokeMutation.isPending ? "Revoking..." : "Yes, revoke key"}
-              </button>
-              <button
+              </DashboardButton>
+              <DashboardButton
                 type="button"
-                className="btn btn-soft"
+                variant="soft"
                 disabled={revokeMutation.isPending}
                 onClick={() => setRevokeTarget(null)}
               >
                 Cancel
-              </button>
+              </DashboardButton>
             </div>
           </section>
         </div>
@@ -742,29 +629,25 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
               </span>
             </div>
             <div className="actions">
-              <button type="button" className="btn btn-primary" disabled={rotateMutation.isPending} onClick={() => void onRotate()}>
+              <DashboardButton type="button" variant="primary" loading={rotateMutation.isPending} onClick={() => void onRotate()}>
                 {rotateMutation.isPending ? "Rotating..." : "Rotate and show replacement"}
-              </button>
-              <button
+              </DashboardButton>
+              <DashboardButton
                 type="button"
-                className="btn btn-soft"
+                variant="soft"
                 disabled={rotateMutation.isPending}
                 onClick={() => setRotateTarget(null)}
               >
                 Cancel
-              </button>
+              </DashboardButton>
             </div>
           </section>
         </div>
       )}
-    </div>
+    </SettingsScaffold>
   );
 }
 
 export default function ApiKeysPage() {
-  return (
-    <Suspense fallback={<div className="page-content keys-setup-page"><section className="panel"><div className="loading" /></section></div>}>
-      <ApiKeysContent />
-    </Suspense>
-  );
+  return <ApiKeysContent />;
 }

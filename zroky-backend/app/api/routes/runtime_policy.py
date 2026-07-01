@@ -23,6 +23,16 @@ from app.services.runtime_policy import (
     list_runtime_policy_decisions,
     resolve_runtime_policy_decision,
 )
+from app.services.runtime_policy_rules import (
+    RuntimePolicyRuleNotFound,
+    RuntimePolicyRuleValidationError,
+    create_runtime_policy_rule,
+    disable_runtime_policy_rule,
+    list_runtime_policy_rules,
+    resolve_runtime_policy,
+    runtime_policy_rule_to_dict,
+    update_runtime_policy_rule,
+)
 
 
 router = APIRouter(prefix="/v1/runtime-policy")
@@ -42,6 +52,7 @@ class RuntimePolicyCheckRequest(BaseModel):
     trace_id: str | None = Field(default=None, max_length=128)
     span_id: str | None = Field(default=None, max_length=128)
     call_id: str | None = Field(default=None, max_length=64)
+    agent_id: str | None = Field(default=None, max_length=36)
     agent_name: str | None = Field(default=None, max_length=255)
     role: str | None = Field(default=None, max_length=64)
     action_type: str | None = Field(default=None, max_length=64)
@@ -124,6 +135,20 @@ class RuntimePolicyCheckResponse(RuntimePolicyDecisionResponse):
     approval_queue_item: RuntimePolicyDecisionResponse | None = None
 
 
+class RuntimePolicyDryRunResponse(BaseModel):
+    recorded: bool = False
+    decision: str
+    status: str
+    allowed: bool
+    requires_approval: bool
+    reasons: list[str]
+    request: dict[str, Any]
+    policy_hit: dict[str, Any]
+    business_impact: dict[str, Any]
+    intended_action: dict[str, Any]
+    required_approval_count: int
+
+
 class RuntimePolicyResolveRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=1000)
 
@@ -136,6 +161,64 @@ class RuntimePolicyKillSwitchResponse(BaseModel):
     project_id: str
     enabled: bool
     policy: dict[str, Any]
+
+
+class RuntimePolicyRuleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    agent_id: str | None = Field(default=None, max_length=36)
+    action_type: str | None = Field(default=None, max_length=64)
+    environment: str | None = Field(default=None, max_length=64)
+    policy_patch: dict[str, Any]
+    priority: int = 0
+    is_enabled: bool = True
+
+
+class RuntimePolicyRuleUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    agent_id: str | None = Field(default=None, max_length=36)
+    action_type: str | None = Field(default=None, max_length=64)
+    environment: str | None = Field(default=None, max_length=64)
+    policy_patch: dict[str, Any] | None = None
+    priority: int | None = None
+    is_enabled: bool | None = None
+
+
+class RuntimePolicyRuleResponse(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    description: str | None
+    agent_id: str | None
+    action_type: str | None
+    environment: str | None
+    policy_patch: dict[str, Any]
+    priority: int
+    version: int
+    is_enabled: bool
+    created_by_subject: str | None
+    updated_by_subject: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RuntimePolicyRuleListResponse(BaseModel):
+    items: list[RuntimePolicyRuleResponse]
+    total_in_page: int
+
+
+class RuntimePolicyResolvePreviewRequest(BaseModel):
+    agent_id: str | None = Field(default=None, max_length=36)
+    action_type: str | None = Field(default=None, max_length=64)
+    tool_name: str | None = Field(default=None, max_length=255)
+    environment: str | None = Field(default=None, max_length=64)
+
+
+class RuntimePolicyResolvePreviewResponse(BaseModel):
+    project_id: str
+    policy: dict[str, Any]
+    matched_rules: list[dict[str, Any]]
 
 
 class RuntimePolicyEvidencePackResponse(BaseModel):
@@ -223,6 +306,10 @@ def _decision_to_response(
     )
 
 
+def _rule_to_response(row) -> RuntimePolicyRuleResponse:
+    return RuntimePolicyRuleResponse(**runtime_policy_rule_to_dict(row))
+
+
 @router.post("/check", response_model=RuntimePolicyCheckResponse)
 def check_runtime_policy(
     body: RuntimePolicyCheckRequest,
@@ -260,6 +347,156 @@ def check_runtime_policy(
         except Exception:
             logger.debug("runtime_policy.slack_approval_dispatch_failed", exc_info=True)
     return response
+
+
+@router.post("/dry-run", response_model=RuntimePolicyDryRunResponse)
+def dry_run_runtime_policy(
+    body: RuntimePolicyCheckRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RuntimePolicyDryRunResponse:
+    _require_role(context, "member")
+    result = evaluate_runtime_policy(
+        db,
+        project_id=context.tenant_id,
+        payload=body.model_dump(exclude_none=True),
+        persist=False,
+    )
+    row = result.decision
+    return RuntimePolicyDryRunResponse(
+        recorded=False,
+        decision=row.decision,
+        status=row.status,
+        allowed=result.allowed,
+        requires_approval=result.requires_approval,
+        reasons=result.reasons,
+        request=_parse_json(row.request_json, {}),
+        policy_hit=_parse_json(row.policy_hit_json, {}),
+        business_impact=_parse_json(row.business_impact_json, {}),
+        intended_action=_parse_json(row.intended_action_json, {}),
+        required_approval_count=row.required_approval_count or 0,
+    )
+
+
+@router.post("/resolve-preview", response_model=RuntimePolicyResolvePreviewResponse)
+def resolve_runtime_policy_preview(
+    body: RuntimePolicyResolvePreviewRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RuntimePolicyResolvePreviewResponse:
+    _require_role(context, "viewer")
+    resolved = resolve_runtime_policy(
+        db,
+        project_id=context.tenant_id,
+        payload=body.model_dump(exclude_none=True),
+    )
+    return RuntimePolicyResolvePreviewResponse(
+        project_id=context.tenant_id,
+        policy=resolved.policy,
+        matched_rules=resolved.matched_rules,
+    )
+
+
+@router.get("/rules", response_model=RuntimePolicyRuleListResponse)
+def list_rules(
+    enabled: bool | None = Query(default=None),
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RuntimePolicyRuleListResponse:
+    _require_role(context, "viewer")
+    rows = list_runtime_policy_rules(
+        db,
+        project_id=context.tenant_id,
+        enabled=enabled,
+    )
+    return RuntimePolicyRuleListResponse(
+        items=[_rule_to_response(row) for row in rows],
+        total_in_page=len(rows),
+    )
+
+
+@router.post("/rules", response_model=RuntimePolicyRuleResponse, status_code=status.HTTP_201_CREATED)
+def create_rule(
+    body: RuntimePolicyRuleCreateRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RuntimePolicyRuleResponse:
+    _require_role(context, "admin")
+    try:
+        row = create_runtime_policy_rule(
+            db,
+            project_id=context.tenant_id,
+            name=body.name,
+            description=body.description,
+            agent_id=body.agent_id,
+            action_type=body.action_type,
+            environment=body.environment,
+            policy_patch=body.policy_patch,
+            priority=body.priority,
+            is_enabled=body.is_enabled,
+            actor=context.subject,
+        )
+    except RuntimePolicyRuleValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    return _rule_to_response(row)
+
+
+@router.patch("/rules/{rule_id}", response_model=RuntimePolicyRuleResponse)
+def update_rule(
+    rule_id: str,
+    body: RuntimePolicyRuleUpdateRequest,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RuntimePolicyRuleResponse:
+    _require_role(context, "admin")
+    update_fields = body.model_dump(exclude_unset=True)
+    for clearable in ("agent_id", "action_type", "environment", "description"):
+        if clearable in body.model_fields_set and update_fields.get(clearable) is None:
+            update_fields[clearable] = ""
+    try:
+        row = update_runtime_policy_rule(
+            db,
+            project_id=context.tenant_id,
+            rule_id=rule_id,
+            actor=context.subject,
+            **update_fields,
+        )
+    except RuntimePolicyRuleNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except RuntimePolicyRuleValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    return _rule_to_response(row)
+
+
+@router.delete("/rules/{rule_id}", response_model=RuntimePolicyRuleResponse)
+def disable_rule(
+    rule_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> RuntimePolicyRuleResponse:
+    _require_role(context, "admin")
+    try:
+        row = disable_runtime_policy_rule(
+            db,
+            project_id=context.tenant_id,
+            rule_id=rule_id,
+            actor=context.subject,
+        )
+    except RuntimePolicyRuleNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return _rule_to_response(row)
 
 
 @router.get("/approvals", response_model=RuntimePolicyListResponse)

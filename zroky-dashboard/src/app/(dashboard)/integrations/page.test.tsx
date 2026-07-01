@@ -2,19 +2,59 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { GenericRestConnectorStatusResponse, OutcomeReconciliationView, ToolRegistryResponse } from "@/lib/api";
+import type {
+  GenericRestConnectorStatusResponse,
+  HubSpotCrmConnectorStatusResponse,
+  JiraIssueConnectorStatusResponse,
+  NetSuiteFinanceConnectorStatusResponse,
+  OutcomeReconciliationView,
+  PostgresReadConnectorStatusResponse,
+  RazorpayRefundConnectorStatusResponse,
+  SalesforceCrmConnectorStatusResponse,
+  StripeRefundConnectorStatusResponse,
+  ToolRegistryResponse,
+  ZendeskTicketConnectorStatusResponse,
+  ZohoCrmConnectorStatusResponse,
+} from "@/lib/api";
+import { externalNavigator } from "@/lib/external-navigation";
 import IntegrationsPage from "./page";
 
 const api = vi.hoisted(() => ({
   getCustomerRecordConnectorStatus: vi.fn(),
   getGenericRestConnectorStatus: vi.fn(),
   getGithubConnectionStatus: vi.fn(),
+  getHubSpotCrmConnectorStatus: vi.fn(),
+  getJiraIssueConnectorStatus: vi.fn(),
   getLedgerRefundConnectorStatus: vi.fn(),
+  getNetSuiteFinanceConnectorStatus: vi.fn(),
+  getPostgresReadConnectorStatus: vi.fn(),
+  getRazorpayRefundConnectorStatus: vi.fn(),
+  getSalesforceCrmConnectorStatus: vi.fn(),
+  getStripeRefundConnectorStatus: vi.fn(),
+  getZendeskTicketConnectorStatus: vi.fn(),
+  getZohoCrmConnectorStatus: vi.fn(),
   getSlackInstallStatus: vi.fn(),
   getToolRegistry: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
   saveGenericRestConnectorConfig: vi.fn(),
+  saveHubSpotCrmConnectorConfig: vi.fn(),
+  saveJiraIssueConnectorConfig: vi.fn(),
+  saveNetSuiteFinanceConnectorConfig: vi.fn(),
+  saveRazorpayRefundConnectorConfig: vi.fn(),
+  saveSalesforceCrmConnectorConfig: vi.fn(),
+  saveStripeRefundConnectorConfig: vi.fn(),
+  saveZendeskTicketConnectorConfig: vi.fn(),
+  saveZohoCrmConnectorConfig: vi.fn(),
+  startZohoCrmOAuth: vi.fn(),
   testGenericRestConnector: vi.fn(),
+  testHubSpotCrmConnector: vi.fn(),
+  testJiraIssueConnector: vi.fn(),
+  testNetSuiteFinanceConnector: vi.fn(),
+  testRazorpayRefundConnector: vi.fn(),
+  testSalesforceCrmConnector: vi.fn(),
+  testStripeRefundConnector: vi.fn(),
+  testZendeskTicketConnector: vi.fn(),
+  testZohoCrmConnector: vi.fn(),
 }));
 
 const clipboardWrite = vi.fn();
@@ -42,12 +82,38 @@ vi.mock("@/lib/api", async () => {
     getCustomerRecordConnectorStatus: api.getCustomerRecordConnectorStatus,
     getGenericRestConnectorStatus: api.getGenericRestConnectorStatus,
     getGithubConnectionStatus: api.getGithubConnectionStatus,
+    getHubSpotCrmConnectorStatus: api.getHubSpotCrmConnectorStatus,
+    getJiraIssueConnectorStatus: api.getJiraIssueConnectorStatus,
     getLedgerRefundConnectorStatus: api.getLedgerRefundConnectorStatus,
+    getNetSuiteFinanceConnectorStatus: api.getNetSuiteFinanceConnectorStatus,
+    getPostgresReadConnectorStatus: api.getPostgresReadConnectorStatus,
+    getRazorpayRefundConnectorStatus: api.getRazorpayRefundConnectorStatus,
+    getSalesforceCrmConnectorStatus: api.getSalesforceCrmConnectorStatus,
+    getStripeRefundConnectorStatus: api.getStripeRefundConnectorStatus,
+    getZendeskTicketConnectorStatus: api.getZendeskTicketConnectorStatus,
+    getZohoCrmConnectorStatus: api.getZohoCrmConnectorStatus,
     getSlackInstallStatus: api.getSlackInstallStatus,
     getToolRegistry: api.getToolRegistry,
     listOutcomeReconciliations: api.listOutcomeReconciliations,
     saveGenericRestConnectorConfig: api.saveGenericRestConnectorConfig,
+    saveHubSpotCrmConnectorConfig: api.saveHubSpotCrmConnectorConfig,
+    saveJiraIssueConnectorConfig: api.saveJiraIssueConnectorConfig,
+    saveNetSuiteFinanceConnectorConfig: api.saveNetSuiteFinanceConnectorConfig,
+    saveRazorpayRefundConnectorConfig: api.saveRazorpayRefundConnectorConfig,
+    saveSalesforceCrmConnectorConfig: api.saveSalesforceCrmConnectorConfig,
+    saveStripeRefundConnectorConfig: api.saveStripeRefundConnectorConfig,
+    saveZendeskTicketConnectorConfig: api.saveZendeskTicketConnectorConfig,
+    saveZohoCrmConnectorConfig: api.saveZohoCrmConnectorConfig,
+    startZohoCrmOAuth: api.startZohoCrmOAuth,
     testGenericRestConnector: api.testGenericRestConnector,
+    testHubSpotCrmConnector: api.testHubSpotCrmConnector,
+    testJiraIssueConnector: api.testJiraIssueConnector,
+    testNetSuiteFinanceConnector: api.testNetSuiteFinanceConnector,
+    testRazorpayRefundConnector: api.testRazorpayRefundConnector,
+    testSalesforceCrmConnector: api.testSalesforceCrmConnector,
+    testStripeRefundConnector: api.testStripeRefundConnector,
+    testZendeskTicketConnector: api.testZendeskTicketConnector,
+    testZohoCrmConnector: api.testZohoCrmConnector,
   };
 });
 
@@ -148,24 +214,24 @@ function toolRegistry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegist
         backend_capability: "system_of_record.generic_rest_api",
         availability_notes: "Available for launch.",
       },
-    ],
-    native_tool_families: [
       {
         id: "stripe_refund",
-        kind: "native_tool_family",
-        label: "Stripe refunds",
-        description: "Template for guarding and verifying Stripe refund actions.",
-        category: "payments",
+        kind: "verification_connector",
+        label: "Stripe refund verifier",
+        description: "Verify refund claims against Stripe's read-only refund API.",
+        category: "system_of_record",
         phase: "phase1",
-        implementation_status: "planned",
-        launch_tier: "p1",
+        implementation_status: "available",
+        launch_tier: "p0",
         supported_action_types: ["refund"],
         recommended_for_action_types: ["refund"],
         requires_customer_credentials: true,
         dashboard_href: "/integrations",
-        backend_capability: null,
-        availability_notes: "Planned after launch partner demand.",
+        backend_capability: "system_of_record.stripe_refund",
+        availability_notes: "Available for launch.",
       },
+    ],
+    native_tool_families: [
       {
         id: "slack_approval_alert",
         kind: "native_tool_family",
@@ -204,6 +270,263 @@ function genericStatus(
     path_template: null,
     record_path: null,
     query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function stripeStatus(
+  overrides: Partial<StripeRefundConnectorStatusResponse> = {},
+): StripeRefundConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "stripe_refund",
+    base_url: "https://api.stripe.com",
+    path_template: "/v1/refunds/{refund_id}",
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function razorpayStatus(
+  overrides: Partial<RazorpayRefundConnectorStatusResponse> = {},
+): RazorpayRefundConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "razorpay_refund",
+    base_url: "https://api.razorpay.com",
+    path_template: "/v1/refunds/{refund_id}",
+    record_path: null,
+    query: { key_id: "rzp_test_key" },
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function netsuiteStatus(
+  overrides: Partial<NetSuiteFinanceConnectorStatusResponse> = {},
+): NetSuiteFinanceConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "netsuite_finance",
+    base_url: "https://example.suitetalk.api.netsuite.com",
+    path_template: "/services/rest/record/v1/{record_type}/{record_ref}",
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function hubspotStatus(
+  overrides: Partial<HubSpotCrmConnectorStatusResponse> = {},
+): HubSpotCrmConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "hubspot_crm",
+    base_url: null,
+    path_template: null,
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function salesforceStatus(
+  overrides: Partial<SalesforceCrmConnectorStatusResponse> = {},
+): SalesforceCrmConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "salesforce_crm",
+    base_url: null,
+    path_template: null,
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+function zohoStatus(
+  overrides: Partial<ZohoCrmConnectorStatusResponse> = {},
+): ZohoCrmConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "zoho_crm",
+    base_url: null,
+    path_template: null,
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    has_oauth_refresh_token: false,
+    oauth_refresh_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function zendeskStatus(
+  overrides: Partial<ZendeskTicketConnectorStatusResponse> = {},
+): ZendeskTicketConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "zendesk_ticket",
+    base_url: null,
+    path_template: null,
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function jiraStatus(
+  overrides: Partial<JiraIssueConnectorStatusResponse> = {},
+): JiraIssueConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "jira_issue",
+    base_url: null,
+    path_template: null,
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function postgresStatus(
+  overrides: Partial<PostgresReadConnectorStatusResponse> = {},
+): PostgresReadConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "postgres_read",
+    base_url: null,
+    path_template: null,
+    record_path: null,
+    query: null,
+    has_database_url: false,
+    database_url_last4: null,
+    has_read_query: false,
+    read_query_digest: null,
     has_bearer_token: false,
     bearer_token_last4: null,
     last_tested_at: null,
@@ -307,7 +630,7 @@ describe("IntegrationsPage", () => {
       has_bearer_token: true,
       bearer_token_last4: "9876",
       last_tested_at: null,
-      health_status: "not_verified",
+      health_status: "healthy",
       last_verdict: null,
       last_error: null,
       last_error_code: null,
@@ -323,6 +646,27 @@ describe("IntegrationsPage", () => {
       updated_at: "2026-06-24T09:00:00Z",
     });
     api.getGenericRestConnectorStatus.mockResolvedValue(genericStatus());
+    api.getStripeRefundConnectorStatus.mockResolvedValue(stripeStatus());
+    api.getRazorpayRefundConnectorStatus.mockResolvedValue(razorpayStatus());
+    api.getNetSuiteFinanceConnectorStatus.mockResolvedValue(netsuiteStatus());
+    api.getHubSpotCrmConnectorStatus.mockResolvedValue(hubspotStatus());
+    api.getSalesforceCrmConnectorStatus.mockResolvedValue(salesforceStatus());
+    api.getZendeskTicketConnectorStatus.mockResolvedValue(zendeskStatus());
+    api.getJiraIssueConnectorStatus.mockResolvedValue(jiraStatus());
+    api.getZohoCrmConnectorStatus.mockResolvedValue(zohoStatus());
+    api.startZohoCrmOAuth.mockResolvedValue({
+      authorization_url: "https://accounts.zoho.com/oauth/v2/auth?state=test",
+    });
+    api.getPostgresReadConnectorStatus.mockResolvedValue(postgresStatus({
+      connected: true,
+      has_database_url: true,
+      has_read_query: true,
+      read_query_digest: "sha256:query",
+      health_status: "healthy",
+      last_verdict: "matched",
+      readiness: { status: "ready" },
+      last_checked_at: "2026-06-24T09:03:00Z",
+    }));
     api.listOutcomeReconciliations.mockResolvedValue({
       items: [
         {
@@ -374,54 +718,327 @@ describe("IntegrationsPage", () => {
         readiness: { status: "ready" },
       }),
     });
+    api.saveStripeRefundConnectorConfig.mockResolvedValue(stripeStatus({
+      connected: true,
+      has_bearer_token: true,
+      bearer_token_last4: "7890",
+      health_status: "not_verified",
+    }));
+    api.testStripeRefundConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "stripe_refund",
+        system_ref: "stripe:refund:re_123",
+        action_type: "refund",
+        actual: {
+          refund_id: "re_123",
+          stripe_refund_id: "re_123",
+          amount_minor: 4250,
+          amount_major: "42.5",
+          amount_usd: 42.5,
+          currency: "USD",
+          status: "succeeded",
+        },
+        metadata: { connector_kind: "stripe_refund" },
+      }),
+      connector: stripeStatus({
+        connected: true,
+        has_bearer_token: true,
+        bearer_token_last4: "7890",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveRazorpayRefundConnectorConfig.mockResolvedValue(razorpayStatus({
+      connected: true,
+      has_bearer_token: true,
+      bearer_token_last4: "cret",
+      health_status: "not_verified",
+    }));
+    api.testRazorpayRefundConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "razorpay_refund",
+        system_ref: "razorpay:refund:rfnd_123",
+        action_type: "refund",
+        actual: {
+          refund_id: "rfnd_123",
+          razorpay_refund_id: "rfnd_123",
+          amount_minor: 4250,
+          amount_major: "42.5",
+          currency: "INR",
+          status: "processed",
+        },
+        metadata: { connector_kind: "razorpay_refund" },
+      }),
+      connector: razorpayStatus({
+        connected: true,
+        has_bearer_token: true,
+        bearer_token_last4: "cret",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveHubSpotCrmConnectorConfig.mockResolvedValue(hubspotStatus({
+      connected: true,
+      base_url: "https://api.hubapi.com",
+      path_template: "/crm/v3/objects/contacts/{record_ref}",
+      query: {
+        properties: "email,firstname,lifecyclestage,hs_object_id",
+        idProperty: "email",
+      },
+      has_bearer_token: true,
+      bearer_token_last4: "7890",
+      health_status: "not_verified",
+    }));
+    api.testHubSpotCrmConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "hubspot_crm",
+        system_ref: "hubspot:contact:owner@example.com",
+        action_type: "customer_record_update",
+        metadata: { connector_kind: "hubspot_crm" },
+      }),
+      connector: hubspotStatus({
+        connected: true,
+        base_url: "https://api.hubapi.com",
+        path_template: "/crm/v3/objects/contacts/{record_ref}",
+        query: {
+          properties: "email,firstname,lifecyclestage,hs_object_id",
+          idProperty: "email",
+        },
+        has_bearer_token: true,
+        bearer_token_last4: "7890",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveSalesforceCrmConnectorConfig.mockResolvedValue(salesforceStatus({
+      connected: true,
+      base_url: "https://example.my.salesforce.com",
+      path_template: "/services/data/v60.0/sobjects/{object_type}/{record_ref}",
+      query: {
+        fields: "Id,Name,StageName,Amount",
+      },
+      has_bearer_token: true,
+      bearer_token_last4: "7890",
+      health_status: "not_verified",
+    }));
+    api.testSalesforceCrmConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "salesforce_crm",
+        system_ref: "salesforce:Account:001000000000000AAA",
+        action_type: "customer_record_update",
+        metadata: { connector_kind: "salesforce_crm" },
+      }),
+      connector: salesforceStatus({
+        connected: true,
+        base_url: "https://example.my.salesforce.com",
+        path_template: "/services/data/v60.0/sobjects/{object_type}/{record_ref}",
+        query: {
+          fields: "Id,Name,StageName,Amount",
+        },
+        has_bearer_token: true,
+        bearer_token_last4: "7890",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveZohoCrmConnectorConfig.mockResolvedValue(zohoStatus({
+      connected: true,
+      base_url: "https://www.zohoapis.com",
+      path_template: "/crm/v8/{module_name}/{record_ref}",
+      record_path: "data.0",
+      query: {
+        fields: "id,Full_Name,Email,Phone,Company,Stage,Amount,Lead_Status,Owner,Modified_Time",
+      },
+      has_bearer_token: true,
+      bearer_token_last4: "7890",
+      health_status: "not_verified",
+    }));
+    api.testZohoCrmConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "zoho_crm",
+        system_ref: "zoho:Contacts:1234567890000000001",
+        action_type: "customer_record_update",
+        metadata: { connector_kind: "zoho_crm" },
+      }),
+      connector: zohoStatus({
+        connected: true,
+        base_url: "https://www.zohoapis.com",
+        path_template: "/crm/v8/{module_name}/{record_ref}",
+        record_path: "data.0",
+        query: {
+          fields: "id,Full_Name,Email,Phone,Company,Stage,Amount,Lead_Status,Owner,Modified_Time",
+        },
+        has_bearer_token: true,
+        bearer_token_last4: "7890",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveZendeskTicketConnectorConfig.mockResolvedValue(zendeskStatus({
+      connected: true,
+      base_url: "https://example.zendesk.com",
+      path_template: "/api/v2/tickets/{record_ref}.json",
+      record_path: "ticket",
+      query: { auth_username: "agent@example.com" },
+      has_bearer_token: true,
+      bearer_token_last4: "7890",
+      health_status: "not_verified",
+    }));
+    api.testZendeskTicketConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "zendesk_ticket",
+        system_ref: "zendesk:ticket:12345",
+        action_type: "ticket_close",
+        metadata: { connector_kind: "zendesk_ticket" },
+      }),
+      connector: zendeskStatus({
+        connected: true,
+        base_url: "https://example.zendesk.com",
+        path_template: "/api/v2/tickets/{record_ref}.json",
+        record_path: "ticket",
+        query: { auth_username: "agent@example.com" },
+        has_bearer_token: true,
+        bearer_token_last4: "7890",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveJiraIssueConnectorConfig.mockResolvedValue(jiraStatus({
+      connected: true,
+      base_url: "https://example.atlassian.net",
+      path_template: "/rest/api/3/issue/{record_ref}",
+      query: { auth_username: "agent@example.com" },
+      has_bearer_token: true,
+      bearer_token_last4: "7890",
+      health_status: "not_verified",
+    }));
+    api.testJiraIssueConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "jira_issue",
+        system_ref: "jira:issue:JSM-123",
+        action_type: "ticket_close",
+        metadata: { connector_kind: "jira_issue" },
+      }),
+      connector: jiraStatus({
+        connected: true,
+        base_url: "https://example.atlassian.net",
+        path_template: "/rest/api/3/issue/{record_ref}",
+        query: { auth_username: "agent@example.com" },
+        has_bearer_token: true,
+        bearer_token_last4: "7890",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveNetSuiteFinanceConnectorConfig.mockResolvedValue(netsuiteStatus({
+      connected: true,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      health_status: "not_verified",
+    }));
+    api.testNetSuiteFinanceConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "netsuite_finance",
+        system_ref: "netsuite:vendorBill:12345",
+        action_type: "invoice_spend_approval",
+        claimed: {
+          netsuite_record_id: "12345",
+          record_type: "vendorBill",
+          tran_id: "VB1001",
+          amount_minor: 125000,
+          amount_major: "1250",
+          currency: "USD",
+          status: "approved",
+        },
+        actual: {
+          netsuite_record_id: "12345",
+          record_type: "vendorBill",
+          tran_id: "VB1001",
+          amount_minor: 125000,
+          amount_major: "1250",
+          currency: "USD",
+          status: "approved",
+        },
+        metadata: { connector_kind: "netsuite_finance" },
+      }),
+      connector: netsuiteStatus({
+        connected: true,
+        has_bearer_token: true,
+        bearer_token_last4: "oken",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
   });
 
-  it("keeps the overview focused on system-of-record proof and support integrations", async () => {
+  it("frames connectors as transport-first verifier inventory with coverage", async () => {
     render(<IntegrationsPage />);
 
     expect(
-      await screen.findByRole("heading", { name: "Proof connectors need preflight" }),
+      await screen.findByRole("heading", { name: "Some agent actions are unverifiable" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("1 matched checks / 1 need action")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Configure ledger" }).getAttribute("href")).toBe("/integrations#ledger-refund-connector");
-    expect(screen.getByRole("link", { name: "Configure CRM" }).getAttribute("href")).toBe("/integrations#customer-record-connector");
-    expect(screen.getByRole("link", { name: "Open policies" }).getAttribute("href")).toBe("/policies");
-    expect(screen.getByRole("link", { name: "Manage Slack" }).getAttribute("href")).toBe("/integrations/slack");
-    expect(screen.getByRole("link", { name: "Open evidence" }).getAttribute("href")).toBe("/evidence");
-    expect(screen.getByRole("link", { name: "Review reconciliation" }).getAttribute("href")).toBe("/outcomes");
-    expect(screen.getByRole("heading", { name: "System-of-record connectors" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Phase 1 connector catalog" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Connector coverage" })).toBeInTheDocument();
-    expect(screen.getByText("5 available now")).toBeInTheDocument();
-    expect(screen.getByText("0 template")).toBeInTheDocument();
-    expect(screen.getByText("2 planned")).toBeInTheDocument();
-    expect(screen.getByLabelText("Connector launch truth")).toBeInTheDocument();
-    expect(screen.getByText("Live proof connectors")).toBeInTheDocument();
-    expect(screen.getByText("Fallback path")).toBeInTheDocument();
-    expect(screen.getByText("Planned native adapters")).toBeInTheDocument();
-    expect(screen.getByText("Use this for unsupported Stripe, Razorpay, Zendesk, Gmail, HubSpot, Salesforce, and internal tools.")).toBeInTheDocument();
-    expect(screen.getByText("These can produce matched, mismatched, or not_verified outcome checks now.")).toBeInTheDocument();
-    expect(screen.getByText("SDK wrapper")).toBeInTheDocument();
-    expect(screen.getAllByText("Generic REST/OpenAPI verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Stripe refunds").length).toBeGreaterThan(0);
-    expect(screen.getByText("Slack approval and alert").closest("a")?.getAttribute("href")).toBe("/integrations/slack");
-    expect(screen.getByRole("region", { name: "Generic REST verifier setup" })).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: "Generic REST/OpenAPI verifier" }).length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Generic REST webhook bridge request")).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("/v1/outcomes/reconciliation/saved"))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("x-api-key: $ZROKY_API_KEY"))).toBeInTheDocument();
-    expect((screen.getByRole("button", { name: /Run proof test/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    expect(screen.getByRole("region", { name: "Verifier coverage map" })).toBeInTheDocument();
+    expect(screen.getByText("refund")).toBeInTheDocument();
+    expect(screen.getAllByText("Verifier healthy").length).toBeGreaterThan(0);
+    expect(screen.getByText("custom")).toBeInTheDocument();
+    expect(screen.getByText("No verifier")).toBeInTheDocument();
+
+    expect(screen.getByRole("region", { name: "REST / HTTP JSON verifier" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "SQL / database read verifier" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Webhook / bridge verifier" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Workflow integrations" })).toBeInTheDocument();
+    expect(screen.getAllByText("REST / HTTP JSON verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("HubSpot CRM verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Salesforce CRM verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Zoho CRM verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Zendesk ticket verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Jira / JSM verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Razorpay refund verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Refund ledger template").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Customer / CRM record template").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SQL / Postgres read verifier").length).toBeGreaterThan(0);
+    expect(screen.getByText("Slack")).toBeInTheDocument();
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { name: "Backend coverage stays honest" })).toBeInTheDocument();
+    expect(screen.getByText("one saved config per verifier type", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Integration status" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show controls" }));
     expect(screen.getByRole("region", { name: "Integration status" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Manage providers" })).not.toBeInTheDocument();
-    await waitFor(() => expect(api.listOutcomeReconciliations).toHaveBeenCalledWith({ limit: 25 }));
+
+    await waitFor(() => expect(api.listOutcomeReconciliations).toHaveBeenCalledWith({ limit: 50 }));
     await waitFor(() => expect(api.getGenericRestConnectorStatus).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getRazorpayRefundConnectorStatus).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getHubSpotCrmConnectorStatus).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getSalesforceCrmConnectorStatus).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getZohoCrmConnectorStatus).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getPostgresReadConnectorStatus).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.getToolRegistry).toHaveBeenCalledTimes(1));
   });
 
   it("saves and tests the Generic REST verifier setup path", async () => {
     render(<IntegrationsPage />);
 
-    await screen.findByRole("heading", { name: "Generic REST/OpenAPI verifier" });
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /REST \/ HTTP JSON verifier/i }));
     fireEvent.change(screen.getByLabelText("Base URL"), {
       target: { value: "https://internal.example.com/api" },
     });
@@ -478,6 +1095,7 @@ describe("IntegrationsPage", () => {
       expect(api.testGenericRestConnector).toHaveBeenCalledWith({
         record_ref: "invoice_42",
         action_type: "invoice_spend_approval",
+        system_ref: "invoice_42",
         claimed: {
           record_ref: "invoice_42",
           status: "approved",
@@ -486,6 +1104,306 @@ describe("IntegrationsPage", () => {
         match_fields: ["status"],
       });
     });
-    expect(await screen.findByText("Generic REST test recorded matched.")).toBeInTheDocument();
+    expect(await screen.findByText("REST verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("saves and tests the native Razorpay refund verifier setup path", async () => {
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /Razorpay refund verifier/i }));
+    fireEvent.change(screen.getByLabelText("Razorpay key id"), {
+      target: { value: "rzp_test_key" },
+    });
+    fireEvent.change(screen.getByLabelText("Razorpay key secret"), {
+      target: { value: "razorpay-secret" },
+    });
+    fireEvent.change(screen.getByLabelText("Refund ID"), {
+      target: { value: "rfnd_123" },
+    });
+    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            refund_id: "rfnd_123",
+            amount_minor: 4250,
+            amount_major: "42.5",
+            currency: "INR",
+            status: "processed",
+          },
+          null,
+          2,
+        ),
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save Razorpay verifier/i }));
+
+    await waitFor(() => {
+      expect(api.saveRazorpayRefundConnectorConfig).toHaveBeenCalledWith({
+        key_id: "rzp_test_key",
+        key_secret: "razorpay-secret",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run Razorpay preflight/i }));
+
+    await waitFor(() => {
+      expect(api.testRazorpayRefundConnector).toHaveBeenCalledWith({
+        refund_id: "rfnd_123",
+        action_type: "refund",
+        claimed: {
+          refund_id: "rfnd_123",
+          amount_minor: 4250,
+          amount_major: "42.5",
+          currency: "INR",
+          status: "processed",
+        },
+        match_fields: ["refund_id", "amount_minor", "currency", "status"],
+      });
+    });
+    expect(await screen.findByText("Razorpay verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("saves and tests the native HubSpot verifier setup path", async () => {
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /HubSpot CRM verifier/i }));
+    fireEvent.change(screen.getByLabelText("Private app token"), {
+      target: { value: "hubspot-private-app-token" },
+    });
+    fireEvent.change(screen.getByLabelText("Contact ref"), {
+      target: { value: "owner@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            email: "owner@example.com",
+            lifecyclestage: "customer",
+          },
+          null,
+          2,
+        ),
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save HubSpot verifier/i }));
+
+    await waitFor(() => {
+      expect(api.saveHubSpotCrmConnectorConfig).toHaveBeenCalledWith({
+        query: {
+          properties: "email,firstname,lastname,lifecyclestage,hs_lead_status,hs_object_id",
+          idProperty: "email",
+        },
+        bearer_token: "hubspot-private-app-token",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run HubSpot preflight/i }));
+
+    await waitFor(() => {
+      expect(api.testHubSpotCrmConnector).toHaveBeenCalledWith({
+        record_ref: "owner@example.com",
+        action_type: "customer_record_update",
+        claimed: {
+          email: "owner@example.com",
+          lifecyclestage: "customer",
+        },
+        match_fields: ["email", "lifecyclestage"],
+      });
+    });
+    expect(await screen.findByText("HubSpot verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("saves and tests the native Zoho CRM verifier setup path", async () => {
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
+    fireEvent.change(screen.getByLabelText("Manual bearer token"), {
+      target: { value: "zoho-oauth-access-token" },
+    });
+    fireEvent.change(screen.getByLabelText("Module name"), {
+      target: { value: "Contacts" },
+    });
+    fireEvent.change(screen.getByLabelText("Record ID"), {
+      target: { value: "1234567890000000001" },
+    });
+    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            zoho_record_id: "1234567890000000001",
+            Email: "owner@example.com",
+          },
+          null,
+          2,
+        ),
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save Zoho CRM verifier/i }));
+
+    await waitFor(() => {
+      expect(api.saveZohoCrmConnectorConfig).toHaveBeenCalledWith({
+        base_url: "https://www.zohoapis.com",
+        query: {
+          fields: "id,Full_Name,Email,Phone,Company,Stage,Amount,Lead_Status,Owner,Modified_Time",
+        },
+        bearer_token: "zoho-oauth-access-token",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run Zoho preflight/i }));
+
+    await waitFor(() => {
+      expect(api.testZohoCrmConnector).toHaveBeenCalledWith({
+        module_name: "Contacts",
+        record_ref: "1234567890000000001",
+        action_type: "customer_record_update",
+        claimed: {
+          zoho_record_id: "1234567890000000001",
+          Email: "owner@example.com",
+        },
+        match_fields: ["zoho_record_id", "Email"],
+      });
+    });
+    expect(await screen.findByText("Zoho CRM verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("saves and tests the native Jira issue verifier setup path", async () => {
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /Jira \/ JSM verifier/i }));
+    fireEvent.change(screen.getByLabelText("Atlassian email"), {
+      target: { value: "agent@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("API token or bearer token"), {
+      target: { value: "jira-api-token" },
+    });
+    fireEvent.change(screen.getByLabelText("Issue key"), {
+      target: { value: "JSM-123" },
+    });
+    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            jira_issue_key: "JSM-123",
+            status: "Done",
+          },
+          null,
+          2,
+        ),
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save Jira verifier/i }));
+
+    await waitFor(() => {
+      expect(api.saveJiraIssueConnectorConfig).toHaveBeenCalledWith({
+        base_url: "https://example.atlassian.net",
+        auth_username: "agent@example.com",
+        bearer_token: "jira-api-token",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run Jira preflight/i }));
+
+    await waitFor(() => {
+      expect(api.testJiraIssueConnector).toHaveBeenCalledWith({
+        record_ref: "JSM-123",
+        action_type: "ticket_close",
+        claimed: {
+          jira_issue_key: "JSM-123",
+          status: "Done",
+        },
+        match_fields: ["jira_issue_key", "status"],
+      });
+    });
+    expect(await screen.findByText("Jira verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("saves and tests the native NetSuite finance verifier setup path", async () => {
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /NetSuite finance verifier/i }));
+    fireEvent.change(screen.getByLabelText("Bearer token"), {
+      target: { value: "netsuite-token" },
+    });
+    fireEvent.change(screen.getByLabelText("Record type"), {
+      target: { value: "vendorBill" },
+    });
+    fireEvent.change(screen.getByLabelText("Record ID"), {
+      target: { value: "12345" },
+    });
+    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            netsuite_record_id: "12345",
+            record_type: "vendorBill",
+            tran_id: "VB1001",
+            amount_minor: 125000,
+            amount_major: "1250",
+            currency: "USD",
+            status: "approved",
+          },
+          null,
+          2,
+        ),
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save NetSuite verifier/i }));
+
+    await waitFor(() => {
+      expect(api.saveNetSuiteFinanceConnectorConfig).toHaveBeenCalledWith({
+        base_url: "https://example.suitetalk.api.netsuite.com",
+        bearer_token: "netsuite-token",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run NetSuite preflight/i }));
+
+    await waitFor(() => {
+      expect(api.testNetSuiteFinanceConnector).toHaveBeenCalledWith({
+        record_type: "vendorBill",
+        record_ref: "12345",
+        action_type: "invoice_spend_approval",
+        claimed: {
+          netsuite_record_id: "12345",
+          record_type: "vendorBill",
+          tran_id: "VB1001",
+          amount_minor: 125000,
+          amount_major: "1250",
+          currency: "USD",
+          status: "approved",
+        },
+        match_fields: ["netsuite_record_id", "record_type", "tran_id", "amount_minor", "currency", "status"],
+      });
+    });
+    expect(await screen.findByText("NetSuite verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("starts the Zoho CRM OAuth connection flow", async () => {
+    const assignSpy = vi.spyOn(externalNavigator, "assign").mockImplementation(() => undefined);
+    try {
+      render(<IntegrationsPage />);
+
+      await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+      fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /Connect Zoho CRM/i }));
+
+      await waitFor(() => expect(api.startZohoCrmOAuth).toHaveBeenCalledTimes(1));
+      expect(assignSpy).toHaveBeenCalledWith(
+        "https://accounts.zoho.com/oauth/v2/auth?state=test",
+      );
+    } finally {
+      assignSpy.mockRestore();
+    }
   });
 });

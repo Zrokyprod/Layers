@@ -295,6 +295,58 @@ class PolicyDocument(Base):
     )
 
 
+class RuntimePolicyRule(Base):
+    """Scoped runtime action-control rule.
+
+    Rules patch the project baseline policy at evaluation time. Nullable
+    scope columns mean "all" for that dimension:
+      - all null = project default rule
+      - action_type = action-type rule
+      - agent_id = per-agent rule
+      - agent_id + action_type/environment = more-specific override
+    """
+
+    __tablename__ = "runtime_policy_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    environment: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    policy_patch_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint("version >= 1", name="ck_runtime_policy_rules_version"),
+        Index("ix_runtime_policy_rules_project_enabled", "project_id", "is_enabled"),
+        Index("ix_runtime_policy_rules_project_agent", "project_id", "agent_id"),
+        Index("ix_runtime_policy_rules_project_action", "project_id", "action_type"),
+        Index("ix_runtime_policy_rules_project_env", "project_id", "environment"),
+        Index("ix_runtime_policy_rules_project_priority", "project_id", "priority", "updated_at"),
+    )
+
+
 class RuntimePolicyDecision(Base):
     """Durable runtime policy decision and approval queue item.
 

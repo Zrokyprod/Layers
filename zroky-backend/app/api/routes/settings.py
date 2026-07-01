@@ -40,7 +40,7 @@ from app.schemas.dashboard import (
     RetentionPolicyResponse,
     RetentionPolicyUpdateRequest,
 )
-from app.schemas.project import ProjectResponse
+from app.schemas.project import ProjectResponse, ProjectUpdateRequest
 from app.core.security_logging import sanitize_exception
 from app.services.github_tokens import (
     ensure_github_token_encryption_ready,
@@ -100,6 +100,27 @@ def get_project_settings(
     db: Session = Depends(get_db_session_read),
 ) -> ProjectResponse:
     project = _require_project(db, tenant_id)
+    return ProjectResponse(
+        project_id=project.id,
+        name=project.name,
+        owner_ref=project.owner_ref,
+        is_active=project.is_active,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+    )
+
+
+@router.patch("/project", response_model=ProjectResponse)
+def update_project_settings(
+    body: ProjectUpdateRequest,
+    tenant_id: str = Depends(require_tenant_role("admin")),
+    db: Session = Depends(get_db_session),
+) -> ProjectResponse:
+    project = _require_project(db, tenant_id)
+    project.name = body.name
+    db.add(project)
+    db.commit()
+    db.refresh(project)
     return ProjectResponse(
         project_id=project.id,
         name=project.name,

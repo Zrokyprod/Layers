@@ -39,10 +39,10 @@ function DashboardAuthRedirect() {
   }, [targetUrl]);
 
   return (
-    <div className="grid min-h-screen place-items-center bg-ink px-6 text-center">
+    <div className="grid min-h-screen place-items-center bg-white px-6 text-center">
       <div>
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-tertiary">Zroky app</p>
-        <h1 className="mt-3 text-2xl font-semibold text-primary">Redirecting to secure auth...</h1>
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#8a8aa3]">Zroky app</p>
+        <h1 className="mt-3 text-2xl font-semibold text-[#0b0b14]">Redirecting to secure auth...</h1>
       </div>
     </div>
   );
@@ -53,8 +53,7 @@ function App() {
   const isAuthRedirect = isDashboardAuthAlias(location.pathname);
 
   return (
-    <div className="relative min-h-screen overflow-x-clip bg-ink">
-      {!isAuthRedirect && <div className="pointer-events-none fixed inset-0 z-0 grid-bg opacity-60" />}
+    <div className="relative min-h-screen overflow-x-clip bg-white">
       <ScrollToTop />
       {!isAuthRedirect && <Nav />}
       <main className={isAuthRedirect ? '' : 'relative z-10 flex w-full flex-col items-center overflow-x-hidden'}>

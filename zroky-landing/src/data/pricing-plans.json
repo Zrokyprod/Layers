@@ -17,13 +17,13 @@
         "monthly_usd": 0,
         "period": "/mo"
       },
-      "description": "For validating capture, traces, and issue grouping before replay becomes part of release checks.",
+      "description": "For trying protected AI-agent actions with fail-closed policy checks, verification, and signed receipts.",
       "cta": {
         "label": "Start free",
         "href": "/auth/register"
       },
       "featured": false,
-      "note": "Best when you need production evidence before committing to replay workflows.",
+      "note": "Best for a first managed agent and a small proof loop before upgrading control-plane volume.",
       "pricing": {
         "calls_per_month": 5000,
         "retention_days": 7,
@@ -73,6 +73,14 @@
         },
         "compatibility": {
           "events.monthly_quota": 5000,
+          "actions.protected.monthly_quota": 25,
+          "actions.policy_checks.monthly_quota": 100,
+          "actions.runner_executions.monthly_quota": 25,
+          "actions.receipts.monthly_quota": 25,
+          "actions.verifications.monthly_quota": 50,
+          "actions.source_mutations.monthly_quota": 100,
+          "connectors.system_of_record.max": 1,
+          "agents.max": 1,
           "retention.days": 7,
           "goldens.max_sets": 0,
           "replay.monthly_runs": 0,
@@ -153,6 +161,14 @@
         },
         "compatibility": {
           "events.monthly_quota": 50000,
+          "actions.protected.monthly_quota": 2000,
+          "actions.policy_checks.monthly_quota": 10000,
+          "actions.runner_executions.monthly_quota": 2000,
+          "actions.receipts.monthly_quota": 2000,
+          "actions.verifications.monthly_quota": 5000,
+          "actions.source_mutations.monthly_quota": 10000,
+          "connectors.system_of_record.max": 3,
+          "agents.max": 3,
           "retention.days": 30,
           "goldens.max_sets": 5,
           "replay.monthly_runs": 50,
@@ -173,17 +189,17 @@
       "code": "pro",
       "name": "Pro",
       "price": {
-        "label": "$199",
-        "monthly_usd": 199,
+        "label": "$399",
+        "monthly_usd": 399,
         "period": "/mo"
       },
-      "description": "For teams that need release protection, real replay proof, and blocking CI gates.",
+      "description": "For teams putting high-risk AI-agent actions behind approval, isolated execution, system-of-record verification, and signed receipts.",
       "cta": {
-        "label": "Protect releases",
+        "label": "Start Pro",
         "href": "/auth/register"
       },
       "featured": true,
-      "note": "The main self-serve plan when Zroky becomes part of the release process.",
+      "note": "The main self-serve control-plane plan for production agent actions.",
       "pricing": {
         "calls_per_month": 250000,
         "retention_days": 90,
@@ -233,6 +249,14 @@
         },
         "compatibility": {
           "events.monthly_quota": 250000,
+          "actions.protected.monthly_quota": 25000,
+          "actions.policy_checks.monthly_quota": 100000,
+          "actions.runner_executions.monthly_quota": 25000,
+          "actions.receipts.monthly_quota": 25000,
+          "actions.verifications.monthly_quota": 50000,
+          "actions.source_mutations.monthly_quota": 100000,
+          "connectors.system_of_record.max": 10,
+          "agents.max": 5,
           "retention.days": 90,
           "goldens.max_sets": 25,
           "replay.monthly_runs": 500,
@@ -313,6 +337,14 @@
         },
         "compatibility": {
           "events.monthly_quota": -1,
+          "actions.protected.monthly_quota": -1,
+          "actions.policy_checks.monthly_quota": -1,
+          "actions.runner_executions.monthly_quota": -1,
+          "actions.receipts.monthly_quota": -1,
+          "actions.verifications.monthly_quota": -1,
+          "actions.source_mutations.monthly_quota": -1,
+          "connectors.system_of_record.max": -1,
+          "agents.max": -1,
           "retention.days": -1,
           "goldens.max_sets": -1,
           "replay.monthly_runs": -1,

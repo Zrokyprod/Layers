@@ -77,16 +77,17 @@ describe("AccountPage", () => {
     });
   });
 
-  it("surfaces account posture and personal control flow", async () => {
+  it("surfaces account posture without duplicate in-page navigation", async () => {
     render(<AccountPage />);
 
     expect(screen.getByRole("heading", { name: "Sanket K." })).toBeInTheDocument();
     expect(screen.getByLabelText("Account security overview")).toBeInTheDocument();
     expect(await screen.findByText("Controlled")).toBeInTheDocument();
     expect(screen.getByLabelText("Account control summary")).toBeInTheDocument();
-    for (const label of ["Identity", "Login method", "Session control", "Danger zone"]) {
-      expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
-    }
+    expect(screen.queryByRole("navigation", { name: "Account control flow" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your identity" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Change password" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Account security" })).toBeInTheDocument();
     expect(screen.getAllByText("GitHub").length).toBeGreaterThan(0);
   });
 

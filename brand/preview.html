@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zroky Brand Preview</title>
+  <style>
+    body { margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:#F1F5F9; color:#0F172A; }
+    header { padding:28px 40px; }
+    h1 { margin:0; font-size:20px; letter-spacing:1px; }
+    .grid { display:grid; gap:24px; padding:0 40px 60px; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+    .card { border-radius:20px; padding:32px; display:flex; align-items:center; justify-content:center; min-height:220px; box-shadow:0 10px 30px rgba(15,23,42,.08); }
+    .light { background:#FFFFFF; }
+    .dark  { background:#0B1220; }
+    .icon  { background:linear-gradient(135deg,#EEF2FF,#ECFEFF); }
+    .label { font-size:12px; letter-spacing:2px; color:#64748B; padding:0 40px 8px; text-transform:uppercase; }
+    img { max-width:100%; height:auto; }
+    .row { display:flex; flex-direction:column; }
+    .favrow { display:flex; gap:20px; align-items:center; }
+    .favrow img { width:64px; }
+    .favrow .s32 { width:32px; }
+    .favrow .s16 { width:16px; }
+  </style>
+</head>
+<body>
+  <header><h1>ZROKY — BRAND CONCEPT</h1></header>
+
+  <div class="label">Primary logo (light)</div>
+  <div class="grid"><div class="card light"><img src="zroky-logo.svg" alt="Zroky light"/></div></div>
+
+  <div class="label">Primary logo (dark)</div>
+  <div class="grid"><div class="card dark"><img src="zroky-logo-dark.svg" alt="Zroky dark"/></div></div>
+
+  <div class="label">App icon / favicon scaling</div>
+  <div class="grid">
+    <div class="card icon">
+      <div class="favrow">
+        <img src="zroky-icon.svg" alt="64"/>
+        <img class="s32" src="zroky-icon.svg" alt="32"/>
+        <img class="s16" src="zroky-icon.svg" alt="16"/>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

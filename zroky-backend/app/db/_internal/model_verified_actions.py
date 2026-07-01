@@ -55,6 +55,11 @@ class ActionIntent(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     contract_version_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("action_contract_versions.id", ondelete="RESTRICT"),
@@ -73,9 +78,12 @@ class ActionIntent(Base):
     purpose_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     resource_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     parameters_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    execution_request_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     verification_profile: Mapped[str | None] = mapped_column(String(160), nullable=True)
     trace_context_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'validated'"))
+    proof_status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'not_started'"))
+    receipt_status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'missing'"))
     runtime_policy_decision_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("runtime_policy_decisions.id", ondelete="SET NULL"),
@@ -96,10 +104,20 @@ class ActionIntent(Base):
             "status IN ('validated','deciding','denied','approval_pending','authorized','expired')",
             name="ck_action_intents_status",
         ),
+        CheckConstraint(
+            "proof_status IN ('not_started','pending','matched','mismatched','not_verified')",
+            name="ck_action_intents_proof_status",
+        ),
+        CheckConstraint(
+            "receipt_status IN ('missing','pending','generated','failed')",
+            name="ck_action_intents_receipt_status",
+        ),
         Index("ix_action_intents_project_created", "project_id", "created_at"),
         Index("ix_action_intents_project_digest", "project_id", "intent_digest"),
         Index("ix_action_intents_project_policy_decision", "project_id", "runtime_policy_decision_id"),
         Index("ix_action_intents_project_status", "project_id", "status", "created_at"),
+        Index("ix_action_intents_project_proof", "project_id", "proof_status", "created_at"),
+        Index("ix_action_intents_project_agent_created", "project_id", "agent_id", "created_at"),
     )
 
 
@@ -256,4 +274,64 @@ class ActionReceipt(Base):
         UniqueConstraint("project_id", "action_intent_id", name="ux_action_receipts_project_intent"),
         Index("ix_action_receipts_project_created", "project_id", "created_at"),
         Index("ix_action_receipts_project_digest", "project_id", "receipt_digest"),
+    )
+
+
+class ActionPostExecutionJob(Base):
+    """Transactional outbox job for backend-owned verification and receipt generation."""
+
+    __tablename__ = "action_post_execution_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    action_intent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("action_intents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    execution_attempt_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("action_execution_attempts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    job_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'pending'"))
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'{}'"))
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("3"))
+    claimed_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    available_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "action_intent_id",
+            "execution_attempt_id",
+            "job_type",
+            name="ux_action_post_execution_jobs_project_attempt_type",
+        ),
+        CheckConstraint(
+            "job_type IN ('verify_outcome','generate_receipt')",
+            name="ck_action_post_execution_jobs_type",
+        ),
+        CheckConstraint(
+            "status IN ('pending','claimed','running','succeeded','retrying','dead')",
+            name="ck_action_post_execution_jobs_status",
+        ),
+        Index("ix_action_post_execution_jobs_project_status", "project_id", "status", "available_at"),
+        Index("ix_action_post_execution_jobs_attempt", "project_id", "execution_attempt_id"),
+        Index("ix_action_post_execution_jobs_action", "project_id", "action_intent_id"),
+        Index("ix_action_post_execution_jobs_lease", "status", "lease_expires_at"),
     )

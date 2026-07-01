@@ -185,6 +185,15 @@ class SystemOfRecordConnectorConfig(Base):
         String(64), nullable=True
     )
     bearer_token_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    oauth_refresh_token_ciphertext: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    oauth_refresh_token_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    oauth_refresh_token_last4: Mapped[str | None] = mapped_column(
+        String(8), nullable=True
+    )
     database_url_ciphertext: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True
     )
@@ -211,7 +220,7 @@ class SystemOfRecordConnectorConfig(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "connector_type IN ('ledger_refund_api','customer_record_api','generic_rest_api','postgres_read')",
+            "connector_type IN ('ledger_refund_api','customer_record_api','generic_rest_api','postgres_read','hubspot_crm','zendesk_ticket','salesforce_crm','zoho_crm','jira_issue','stripe_refund','razorpay_refund','netsuite_finance')",
             name="ck_sor_connector_type",
         ),
         UniqueConstraint(

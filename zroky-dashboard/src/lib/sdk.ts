@@ -26,8 +26,10 @@ export const SDK = {
   prose: PROSE,
   /** Install command shown in the Quickstart / Capture section. */
   install: `npm install ${SCOPED}`,
-  /** Verbatim, contract-locked import statement for the SDK snippet. */
+  /** Verbatim, contract-locked import statement for the legacy capture SDK snippet. */
   importStatement: `import { init, traceRun, wrap } from "${SCOPED}";`,
+  /** Verbatim, contract-locked import statement for verified-action setup. */
+  verifiedActionImportStatement: `import { init, verifiedAction, awaitActionProof } from "${SCOPED}";`,
 } as const;
 
 export type SdkIdentity = typeof SDK;

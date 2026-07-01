@@ -10,6 +10,7 @@ describe("SDK identity", () => {
   it("derives the install command and import statement from the scoped name", () => {
     expect(SDK.install).toBe("npm install @zroky-ai/sdk");
     expect(SDK.importStatement).toBe('import { init, traceRun, wrap } from "@zroky-ai/sdk";');
+    expect(SDK.verifiedActionImportStatement).toBe('import { init, verifiedAction, awaitActionProof } from "@zroky-ai/sdk";');
   });
 
   it("never produces the forbidden identifiers", () => {

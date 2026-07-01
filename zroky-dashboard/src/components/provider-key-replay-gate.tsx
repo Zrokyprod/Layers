@@ -135,8 +135,8 @@ export function ProviderKeyReplayGate({
                 Upgrade plan
               </Link>
             ) : null}
-            <Link href="/settings/providers" className="btn btn-soft">
-              Open provider settings
+            <Link href="/settings" className="btn btn-soft">
+              Open Settings
             </Link>
           </div>
         </div>
@@ -180,8 +180,8 @@ export function ProviderKeyReplayGate({
                 Use fixture validation
               </button>
             ) : null}
-            <Link href="/settings/providers" className="btn btn-soft">
-              Open provider settings
+            <Link href="/settings" className="btn btn-soft">
+              Open Settings
             </Link>
           </div>
         </form>

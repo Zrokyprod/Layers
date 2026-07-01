@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 from sqlalchemy import func, select
@@ -117,7 +117,7 @@ EXECUTION_ADAPTER_CONTRACTS: dict[str, dict[str, Any]] = {
         "required_target_fields": ["ticket_id"],
         "required_argument_fields": ["fields"],
         "required_result_fields": ["provider_ref", "status"],
-        "verification_connector": "customer_record_api",
+        "verification_connector": "zendesk_ticket",
     },
     "customer_message": {
         "adapter": "customer_message",
@@ -387,6 +387,201 @@ def list_action_runners(db: Session, *, project_id: str) -> list[ActionRunner]:
     )
 
 
+def _text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _execution_request(intent: ActionIntent) -> dict[str, Any] | None:
+    value = _json_loads(intent.execution_request_json, None)
+    return value if isinstance(value, dict) else None
+
+
+def _credential_pointer(request: Mapping[str, Any]) -> str | None:
+    pointer = _text(request.get("credential_pointer"))
+    credential = request.get("credential")
+    if pointer is None and isinstance(credential, Mapping):
+        pointer = _text(credential.get("pointer"))
+    if pointer and "://" in pointer:
+        raise ActionCredentialReferenceError(
+            "execution_request credential_pointer must be a non-secret alias, not a protected credential ref."
+        )
+    return pointer
+
+
+def _credential_ref_allowed_by_scope(scope: Mapping[str, Any], credential_ref: str) -> bool:
+    allowed = scope.get("allowed_prefixes")
+    if not isinstance(allowed, list) or not allowed:
+        return True
+    prefixes = [str(item).strip() for item in allowed if str(item).strip()]
+    return not prefixes or any(credential_ref.startswith(prefix) for prefix in prefixes)
+
+
+def _resolve_credential_ref_from_runner_scope(
+    runner: ActionRunner,
+    *,
+    credential_pointer: str | None,
+) -> str:
+    scope = _json_loads(runner.credential_scope_json, {})
+    if not isinstance(scope, Mapping):
+        scope = {}
+    credential_ref: str | None = None
+    refs = scope.get("credential_refs")
+    if refs is None:
+        refs = scope.get("credentials")
+    if credential_pointer:
+        if isinstance(refs, Mapping):
+            credential_ref = _text(refs.get(credential_pointer))
+        if credential_ref is None:
+            raise ActionCredentialReferenceError(
+                f"runner {runner.id} does not define credential pointer {credential_pointer!r}."
+            )
+    else:
+        credential_ref = _text(scope.get("default_credential_ref"))
+
+    if credential_ref is None:
+        raise ActionCredentialReferenceError(
+            f"runner {runner.id} does not define a default credential_ref for backend-owned execution."
+        )
+    normalized = validate_credential_ref(credential_ref)
+    if not _credential_ref_allowed_by_scope(scope, normalized):
+        raise ActionCredentialReferenceError(
+            f"runner {runner.id} credential_ref is outside the runner credential_scope allowed_prefixes."
+        )
+    return normalized
+
+
+def _runner_matches_capability(
+    runner: ActionRunner,
+    *,
+    intent: ActionIntent,
+    execution_plan: Mapping[str, Any],
+    capability: Mapping[str, Any],
+) -> bool:
+    if runner.status == "disabled":
+        return False
+    if runner.environment not in ("*", "all", intent.environment):
+        return False
+    if not _runner_supports_intent(runner, intent):
+        return False
+    runner_type = _text(capability.get("runner_type"))
+    if runner_type and runner.runner_type != runner_type:
+        return False
+    capability_version = _text(capability.get("capability_version"))
+    if capability_version and runner.capability_version != capability_version:
+        return False
+    operation_kind = _text(capability.get("operation_kind"))
+    if operation_kind and operation_kind != intent.operation_kind:
+        return False
+    adapter = _text(capability.get("adapter"))
+    if adapter and adapter != execution_plan.get("adapter"):
+        return False
+    operation = _text(capability.get("operation"))
+    if operation and operation != execution_plan.get("operation"):
+        return False
+    return True
+
+
+def _eligible_runners(
+    db: Session,
+    *,
+    intent: ActionIntent,
+    execution_plan: Mapping[str, Any],
+    capability: Mapping[str, Any],
+) -> list[ActionRunner]:
+    rows = list(
+        db.execute(
+            select(ActionRunner)
+            .where(ActionRunner.project_id == intent.project_id)
+            .order_by(ActionRunner.created_at.asc(), ActionRunner.id.asc())
+        ).scalars()
+    )
+    return [
+        row
+        for row in rows
+        if _runner_matches_capability(
+            row,
+            intent=intent,
+            execution_plan=execution_plan,
+            capability=capability,
+        )
+    ]
+
+
+def auto_create_execution_attempt_for_intent(
+    db: Session,
+    *,
+    intent: ActionIntent,
+    actor: str | None = None,
+) -> CreatedExecutionAttempt | None:
+    """Create the backend-owned claimable attempt for an authorized intent.
+
+    The agent supplies an execution_request, not a runner id or protected
+    credential ref. This resolver chooses a matching runner and resolves the
+    protected credential reference from runner/project configuration.
+    """
+    request = _execution_request(intent)
+    if request is None:
+        return None
+    if intent.status != "authorized":
+        raise ActionExecutionNotAuthorized("Action intent must be authorized before execution can be planned.")
+
+    existing = db.execute(
+        select(ActionExecutionAttempt)
+        .where(
+            ActionExecutionAttempt.project_id == intent.project_id,
+            ActionExecutionAttempt.action_intent_id == intent.id,
+        )
+        .order_by(ActionExecutionAttempt.attempt_number.asc(), ActionExecutionAttempt.created_at.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if existing is not None:
+        return CreatedExecutionAttempt(existing, created=False)
+
+    execution_plan_raw = request.get("execution_plan")
+    if not isinstance(execution_plan_raw, Mapping):
+        raise ActionExecutionPlanError("execution_request.execution_plan must be an object.")
+    normalized_plan = normalize_execution_plan_for_intent(
+        intent=intent,
+        execution_plan=execution_plan_raw,
+    )
+    capability_raw = request.get("capability")
+    capability = capability_raw if isinstance(capability_raw, Mapping) else {}
+    credential_pointer = _credential_pointer(request)
+
+    last_credential_error: ActionCredentialReferenceError | None = None
+    for runner in _eligible_runners(
+        db,
+        intent=intent,
+        execution_plan=normalized_plan,
+        capability=capability,
+    ):
+        try:
+            credential_ref = _resolve_credential_ref_from_runner_scope(
+                runner,
+                credential_pointer=credential_pointer,
+            )
+        except ActionCredentialReferenceError as exc:
+            last_credential_error = exc
+            continue
+        return create_execution_attempt(
+            db,
+            project_id=intent.project_id,
+            action_id=intent.id,
+            runner_id=runner.id,
+            idempotency_key=f"auto-execution:{intent.id}",
+            credential_ref=credential_ref,
+            execution_plan=normalized_plan,
+            requested_by_subject=actor,
+        )
+
+    if last_credential_error is not None:
+        raise last_credential_error
+    raise ActionRunnerNotFound("No action runner matched execution_request capability.")
+
+
 def record_runner_heartbeat(
     db: Session,
     *,
@@ -558,6 +753,32 @@ def list_execution_attempts(
     )
 
 
+def list_project_execution_attempts(
+    db: Session,
+    *,
+    project_id: str,
+    statuses: list[str] | None = None,
+    stale: bool = False,
+    stale_after_seconds: int = 600,
+    limit: int = 50,
+    offset: int = 0,
+    now: datetime | None = None,
+) -> list[ActionExecutionAttempt]:
+    query = select(ActionExecutionAttempt).where(ActionExecutionAttempt.project_id == project_id)
+    if statuses:
+        query = query.where(ActionExecutionAttempt.status.in_(statuses))
+    if stale:
+        cutoff = (now or _now()) - timedelta(seconds=max(1, int(stale_after_seconds)))
+        query = query.where(ActionExecutionAttempt.updated_at <= cutoff)
+    return list(
+        db.execute(
+            query.order_by(ActionExecutionAttempt.updated_at.asc(), ActionExecutionAttempt.created_at.asc())
+            .offset(max(0, int(offset)))
+            .limit(max(1, min(100, int(limit))))
+        ).scalars()
+    )
+
+
 def get_execution_attempt(
     db: Session,
     *,
@@ -720,7 +941,7 @@ def finish_execution_attempt(
 ) -> ActionExecutionAttempt:
     if final_status not in {"succeeded", "failed", "ambiguous", "cancelled"}:
         raise ActionExecutionStateError("final_status must be succeeded, failed, ambiguous, or cancelled.")
-    return _set_execution_attempt_status(
+    row = _set_execution_attempt_status(
         db,
         project_id=project_id,
         action_id=action_id,
@@ -731,6 +952,16 @@ def finish_execution_attempt(
         error_message=error_message,
         actor=actor,
     )
+    from app.services.action_post_execution import enqueue_post_execution_verification
+
+    enqueue_post_execution_verification(
+        db,
+        project_id=project_id,
+        action_id=action_id,
+        attempt_id=attempt_id,
+        actor=actor,
+    )
+    return row
 
 
 def action_runner_supported_operation_kinds(row: ActionRunner) -> list[str]:

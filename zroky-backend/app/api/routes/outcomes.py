@@ -12,8 +12,9 @@ Surface:
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Mapping
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
@@ -59,14 +60,30 @@ from app.services.system_of_record_connectors import (
 from app.services.system_of_record_connector_config import (
     CUSTOMER_RECORD_CONNECTOR_TYPE,
     GENERIC_REST_CONNECTOR_TYPE,
+    HUBSPOT_CRM_CONNECTOR_TYPE,
+    JIRA_ISSUE_CONNECTOR_TYPE,
     LEDGER_REFUND_CONNECTOR_TYPE,
+    NETSUITE_FINANCE_CONNECTOR_TYPE,
     POSTGRES_READ_CONNECTOR_TYPE,
+    RAZORPAY_REFUND_CONNECTOR_TYPE,
+    SALESFORCE_CRM_CONNECTOR_TYPE,
+    STRIPE_REFUND_CONNECTOR_TYPE,
+    ZENDESK_TICKET_CONNECTOR_TYPE,
+    ZOHO_CRM_CONNECTOR_TYPE,
     EnvelopeFormatError,
     VaultCipherUnavailable,
     build_customer_record_connector,
     build_generic_rest_connector,
+    build_hubspot_crm_connector,
+    build_jira_issue_connector,
     build_ledger_refund_connector,
+    build_netsuite_finance_connector,
     build_postgres_read_connector,
+    build_razorpay_refund_connector,
+    build_salesforce_crm_connector,
+    build_stripe_refund_connector,
+    build_zendesk_ticket_connector,
+    build_zoho_crm_connector,
     decrypt_connector_bearer_token,
     decrypt_connector_database_url,
     get_connector_config,
@@ -77,6 +94,7 @@ from app.services.source_mutations import (
     source_mutation_summary,
     source_mutation_to_dict,
 )
+from app.services.zoho_oauth import ZohoOAuthError, resolve_zoho_crm_bearer_token
 
 router = APIRouter(prefix="/v1/outcomes", tags=["outcomes"])
 logger = logging.getLogger(__name__)
@@ -398,11 +416,38 @@ class SavedPostgresReadReconciliationIngest(BaseModel):
 _SAVED_RECONCILIATION_BRIDGE_CONNECTORS = {
     "ledger_refund": LEDGER_REFUND_CONNECTOR_TYPE,
     "ledger_refund_api": LEDGER_REFUND_CONNECTOR_TYPE,
+    "stripe": STRIPE_REFUND_CONNECTOR_TYPE,
+    "stripe_refund": STRIPE_REFUND_CONNECTOR_TYPE,
+    "stripe_refunds": STRIPE_REFUND_CONNECTOR_TYPE,
+    "razorpay": RAZORPAY_REFUND_CONNECTOR_TYPE,
+    "razorpay_refund": RAZORPAY_REFUND_CONNECTOR_TYPE,
+    "razorpay_refunds": RAZORPAY_REFUND_CONNECTOR_TYPE,
     "crm_record": CUSTOMER_RECORD_CONNECTOR_TYPE,
     "customer_record": CUSTOMER_RECORD_CONNECTOR_TYPE,
     "customer_record_api": CUSTOMER_RECORD_CONNECTOR_TYPE,
     "generic_rest": GENERIC_REST_CONNECTOR_TYPE,
     "generic_rest_api": GENERIC_REST_CONNECTOR_TYPE,
+    "hubspot": HUBSPOT_CRM_CONNECTOR_TYPE,
+    "hubspot_crm": HUBSPOT_CRM_CONNECTOR_TYPE,
+    "hubspot_customer": HUBSPOT_CRM_CONNECTOR_TYPE,
+    "salesforce": SALESFORCE_CRM_CONNECTOR_TYPE,
+    "salesforce_crm": SALESFORCE_CRM_CONNECTOR_TYPE,
+    "salesforce_customer": SALESFORCE_CRM_CONNECTOR_TYPE,
+    "zoho": ZOHO_CRM_CONNECTOR_TYPE,
+    "zoho_crm": ZOHO_CRM_CONNECTOR_TYPE,
+    "zoho_customer": ZOHO_CRM_CONNECTOR_TYPE,
+    "jira": JIRA_ISSUE_CONNECTOR_TYPE,
+    "jira_issue": JIRA_ISSUE_CONNECTOR_TYPE,
+    "jira_ticket": JIRA_ISSUE_CONNECTOR_TYPE,
+    "jsm": JIRA_ISSUE_CONNECTOR_TYPE,
+    "ticket_status": ZENDESK_TICKET_CONNECTOR_TYPE,
+    "zendesk": ZENDESK_TICKET_CONNECTOR_TYPE,
+    "zendesk_ticket": ZENDESK_TICKET_CONNECTOR_TYPE,
+    "netsuite": NETSUITE_FINANCE_CONNECTOR_TYPE,
+    "netsuite_finance": NETSUITE_FINANCE_CONNECTOR_TYPE,
+    "netsuite_record": NETSUITE_FINANCE_CONNECTOR_TYPE,
+    "finance_record": NETSUITE_FINANCE_CONNECTOR_TYPE,
+    "procurement_record": NETSUITE_FINANCE_CONNECTOR_TYPE,
     "postgres": POSTGRES_READ_CONNECTOR_TYPE,
     "postgres_read": POSTGRES_READ_CONNECTOR_TYPE,
 }
@@ -686,6 +731,151 @@ def _generic_rest_match_fields(
     return fields or ["record_ref"]
 
 
+def _hubspot_crm_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["email"]
+    fields = [
+        field
+        for field in (
+            "email",
+            "lifecyclestage",
+            "hs_lead_status",
+            "status",
+            "firstname",
+            "lastname",
+            "hs_object_id",
+        )
+        if field in claimed
+    ]
+    return fields or ["record_ref"]
+
+
+def _zendesk_ticket_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["ticket_id"]
+    fields = [
+        field
+        for field in (
+            "ticket_id",
+            "status",
+            "subject",
+            "requester_id",
+            "assignee_id",
+            "priority",
+            "type",
+        )
+        if field in claimed
+    ]
+    return fields or ["record_ref"]
+
+
+def _jira_issue_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["jira_issue_key"]
+    fields = [
+        field
+        for field in (
+            "jira_issue_key",
+            "issue_key",
+            "record_ref",
+            "status",
+            "summary",
+            "assignee_id",
+            "assignee",
+            "reporter_id",
+            "issue_type",
+            "project_key",
+            "priority",
+        )
+        if field in claimed
+    ]
+    return fields or ["jira_issue_key"]
+
+
+def _salesforce_crm_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["salesforce_id"]
+    fields = [
+        field
+        for field in (
+            "Id",
+            "salesforce_id",
+            "Name",
+            "Status",
+            "StageName",
+            "LeadStatus",
+            "Amount",
+            "Email",
+            "status",
+            "amount_usd",
+        )
+        if field in claimed
+    ]
+    return fields or ["record_ref"]
+
+
+def _zoho_crm_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["zoho_record_id"]
+    fields = [
+        field
+        for field in (
+            "id",
+            "zoho_record_id",
+            "Full_Name",
+            "Email",
+            "Phone",
+            "Company",
+            "Stage",
+            "Lead_Status",
+            "Owner",
+            "Amount",
+            "status",
+            "amount_usd",
+        )
+        if field in claimed
+    ]
+    return fields or ["record_ref"]
+
+
+def _netsuite_finance_match_fields(
+    claimed: dict[str, Any], explicit: list[str] | None
+) -> list[str]:
+    if explicit:
+        fields = [field.strip() for field in explicit if field.strip()]
+        return fields or ["netsuite_record_id"]
+    fields = [
+        field
+        for field in (
+            "netsuite_record_id",
+            "record_ref",
+            "record_type",
+            "tran_id",
+            "status",
+            "amount_usd",
+            "currency",
+            "entity_id",
+        )
+        if field in claimed
+    ]
+    return fields or ["record_ref"]
+
+
 def _postgres_read_match_fields(
     claimed: dict[str, Any], explicit: list[str] | None
 ) -> list[str] | None:
@@ -735,6 +925,19 @@ def _saved_ledger_refund_idempotency_key(
     return f"saved_ledger_refund:{scope}:{refund_id}"
 
 
+def _saved_razorpay_refund_idempotency_key(
+    body: SavedLedgerRefundReconciliationIngest,
+    *,
+    refund_id: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_razorpay_refund:{scope}:{refund_id}"
+
+
 def _saved_customer_record_idempotency_key(
     body: SavedCustomerRecordReconciliationIngest,
     *,
@@ -759,6 +962,87 @@ def _saved_generic_rest_idempotency_key(
         body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
     )
     return f"saved_generic_rest:{scope}:{record_ref}"
+
+
+def _saved_hubspot_crm_idempotency_key(
+    body: SavedGenericRestReconciliationIngest,
+    *,
+    record_ref: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_hubspot_crm:{scope}:{record_ref}"
+
+
+def _saved_zendesk_ticket_idempotency_key(
+    body: SavedGenericRestReconciliationIngest,
+    *,
+    record_ref: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_zendesk_ticket:{scope}:{record_ref}"
+
+
+def _saved_jira_issue_idempotency_key(
+    body: SavedGenericRestReconciliationIngest,
+    *,
+    record_ref: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_jira_issue:{scope}:{record_ref}"
+
+
+def _saved_salesforce_crm_idempotency_key(
+    body: SavedGenericRestReconciliationIngest,
+    *,
+    object_type: str,
+    record_ref: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_salesforce_crm:{scope}:{object_type}:{record_ref}"
+
+
+def _saved_zoho_crm_idempotency_key(
+    body: SavedGenericRestReconciliationIngest,
+    *,
+    module_name: str,
+    record_ref: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_zoho_crm:{scope}:{module_name}:{record_ref}"
+
+
+def _saved_netsuite_finance_idempotency_key(
+    body: SavedGenericRestReconciliationIngest,
+    *,
+    record_type: str,
+    record_ref: str,
+) -> str:
+    if body.idempotency_key:
+        return body.idempotency_key
+    scope = (
+        body.runtime_policy_decision_id or body.call_id or body.trace_id or "unlinked"
+    )
+    return f"saved_netsuite_finance:{scope}:{record_type}:{record_ref}"
 
 
 def _postgres_read_idempotency_key(body: PostgresReadReconciliationIngest) -> str:
@@ -813,6 +1097,8 @@ def _map_saved_connector_error(exc: Exception) -> HTTPException:
             status_code=500,
             detail="Connector secret could not be decrypted.",
         )
+    if isinstance(exc, ZohoOAuthError):
+        return HTTPException(status_code=502, detail=str(exc))
     return HTTPException(status_code=422, detail=str(exc))
 
 
@@ -838,6 +1124,63 @@ def _bridge_metadata(body: SavedConnectorReconciliationIngest) -> dict[str, Any]
         "runtime_path": "webhook_bridge",
         "bridge_connector": body.connector,
     }
+
+
+def _bridge_salesforce_object_type(body: SavedConnectorReconciliationIngest) -> str:
+    for source in (body.params, body.metadata):
+        if not isinstance(source, Mapping):
+            continue
+        value = source.get("object_type") or source.get("salesforce_object")
+        if value is None:
+            continue
+        cleaned = str(value).strip()
+        if not cleaned:
+            continue
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(__c)?", cleaned):
+            raise HTTPException(
+                status_code=422,
+                detail="object_type must be a Salesforce object API name.",
+            )
+        return cleaned
+    return "Account"
+
+
+def _bridge_zoho_module_name(body: SavedConnectorReconciliationIngest) -> str:
+    for source in (body.params, body.metadata):
+        if not isinstance(source, Mapping):
+            continue
+        value = source.get("module_name") or source.get("zoho_module")
+        if value is None:
+            continue
+        cleaned = str(value).strip()
+        if not cleaned:
+            continue
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", cleaned):
+            raise HTTPException(
+                status_code=422,
+                detail="module_name must be a Zoho CRM module API name.",
+            )
+        return cleaned
+    return "Contacts"
+
+
+def _bridge_netsuite_record_type(body: SavedConnectorReconciliationIngest) -> str:
+    for source in (body.params, body.metadata):
+        if not isinstance(source, Mapping):
+            continue
+        value = source.get("record_type") or source.get("netsuite_record_type")
+        if value is None:
+            continue
+        cleaned = str(value).strip()
+        if not cleaned:
+            continue
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", cleaned):
+            raise HTTPException(
+                status_code=422,
+                detail="record_type must be a NetSuite record type API name.",
+            )
+        return cleaned
+    return "vendorBill"
 
 
 def _create_saved_ledger_refund_reconciliation(
@@ -893,6 +1236,144 @@ def _create_saved_ledger_refund_reconciliation(
             metadata={
                 **(body.metadata or {}),
                 "connector_kind": "ledger_refund_api",
+                "connector_config_id": config.id,
+                "refund_id": refund_id,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_stripe_refund_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedLedgerRefundReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=STRIPE_REFUND_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Stripe refund connector is not configured.",
+        )
+
+    refund_id = _refund_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("refund_id", refund_id)
+    claimed.setdefault("stripe_refund_id", refund_id)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_stripe_refund_connector(
+            config,
+            refund_id=refund_id,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "refund",
+            system_ref=body.system_ref or f"stripe:refund:{refund_id}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(claimed.get("amount_usd")),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_ledger_refund_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_razorpay_refund_idempotency_key(
+                body, refund_id=refund_id
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": STRIPE_REFUND_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "refund_id": refund_id,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_razorpay_refund_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedLedgerRefundReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=RAZORPAY_REFUND_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Razorpay refund connector is not configured.",
+        )
+
+    refund_id = _refund_id(body)
+    claimed = dict(body.claimed)
+    claimed.setdefault("refund_id", refund_id)
+    claimed.setdefault("razorpay_refund_id", refund_id)
+    settings = get_settings()
+
+    try:
+        key_secret = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_razorpay_refund_connector(
+            config,
+            refund_id=refund_id,
+            key_secret=key_secret,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "refund",
+            system_ref=body.system_ref or f"razorpay:refund:{refund_id}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(claimed.get("amount_usd")),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_ledger_refund_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_ledger_refund_idempotency_key(
+                body, refund_id=refund_id
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": RAZORPAY_REFUND_CONNECTOR_TYPE,
                 "connector_config_id": config.id,
                 "refund_id": refund_id,
                 "source": "saved_connector_runtime",
@@ -1028,6 +1509,443 @@ def _create_saved_generic_rest_reconciliation(
                 **(body.metadata or {}),
                 "connector_kind": GENERIC_REST_CONNECTOR_TYPE,
                 "connector_config_id": config.id,
+                "record_ref": record_ref,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_hubspot_crm_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedGenericRestReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=HUBSPOT_CRM_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="HubSpot CRM connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    if "@" in record_ref and "email" not in claimed:
+        claimed["email"] = record_ref.strip().lower()
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_hubspot_crm_connector(
+            config,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "customer_record_update",
+            system_ref=body.system_ref or f"hubspot:contact:{record_ref}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_hubspot_crm_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_hubspot_crm_idempotency_key(
+                body, record_ref=record_ref
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": HUBSPOT_CRM_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "record_ref": record_ref,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_zendesk_ticket_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedGenericRestReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=ZENDESK_TICKET_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Zendesk ticket connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    claimed.setdefault("ticket_id", record_ref)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_zendesk_ticket_connector(
+            config,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "ticket_close",
+            system_ref=body.system_ref or f"zendesk:ticket:{record_ref}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_zendesk_ticket_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_zendesk_ticket_idempotency_key(
+                body, record_ref=record_ref
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": ZENDESK_TICKET_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "record_ref": record_ref,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_jira_issue_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedGenericRestReconciliationIngest,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=JIRA_ISSUE_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Jira issue connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    claimed.setdefault("jira_issue_key", record_ref)
+    claimed.setdefault("issue_key", record_ref)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_jira_issue_connector(
+            config,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "ticket_close",
+            system_ref=body.system_ref or f"jira:issue:{record_ref}",
+            amount_usd=body.amount_usd,
+            currency=body.currency,
+            match_fields=_jira_issue_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_jira_issue_idempotency_key(
+                body, record_ref=record_ref
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": JIRA_ISSUE_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "record_ref": record_ref,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_salesforce_crm_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedGenericRestReconciliationIngest,
+    object_type: str,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=SALESFORCE_CRM_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Salesforce CRM connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    claimed.setdefault("salesforce_id", record_ref)
+    claimed.setdefault("object_type", object_type)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_salesforce_crm_connector(
+            config,
+            object_type=object_type,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "customer_record_update",
+            system_ref=body.system_ref or f"salesforce:{object_type}:{record_ref}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(claimed.get("amount_usd") or claimed.get("Amount")),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_salesforce_crm_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_salesforce_crm_idempotency_key(
+                body,
+                object_type=object_type,
+                record_ref=record_ref,
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": SALESFORCE_CRM_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "object_type": object_type,
+                "record_ref": record_ref,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_zoho_crm_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedGenericRestReconciliationIngest,
+    module_name: str,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=ZOHO_CRM_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Zoho CRM connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    claimed.setdefault("zoho_record_id", record_ref)
+    claimed.setdefault("module_name", module_name)
+    settings = get_settings()
+
+    try:
+        bearer_token = resolve_zoho_crm_bearer_token(
+            config,
+            project_id=tenant_id,
+            settings=settings,
+        )
+        connector = build_zoho_crm_connector(
+            config,
+            module_name=module_name,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "customer_record_update",
+            system_ref=body.system_ref or f"zoho:{module_name}:{record_ref}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(claimed.get("amount_usd") or claimed.get("Amount")),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_zoho_crm_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_zoho_crm_idempotency_key(
+                body,
+                module_name=module_name,
+                record_ref=record_ref,
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": ZOHO_CRM_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "module_name": module_name,
+                "record_ref": record_ref,
+                "source": "saved_connector_runtime",
+            },
+        )
+    except (
+        ConnectorConfigError,
+        EnvelopeFormatError,
+        VaultCipherUnavailable,
+        ZohoOAuthError,
+        ValueError,
+    ) as exc:
+        raise _map_saved_connector_error(exc) from exc
+
+    return _serialize_reconciliation(row)
+
+
+def _create_saved_netsuite_finance_reconciliation(
+    *,
+    db: Session,
+    tenant_id: str,
+    body: SavedGenericRestReconciliationIngest,
+    record_type: str,
+) -> OutcomeReconciliationView:
+    config = get_connector_config(
+        db,
+        project_id=tenant_id,
+        connector_type=NETSUITE_FINANCE_CONNECTOR_TYPE,
+    )
+    if config is None or not config.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="NetSuite finance connector is not configured.",
+        )
+
+    record_ref = body.record_ref.strip()
+    claimed = dict(body.claimed)
+    claimed.setdefault("record_ref", record_ref)
+    claimed.setdefault("netsuite_record_id", record_ref)
+    claimed.setdefault("record_type", record_type)
+    settings = get_settings()
+
+    try:
+        bearer_token = decrypt_connector_bearer_token(config, project_id=tenant_id)
+        connector = build_netsuite_finance_connector(
+            config,
+            record_type=record_type,
+            record_ref=record_ref,
+            bearer_token=bearer_token,
+            timeout_seconds=settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS,
+            max_attempts=settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS,
+        )
+        row = reconcile_outcome(
+            db,
+            project_id=tenant_id,
+            claimed=claimed,
+            connector=connector,
+            call_id=body.call_id,
+            trace_id=body.trace_id,
+            runtime_policy_decision_id=body.runtime_policy_decision_id,
+            action_type=body.action_type or "finance_record_update",
+            system_ref=body.system_ref or f"netsuite:{record_type}:{record_ref}",
+            amount_usd=body.amount_usd
+            if body.amount_usd is not None
+            else _optional_float(
+                claimed.get("amount_usd")
+                or claimed.get("Amount")
+                or claimed.get("total")
+            ),
+            currency=body.currency or _claim_text(claimed, "currency"),
+            match_fields=_netsuite_finance_match_fields(claimed, body.match_fields),
+            idempotency_key=_saved_netsuite_finance_idempotency_key(
+                body,
+                record_type=record_type,
+                record_ref=record_ref,
+            ),
+            metadata={
+                **(body.metadata or {}),
+                "connector_kind": NETSUITE_FINANCE_CONNECTOR_TYPE,
+                "connector_config_id": config.id,
+                "record_type": record_type,
                 "record_ref": record_ref,
                 "source": "saved_connector_runtime",
             },
@@ -1329,6 +2247,46 @@ def create_saved_ledger_refund_reconciliation(
 
 
 @router.post(
+    "/reconciliation/stripe-refund/saved",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_saved_stripe_refund_reconciliation(
+    request: Request,
+    body: SavedLedgerRefundReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Use the saved Stripe connector to verify a refund without resending its secret."""
+    return _create_saved_stripe_refund_reconciliation(
+        db=db,
+        tenant_id=tenant_id,
+        body=body,
+    )
+
+
+@router.post(
+    "/reconciliation/razorpay-refund/saved",
+    response_model=OutcomeReconciliationView,
+    status_code=201,
+)
+@limiter.limit("60/minute")
+def create_saved_razorpay_refund_reconciliation(
+    request: Request,
+    body: SavedLedgerRefundReconciliationIngest = Body(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: str = Depends(require_tenant_id),
+) -> OutcomeReconciliationView:
+    """Use the saved Razorpay connector to verify a refund without resending its secret."""
+    return _create_saved_razorpay_refund_reconciliation(
+        db=db,
+        tenant_id=tenant_id,
+        body=body,
+    )
+
+
+@router.post(
     "/reconciliation/customer-record",
     response_model=OutcomeReconciliationView,
     status_code=201,
@@ -1491,6 +2449,24 @@ def create_saved_connector_reconciliation(
                 **common,
             ),
         )
+    if body.connector == STRIPE_REFUND_CONNECTOR_TYPE:
+        return _create_saved_stripe_refund_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedLedgerRefundReconciliationIngest(
+                refund_id=body.refund_id,
+                **common,
+            ),
+        )
+    if body.connector == RAZORPAY_REFUND_CONNECTOR_TYPE:
+        return _create_saved_razorpay_refund_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedLedgerRefundReconciliationIngest(
+                refund_id=body.refund_id,
+                **common,
+            ),
+        )
     if body.connector == CUSTOMER_RECORD_CONNECTOR_TYPE:
         return _create_saved_customer_record_reconciliation(
             db=db,
@@ -1508,6 +2484,63 @@ def create_saved_connector_reconciliation(
                 record_ref=_bridge_record_ref(body),
                 **common,
             ),
+        )
+    if body.connector == HUBSPOT_CRM_CONNECTOR_TYPE:
+        return _create_saved_hubspot_crm_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedGenericRestReconciliationIngest(
+                record_ref=_bridge_record_ref(body),
+                **common,
+            ),
+        )
+    if body.connector == ZENDESK_TICKET_CONNECTOR_TYPE:
+        return _create_saved_zendesk_ticket_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedGenericRestReconciliationIngest(
+                record_ref=_bridge_record_ref(body),
+                **common,
+            ),
+        )
+    if body.connector == JIRA_ISSUE_CONNECTOR_TYPE:
+        return _create_saved_jira_issue_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedGenericRestReconciliationIngest(
+                record_ref=_bridge_record_ref(body),
+                **common,
+            ),
+        )
+    if body.connector == SALESFORCE_CRM_CONNECTOR_TYPE:
+        return _create_saved_salesforce_crm_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedGenericRestReconciliationIngest(
+                record_ref=_bridge_record_ref(body),
+                **common,
+            ),
+            object_type=_bridge_salesforce_object_type(body),
+        )
+    if body.connector == ZOHO_CRM_CONNECTOR_TYPE:
+        return _create_saved_zoho_crm_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedGenericRestReconciliationIngest(
+                record_ref=_bridge_record_ref(body),
+                **common,
+            ),
+            module_name=_bridge_zoho_module_name(body),
+        )
+    if body.connector == NETSUITE_FINANCE_CONNECTOR_TYPE:
+        return _create_saved_netsuite_finance_reconciliation(
+            db=db,
+            tenant_id=tenant_id,
+            body=SavedGenericRestReconciliationIngest(
+                record_ref=_bridge_record_ref(body),
+                **common,
+            ),
+            record_type=_bridge_netsuite_record_type(body),
         )
     if body.connector == POSTGRES_READ_CONNECTOR_TYPE:
         return _create_saved_postgres_read_reconciliation(

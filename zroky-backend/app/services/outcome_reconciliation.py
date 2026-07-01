@@ -47,6 +47,8 @@ VALID_VERIFICATION_STATUSES = frozenset(
 
 DEFAULT_MATCH_FIELDS = (
     "status",
+    "amount_minor",
+    "amount_major",
     "amount",
     "amount_usd",
     "currency",

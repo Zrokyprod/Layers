@@ -108,6 +108,21 @@ def test_project_and_api_key_flow(client: TestClient) -> None:
     status_payload = status_response.json()
     assert status_payload["tenant_id"] == project_id
 
+    rename_response = client.patch(
+        "/v1/settings/project",
+        headers=_project_auth_headers(project_id, "owner-1"),
+        json={"name": "Acme Verified Actions"},
+    )
+    assert rename_response.status_code == 200
+    assert rename_response.json()["name"] == "Acme Verified Actions"
+
+    settings_response = client.get(
+        "/v1/settings/project",
+        headers=_project_auth_headers(project_id, "owner-1"),
+    )
+    assert settings_response.status_code == 200
+    assert settings_response.json()["name"] == "Acme Verified Actions"
+
 
 def test_invalid_api_key_rejected(client: TestClient) -> None:
     response = client.post(

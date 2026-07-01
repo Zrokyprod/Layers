@@ -12,10 +12,6 @@ const hooks = vi.hoisted(() => ({
   useRotateProjectApiKey: vi.fn(),
 }));
 
-const navigation = vi.hoisted(() => ({
-  query: "",
-}));
-
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -32,10 +28,6 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(navigation.query),
-}));
-
 vi.mock("@/lib/hooks", () => hooks);
 
 const now = "2026-05-29T10:00:00.000Z";
@@ -44,7 +36,7 @@ function apiKey(overrides: Partial<import("@/lib/types").ApiKeyResponse> = {}): 
   return {
     key_id: "key_1",
     project_id: "proj_1",
-    name: "Production capture key",
+    name: "Production verified-action key",
     key_prefix: "zk_live",
     scopes: ["project:member"],
     revoked: false,
@@ -61,7 +53,7 @@ function createdKey(overrides: Partial<import("@/lib/types").ApiKeyCreateRespons
   return {
     key_id: "key_new",
     project_id: "proj_1",
-    name: "Production capture key",
+    name: "Production verified-action key",
     key_prefix: "zk_new",
     api_key: "zk_live_created_secret",
     scopes: ["project:member"],
@@ -80,7 +72,6 @@ const clipboardWrite = vi.fn();
 describe("ApiKeysPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    navigation.query = "";
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: clipboardWrite },
@@ -111,103 +102,39 @@ describe("ApiKeysPage", () => {
     });
   });
 
-  it("renders a capture-first setup page and empty state", () => {
+  it("renders a verified-action setup page and empty state", () => {
     render(<ApiKeysPage />);
 
+    expect(screen.getByRole("heading", { name: "Verified action access" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Project key setup" })).toBeInTheDocument();
     expect(screen.getByText("Create key")).toBeInTheDocument();
-    expect(screen.getByText("Run SDK/Gateway")).toBeInTheDocument();
-    expect(screen.getByText("First trace")).toBeInTheDocument();
-    expect(screen.getByText("Fixture validation")).toBeInTheDocument();
+    expect(screen.getAllByText("Configure agent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Run verified action").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Signed receipt").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Create project key" })).toBeInTheDocument();
-    expect(screen.getByText("No model-provider setup is needed for capture.")).toBeInTheDocument();
-    expect(screen.getByText("Use a project key first; advanced replay setup can come later when a protected workflow needs it.")).toBeInTheDocument();
-    expect(screen.getByText("No project keys yet. Create one to start capturing calls.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open evidence" }).getAttribute("href")).toBe("/evidence");
+    expect(screen.getByText("No model-provider setup is needed for verified actions.")).toBeInTheDocument();
+    expect(screen.getByText("Use a project key for access; policy, runner, and verifier setup stays in Agent Setup.")).toBeInTheDocument();
+    expect(screen.getByText("No project keys yet. Create one to run your first verified action.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configure agent" }).getAttribute("href")).toBe("/agents/setup");
+    expect(screen.getAllByRole("link", { name: "Open evidence" }).some((link) => link.getAttribute("href") === "/evidence")).toBe(true);
     expect(screen.queryByRole("link", { name: "Provider settings" })).not.toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("traceRun"))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("zroky.trace_run"))).toBeInTheDocument();
+    expect(screen.getAllByText((content) => content.includes("verifiedAction")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((content) => content.includes("zroky.verified_action")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((content) => content.includes('import { init, verifiedAction, awaitActionProof } from "@zroky-ai/sdk";')).length).toBeGreaterThan(0);
+    expect(screen.queryByText((content) => content.includes("traceRun"))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("captureToolCall"))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("wrap("))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("zroky.trace_run"))).not.toBeInTheDocument();
   });
 
-  it("surfaces the protected agent setup intent with mandate and SDK copy actions", async () => {
-    navigation.query = "intent=protect-agent&plan=pro&source=pricing";
-
+  it("keeps agent configuration out of API Keys even with setup query params", () => {
     render(<ApiKeysPage />);
 
-    expect(screen.getByRole("heading", { name: "First protected agent setup" })).toBeInTheDocument();
-    expect(screen.getByText("Plan intent: Pro")).toBeInTheDocument();
-    expect(screen.getByText("Source: Pricing")).toBeInTheDocument();
-    expect(screen.getByText("5 starter mandates")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Create project key" }).getAttribute("href")).toBe("#create-project-key");
-    expect(screen.getByRole("tab", { name: "Refund / payment" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText("refund-ops-agent")).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('name: "issue_refund"'))).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: "DevOps / release" }));
-
-    expect(screen.getByText("release-ops-agent")).toBeInTheDocument();
-    expect(screen.getByText("CI deployment and incident status")).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('name: "deploy_change"'))).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Webhook proof bridge" })).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("/v1/outcomes/reconciliation/saved"))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("x-api-key: $ZROKY_API_KEY"))).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open proof connector" }).getAttribute("href")).toBe("/integrations");
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy mandate" }));
-    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("release-ops-agent")));
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy SDK wrapper" }));
-    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining('name: "deploy_change"')));
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy webhook bridge" }));
-    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("/v1/outcomes/reconciliation/saved")));
-  });
-
-  it("renders pilot handoff proof criteria and connector inputs after pilot signup", async () => {
-    navigation.query = "intent=protect-agent&plan=pro&source=pilot";
-
-    render(<ApiKeysPage />);
-
-    expect(screen.getByText("Pilot handoff readiness")).toBeInTheDocument();
-    expect(screen.getByText("Connect system of record")).toBeInTheDocument();
-    expect(screen.getByText("Run connector preflight")).toBeInTheDocument();
-    expect(screen.getByText("Run full proof command")).toBeInTheDocument();
-    expect(screen.getByText("ledger/refund API base URL")).toBeInTheDocument();
-    expect(screen.getByText("unsafe_action_stopped")).toBeInTheDocument();
-    expect(screen.getByText("connector_configured")).toBeInTheDocument();
-    expect(screen.getByText("connector_health_verified")).toBeInTheDocument();
-    expect(screen.getByText("real_connector_ready")).toBeInTheDocument();
-    expect(screen.getByText("saved_test_endpoint_used")).toBeInTheDocument();
-    expect(screen.getByText("evidence_hash_visible")).toBeInTheDocument();
-    expect(screen.getByText("evidence_json_exported")).toBeInTheDocument();
-    expect(screen.getByText("not_verified_when_missing")).toBeInTheDocument();
-    expect(screen.getByText("Packaged full proof command")).toBeInTheDocument();
-    expect(screen.getByText("Packaged full proof runner:")).toBeInTheDocument();
-    expect(screen.getByText("Refund and payment agents can use the packaged ledger/refund preflight and full proof runner.")).toBeInTheDocument();
-    expect(screen.getByText(/--scenario refund/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Configure ledger connector" }).getAttribute("href")).toBe(
-      "/integrations#ledger-refund-connector"
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy live smoke command" }));
-    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("--scenario refund")));
-
-    fireEvent.click(screen.getByRole("tab", { name: "CRM / data" }));
-    expect(screen.getByText("CRM/customer API base URL")).toBeInTheDocument();
-    expect(screen.getByText("CRM and data agents can use the packaged customer-record preflight and full proof runner.")).toBeInTheDocument();
-    expect(screen.getByText(/--scenario customer-record/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Configure CRM connector" }).getAttribute("href")).toBe(
-      "/integrations#customer-record-connector"
-    );
-
-    fireEvent.click(screen.getByRole("tab", { name: "Procurement / spend" }));
-    expect(screen.getByText("ERP or purchase-order API")).toBeInTheDocument();
-    expect(screen.getByText("Custom connector required before live smoke")).toBeInTheDocument();
-    expect(screen.getByText("Custom connector required:")).toBeInTheDocument();
-    expect(screen.getByText("This template has mandate and SDK capture coverage. Add a connector that reads ERP purchase order before calling the pilot verified.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open connectors" }).getAttribute("href")).toBe(
-      "/integrations"
-    );
+    expect(screen.getByRole("heading", { name: "Verified action access" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "First protected agent setup" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Pilot handoff readiness")).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy mandate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Webhook proof bridge")).not.toBeInTheDocument();
   });
 
   it("creates a project key with the expected payload and shows the one-time copy panel", async () => {
@@ -220,7 +147,7 @@ describe("ApiKeysPage", () => {
     await waitFor(() =>
       expect(createMutateAsync).toHaveBeenCalledWith({
         projectId: "proj_1",
-        name: "Production capture key",
+        name: "Production verified-action key",
         expires_in_days: 90,
         scopes: ["project:member"],
       }),
@@ -229,6 +156,8 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("zk_live_created_secret")).toBeInTheDocument();
     expect(screen.getByText("proj_1")).toBeInTheDocument();
     expect(screen.getAllByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"')).length).toBe(2);
+    expect(screen.getAllByText((content) => content.includes("npm install @zroky-ai/sdk")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((content) => content.includes("pip install zroky")).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Open evidence" }).some((link) => link.getAttribute("href") === "/evidence")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Copy key" }));
@@ -236,6 +165,16 @@ describe("ApiKeysPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy Node setup" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("ZROKY_PROJECT_ID")));
+  });
+
+  it("blocks invalid expiry values before creating a key", async () => {
+    render(<ApiKeysPage />);
+
+    fireEvent.change(screen.getByLabelText("Expires in days"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create project key" }));
+
+    expect(await screen.findByText("Failed to create key: expiry must be blank or a whole number between 1 and 3650 days.")).toBeInTheDocument();
+    expect(createMutateAsync).not.toHaveBeenCalled();
   });
 
   it("rotates an active key and shows the replacement key panel", async () => {

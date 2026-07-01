@@ -3,18 +3,17 @@
 import { useMemo, useState } from "react";
 
 /**
- * Judge Narrative Card — surfaces the LLM judge's verbatim reasoning as a
- * screenshot-worthy hero callout. Designed for the "engineer pastes this into
- * Slack" moment.
+ * AI Advisory Narrative Card - surfaces model-authored diagnostic reasoning as
+ * non-authoritative context. It is useful for triage, not for policy authority
+ * or proof.
  *
  * Distinct from `JudgeScorecard`:
  *   - Scorecard:  per-dimension bars + scores + small reason text.
- *   - Narrative:  ONE prominent quote — the lowest-scored dimension's reason,
- *                 attributed to the judge model, with a copy-to-clipboard CTA.
+ *   - Narrative:  ONE prominent quote - the lowest-scored dimension's reason,
+ *                 attributed to the advisory model, with a copy-to-clipboard CTA.
  *
- * The narrative is the strongest emotional / shareable artifact Layer 3
- * produces: "the judge said the agent fabricated three citations." This card
- * lets users copy that verbatim string + provenance with one click.
+ * This narrative is advisory context only. It must not be treated as the
+ * policy decision or system-of-record proof for a protected action.
  *
  * Renders only when the diagnosis evidence carries a Layer 3 detector's
  * reasoning text (groundedness_reason / accuracy_reason). Silent otherwise
@@ -138,19 +137,20 @@ export function JudgeNarrativeCard({ source, category }: JudgeNarrativeCardProps
   // — TypeScript doesn't propagate the `if (!narrative) return null` guard
   // into nested function declarations.
   const n: Narrative = narrative;
-  const heroCategory = category && category.trim() ? category : "Layer 3 verdict";
+  const heroCategory = category && category.trim() ? category : "AI advisory";
   const accent = n.severity; // critical | high | medium → CSS class
 
   function buildShareText(): string {
     const parts: string[] = [];
-    parts.push(`Judge verdict on ${n.dimension}:`);
+    parts.push(`AI advisory on ${n.dimension}:`);
     parts.push(`"${n.reason}"`);
     const meta: string[] = [];
     if (model) meta.push(`model: ${model}`);
-    if (verdict) meta.push(`verdict: ${verdict}`);
+    if (verdict) meta.push(`advisory verdict: ${verdict}`);
     if (n.score !== null) meta.push(`score: ${n.score.toFixed(2)}`);
     if (confidence !== null) meta.push(`confidence: ${(confidence * 100).toFixed(0)}%`);
-    if (meta.length > 0) parts.push(`— ${meta.join(", ")}`);
+    if (meta.length > 0) parts.push(`- ${meta.join(", ")}`);
+    parts.push("Advisory only. Policy decisions and system-of-record proof remain authoritative.");
     return parts.join("\n");
   }
 
@@ -166,10 +166,10 @@ export function JudgeNarrativeCard({ source, category }: JudgeNarrativeCardProps
   }
 
   return (
-    <article className={`judge-narrative judge-narrative-${accent}`} aria-label="Judge narrative">
+    <article className={`judge-narrative judge-narrative-${accent}`} aria-label="AI advisory narrative">
       <header className="judge-narrative-header">
         <div className="judge-narrative-eyebrow">
-          <span aria-hidden="true">⚖</span> {heroCategory}
+          <span aria-hidden="true">AI</span> {heroCategory}
           {narrative.dimension ? (
             <span className="judge-narrative-eyebrow-sub">· {narrative.dimension}</span>
           ) : null}
@@ -178,21 +178,21 @@ export function JudgeNarrativeCard({ source, category }: JudgeNarrativeCardProps
           type="button"
           className="judge-narrative-copy-btn"
           onClick={() => void copyShareText()}
-          aria-label="Copy verdict text to clipboard"
+          aria-label="Copy advisory text to clipboard"
         >
-          {copied ? "✓ Copied" : "Copy"}
+          {copied ? "Copied" : "Copy"}
         </button>
       </header>
 
       <blockquote className="judge-narrative-quote">
-        <p>“{narrative.reason}”</p>
+        <p>&ldquo;{narrative.reason}&rdquo;</p>
       </blockquote>
 
       <footer className="judge-narrative-footer">
         {model ? <span className="mono judge-narrative-model">{model}</span> : null}
         {verdict ? (
           <span className={`judge-narrative-verdict judge-narrative-verdict-${verdict}`}>
-            {verdict}
+            Advisory: {verdict}
           </span>
         ) : null}
         {narrative.score !== null ? (
@@ -206,6 +206,7 @@ export function JudgeNarrativeCard({ source, category }: JudgeNarrativeCardProps
             confidence <span className="mono">{(confidence * 100).toFixed(0)}%</span>
           </span>
         ) : null}
+        <span className="judge-narrative-confidence">advisory only</span>
       </footer>
     </article>
   );

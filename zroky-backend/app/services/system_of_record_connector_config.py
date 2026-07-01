@@ -24,24 +24,69 @@ from app.services.system_of_record_connectors import (
     ConnectorConfigError,
     CustomerRecordApiConnector,
     GenericRestApiConnector,
+    HubSpotCrmConnector,
+    JiraIssueConnector,
     LedgerRefundApiConnector,
+    NetSuiteFinanceConnector,
     PostgresReadOnlyConnector,
+    RazorpayRefundConnector,
+    SalesforceCrmConnector,
+    StripeRefundConnector,
+    ZendeskTicketConnector,
+    ZohoCrmConnector,
     validate_customer_record_api_config,
     validate_generic_rest_api_config,
+    validate_hubspot_crm_config,
+    validate_jira_issue_config,
     validate_ledger_refund_api_config,
+    validate_netsuite_finance_config,
     validate_postgres_read_config,
+    validate_razorpay_refund_config,
+    validate_salesforce_crm_config,
+    validate_stripe_refund_config,
+    validate_zendesk_ticket_config,
+    validate_zoho_crm_config,
 )
 
 CUSTOMER_RECORD_CONNECTOR_TYPE = "customer_record_api"
 GENERIC_REST_CONNECTOR_TYPE = "generic_rest_api"
+HUBSPOT_CRM_CONNECTOR_TYPE = "hubspot_crm"
+JIRA_ISSUE_CONNECTOR_TYPE = "jira_issue"
 LEDGER_REFUND_CONNECTOR_TYPE = "ledger_refund_api"
+NETSUITE_FINANCE_CONNECTOR_TYPE = "netsuite_finance"
 POSTGRES_READ_CONNECTOR_TYPE = "postgres_read"
+RAZORPAY_REFUND_CONNECTOR_TYPE = "razorpay_refund"
+SALESFORCE_CRM_CONNECTOR_TYPE = "salesforce_crm"
+STRIPE_REFUND_CONNECTOR_TYPE = "stripe_refund"
+ZENDESK_TICKET_CONNECTOR_TYPE = "zendesk_ticket"
+ZOHO_CRM_CONNECTOR_TYPE = "zoho_crm"
+_SALESFORCE_DEFAULT_QUERY = {
+    "fields": "Id,Name",
+}
+_ZOHO_DEFAULT_QUERY = {
+    "fields": "id,Full_Name,Email,Phone,Company,Stage,Amount,Lead_Status,Owner,Modified_Time",
+}
+_HUBSPOT_DEFAULT_QUERY = {
+    "properties": "email,firstname,lastname,lifecyclestage,hs_lead_status,hs_object_id",
+}
+_JIRA_DEFAULT_QUERY = {
+    "fields": "summary,status,assignee,reporter,issuetype,project,priority,updated,created,resolutiondate,labels",
+}
+_NETSUITE_DEFAULT_QUERY: dict[str, str] = {}
 VALID_CONNECTOR_TYPES = frozenset(
     {
         CUSTOMER_RECORD_CONNECTOR_TYPE,
         GENERIC_REST_CONNECTOR_TYPE,
+        HUBSPOT_CRM_CONNECTOR_TYPE,
+        JIRA_ISSUE_CONNECTOR_TYPE,
         LEDGER_REFUND_CONNECTOR_TYPE,
+        NETSUITE_FINANCE_CONNECTOR_TYPE,
         POSTGRES_READ_CONNECTOR_TYPE,
+        RAZORPAY_REFUND_CONNECTOR_TYPE,
+        SALESFORCE_CRM_CONNECTOR_TYPE,
+        STRIPE_REFUND_CONNECTOR_TYPE,
+        ZENDESK_TICKET_CONNECTOR_TYPE,
+        ZOHO_CRM_CONNECTOR_TYPE,
     }
 )
 
@@ -61,10 +106,67 @@ _CONNECTOR_CONTRACTS: dict[str, dict[str, Any]] = {
             "safe_existing_refund_id",
         ],
         "required_record_fields": ["refund_id", "status"],
-        "recommended_record_fields": ["amount_usd", "currency"],
+        "recommended_record_fields": ["amount_minor", "amount_major", "currency"],
         "pass_rule": (
             "A saved connector test must fetch one refund record from the "
             "system of record and reconcile it as matched."
+        ),
+    },
+    STRIPE_REFUND_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": STRIPE_REFUND_CONNECTOR_TYPE,
+        "adapter": "stripe_refund_read",
+        "system_of_record": "stripe",
+        "config_endpoint": "/v1/integrations/system-of-record/stripe-refund/config",
+        "status_endpoint": "/v1/integrations/system-of-record/stripe-refund/status",
+        "test_endpoint": "/v1/integrations/system-of-record/stripe-refund/test",
+        "auth_mode": "stripe_secret_key",
+        "oauth_status": "not_required",
+        "required_inputs": [
+            "stripe_secret_key_with_read_scope",
+            "safe_existing_refund_id",
+            "fields_to_verify",
+        ],
+        "required_record_fields": ["refund_id", "status"],
+        "recommended_record_fields": [
+            "amount_minor",
+            "amount_major",
+            "currency",
+            "charge_id",
+            "payment_intent_id",
+        ],
+        "pass_rule": (
+            "A saved connector test must fetch one Stripe refund through the "
+            "read-only Stripe API and reconcile the configured fields as matched."
+        ),
+    },
+    RAZORPAY_REFUND_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": RAZORPAY_REFUND_CONNECTOR_TYPE,
+        "adapter": "razorpay_refund_read",
+        "system_of_record": "razorpay",
+        "config_endpoint": "/v1/integrations/system-of-record/razorpay-refund/config",
+        "status_endpoint": "/v1/integrations/system-of-record/razorpay-refund/status",
+        "test_endpoint": "/v1/integrations/system-of-record/razorpay-refund/test",
+        "auth_mode": "basic_key_id_secret",
+        "oauth_status": "not_required",
+        "required_inputs": [
+            "razorpay_key_id",
+            "razorpay_key_secret_with_read_scope",
+            "safe_existing_refund_id",
+            "fields_to_verify",
+        ],
+        "required_record_fields": ["refund_id", "status"],
+        "recommended_record_fields": [
+            "amount_minor",
+            "amount_major",
+            "currency",
+            "payment_id",
+            "receipt",
+        ],
+        "pass_rule": (
+            "A saved connector test must fetch one Razorpay refund through the "
+            "read-only Razorpay API and reconcile the configured fields as matched."
         ),
     },
     CUSTOMER_RECORD_CONNECTOR_TYPE: {
@@ -107,6 +209,165 @@ _CONNECTOR_CONTRACTS: dict[str, dict[str, Any]] = {
         "pass_rule": (
             "A saved connector test must fetch one JSON record from the "
             "customer system and reconcile the configured match fields as matched."
+        ),
+    },
+    HUBSPOT_CRM_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": HUBSPOT_CRM_CONNECTOR_TYPE,
+        "adapter": "hubspot_crm_contact_read",
+        "system_of_record": "hubspot_crm",
+        "config_endpoint": "/v1/integrations/system-of-record/hubspot-crm/config",
+        "status_endpoint": "/v1/integrations/system-of-record/hubspot-crm/status",
+        "test_endpoint": "/v1/integrations/system-of-record/hubspot-crm/test",
+        "auth_mode": "private_app_bearer_token",
+        "oauth_status": "planned",
+        "required_inputs": [
+            "hubspot_private_app_token",
+            "safe_existing_contact_id_or_email",
+            "properties_to_verify",
+        ],
+        "required_record_fields": ["hs_object_id"],
+        "recommended_record_fields": ["email", "lifecyclestage", "hs_lead_status"],
+        "pass_rule": (
+            "A saved connector test must fetch one HubSpot contact through the "
+            "CRM v3 API and reconcile the configured fields as matched."
+        ),
+    },
+    ZENDESK_TICKET_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": ZENDESK_TICKET_CONNECTOR_TYPE,
+        "adapter": "zendesk_ticket_read",
+        "system_of_record": "zendesk_support",
+        "config_endpoint": "/v1/integrations/system-of-record/zendesk-ticket/config",
+        "status_endpoint": "/v1/integrations/system-of-record/zendesk-ticket/status",
+        "test_endpoint": "/v1/integrations/system-of-record/zendesk-ticket/test",
+        "auth_mode": "oauth_bearer_or_api_token_basic",
+        "oauth_status": "planned",
+        "required_inputs": [
+            "zendesk_subdomain_url",
+            "read_scoped_token",
+            "safe_existing_ticket_id",
+        ],
+        "required_record_fields": ["ticket_id", "status"],
+        "recommended_record_fields": ["subject", "requester_id", "assignee_id"],
+        "pass_rule": (
+            "A saved connector test must fetch one Zendesk Support ticket and "
+            "reconcile the configured fields as matched."
+        ),
+    },
+    JIRA_ISSUE_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": JIRA_ISSUE_CONNECTOR_TYPE,
+        "adapter": "jira_issue_read",
+        "system_of_record": "jira_service_management",
+        "config_endpoint": "/v1/integrations/system-of-record/jira-issue/config",
+        "status_endpoint": "/v1/integrations/system-of-record/jira-issue/status",
+        "test_endpoint": "/v1/integrations/system-of-record/jira-issue/test",
+        "auth_mode": "api_token_basic_or_bearer",
+        "oauth_status": "planned",
+        "required_inputs": [
+            "jira_cloud_base_url",
+            "read_scoped_api_token_or_bearer_token",
+            "safe_existing_issue_key_or_id",
+        ],
+        "required_record_fields": ["jira_issue_key"],
+        "recommended_record_fields": [
+            "summary",
+            "status",
+            "assignee",
+            "reporter",
+            "issue_type",
+            "project",
+            "priority",
+            "updated_at",
+        ],
+        "pass_rule": (
+            "A saved connector test must fetch one Jira/JSM issue and "
+            "reconcile the configured fields as matched."
+        ),
+    },
+    SALESFORCE_CRM_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": SALESFORCE_CRM_CONNECTOR_TYPE,
+        "adapter": "salesforce_crm_sobject_read",
+        "system_of_record": "salesforce_crm",
+        "config_endpoint": "/v1/integrations/system-of-record/salesforce-crm/config",
+        "status_endpoint": "/v1/integrations/system-of-record/salesforce-crm/status",
+        "test_endpoint": "/v1/integrations/system-of-record/salesforce-crm/test",
+        "auth_mode": "oauth_bearer_token",
+        "oauth_status": "planned",
+        "required_inputs": [
+            "salesforce_instance_url",
+            "read_scoped_access_token",
+            "safe_existing_object_type_and_record_id",
+            "fields_to_verify",
+        ],
+        "required_record_fields": ["Id"],
+        "recommended_record_fields": ["Name", "Status", "StageName", "Amount"],
+        "pass_rule": (
+            "A saved connector test must fetch one Salesforce sObject record and "
+            "reconcile the configured fields as matched."
+        ),
+    },
+    ZOHO_CRM_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": ZOHO_CRM_CONNECTOR_TYPE,
+        "adapter": "zoho_crm_module_record_read",
+        "system_of_record": "zoho_crm",
+        "config_endpoint": "/v1/integrations/system-of-record/zoho-crm/config",
+        "status_endpoint": "/v1/integrations/system-of-record/zoho-crm/status",
+        "test_endpoint": "/v1/integrations/system-of-record/zoho-crm/test",
+        "auth_mode": "oauth_bearer_token",
+        "oauth_status": "available",
+        "oauth_start_endpoint": "/v1/integrations/system-of-record/zoho-crm/oauth/start",
+        "required_inputs": [
+            "zoho_api_domain",
+            "read_scoped_oauth_connection_or_access_token",
+            "safe_existing_module_and_record_id",
+            "fields_to_verify",
+        ],
+        "required_record_fields": ["id"],
+        "recommended_record_fields": [
+            "Full_Name",
+            "Email",
+            "Stage",
+            "Lead_Status",
+            "Owner",
+            "Amount",
+        ],
+        "pass_rule": (
+            "A saved connector test must fetch one Zoho CRM module record and "
+            "reconcile the configured fields as matched."
+        ),
+    },
+    NETSUITE_FINANCE_CONNECTOR_TYPE: {
+        "schema_version": "system_of_record_connector.v1",
+        "connector_type": NETSUITE_FINANCE_CONNECTOR_TYPE,
+        "adapter": "netsuite_finance_record_read",
+        "system_of_record": "netsuite",
+        "config_endpoint": "/v1/integrations/system-of-record/netsuite-finance/config",
+        "status_endpoint": "/v1/integrations/system-of-record/netsuite-finance/status",
+        "test_endpoint": "/v1/integrations/system-of-record/netsuite-finance/test",
+        "auth_mode": "bearer_token",
+        "oauth_status": "manual_token_supported",
+        "required_inputs": [
+            "netsuite_account_rest_base_url",
+            "record_type",
+            "record_ref",
+            "read_scoped_bearer_token",
+        ],
+        "required_record_fields": ["record_type", "record_ref"],
+        "recommended_record_fields": [
+            "tran_id",
+            "status",
+            "amount_minor",
+            "amount_major",
+            "currency",
+            "entity_id",
+        ],
+        "pass_rule": (
+            "A saved connector test must fetch one NetSuite finance or "
+            "procurement record and reconcile the configured fields as matched."
         ),
     },
     POSTGRES_READ_CONNECTOR_TYPE: {
@@ -213,10 +474,15 @@ def _connector_readiness(
             "not_retryable_failure": "latest connector test ended in a retryable failure",
         }
     else:
+        token_present = row is not None and bool(row.bearer_token_ciphertext)
+        if connector_type == ZOHO_CRM_CONNECTOR_TYPE:
+            token_present = row is not None and (
+                bool(row.bearer_token_ciphertext)
+                or bool(row.oauth_refresh_token_ciphertext)
+            )
         checks = {
             "config_saved": row is not None and bool(row.is_active),
-            "bearer_token_present": row is not None
-            and bool(row.bearer_token_ciphertext),
+            "bearer_token_present": token_present,
             "saved_test_matched": health_payload.get("last_verdict") == "matched",
             "connector_attempted": last_attempts is not None and last_attempts >= 1,
             "http_2xx": last_http_status is not None
@@ -226,7 +492,7 @@ def _connector_readiness(
         }
         blocker_messages = {
             "config_saved": "connector config has not been saved",
-            "bearer_token_present": "read-scoped bearer token is missing",
+            "bearer_token_present": "read-scoped OAuth connection or bearer token is missing",
             "saved_test_matched": "latest connector test did not reconcile as matched",
             "connector_attempted": "connector has not attempted a system-of-record read",
             "http_2xx": "latest connector test did not return a 2xx HTTP response",
@@ -350,6 +616,155 @@ def upsert_ledger_refund_connector_config(
                 "bearer_token must not be empty when provided"
             )
         bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_stripe_refund_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    base_url: str = "https://api.stripe.com",
+    path_template: str = "/v1/refunds/{refund_id}",
+    record_path: str | None = None,
+    query: Mapping[str, Any] | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_stripe_refund_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = _normalize_query(query)
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=STRIPE_REFUND_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=STRIPE_REFUND_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=STRIPE_REFUND_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_razorpay_refund_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    key_id: str,
+    key_secret: str | None = None,
+    base_url: str = "https://api.razorpay.com",
+    path_template: str = "/v1/refunds/{refund_id}",
+    record_path: str | None = None,
+    query: Mapping[str, Any] | None = None,
+    clear_key_secret: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_razorpay_refund_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    cleaned_key_id = key_id.strip()
+    if len(cleaned_key_id) < 4:
+        raise InvalidSystemOfRecordConnectorError("key_id must be at least 4 characters")
+    normalized_query = {
+        **(_normalize_query(query) or {}),
+        "key_id": cleaned_key_id,
+    }
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=RAZORPAY_REFUND_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=RAZORPAY_REFUND_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=RAZORPAY_REFUND_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_key_secret:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif key_secret is not None:
+        cleaned_secret = key_secret.strip()
+        if not cleaned_secret:
+            raise InvalidSystemOfRecordConnectorError(
+                "key_secret must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned_secret, project_id=project_id)
         row.bearer_token_ciphertext = bundle.ciphertext
         row.bearer_token_fingerprint = bundle.key_fingerprint
         row.bearer_token_last4 = bundle.key_last4
@@ -507,6 +922,474 @@ def upsert_generic_rest_connector_config(
     return row
 
 
+def upsert_hubspot_crm_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    path_template: str = "/crm/v3/objects/contacts/{record_ref}",
+    record_path: str | None = None,
+    query: Mapping[str, Any] | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_hubspot_crm_config(
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = {
+        **_HUBSPOT_DEFAULT_QUERY,
+        **(_normalize_query(query) or {}),
+    }
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=HUBSPOT_CRM_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=HUBSPOT_CRM_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=HUBSPOT_CRM_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_zendesk_ticket_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    base_url: str,
+    path_template: str = "/api/v2/tickets/{record_ref}.json",
+    record_path: str | None = "ticket",
+    query: Mapping[str, Any] | None = None,
+    auth_username: str | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_zendesk_ticket_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = _normalize_query(query) or {}
+    cleaned_username = (auth_username or "").strip()
+    if cleaned_username:
+        normalized_query["auth_username"] = cleaned_username
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=ZENDESK_TICKET_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=ZENDESK_TICKET_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=ZENDESK_TICKET_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_jira_issue_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    base_url: str,
+    path_template: str = "/rest/api/3/issue/{record_ref}",
+    record_path: str | None = None,
+    query: Mapping[str, Any] | None = None,
+    auth_username: str | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_jira_issue_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = {
+        **_JIRA_DEFAULT_QUERY,
+        **(_normalize_query(query) or {}),
+    }
+    cleaned_username = (auth_username or "").strip()
+    if cleaned_username:
+        normalized_query["auth_username"] = cleaned_username
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=JIRA_ISSUE_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=JIRA_ISSUE_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=JIRA_ISSUE_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_salesforce_crm_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    base_url: str,
+    path_template: str = "/services/data/v60.0/sobjects/{object_type}/{record_ref}",
+    record_path: str | None = None,
+    query: Mapping[str, Any] | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_salesforce_crm_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = {
+        **_SALESFORCE_DEFAULT_QUERY,
+        **(_normalize_query(query) or {}),
+    }
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=SALESFORCE_CRM_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=SALESFORCE_CRM_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=SALESFORCE_CRM_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_zoho_crm_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    base_url: str = "https://www.zohoapis.com",
+    path_template: str = "/crm/v8/{module_name}/{record_ref}",
+    record_path: str | None = "data.0",
+    query: Mapping[str, Any] | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    oauth_refresh_token: str | None = None,
+    clear_oauth_refresh_token: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_zoho_crm_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = {
+        **_ZOHO_DEFAULT_QUERY,
+        **(_normalize_query(query) or {}),
+    }
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=ZOHO_CRM_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=ZOHO_CRM_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=ZOHO_CRM_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    if clear_oauth_refresh_token:
+        row.oauth_refresh_token_ciphertext = None
+        row.oauth_refresh_token_fingerprint = None
+        row.oauth_refresh_token_last4 = None
+    elif oauth_refresh_token is not None:
+        cleaned_refresh = oauth_refresh_token.strip()
+        if not cleaned_refresh:
+            raise InvalidSystemOfRecordConnectorError(
+                "oauth_refresh_token must not be empty when provided"
+            )
+        refresh_bundle = encrypt_provider_key(
+            plaintext=cleaned_refresh,
+            project_id=project_id,
+        )
+        row.oauth_refresh_token_ciphertext = refresh_bundle.ciphertext
+        row.oauth_refresh_token_fingerprint = refresh_bundle.key_fingerprint
+        row.oauth_refresh_token_last4 = refresh_bundle.key_last4
+        row.kms_key_id = refresh_bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def upsert_netsuite_finance_connector_config(
+    db: Session,
+    *,
+    project_id: str,
+    base_url: str,
+    path_template: str = "/services/rest/record/v1/{record_type}/{record_ref}",
+    record_path: str | None = None,
+    query: Mapping[str, Any] | None = None,
+    bearer_token: str | None = None,
+    clear_bearer_token: bool = False,
+    updated_by_subject: str | None = None,
+) -> SystemOfRecordConnectorConfig:
+    try:
+        normalized = validate_netsuite_finance_config(
+            base_url=base_url,
+            path_template=path_template,
+            record_path=record_path,
+        )
+    except ConnectorConfigError as exc:
+        raise InvalidSystemOfRecordConnectorError(str(exc)) from exc
+
+    normalized_query = {
+        **_NETSUITE_DEFAULT_QUERY,
+        **(_normalize_query(query) or {}),
+    }
+    enforce_system_of_record_connector_limit(
+        db,
+        project_id,
+        connector_type=NETSUITE_FINANCE_CONNECTOR_TYPE,
+    )
+    row = get_connector_config(
+        db, project_id=project_id, connector_type=NETSUITE_FINANCE_CONNECTOR_TYPE
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = SystemOfRecordConnectorConfig(
+            id=str(uuid4()),
+            project_id=project_id,
+            connector_type=NETSUITE_FINANCE_CONNECTOR_TYPE,
+            created_by_subject=updated_by_subject,
+            created_at=now,
+        )
+
+    row.base_url = str(normalized["base_url"])
+    row.path_template = str(normalized["path_template"])
+    row.record_path = normalized["record_path"]
+    row.query_json = _json_dumps(normalized_query)
+    row.updated_by_subject = updated_by_subject
+    row.updated_at = now
+    row.is_active = True
+
+    if clear_bearer_token:
+        row.bearer_token_ciphertext = None
+        row.bearer_token_fingerprint = None
+        row.bearer_token_last4 = None
+        row.kms_key_id = None
+    elif bearer_token is not None:
+        cleaned = bearer_token.strip()
+        if not cleaned:
+            raise InvalidSystemOfRecordConnectorError(
+                "bearer_token must not be empty when provided"
+            )
+        bundle = encrypt_provider_key(plaintext=cleaned, project_id=project_id)
+        row.bearer_token_ciphertext = bundle.ciphertext
+        row.bearer_token_fingerprint = bundle.key_fingerprint
+        row.bearer_token_last4 = bundle.key_last4
+        row.kms_key_id = bundle.kms_key_id
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def upsert_postgres_read_connector_config(
     db: Session,
     *,
@@ -606,6 +1489,19 @@ def decrypt_connector_bearer_token(
     )
 
 
+def decrypt_connector_oauth_refresh_token(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    project_id: str,
+) -> str | None:
+    if not row.oauth_refresh_token_ciphertext:
+        return None
+    return decrypt_provider_key(
+        ciphertext=row.oauth_refresh_token_ciphertext,
+        project_id=project_id,
+    )
+
+
 def decrypt_connector_database_url(
     row: SystemOfRecordConnectorConfig,
     *,
@@ -638,6 +1534,51 @@ def build_ledger_refund_connector(
         timeout_seconds=timeout_seconds,
         max_attempts=max_attempts,
         allow_private_hosts=allow_private_hosts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_stripe_refund_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    refund_id: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> StripeRefundConnector:
+    return StripeRefundConnector(
+        refund_id=refund_id,
+        bearer_token=bearer_token,
+        base_url=row.base_url or "https://api.stripe.com",
+        path_template=row.path_template or "/v1/refunds/{refund_id}",
+        query=_json_loads(row.query_json),
+        record_path=row.record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_razorpay_refund_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    refund_id: str,
+    key_secret: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> RazorpayRefundConnector:
+    query = _json_loads(row.query_json)
+    key_id = str(query.pop("key_id", "") or "").strip() or None
+    return RazorpayRefundConnector(
+        refund_id=refund_id,
+        key_id=key_id,
+        key_secret=key_secret,
+        base_url=row.base_url or "https://api.razorpay.com",
+        path_template=row.path_template or "/v1/refunds/{refund_id}",
+        query=query,
+        record_path=row.record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
         fail_closed_config_errors=True,
     )
 
@@ -684,6 +1625,147 @@ def build_generic_rest_connector(
         timeout_seconds=timeout_seconds,
         max_attempts=max_attempts,
         allow_private_hosts=allow_private_hosts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_hubspot_crm_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    record_ref: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> HubSpotCrmConnector:
+    return HubSpotCrmConnector(
+        record_ref=record_ref,
+        bearer_token=bearer_token,
+        base_url=row.base_url or "https://api.hubapi.com",
+        path_template=row.path_template or "/crm/v3/objects/contacts/{record_ref}",
+        query=_json_loads(row.query_json),
+        record_path=row.record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_zendesk_ticket_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    record_ref: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> ZendeskTicketConnector:
+    query = _json_loads(row.query_json)
+    auth_username = str(query.pop("auth_username", "") or "").strip() or None
+    return ZendeskTicketConnector(
+        record_ref=record_ref,
+        bearer_token=bearer_token if not auth_username else None,
+        basic_auth_username=f"{auth_username}/token" if auth_username else None,
+        basic_auth_password=bearer_token if auth_username else None,
+        base_url=row.base_url or "https://example.zendesk.com",
+        path_template=row.path_template or "/api/v2/tickets/{record_ref}.json",
+        query=query,
+        record_path=row.record_path or "ticket",
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_jira_issue_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    record_ref: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> JiraIssueConnector:
+    query = _json_loads(row.query_json)
+    auth_username = str(query.pop("auth_username", "") or "").strip() or None
+    return JiraIssueConnector(
+        record_ref=record_ref,
+        bearer_token=bearer_token if not auth_username else None,
+        basic_auth_username=auth_username,
+        basic_auth_password=bearer_token if auth_username else None,
+        base_url=row.base_url or "https://example.atlassian.net",
+        path_template=row.path_template or "/rest/api/3/issue/{record_ref}",
+        query=query,
+        record_path=row.record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_salesforce_crm_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    object_type: str,
+    record_ref: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> SalesforceCrmConnector:
+    return SalesforceCrmConnector(
+        object_type=object_type,
+        record_ref=record_ref,
+        bearer_token=bearer_token,
+        base_url=row.base_url or "https://example.my.salesforce.com",
+        path_template=row.path_template or "/services/data/v60.0/sobjects/{object_type}/{record_ref}",
+        query=_json_loads(row.query_json),
+        record_path=row.record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_zoho_crm_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    module_name: str,
+    record_ref: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> ZohoCrmConnector:
+    return ZohoCrmConnector(
+        module_name=module_name,
+        record_ref=record_ref,
+        bearer_token=bearer_token,
+        base_url=row.base_url or "https://www.zohoapis.com",
+        path_template=row.path_template or "/crm/v8/{module_name}/{record_ref}",
+        query=_json_loads(row.query_json),
+        record_path=row.record_path or "data.0",
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        fail_closed_config_errors=True,
+    )
+
+
+def build_netsuite_finance_connector(
+    row: SystemOfRecordConnectorConfig,
+    *,
+    record_type: str,
+    record_ref: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+) -> NetSuiteFinanceConnector:
+    return NetSuiteFinanceConnector(
+        record_type=record_type,
+        record_ref=record_ref,
+        bearer_token=bearer_token,
+        base_url=row.base_url or "https://example.suitetalk.api.netsuite.com",
+        path_template=row.path_template
+        or "/services/rest/record/v1/{record_type}/{record_ref}",
+        query=_json_loads(row.query_json),
+        record_path=row.record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
         fail_closed_config_errors=True,
     )
 
@@ -816,6 +1898,8 @@ def serialize_connector_config(
             "read_query_digest": None,
             "has_bearer_token": False,
             "bearer_token_last4": None,
+            "has_oauth_refresh_token": False,
+            "oauth_refresh_token_last4": None,
             "last_tested_at": None,
             "created_at": None,
             "updated_at": None,
@@ -845,6 +1929,8 @@ def serialize_connector_config(
         else None,
         "has_bearer_token": bool(row.bearer_token_ciphertext),
         "bearer_token_last4": row.bearer_token_last4,
+        "has_oauth_refresh_token": bool(row.oauth_refresh_token_ciphertext),
+        "oauth_refresh_token_last4": row.oauth_refresh_token_last4,
         "last_tested_at": row.last_tested_at,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
@@ -864,22 +1950,47 @@ __all__ = [
     "CUSTOMER_RECORD_CONNECTOR_TYPE",
     "EnvelopeFormatError",
     "GENERIC_REST_CONNECTOR_TYPE",
+    "HUBSPOT_CRM_CONNECTOR_TYPE",
+    "JIRA_ISSUE_CONNECTOR_TYPE",
     "InvalidSystemOfRecordConnectorError",
     "LEDGER_REFUND_CONNECTOR_TYPE",
+    "NETSUITE_FINANCE_CONNECTOR_TYPE",
     "POSTGRES_READ_CONNECTOR_TYPE",
+    "RAZORPAY_REFUND_CONNECTOR_TYPE",
+    "SALESFORCE_CRM_CONNECTOR_TYPE",
+    "STRIPE_REFUND_CONNECTOR_TYPE",
     "VaultCipherUnavailable",
+    "ZENDESK_TICKET_CONNECTOR_TYPE",
+    "ZOHO_CRM_CONNECTOR_TYPE",
     "build_customer_record_connector",
     "build_generic_rest_connector",
+    "build_hubspot_crm_connector",
+    "build_jira_issue_connector",
     "build_ledger_refund_connector",
+    "build_netsuite_finance_connector",
     "build_postgres_read_connector",
+    "build_razorpay_refund_connector",
+    "build_salesforce_crm_connector",
+    "build_stripe_refund_connector",
+    "build_zendesk_ticket_connector",
+    "build_zoho_crm_connector",
     "decrypt_connector_bearer_token",
     "decrypt_connector_database_url",
+    "decrypt_connector_oauth_refresh_token",
     "get_connector_config",
     "get_connector_health_snapshot",
     "mark_connector_tested",
     "serialize_connector_config",
     "upsert_customer_record_connector_config",
     "upsert_generic_rest_connector_config",
+    "upsert_hubspot_crm_connector_config",
+    "upsert_jira_issue_connector_config",
     "upsert_ledger_refund_connector_config",
+    "upsert_netsuite_finance_connector_config",
     "upsert_postgres_read_connector_config",
+    "upsert_razorpay_refund_connector_config",
+    "upsert_salesforce_crm_connector_config",
+    "upsert_stripe_refund_connector_config",
+    "upsert_zendesk_ticket_connector_config",
+    "upsert_zoho_crm_connector_config",
 ]

@@ -80,6 +80,7 @@ LEGACY_COMPATIBILITY_KEYS = {
     "actions.verifications.monthly_quota",
     "actions.source_mutations.monthly_quota",
     "connectors.system_of_record.max",
+    "agents.max",
     "retention.days",
     "goldens.max_sets",
     "replay.monthly_runs",
@@ -115,6 +116,13 @@ def test_catalog_entries_have_exact_required_key_sets(plan_code: str) -> None:
 @pytest.mark.parametrize("plan_code", CANONICAL_PLAN_CODES)
 def test_default_limits(plan_code: str) -> None:
     assert resolve_plan_limits(plan_code) == EXPECTED_LIMITS[plan_code]
+
+
+def test_agent_profile_limits_by_tier() -> None:
+    assert resolve_plan_template("free")["agents.max"] == 1
+    assert resolve_plan_template("starter")["agents.max"] == 3
+    assert resolve_plan_template("pro")["agents.max"] == 5
+    assert resolve_plan_template("enterprise")["agents.max"] == -1
 
 
 def test_pricing_contract_matches_backend_enforcement() -> None:

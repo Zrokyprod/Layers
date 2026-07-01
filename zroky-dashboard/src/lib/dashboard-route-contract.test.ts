@@ -39,24 +39,24 @@ describe("dashboard route contract", () => {
   it("keeps the paid dashboard primary IA frozen", () => {
     expect(DASHBOARD_PRIMARY_ROUTES.map((route) => route.href)).toEqual([
       "/home",
+      "/approvals",
       "/actions",
       "/agents",
-      "/approvals",
       "/outcomes",
       "/evidence",
-      "/integrations",
       "/policies",
+      "/integrations",
       "/settings",
     ]);
     expect(DASHBOARD_PRIMARY_ROUTES.map((route) => route.label)).toEqual([
       "Home",
+      "Approvals",
       "Actions",
       "Agents",
-      "Approvals",
       "Outcomes",
       "Evidence",
-      "Connectors",
       "Policies",
+      "Connectors",
       "Settings",
     ]);
   });
@@ -68,13 +68,13 @@ describe("dashboard route contract", () => {
     ]);
     expect(DASHBOARD_PROTECTED_PREFIXES).toEqual([
       "/home",
+      "/approvals",
       "/actions",
       "/agents",
-      "/approvals",
       "/outcomes",
       "/evidence",
-      "/integrations",
       "/policies",
+      "/integrations",
       "/settings",
       "/account",
       "/projects",

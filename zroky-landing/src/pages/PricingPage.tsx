@@ -18,7 +18,6 @@ import {
   Server,
   ShieldCheck,
   type LucideIcon,
-  Zap,
 } from 'lucide-react';
 import pricingContract from '../data/pricing-plans.json';
 import { buildSignUpUrl } from '../lib/links';
@@ -55,6 +54,7 @@ type PricingPlan = {
       max_projects: number;
       max_members: number;
     };
+    compatibility: Record<string, number | boolean | string>;
   };
 };
 
@@ -67,7 +67,7 @@ const compactNumberFormatter = new Intl.NumberFormat('en-US', {
 
 const planIcons: Record<PlanCode, LucideIcon> = {
   free: Activity,
-  starter: Zap,
+  starter: ShieldCheck,
   pro: GitBranch,
   enterprise: Server,
 };
@@ -87,52 +87,11 @@ function formatLimit(value: number, singular: string, plural = `${singular}s`) {
   return `${numberFormatter.format(value)} ${value === 1 ? singular : plural}`;
 }
 
-function formatMonthlyCalls(value: number) {
-  if (value === UNLIMITED) {
-    return 'Unlimited captured calls/mo';
-  }
-  return `${compactNumberFormatter.format(value)} captured calls/mo`;
-}
-
 function formatRetention(days: number) {
   if (days === UNLIMITED) {
     return 'Custom retention';
   }
-  return `${numberFormatter.format(days)}-day retention`;
-}
-
-function formatReplayCredits(credits: number) {
-  if (credits === UNLIMITED) {
-    return 'Unlimited replay credits/mo';
-  }
-  if (credits === 0) {
-    return 'Replay credits locked';
-  }
-  return `${numberFormatter.format(credits)} replay credits/mo`;
-}
-
-function formatGoldens(traces: number, sets: number) {
-  if (traces === UNLIMITED && sets === UNLIMITED) {
-    return 'Unlimited Golden traces and sets';
-  }
-  if (traces === 0 && sets === 0) {
-    return 'Goldens locked';
-  }
-  return `${numberFormatter.format(traces)} Golden traces across ${numberFormatter.format(sets)} sets`;
-}
-
-function formatCiGates(nonBlocking: boolean, blocking: boolean) {
-  if (nonBlocking && blocking) {
-    return 'Non-blocking and blocking CI gates';
-  }
-  if (nonBlocking) {
-    return 'Non-blocking CI gates';
-  }
-  return 'CI gates locked';
-}
-
-function formatProviderVault(enabled: boolean) {
-  return enabled ? 'Provider key vault included' : 'Provider key vault locked';
+  return `${numberFormatter.format(days)}-day evidence retention`;
 }
 
 function formatProjectSeats(projects: number, seats: number) {
@@ -142,15 +101,29 @@ function formatProjectSeats(projects: number, seats: number) {
   return `${formatLimit(projects, 'project')} and ${formatLimit(seats, 'seat')}`;
 }
 
+function formatControlLimit(value: unknown, label: string) {
+  if (typeof value === 'boolean') {
+    return value ? `${label} included` : `${label} locked`;
+  }
+  if (typeof value !== 'number') {
+    return `${label} not configured`;
+  }
+  if (value === UNLIMITED) {
+    return `Unlimited ${label}`;
+  }
+  return `${compactNumberFormatter.format(value)} ${label}`;
+}
+
 function buildPlanBullets(plan: PricingPlan) {
+  const compatibility = plan.enforcement.compatibility;
   return [
     formatProjectSeats(plan.enforcement.limits.max_projects, plan.enforcement.limits.max_members),
-    formatMonthlyCalls(plan.pricing.calls_per_month),
-    formatRetention(plan.pricing.retention_days),
-    formatReplayCredits(plan.pricing.replay_credits),
-    formatGoldens(plan.pricing.golden_traces, plan.pricing.golden_sets),
-    formatCiGates(plan.pricing.non_blocking_ci, plan.pricing.blocking_ci),
-    formatProviderVault(plan.pricing.provider_key_vault),
+    formatControlLimit(compatibility['agents.max'], 'managed agents'),
+    formatControlLimit(compatibility['connectors.system_of_record.max'], 'system-of-record connectors'),
+    formatControlLimit(compatibility['actions.protected.monthly_quota'], 'protected actions/mo'),
+    formatControlLimit(compatibility['actions.receipts.monthly_quota'], 'signed receipts/mo'),
+    formatControlLimit(compatibility['actions.verifications.monthly_quota'], 'verification checks/mo'),
+    formatRetention(Number(compatibility['retention.days'] ?? plan.pricing.retention_days)),
   ];
 }
 
@@ -158,7 +131,7 @@ const allPlans = pricingContract.plans as PricingPlan[];
 const enterprisePlan = allPlans.find((plan) => plan.code === 'enterprise');
 
 const plans = allPlans
-  .filter((plan) => plan.code !== 'enterprise')
+  .filter((plan) => plan.code === 'free' || plan.code === 'pro')
   .map((plan) => ({
     code: plan.code,
     name: plan.name,
@@ -174,7 +147,6 @@ const plans = allPlans
   }));
 
 const proPlan = plans.find((plan) => plan.code === 'pro');
-const starterPlan = plans.find((plan) => plan.code === 'starter');
 
 const riskMetrics = [
   {
@@ -189,7 +161,7 @@ const riskMetrics = [
   },
   {
     label: 'Self-serve protection',
-    value: proPlan ? `${proPlan.price}/mo` : '$199/mo',
+    value: proPlan ? `${proPlan.price}/mo` : '$399/mo',
     body: 'Pro is priced below the cost of one material mistake for teams ready to gate production behavior.',
   },
 ];
@@ -198,25 +170,19 @@ const planFit = [
   {
     icon: Activity,
     plan: 'Free',
-    fit: 'Instrument real traffic and prove Zroky can see the action path.',
-    trigger: 'Use before delegation, when the team still needs capture confidence.',
-  },
-  {
-    icon: Zap,
-    plan: 'Starter',
-    fit: 'Protect the first serious agent with diagnosis, mocked replay, Goldens, and non-blocking CI.',
-    trigger: `Use when ${starterPlan?.price ?? '$49'}/mo is easier than manual review for every run.`,
+    fit: 'Try the control loop on one managed agent before handing it more authority.',
+    trigger: 'Use when the team needs to see allow, hold, block, verification, and receipt behavior end to end.',
   },
   {
     icon: ShieldCheck,
     plan: 'Pro',
-    fit: 'Gate unattended production agents with real replay, blocking CI, outcome attribution, and evidence exports.',
+    fit: 'Gate production agents with approval, isolated execution, system-of-record verification, and signed receipts.',
     trigger: 'Use when a wrong action has real financial, operational, or customer impact.',
   },
   {
     icon: Server,
     plan: 'Enterprise',
-    fit: 'Add private execution, custom retention, custom detectors, and procurement-ready controls.',
+    fit: 'Add private execution, SSO, custom retention, custom connector scope, and procurement-ready controls.',
     trigger: 'Use when risk, audit, or customer requirements need a contract and deployment plan.',
   },
 ];
@@ -242,7 +208,7 @@ const agentRiskRows: Array<{
     agent: 'DevOps and release agents',
     action: 'Deploys, rollbacks, infra edits, config changes',
     pain: 'A single bad tool call can ship broken code, leak config, or mutate production state.',
-    proof: 'Blocking CI gate, replayable failure evidence, approval trail.',
+    proof: 'Policy hold or block, approval trail, isolated runner execution, and receipt.',
     plan: 'Pro',
   },
   {
@@ -251,7 +217,7 @@ const agentRiskRows: Array<{
     action: 'Record merges, account updates, ownership changes',
     pain: 'Duplicate or corrupted records quietly break sales, support, and compliance workflows.',
     proof: 'Policy snapshot, system-of-record check, not_verified state when proof is missing.',
-    plan: 'Starter to Pro',
+    plan: 'Free to Pro',
   },
   {
     icon: MailCheck,
@@ -297,25 +263,25 @@ const proofSteps = [
 const usageRules = [
   {
     icon: KeyRound,
-    title: 'Bring your provider key',
-    body: 'Real LLM replay defaults to your OpenAI, Anthropic, or Gemini key. Zroky charges for protection workflow, not hidden model spend.',
+    title: 'BYOK for AI assist',
+    body: 'Runtime policy, verification, and receipts are deterministic. Optional AI summaries or policy suggestions can use your provider key.',
   },
   {
     icon: CircleDollarSign,
-    title: 'Managed replay is optional',
-    body: 'If Zroky pays the provider bill, usage is provider token cost plus a 30% platform fee for billing, retries, limits, and support.',
+    title: 'AI credits stay explicit',
+    body: 'Heavy advisory analysis should use BYOK or metered AI credits so the Pro subscription is not silently consumed by model spend.',
   },
   {
     icon: Lock,
-    title: 'Caps protect both sides',
-    body: 'Self-serve plans use explicit replay and CI limits. Organizations get alerts before limits, then upgrade or pause new safety execution.',
+    title: 'Hard control-plane caps',
+    body: 'Self-serve plans use explicit protected-action, receipt, runner, verification, connector, and agent limits before overage billing is enabled.',
   },
 ];
 
 const overages = [
-  ['Extra captured calls', 'Plan upgrade'],
-  ['Extra verified replay', 'Quoted add-on'],
-  ['Managed provider spend', 'Provider cost + service fee'],
+  ['Extra protected actions', 'Plan upgrade'],
+  ['Extra receipts or verifications', 'Plan upgrade'],
+  ['Optional AI assist spend', 'BYOK or metered credits'],
 ];
 
 const faqs = [
@@ -324,20 +290,20 @@ const faqs = [
     a: 'No. Start where the action is expensive or irreversible. Refunds are a sharp wedge, but deploys, CRM mutations, purchase approvals, and mass messaging need the same action-accountability loop.',
   },
   {
-    q: 'What counts as a replay run?',
-    a: 'A replay run is one verified attempt against captured production evidence. Starter supports mocked-tool replay. Pro adds real LLM replay and live-sandbox replay through your provider key or optional Zroky-managed execution.',
+    q: 'What counts as a protected action?',
+    a: 'A protected action is one high-risk agent operation routed through Zroky for policy evaluation before the real system is mutated.',
   },
   {
     q: 'Why is BYOK the default?',
-    a: 'Provider cost can multiply quickly when teams replay many failures or run Goldens in CI. BYOK keeps model spend visible in your provider account and keeps Zroky pricing predictable.',
+    a: 'Provider cost can multiply quickly when teams run heavy advisory analysis. BYOK keeps model spend visible in your provider account and keeps Zroky pricing predictable.',
   },
   {
     q: 'When do you ask for a provider key?',
-    a: 'We only ask for a provider key when you run verified replay, not during signup or capture. You can capture failures, inspect traces, and review issues before connecting a key.',
+    a: 'We only ask for a provider key when you enable optional AI assistance. Core policy decisions and system-of-record proof do not require an LLM provider key.',
   },
   {
     q: 'What happens when limits are reached?',
-    a: 'Zroky shows usage alerts before the limit. You can upgrade, buy overage, or pause new replay or CI execution while captured evidence remains available within your retention window.',
+    a: 'Zroky shows usage alerts before the limit. You can upgrade or pause new protected actions while signed receipts and evidence remain available within your retention window.',
   },
   {
     q: 'When should we talk to sales?',
@@ -428,7 +394,7 @@ export default function PricingPage() {
           <div className="browser-frame hidden overflow-hidden p-2 lg:block">
             <img
               src="/product-ci-gate.png"
-              alt="Zroky product screen showing a CI gate connected to captured agent evidence"
+              alt="Zroky product screen showing protected agent action controls"
               className="max-h-[460px] w-full rounded-xl border border-line object-cover object-top"
             />
           </div>
@@ -501,7 +467,7 @@ export default function PricingPage() {
             </h2>
           </div>
 
-          <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-10 grid gap-3 md:grid-cols-3">
             {planFit.map((item) => {
               const Icon = item.icon;
 
@@ -595,7 +561,7 @@ export default function PricingPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
               <p className="text-sm leading-7 text-secondary">
-                Enterprise maps to contract entitlements: unlimited limits, private replay workers, custom retention, custom detectors, and system-of-record integration planning.
+                Enterprise maps to contract entitlements: custom protected-action volume, private runners, custom retention, SSO, self-hosting, and system-of-record integration planning.
               </p>
               <a href={enterpriseHref} className="btn-ghost">
                 Talk to Zroky
@@ -662,7 +628,7 @@ export default function PricingPage() {
             <div className="browser-frame overflow-hidden p-2">
               <img
                 src="/product-replay-detail.png"
-                alt="Zroky replay detail screen showing verified evidence for an agent failure"
+                alt="Zroky evidence screen showing verified proof for an agent action"
                 className="h-full w-full rounded-xl border border-line object-cover"
               />
             </div>
@@ -726,7 +692,7 @@ export default function PricingPage() {
           </div>
 
           <div className="mt-5 rounded-2xl border border-line bg-ink p-4">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2">
               {overages.map(([label, price]) => (
                 <div key={label} className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-line bg-white/[0.03] px-4 py-3">
                   <span className="text-sm font-semibold text-secondary">{label}</span>

@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Star, ArrowUpRight } from 'lucide-react';
-import { SIGN_IN_URL, SIGN_UP_URL } from '../lib/links';
+import { Menu, X, ArrowUpRight, CalendarDays } from 'lucide-react';
+import { DEMO_URL, SIGN_IN_URL, SIGN_UP_URL } from '../lib/links';
 
 const LINKS = [
   { label: 'Product', to: '/#product' },
-  { label: 'Pricing', to: '/pricing' },
+  { label: 'Receipts', to: '/#receipts' },
+  { label: 'Pricing', to: '/#pricing' },
   { label: 'Docs', to: '/docs' },
-  { label: 'Changelog', to: '/changelog' },
 ];
-
-const GITHUB_URL = 'https://github.com/zroky/zroky-watch';
 
 export default function Nav() {
   const [scrolled, setScrolled] = useState(false);
@@ -33,15 +31,15 @@ export default function Nav() {
         initial={{ y: -16, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className={`flex w-full max-w-6xl items-center justify-between rounded-2xl border px-4 py-2.5 transition-all duration-300 ${
+        className={`flex w-full max-w-[1340px] items-center justify-between rounded-2xl border px-4 py-2.5 transition-all duration-300 ${
           scrolled
-            ? 'border-line-strong bg-ink/80 backdrop-blur-xl shadow-card'
-            : 'border-line bg-ink/40 backdrop-blur-md'
+            ? 'border-[#d8dbd2] bg-[#fbfcf8]/84 shadow-[0_1px_2px_rgba(42,45,40,0.04),0_18px_40px_-28px_rgba(42,45,40,0.25)] backdrop-blur-xl'
+            : 'border-[#d8dbd2]/60 bg-[#f7f8f4]/62 backdrop-blur-md'
         }`}
       >
         <Link to="/" className="flex items-center gap-2.5">
-          <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary text-ink font-black text-sm">Z</div>
-          <span className="text-[15px] font-bold tracking-tight">Zroky</span>
+          <img src="/zroky.png" alt="Zroky" className="h-7 w-7 rounded-[8px] object-contain" />
+          <span className="text-[15px] font-semibold tracking-[-0.02em] text-[#20231f]">Zroky</span>
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
@@ -49,7 +47,7 @@ export default function Nav() {
             <a
               key={l.label}
               href={l.to}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-secondary transition hover:text-primary"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-[#5b615a] transition hover:text-[#20231f]"
             >
               {l.label}
             </a>
@@ -57,18 +55,18 @@ export default function Nav() {
         </div>
 
         <div className="hidden items-center gap-2 md:flex">
-          <a href={GITHUB_URL} className="btn-ghost !px-3 !py-2" aria-label="Star zroky-watch on GitHub">
-            <Star size={14} /> <span className="text-xs">zroky-watch</span>
-          </a>
-          <a href={SIGN_IN_URL} className="rounded-full px-3 py-2 text-sm font-semibold text-secondary transition hover:text-primary">
+          <a href={SIGN_IN_URL} className="rounded-full px-3 py-2 text-sm font-semibold text-[#5b615a] transition hover:text-[#20231f]">
             Sign in
           </a>
-          <a href={SIGN_UP_URL} className="btn-primary">
-            Start free <ArrowUpRight size={15} />
+          <a
+            href={DEMO_URL}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[linear-gradient(180deg,#5f675f,#343a34)] px-4 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_8px_20px_-12px_rgba(42,45,40,0.5)] transition hover:-translate-y-px hover:bg-[#4f5a52] active:scale-[0.98]"
+          >
+            <CalendarDays size={15} /> Book a demo
           </a>
         </div>
 
-        <button className="md:hidden p-2 text-primary" onClick={() => setOpen((v) => !v)} aria-label="Menu">
+        <button className="p-2 text-[#20231f] md:hidden" onClick={() => setOpen((v) => !v)} aria-label="Menu">
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>
       </motion.nav>
@@ -79,18 +77,23 @@ export default function Nav() {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="absolute inset-x-4 top-[68px] z-50 rounded-2xl border border-line-strong bg-ink/95 p-4 backdrop-blur-xl md:hidden"
+            className="absolute inset-x-4 top-[68px] z-50 rounded-2xl border border-[#d8dbd2] bg-[#fbfcf8]/95 p-4 shadow-[0_18px_40px_-24px_rgba(42,45,40,0.25)] backdrop-blur-xl md:hidden"
           >
             <div className="flex flex-col gap-1">
               {LINKS.map((l) => (
-                <a key={l.label} href={l.to} className="rounded-lg px-3 py-2.5 text-sm font-medium text-secondary hover:bg-white/5 hover:text-primary">
+                <a key={l.label} href={l.to} className="rounded-lg px-3 py-2.5 text-sm font-medium text-[#5b615a] hover:bg-[#eef0eb] hover:text-[#20231f]">
                   {l.label}
                 </a>
               ))}
             </div>
-            <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
-              <a href={GITHUB_URL} className="btn-ghost w-full"><Star size={14} /> Star zroky-watch</a>
-              <a href={SIGN_UP_URL} className="btn-primary w-full">Start free <ArrowUpRight size={15} /></a>
+            <div className="mt-3 flex flex-col gap-2 border-t border-[#d8dbd2] pt-3">
+              <a href={SIGN_IN_URL} className="rounded-[10px] px-3 py-2.5 text-sm font-semibold text-[#5b615a] hover:text-[#20231f]">Sign in</a>
+              <a
+                href={SIGN_UP_URL}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-[linear-gradient(180deg,#5f675f,#343a34)] px-4 text-sm font-semibold text-white"
+              >
+                Start free <ArrowUpRight size={15} />
+              </a>
             </div>
           </motion.div>
         )}

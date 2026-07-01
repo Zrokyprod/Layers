@@ -74,6 +74,7 @@ import {
   getBudgetStatus,
   updateBudget,
   getProjectSettings,
+  updateProjectSettings,
   listProjectApiKeys,
   createProjectApiKey,
   revokeProjectApiKey,
@@ -117,6 +118,16 @@ import {
   getReplayQuota,
   createReplayRunFromCall,
   createReplayRunFromIssue,
+  listActionIntents,
+  getActionIntent,
+  getActionIntentTimeline,
+  getActionIntentReceipt,
+  decideActionIntent,
+  listActionExecutionAttempts,
+  listProjectActionExecutionAttempts,
+  listActionRunners,
+  getAgentProfile,
+  updateAgentProfile,
   listRuntimePolicyApprovals,
   getRuntimePolicyEvidencePack,
   approveRuntimePolicyDecision,
@@ -128,6 +139,18 @@ import {
   type ReplayQuotaResponse,
   type ReplayCreatePayload,
   type ReplayCreateResponse,
+  type ActionIntentStatus,
+  type ActionIntentProofStatus,
+  type ActionIntentReceiptStatus,
+  type ActionIntentResponse,
+  type ActionIntentListResponse,
+  type ActionIntentDecisionResponse,
+  type ActionTimelineResponse,
+  type ActionReceiptResponse,
+  type ActionExecutionAttemptListResponse,
+  type ActionRunnerListResponse,
+  type AgentProfileResponse,
+  type AgentProfileUpdatePayload,
   type RuntimePolicyDecisionStatus,
   type RuntimePolicyListResponse,
   type RuntimePolicyDecisionResponse,
@@ -413,6 +436,17 @@ export function useProjectSettings(projectId?: string | null) {
     queryFn: () => getProjectSettings(),
     enabled: hasExplicitProject ? Boolean(projectId) : true,
     retry: false,
+  });
+}
+
+export function useUpdateProjectSettings() {
+  const qc = useQueryClient();
+  return useMutation<ProjectResponse, Error, { name: string }>({
+    mutationFn: (body) => updateProjectSettings(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project-settings"] });
+      qc.invalidateQueries({ queryKey: ["me", "projects"] });
+    },
   });
 }
 
@@ -1044,6 +1078,154 @@ export function useReplayQuota(options?: Partial<UseQueryOptions<ReplayQuotaResp
   });
 }
 
+// ── Verified Action Control Plane ───────────────────────────────────────────
+
+export type ActionIntentQuery = {
+  status?: ActionIntentStatus | "all" | string | null;
+  proof_status?: ActionIntentProofStatus | "all" | string | null;
+  receipt_status?: ActionIntentReceiptStatus | "all" | string | null;
+  agent_id?: string | null;
+  limit?: number;
+  offset?: number;
+};
+
+export function useActionIntents(
+  query: ActionIntentQuery = { limit: 50 },
+  options?: Partial<UseQueryOptions<ActionIntentListResponse>>,
+) {
+  return useQuery<ActionIntentListResponse>({
+    queryKey: ["action-intents", query],
+    queryFn: ({ signal }) => listActionIntents(query, signal),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    ...options,
+  });
+}
+
+export function useActionIntent(
+  actionId: string | null,
+  options?: Partial<UseQueryOptions<ActionIntentResponse>>,
+) {
+  return useQuery<ActionIntentResponse>({
+    queryKey: ["action-intent", actionId],
+    queryFn: ({ signal }) => getActionIntent(actionId ?? "", signal),
+    enabled: Boolean(actionId),
+    staleTime: 10_000,
+    retry: false,
+    ...options,
+  });
+}
+
+export function useActionIntentTimeline(
+  actionId: string | null,
+  options?: Partial<UseQueryOptions<ActionTimelineResponse>>,
+) {
+  return useQuery<ActionTimelineResponse>({
+    queryKey: ["action-intent", actionId, "timeline"],
+    queryFn: ({ signal }) => getActionIntentTimeline(actionId ?? "", signal),
+    enabled: Boolean(actionId),
+    staleTime: 10_000,
+    retry: false,
+    ...options,
+  });
+}
+
+export function useActionIntentReceipt(
+  actionId: string | null,
+  options?: Partial<UseQueryOptions<ActionReceiptResponse>>,
+) {
+  return useQuery<ActionReceiptResponse>({
+    queryKey: ["action-receipt", actionId],
+    queryFn: ({ signal }) => getActionIntentReceipt(actionId ?? "", signal),
+    enabled: Boolean(actionId),
+    staleTime: 30_000,
+    retry: false,
+    ...options,
+  });
+}
+
+export function useActionExecutionAttempts(
+  actionId: string | null,
+  options?: Partial<UseQueryOptions<ActionExecutionAttemptListResponse>>,
+) {
+  return useQuery<ActionExecutionAttemptListResponse>({
+    queryKey: ["action-intent", actionId, "execution-attempts"],
+    queryFn: ({ signal }) => listActionExecutionAttempts(actionId ?? "", signal),
+    enabled: Boolean(actionId),
+    staleTime: 10_000,
+    retry: false,
+    ...options,
+  });
+}
+
+export function useProjectActionExecutionAttempts(
+  query: {
+    status?: string[];
+    stale?: boolean;
+    stale_after_seconds?: number;
+    limit?: number;
+    offset?: number;
+  } = {},
+  options?: Partial<UseQueryOptions<ActionExecutionAttemptListResponse>>,
+) {
+  return useQuery<ActionExecutionAttemptListResponse>({
+    queryKey: ["action-execution-attempts", query],
+    queryFn: ({ signal }) => listProjectActionExecutionAttempts(query, signal),
+    staleTime: 10_000,
+    refetchInterval: 30_000,
+    ...options,
+  });
+}
+
+export function useActionRunners(options?: Partial<UseQueryOptions<ActionRunnerListResponse>>) {
+  return useQuery<ActionRunnerListResponse>({
+    queryKey: ["action-runners"],
+    queryFn: ({ signal }) => listActionRunners(signal),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    ...options,
+  });
+}
+
+export function useAgentProfile(
+  agentId: string | null,
+  options?: Partial<UseQueryOptions<AgentProfileResponse>>,
+) {
+  return useQuery<AgentProfileResponse>({
+    queryKey: ["agents", "profile", agentId],
+    queryFn: ({ signal }) => getAgentProfile(agentId ?? "", signal),
+    enabled: Boolean(agentId),
+    staleTime: 15_000,
+    retry: false,
+    ...options,
+  });
+}
+
+export function useUpdateAgentProfile() {
+  const queryClient = useQueryClient();
+  return useMutation<AgentProfileResponse, Error, { agentId: string; payload: AgentProfileUpdatePayload }>({
+    mutationFn: ({ agentId, payload }) => updateAgentProfile(agentId, payload),
+    onSuccess: (profile) => {
+      queryClient.setQueryData(["agents", "profile", profile.id], profile);
+      queryClient.invalidateQueries({ queryKey: ["agents", "profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["agents", "profile"] });
+    },
+  });
+}
+
+export function useDecideActionIntent() {
+  const queryClient = useQueryClient();
+  return useMutation<ActionIntentDecisionResponse, Error, { actionId: string; approvalId?: string | null }>({
+    mutationFn: ({ actionId, approvalId }) => decideActionIntent(actionId, { approval_id: approvalId ?? null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["action-intents"] });
+      queryClient.invalidateQueries({ queryKey: ["action-intent"] });
+      queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["runtime-policy", "evidence"] });
+    },
+  });
+}
+
 // ── Runtime Policy Gate ─────────────────────────────────────────────────────
 
 export function useRuntimePolicyApprovals(
@@ -1079,6 +1261,10 @@ export function useApproveRuntimePolicyDecision() {
     mutationFn: ({ decisionId, reason }) => approveRuntimePolicyDecision(decisionId, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["runtime-policy", "evidence"] });
+      queryClient.invalidateQueries({ queryKey: ["action-intents"] });
+      queryClient.invalidateQueries({ queryKey: ["action-intent"] });
+      queryClient.invalidateQueries({ queryKey: ["action-receipt"] });
     },
   });
 }
@@ -1089,6 +1275,10 @@ export function useRejectRuntimePolicyDecision() {
     mutationFn: ({ decisionId, reason }) => rejectRuntimePolicyDecision(decisionId, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["runtime-policy", "evidence"] });
+      queryClient.invalidateQueries({ queryKey: ["action-intents"] });
+      queryClient.invalidateQueries({ queryKey: ["action-intent"] });
+      queryClient.invalidateQueries({ queryKey: ["action-receipt"] });
     },
   });
 }

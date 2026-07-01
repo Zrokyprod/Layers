@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  ActionIntentResponse,
   RuntimePolicyDecisionResponse,
   RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
@@ -122,7 +123,33 @@ const fixtures = vi.hoisted(() => {
     evidence_hash: "def456def456def456def456def456def456def456def456def456def456def0",
   };
 
+  const actionIntent: ActionIntentResponse = {
+    action_id: "act_1",
+    project_id: "proj_1",
+    contract_version: "v1",
+    action_type: "refund",
+    operation_kind: "business_mutation",
+    environment: "test",
+    status: "approval_pending",
+    proof_status: "matched",
+    receipt_status: "generated",
+    idempotency_key: "idem_act_1",
+    intent_digest: "intent_digest_1",
+    canonical_intent: {
+      principal: { id: "Refund agent" },
+      purpose: { summary: "Refund payment rf_100" },
+      resource: { id: "rf_100" },
+    },
+    created_at: "2026-06-20T09:00:00Z",
+    decided_at: null,
+    authorized_at: null,
+    runtime_policy_decision_id: "decision_1",
+    deadline: "2099-06-20T09:15:00Z",
+    status_url: "/v1/action-intents/act_1",
+  };
+
   return {
+    actionIntent,
     decision,
     matchedPack,
     missingPack,
@@ -132,6 +159,7 @@ const fixtures = vi.hoisted(() => {
 const hookState = vi.hoisted(() => ({
   evidenceMode: "matched" as "matched" | "missing",
   evidenceDecisionId: null as string | null,
+  approvalsStatus: null as string | null,
   approvalsRefetch: vi.fn(),
   approve: vi.fn(),
   reject: vi.fn(),
@@ -155,13 +183,24 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/lib/hooks", () => ({
-  useRuntimePolicyApprovals: () => ({
-    data: { items: [fixtures.decision], total_in_page: 1 },
+  useRuntimePolicyApprovals: (status: string) => {
+    hookState.approvalsStatus = status;
+    return {
+      data: { items: [fixtures.decision], total_in_page: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+      isFetching: false,
+      refetch: hookState.approvalsRefetch,
+    };
+  },
+  useActionIntents: () => ({
+    data: { items: [fixtures.actionIntent], total_in_page: 1, limit: 100, offset: 0 },
     isLoading: false,
     isError: false,
     error: null,
     isFetching: false,
-    refetch: hookState.approvalsRefetch,
+    refetch: vi.fn(),
   }),
   useRuntimePolicyEvidencePack: (decisionId: string | null) => {
     hookState.evidenceDecisionId = decisionId;
@@ -190,6 +229,7 @@ describe("RuntimeApprovalsPage evidence pack", () => {
   beforeEach(() => {
     hookState.evidenceMode = "matched";
     hookState.evidenceDecisionId = null;
+    hookState.approvalsStatus = null;
     hookState.approvalsRefetch.mockClear();
     hookState.approve.mockClear();
     hookState.reject.mockClear();
@@ -209,26 +249,27 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     render(<RuntimeApprovalsPage />);
 
     expect(screen.getByRole("heading", { name: "Risky actions held before commit" })).toBeInTheDocument();
-    const contract = screen.getByRole("region", { name: "Approval control contract" });
-    expect(
-      within(contract).getByText("Human approval releases the action; outcome verification proves what happened."),
-    ).toBeInTheDocument();
-    expect(
-      within(contract).getByText(
-        "This page controls the before-action decision. The Evidence Pack becomes customer-ready only after matched system-of-record proof is linked.",
-      ),
-    ).toBeInTheDocument();
-    expect(within(contract).getByText("Hold before commit")).toBeInTheDocument();
-    expect(within(contract).getByText("Release with audit")).toBeInTheDocument();
-    expect(within(contract).getByText("Keep stopped")).toBeInTheDocument();
-    expect(within(contract).getByText("Fail closed")).toBeInTheDocument();
+    expect(hookState.approvalsStatus).toBe("all");
+    const metrics = screen.getByRole("region", { name: "Approval control metrics" });
+    expect(within(metrics).getByText("Pending holds")).toBeInTheDocument();
+    expect(within(metrics).getByText("Money-touching")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Held action queue" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Selected action control" })).toBeInTheDocument();
+    const selected = screen.getByRole("region", { name: "Selected action control" });
     expect(screen.getByText("P0")).toBeInTheDocument();
-    expect(screen.getByText("money-action hold")).toBeInTheDocument();
-    expect(screen.getByText("After-action proof")).toBeInTheDocument();
-    expect(screen.getByText("Outcome verified")).toBeInTheDocument();
-    expect(screen.getByText("Matched system-of-record outcome is linked.")).toBeInTheDocument();
+    expect(screen.getByText(/money-touching hold/)).toBeInTheDocument();
+    expect(screen.getAllByText("Action intent").length).toBeGreaterThan(0);
+    expect(screen.getByText("act_1")).toBeInTheDocument();
+    expect(screen.getByText("intent_digest_1")).toBeInTheDocument();
+    expect(within(selected).getByRole("navigation", { name: "Proof chain" })).toBeInTheDocument();
+    expect(within(selected).getByRole("tab", { name: "Decision" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(selected).getByText("Decision mechanism")).toBeInTheDocument();
+    fireEvent.click(within(selected).getByRole("tab", { name: "Evidence" }));
+    expect(within(selected).getByRole("link", { name: "Open full evidence" }).getAttribute("href")).toBe(
+      "/evidence?decision_id=decision_1",
+    );
+    const evidence = screen.getByRole("region", { name: "Runtime policy Evidence Pack" });
+    expect(within(evidence).getByText(fixtures.matchedPack.evidence_hash)).toBeInTheDocument();
+    expect(within(evidence).getByText("ledger:rf_100")).toBeInTheDocument();
     expect(hookState.evidenceDecisionId).toBe("decision_1");
   });
 
@@ -267,35 +308,30 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
   });
 
-  it("opens the evidence pack, shows the hash, matched outcome, and exports JSON", () => {
+  it("renders compact evidence inline and links to the full evidence page", () => {
     render(<RuntimeApprovalsPage />);
 
-    expect(screen.getAllByText(/Financial action/).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Open Evidence Pack" }));
-
     expect(hookState.evidenceDecisionId).toBe("decision_1");
-    const dialog = screen.getByRole("dialog", { name: "Evidence Pack" });
-    expect(within(dialog).getByText("Outcome verified against the system of record.")).toBeInTheDocument();
-    expect(within(dialog).getByText(fixtures.matchedPack.evidence_hash)).toBeInTheDocument();
-    expect(within(dialog).getByText("ledger:rf_100")).toBeInTheDocument();
-    expect(within(dialog).getByText("matched")).toBeInTheDocument();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Export Evidence JSON" }));
-
-    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:evidence-pack");
+    fireEvent.click(screen.getByRole("tab", { name: "Evidence" }));
+    const evidence = screen.getByRole("region", { name: "Runtime policy Evidence Pack" });
+    expect(within(evidence).getByText(fixtures.matchedPack.evidence_hash)).toBeInTheDocument();
+    expect(within(evidence).getByText("ledger:rf_100")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open full evidence" }).getAttribute("href")).toBe(
+      "/evidence?decision_id=decision_1",
+    );
+    expect(screen.queryByRole("dialog", { name: "Evidence Pack" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export Evidence JSON" })).not.toBeInTheDocument();
   });
 
   it("shows a not verified state when outcome evidence is missing", () => {
     hookState.evidenceMode = "missing";
 
     render(<RuntimeApprovalsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Open Evidence Pack" }));
 
-    const dialog = screen.getByRole("dialog", { name: "Evidence Pack" });
-    expect(within(dialog).getByText("Not verified")).toBeInTheDocument();
-    expect(within(dialog).getByText(fixtures.missingPack.evidence_hash)).toBeInTheDocument();
-    expect(within(dialog).getByText("Missing evidence")).toBeInTheDocument();
-    expect(within(dialog).getByText("No matched system-of-record outcome is linked to this decision yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Evidence" }));
+    const evidence = screen.getByRole("region", { name: "Runtime policy Evidence Pack" });
+    expect(within(evidence).getByText("Not verified")).toBeInTheDocument();
+    expect(within(evidence).getByText(fixtures.missingPack.evidence_hash)).toBeInTheDocument();
+    expect(within(evidence).getByText("No system-of-record outcome proof is linked.")).toBeInTheDocument();
   });
 });

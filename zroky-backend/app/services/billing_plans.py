@@ -18,7 +18,7 @@ from app.services.entitlement_catalog import (
     InvalidPlanCodeError,
 )
 
-SELF_SERVE_PLAN_CODES: tuple[str, ...] = ("starter", "pro")
+SELF_SERVE_PLAN_CODES: tuple[str, ...] = ("pro",)
 ENTERPRISE_PLAN_CODE: str = "enterprise"
 
 

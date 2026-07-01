@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { formatUsd, formatCount, formatDate, formatDateTime, formatPercent } from "./format";
+import {
+  compactJson,
+  field,
+  formatCount,
+  formatDate,
+  formatDateTime,
+  formatPercent,
+  formatUsd,
+  humanize,
+  timeSince,
+  timeUntil,
+} from "./format";
 
 describe("formatUsd", () => {
   it("formats dollars with 4 decimals", () => {
@@ -54,5 +65,44 @@ describe("formatPercent", () => {
 
   it("handles zero", () => {
     expect(formatPercent(0)).toBe("0.00%");
+  });
+});
+
+describe("compactJson", () => {
+  it("removes empty object fields before rendering", () => {
+    expect(compactJson({ a: 1, b: "", c: null })).toBe(JSON.stringify({ a: 1 }, null, 2));
+  });
+
+  it("renders fallback for empty objects", () => {
+    expect(compactJson({})).toBe("-");
+  });
+});
+
+describe("field", () => {
+  it("renders primitives and object values", () => {
+    expect(field(" value ")).toBe("value");
+    expect(field(true)).toBe("true");
+    expect(field({ id: "x" })).toBe(JSON.stringify({ id: "x" }));
+  });
+});
+
+describe("humanize", () => {
+  it("humanizes snake and kebab case values", () => {
+    expect(humanize("not_verified")).toBe("Not verified");
+    expect(humanize("policy-bypass")).toBe("Policy bypass");
+  });
+});
+
+describe("relative time", () => {
+  const now = new Date("2026-06-28T12:00:00Z").getTime();
+
+  it("formats elapsed time", () => {
+    expect(timeSince("2026-06-28T11:45:00Z", now)).toBe("15m old");
+    expect(timeSince("2026-06-27T10:00:00Z", now)).toBe("26h old");
+  });
+
+  it("formats future time", () => {
+    expect(timeUntil("2026-06-28T12:30:00Z", now)).toBe("30m left");
+    expect(timeUntil("2026-06-28T11:59:00Z", now)).toBe("Expired");
   });
 });

@@ -13,11 +13,14 @@ from zroky._errors import (
     ZrokyRuntimePolicyApprovalRequired,
     ZrokyRuntimePolicyBlocked,
     ZrokyRuntimePolicyError,
+    ZrokyVerifiedActionApprovalRequired,
+    ZrokyVerifiedActionError,
 )
 from zroky._internal.config import load_config
 from zroky._internal.models import ErrorCode
 from zroky._internal.prompt_fingerprint import generate_prompt_fingerprint
 from zroky._runtime_policy import _runtime_policy_url
+from zroky._verified_action import _api_url
 
 
 def _reset_sdk():
@@ -105,6 +108,279 @@ def test_runtime_policy_url_uses_control_plane_endpoint():
         _runtime_policy_url("http://localhost:8000/api/v1/ingest")
         == "http://localhost:8000/v1/runtime-policy/check"
     )
+
+
+def test_verified_action_api_url_uses_control_plane_endpoint():
+    assert (
+        _api_url("https://api.zroky.com/v1/ingest", "/v1/action-intents")
+        == "https://api.zroky.com/v1/action-intents"
+    )
+    assert (
+        _api_url("http://localhost:8000/api/v1/ingest", "/v1/action-intents")
+        == "http://localhost:8000/v1/action-intents"
+    )
+
+
+def test_verified_action_creates_intent_and_decides_without_runner_or_credential_pin(monkeypatch):
+    _reset_sdk()
+    calls: list[dict[str, object]] = []
+    responses = [
+        {
+            "action_id": "act_123",
+            "status": "validated",
+            "proof_status": "not_started",
+            "receipt_status": "missing",
+        },
+        {
+            "action_id": "act_123",
+            "status": "authorized",
+            "allowed": True,
+            "requires_approval": False,
+            "proof_status": "not_started",
+            "receipt_status": "missing",
+        },
+    ]
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_request(method, url, *, headers, json, timeout):
+        calls.append({"method": method, "url": url, "headers": headers, "json": json, "timeout": timeout})
+        return _Response(responses[len(calls) - 1])
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(
+            api_key="zk_live_test",
+            project="proj_actions",
+            ingest_url="https://api.zroky.com/v1/ingest",
+            agent_id="agent_profile_inventory",
+        )
+
+    decision = zroky.verified_action(
+        contract_version="inventory.item.update/1.0",
+        action_type="inventory.item.update",
+        operation_kind="UPDATE",
+        principal={"type": "agent", "id": "inventory-agent"},
+        resource={"type": "inventory_item", "id": "item_123"},
+        parameters={"fields": {"status": "active"}},
+        execution_request={
+            "capability": {"adapter": "generic_rest", "operation": "rest.patch"},
+            "credential_pointer": "ops-default",
+            "execution_plan": {
+                "adapter": "generic_rest",
+                "operation": "rest.patch",
+                "target": {"resource_ref": "item_123"},
+                "arguments": {"fields": {"status": "active"}},
+            },
+        },
+        idempotency_key="inventory_item_123_update",
+    )
+
+    assert decision["status"] == "authorized"
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"] == "https://api.zroky.com/v1/action-intents"
+    assert calls[1]["url"] == "https://api.zroky.com/v1/action-intents/act_123/decide"
+    assert calls[0]["headers"]["Idempotency-Key"] == "inventory_item_123_update"  # type: ignore[index]
+    body = calls[0]["json"]  # type: ignore[assignment]
+    assert body["agent_id"] == "agent_profile_inventory"  # type: ignore[index]
+    assert body["execution_request"]["credential_pointer"] == "ops-default"  # type: ignore[index]
+    assert "runner_id" not in body["execution_request"]  # type: ignore[operator,index]
+    assert "credential_ref" not in body["execution_request"]  # type: ignore[operator,index]
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_verified_action_allows_per_call_agent_id_override(monkeypatch):
+    _reset_sdk()
+    calls: list[dict[str, object]] = []
+    responses = [
+        {"action_id": "act_123", "status": "validated"},
+        {"action_id": "act_123", "status": "authorized", "allowed": True, "requires_approval": False},
+    ]
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_request(method, url, *, headers, json, timeout):
+        calls.append({"method": method, "url": url, "headers": headers, "json": json, "timeout": timeout})
+        return _Response(responses[len(calls) - 1])
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_actions", agent_id="agent_profile_default")
+
+    zroky.verified_action(
+        agent_id="agent_profile_override",
+        contract_version="inventory.item.update/1.0",
+        action_type="inventory.item.update",
+        operation_kind="UPDATE",
+        execution_request={
+            "credential_pointer": "ops-default",
+            "execution_plan": {"adapter": "generic_rest", "operation": "rest.patch"},
+        },
+        idempotency_key="inventory_override",
+    )
+
+    body = calls[0]["json"]  # type: ignore[assignment]
+    assert body["agent_id"] == "agent_profile_override"  # type: ignore[index]
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_verified_action_raises_with_action_and_approval_ids(monkeypatch):
+    _reset_sdk()
+    responses = [
+        {"action_id": "act_pending", "status": "validated"},
+        {
+            "action_id": "act_pending",
+            "status": "approval_pending",
+            "allowed": False,
+            "requires_approval": True,
+            "runtime_policy_decision_id": "decision_pending",
+        },
+    ]
+    index = {"value": 0}
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_request(*_args, **_kwargs):
+        payload = responses[index["value"]]
+        index["value"] += 1
+        return _Response(payload)
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_actions")
+
+    with pytest.raises(ZrokyVerifiedActionApprovalRequired) as error:
+        zroky.verified_action(
+            contract_version="inventory.item.delete/1.0",
+            action_type="inventory.item.delete",
+            operation_kind="UPDATE",
+            execution_request={
+                "credential_pointer": "ops-default",
+                "execution_plan": {
+                    "adapter": "generic_rest",
+                    "operation": "rest.patch",
+                    "target": {"resource_ref": "item_123"},
+                },
+            },
+            idempotency_key="inventory_item_123_delete",
+        )
+
+    assert error.value.action_id == "act_pending"
+    assert error.value.approval_id == "decision_pending"
+    assert error.value.decision["status"] == "approval_pending"
+    zroky.shutdown()
+    _reset_sdk()
+
+
+@pytest.mark.parametrize(
+    "execution_request",
+    [
+        {
+            "runner_id": "forbidden",
+            "execution_plan": {
+                "adapter": "generic_rest",
+                "operation": "rest.patch",
+                "target": {"resource_ref": "item_123"},
+            },
+        },
+        {
+            "credential_pointer": "customer-runner-secret://ops/default",
+            "execution_plan": {
+                "adapter": "generic_rest",
+                "operation": "rest.patch",
+                "target": {"resource_ref": "item_123"},
+            },
+        },
+    ],
+)
+def test_verified_action_rejects_runner_or_credential_pins_before_api_call(monkeypatch, execution_request):
+    _reset_sdk()
+    called = False
+
+    def _fake_request(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("request should not be called")
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_actions")
+
+    with pytest.raises(ZrokyVerifiedActionError):
+        zroky.verified_action(
+            contract_version="inventory.item.update/1.0",
+            action_type="inventory.item.update",
+            operation_kind="UPDATE",
+            execution_request=execution_request,
+        )
+
+    assert called is False
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_await_action_proof_polls_until_receipt(monkeypatch):
+    _reset_sdk()
+    calls: list[str] = []
+    responses = [
+        {"action_id": "act_done", "proof_status": "pending", "receipt_status": "pending"},
+        {"action_id": "act_done", "proof_status": "matched", "receipt_status": "generated"},
+        {"receipt_id": "receipt_123", "signature_valid": True, "receipt": {"final_status": "matched"}},
+    ]
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_request(_method, url, **_kwargs):
+        calls.append(url)
+        return _Response(responses[len(calls) - 1])
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_actions")
+
+    proof = zroky.await_action_proof("act_done", timeout_seconds=5, poll_interval_seconds=0.01)
+
+    assert proof["proof_status"] == "matched"
+    assert proof["receipt_status"] == "generated"
+    assert proof["signature_valid"] is True
+    assert proof["evidence_id"] == "receipt_123"
+    assert calls[-1] == "https://api.zroky.com/v1/action-intents/act_done/receipt"
+    zroky.shutdown()
+    _reset_sdk()
 
 
 def test_check_runtime_policy_posts_masked_payload_and_returns_decision(monkeypatch):

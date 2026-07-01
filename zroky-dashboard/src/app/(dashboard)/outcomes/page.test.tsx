@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import OutcomesPage from "./page";
 
 const hookState = vi.hoisted(() => ({
-  filter: "all",
   summaryRefetch: vi.fn(),
   checksRefetch: vi.fn(),
   sourceMutationSummaryRefetch: vi.fn(),
@@ -67,16 +66,17 @@ const hookState = vi.hoisted(() => ({
       reason: "field_mismatch",
       amount_usd: 42.5,
       currency: "USD",
-      claimed: { refund_id: "rf_999", amount_usd: 42.5, currency: "USD" },
+      claimed: { refund_id: "rf_999", amount_usd: 42.5, currency: "USD", agent_name: "refund-agent" },
       actual: { refund_id: "rf_999", amount_usd: 41.5, currency: "USD" },
       comparison: {
         compared_fields: [
           { field: "amount_usd", claimed: 42.5, actual: 41.5, matched: false },
+          { field: "currency", claimed: "USD", actual: "USD", matched: true },
         ],
         mismatches: [{ field: "amount_usd" }],
       },
       idempotency_key: "call_refund_api:rf_999",
-      metadata: { source: "test" },
+      metadata: { source: "test", agent_name: "refund-agent", action_id: "action_1" },
       checked_at: "2026-06-20T09:00:00Z",
       created_at: "2026-06-20T09:00:00Z",
     },
@@ -152,21 +152,14 @@ vi.mock("@/lib/hooks", () => ({
     isFetching: false,
     refetch: hookState.summaryRefetch,
   }),
-  useOutcomeReconciliations: (filter: string) => {
-    hookState.filter = filter;
-    const items =
-      filter === "all"
-        ? hookState.checks
-        : hookState.checks.filter((item) => item.verdict === filter);
-    return {
-      data: { items, total_in_page: items.length },
-      isLoading: false,
-      isError: false,
-      error: null,
-      isFetching: false,
-      refetch: hookState.checksRefetch,
-    };
-  },
+  useOutcomeReconciliations: () => ({
+    data: { items: hookState.checks, total_in_page: hookState.checks.length },
+    isLoading: false,
+    isError: false,
+    error: null,
+    isFetching: false,
+    refetch: hookState.checksRefetch,
+  }),
   useSourceMutationSummary: () => ({
     data: hookState.sourceMutationSummary,
     isLoading: false,
@@ -185,101 +178,83 @@ vi.mock("@/lib/hooks", () => ({
   }),
 }));
 
-function metricCard(label: string): HTMLElement {
-  const labelNode = screen.getAllByText(label)[0];
-  const card = labelNode.closest("article");
-  if (!card) throw new Error(`Missing metric card ${label}`);
-  return card;
+function metric(label: string): HTMLElement {
+  const metrics = screen.getByLabelText("Outcome verification metrics");
+  const node = within(metrics).getByText(label);
+  const card = node.closest(".dashboard-metric-card");
+  if (!card) throw new Error(`Missing metric ${label}`);
+  return card as HTMLElement;
 }
 
 describe("OutcomesPage", () => {
   beforeEach(() => {
-    hookState.filter = "all";
     hookState.summaryRefetch.mockClear();
     hookState.checksRefetch.mockClear();
     hookState.sourceMutationSummaryRefetch.mockClear();
     hookState.unreceiptedMutationsRefetch.mockClear();
   });
 
-  it("renders reconciliation KPIs and check evidence", () => {
+  it("renders the verification cockpit with honest metrics and bypass signal", () => {
     render(<OutcomesPage />);
 
-    expect(screen.getByRole("heading", { name: "Agent outcome mismatch" })).toBeInTheDocument();
-    expect(within(metricCard("Mismatched")).getByText("1")).toBeInTheDocument();
-    expect(within(metricCard("Not verified")).getByText("1")).toBeInTheDocument();
-    expect(within(metricCard("Matched")).getByText("1")).toBeInTheDocument();
-    expect(within(metricCard("Matched rate")).getByText("33%")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Verified action mismatch" })).toBeInTheDocument();
+    expect(within(metric("Verified")).getByText("1")).toBeInTheDocument();
+    expect(within(metric("Mismatched")).getByText("1")).toBeInTheDocument();
+    expect(within(metric("Not verified")).getByText("1")).toBeInTheDocument();
+    expect(within(metric("Bypass risk")).getByText("3")).toBeInTheDocument();
+    expect(within(metric("Verified rate")).getByText("33%")).toBeInTheDocument();
 
-    expect(screen.getByRole("region", { name: "Outcome verification setup paths" })).toBeInTheDocument();
-    expect(screen.getByText("SDK helper and webhook bridge land in the same verification queue.")).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("verifyOutcome()"))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("/v1/outcomes/reconciliation/saved"))).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("x-api-key"))).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open SDK setup/i }).getAttribute("href")).toBe(
-      "/settings/keys?intent=protect-agent",
-    );
-    expect(screen.getByRole("link", { name: /Open bridge setup/i }).getAttribute("href")).toBe(
-      "/integrations#generic-rest-connector",
-    );
+    const bypass = screen.getByRole("region", { name: "Bypass risk" });
+    expect(within(bypass).getByRole("heading", { name: "3 system changes with no receipt" })).toBeInTheDocument();
+    expect(within(bypass).getByText("stripe:rf_bypass")).toBeInTheDocument();
 
-    const proofContract = screen.getByRole("region", { name: "Outcome proof state contract" });
-    expect(
-      within(proofContract).getByText("Every risky action must end as matched, mismatched, or not_verified."),
-    ).toBeInTheDocument();
-    expect(
-      within(proofContract).getByText(
-        "Green agent output is not proof. Zroky only trusts a real connector read or a signed outcome callback.",
-      ),
-    ).toBeInTheDocument();
-    expect(within(proofContract).getByText("Safe to export")).toBeInTheDocument();
-    expect(within(proofContract).getByText("Block the path")).toBeInTheDocument();
-    expect(within(proofContract).getByText("Do not trust yet")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Reconciliation feed" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Selected outcome check" })).toBeInTheDocument();
+    expect(screen.getAllByText("Refund id rf_999").length).toBeGreaterThan(0);
+    expect(screen.getByText("refund-agent / Refund")).toBeInTheDocument();
+  });
 
-    const bypassWatch = screen.getByRole("region", { name: "Reconciliation bypass watch" });
-    expect(within(bypassWatch).getByText("Source mutations must map back to a signed Zroky receipt.")).toBeInTheDocument();
-    expect(within(bypassWatch).getAllByText("1").length).toBeGreaterThan(0);
-    expect(within(bypassWatch).getByText("stripe:rf_bypass")).toBeInTheDocument();
-    expect(within(bypassWatch).getAllByText("Policy bypass").length).toBeGreaterThan(0);
+  it("shows a field-level claimed-vs-actual diff instead of raw JSON first", () => {
+    render(<OutcomesPage />);
 
-    expect(screen.getByRole("region", { name: "Real outcome verification queue" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Selected outcome verification" })).toBeInTheDocument();
-    expect(screen.getAllByText("Refund rf_999").length).toBeGreaterThan(0);
-    expect(screen.getByText("Outcome mismatch")).toBeInTheDocument();
-    expect(screen.getByText("1 field mismatch")).toBeInTheDocument();
-    expect(screen.getByText(/ledger:rf_999 \/ Field mismatch/)).toBeInTheDocument();
-    expect(screen.getByText("call_refund_api").getAttribute("href")).toBe("/evidence");
-    expect(screen.getByText("trace_refund_api").getAttribute("href")).toBe("/evidence");
-    expect(screen.getByRole("link", { name: "Open Evidence Pack" }).getAttribute("href")).toBe(
+    const diff = screen.getByRole("table", { name: "Claimed versus actual field comparison" });
+    expect(within(diff).getByText("amount_usd")).toBeInTheDocument();
+    expect(within(diff).getByText("42.5")).toBeInTheDocument();
+    expect(within(diff).getByText("41.5")).toBeInTheDocument();
+    expect(within(diff).getByText("currency")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open signed evidence/ }).getAttribute("href")).toBe(
       "/evidence?decision_id=decision_1",
+    );
+    expect(screen.getByRole("link", { name: /Open action/ }).getAttribute("href")).toBe(
+      "/actions?action_id=action_1",
     );
   });
 
-  it("filters by verdict and refreshes both queries", () => {
+  it("filters locally by verdict and search", () => {
     render(<OutcomesPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mismatched" }));
+    fireEvent.click(screen.getByRole("button", { name: "Not verified" }));
 
-    expect(hookState.filter).toBe("mismatched");
-    expect(screen.getAllByText("Refund rf_999").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Email customer@example.com")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Payment id pay_1").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Refund id rf_999")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.change(screen.getByPlaceholderText("Search system ref, connector, claim..."), {
+      target: { value: "customer@example.com" },
+    });
+
+    expect(screen.getAllByText("Email customer@example.com").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Refund id rf_999")).not.toBeInTheDocument();
+  });
+
+  it("refreshes reconciliation and source mutation feeds", () => {
+    render(<OutcomesPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Refresh/ }));
 
     expect(hookState.summaryRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.checksRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.sourceMutationSummaryRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.unreceiptedMutationsRefetch).toHaveBeenCalledTimes(1);
-  });
-
-  it("searches loaded checks without changing the server verdict filter", () => {
-    render(<OutcomesPage />);
-
-    fireEvent.change(screen.getByPlaceholderText("System ref, call, trace, action, claim..."), {
-      target: { value: "customer@example.com" },
-    });
-
-    expect(hookState.filter).toBe("all");
-    expect(screen.getAllByText("Email customer@example.com").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Refund rf_999")).not.toBeInTheDocument();
   });
 });

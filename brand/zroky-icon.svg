@@ -1,0 +1,18 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Zroky icon">
+  <defs>
+    <linearGradient id="zIcon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6D5EF9"/>
+      <stop offset="55%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#zIcon)"/>
+  <rect x="10" y="10" width="108" height="108" rx="25" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="2"/>
+  <path d="M38 44 H90 L48 84 H90"
+        fill="none" stroke="#FFFFFF" stroke-width="12"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="38" cy="44" r="7" fill="#FFFFFF"/>
+  <circle cx="90" cy="44" r="7" fill="#FFFFFF"/>
+  <circle cx="48" cy="84" r="7" fill="#FFFFFF"/>
+  <circle cx="90" cy="84" r="7" fill="#FFFFFF"/>
+</svg>

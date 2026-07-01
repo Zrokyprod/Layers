@@ -16,13 +16,18 @@ from app.schemas.agents import (
 )
 from app.services.agent_profiles import (
     AgentProfileConflict,
+    AgentProfileLimitExceeded,
+    AgentProfileMandateError,
     AgentProfileNotFound,
     AgentProfileValidationError,
     agent_profile_to_dict,
+    apply_agent_setup_mandate,
+    count_active_agent_profiles,
     create_agent_profile,
     deactivate_agent_profile,
     get_agent_profile,
     list_agent_profiles,
+    resolve_agent_profile_limit,
     update_agent_profile,
 )
 
@@ -66,11 +71,16 @@ def list_agents_route(
         limit=limit,
         offset=offset,
     )
+    active_count = count_active_agent_profiles(db, project_id=context.tenant_id)
+    max_active_agents = resolve_agent_profile_limit(db, project_id=context.tenant_id)
     return AgentProfileListResponse(
         items=[_response(row) for row in rows],
         total=total,
         limit=limit,
         offset=offset,
+        active_count=active_count,
+        max_active_agents=max_active_agents,
+        limit_reached=max_active_agents != -1 and active_count >= max_active_agents,
     )
 
 
@@ -93,7 +103,36 @@ def create_agent_route(
         )
     except AgentProfileConflict as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except AgentProfileLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=str(exc),
+        ) from exc
     except AgentProfileValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return _response(row)
+
+
+@router.post("/{agent_id}/enforce", response_model=AgentProfileResponse)
+@limiter.limit("20/minute")
+def enforce_agent_route(
+    request: Request,
+    agent_id: str,
+    context: TenantContext = Depends(require_tenant_context),
+    db: Session = Depends(get_db_session),
+) -> AgentProfileResponse:
+    _require_role(context, "admin")
+    _require_project(db, context.tenant_id)
+    try:
+        row = apply_agent_setup_mandate(
+            db,
+            project_id=context.tenant_id,
+            agent_id=agent_id,
+            actor_subject=context.subject,
+        )
+    except AgentProfileNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (AgentProfileMandateError, AgentProfileValidationError) as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return _response(row)
 

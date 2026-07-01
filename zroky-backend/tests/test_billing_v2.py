@@ -153,7 +153,7 @@ class _FakeRazorpayOrderClient:
         if order is None:
             return {
                 "id": order_id,
-                "amount": 1_592_000,
+                "amount": 3_192_000,
                 "currency": "INR",
                 "status": self._owner.order_status,
                 "notes": {"org_id": "org-alpha", "plan_code": "pro", "product": "zroky"},
@@ -167,7 +167,7 @@ class _FakeRazorpayOrderClient:
                 {
                     "id": self._owner.payment_id,
                     "order_id": order_id,
-                    "amount": order.get("amount", 1_592_000),
+                    "amount": order.get("amount", 3_192_000),
                     "currency": order.get("currency", "INR"),
                     "status": self._owner.payment_status,
                     "captured": self._owner.payment_status == "captured",
@@ -189,7 +189,7 @@ class _FakeRazorpayPaymentClient:
         return {
             "id": payment_id,
             "order_id": "order_test_123",
-            "amount": order.get("amount", 1_592_000),
+            "amount": order.get("amount", 3_192_000),
             "currency": order.get("currency", "INR"),
             "status": self._owner.payment_status,
             "captured": self._owner.payment_status == "captured",
@@ -276,9 +276,11 @@ class TestBillingPlans:
             normalize_plan_code(None)
 
     def test_assert_self_serve_rules(self) -> None:
-        assert assert_self_serve_plan("pilot") == "starter"
-        assert assert_self_serve_plan("starter") == "starter"
         assert assert_self_serve_plan("pro") == "pro"
+        with pytest.raises(PlanNotSelfServeError):
+            assert_self_serve_plan("pilot")
+        with pytest.raises(PlanNotSelfServeError):
+            assert_self_serve_plan("starter")
         with pytest.raises(PlanNotSelfServeError):
             assert_self_serve_plan("free")
         with pytest.raises(PlanNotSelfServeError):
@@ -308,6 +310,7 @@ class TestDeprecatedCheckoutRoute:
     def test_checkout_rejects_invalid_or_forbidden_plan(self, client: TestClient) -> None:
         assert client.post("/v1/billing/checkout", json={"plan_code": "ultra"}).status_code == 422
         assert client.post("/v1/billing/checkout", json={"plan_code": "free"}).status_code == 422
+        assert client.post("/v1/billing/checkout", json={"plan_code": "starter"}).status_code == 422
         assert client.post("/v1/billing/checkout", json={"plan_code": "enterprise"}).status_code == 422
 
     def test_checkout_requires_admin_role(self, client: TestClient) -> None:
@@ -331,7 +334,7 @@ class TestRazorpayCheckoutRoute:
         assert response.status_code == 200
         body = response.json()
         assert body["order_id"] == "order_test_123"
-        assert body["amount"] == 1_592_000
+        assert body["amount"] == 3_192_000
         assert body["currency"] == "INR"
         assert body["plan_code"] == "pro"
         assert fake.order.last_payload is not None
@@ -357,12 +360,23 @@ class TestRazorpayCheckoutRoute:
     ) -> None:
         self.test_create_order_tracks_pending_request(client, monkeypatch)
 
+    def test_create_order_rejects_grandfathered_starter(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake = _FakeRazorpayClient()
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+
+        response = client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"})
+
+        assert response.status_code == 422
+        assert fake.order.last_payload is None
+
     def test_verify_payment_activates_plan_after_valid_signature(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         fake = _FakeRazorpayClient()
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"}).status_code == 200
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pro"}).status_code == 200
 
         payment_id = "pay_test_123"
         response = client.post(
@@ -384,7 +398,7 @@ class TestRazorpayCheckoutRoute:
             assert sub.payment_provider == "razorpay"
             assert sub.payment_request_ref == "order_test_123"
             assert sub.payment_subscription_ref == payment_id
-            assert sub.plan_code == "starter"
+            assert sub.plan_code == "pro"
             event = session.execute(
                 select(BillingEvent).where(
                     BillingEvent.provider == "razorpay",
@@ -400,7 +414,7 @@ class TestRazorpayCheckoutRoute:
         fake.payment_status = "authorized"
         fake.order_status = "attempted"
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"}).status_code == 200
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pro"}).status_code == 200
 
         payment_id = "pay_authorized"
         response = client.post(
@@ -460,7 +474,7 @@ class TestRazorpayReconciliation:
         fake = _FakeRazorpayClient()
         fake.payment_id = "pay_reconciled"
         monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
-        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"}).status_code == 200
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pro"}).status_code == 200
 
         factory = client._session_factory  # type: ignore[attr-defined]
         with factory() as session:
@@ -475,8 +489,8 @@ class TestRazorpayReconciliation:
             assert sub.payment_request_ref == "order_test_123"
             assert sub.payment_subscription_ref == "pay_reconciled"
             assert sub.status == "active"
-            assert sub.plan_code == "starter"
-            assert entitlements_resolver.get(session, "org-alpha", "events.monthly_quota") == 50_000
+            assert sub.plan_code == "pro"
+            assert entitlements_resolver.get(session, "org-alpha", "events.monthly_quota") == 250_000
 
             event = session.execute(
                 select(BillingEvent).where(

@@ -12,7 +12,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Call, RuntimePolicyAuditEvent, RuntimePolicyDecision, TraceSpan
-from app.services.pilot import get_or_create_policy, parse_policy_json
+from app.services.runtime_policy_rules import resolve_runtime_policy
 from app.services.privacy import mask_payload, mask_text, mask_value
 
 
@@ -706,6 +706,67 @@ def _create_decision(
     expires_at: datetime | None = None,
     required_approval_count: int = 0,
 ) -> RuntimePolicyDecision:
+    row = _build_decision(
+        db,
+        project_id=project_id,
+        payload=payload,
+        policy=policy,
+        decision=decision,
+        status=status,
+        reasons=reasons,
+        expires_at=expires_at,
+        required_approval_count=required_approval_count,
+    )
+    db.add(row)
+    db.flush()
+    _persist_trace_policy_span(db, project_id=project_id, decision=row, request_payload=payload)
+    _log_audit_event(
+        db,
+        decision=row,
+        event_type=_audit_event_type(decision=decision, status=status),
+        actor=_bounded(payload.get("actor") or payload.get("agent_name"), max_length=128),
+        reason="; ".join([_reason(item) for item in reasons]),
+    )
+    return row
+
+
+def _preview_decision(
+    db: Session,
+    *,
+    project_id: str,
+    payload: dict[str, Any],
+    policy: dict[str, Any],
+    decision: str,
+    status: str,
+    reasons: list[str],
+    expires_at: datetime | None = None,
+    required_approval_count: int = 0,
+) -> RuntimePolicyDecision:
+    return _build_decision(
+        db,
+        project_id=project_id,
+        payload=payload,
+        policy=policy,
+        decision=decision,
+        status=status,
+        reasons=reasons,
+        expires_at=expires_at,
+        required_approval_count=required_approval_count,
+    )
+
+
+def _build_decision(
+    db: Session,
+    *,
+    project_id: str,
+    payload: dict[str, Any],
+    policy: dict[str, Any],
+    decision: str,
+    status: str,
+    reasons: list[str],
+    expires_at: datetime | None = None,
+    required_approval_count: int = 0,
+) -> RuntimePolicyDecision:
     masked_request = mask_payload(payload)
     intended_action = _intended_action_payload(payload)
     trace_context = _trace_context_payload(db, project_id=project_id, payload=payload)
@@ -746,16 +807,6 @@ def _create_decision(
         approver_subjects_json=_json_dumps([]),
         expires_at=expires_at,
     )
-    db.add(row)
-    db.flush()
-    _persist_trace_policy_span(db, project_id=project_id, decision=row, request_payload=payload)
-    _log_audit_event(
-        db,
-        decision=row,
-        event_type=_audit_event_type(decision=decision, status=status),
-        actor=_bounded(payload.get("actor") or payload.get("agent_name"), max_length=128),
-        reason="; ".join([_reason(item) for item in reasons]),
-    )
     return row
 
 
@@ -764,24 +815,46 @@ def evaluate_runtime_policy(
     *,
     project_id: str,
     payload: dict[str, Any],
+    persist: bool = True,
 ) -> RuntimePolicyResult:
-    policy_row = get_or_create_policy(db, project_id=project_id)
-    policy = parse_policy_json(policy_row.policy_json)
+    policy = resolve_runtime_policy(db, project_id=project_id, payload=payload).policy
 
-    reasons: list[str] = []
-    if policy.get("runtime_enabled") is False:
-        row = _create_decision(
+    def make_result(
+        *,
+        decision: str,
+        status: str,
+        reasons: list[str],
+        allowed: bool,
+        requires_approval: bool,
+        expires_at: datetime | None = None,
+        required_approval_count: int = 0,
+    ) -> RuntimePolicyResult:
+        maker = _create_decision if persist else _preview_decision
+        row = maker(
             db,
             project_id=project_id,
             payload=payload,
             policy=policy,
+            decision=decision,
+            status=status,
+            reasons=reasons,
+            expires_at=expires_at,
+            required_approval_count=required_approval_count,
+        )
+        if persist:
+            db.commit()
+            db.refresh(row)
+        return RuntimePolicyResult(row, allowed=allowed, requires_approval=requires_approval, reasons=reasons)
+
+    reasons: list[str] = []
+    if policy.get("runtime_enabled") is False:
+        return make_result(
             decision="allow",
             status="allowed",
             reasons=["runtime policy gate disabled for this project"],
+            allowed=True,
+            requires_approval=False,
         )
-        db.commit()
-        db.refresh(row)
-        return RuntimePolicyResult(row, allowed=True, requires_approval=False, reasons=["runtime policy gate disabled for this project"])
 
     if policy.get("kill_switch") is True:
         reasons.append("project kill switch is enabled")
@@ -822,18 +895,13 @@ def evaluate_runtime_policy(
     reasons.extend(_first_launch_block_reasons(payload, policy))
 
     if reasons:
-        row = _create_decision(
-            db,
-            project_id=project_id,
-            payload=payload,
-            policy=policy,
+        return make_result(
             decision="block",
             status="blocked",
             reasons=reasons,
+            allowed=False,
+            requires_approval=False,
         )
-        db.commit()
-        db.refresh(row)
-        return RuntimePolicyResult(row, allowed=False, requires_approval=False, reasons=reasons)
 
     approval_reasons = _first_launch_approval_reasons(payload, policy)
     if _is_sensitive_action(payload, policy) and policy.get("runtime_sensitive_actions_require_approval") is True:
@@ -841,6 +909,16 @@ def evaluate_runtime_policy(
     required_approval_count = _required_approval_count(payload, policy, approval_reasons)
 
     if approval_reasons:
+        if not persist:
+            return make_result(
+                decision="requires_approval",
+                status="pending_approval",
+                reasons=approval_reasons,
+                allowed=False,
+                requires_approval=True,
+                expires_at=_approval_expiry(policy),
+                required_approval_count=required_approval_count,
+            )
         approval = _valid_approval(
             db,
             project_id=project_id,
@@ -882,33 +960,23 @@ def evaluate_runtime_policy(
             reasons = _json_loads(pending.reasons_json, approval_reasons)
             return RuntimePolicyResult(pending, allowed=False, requires_approval=True, reasons=reasons)
 
-        row = _create_decision(
-            db,
-            project_id=project_id,
-            payload=payload,
-            policy=policy,
+        return make_result(
             decision="requires_approval",
             status="pending_approval",
             reasons=approval_reasons,
+            allowed=False,
+            requires_approval=True,
             expires_at=_approval_expiry(policy),
             required_approval_count=required_approval_count,
         )
-        db.commit()
-        db.refresh(row)
-        return RuntimePolicyResult(row, allowed=False, requires_approval=True, reasons=approval_reasons)
 
-    row = _create_decision(
-        db,
-        project_id=project_id,
-        payload=payload,
-        policy=policy,
+    return make_result(
         decision="allow",
         status="allowed",
         reasons=["runtime policy checks passed"],
+        allowed=True,
+        requires_approval=False,
     )
-    db.commit()
-    db.refresh(row)
-    return RuntimePolicyResult(row, allowed=True, requires_approval=False, reasons=["runtime policy checks passed"])
 
 
 def list_runtime_policy_decisions(
@@ -960,6 +1028,25 @@ def list_runtime_policy_audit_events(
     return grouped
 
 
+def _auto_advance_linked_action_intent(
+    db: Session,
+    *,
+    project_id: str,
+    decision_id: str,
+    actor: str | None,
+) -> None:
+    from app.services.action_kernel import auto_advance_action_intent_for_runtime_policy_resolution
+
+    advanced = auto_advance_action_intent_for_runtime_policy_resolution(
+        db,
+        project_id=project_id,
+        decision_id=decision_id,
+        actor=actor,
+    )
+    if advanced is not None:
+        db.commit()
+
+
 def resolve_runtime_policy_decision(
     db: Session,
     *,
@@ -1001,6 +1088,13 @@ def resolve_runtime_policy_decision(
         _update_trace_policy_span(db, project_id=project_id, decision=row)
         db.commit()
         db.refresh(row)
+        _auto_advance_linked_action_intent(
+            db,
+            project_id=project_id,
+            decision_id=row.id,
+            actor=actor_key,
+        )
+        db.refresh(row)
         return row
 
     approvers = _approver_subjects(row)
@@ -1040,6 +1134,14 @@ def resolve_runtime_policy_decision(
     _update_trace_policy_span(db, project_id=project_id, decision=row)
     db.commit()
     db.refresh(row)
+    if row.status == "approved":
+        _auto_advance_linked_action_intent(
+            db,
+            project_id=project_id,
+            decision_id=row.id,
+            actor=actor_key,
+        )
+        db.refresh(row)
     return row
 
 

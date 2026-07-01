@@ -178,6 +178,111 @@ export interface RuntimePolicyKillSwitchResponse {
   policy: Record<string, unknown>;
 }
 
+export interface RuntimePolicyDryRunPayload {
+  agent_id?: string | null;
+  agent_name?: string | null;
+  role?: string | null;
+  action_type?: string | null;
+  operation_kind?: string | null;
+  tool_name?: string | null;
+  tool_args?: Record<string, unknown> | null;
+  external_action?: boolean | null;
+  environment?: string | null;
+  business_impact_summary?: string | null;
+  impact_usd?: number | null;
+  estimated_cost_usd?: number | null;
+  resource_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface RuntimePolicyDryRunResponse {
+  recorded: boolean;
+  decision: "allow" | "block" | "requires_approval" | string;
+  status: RuntimePolicyDecisionStatus;
+  allowed: boolean;
+  requires_approval: boolean;
+  reasons: string[];
+  request: Record<string, unknown>;
+  policy_hit: Record<string, unknown>;
+  business_impact: Record<string, unknown>;
+  intended_action: Record<string, unknown>;
+  required_approval_count: number;
+}
+
+export interface RuntimePolicyRuleResponse {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  agent_id: string | null;
+  action_type: string | null;
+  environment: string | null;
+  policy_patch: Partial<PilotPolicyPayload>;
+  priority: number;
+  version: number;
+  is_enabled: boolean;
+  created_by_subject: string | null;
+  updated_by_subject: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RuntimePolicyRuleListResponse {
+  items: RuntimePolicyRuleResponse[];
+  total_in_page: number;
+}
+
+export interface RuntimePolicyRulePayload {
+  name: string;
+  description?: string | null;
+  agent_id?: string | null;
+  action_type?: string | null;
+  environment?: string | null;
+  policy_patch: Partial<PilotPolicyPayload>;
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface RuntimePolicyRuleUpdatePayload {
+  name?: string;
+  description?: string | null;
+  agent_id?: string | null;
+  action_type?: string | null;
+  environment?: string | null;
+  policy_patch?: Partial<PilotPolicyPayload>;
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface RuntimePolicyResolvePreviewPayload {
+  agent_id?: string | null;
+  action_type?: string | null;
+  tool_name?: string | null;
+  environment?: string | null;
+}
+
+export interface RuntimePolicyMatchedRule {
+  id: string;
+  name: string;
+  agent_id: string | null;
+  action_type: string | null;
+  environment: string | null;
+  priority: number;
+  version: number;
+  specificity: number;
+}
+
+export interface RuntimePolicyResolvePreviewResponse {
+  project_id: string;
+  policy: PilotPolicyPayload & {
+    _runtime_policy_resolution?: {
+      source?: string;
+      matched_rules?: RuntimePolicyMatchedRule[];
+    };
+  };
+  matched_rules: RuntimePolicyMatchedRule[];
+}
+
 export interface RuntimePolicyEvidenceDecisionResponse {
   id: string;
   project_id: string;
@@ -254,6 +359,143 @@ export interface RuntimePolicyEvidencePackResponse {
   hash_payload_excludes: string[];
 }
 
+export type ActionIntentStatus =
+  | "validated"
+  | "deciding"
+  | "denied"
+  | "approval_pending"
+  | "authorized"
+  | "expired";
+
+export type ActionIntentProofStatus =
+  | "not_started"
+  | "pending"
+  | "matched"
+  | "mismatched"
+  | "not_verified";
+
+export type ActionIntentReceiptStatus =
+  | "missing"
+  | "pending"
+  | "generated"
+  | "failed";
+
+export interface ActionIntentResponse {
+  action_id: string;
+  project_id: string;
+  agent_id?: string | null;
+  agent_profile?: {
+    id: string;
+    display_name: string;
+    slug: string;
+    runtime_path: string;
+    environment: string | null;
+  } | null;
+  contract_version: string;
+  action_type: string;
+  operation_kind: string;
+  environment: string;
+  status: ActionIntentStatus | string;
+  proof_status: ActionIntentProofStatus | string;
+  receipt_status: ActionIntentReceiptStatus | string;
+  idempotency_key: string;
+  intent_digest: string;
+  canonical_intent: Record<string, unknown>;
+  created_at: string;
+  decided_at: string | null;
+  authorized_at: string | null;
+  runtime_policy_decision_id: string | null;
+  deadline: string | null;
+  status_url: string;
+}
+
+export interface ActionIntentListResponse {
+  items: ActionIntentResponse[];
+  total_in_page: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ActionIntentDecisionResponse extends ActionIntentResponse {
+  allowed: boolean;
+  requires_approval: boolean;
+  reasons: string[];
+}
+
+export interface ActionTimelineEventResponse {
+  event_id: string;
+  action_id: string;
+  project_id: string;
+  event_type: string;
+  event_digest: string;
+  actor: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ActionTimelineResponse {
+  items: ActionTimelineEventResponse[];
+}
+
+export interface ActionReceiptResponse {
+  receipt_id: string;
+  project_id: string;
+  action_id: string;
+  receipt_digest: string;
+  evidence_hash: string | null;
+  signature_algorithm: string;
+  signature: string;
+  signing_key_id: string;
+  signature_valid: boolean;
+  generated_at: string;
+  receipt: Record<string, unknown>;
+}
+
+export interface ActionExecutionAttemptResponse {
+  attempt_id: string;
+  project_id: string;
+  action_id: string;
+  runner_id: string;
+  attempt_number: number;
+  status: string;
+  idempotency_key: string;
+  credential_ref: string;
+  plan_digest: string;
+  execution_plan: Record<string, unknown>;
+  result_summary: Record<string, unknown>;
+  error_message: string | null;
+  protected_credential_returned: boolean;
+  requested_by_subject: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActionExecutionAttemptListResponse {
+  items: ActionExecutionAttemptResponse[];
+}
+
+export interface ActionRunnerResponse {
+  runner_id: string;
+  project_id: string;
+  name: string;
+  runner_type: string;
+  environment: string;
+  status: string;
+  supported_operation_kinds: string[];
+  credential_scope: Record<string, unknown>;
+  heartbeat_payload: Record<string, unknown>;
+  capability_version: string | null;
+  last_heartbeat_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActionRunnerListResponse {
+  items: ActionRunnerResponse[];
+}
+
 export type AgentRuntimePath = "sdk" | "http_gateway" | "mcp_gateway" | "webhook";
 
 export type AgentRiskActionType =
@@ -273,7 +515,15 @@ export type AgentVerificationConnectorType =
   | "webhook_callback"
   | "database_read"
   | "ledger_refund"
+  | "stripe_refund"
+  | "razorpay_refund"
+  | "netsuite_finance"
   | "crm_record"
+  | "hubspot_crm"
+  | "salesforce_crm"
+  | "zoho_crm"
+  | "zendesk_ticket"
+  | "jira_issue"
   | "ticket_status"
   | "email_delivery"
   | "github_ci";
@@ -307,10 +557,30 @@ export interface AgentProfileListResponse {
   total: number;
   limit: number;
   offset: number;
+  active_count: number;
+  max_active_agents: number;
+  limit_reached: boolean;
 }
 
 export interface AgentProfileCreatePayload {
   display_name: string;
+  description?: string | null;
+  runtime_path?: AgentRuntimePath;
+  framework?: string | null;
+  environment?: string | null;
+  model_provider?: string | null;
+  model_name?: string | null;
+  tool_names?: string[];
+  allowed_action_types?: AgentRiskActionType[];
+  blocked_action_types?: AgentRiskActionType[];
+  default_policy_id?: string | null;
+  risk_limits?: Record<string, unknown>;
+  verification_connectors?: AgentVerificationConnectorType[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentProfileUpdatePayload {
+  display_name?: string;
   description?: string | null;
   runtime_path?: AgentRuntimePath;
   framework?: string | null;
@@ -908,12 +1178,37 @@ export function listAgentProfiles(
   });
 }
 
+export function getAgentProfile(
+  agentId: string,
+  signal?: AbortSignal,
+): Promise<AgentProfileResponse> {
+  return request<AgentProfileResponse>(`/v1/agents/${encodeURIComponent(agentId)}`, {
+    signal,
+  });
+}
+
 export function createAgentProfile(
   payload: AgentProfileCreatePayload,
 ): Promise<AgentProfileResponse> {
   return request<AgentProfileResponse>("/v1/agents", {
     method: "POST",
     body: payload,
+  });
+}
+
+export function updateAgentProfile(
+  agentId: string,
+  payload: AgentProfileUpdatePayload,
+): Promise<AgentProfileResponse> {
+  return request<AgentProfileResponse>(`/v1/agents/${encodeURIComponent(agentId)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function enforceAgentProfile(agentId: string): Promise<AgentProfileResponse> {
+  return request<AgentProfileResponse>(`/v1/agents/${encodeURIComponent(agentId)}/enforce`, {
+    method: "POST",
   });
 }
 
@@ -1162,6 +1457,13 @@ export function getProjectSettings(signal?: AbortSignal): Promise<ProjectRespons
   return request<ProjectResponse>("/v1/settings/project", { signal });
 }
 
+export function updateProjectSettings(body: { name: string }): Promise<ProjectResponse> {
+  return request<ProjectResponse>("/v1/settings/project", {
+    method: "PATCH",
+    body,
+  });
+}
+
 export function getPiiPolicy(signal?: AbortSignal): Promise<PiiPolicyResponse> {
   return request<PiiPolicyResponse>("/v1/settings/pii-policy", { signal });
 }
@@ -1336,6 +1638,79 @@ export interface LedgerRefundConnectorTestResponse {
   connector: LedgerRefundConnectorStatusResponse;
 }
 
+export type StripeRefundConnectorStatusResponse = LedgerRefundConnectorStatusResponse & {
+  connector_type: "stripe_refund" | string;
+};
+
+export type StripeRefundConnectorConfigPayload = Omit<LedgerRefundConnectorConfigPayload, "base_url"> & {
+  base_url?: string;
+};
+
+export type StripeRefundConnectorTestPayload = LedgerRefundConnectorTestPayload;
+
+export interface StripeRefundConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: StripeRefundConnectorStatusResponse;
+}
+
+export type RazorpayRefundConnectorStatusResponse = LedgerRefundConnectorStatusResponse & {
+  connector_type: "razorpay_refund" | string;
+};
+
+export interface RazorpayRefundConnectorConfigPayload {
+  base_url?: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  key_id: string;
+  key_secret?: string | null;
+  clear_key_secret?: boolean;
+}
+
+export type RazorpayRefundConnectorTestPayload = LedgerRefundConnectorTestPayload;
+
+export interface RazorpayRefundConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: RazorpayRefundConnectorStatusResponse;
+}
+
+export type NetSuiteFinanceConnectorStatusResponse = LedgerRefundConnectorStatusResponse & {
+  connector_type: "netsuite_finance" | string;
+};
+
+export interface NetSuiteFinanceConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface NetSuiteFinanceConnectorTestPayload {
+  record_type?: string;
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface NetSuiteFinanceConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: NetSuiteFinanceConnectorStatusResponse;
+}
+
 export interface CustomerRecordConnectorStatusResponse {
   connected: boolean;
   connector_type: "customer_record_api" | string;
@@ -1441,6 +1816,280 @@ export interface GenericRestConnectorTestResponse {
   connector: GenericRestConnectorStatusResponse;
 }
 
+export interface HubSpotCrmConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "hubspot_crm" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_retryable: boolean | null;
+  last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface HubSpotCrmConnectorConfigPayload {
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface HubSpotCrmConnectorTestPayload {
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface HubSpotCrmConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: HubSpotCrmConnectorStatusResponse;
+}
+
+export interface SalesforceCrmConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "salesforce_crm" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_retryable: boolean | null;
+  last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SalesforceCrmConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface SalesforceCrmConnectorTestPayload {
+  object_type: string;
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface SalesforceCrmConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: SalesforceCrmConnectorStatusResponse;
+}
+
+export interface ZohoCrmConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "zoho_crm" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  has_oauth_refresh_token?: boolean;
+  oauth_refresh_token_last4?: string | null;
+  last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_retryable: boolean | null;
+  last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ZohoCrmConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface ZohoCrmConnectorTestPayload {
+  module_name: string;
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface ZohoCrmConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: ZohoCrmConnectorStatusResponse;
+}
+
+export interface OAuthStartResponse {
+  authorization_url: string;
+}
+
+export interface ZendeskTicketConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "zendesk_ticket" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_retryable: boolean | null;
+  last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ZendeskTicketConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  auth_username?: string | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface ZendeskTicketConnectorTestPayload {
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface ZendeskTicketConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: ZendeskTicketConnectorStatusResponse;
+}
+
+export interface JiraIssueConnectorStatusResponse {
+  connected: boolean;
+  connector_type: "jira_issue" | string;
+  base_url: string | null;
+  path_template: string | null;
+  record_path: string | null;
+  query: Record<string, string | number | boolean> | null;
+  has_bearer_token: boolean;
+  bearer_token_last4: string | null;
+  last_tested_at: string | null;
+  health_status: string;
+  last_verdict: OutcomeReconciliationVerdict | string | null;
+  last_error: string | null;
+  last_error_code: string | null;
+  last_http_status: number | null;
+  last_attempts: number | null;
+  last_retryable: boolean | null;
+  last_checked_at: string | null;
+  readiness?: SystemOfRecordConnectorReadiness;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface JiraIssueConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  auth_username?: string | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface JiraIssueConnectorTestPayload {
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  system_ref?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface JiraIssueConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: JiraIssueConnectorStatusResponse;
+}
+
 export interface PostgresReadConnectorStatusResponse {
   connected: boolean;
   connector_type: "postgres_read" | string;
@@ -1528,6 +2177,108 @@ export function testLedgerRefundConnector(
   );
 }
 
+export function getStripeRefundConnectorStatus(
+  signal?: AbortSignal,
+): Promise<StripeRefundConnectorStatusResponse> {
+  return request<StripeRefundConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/stripe-refund/status",
+    { signal },
+  );
+}
+
+export function saveStripeRefundConnectorConfig(
+  body: StripeRefundConnectorConfigPayload,
+): Promise<StripeRefundConnectorStatusResponse> {
+  return request<StripeRefundConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/stripe-refund/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testStripeRefundConnector(
+  body: StripeRefundConnectorTestPayload,
+): Promise<StripeRefundConnectorTestResponse> {
+  return request<StripeRefundConnectorTestResponse>(
+    "/v1/integrations/system-of-record/stripe-refund/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getRazorpayRefundConnectorStatus(
+  signal?: AbortSignal,
+): Promise<RazorpayRefundConnectorStatusResponse> {
+  return request<RazorpayRefundConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/razorpay-refund/status",
+    { signal },
+  );
+}
+
+export function saveRazorpayRefundConnectorConfig(
+  body: RazorpayRefundConnectorConfigPayload,
+): Promise<RazorpayRefundConnectorStatusResponse> {
+  return request<RazorpayRefundConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/razorpay-refund/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testRazorpayRefundConnector(
+  body: RazorpayRefundConnectorTestPayload,
+): Promise<RazorpayRefundConnectorTestResponse> {
+  return request<RazorpayRefundConnectorTestResponse>(
+    "/v1/integrations/system-of-record/razorpay-refund/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getNetSuiteFinanceConnectorStatus(
+  signal?: AbortSignal,
+): Promise<NetSuiteFinanceConnectorStatusResponse> {
+  return request<NetSuiteFinanceConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/netsuite-finance/status",
+    { signal },
+  );
+}
+
+export function saveNetSuiteFinanceConnectorConfig(
+  body: NetSuiteFinanceConnectorConfigPayload,
+): Promise<NetSuiteFinanceConnectorStatusResponse> {
+  return request<NetSuiteFinanceConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/netsuite-finance/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testNetSuiteFinanceConnector(
+  body: NetSuiteFinanceConnectorTestPayload,
+): Promise<NetSuiteFinanceConnectorTestResponse> {
+  return request<NetSuiteFinanceConnectorTestResponse>(
+    "/v1/integrations/system-of-record/netsuite-finance/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
 export function getCustomerRecordConnectorStatus(
   signal?: AbortSignal,
 ): Promise<CustomerRecordConnectorStatusResponse> {
@@ -1588,6 +2339,185 @@ export function testGenericRestConnector(
 ): Promise<GenericRestConnectorTestResponse> {
   return request<GenericRestConnectorTestResponse>(
     "/v1/integrations/system-of-record/generic-rest/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getHubSpotCrmConnectorStatus(
+  signal?: AbortSignal,
+): Promise<HubSpotCrmConnectorStatusResponse> {
+  return request<HubSpotCrmConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/hubspot-crm/status",
+    { signal },
+  );
+}
+
+export function saveHubSpotCrmConnectorConfig(
+  body: HubSpotCrmConnectorConfigPayload,
+): Promise<HubSpotCrmConnectorStatusResponse> {
+  return request<HubSpotCrmConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/hubspot-crm/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testHubSpotCrmConnector(
+  body: HubSpotCrmConnectorTestPayload,
+): Promise<HubSpotCrmConnectorTestResponse> {
+  return request<HubSpotCrmConnectorTestResponse>(
+    "/v1/integrations/system-of-record/hubspot-crm/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getSalesforceCrmConnectorStatus(
+  signal?: AbortSignal,
+): Promise<SalesforceCrmConnectorStatusResponse> {
+  return request<SalesforceCrmConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/salesforce-crm/status",
+    { signal },
+  );
+}
+
+export function saveSalesforceCrmConnectorConfig(
+  body: SalesforceCrmConnectorConfigPayload,
+): Promise<SalesforceCrmConnectorStatusResponse> {
+  return request<SalesforceCrmConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/salesforce-crm/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testSalesforceCrmConnector(
+  body: SalesforceCrmConnectorTestPayload,
+): Promise<SalesforceCrmConnectorTestResponse> {
+  return request<SalesforceCrmConnectorTestResponse>(
+    "/v1/integrations/system-of-record/salesforce-crm/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getZohoCrmConnectorStatus(
+  signal?: AbortSignal,
+): Promise<ZohoCrmConnectorStatusResponse> {
+  return request<ZohoCrmConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/zoho-crm/status",
+    { signal },
+  );
+}
+
+export function startZohoCrmOAuth(): Promise<OAuthStartResponse> {
+  return request<OAuthStartResponse>(
+    "/v1/integrations/system-of-record/zoho-crm/oauth/start",
+    {
+      method: "GET",
+    },
+  );
+}
+
+export function saveZohoCrmConnectorConfig(
+  body: ZohoCrmConnectorConfigPayload,
+): Promise<ZohoCrmConnectorStatusResponse> {
+  return request<ZohoCrmConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/zoho-crm/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testZohoCrmConnector(
+  body: ZohoCrmConnectorTestPayload,
+): Promise<ZohoCrmConnectorTestResponse> {
+  return request<ZohoCrmConnectorTestResponse>(
+    "/v1/integrations/system-of-record/zoho-crm/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getZendeskTicketConnectorStatus(
+  signal?: AbortSignal,
+): Promise<ZendeskTicketConnectorStatusResponse> {
+  return request<ZendeskTicketConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/zendesk-ticket/status",
+    { signal },
+  );
+}
+
+export function saveZendeskTicketConnectorConfig(
+  body: ZendeskTicketConnectorConfigPayload,
+): Promise<ZendeskTicketConnectorStatusResponse> {
+  return request<ZendeskTicketConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/zendesk-ticket/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testZendeskTicketConnector(
+  body: ZendeskTicketConnectorTestPayload,
+): Promise<ZendeskTicketConnectorTestResponse> {
+  return request<ZendeskTicketConnectorTestResponse>(
+    "/v1/integrations/system-of-record/zendesk-ticket/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getJiraIssueConnectorStatus(
+  signal?: AbortSignal,
+): Promise<JiraIssueConnectorStatusResponse> {
+  return request<JiraIssueConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/jira-issue/status",
+    { signal },
+  );
+}
+
+export function saveJiraIssueConnectorConfig(
+  body: JiraIssueConnectorConfigPayload,
+): Promise<JiraIssueConnectorStatusResponse> {
+  return request<JiraIssueConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/jira-issue/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testJiraIssueConnector(
+  body: JiraIssueConnectorTestPayload,
+): Promise<JiraIssueConnectorTestResponse> {
+  return request<JiraIssueConnectorTestResponse>(
+    "/v1/integrations/system-of-record/jira-issue/test",
     {
       method: "POST",
       body,
@@ -2517,9 +3447,36 @@ export interface SavedPostgresReadReconciliationPayload {
 export type SavedConnectorReconciliationConnector =
   | "ledger_refund"
   | "ledger_refund_api"
+  | "stripe"
+  | "stripe_refund"
+  | "stripe_refunds"
+  | "razorpay"
+  | "razorpay_refund"
+  | "razorpay_refunds"
   | "crm_record"
   | "customer_record"
   | "customer_record_api"
+  | "hubspot"
+  | "hubspot_crm"
+  | "hubspot_customer"
+  | "salesforce"
+  | "salesforce_crm"
+  | "salesforce_customer"
+  | "zoho"
+  | "zoho_crm"
+  | "zoho_customer"
+  | "ticket_status"
+  | "zendesk"
+  | "zendesk_ticket"
+  | "jira"
+  | "jira_issue"
+  | "jira_ticket"
+  | "jsm"
+  | "netsuite"
+  | "netsuite_finance"
+  | "netsuite_record"
+  | "finance_record"
+  | "procurement_record"
   | "generic_rest"
   | "generic_rest_api"
   | "postgres"
@@ -2640,6 +3597,26 @@ export function reconcileSavedLedgerRefund(
   payload: SavedLedgerRefundReconciliationPayload,
 ): Promise<OutcomeReconciliationView> {
   return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/ledger-refund/saved", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 45_000,
+  });
+}
+
+export function reconcileSavedStripeRefund(
+  payload: SavedLedgerRefundReconciliationPayload,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/stripe-refund/saved", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 45_000,
+  });
+}
+
+export function reconcileSavedRazorpayRefund(
+  payload: SavedLedgerRefundReconciliationPayload,
+): Promise<OutcomeReconciliationView> {
+  return request<OutcomeReconciliationView>("/v1/outcomes/reconciliation/razorpay-refund/saved", {
     method: "POST",
     body: payload,
     timeoutMs: 45_000,
@@ -3472,6 +4449,94 @@ export function updatePilotPolicy(policy: PilotPolicyPayload): Promise<PilotPoli
   });
 }
 
+// ── Verified Action Control Plane ───────────────────────────────────────────
+
+export function listActionIntents(
+  query: {
+    status?: ActionIntentStatus | "all" | string | null;
+    proof_status?: ActionIntentProofStatus | "all" | string | null;
+    receipt_status?: ActionIntentReceiptStatus | "all" | string | null;
+    agent_id?: string | null;
+    limit?: number;
+    offset?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<ActionIntentListResponse> {
+  const q: Record<string, string | number | undefined | null> = {
+    limit: query.limit,
+    offset: query.offset,
+  };
+  if (query.status && query.status !== "all") q.status = query.status;
+  if (query.proof_status && query.proof_status !== "all") q.proof_status = query.proof_status;
+  if (query.receipt_status && query.receipt_status !== "all") q.receipt_status = query.receipt_status;
+  if (query.agent_id) q.agent_id = query.agent_id;
+  return request<ActionIntentListResponse>("/v1/action-intents", { query: q, signal });
+}
+
+export function getActionIntent(actionId: string, signal?: AbortSignal): Promise<ActionIntentResponse> {
+  return request<ActionIntentResponse>(`/v1/action-intents/${encodeURIComponent(actionId)}`, { signal });
+}
+
+export function decideActionIntent(
+  actionId: string,
+  body: { approval_id?: string | null } = {},
+): Promise<ActionIntentDecisionResponse> {
+  return request<ActionIntentDecisionResponse>(`/v1/action-intents/${encodeURIComponent(actionId)}/decide`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function getActionIntentTimeline(
+  actionId: string,
+  signal?: AbortSignal,
+): Promise<ActionTimelineResponse> {
+  return request<ActionTimelineResponse>(`/v1/action-intents/${encodeURIComponent(actionId)}/timeline`, { signal });
+}
+
+export function getActionIntentReceipt(
+  actionId: string,
+  signal?: AbortSignal,
+): Promise<ActionReceiptResponse> {
+  return request<ActionReceiptResponse>(`/v1/action-intents/${encodeURIComponent(actionId)}/receipt`, { signal });
+}
+
+export function listActionExecutionAttempts(
+  actionId: string,
+  signal?: AbortSignal,
+): Promise<ActionExecutionAttemptListResponse> {
+  return request<ActionExecutionAttemptListResponse>(
+    `/v1/action-intents/${encodeURIComponent(actionId)}/execution-attempts`,
+    { signal },
+  );
+}
+
+export function listProjectActionExecutionAttempts(
+  query: {
+    status?: string[];
+    stale?: boolean;
+    stale_after_seconds?: number;
+    limit?: number;
+    offset?: number;
+  } = {},
+  signal?: AbortSignal,
+): Promise<ActionExecutionAttemptListResponse> {
+  return request<ActionExecutionAttemptListResponse>("/v1/action-execution-attempts", {
+    query: {
+      status: query.status?.join(","),
+      stale: query.stale ? "true" : undefined,
+      stale_after_seconds: query.stale_after_seconds,
+      limit: query.limit,
+      offset: query.offset,
+    },
+    signal,
+  });
+}
+
+export function listActionRunners(signal?: AbortSignal): Promise<ActionRunnerListResponse> {
+  return request<ActionRunnerListResponse>("/v1/action-runners", { signal });
+}
+
 // ── Runtime Policy Gate ─────────────────────────────────────────────────────
 
 export function listRuntimePolicyApprovals(
@@ -3480,6 +4545,61 @@ export function listRuntimePolicyApprovals(
 ): Promise<RuntimePolicyListResponse> {
   return request<RuntimePolicyListResponse>("/v1/runtime-policy/approvals", {
     query: { status },
+    signal,
+  });
+}
+
+export function dryRunRuntimePolicy(
+  payload: RuntimePolicyDryRunPayload,
+): Promise<RuntimePolicyDryRunResponse> {
+  return request<RuntimePolicyDryRunResponse>("/v1/runtime-policy/dry-run", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function listRuntimePolicyRules(
+  enabled?: boolean | null,
+  signal?: AbortSignal,
+): Promise<RuntimePolicyRuleListResponse> {
+  return request<RuntimePolicyRuleListResponse>("/v1/runtime-policy/rules", {
+    query: { enabled: enabled == null ? undefined : String(enabled) },
+    signal,
+  });
+}
+
+export function createRuntimePolicyRule(
+  payload: RuntimePolicyRulePayload,
+): Promise<RuntimePolicyRuleResponse> {
+  return request<RuntimePolicyRuleResponse>("/v1/runtime-policy/rules", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function updateRuntimePolicyRule(
+  ruleId: string,
+  payload: RuntimePolicyRuleUpdatePayload,
+): Promise<RuntimePolicyRuleResponse> {
+  return request<RuntimePolicyRuleResponse>(`/v1/runtime-policy/rules/${encodeURIComponent(ruleId)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function disableRuntimePolicyRule(ruleId: string): Promise<RuntimePolicyRuleResponse> {
+  return request<RuntimePolicyRuleResponse>(`/v1/runtime-policy/rules/${encodeURIComponent(ruleId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function resolveRuntimePolicyPreview(
+  payload: RuntimePolicyResolvePreviewPayload,
+  signal?: AbortSignal,
+): Promise<RuntimePolicyResolvePreviewResponse> {
+  return request<RuntimePolicyResolvePreviewResponse>("/v1/runtime-policy/resolve-preview", {
+    method: "POST",
+    body: payload,
     signal,
   });
 }

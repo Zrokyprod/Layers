@@ -116,7 +116,7 @@ setup("seed deterministic demo and save authenticated state", async ({ page, req
   );
 
   await page.goto("/home", { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await expect(page.getByRole("button", { name: "Search (Command Palette)" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: /Search actions, agents, and evidence/i })).toBeVisible({ timeout: 60_000 });
   await expect(
     page.getByRole("heading", {
       name: /Agent action accountability|Setup required|Proof missing|Production promotion blocked|Capture stale|Protected|Agent safety status/,

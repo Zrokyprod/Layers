@@ -1,12 +1,14 @@
 ﻿"use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, CreditCard, Gauge, ReceiptText, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CreditCard, Gauge, ReceiptText, RefreshCw, ShieldCheck } from "lucide-react";
 
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
+import { SettingsHero, SettingsMetricStrip, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
+import { StatusPill } from "@/components/status-pill";
 import { useBudget, useUpdateBudget } from "@/lib/hooks";
 import { budgetSchema, type BudgetFormData } from "@/lib/schemas";
 import {
@@ -76,36 +78,27 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     code: "free",
     name: "Free",
     monthlyCostUsd: 0,
-    features: ["25 protected actions/mo", "100 policy checks/mo", "1 system-of-record connector", "Signed receipts and bypass watch"],
-    selfServe: false,
-  },
-  {
-    code: "starter",
-    name: "Starter",
-    monthlyCostUsd: 49,
     features: [
-      "2K protected actions/mo",
-      "10K policy checks/mo",
-      "Unlimited seats",
-      "2K runner executions and receipts/mo",
-      "5K verification checks/mo",
-      "3 system-of-record connectors",
-      "Dashboard and Slack approvals",
+      "25 protected actions/mo",
+      "1 managed agent",
+      "1 system-of-record connector",
+      "Signed receipts and bypass watch",
     ],
-    selfServe: true,
+    selfServe: false,
   },
   {
     code: "pro",
     name: "Pro",
-    monthlyCostUsd: 199,
+    monthlyCostUsd: 399,
     features: [
       "25K protected actions/mo",
       "100K policy checks/mo",
-      "Unlimited seats",
+      "5 managed agents",
+      "10 system-of-record connectors",
       "25K runner executions and receipts/mo",
       "50K verification checks/mo",
-      "10 system-of-record connectors",
-      "Expanded reconciliation and Evidence Pack volume",
+      "Dashboard and Slack approvals",
+      "Exportable Evidence Packs",
     ],
     selfServe: true,
   },
@@ -115,9 +108,10 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     monthlyCostUsd: null,
     features: [
       "Custom protected action volume",
-      "Unlimited or contracted policy and verification meters",
+      "Contracted policy, runner, receipt, and verification meters",
+      "Unlimited or contracted agent and connector capacity",
       "Customer-hosted runner scale-out",
-      "Advanced audit, retention, and support controls",
+      "SSO, self-hosting, audit, retention, and support controls",
     ],
     selfServe: false,
   },
@@ -211,12 +205,28 @@ function usageDetail(label: string, meter: BillingUsageMeter | null | undefined)
   return meter.resets_at ? `Resets ${meter.resets_at}.` : "Current plan allocation.";
 }
 
+function meterTone(meter: BillingUsageMeter | null | undefined): "success" | "warning" | "danger" | "neutral" {
+  if (!meter) return "neutral";
+  if (meter.state === "exceeded" || meter.state === "blocked") return "danger";
+  if (meter.state === "near_limit") return "warning";
+  return "success";
+}
+
 function upgradeHintMessage(value: string | null): string | null {
+  if (value === "actions.protected.monthly_quota" || value === "protected_actions") {
+    return "Protected action volume is gated by your current plan. Upgrade to raise the monthly control-plane limit.";
+  }
+  if (value === "actions.receipts.monthly_quota" || value === "action_receipts") {
+    return "Signed receipt volume is gated by your current plan. Upgrade to export more audit-grade proof.";
+  }
+  if (value === "connectors.system_of_record.max" || value === "active_connectors") {
+    return "System-of-record connector capacity is gated by your current plan. Upgrade to verify more systems.";
+  }
   if (value === "replay.monthly_runs") {
-    return "Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity.";
+    return "That legacy quota is gated by your current plan. Billing now centers on protected actions, receipts, verification, and connectors.";
   }
   if (value === "pilot.goldens_basic") {
-    return "Contracts require a plan with release-safety entitlements.";
+    return "That legacy entitlement needs a higher plan. Current plans are enforced through protected-action control-plane meters.";
   }
   if (value) {
     return "This feature needs a higher plan or an enabled entitlement.";
@@ -395,12 +405,15 @@ function BillingSettingsContent() {
     currentPlanAlias === "plus"
       ? "Legacy Plus maps to Pro entitlements."
       : currentPlanAlias === "pilot"
-        ? "Legacy Pilot maps to Starter entitlements."
-        : null;
+        ? "Legacy Pilot maps to grandfathered Starter entitlements. Pro is the current self-serve upgrade."
+        : currentPlanAlias === "starter"
+          ? "Starter is grandfathered. Pro is the current self-serve upgrade."
+          : null;
   const template = billingMe?.plan_template ?? {};
   const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
   const paymentStatus = paymentStatusLabel(billingMe);
   const pendingPaymentConfirmation = Boolean(billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref);
+  const billingTone = error ? "danger" : pendingPaymentConfirmation ? "warning" : billingMe?.status === "active" ? "success" : "neutral";
   const protectedActionMeters = [
     {
       label: "Protected actions",
@@ -438,6 +451,38 @@ function BillingSettingsContent() {
       meter: billingUsage?.active_connectors,
     },
   ];
+  const entitlementCards = [
+    {
+      label: "Agent limit",
+      value: formatEntitlement(template["agents.max"]),
+      helper: "Managed AgentProfile capacity",
+    },
+    {
+      label: "SOR connectors",
+      value: formatEntitlement(template["connectors.system_of_record.max"]),
+      helper: "Verification connectors included",
+    },
+    {
+      label: "Protected actions",
+      value: formatEntitlement(template["actions.protected.monthly_quota"]),
+      helper: "Monthly held/controlled actions",
+    },
+    {
+      label: "Receipts",
+      value: formatEntitlement(template["actions.receipts.monthly_quota"]),
+      helper: "Signed action receipts included",
+    },
+    {
+      label: "Verification checks",
+      value: formatEntitlement(template["actions.verifications.monthly_quota"]),
+      helper: "System-of-record verification checks",
+    },
+    {
+      label: "Retention",
+      value: formatEntitlement(template["retention.days"]),
+      helper: "Evidence retention days",
+    },
+  ];
 
   useEffect(() => {
     if (!pendingPaymentConfirmation) {
@@ -450,49 +495,78 @@ function BillingSettingsContent() {
   }, [load, pendingPaymentConfirmation]);
 
   return (
-    <div className="page-content">
-      {upgradeHint && <div className="alert-strip billing-upgrade-hint">{upgradeHint}</div>}
-      {error && <div className="alert-strip alert-strip-error">{error}</div>}
-      {actionMsg && (
-        <div className={isProblemMessage(actionMsg) ? "alert-strip alert-strip-error" : "alert-strip"}>
-          {actionMsg}
-        </div>
-      )}
+    <SettingsScaffold className="billing-settings-page" aria-labelledby="billing-settings-title">
+      <SettingsHero
+        ariaLabel="Plan and billing settings"
+        eyebrow="Plan & Billing"
+        icon={<CreditCard aria-hidden="true" />}
+        title={`${displayPlanCode(currentPlanCode)} plan`}
+        copy="Plan access, Razorpay checkout, protected-action quotas, connector capacity, and AI spend guardrails for this workspace."
+        tone={billingTone}
+        pill={paymentStatus.label}
+        updatedLabel={loading ? "Loading" : "Settings live"}
+        notices={
+          <>
+            {upgradeHint ? <div className="alert-strip billing-upgrade-hint">{upgradeHint}</div> : null}
+            {error ? <div className="alert-strip alert-strip-error">{error}</div> : null}
+            {actionMsg ? (
+              <div className={isProblemMessage(actionMsg) ? "alert-strip alert-strip-error" : "alert-strip"}>
+                {actionMsg}
+              </div>
+            ) : null}
+          </>
+        }
+        actions={
+          <DashboardButton icon={<RefreshCw />} onClick={() => void load()} disabled={loading || checkoutBusy} variant="soft">
+            Refresh
+          </DashboardButton>
+        }
+      />
 
-      <section className="settings-summary-grid">
-        <article className="panel settings-summary-card">
-          <CreditCard aria-hidden="true" />
-          <span>Current plan</span>
-          <strong>{displayPlanCode(currentPlanCode)}</strong>
-          <small>{legacyPlanAliasNote ?? billingMe?.status ?? "Loading billing status"}</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <ReceiptText aria-hidden="true" />
-          <span>Payment</span>
-          <strong>{paymentStatus.label}</strong>
-          <small>{paymentStatus.detail}</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <Gauge aria-hidden="true" />
-          <span>Event usage</span>
-          <strong>{formatUsageMeter(billingUsage?.calls)}</strong>
-          <small>{usageDetail("Capture", billingUsage?.calls)}</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <ShieldCheck aria-hidden="true" />
-          <span>Protected actions</span>
-          <strong>{formatUsageMeter(billingUsage?.protected_actions)}</strong>
-          <small>{usageDetail("Protected actions", billingUsage?.protected_actions)}</small>
-        </article>
-      </section>
+      <SettingsMetricStrip
+        ariaLabel="Plan and billing summary"
+        metrics={[
+          {
+            id: "current-plan",
+            label: "Current plan",
+            value: displayPlanCode(currentPlanCode),
+            helper: legacyPlanAliasNote ?? billingMe?.status ?? "Loading billing status",
+            tone: billingMe?.status === "active" ? "success" : "neutral",
+            icon: <CreditCard aria-hidden="true" />,
+          },
+          {
+            id: "payment",
+            label: "Payment",
+            value: paymentStatus.label,
+            helper: paymentStatus.detail,
+            tone: pendingPaymentConfirmation ? "warning" : billingMe?.payment_subscription_ref || billingMe?.payment_provider === "manual" ? "success" : "neutral",
+            icon: <ReceiptText aria-hidden="true" />,
+          },
+          {
+            id: "protected-actions",
+            label: "Protected actions",
+            value: formatUsageMeter(billingUsage?.protected_actions),
+            helper: usageDetail("Protected actions", billingUsage?.protected_actions),
+            tone: meterTone(billingUsage?.protected_actions),
+            icon: <ShieldCheck aria-hidden="true" />,
+          },
+          {
+            id: "connectors",
+            label: "SOR connectors",
+            value: formatUsageMeter(billingUsage?.active_connectors),
+            helper: usageDetail("System-of-record connectors", billingUsage?.active_connectors),
+            tone: meterTone(billingUsage?.active_connectors),
+            icon: <Gauge aria-hidden="true" />,
+          },
+        ]}
+      />
 
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Plan controls</h3>
-            <p>Current entitlement template and available upgrades.</p>
-          </div>
-        </header>
+      <SettingsSection
+        id="billing-plan-controls"
+        eyebrow="Plan"
+        title="Plan controls"
+        copy="Current entitlement template and available paid-plan upgrades."
+      >
 
         {isProblemMessage(actionMsg) ? (
           <div className="settings-config-warning" role="status">
@@ -525,53 +599,37 @@ function BillingSettingsContent() {
                     ))}
                   </ul>
                   {canChangeToPlan && (
-                    <button
+                    <DashboardButton
                       type="button"
-                      className="btn btn-primary billing-plan-btn"
+                      className="billing-plan-btn"
+                      variant="primary"
                       onClick={() => void changePlan(plan.code)}
                       disabled={loading || checkoutBusy}
                     >
                       {plan.selfServe ? (checkoutBusy ? "Opening checkout..." : `Pay with Razorpay for ${plan.name}`) : `Contact Zroky for ${plan.name}`}
-                    </button>
+                    </DashboardButton>
                   )}
                 </div>
               );
             })}
           </div>
         )}
-      </section>
+      </SettingsSection>
 
       {billingMe && (
-        <section className="panel">
-          <header className="panel-header">
-            <h3>Usage &amp; Entitlements</h3>
-            <p>
-              {billingMe.status} plan for org {billingMe.org_id}
-            </p>
-          </header>
-
-          <div className="kpi-grid billing-usage-kpis">
-            <div className="kpi-card">
-              <div className="kpi-value">{formatUsageMeter(billingUsage?.calls)}</div>
-              <div className="kpi-label">Capture events</div>
-              <small>{usageDetail("Capture", billingUsage?.calls)}</small>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{formatUsageMeter(billingUsage?.replay)}</div>
-              <div className="kpi-label">Replay runs</div>
-              <small>{usageDetail("Replay", billingUsage?.replay)}</small>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{formatUsageMeter(billingUsage?.goldens)}</div>
-              <div className="kpi-label">Fixture traces</div>
-              <small>{usageDetail("Fixtures", billingUsage?.goldens)}</small>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{billingUsage?.metering_health.state ?? "loading"}</div>
-              <div className="kpi-label">Metering health</div>
-              <small>{billingUsage?.metering_health.detail ?? `Policy: ${billingUsage?.metering_health.failure_policy ?? "unknown"}`}</small>
-            </div>
-          </div>
+        <SettingsSection
+          id="billing-usage-entitlements"
+          eyebrow="Usage"
+          title="Usage and entitlements"
+          copy={`${billingMe.status} plan for org ${billingMe.org_id}. Meters are hard plan gates until overage billing is explicitly enabled.`}
+          actions={
+            <StatusPill
+              value={billingUsage?.metering_health.state ?? "loading"}
+              label={billingUsage?.metering_health.state ?? "Loading"}
+              tone={billingUsage?.metering_health.state === "ok" ? "success" : "warning"}
+            />
+          }
+        >
 
           <div className="kpi-grid billing-usage-kpis" role="region" aria-label="Protected action usage">
             {protectedActionMeters.map((item) => (
@@ -584,39 +642,35 @@ function BillingSettingsContent() {
           </div>
 
           <div className="actions billing-control-links">
-            <Link href="/actions" className="btn btn-primary">
+            <DashboardButtonLink href="/actions" variant="primary">
               Open Actions
-            </Link>
-            <Link href="/outcomes" className="btn btn-secondary">
+            </DashboardButtonLink>
+            <DashboardButtonLink href="/outcomes" variant="soft">
               Open bypass risk
-            </Link>
-            <Link href="/evidence" className="btn btn-secondary">
+            </DashboardButtonLink>
+            <DashboardButtonLink href="/evidence" variant="soft">
               Open Evidence
-            </Link>
+            </DashboardButtonLink>
           </div>
 
           <div className="kpi-grid billing-usage-kpis">
-            <div className="kpi-card">
-              <div className="kpi-value">{formatEntitlement(template["events.monthly_quota"])}</div>
-              <div className="kpi-label">Plan event limit</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{formatEntitlement(template["replay.monthly_runs"])}</div>
-              <div className="kpi-label">Plan replay limit</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-value">{formatEntitlement(template["seats.included"])}</div>
-              <div className="kpi-label">Included seats</div>
-            </div>
+            {entitlementCards.map((item) => (
+              <div className="kpi-card" key={item.label}>
+                <div className="kpi-value">{item.value}</div>
+                <div className="kpi-label">{item.label}</div>
+                <small>{item.helper}</small>
+              </div>
+            ))}
           </div>
-        </section>
+        </SettingsSection>
       )}
 
-      <section className="panel">
-        <header className="panel-header">
-          <h3>Spend Limits</h3>
-          <p>Saved monthly AI spend controls used by the backend budget guard and alerting flow.</p>
-        </header>
+      <SettingsSection
+        id="billing-spend-limits"
+        eyebrow="Spend guard"
+        title="Spend limits"
+        copy="Saved monthly AI spend controls used by the backend budget guard and alerting flow."
+      >
 
         <form onSubmit={onSaveBudget} className="billing-budget-form">
           <div className="field">
@@ -659,32 +713,33 @@ function BillingSettingsContent() {
           )}
 
           <div className="actions">
-            <button type="submit" className="btn btn-primary" disabled={updateBudget.isPending}>
+            <DashboardButton type="submit" variant="primary" loading={updateBudget.isPending} disabled={updateBudget.isPending}>
               {updateBudget.isPending ? "Saving..." : "Save limits"}
-            </button>
+            </DashboardButton>
           </div>
         </form>
-      </section>
+      </SettingsSection>
 
-      <section className="panel">
-        <header className="panel-header">
-          <h3>Invoices</h3>
-          <p>Razorpay is the self-serve payment surface; Zroky verifies paid plans into entitlements.</p>
-        </header>
+      <SettingsSection
+        id="billing-invoices"
+        eyebrow="Invoices"
+        title="Razorpay receipts"
+        copy="Razorpay is the self-serve payment surface; Zroky verifies paid plans into entitlements."
+      >
         <div className="actions billing-invoices-empty">
           <span className="hint">Razorpay payment receipts are confirmed immediately after checkout verification.</span>
           {!billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref && (
             <span className="hint">Start a paid plan to create a Razorpay payment reference.</span>
           )}
         </div>
-      </section>
-    </div>
+      </SettingsSection>
+    </SettingsScaffold>
   );
 }
 
 export default function BillingPage() {
   return (
-    <Suspense fallback={<div className="page-content"><section className="panel"><div className="loading" /></section></div>}>
+    <Suspense fallback={<SettingsScaffold className="billing-settings-page"><SettingsSection title="Plan & Billing"><div className="loading" /></SettingsSection></SettingsScaffold>}>
       <BillingSettingsContent />
     </Suspense>
   );

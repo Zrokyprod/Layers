@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ShieldCheck, UserPlus, Users, AlertTriangle } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { RefreshCw, ShieldCheck, UserPlus, Users } from "lucide-react";
 
+import { DashboardButton } from "@/components/dashboard-button";
+import { SettingsHero, SettingsMetricStrip, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
+import { StatusPill } from "@/components/status-pill";
 import { useDashboardStore } from "@/lib/store";
 import { useProjectSettings } from "@/lib/hooks";
 import {
@@ -60,7 +63,7 @@ export default function TeamPage() {
     loadData();
   }, [loadData]);
 
-  async function onInvite(e: React.FormEvent) {
+  async function onInvite(e: FormEvent) {
     e.preventDefault();
     if (!projectId || !inviteEmail.trim()) return;
     setInviteBusy(true);
@@ -160,45 +163,60 @@ export default function TeamPage() {
   const pendingInvites = invitations.filter((invitation) => !invitation.accepted_at && !invitation.revoked_at).length;
 
   return (
-    <>
-      <section className="settings-summary-grid">
-        <article className="panel settings-summary-card">
-          <Users aria-hidden="true" />
-          <span>Active members</span>
-          <strong>{activeMembers.length}</strong>
-          <small>{members.length} total memberships loaded.</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <ShieldCheck aria-hidden="true" />
-          <span>Owners</span>
-          <strong>{ownerCount}</strong>
-          <small>Last owner is protected from demotion or removal.</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <UserPlus aria-hidden="true" />
-          <span>Pending invites</span>
-          <strong>{pendingInvites}</strong>
-          <small>Invites can be revoked before acceptance.</small>
-        </article>
-        <article className="panel settings-summary-card">
-          <AlertTriangle aria-hidden="true" />
-          <span>Project source</span>
-          <strong>{projectQuery.data?.project_id ? "Backend" : selectedProject ? "Store fallback" : "Missing"}</strong>
-          <small className="mono">{projectId || "No project id available"}</small>
-        </article>
-      </section>
+    <SettingsScaffold className="team-settings-page" aria-labelledby="team-settings-title">
+      <SettingsHero
+        ariaLabel="Members settings"
+        eyebrow="Members"
+        icon={<Users aria-hidden="true" />}
+        title="Workspace access"
+        copy="Invite teammates, manage roles, and keep at least one active owner on the project."
+        tone={!projectId || error ? "danger" : "success"}
+        pill={projectId ? `${activeMembers.length} active` : "Project missing"}
+        updatedLabel={loading ? "Refreshing" : "Settings live"}
+        actions={
+          <DashboardButton icon={<RefreshCw />} onClick={() => void loadData()} disabled={loading || !projectId} variant="soft">
+            Refresh
+          </DashboardButton>
+        }
+      />
+
+      <SettingsMetricStrip
+        ariaLabel="Members settings summary"
+        metrics={[
+          {
+            id: "active-members",
+            label: "Active members",
+            value: String(activeMembers.length),
+            helper: `${members.length} total memberships loaded`,
+            tone: activeMembers.length > 0 ? "success" : "warning",
+            icon: <Users aria-hidden="true" />,
+          },
+          {
+            id: "owners",
+            label: "Owners",
+            value: String(ownerCount),
+            helper: "Last owner is protected from demotion or removal",
+            tone: ownerCount > 0 ? "success" : "danger",
+            icon: <ShieldCheck aria-hidden="true" />,
+          },
+          {
+            id: "pending-invites",
+            label: "Pending invites",
+            value: String(pendingInvites),
+            helper: "Invites can be revoked before acceptance",
+            tone: pendingInvites > 0 ? "warning" : "setup",
+            icon: <UserPlus aria-hidden="true" />,
+          },
+        ]}
+      />
 
       {/* Invite form */}
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Invite Team Member</h3>
-            <p>Send an email invitation to collaborate on this project.</p>
-          </div>
-          <button type="button" className="btn btn-soft" onClick={() => void loadData()} disabled={loading}>
-            Refresh
-          </button>
-        </header>
+      <SettingsSection
+        id="invite-team-member"
+        eyebrow="Access"
+        title="Invite team member"
+        copy="Send an email invitation to collaborate on this project."
+      >
 
         {!projectId ? <p className="notif-error team-error">Project context is missing. Reload the dashboard before changing members.</p> : null}
         {error && <p className="notif-error team-error">{error}</p>}
@@ -230,24 +248,24 @@ export default function TeamPage() {
               <option value="owner">Owner</option>
             </select>
           </div>
-          <button
+          <DashboardButton
             type="submit"
-            className="btn btn-primary"
+            variant="primary"
+            loading={inviteBusy}
             disabled={inviteBusy || !inviteEmail.trim()}
           >
             {inviteBusy ? "Sending..." : "Send invite"}
-          </button>
+          </DashboardButton>
         </form>
-      </section>
+      </SettingsSection>
 
       {/* Members list */}
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Project Members</h3>
-            <p>{members.length} member{members.length !== 1 ? "s" : ""}</p>
-          </div>
-        </header>
+      <SettingsSection
+        id="project-members"
+        eyebrow="Members"
+        title="Project members"
+        copy={`${members.length} member${members.length !== 1 ? "s" : ""} in this project.`}
+      >
 
         {loading && members.length === 0 ? (
           <div className="loading" />
@@ -280,42 +298,45 @@ export default function TeamPage() {
                   </select>
 
                   {m.is_active ? (
-                    <button
+                    <DashboardButton
                       type="button"
-                      className="btn btn-soft"
+                      variant="soft"
                       onClick={() => requestMemberActive(m, false)}
                       disabled={busyMemberId === m.membership_id}
                       title="Remove member"
                     >
                       Remove
-                    </button>
+                    </DashboardButton>
                   ) : (
-                    <button
+                    <DashboardButton
                       type="button"
-                      className="btn btn-primary"
+                      variant="primary"
                       onClick={() => requestMemberActive(m, true)}
                       disabled={busyMemberId === m.membership_id}
                     >
                       Reactivate
-                    </button>
+                    </DashboardButton>
                   )}
                 </div>
 
-                <span className={`pill${m.is_active ? " pill-green" : ""}`}>{m.is_active ? "Active" : "Inactive"}</span>
+                <StatusPill
+                  value={m.is_active ? "active" : "inactive"}
+                  label={m.is_active ? "Active" : "Inactive"}
+                  tone={m.is_active ? "success" : "neutral"}
+                />
               </div>
             ))}
           </div>
         )}
-      </section>
+      </SettingsSection>
 
       {/* Invitations list */}
-      <section className="panel">
-        <header className="panel-header">
-          <div>
-            <h3>Pending Invitations</h3>
-            <p>{invitations.length} invitation{invitations.length !== 1 ? "s" : ""}</p>
-          </div>
-        </header>
+      <SettingsSection
+        id="pending-invitations"
+        eyebrow="Invitations"
+        title="Pending invitations"
+        copy={`${invitations.length} invitation${invitations.length !== 1 ? "s" : ""} loaded for this project.`}
+      >
 
         {loading && invitations.length === 0 ? (
           <div className="loading" />
@@ -334,20 +355,21 @@ export default function TeamPage() {
                 </div>
                 <div className="team-invite-actions">
                   {inv.accepted_at ? (
-                    <span className="pill pill-green">Accepted</span>
+                    <StatusPill value="accepted" label="Accepted" tone="success" />
                   ) : inv.revoked_at ? (
-                    <span className="pill">Revoked</span>
+                    <StatusPill value="revoked" label="Revoked" tone="neutral" />
                   ) : (
                     <>
-                      <span className="pill team-pill-pending">Pending</span>
-                      <button
+                      <StatusPill value="pending" label="Pending" tone="warning" />
+                      <DashboardButton
                         type="button"
-                        className="notif-delete-btn"
+                        size="sm"
+                        variant="danger"
                         title="Revoke invitation"
                         onClick={() => void onRevoke(inv.invitation_id)}
                       >
                         Revoke
-                      </button>
+                      </DashboardButton>
                     </>
                   )}
                 </div>
@@ -355,7 +377,7 @@ export default function TeamPage() {
             ))}
           </div>
         )}
-      </section>
+      </SettingsSection>
 
       {roleChangeTarget ? (
         <div
@@ -379,22 +401,23 @@ export default function TeamPage() {
               </div>
             </header>
             <div className="actions">
-              <button
+              <DashboardButton
                 type="button"
-                className="btn btn-primary"
+                variant="primary"
+                loading={busyMemberId === roleChangeTarget.member.membership_id}
                 disabled={busyMemberId === roleChangeTarget.member.membership_id}
                 onClick={() => void changeMemberRole(roleChangeTarget.member, roleChangeTarget.role)}
               >
                 {busyMemberId === roleChangeTarget.member.membership_id ? "Saving..." : "Apply role change"}
-              </button>
-              <button
+              </DashboardButton>
+              <DashboardButton
                 type="button"
-                className="btn btn-soft"
+                variant="soft"
                 disabled={busyMemberId === roleChangeTarget.member.membership_id}
                 onClick={() => setRoleChangeTarget(null)}
               >
                 Cancel
-              </button>
+              </DashboardButton>
             </div>
           </section>
         </div>
@@ -427,9 +450,10 @@ export default function TeamPage() {
               <span>Subject <strong className="mono">{activeChangeTarget.member.subject}</strong></span>
             </div>
             <div className="actions">
-              <button
+              <DashboardButton
                 type="button"
-                className={activeChangeTarget.active ? "btn btn-primary" : "btn btn-danger"}
+                variant={activeChangeTarget.active ? "primary" : "danger"}
+                loading={busyMemberId === activeChangeTarget.member.membership_id}
                 disabled={busyMemberId === activeChangeTarget.member.membership_id}
                 onClick={() => void setMemberActive()}
               >
@@ -438,19 +462,19 @@ export default function TeamPage() {
                   : activeChangeTarget.active
                     ? "Reactivate member"
                     : "Remove member"}
-              </button>
-              <button
+              </DashboardButton>
+              <DashboardButton
                 type="button"
-                className="btn btn-soft"
+                variant="soft"
                 disabled={busyMemberId === activeChangeTarget.member.membership_id}
                 onClick={() => setActiveChangeTarget(null)}
               >
                 Cancel
-              </button>
+              </DashboardButton>
             </div>
           </section>
         </div>
       ) : null}
-    </>
+    </SettingsScaffold>
   );
 }

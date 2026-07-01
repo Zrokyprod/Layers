@@ -24,6 +24,18 @@ class ProjectDeleteRequest(BaseModel):
         return normalized
 
 
+class ProjectUpdateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Project name must not be empty")
+        return normalized
+
+
 class ProjectResponse(BaseModel):
     project_id: str
     name: str

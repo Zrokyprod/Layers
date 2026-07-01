@@ -1,0 +1,8 @@
+<svg width="900" height="320" viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Zroky">
+  <rect width="900" height="320" fill="#FFFFFF"/>
+  <g fill="#0A0A0A" transform="translate(30,30) scale(0.254)">
+    <path d="M470 190 C520 190 540 235 528 275 C610 300 700 330 770 410 C828 470 820 552 756 592 C676 660 600 720 548 780 C578 706 556 648 560 596 C630 520 602 466 516 444 C452 426 424 356 430 312 C434 250 430 200 470 190 Z"/>
+    <path transform="rotate(180 512 512)" d="M470 190 C520 190 540 235 528 275 C610 300 700 330 770 410 C828 470 820 552 756 592 C676 660 600 720 548 780 C578 706 556 648 560 596 C630 520 602 466 516 444 C452 426 424 356 430 312 C434 250 430 200 470 190 Z"/>
+  </g>
+  <text x="300" y="185" font-family="'Segoe UI','Poppins',system-ui,sans-serif" font-size="120" font-weight="700" letter-spacing="-2" fill="#0A0A0A">Zroky</text>
+</svg>

@@ -10,6 +10,13 @@ export {
   ZrokyRuntimePolicyBlocked,
   ZrokyRuntimePolicyError,
 } from "./guard";
+export {
+  awaitActionProof,
+  verifiedAction,
+  ZrokyVerifiedActionApprovalRequired,
+  ZrokyVerifiedActionBlocked,
+  ZrokyVerifiedActionError,
+} from "./verified-action";
 export { verifyOutcome, ZrokyOutcomeVerificationError } from "./verify";
 export { outcome } from "./outcome";
 export { promptFingerprint } from "./fingerprint";
@@ -23,6 +30,12 @@ export {
 } from "./contracts";
 export type { ZrokyConfig, CapturePayload } from "./types";
 export type { GuardOptions, RuntimePolicyDecision } from "./guard";
+export type {
+  ActionProofResult,
+  AwaitActionProofOptions,
+  VerifiedActionDecision,
+  VerifiedActionOptions,
+} from "./verified-action";
 export type {
   OutcomeReconciliationView,
   OutcomeVerificationVerdict,

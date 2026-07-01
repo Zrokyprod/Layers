@@ -16,7 +16,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --minify",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "size": "node scripts/bench_js_sdk_size.js",
     "prepublishOnly": "npm run build && npm run size"
   },

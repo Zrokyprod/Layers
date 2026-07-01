@@ -22,4 +22,11 @@ describe("StatusPill", () => {
     const { container } = render(<StatusPill value="COST_SPIKE" />);
     expect(container.querySelector(".status-cost-spike")).toBeInTheDocument();
   });
+
+  it("can render a kernel label and tone without changing the status class", () => {
+    const { container } = render(<StatusPill value="not_verified" kind="proof" tone="warning" />);
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(container.querySelector(".status-not-verified")).toBeInTheDocument();
+    expect(container.querySelector(".status-tone-warning")).toBeInTheDocument();
+  });
 });

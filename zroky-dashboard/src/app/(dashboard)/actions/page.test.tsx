@@ -5,21 +5,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ActionsPage from "./page";
 
 const api = vi.hoisted(() => ({
+  getActionIntentTimeline: vi.fn(),
   getBillingUsage: vi.fn(),
   getOutcomeReconciliationSummary: vi.fn(),
   getSourceMutationSummary: vi.fn(),
+  listActionExecutionAttempts: vi.fn(),
+  listActionIntents: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
+  listProjectActionExecutionAttempts: vi.fn(),
   listRuntimePolicyApprovals: vi.fn(),
   listUnreceiptedSourceMutations: vi.fn(),
 }));
 
 const queryState = vi.hoisted(() => ({
+  attempts: [] as Record<string, unknown>[],
   billingUsage: null as Record<string, unknown> | null,
   decisions: [] as Record<string, unknown>[],
+  intents: [] as Record<string, unknown>[],
   outcomeSummary: null as Record<string, unknown> | null,
   outcomes: [] as Record<string, unknown>[],
   sourceMutationSummary: null as Record<string, unknown> | null,
+  staleAttempts: [] as Record<string, unknown>[],
+  timeline: [] as Record<string, unknown>[],
   unreceiptedMutations: [] as Record<string, unknown>[],
+  dataUpdatedAt: 0,
   isLoading: false,
   isError: false,
   refetch: vi.fn(),
@@ -33,12 +42,45 @@ vi.mock("@tanstack/react-query", () => ({
         data: queryState.billingUsage,
         isLoading: queryState.isLoading,
         isError: queryState.isError,
+        dataUpdatedAt: queryState.dataUpdatedAt,
         refetch: queryState.refetch,
       };
     }
     if (key === "runtime-policy:actions:all") {
       return {
         data: { total_in_page: queryState.decisions.length, items: queryState.decisions },
+        isLoading: queryState.isLoading,
+        isError: queryState.isError,
+        refetch: queryState.refetch,
+      };
+    }
+    if (key === "action-intents:actions:all") {
+      return {
+        data: { total_in_page: queryState.intents.length, items: queryState.intents },
+        isLoading: queryState.isLoading,
+        isError: queryState.isError,
+        refetch: queryState.refetch,
+      };
+    }
+    if (key === "action-intent:act_1:timeline:actions-page") {
+      return {
+        data: { items: queryState.timeline },
+        isLoading: queryState.isLoading,
+        isError: queryState.isError,
+        refetch: queryState.refetch,
+      };
+    }
+    if (key === "action-intent:act_1:execution-attempts:actions-page") {
+      return {
+        data: { items: queryState.attempts },
+        isLoading: queryState.isLoading,
+        isError: queryState.isError,
+        refetch: queryState.refetch,
+      };
+    }
+    if (key === "action-execution-attempts:actions:stale") {
+      return {
+        data: { items: queryState.staleAttempts },
         isLoading: queryState.isLoading,
         isError: queryState.isError,
         refetch: queryState.refetch,
@@ -186,6 +228,34 @@ function decision(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function actionIntent(overrides: Record<string, unknown> = {}) {
+  return {
+    action_id: "act_1",
+    project_id: "proj_1",
+    contract_version: "v1",
+    action_type: "ticket_close",
+    operation_kind: "business_mutation",
+    environment: "test",
+    status: "authorized",
+    proof_status: "matched",
+    receipt_status: "generated",
+    idempotency_key: "idem_act_1",
+    intent_digest: "intent_digest_1",
+    canonical_intent: {
+      principal: { id: "Support agent" },
+      purpose: { summary: "Close ticket T-1001" },
+      resource: { id: "T-1001" },
+    },
+    created_at: "2026-06-20T09:10:00Z",
+    decided_at: "2026-06-20T09:10:10Z",
+    authorized_at: "2026-06-20T09:10:20Z",
+    runtime_policy_decision_id: "decision_1",
+    deadline: null,
+    status_url: "/v1/action-intents/act_1",
+    ...overrides,
+  };
+}
+
 function outcome(overrides: Record<string, unknown> = {}) {
   return {
     id: "check_1",
@@ -245,7 +315,10 @@ describe("ActionsPage", () => {
     queryState.isLoading = false;
     queryState.isError = false;
     queryState.refetch.mockClear();
+    queryState.dataUpdatedAt = Date.now();
+    queryState.attempts = [];
     queryState.billingUsage = billingUsage();
+    queryState.intents = [];
     queryState.decisions = [
       decision(),
       decision({
@@ -280,7 +353,13 @@ describe("ActionsPage", () => {
       unknown_actor: 0,
       unreceipted: 1,
     };
+    queryState.staleAttempts = [];
+    queryState.timeline = [];
     queryState.unreceiptedMutations = [sourceMutation()];
+    api.listActionIntents.mockResolvedValue({ total_in_page: 0, items: [], limit: 50, offset: 0 });
+    api.getActionIntentTimeline.mockResolvedValue({ items: [] });
+    api.listActionExecutionAttempts.mockResolvedValue({ items: [] });
+    api.listProjectActionExecutionAttempts.mockResolvedValue({ items: [] });
     api.getBillingUsage.mockResolvedValue(billingUsage());
     api.listRuntimePolicyApprovals.mockResolvedValue({
       total_in_page: 2,
@@ -328,16 +407,18 @@ describe("ActionsPage", () => {
     });
   });
 
-  it("combines quota, action lifecycle, evidence, and bypass risk in one dashboard", async () => {
+  it("shows lifecycle metrics, intent-primary queue, and bypass as a metric only", async () => {
     renderActionsPage();
 
     expect(
-      await screen.findByRole("heading", { name: "Bypass risk visible before customer handoff" }),
+      await screen.findByRole("heading", { name: "Bypass risk" }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Updated just now/i)).toBeInTheDocument();
+    expect(screen.queryByText("Updated live")).not.toBeInTheDocument();
 
-    const metrics = screen.getByRole("region", { name: "Protected action control metrics" });
+    const metrics = screen.getByRole("region", { name: "Action lifecycle metrics" });
     expect(within(metrics).getByText("Protected actions")).toBeInTheDocument();
-    expect(within(metrics).getByText("12 / 25,000")).toBeInTheDocument();
+    expect(within(metrics).getByText("0")).toBeInTheDocument();
     expect(within(metrics).getByText("Policy checks")).toBeInTheDocument();
     expect(within(metrics).getByText("30 / 100,000")).toBeInTheDocument();
     expect(within(metrics).getByText("Runner executions")).toBeInTheDocument();
@@ -347,21 +428,79 @@ describe("ActionsPage", () => {
     const queue = screen.getByRole("region", { name: "Action lifecycle queue" });
     expect(within(queue).getByText("Refund RF-1001")).toBeInTheDocument();
     expect(within(queue).getByText("Deploy production release")).toBeInTheDocument();
-    expect(within(queue).getByText("Bypass: stripe:rf_bypass")).toBeInTheDocument();
+    expect(within(queue).queryByText("Bypass: stripe:rf_bypass")).not.toBeInTheDocument();
 
     fireEvent.click(within(queue).getByRole("button", { name: /Refund RF-1001/ }));
 
     const selected = screen.getByRole("region", { name: "Selected action lifecycle" });
     expect(within(selected).getByRole("heading", { name: "Refund RF-1001" })).toBeInTheDocument();
     expect(within(selected).getByText((content) => content.includes("ledger:RF-1001"))).toBeInTheDocument();
+    expect(within(selected).getByRole("navigation", { name: "Proof chain" })).toBeInTheDocument();
     expect(within(selected).getByRole("link", { name: "Open Evidence Pack" }).getAttribute("href")).toBe(
       "/evidence?decision_id=decision_1",
     );
 
-    const bypassWatch = screen.getByRole("region", { name: "Bypass risk watch" });
-    expect(within(bypassWatch).getByText("Source mutations must map back to a Zroky receipt or an approved exception.")).toBeInTheDocument();
-    expect(within(bypassWatch).getByText("unreceipted")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Billing" }).getAttribute("href")).toBe("/settings/billing");
+    expect(screen.queryByRole("region", { name: "Bypass risk watch" })).not.toBeInTheDocument();
+  });
+
+  it("shows action-intent lifecycle details with receipt, timeline, and execution attempts", async () => {
+    queryState.intents = [actionIntent()];
+    queryState.decisions = [];
+    queryState.outcomes = [];
+    queryState.unreceiptedMutations = [];
+    queryState.timeline = [
+      {
+        event_id: "evt_1",
+        action_id: "act_1",
+        project_id: "proj_1",
+        event_type: "authorized",
+        event_digest: "evt_digest_1",
+        actor: "system",
+        payload: {},
+        created_at: "2026-06-20T09:10:20Z",
+      },
+    ];
+    queryState.attempts = [
+      {
+        attempt_id: "attempt_1",
+        project_id: "proj_1",
+        action_id: "act_1",
+        runner_id: "runner_1",
+        attempt_number: 1,
+        status: "succeeded",
+        idempotency_key: "idem_attempt_1",
+        credential_ref: "cred:scoped",
+        plan_digest: "plan_digest_1",
+        execution_plan: {},
+        result_summary: {},
+        error_message: null,
+        protected_credential_returned: false,
+        requested_by_subject: "agent",
+        started_at: "2026-06-20T09:10:30Z",
+        finished_at: "2026-06-20T09:10:40Z",
+        created_at: "2026-06-20T09:10:30Z",
+        updated_at: "2026-06-20T09:10:40Z",
+      },
+    ];
+
+    renderActionsPage();
+
+    const queue = await screen.findByRole("region", { name: "Action lifecycle queue" });
+    fireEvent.click(within(queue).getByRole("button", { name: /Close ticket T-1001/ }));
+
+    const selected = screen.getByRole("region", { name: "Selected action lifecycle" });
+    expect(within(selected).getByRole("button", { name: /Action: Authorized/i })).toBeInTheDocument();
+    expect(within(selected).getByRole("button", { name: /Verification: Matched/i })).toBeInTheDocument();
+    expect(within(selected).getByRole("button", { name: /Receipt: Generated/i })).toBeInTheDocument();
+    expect(within(selected).getByText("Action timeline")).toBeInTheDocument();
+    expect(within(selected).getByText("Intent")).toBeInTheDocument();
+    expect(document.querySelectorAll(".al-json-section[open]")).toHaveLength(0);
+    expect(within(selected).getAllByText("Authorized").length).toBeGreaterThan(0);
+    expect(within(selected).getByText("Execution attempts")).toBeInTheDocument();
+    expect(within(selected).getByText("runner_1")).toBeInTheDocument();
+    expect(within(selected).getByRole("link", { name: "Open Action Receipt" }).getAttribute("href")).toBe(
+      "/evidence?action_id=act_1",
+    );
   });
 
   it("renders a ready state when no protected action data exists yet", async () => {
@@ -435,7 +574,7 @@ describe("ActionsPage", () => {
 
     renderActionsPage();
 
-    expect(await screen.findByRole("heading", { name: "Action control plane ready" })).toBeInTheDocument();
-    expect(screen.getByText("No protected action signals")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
+    expect(screen.getByText("No actions match this filter")).toBeInTheDocument();
   });
 });

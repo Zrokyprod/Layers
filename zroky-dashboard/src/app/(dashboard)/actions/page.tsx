@@ -1,85 +1,34 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Gauge,
-  ReceiptText,
-  RefreshCw,
-  ShieldAlert,
-  ShieldCheck,
-  Workflow,
-} from "lucide-react";
 
-import { StatusPill } from "@/components/status-pill";
+import { ActionInspector } from "./ActionInspector";
+import { ActionLifecycleQueue } from "./ActionLifecycleQueue";
+import { ActionsMetricStrip } from "./ActionsMetricStrip";
+import { ActionsVerdictHero } from "./ActionsVerdictHero";
+import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
+  getActionIntentTimeline,
   getBillingUsage,
   getOutcomeReconciliationSummary,
   getSourceMutationSummary,
+  listActionExecutionAttempts,
+  listActionIntents,
   listOutcomeReconciliations,
+  listProjectActionExecutionAttempts,
   listRuntimePolicyApprovals,
-  listUnreceiptedSourceMutations,
-  type OutcomeReconciliationView,
-  type RuntimePolicyDecisionResponse,
-  type SourceMutationView,
 } from "@/lib/api";
-import { formatCount, formatDateTime } from "@/lib/format";
+import {
+  actionLifecycleCounts,
+  buildActionLifecycle,
+  filterActionLifecycle,
+  type ActionLifecycleFilter,
+  type ActionLifecycleRow,
+} from "@/lib/action-lifecycle";
+import type { StatusTone } from "@/lib/action-status";
+import { formatCount, timeSince } from "@/lib/format";
 import type { BillingUsageMeter } from "@/lib/types";
-
-type Tone = "danger" | "warning" | "success" | "neutral";
-
-type ActionLifecycleRow = {
-  key: string;
-  title: string;
-  agentName: string;
-  actionType: string;
-  policyStatus: string;
-  proofStatus: string;
-  receiptStatus: string;
-  systemRef: string;
-  priority: { label: string; detail: string };
-  tone: Tone;
-  createdAt: string | null;
-  decision: RuntimePolicyDecisionResponse | null;
-  outcome: OutcomeReconciliationView | null;
-  mutation: SourceMutationView | null;
-};
-
-type MetricCardProps = {
-  label: string;
-  value: string;
-  helper: string;
-  tone?: Tone;
-  Icon: ComponentType<{ size?: number; className?: string }>;
-};
-
-const EMPTY_JSON = "{}";
-
-function compactJson(value: unknown): string {
-  if (value == null || value === "") return "-";
-  if (typeof value !== "object") return String(value);
-  if (Array.isArray(value)) return value.length > 0 ? JSON.stringify(value, null, 2) : "[]";
-  const entries = Object.entries(value as Record<string, unknown>).filter(([, item]) => item != null && item !== "");
-  if (entries.length === 0) return EMPTY_JSON;
-  return JSON.stringify(Object.fromEntries(entries), null, 2);
-}
-
-function humanize(value: string | null | undefined): string {
-  if (!value) return "-";
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^\w/, (char) => char.toUpperCase());
-}
-
-function summary(value: Record<string, unknown> | null | undefined, fallback: string): string {
-  const candidate = value?.summary;
-  return typeof candidate === "string" && candidate.trim() ? candidate : fallback;
-}
 
 function formatMeter(meter: BillingUsageMeter | null | undefined): string {
   if (!meter) return "Loading";
@@ -97,380 +46,120 @@ function meterHelper(label: string, meter: BillingUsageMeter | null | undefined)
   return meter.resets_at ? `Resets ${meter.resets_at}.` : "Current billing period.";
 }
 
-function decisionTitle(item: RuntimePolicyDecisionResponse): string {
-  return summary(item.intended_action, item.tool_name ?? item.action_type ?? "Agent action");
-}
-
-function outcomeTitle(item: OutcomeReconciliationView): string {
-  const refundId = item.claimed.refund_id;
-  if (typeof refundId === "string" && refundId.trim()) return `Refund ${refundId}`;
-  const paymentId = item.claimed.payment_id;
-  if (typeof paymentId === "string" && paymentId.trim()) return `Payment ${paymentId}`;
-  const email = item.claimed.email;
-  if (typeof email === "string" && email.trim()) return `Email ${email}`;
-  return item.system_ref ?? humanize(item.action_type) ?? "Outcome check";
-}
-
-function mutationTitle(item: SourceMutationView): string {
-  return item.system_ref ?? item.resource_id ?? item.mutation_id;
-}
-
-function rowTone(row: Pick<ActionLifecycleRow, "policyStatus" | "proofStatus" | "mutation">): Tone {
-  if (row.mutation?.classification === "policy_bypass" || row.mutation?.classification === "unmanaged_agent_action") {
-    return "danger";
-  }
-  if (["blocked", "rejected", "mismatched", "fail", "policy_bypass"].includes(row.policyStatus)) return "danger";
-  if (["mismatched", "fail"].includes(row.proofStatus)) return "danger";
-  if (["pending_approval", "not_verified", "pending", "unverifiable", "legacy_path", "unknown_actor"].includes(row.policyStatus)) {
-    return "warning";
-  }
-  if (["not_verified", "pending", "unverifiable"].includes(row.proofStatus)) return "warning";
-  if (["approved", "allowed", "matched", "verified", "pass"].includes(row.policyStatus)) return "success";
-  if (["matched", "verified", "pass"].includes(row.proofStatus)) return "success";
-  return "neutral";
-}
-
-function priorityFor(row: Pick<ActionLifecycleRow, "policyStatus" | "proofStatus" | "mutation">): { label: string; detail: string } {
-  if (row.mutation?.classification === "policy_bypass") return { label: "P0", detail: "policy bypass" };
-  if (row.mutation?.classification === "unmanaged_agent_action") return { label: "P0", detail: "unmanaged action" };
-  if (["blocked", "rejected", "mismatched", "fail"].includes(row.policyStatus) || ["mismatched", "fail"].includes(row.proofStatus)) {
-    return { label: "P0", detail: "unsafe path" };
-  }
-  if (row.policyStatus === "pending_approval") return { label: "P1", detail: "needs approval" };
-  if (["not_verified", "pending", "unverifiable"].includes(row.proofStatus)) return { label: "P1", detail: "needs proof" };
-  return { label: "P2", detail: "controlled" };
-}
-
-function latestOutcomeByDecision(outcomes: OutcomeReconciliationView[]): Map<string, OutcomeReconciliationView> {
-  const byDecision = new Map<string, OutcomeReconciliationView>();
-  for (const outcome of outcomes) {
-    if (!outcome.runtime_policy_decision_id) continue;
-    const current = byDecision.get(outcome.runtime_policy_decision_id);
-    if (!current || new Date(outcome.checked_at).getTime() > new Date(current.checked_at).getTime()) {
-      byDecision.set(outcome.runtime_policy_decision_id, outcome);
-    }
-  }
-  return byDecision;
-}
-
-function buildRows({
-  decisions,
-  outcomes,
-  mutations,
-}: {
-  decisions: RuntimePolicyDecisionResponse[];
-  outcomes: OutcomeReconciliationView[];
-  mutations: SourceMutationView[];
-}): ActionLifecycleRow[] {
-  const outcomeByDecision = latestOutcomeByDecision(outcomes);
-  const linkedOutcomeIds = new Set<string>();
-  const rows: ActionLifecycleRow[] = [];
-
-  for (const decision of decisions) {
-    const outcome = outcomeByDecision.get(decision.id) ?? null;
-    if (outcome) linkedOutcomeIds.add(outcome.id);
-    const proofStatus = outcome?.verdict ?? (decision.status === "approved" || decision.status === "allowed" ? "not_verified" : "pending");
-    const receiptStatus = outcome?.verdict === "matched" ? "receipt_ready" : decision.status === "approved" ? "receipt_pending" : "not_ready";
-    const partial = {
-      policyStatus: decision.status,
-      proofStatus,
-      mutation: null,
-    };
-    const row: ActionLifecycleRow = {
-      key: `decision:${decision.id}`,
-      title: decisionTitle(decision),
-      agentName: decision.agent_name ?? "Unknown agent",
-      actionType: humanize(decision.action_type ?? decision.tool_name),
-      policyStatus: decision.status,
-      proofStatus,
-      receiptStatus,
-      systemRef: outcome?.system_ref ?? decision.call_id ?? decision.trace_id ?? decision.id,
-      priority: priorityFor(partial),
-      tone: rowTone(partial),
-      createdAt: decision.created_at,
-      decision,
-      outcome,
-      mutation: null,
-    };
-    rows.push(row);
-  }
-
-  for (const outcome of outcomes) {
-    if (linkedOutcomeIds.has(outcome.id)) continue;
-    const partial = {
-      policyStatus: "unlinked_outcome",
-      proofStatus: outcome.verdict,
-      mutation: null,
-    };
-    rows.push({
-      key: `outcome:${outcome.id}`,
-      title: outcomeTitle(outcome),
-      agentName: "Unlinked action",
-      actionType: humanize(outcome.action_type),
-      policyStatus: "unlinked_outcome",
-      proofStatus: outcome.verdict,
-      receiptStatus: "not_ready",
-      systemRef: outcome.system_ref ?? outcome.id,
-      priority: priorityFor(partial),
-      tone: rowTone(partial),
-      createdAt: outcome.checked_at,
-      decision: null,
-      outcome,
-      mutation: null,
-    });
-  }
-
-  for (const mutation of mutations.slice(0, 8)) {
-    const policyStatus = mutation.classification;
-    const partial = {
-      policyStatus,
-      proofStatus: mutation.action_receipt_id ? "matched" : "not_verified",
-      mutation,
-    };
-    rows.push({
-      key: `mutation:${mutation.id}`,
-      title: `Bypass: ${mutationTitle(mutation)}`,
-      agentName: mutation.actor_id ?? mutation.actor_type ?? "Unknown actor",
-      actionType: humanize(mutation.action_type ?? mutation.resource_type),
-      policyStatus,
-      proofStatus: partial.proofStatus,
-      receiptStatus: mutation.action_receipt_id ? "receipt_linked" : "unreceipted",
-      systemRef: mutation.system_ref ?? mutation.mutation_id,
-      priority: priorityFor(partial),
-      tone: rowTone(partial),
-      createdAt: mutation.occurred_at,
-      decision: null,
-      outcome: null,
-      mutation,
-    });
-  }
-
-  return rows.sort((a, b) => {
-    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return timeB - timeA;
-  });
-}
+type HeroState = {
+  title: string;
+  copy: string;
+  pill: string;
+  tone: StatusTone;
+  ctaHref: string;
+  ctaLabel: string;
+};
 
 function heroState({
   bypassRisk,
   error,
+  held,
   loading,
   mismatched,
-  pending,
   protectedActions,
 }: {
   bypassRisk: number;
   error: boolean;
+  held: number;
   loading: boolean;
   mismatched: number;
-  pending: number;
   protectedActions: number;
-}): { title: string; copy: string; pill: string; tone: Tone } {
+}): HeroState {
   if (error) {
     return {
-      title: "Action control visibility unavailable",
-      copy: "Quota, policy, verification, or bypass feeds did not refresh cleanly.",
+      title: "Action visibility unavailable",
+      copy: "One or more lifecycle feeds did not refresh cleanly.",
       pill: "refresh failed",
       tone: "danger",
+      ctaHref: "/actions",
+      ctaLabel: "Retry",
     };
   }
   if (loading) {
     return {
-      title: "Loading protected action control",
-      copy: "Refreshing policy decisions, action meters, outcome checks, receipts, and source mutations.",
+      title: "Loading protected actions",
+      copy: "Refreshing action intents, policy decisions, runner attempts, outcomes, receipts, and bypass summary.",
       pill: "loading",
       tone: "neutral",
+      ctaHref: "/actions",
+      ctaLabel: "Open actions",
     };
   }
   if (bypassRisk > 0) {
     return {
-      title: "Bypass risk visible before customer handoff",
-      copy: `${formatCount(bypassRisk)} source mutation${bypassRisk === 1 ? "" : "s"} need receipt matching or exception classification.`,
+      title: "Bypass risk",
+      copy: `${formatCount(bypassRisk)} source mutation${bypassRisk === 1 ? "" : "s"} need receipt matching or exception review in Outcomes.`,
       pill: `${formatCount(bypassRisk)} unreceipted`,
       tone: "danger",
+      ctaHref: "/outcomes",
+      ctaLabel: "Review bypass",
     };
   }
   if (mismatched > 0) {
     return {
-      title: "Verified action mismatch",
+      title: "Action mismatch",
       copy: `${formatCount(mismatched)} protected action${mismatched === 1 ? "" : "s"} do not match the source of record.`,
       pill: `${formatCount(mismatched)} mismatch`,
       tone: "danger",
+      ctaHref: "/evidence",
+      ctaLabel: "Review mismatch",
     };
   }
-  if (pending > 0) {
+  if (held > 0) {
     return {
-      title: "Actions held before execution",
-      copy: `${formatCount(pending)} high-risk action${pending === 1 ? "" : "s"} are waiting for approval.`,
-      pill: `${formatCount(pending)} held`,
+      title: "Actions held",
+      copy: `${formatCount(held)} action${held === 1 ? "" : "s"} are waiting at the policy approval gate.`,
+      pill: `${formatCount(held)} held`,
       tone: "warning",
+      ctaHref: "/approvals",
+      ctaLabel: "Review held actions",
     };
   }
   if (protectedActions > 0) {
     return {
-      title: "Protected actions controlled",
-      copy: "Policy decisions, runner execution volume, verification checks, and receipts are visible for this billing period.",
+      title: "Actions controlled",
+      copy: "Protected action lifecycle, runner execution, proof, and receipts are visible.",
       pill: `${formatCount(protectedActions)} controlled`,
       tone: "success",
+      ctaHref: "/evidence",
+      ctaLabel: "Open receipts",
     };
   }
   return {
-    title: "Action control plane ready",
-    copy: "Protected action lifecycle, quotas, proof, and bypass visibility will populate as agents route actions through Zroky.",
-    pill: "ready",
+    title: "Setup required",
+    copy: "Protect your first agent action to populate the lifecycle cockpit.",
+    pill: "no actions yet",
     tone: "neutral",
+    ctaHref: "/agents/setup",
+    ctaLabel: "Protect first action",
   };
 }
 
-function MetricCard({ Icon, helper, label, tone = "neutral", value }: MetricCardProps) {
-  return (
-    <article className={`outcome-metric-card tone-${tone}`}>
-      <Icon aria-hidden="true" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{helper}</small>
-    </article>
-  );
-}
-
-function evidenceHref(decisionId: string): string {
-  return `/evidence?decision_id=${encodeURIComponent(decisionId)}`;
-}
-
-function ActionQueue({
-  rows,
-  selectedKey,
-  onSelect,
-}: {
-  rows: ActionLifecycleRow[];
-  selectedKey: string | null;
-  onSelect: (key: string) => void;
-}) {
-  return (
-    <section className="outcome-queue-panel" aria-label="Action lifecycle queue">
-      <div className="outcome-panel-head">
-        <div>
-          <span className="eyebrow">Lifecycle queue</span>
-          <strong>{formatCount(rows.length)} protected action signal{rows.length === 1 ? "" : "s"}</strong>
-        </div>
-        <span className="outcome-live-dot">live</span>
-      </div>
-      <div className="outcome-queue-list">
-        {rows.length === 0 ? (
-          <div className="outcome-empty-state">
-            <h2>No protected action signals</h2>
-            <p>Policy decisions, verified outcomes, and bypass mutations will appear here.</p>
-          </div>
-        ) : (
-          rows.map((row) => (
-            <button
-              className={`outcome-queue-row tone-${row.tone}${row.key === selectedKey ? " selected" : ""}`}
-              key={row.key}
-              onClick={() => onSelect(row.key)}
-              type="button"
-            >
-              <span className="outcome-priority">{row.priority.label}</span>
-              <span className="outcome-queue-main">
-                <strong>{row.title}</strong>
-                <small>
-                  {row.agentName} / {row.actionType}
-                </small>
-                <em>{row.priority.detail}</em>
-              </span>
-              <span className="outcome-queue-side">
-                <StatusPill value={row.policyStatus} />
-                <small>{formatDateTime(row.createdAt)}</small>
-              </span>
-            </button>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
-function SelectedActionPanel({ row }: { row: ActionLifecycleRow | null }) {
-  if (!row) {
-    return (
-      <section className="outcome-empty-state" aria-label="Selected action lifecycle">
-        <h2>No action selected</h2>
-        <p>Select a protected action signal to inspect policy, proof, receipt, and bypass state.</p>
-      </section>
-    );
+function initialDeepLink(rows: ActionLifecycleRow[], search: URLSearchParams): string | null {
+  const actionId = search.get("action_id");
+  const decisionId = search.get("decision_id");
+  if (actionId) {
+    return rows.find((row) => row.actionId === actionId)?.id ?? null;
   }
-
-  return (
-    <section className="outcome-inspector-panel" aria-label="Selected action lifecycle">
-      <header className="outcome-inspector-header">
-        <div>
-          <span className="eyebrow">Selected action</span>
-          <h2>{row.title}</h2>
-          <p>
-            {row.agentName} / {row.actionType} / {row.systemRef}
-          </p>
-        </div>
-        <StatusPill value={row.proofStatus} />
-      </header>
-
-      <div className={`outcome-proof-strip tone-${row.tone}`}>
-        <div>
-          <span className="eyebrow">Control state</span>
-          <strong>{humanize(row.policyStatus)}</strong>
-          <p>{row.priority.detail}</p>
-        </div>
-        <StatusPill value={row.receiptStatus} />
-      </div>
-
-      <dl className="outcome-inspector-metrics">
-        <div>
-          <dt>Decision</dt>
-          <dd>{row.decision?.id ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Outcome</dt>
-          <dd>{row.outcome?.id ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Mutation</dt>
-          <dd>{row.mutation?.mutation_id ?? "-"}</dd>
-        </div>
-      </dl>
-
-      <div className="actions">
-        <Link href="/approvals" className="btn btn-secondary">
-          Open Approvals
-        </Link>
-        <Link href="/outcomes" className="btn btn-secondary">
-          Open Outcomes
-        </Link>
-        {row.decision ? (
-          <Link href={evidenceHref(row.decision.id)} className="btn btn-primary">
-            Open Evidence Pack
-          </Link>
-        ) : (
-          <Link href="/evidence" className="btn btn-primary">
-            Open Evidence
-          </Link>
-        )}
-      </div>
-
-      <div className="outcome-inspector-grid">
-        <section>
-          <h4>Intended action</h4>
-          <pre>{compactJson(row.decision?.intended_action ?? row.outcome?.claimed ?? row.mutation?.metadata)}</pre>
-        </section>
-        <section>
-          <h4>Source proof</h4>
-          <pre>{compactJson(row.outcome?.actual ?? row.outcome?.comparison ?? row.mutation)}</pre>
-        </section>
-      </div>
-    </section>
-  );
+  if (decisionId) {
+    return rows.find((row) => row.decisionId === decisionId)?.id ?? null;
+  }
+  return null;
 }
 
 export default function ActionsPage() {
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ActionLifecycleFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const search = useMemo(
+    () => new URLSearchParams(typeof window === "undefined" ? "" : window.location.search),
+    [],
+  );
 
   const billingQuery = useQuery({
     queryKey: ["billing", "usage", "protected-action-dashboard"],
@@ -478,22 +167,37 @@ export default function ActionsPage() {
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
+  const actionIntentsQuery = useQuery({
+    queryKey: ["action-intents", "actions", "all"],
+    queryFn: ({ signal }) => listActionIntents({ status: "all", limit: 100 }, signal),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
   const decisionsQuery = useQuery({
     queryKey: ["runtime-policy", "actions", "all"],
     queryFn: ({ signal }) => listRuntimePolicyApprovals("all", signal),
     staleTime: 10_000,
     refetchInterval: 15_000,
   });
+  const outcomesQuery = useQuery({
+    queryKey: ["outcomes", "actions", "reconciliation"],
+    queryFn: ({ signal }) => listOutcomeReconciliations({ verdict: "all", limit: 100 }, signal),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+  const staleAttemptsQuery = useQuery({
+    queryKey: ["action-execution-attempts", "actions", "stale"],
+    queryFn: ({ signal }) => listProjectActionExecutionAttempts(
+      { status: ["planned", "dispatched", "running"], stale: true, limit: 100 },
+      signal,
+    ),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
   const outcomeSummaryQuery = useQuery({
     queryKey: ["outcomes", "actions", "summary", 30],
     queryFn: ({ signal }) => getOutcomeReconciliationSummary(30, signal),
     staleTime: 30_000,
-    refetchInterval: 30_000,
-  });
-  const outcomesQuery = useQuery({
-    queryKey: ["outcomes", "actions", "reconciliation"],
-    queryFn: ({ signal }) => listOutcomeReconciliations({ verdict: "all", limit: 50 }, signal),
-    staleTime: 15_000,
     refetchInterval: 30_000,
   });
   const sourceMutationSummaryQuery = useQuery({
@@ -502,229 +206,189 @@ export default function ActionsPage() {
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
-  const unreceiptedMutationsQuery = useQuery({
-    queryKey: ["outcomes", "actions", "source-mutations", "unreceipted"],
-    queryFn: ({ signal }) => listUnreceiptedSourceMutations(20, signal),
-    staleTime: 15_000,
-    refetchInterval: 15_000,
-  });
 
   const billing = billingQuery.data;
-  const outcomeSummary = outcomeSummaryQuery.data;
   const sourceSummary = sourceMutationSummaryQuery.data;
+  const outcomeSummary = outcomeSummaryQuery.data;
+  const intents = useMemo(() => actionIntentsQuery.data?.items ?? [], [actionIntentsQuery.data?.items]);
   const decisions = useMemo(() => decisionsQuery.data?.items ?? [], [decisionsQuery.data?.items]);
   const outcomes = useMemo(() => outcomesQuery.data?.items ?? [], [outcomesQuery.data?.items]);
-  const unreceiptedMutations = useMemo(
-    () => unreceiptedMutationsQuery.data?.items ?? [],
-    [unreceiptedMutationsQuery.data?.items],
+  const staleAttempts = useMemo(() => staleAttemptsQuery.data?.items ?? [], [staleAttemptsQuery.data?.items]);
+  const rows = useMemo(
+    () => buildActionLifecycle({
+      intents,
+      decisions,
+      outcomes,
+      attempts: staleAttempts,
+      staleAttemptIds: staleAttempts.map((attempt) => attempt.attempt_id),
+    }),
+    [decisions, intents, outcomes, staleAttempts],
   );
-  const pending = decisions.filter((item) => item.status === "pending_approval").length;
-  const bypassRisk = sourceSummary?.unreceipted ?? unreceiptedMutations.length;
-  const protectedActionCount = billing?.protected_actions.used ?? 0;
-  const mismatched = outcomeSummary?.mismatched ?? outcomes.filter((item) => item.verdict === "mismatched").length;
-  const matched = outcomeSummary?.matched ?? outcomes.filter((item) => item.verdict === "matched").length;
-  const notVerified = outcomeSummary?.not_verified ?? outcomes.filter((item) => item.verdict === "not_verified").length;
+  const filteredRows = useMemo(() => filterActionLifecycle(rows, filter), [filter, rows]);
+  const counts = useMemo(() => actionLifecycleCounts(rows), [rows]);
+  const selectedRow = rows.find((row) => row.id === selectedId)
+    ?? filteredRows[0]
+    ?? rows[0]
+    ?? null;
+  const selectedActionId = selectedRow?.actionId ?? null;
+
+  const actionTimelineQuery = useQuery({
+    queryKey: ["action-intent", selectedActionId, "timeline", "actions-page"],
+    enabled: Boolean(selectedActionId),
+    queryFn: ({ signal }) => getActionIntentTimeline(selectedActionId ?? "", signal),
+    staleTime: 10_000,
+    retry: false,
+  });
+  const actionAttemptsQuery = useQuery({
+    queryKey: ["action-intent", selectedActionId, "execution-attempts", "actions-page"],
+    enabled: Boolean(selectedActionId),
+    queryFn: ({ signal }) => listActionExecutionAttempts(selectedActionId ?? "", signal),
+    staleTime: 10_000,
+    retry: false,
+  });
+
   const loading =
     billingQuery.isLoading ||
+    actionIntentsQuery.isLoading ||
     decisionsQuery.isLoading ||
-    outcomeSummaryQuery.isLoading ||
     outcomesQuery.isLoading ||
-    sourceMutationSummaryQuery.isLoading ||
-    unreceiptedMutationsQuery.isLoading;
+    staleAttemptsQuery.isLoading ||
+    outcomeSummaryQuery.isLoading ||
+    sourceMutationSummaryQuery.isLoading;
   const hasError =
     billingQuery.isError ||
+    actionIntentsQuery.isError ||
     decisionsQuery.isError ||
-    outcomeSummaryQuery.isError ||
     outcomesQuery.isError ||
-    sourceMutationSummaryQuery.isError ||
-    unreceiptedMutationsQuery.isError;
-
-  const rows = useMemo(
-    () => buildRows({ decisions, outcomes, mutations: unreceiptedMutations }),
-    [decisions, outcomes, unreceiptedMutations],
-  );
-  const selectedRow = rows.find((row) => row.key === selectedKey) ?? rows[0] ?? null;
+    staleAttemptsQuery.isError ||
+    outcomeSummaryQuery.isError ||
+    sourceMutationSummaryQuery.isError;
+  const bypassRisk = sourceSummary?.unreceipted ?? 0;
+  const matched = outcomeSummary?.matched ?? outcomes.filter((item) => item.verdict === "matched").length;
+  const mismatched = counts.mismatched || outcomeSummary?.mismatched || 0;
+  const notVerified = counts.notVerified || outcomeSummary?.not_verified || 0;
   const hero = heroState({
     bypassRisk,
     error: hasError,
+    held: counts.held,
     loading,
     mismatched,
-    pending,
-    protectedActions: protectedActionCount,
+    protectedActions: counts.protectedActions,
   });
+  const lastUpdatedMs = Math.max(
+    billingQuery.dataUpdatedAt ?? 0,
+    actionIntentsQuery.dataUpdatedAt ?? 0,
+    decisionsQuery.dataUpdatedAt ?? 0,
+    outcomesQuery.dataUpdatedAt ?? 0,
+    staleAttemptsQuery.dataUpdatedAt ?? 0,
+    outcomeSummaryQuery.dataUpdatedAt ?? 0,
+    sourceMutationSummaryQuery.dataUpdatedAt ?? 0,
+  );
+  const updatedLabel = lastUpdatedMs > 0
+    ? `Updated ${timeSince(new Date(lastUpdatedMs).toISOString(), nowMs)}`
+    : "Updated just now";
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (rows.length === 0) {
-      setSelectedKey(null);
+      setSelectedId(null);
       return;
     }
-    if (!selectedKey || !rows.some((row) => row.key === selectedKey)) {
-      setSelectedKey(rows[0].key);
+    const linked = initialDeepLink(rows, search);
+    if (linked && selectedId == null) {
+      setSelectedId(linked);
+      return;
     }
-  }, [rows, selectedKey]);
+    if (filteredRows.length > 0 && (!selectedId || !filteredRows.some((row) => row.id === selectedId))) {
+      setSelectedId(filteredRows[0].id);
+      return;
+    }
+    if (!selectedId || !rows.some((row) => row.id === selectedId)) {
+      setSelectedId(rows[0].id);
+    }
+  }, [filteredRows, rows, search, selectedId]);
+
+  function refreshAll() {
+    void Promise.all([
+      billingQuery.refetch(),
+      actionIntentsQuery.refetch(),
+      decisionsQuery.refetch(),
+      outcomesQuery.refetch(),
+      staleAttemptsQuery.refetch(),
+      outcomeSummaryQuery.refetch(),
+      sourceMutationSummaryQuery.refetch(),
+      actionTimelineQuery.refetch(),
+      actionAttemptsQuery.refetch(),
+    ]);
+  }
 
   return (
-    <main className="outcomes-cockpit actions-command-center">
-      <section className="outcomes-hero" data-tone={hero.tone}>
-        <div>
-          <span className="eyebrow">Verified Action Control Plane</span>
-          <h1>{hero.title}</h1>
-          <p>{hero.copy}</p>
-        </div>
-        <div className="outcomes-hero-rail">
-          <span className="outcome-hero-pill">{hero.pill}</span>
-          <span className="outcome-hero-pill">Quota {formatMeter(billing?.protected_actions)}</span>
-          <span className="outcome-hero-pill">Receipts {formatMeter(billing?.action_receipts)}</span>
-        </div>
-      </section>
+    <main className="actions-lifecycle-page">
+      <ActionsVerdictHero
+        title={hero.title}
+        copy={hero.copy}
+        pill={hero.pill}
+        tone={hero.tone}
+        ctaHref={hero.ctaHref}
+        ctaLabel={hero.ctaLabel}
+        updatedLabel={updatedLabel}
+        onRefresh={refreshAll}
+      />
 
-      <section className="outcomes-metric-grid" aria-label="Protected action control metrics">
-        <MetricCard
-          Icon={ShieldCheck}
-          label="Protected actions"
-          value={formatMeter(billing?.protected_actions)}
-          helper={meterHelper("Protected actions", billing?.protected_actions)}
-          tone={protectedActionCount > 0 ? "success" : "neutral"}
-        />
-        <MetricCard
-          Icon={Gauge}
-          label="Policy checks"
-          value={formatMeter(billing?.policy_checks)}
-          helper={meterHelper("Policy checks", billing?.policy_checks)}
-          tone={pending > 0 ? "warning" : "neutral"}
-        />
-        <MetricCard
-          Icon={Workflow}
-          label="Runner executions"
-          value={formatMeter(billing?.runner_executions)}
-          helper={meterHelper("Runner executions", billing?.runner_executions)}
-          tone={(billing?.runner_executions.used ?? 0) > 0 ? "success" : "neutral"}
-        />
-        <MetricCard
-          Icon={ReceiptText}
-          label="Receipts"
-          value={formatMeter(billing?.action_receipts)}
-          helper={meterHelper("Action receipts", billing?.action_receipts)}
-          tone={(billing?.action_receipts.used ?? 0) > 0 ? "success" : "warning"}
-        />
-        <MetricCard
-          Icon={CheckCircle2}
-          label="Verified outcomes"
-          value={formatCount(matched)}
-          helper={`${formatCount(mismatched)} mismatched / ${formatCount(notVerified)} not verified.`}
-          tone={mismatched > 0 ? "danger" : notVerified > 0 ? "warning" : matched > 0 ? "success" : "neutral"}
-        />
-        <MetricCard
-          Icon={ShieldAlert}
-          label="Bypass risk"
-          value={formatCount(bypassRisk)}
-          helper={`${formatCount(sourceSummary?.policy_bypass ?? 0)} policy bypass / ${formatCount(sourceSummary?.unmanaged_agent_action ?? 0)} unmanaged.`}
-          tone={bypassRisk > 0 ? "danger" : "success"}
-        />
-      </section>
+      <ActionsMetricStrip
+        protectedActions={formatCount(counts.protectedActions)}
+        policyChecks={formatMeter(billing?.policy_checks)}
+        runnerExecutions={formatMeter(billing?.runner_executions)}
+        receipts={formatMeter(billing?.action_receipts)}
+        verifiedOutcomes={formatCount(matched)}
+        bypassRisk={formatCount(bypassRisk)}
+        policyHelper={`${formatCount(counts.held)} held action${counts.held === 1 ? "" : "s"}.`}
+        runnerHelper={meterHelper("Runner executions", billing?.runner_executions)}
+        receiptHelper={meterHelper("Action receipts", billing?.action_receipts)}
+        outcomeHelper={`${formatCount(mismatched)} mismatched / ${formatCount(notVerified)} not verified.`}
+        bypassHelper={`${formatCount(sourceSummary?.policy_bypass ?? 0)} policy bypass / ${formatCount(sourceSummary?.unmanaged_agent_action ?? 0)} unmanaged.`}
+        tones={{
+          protectedActions: counts.protectedActions > 0 ? "success" : "neutral",
+          policyChecks: counts.held > 0 ? "warning" : "neutral",
+          runnerExecutions: counts.stalled > 0 ? "danger" : (billing?.runner_executions.used ?? 0) > 0 ? "success" : "neutral",
+          receipts: (billing?.action_receipts.used ?? 0) > 0 ? "success" : "warning",
+          verifiedOutcomes: mismatched > 0 ? "danger" : notVerified > 0 ? "warning" : matched > 0 ? "success" : "neutral",
+          bypassRisk: bypassRisk > 0 ? "danger" : "success",
+        }}
+      />
 
-      <section className="outcome-proof-contract" aria-label="Protected action lifecycle coverage">
-        <div>
-          <span className="eyebrow">Lifecycle coverage</span>
-          <h2>Control, execution, verification, receipt, and bypass visibility are live.</h2>
-          <p>These states are backed by billing meters, runtime policy decisions, system-of-record checks, and source mutation reconciliation.</p>
-        </div>
-        <div className="outcome-proof-state-grid">
-          <article data-tone={pending > 0 ? "warning" : "success"}>
-            <StatusPill value="policy" />
-            <strong>{formatMeter(billing?.policy_checks)}</strong>
-            <span>{formatCount(pending)} approval hold{pending === 1 ? "" : "s"}.</span>
-          </article>
-          <article data-tone={(billing?.runner_executions.used ?? 0) > 0 ? "success" : "warning"}>
-            <StatusPill value="runner" />
-            <strong>{formatMeter(billing?.runner_executions)}</strong>
-            <span>Credential-isolated execution volume.</span>
-          </article>
-          <article data-tone={mismatched > 0 ? "danger" : notVerified > 0 ? "warning" : "success"}>
-            <StatusPill value="verification" />
-            <strong>{formatMeter(billing?.verification_checks)}</strong>
-            <span>{formatCount(matched)} matched source-of-record check{matched === 1 ? "" : "s"}.</span>
-          </article>
-          <article data-tone={bypassRisk > 0 ? "danger" : "success"}>
-            <StatusPill value="reconciliation" />
-            <strong>{formatCount(bypassRisk)}</strong>
-            <span>Unreceipted mutation{bypassRisk === 1 ? "" : "s"}.</span>
-          </article>
-        </div>
-      </section>
-
-      <div className="outcome-cockpit-grid">
-        <ActionQueue rows={rows} selectedKey={selectedRow?.key ?? null} onSelect={setSelectedKey} />
-        <SelectedActionPanel row={selectedRow} />
-      </div>
-
-      <section className="outcome-proof-contract" aria-label="Bypass risk watch">
-        <div>
-          <span className="eyebrow">Bypass watch</span>
-          <h2>Source mutations must map back to a Zroky receipt or an approved exception.</h2>
-          <p>Unreceipted mutations stay visible until matched, classified, or migrated behind the protected runner path.</p>
-        </div>
-        <div className="outcome-proof-state-grid">
-          <article data-tone="success">
-            <StatusPill value="matched_receipt" />
-            <strong>{formatCount(sourceSummary?.matched_receipt ?? 0)}</strong>
-            <span>Receipted source mutations.</span>
-          </article>
-          <article data-tone="warning">
-            <StatusPill value="authorized_external" />
-            <strong>{formatCount(sourceSummary?.authorized_external ?? 0)}</strong>
-            <span>Approved outside Zroky.</span>
-          </article>
-          <article data-tone={bypassRisk > 0 ? "danger" : "success"}>
-            <StatusPill value="unreceipted" />
-            <strong>{formatCount(bypassRisk)}</strong>
-            <span>Needs receipt matching.</span>
-          </article>
-        </div>
-      </section>
+      <DashboardWorkspace
+        left={(
+          <ActionLifecycleQueue
+            rows={filteredRows}
+            selectedId={selectedRow?.id ?? null}
+            filter={filter}
+            onFilterChange={setFilter}
+            onSelect={setSelectedId}
+          />
+        )}
+        right={(
+          <ActionInspector
+            row={selectedRow}
+            timeline={actionTimelineQuery.data?.items ?? []}
+            attempts={actionAttemptsQuery.data?.items ?? []}
+          />
+        )}
+      />
 
       {hasError ? (
-        <section className="outcome-proof-strip tone-danger" role="status">
+        <section className="al-alert al-tone-danger" role="status">
           <div>
-            <span className="eyebrow">Refresh status</span>
-            <strong>One or more control feeds failed</strong>
-            <p>Keep protected action launch review conservative until all feeds refresh cleanly.</p>
+            <span className="al-eyebrow">Refresh status</span>
+            <strong>One or more lifecycle feeds failed</strong>
+            <p>Keep protected action review conservative until every feed refreshes cleanly.</p>
           </div>
-          <AlertTriangle aria-hidden="true" />
         </section>
       ) : null}
-
-      <div className="actions">
-        <Link href="/approvals" className="btn btn-secondary">
-          Approvals
-        </Link>
-        <Link href="/outcomes" className="btn btn-secondary">
-          Verification
-        </Link>
-        <Link href="/evidence" className="btn btn-secondary">
-          Evidence
-        </Link>
-        <Link href="/settings/billing" className="btn btn-primary">
-          Billing
-        </Link>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => {
-            void Promise.all([
-              billingQuery.refetch(),
-              decisionsQuery.refetch(),
-              outcomeSummaryQuery.refetch(),
-              outcomesQuery.refetch(),
-              sourceMutationSummaryQuery.refetch(),
-              unreceiptedMutationsQuery.refetch(),
-            ]);
-          }}
-        >
-          <RefreshCw aria-hidden="true" size={14} />
-          Refresh
-        </button>
-      </div>
     </main>
   );
 }

@@ -396,17 +396,32 @@ def upsert_policy(
     payload: dict[str, Any],
     updated_by: str | None,
 ) -> PilotPolicy:
-    """Validate + persist a policy_json payload.
+    """Validate + persist a policy_json patch.
 
     Raises PolicyValidationError if the payload fails schema validation.
     Creates the row if it doesn't exist, else updates it in place.
+
+    The policy row currently carries both the legacy pilot/autofix settings
+    and the runtime action-control mandate. Treat every write as a patch so
+    one surface cannot accidentally reset keys owned by the other surface.
     """
-    sanitised = validate_policy_payload(payload)
-    policy_json = json.dumps(sanitised, separators=(",", ":"))
+    if not isinstance(payload, dict):
+        raise PolicyValidationError("policy must be a JSON object")
 
     existing = db.execute(
         select(PilotPolicy).where(PilotPolicy.project_id == project_id)
     ).scalar_one_or_none()
+    base_policy = (
+        parse_policy_json(existing.policy_json)
+        if existing is not None
+        else deepcopy(DEFAULT_POLICY)
+    )
+    merged_payload = {
+        **base_policy,
+        **{key: value for key, value in payload.items() if key in _POLICY_FIELDS},
+    }
+    sanitised = validate_policy_payload(merged_payload)
+    policy_json = json.dumps(sanitised, separators=(",", ":"))
 
     if existing is None:
         policy = PilotPolicy(

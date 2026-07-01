@@ -79,6 +79,12 @@ describe("BillingPage", () => {
       plan_template: {
         "events.monthly_quota": 5000,
         "replay.monthly_runs": 0,
+        "agents.max": 1,
+        "connectors.system_of_record.max": 1,
+        "actions.protected.monthly_quota": 25,
+        "actions.receipts.monthly_quota": 25,
+        "actions.verifications.monthly_quota": 50,
+        "retention.days": 30,
         "seats.included": 2,
       },
     });
@@ -114,32 +120,33 @@ describe("BillingPage", () => {
     render(<BillingPage />);
 
     expect(
-      screen.getByText("Replay runs are gated by your current plan. Upgrade to unlock more protected replay capacity."),
+      screen.getByText("That legacy quota is gated by your current plan. Billing now centers on protected actions, receipts, verification, and connectors."),
     ).toBeInTheDocument();
     expect(await screen.findByText("Plan controls")).toBeInTheDocument();
-    expect(screen.getAllByText("42 / 5,000").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Capture events")).not.toBeInTheDocument();
+    expect(screen.queryByText("Replay runs")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
     expect(screen.getAllByText("7 / 25").length).toBeGreaterThan(0);
     expect(screen.getByText("Policy checks")).toBeInTheDocument();
     expect(screen.getByText("Runner executions")).toBeInTheDocument();
     expect(screen.getByText("Source mutations")).toBeInTheDocument();
+    expect(screen.getByText("Managed AgentProfile capacity")).toBeInTheDocument();
+    expect(screen.getByText("Evidence retention days")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Actions" }).getAttribute("href")).toBe("/actions");
     expect(screen.getByRole("link", { name: "Open bypass risk" }).getAttribute("href")).toBe("/outcomes");
   });
 
-  it("renders the backend-aligned self-serve plan catalog", async () => {
+  it("renders the launch self-serve plan catalog without Starter", async () => {
     render(<BillingPage />);
 
-    expect(await screen.findByText("Starter")).toBeInTheDocument();
-    const starterCard = screen.getByText("Starter").closest(".billing-plan-card") as HTMLElement;
-    expect(within(starterCard).getByText(/2K protected actions\/mo/)).toBeInTheDocument();
-    expect(within(starterCard).getByText(/10K policy checks\/mo/)).toBeInTheDocument();
+    expect(await screen.findByText("Pro")).toBeInTheDocument();
+    expect(screen.queryByText("Starter")).not.toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
-    expect(screen.getByText("$199.00")).toBeInTheDocument();
+    expect(screen.getByText("$399.00")).toBeInTheDocument();
     const proCard = screen.getByText("Pro").closest(".billing-plan-card") as HTMLElement;
     expect(within(proCard).getByText(/25K protected actions\/mo/)).toBeInTheDocument();
     expect(within(proCard).getByText(/100K policy checks\/mo/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pay with Razorpay for Starter" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay with Razorpay for Pro" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });
 
@@ -195,7 +202,7 @@ describe("BillingPage", () => {
     expect(within(proCard as HTMLElement).getByText("Current")).toBeInTheDocument();
   });
 
-  it("maps legacy Pilot subscriptions to the Starter catalog card", async () => {
+  it("keeps legacy Pilot subscriptions as grandfathered without showing Starter", async () => {
     api.getBillingMe.mockResolvedValue({
       org_id: "org_1",
       plan_code: "pilot",
@@ -218,11 +225,9 @@ describe("BillingPage", () => {
     render(<BillingPage />);
 
     expect(await screen.findByText("PILOT")).toBeInTheDocument();
-    expect(screen.getByText("Legacy Pilot maps to Starter entitlements.")).toBeInTheDocument();
-
-    const starterCard = screen.getByText("Starter").closest(".billing-plan-card");
-    expect(starterCard?.className).toContain("billing-plan-current");
-    expect(within(starterCard as HTMLElement).getByText("Current")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Pilot maps to grandfathered Starter entitlements. Pro is the current self-serve upgrade.")).toBeInTheDocument();
+    expect(screen.queryByText("Starter")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay with Razorpay for Pro" })).toBeInTheDocument();
   });
 
   it("polls billing while a Razorpay payment request is pending", async () => {
@@ -235,7 +240,7 @@ describe("BillingPage", () => {
       payment_provider: "razorpay",
       payment_customer_ref: null,
       payment_subscription_ref: null,
-      payment_request_ref: "order_pending:starter",
+      payment_request_ref: "order_pending:pro",
       current_period_end: null,
       trial_end: null,
       sla_tier: "standard",
@@ -251,7 +256,7 @@ describe("BillingPage", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByText("Pending")).toBeInTheDocument();
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
     expect(api.getBillingMe).toHaveBeenCalledTimes(1);
 
     await act(async () => {

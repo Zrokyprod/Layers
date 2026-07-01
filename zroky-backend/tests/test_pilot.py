@@ -514,6 +514,46 @@ class TestPolicyServices:
         parsed = parse_policy_json(updated.policy_json)
         assert parsed["kill_switch"] is True
 
+    def test_upsert_merges_partial_patch_with_runtime_mandate(self, db_session) -> None:
+        payload = dict(DEFAULT_POLICY)
+        payload.update(
+            {
+                "runtime_enabled": True,
+                "runtime_allowed_tools": ["refund_payment", "customer_record_update"],
+                "runtime_sensitive_tools": ["refund_payment"],
+                "runtime_amount_approval_threshold_usd": 250.0,
+                "runtime_amount_deny_threshold_usd": 2500.0,
+                "runtime_approval_ttl_minutes": 15,
+            }
+        )
+        created = upsert_policy(
+            db_session,
+            project_id="proj-runtime",
+            payload=payload,
+            updated_by="agent-setup",
+        )
+        original_id = created.id
+
+        updated = upsert_policy(
+            db_session,
+            project_id="proj-runtime",
+            payload={"tier1_enabled": True, "tier1_daily_cap": 11},
+            updated_by="policies-page",
+        )
+
+        assert updated.id == original_id
+        parsed = parse_policy_json(updated.policy_json)
+        assert parsed["tier1_enabled"] is True
+        assert parsed["tier1_daily_cap"] == 11
+        assert parsed["runtime_allowed_tools"] == [
+            "refund_payment",
+            "customer_record_update",
+        ]
+        assert parsed["runtime_sensitive_tools"] == ["refund_payment"]
+        assert parsed["runtime_amount_approval_threshold_usd"] == pytest.approx(250.0)
+        assert parsed["runtime_amount_deny_threshold_usd"] == pytest.approx(2500.0)
+        assert parsed["runtime_approval_ttl_minutes"] == 15
+
     def test_upsert_rejects_invalid_payload(self, db_session) -> None:
         bad = dict(DEFAULT_POLICY)
         bad["tier1_min_confidence"] = 2.0
@@ -825,6 +865,42 @@ class TestPutPolicyRoute:
         )
         assert response.status_code == 200
         assert response.json()["policy"]["tier1_daily_cap"] == 99
+
+    def test_put_partial_patch_preserves_runtime_mandate(self, client: TestClient) -> None:
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            payload = dict(DEFAULT_POLICY)
+            payload.update(
+                {
+                    "runtime_allowed_tools": ["refund_payment"],
+                    "runtime_sensitive_tools": ["refund_payment"],
+                    "runtime_amount_approval_threshold_usd": 300.0,
+                    "runtime_amount_deny_threshold_usd": 3000.0,
+                    "runtime_approval_ttl_minutes": 20,
+                }
+            )
+            upsert_policy(
+                session,
+                project_id="proj-runtime",
+                payload=payload,
+                updated_by="agent-setup",
+            )
+
+        response = client.put(
+            "/v1/pilot/policy",
+            headers={PROJECT_HEADER: "proj-runtime"},
+            json={"tier2_enabled": True, "tier2_daily_cap": 4},
+        )
+
+        assert response.status_code == 200
+        policy = response.json()["policy"]
+        assert policy["tier2_enabled"] is True
+        assert policy["tier2_daily_cap"] == 4
+        assert policy["runtime_allowed_tools"] == ["refund_payment"]
+        assert policy["runtime_sensitive_tools"] == ["refund_payment"]
+        assert policy["runtime_amount_approval_threshold_usd"] == pytest.approx(300.0)
+        assert policy["runtime_amount_deny_threshold_usd"] == pytest.approx(3000.0)
+        assert policy["runtime_approval_ttl_minutes"] == 20
 
     def test_put_invalid_confidence_422(self, client: TestClient) -> None:
         payload = dict(DEFAULT_POLICY)

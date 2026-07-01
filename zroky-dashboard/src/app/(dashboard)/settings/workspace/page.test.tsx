@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import WorkspaceSettingsPage from "./page";
 
 const clipboardWrite = vi.hoisted(() => vi.fn());
+const updateProject = vi.hoisted(() => vi.fn());
 
 const hookState = vi.hoisted(() => ({
   project: {
@@ -55,6 +56,10 @@ vi.mock("@/lib/hooks", () => ({
     data: hookState.projects,
     isLoading: hookState.loading,
   }),
+  useUpdateProjectSettings: () => ({
+    mutateAsync: updateProject,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/store", () => ({
@@ -66,6 +71,11 @@ describe("WorkspaceSettingsPage", () => {
   beforeEach(() => {
     clipboardWrite.mockReset();
     clipboardWrite.mockResolvedValue(undefined);
+    updateProject.mockReset();
+    updateProject.mockResolvedValue({
+      ...hookState.project,
+      name: "Revenue Operations",
+    });
     Object.assign(navigator, {
       clipboard: {
         writeText: clipboardWrite,
@@ -73,18 +83,28 @@ describe("WorkspaceSettingsPage", () => {
     });
   });
 
-  it("shows workspace metadata without turning Settings into connectors or evidence", async () => {
+  it("shows focused workspace metadata and project actions", async () => {
     render(<WorkspaceSettingsPage />);
 
     expect(screen.getAllByText("Refund Operations").length).toBeGreaterThan(0);
-    expect(screen.getByText("Backend project context.")).toBeInTheDocument();
+    expect(screen.getByText("Stable dashboard project context")).toBeInTheDocument();
     expect(screen.getByText("Owner")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open projects" }).getAttribute("href")).toBe("/projects");
     expect(screen.getByRole("link", { name: "Manage members" }).getAttribute("href")).toBe("/settings/team");
-    expect(screen.getByText("Use Connectors")).toBeInTheDocument();
-    expect(screen.getByText("Use Evidence")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy project ID" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("proj_1234567890abcdef"));
+  });
+
+  it("renames the workspace through the backend settings endpoint", async () => {
+    render(<WorkspaceSettingsPage />);
+
+    fireEvent.change(screen.getByLabelText("Workspace name"), {
+      target: { value: "Revenue Operations" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save workspace name" }));
+
+    await waitFor(() => expect(updateProject).toHaveBeenCalledWith({ name: "Revenue Operations" }));
+    expect(await screen.findByText("Workspace name updated.")).toBeInTheDocument();
   });
 });

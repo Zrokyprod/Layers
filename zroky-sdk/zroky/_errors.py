@@ -55,6 +55,55 @@ class ZrokyOutcomeVerificationError(RuntimeError):
     """Raised when saved connector outcome verification cannot complete."""
 
 
+class ZrokyVerifiedActionError(RuntimeError):
+    """Raised when a backend-owned verified action cannot make safe progress."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        action: dict[str, Any] | None = None,
+        decision: dict[str, Any] | None = None,
+    ) -> None:
+        self.action = action or {}
+        self.decision = decision or {}
+        super().__init__(message)
+
+
+class ZrokyVerifiedActionBlocked(ZrokyVerifiedActionError):
+    """Raised when a verified action is denied, expired, or otherwise blocked."""
+
+
+class ZrokyVerifiedActionApprovalRequired(ZrokyVerifiedActionBlocked):
+    """Raised when a verified action is paused for human approval."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        action: dict[str, Any],
+        decision: dict[str, Any],
+    ) -> None:
+        super().__init__(message, action=action, decision=decision)
+        self.action_id = self._action_id_from(action, decision)
+        self.approval_id = self._approval_id_from(decision)
+
+    @staticmethod
+    def _action_id_from(action: dict[str, Any], decision: dict[str, Any]) -> str | None:
+        value = action.get("action_id") or decision.get("action_id")
+        return str(value) if value else None
+
+    @staticmethod
+    def _approval_id_from(decision: dict[str, Any]) -> str | None:
+        value = decision.get("runtime_policy_decision_id") or decision.get("id")
+        if value:
+            return str(value)
+        queue_item = decision.get("approval_queue_item")
+        if isinstance(queue_item, dict) and queue_item.get("id"):
+            return str(queue_item["id"])
+        return None
+
+
 class ZrokyRuntimePolicyBlocked(ZrokyRuntimePolicyError):
     """Raised when the runtime policy gate blocks or pauses an agent action."""
 

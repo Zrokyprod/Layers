@@ -23,3 +23,7 @@ export function resolveApiBase(endpoint: string | undefined): string {
 export function runtimePolicyUrl(endpoint: string | undefined): string {
   return `${resolveApiBase(endpoint)}/v1/runtime-policy/check`;
 }
+
+export function apiUrl(endpoint: string | undefined, path: string): string {
+  return `${resolveApiBase(endpoint)}${path}`;
+}

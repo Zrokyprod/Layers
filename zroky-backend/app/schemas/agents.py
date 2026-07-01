@@ -170,3 +170,6 @@ class AgentProfileListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+    active_count: int
+    max_active_agents: int
+    limit_reached: bool

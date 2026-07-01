@@ -20,8 +20,7 @@ import { clearAccessToken } from "@/lib/auth";
 import { useChangePassword, useMe, useUpdateMe } from "@/lib/hooks";
 import { passwordChangeSchema, type PasswordChangeFormData } from "@/lib/schemas";
 import type { SecurityStatusResponse } from "@/lib/types";
-
-const ACCOUNT_FLOW = ["Identity", "Login method", "Session control", "Danger zone"] as const;
+import { DashboardButton } from "./dashboard-button";
 
 function connectedLoginLabel(security: SecurityStatusResponse | null): string {
   if (!security) return "Loading";
@@ -219,15 +218,6 @@ export default function AccountPage() {
         </article>
       </section>
 
-      <nav className="account-flow-rail" aria-label="Account control flow">
-        {ACCOUNT_FLOW.map((item, index) => (
-          <a key={item} href={`#${item.toLowerCase().replaceAll(" ", "-")}`}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
-            <strong>{item}</strong>
-          </a>
-        ))}
-      </nav>
-
       <section className="panel profile-section-gap" id="identity">
         <header className="panel-header">
           <h3>Your identity</h3>
@@ -292,9 +282,9 @@ export default function AccountPage() {
               {profileError && <p className="field-error profile-msg-gap-sm">{profileError}</p>}
               {profileSuccess && <p className="field-success profile-msg-gap-sm">{profileSuccess}</p>}
               <div className="actions">
-                <button type="submit" className="btn btn-primary" disabled={updateMeMutation.isPending}>
+                <DashboardButton type="submit" variant="primary" loading={updateMeMutation.isPending}>
                   {updateMeMutation.isPending ? "Saving..." : "Save profile"}
-                </button>
+                </DashboardButton>
               </div>
             </form>
           </>
@@ -352,9 +342,9 @@ export default function AccountPage() {
             {pwError && <p className="field-error profile-msg-gap-sm">{pwError}</p>}
             {pwSuccess && <p className="field-success profile-msg-gap-sm">{pwSuccess}</p>}
             <div className="actions">
-              <button type="submit" className="btn btn-primary" disabled={changePasswordMutation.isPending}>
+              <DashboardButton type="submit" variant="primary" loading={changePasswordMutation.isPending}>
                 {changePasswordMutation.isPending ? "Saving..." : "Change password"}
-              </button>
+              </DashboardButton>
             </div>
           </form>
         )}
@@ -366,9 +356,9 @@ export default function AccountPage() {
             <h3>Account security</h3>
             <p>Password/OAuth status and session revocation controls.</p>
           </div>
-          <button type="button" className="btn btn-soft" onClick={() => void loadSecurity()} disabled={securityLoading}>
+          <DashboardButton type="button" variant="soft" onClick={() => void loadSecurity()} loading={securityLoading}>
             Refresh
-          </button>
+          </DashboardButton>
         </header>
 
         {securityMessage && <p className="field-error profile-msg-gap-sm">{securityMessage}</p>}
@@ -394,25 +384,17 @@ export default function AccountPage() {
             </div>
           </dl>
         ) : null}
-      </section>
-
-      <section className="panel account-session-panel">
-        <header className="panel-header">
-          <div>
-            <h3>Sessions</h3>
-            <p>Revoke every active browser session for this account.</p>
-          </div>
-        </header>
         <div className="actions">
-          <button
+          <DashboardButton
             type="button"
-            className="btn btn-danger"
+            variant="danger"
             disabled={logoutAllLoading || security?.global_logout_available === false}
+            loading={logoutAllLoading}
+            icon={<LogOut />}
             onClick={() => void onLogoutAllSessions()}
           >
-            <LogOut aria-hidden="true" />
             {logoutAllLoading ? "Revoking..." : "Log out all sessions"}
-          </button>
+          </DashboardButton>
         </div>
       </section>
 
@@ -425,10 +407,9 @@ export default function AccountPage() {
         </header>
 
         {!showDeleteConfirm ? (
-          <button type="button" className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>
-            <AlertTriangle aria-hidden="true" />
+          <DashboardButton type="button" variant="danger" icon={<AlertTriangle />} onClick={() => setShowDeleteConfirm(true)}>
             Delete my account
-          </button>
+          </DashboardButton>
         ) : (
           <div className="profile-form-narrow">
             {deleteError && <div className="auth-banner auth-banner-error">{deleteError}</div>}
@@ -443,25 +424,26 @@ export default function AccountPage() {
               />
             </div>
             <div className="actions">
-              <button
+              <DashboardButton
                 type="button"
-                className="btn btn-danger"
+                variant="danger"
+                icon={<CheckCircle2 />}
                 disabled={!me?.email || deleteInput !== me.email || deleteLoading}
+                loading={deleteLoading}
                 onClick={() => void onDeleteAccount()}
               >
-                <CheckCircle2 aria-hidden="true" />
                 {deleteLoading ? "Deleting..." : "Permanently delete account"}
-              </button>
-              <button
+              </DashboardButton>
+              <DashboardButton
                 type="button"
-                className="btn"
+                variant="soft"
                 onClick={() => {
                   setShowDeleteConfirm(false);
                   setDeleteInput("");
                 }}
               >
                 Cancel
-              </button>
+              </DashboardButton>
             </div>
           </div>
         )}

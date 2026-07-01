@@ -1,14 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  decideActionIntent,
   approveRuntimePolicyDecision,
+  enforceAgentProfile,
   getBillingMe,
+  getActionIntentReceipt,
+  getActionIntentTimeline,
   getCustomerRecordConnectorStatus,
   getLedgerRefundConnectorStatus,
   getRuntimePolicyEvidencePack,
   getOutcomeReconciliation,
   getOutcomeReconciliationSummary,
   getPostgresReadConnectorStatus,
+  listActionExecutionAttempts,
+  listActionIntents,
+  listProjectActionExecutionAttempts,
+  listActionRunners,
   listRuntimePolicyApprovals,
   listOutcomeReconciliations,
   rejectRuntimePolicyDecision,
@@ -248,6 +256,161 @@ describe("runtime policy API client", () => {
         method: "POST",
         body: JSON.stringify({ enabled: true }),
       }),
+    );
+  });
+});
+
+describe("verified action API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("lists action intents with lifecycle filters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total_in_page: 0, limit: 25, offset: 10 }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      listActionIntents({
+        status: "approval_pending",
+        proof_status: "pending",
+        receipt_status: "pending",
+        agent_id: "agent_profile_inventory",
+        limit: 25,
+        offset: 10,
+      }),
+    ).resolves.toEqual({ items: [], total_in_page: 0, limit: 25, offset: 10 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/action-intents?limit=25&offset=10&status=approval_pending&proof_status=pending&receipt_status=pending&agent_id=agent_profile_inventory",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("omits all filters when listing action intents", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [], total_in_page: 0, limit: 50, offset: 0 }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listActionIntents({ status: "all", proof_status: "all", receipt_status: "all", limit: 50 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/action-intents?limit=50",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("loads action timeline, receipt, attempts, project attempts, runners, and posts decide", async () => {
+    const receipt = {
+      receipt_id: "receipt_1",
+      project_id: "proj_1",
+      action_id: "action_1",
+      receipt_digest: "sha256:abc",
+      evidence_hash: "sha256:def",
+      signature_algorithm: "HMAC-SHA256",
+      signature: "sig",
+      signing_key_id: "key",
+      signature_valid: true,
+      generated_at: "2026-06-20T00:00:00Z",
+      receipt: { final_status: "matched" },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ allowed: true, action_id: "action_1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(receipt), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await decideActionIntent("action_1", { approval_id: "decision_1" });
+    await getActionIntentTimeline("action_1");
+    await expect(getActionIntentReceipt("action_1")).resolves.toMatchObject({ signature_valid: true });
+    await listActionExecutionAttempts("action_1");
+    await listProjectActionExecutionAttempts({ status: ["planned", "running"], stale: true, stale_after_seconds: 600 });
+    await listActionRunners();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/zroky/v1/action-intents/action_1/decide",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ approval_id: "decision_1" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/zroky/v1/action-intents/action_1/timeline",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/zroky/v1/action-intents/action_1/receipt",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/zroky/v1/action-intents/action_1/execution-attempts",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "/api/zroky/v1/action-execution-attempts?status=planned%2Crunning&stale=true&stale_after_seconds=600",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      "/api/zroky/v1/action-runners",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+});
+
+describe("agent profile API client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("posts explicit enforcement for an agent profile", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          schema_version: "zroky.agent_tool_control.v1",
+          id: "agent_1",
+          project_id: "proj_1",
+          display_name: "Operations Agent",
+          slug: "operations-agent",
+          description: null,
+          runtime_path: "sdk",
+          framework: null,
+          environment: "production",
+          model_provider: null,
+          model_name: null,
+          tool_names: ["internal.ops.execute"],
+          allowed_action_types: ["internal_api_mutation"],
+          blocked_action_types: [],
+          default_policy_id: null,
+          risk_limits: {},
+          verification_connectors: ["generic_rest"],
+          metadata: { runtime_policy_mandate_enforced: true },
+          is_active: true,
+          created_at: "2026-06-20T09:00:00.000Z",
+          updated_at: "2026-06-20T09:01:00.000Z",
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await enforceAgentProfile("agent_1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/agents/agent_1/enforce",
+      expect.objectContaining({ method: "POST" }),
     );
   });
 });

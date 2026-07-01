@@ -9,6 +9,7 @@ import { DashboardShell } from "./dashboard-shell";
 const navState = vi.hoisted(() => ({
   pathname: "/home",
   planTemplate: {
+    "actions.protected.monthly_quota": 10_000,
     "pilot.replay_stub": true,
     "pilot.goldens_basic": true,
     "pro.ci_gate_nonblocking": true,
@@ -216,6 +217,7 @@ describe("DashboardShell primary navigation", () => {
   beforeEach(() => {
     navState.pathname = "/home";
     navState.planTemplate = {
+      "actions.protected.monthly_quota": 10_000,
       "pilot.replay_stub": true,
       "pilot.goldens_basic": true,
       "pro.ci_gate_nonblocking": true,
@@ -291,12 +293,13 @@ describe("DashboardShell primary navigation", () => {
 
     const settingsSections = screen.getByRole("group", { name: "Settings sections" });
     expect(within(settingsSections).queryByRole("link", { name: /Project/ })).not.toBeInTheDocument();
-    expect(within(settingsSections).getByRole("link", { name: /Capture keys/ }).getAttribute("href")).toBe("/settings/keys");
+    expect(within(settingsSections).getByRole("link", { name: /^API Keys$/ }).getAttribute("href")).toBe("/settings/keys");
     expect(within(settingsSections).queryByRole("link", { name: /Providers/ })).not.toBeInTheDocument();
     expect(within(settingsSections).queryByRole("link", { name: /Connectors/ })).not.toBeInTheDocument();
-    expect(within(settingsSections).getByRole("link", { name: /Billing/ }).getAttribute("href")).toBe("/settings/billing");
+    expect(within(settingsSections).getByRole("link", { name: /Plan & Billing/ }).getAttribute("href")).toBe("/settings/billing");
     expect(within(settingsSections).getByRole("link", { name: /Members/ }).getAttribute("href")).toBe("/settings/team");
     expect(within(settingsSections).getByRole("link", { name: /Workspace/ }).getAttribute("href")).toBe("/settings/workspace");
+    expect(within(settingsSections).queryByRole("link", { name: /Evaluation/ })).not.toBeInTheDocument();
   });
 
   it("renders the dashboard logo image without the old text lockup", () => {
@@ -320,6 +323,7 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const labels = primaryNavLabels();
+    expect(labels).toEqual(["Home", "Approvals", "Actions", "Agents", "Outcomes", "Evidence", "Policies", "Connectors", "Settings"]);
     expect(labels).toContain("Actions");
     expect(labels).toContain("Agents");
     expect(labels).toContain("Approvals");
@@ -341,6 +345,17 @@ describe("DashboardShell primary navigation", () => {
     expect(navItem("actions").getAttribute("href")).toBe("/actions");
     expect(navItem("connectors").getAttribute("href")).toBe("/integrations");
     expect(navItem("evidence").getAttribute("href")).toBe("/evidence");
+  });
+
+  it("groups the sidebar around the control loop", () => {
+    render(<DashboardShell>content</DashboardShell>);
+
+    const primary = screen.getByRole("navigation", { name: "Primary" });
+    const sections = within(primary).getAllByText(/Control|Proof|Configure|Workspace/).map((node) => node.textContent);
+    expect(sections).toEqual(["Control", "Proof", "Configure", "Workspace"]);
+    expect(primary.querySelector('[data-nav-section="control"]')).toBeInTheDocument();
+    expect(primary.querySelector('[data-nav-section="proof"]')).toBeInTheDocument();
+    expect(primary.querySelector('[data-nav-section="configure"]')).toBeInTheDocument();
   });
 
   it("does not show fake workspace or account data while identity APIs are unavailable", () => {
@@ -482,18 +497,18 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
   });
 
-  it("renders unlimited event quota without exposing backend sentinel values or a meter", () => {
+  it("renders unlimited protected-action quota without exposing backend sentinel values or a meter", () => {
     navState.planCode = "enterprise";
     navState.planTemplate = {
       ...navState.planTemplate,
-      "events.monthly_quota": -1,
+      "actions.protected.monthly_quota": -1,
     };
     navState.budgetDataAvailable = false;
 
     const { container } = render(<DashboardShell>content</DashboardShell>);
 
     expect(screen.getByText("Unlimited")).toBeInTheDocument();
-    expect(screen.getByText("events included")).toBeInTheDocument();
+    expect(screen.getByText("protected actions")).toBeInTheDocument();
     expect(screen.queryByText("-1")).not.toBeInTheDocument();
     expect(container.querySelector(".plan-usage-track")).toBeNull();
   });
@@ -516,20 +531,20 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.getByRole("navigation", { name: "Primary" }).querySelector('[data-nav-id="replay"]')).toBeNull();
   });
 
-  it("opens an account menu from the topbar profile control instead of logging out immediately", () => {
+  it("opens a profile menu from the topbar account control instead of logging out immediately", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
+    fireEvent.click(screen.getByRole("button", { name: /Open profile menu/ }));
 
     expect(authState.clearAccessToken).not.toHaveBeenCalled();
     expect(screen.getByRole("menu", { name: "Account menu" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Account" }).getAttribute("href")).toBe("/account");
+    expect(screen.getByRole("menuitem", { name: /Profile & security/ }).getAttribute("href")).toBe("/account");
   });
 
   it("logs out only from the explicit account menu action", () => {
     render(<DashboardShell>content</DashboardShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open account menu" }));
+    fireEvent.click(screen.getByRole("button", { name: /Open profile menu/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Log out" }));
 
     expect(authState.clearAccessToken).toHaveBeenCalledTimes(1);
@@ -613,7 +628,7 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByRole("button", { name: "Open page actions and filters" })).not.toBeInTheDocument();
 
     const topbar = container.querySelector(".topbar");
-    const accountButton = screen.getByRole("button", { name: "Open account menu" });
+    const accountButton = screen.getByRole("button", { name: /Open profile menu/ });
     expect(topbar?.contains(accountButton)).toBe(true);
 
     const planLink = screen.getByLabelText("Open billing and usage");

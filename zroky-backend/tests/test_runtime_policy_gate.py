@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.db.base import Base
 from app.db.models import (
+    Agent,
     OutcomeReconciliationCheck,
     RuntimePolicyAuditEvent,
     RuntimePolicyDecision,
@@ -75,6 +76,30 @@ def _set_policy(client: TestClient, tenant_id: str, **overrides) -> None:
         payload = dict(DEFAULT_POLICY)
         payload.update(overrides)
         upsert_policy(session, project_id=tenant_id, payload=payload, updated_by="test")
+
+
+def _seed_agent(
+    client: TestClient,
+    *,
+    project_id: str = "proj_runtime_a",
+    agent_id: str,
+    name: str,
+    slug: str,
+) -> None:
+    session_factory = client._session_factory  # type: ignore[attr-defined]
+    with session_factory() as session:
+        session.add(
+            Agent(
+                id=agent_id,
+                project_id=project_id,
+                name=name,
+                slug=slug,
+                runtime_path="sdk",
+                environment="production",
+                is_active=True,
+            )
+        )
+        session.commit()
 
 
 def test_sensitive_action_requires_approval_and_is_visible_in_trace(client: TestClient) -> None:
@@ -432,6 +457,295 @@ def test_limits_and_allowed_tools_block_before_execution(client: TestClient) -> 
     assert "tool call count" in reasons
     assert "retry count" in reasons
     assert "estimated action cost" in reasons
+
+
+def test_advisory_ai_fields_cannot_override_policy_authority(client: TestClient) -> None:
+    """AI/advisory text may explain risk, but it must never become gate authority."""
+    _set_policy(
+        client,
+        "proj_runtime_a",
+        runtime_allowed_tools=["refund_payment", "lookup_customer"],
+        runtime_amount_approval_threshold_usd=500.0,
+        runtime_amount_deny_threshold_usd=1000.0,
+        runtime_max_cost_usd=0.5,
+    )
+
+    advisory_says_allow = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-advisory-allow",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "tool_args": {"order_id": "ord_advisory"},
+            "external_action": True,
+            "estimated_cost_usd": 2.0,
+            "business_impact": {"summary": "High-cost action", "estimated_value_usd": 1500.0},
+            "ai_advisory": {
+                "recommendation": "allow",
+                "decision": "allowed",
+                "status": "allowed",
+                "reason": "The customer sounds trustworthy.",
+            },
+            "advisory_decision": "allowed",
+            "llm_recommendation": "approve without review",
+        },
+    )
+    assert advisory_says_allow.status_code == 200
+    allow_body = advisory_says_allow.json()
+    assert allow_body["status"] == "blocked"
+    assert allow_body["allowed"] is False
+    assert allow_body["requires_approval"] is False
+    assert "estimated action cost" in " ".join(allow_body["reasons"])
+
+    advisory_says_block = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-advisory-block",
+            "action_type": "lookup",
+            "tool_name": "lookup_customer",
+            "external_action": False,
+            "ai_advisory": {
+                "recommendation": "block",
+                "decision": "blocked",
+                "status": "blocked",
+                "reason": "The advisory model is uncertain.",
+            },
+            "advisory_decision": "blocked",
+            "llm_recommendation": "deny this action",
+        },
+    )
+    assert advisory_says_block.status_code == 200
+    block_body = advisory_says_block.json()
+    assert block_body["status"] == "allowed"
+    assert block_body["allowed"] is True
+    assert block_body["requires_approval"] is False
+
+
+def test_partial_policy_save_preserves_runtime_mandate_for_gate(client: TestClient) -> None:
+    _set_policy(
+        client,
+        "proj_runtime_a",
+        runtime_sensitive_tools=[],
+        runtime_sensitive_actions_require_approval=False,
+        runtime_amount_approval_threshold_usd=100.0,
+        runtime_amount_deny_threshold_usd=1000.0,
+    )
+    session_factory = client._session_factory  # type: ignore[attr-defined]
+    with session_factory() as session:
+        upsert_policy(
+            session,
+            project_id="proj_runtime_a",
+            payload={"tier1_enabled": True, "tier1_daily_cap": 9},
+            updated_by="policies-page",
+        )
+
+    response = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-runtime-mandate-preserved",
+            "agent_name": "refund-agent",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "external_action": True,
+            "tool_args": {"amount": 150.0, "currency": "USD"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "pending_approval"
+    assert body["requires_approval"] is True
+    assert body["policy_snapshot"]["runtime_amount_approval_threshold_usd"] == pytest.approx(100.0)
+    assert body["policy_snapshot"]["runtime_amount_deny_threshold_usd"] == pytest.approx(1000.0)
+    assert "exceeds approval threshold $100.00" in " ".join(body["reasons"])
+
+
+def test_action_type_scoped_rule_overrides_project_policy(client: TestClient) -> None:
+    _set_policy(
+        client,
+        "proj_runtime_a",
+        runtime_sensitive_tools=[],
+        runtime_sensitive_actions_require_approval=False,
+        runtime_amount_approval_threshold_usd=500.0,
+        runtime_amount_deny_threshold_usd=5000.0,
+    )
+
+    created = client.post(
+        "/v1/runtime-policy/rules",
+        json={
+            "name": "Refund action threshold",
+            "action_type": "refund",
+            "policy_patch": {
+                "runtime_amount_approval_threshold_usd": 100.0,
+                "runtime_amount_deny_threshold_usd": 1000.0,
+            },
+        },
+    )
+    assert created.status_code == 201
+    rule_id = created.json()["id"]
+
+    response = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-action-rule",
+            "agent_name": "refund-agent",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "external_action": True,
+            "tool_args": {"amount": 150.0, "currency": "USD"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "pending_approval"
+    assert "exceeds approval threshold $100.00" in " ".join(body["reasons"])
+    resolution = body["policy_snapshot"]["_runtime_policy_resolution"]
+    assert resolution["source"] == "project_policy+scoped_rules"
+    assert [item["id"] for item in resolution["matched_rules"]] == [rule_id]
+
+
+def test_agent_scoped_rule_wins_over_action_type_rule(client: TestClient) -> None:
+    _set_policy(
+        client,
+        "proj_runtime_a",
+        runtime_sensitive_tools=[],
+        runtime_sensitive_actions_require_approval=False,
+        runtime_amount_approval_threshold_usd=1000.0,
+        runtime_amount_deny_threshold_usd=5000.0,
+    )
+    _seed_agent(
+        client,
+        agent_id="agent_refund_a",
+        name="Refund Agent A",
+        slug="refund-agent-a",
+    )
+    _seed_agent(
+        client,
+        agent_id="agent_refund_b",
+        name="Refund Agent B",
+        slug="refund-agent-b",
+    )
+
+    action_rule = client.post(
+        "/v1/runtime-policy/rules",
+        json={
+            "name": "General refund threshold",
+            "action_type": "refund",
+            "policy_patch": {"runtime_amount_approval_threshold_usd": 300.0},
+        },
+    )
+    assert action_rule.status_code == 201
+    agent_rule = client.post(
+        "/v1/runtime-policy/rules",
+        json={
+            "name": "Refund Agent A strict threshold",
+            "agent_id": "agent_refund_a",
+            "action_type": "refund",
+            "policy_patch": {"runtime_amount_approval_threshold_usd": 50.0},
+        },
+    )
+    assert agent_rule.status_code == 201
+
+    agent_a = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-agent-a-rule",
+            "agent_id": "agent_refund_a",
+            "agent_name": "Refund Agent A",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "external_action": True,
+            "tool_args": {"amount": 100.0, "currency": "USD"},
+        },
+    )
+    assert agent_a.status_code == 200
+    agent_a_body = agent_a.json()
+    assert agent_a_body["status"] == "pending_approval"
+    assert "exceeds approval threshold $50.00" in " ".join(agent_a_body["reasons"])
+    assert [item["id"] for item in agent_a_body["policy_snapshot"]["_runtime_policy_resolution"]["matched_rules"]] == [
+        action_rule.json()["id"],
+        agent_rule.json()["id"],
+    ]
+
+    agent_b = client.post(
+        "/v1/runtime-policy/check",
+        json={
+            "trace_id": "trace-agent-b-rule",
+            "agent_id": "agent_refund_b",
+            "agent_name": "Refund Agent B",
+            "action_type": "refund",
+            "tool_name": "refund_payment",
+            "external_action": True,
+            "tool_args": {"amount": 100.0, "currency": "USD"},
+        },
+    )
+    assert agent_b.status_code == 200
+    agent_b_body = agent_b.json()
+    assert agent_b_body["status"] == "allowed"
+    assert [item["id"] for item in agent_b_body["policy_snapshot"]["_runtime_policy_resolution"]["matched_rules"]] == [
+        action_rule.json()["id"],
+    ]
+
+
+def test_resolve_preview_is_scoped_and_does_not_create_decision(client: TestClient) -> None:
+    _set_policy(
+        client,
+        "proj_runtime_a",
+        runtime_sensitive_tools=[],
+        runtime_sensitive_actions_require_approval=False,
+        runtime_amount_approval_threshold_usd=1000.0,
+        runtime_amount_deny_threshold_usd=5000.0,
+    )
+    _seed_agent(
+        client,
+        agent_id="agent_policy_preview",
+        name="Policy Preview Agent",
+        slug="policy-preview-agent",
+    )
+    action_rule = client.post(
+        "/v1/runtime-policy/rules",
+        json={
+            "name": "General refund preview threshold",
+            "action_type": "refund",
+            "policy_patch": {"runtime_amount_approval_threshold_usd": 300.0},
+        },
+    )
+    assert action_rule.status_code == 201
+    agent_rule = client.post(
+        "/v1/runtime-policy/rules",
+        json={
+            "name": "Policy Preview Agent strict threshold",
+            "agent_id": "agent_policy_preview",
+            "action_type": "refund",
+            "environment": "production",
+            "policy_patch": {"runtime_amount_approval_threshold_usd": 75.0},
+        },
+    )
+    assert agent_rule.status_code == 201
+
+    response = client.post(
+        "/v1/runtime-policy/resolve-preview",
+        json={
+            "agent_id": "agent_policy_preview",
+            "action_type": "refund",
+            "environment": "production",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["policy"]["runtime_amount_approval_threshold_usd"] == pytest.approx(75.0)
+    assert [item["id"] for item in body["matched_rules"]] == [
+        action_rule.json()["id"],
+        agent_rule.json()["id"],
+    ]
+    assert body["policy"]["_runtime_policy_resolution"]["matched_rules"] == body["matched_rules"]
+
+    session_factory = client._session_factory  # type: ignore[attr-defined]
+    with session_factory() as session:
+        decisions = session.execute(select(RuntimePolicyDecision)).scalars().all()
+        assert decisions == []
 
 
 def test_pii_leak_to_external_action_is_blocked_and_masked(client: TestClient) -> None:

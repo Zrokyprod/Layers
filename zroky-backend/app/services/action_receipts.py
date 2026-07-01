@@ -15,6 +15,7 @@ from app.db.models import (
     ActionContractVersion,
     ActionExecutionAttempt,
     ActionIntent,
+    Agent,
     ActionReceipt,
     OutcomeReconciliationCheck,
     RuntimePolicyDecision,
@@ -120,11 +121,14 @@ def _policy_decision_to_receipt(row: RuntimePolicyDecision | None) -> dict[str, 
     if row is None:
         return None
     request = _json_loads(row.request_json, {})
+    policy_snapshot = _json_loads(row.policy_snapshot_json, {})
     return {
         "id": row.id,
         "decision": row.decision,
         "status": row.status,
         "reasons": _json_loads(row.reasons_json, []),
+        "policy_snapshot": policy_snapshot,
+        "policy_resolution": policy_snapshot.get("_runtime_policy_resolution") if isinstance(policy_snapshot, dict) else None,
         "approval_scope_hash": row.approval_scope_hash,
         "approval_id": request.get("approval_id") if isinstance(request, dict) else None,
         "resolved_by": row.resolved_by,
@@ -238,6 +242,7 @@ def _build_receipt_core(
     generated_at: datetime,
 ) -> dict[str, Any]:
     intent = get_action_intent(db, project_id=project_id, action_id=action_id)
+    agent = db.get(Agent, intent.agent_id) if intent.agent_id else None
     contract = db.get(ActionContractVersion, intent.contract_version_id)
     decision = None
     if intent.runtime_policy_decision_id:
@@ -263,6 +268,14 @@ def _build_receipt_core(
         "generated_at": _iso(generated_at),
         "action_contract": _contract_to_receipt(contract),
         "intent": {
+            "agent_id": intent.agent_id,
+            "agent_profile": {
+                "id": agent.id,
+                "display_name": agent.name,
+                "slug": agent.slug,
+                "runtime_path": agent.runtime_path,
+                "environment": agent.environment,
+            } if agent is not None and agent.project_id == project_id else None,
             "contract_version": f"{intent.contract_key}/{intent.contract_version}",
             "action_type": intent.action_type,
             "operation_kind": intent.operation_kind,

@@ -9,13 +9,13 @@ export type DashboardRouteContract = {
 
 export const DASHBOARD_ROUTE_CONTRACT = [
   { id: "home", href: "/home", label: "Home", kind: "primary" },
+  { id: "approvals", href: "/approvals", label: "Approvals", kind: "primary" },
   { id: "actions", href: "/actions", label: "Actions", kind: "primary" },
   { id: "agents", href: "/agents", label: "Agents", kind: "primary" },
-  { id: "approvals", href: "/approvals", label: "Approvals", kind: "primary" },
   { id: "outcomes", href: "/outcomes", label: "Outcomes", kind: "primary" },
   { id: "evidence", href: "/evidence", label: "Evidence", kind: "primary" },
-  { id: "connectors", href: "/integrations", label: "Connectors", kind: "primary" },
   { id: "policies", href: "/policies", label: "Policies", kind: "primary" },
+  { id: "connectors", href: "/integrations", label: "Connectors", kind: "primary" },
   { id: "settings", href: "/settings", label: "Settings", kind: "primary" },
   { id: "account", href: "/account", label: "Account", kind: "support" },
   { id: "projects", href: "/projects", label: "Projects", kind: "support" },
