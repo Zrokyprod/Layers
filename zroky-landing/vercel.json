@@ -15,8 +15,9 @@
   ],
   "rewrites": [
     { "source": "/docs/:path*", "destination": "/index.html" },
-    { "source": "/features", "destination": "/index.html" },
     { "source": "/pricing", "destination": "/index.html" },
-    { "source": "/changelog", "destination": "/index.html" }
+    { "source": "/changelog", "destination": "/index.html" },
+    { "source": "/privacy", "destination": "/index.html" },
+    { "source": "/terms", "destination": "/index.html" }
   ]
 }

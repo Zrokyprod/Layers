@@ -8,6 +8,9 @@ import HomePage from './pages/HomePage';
 import PricingPage from './pages/PricingPage';
 import ChangelogPage from './pages/ChangelogPage';
 import DocsPage from './pages/DocsPage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
+import NotFoundPage from './pages/NotFoundPage';
 import { buildDashboardAuthUrl, isDashboardAuthAlias } from './lib/links';
 
 function ScrollToTop() {
@@ -63,12 +66,15 @@ function App() {
             <Route path="/pricing" element={<PageFade><PricingPage /></PageFade>} />
             <Route path="/changelog" element={<PageFade><ChangelogPage /></PageFade>} />
             <Route path="/docs" element={<PageFade><DocsPage /></PageFade>} />
+            <Route path="/privacy" element={<PageFade><PrivacyPage /></PageFade>} />
+            <Route path="/terms" element={<PageFade><TermsPage /></PageFade>} />
             <Route path="/auth/*" element={<DashboardAuthRedirect />} />
             <Route path="/login" element={<DashboardAuthRedirect />} />
             <Route path="/signup" element={<DashboardAuthRedirect />} />
             <Route path="/forgot-password" element={<DashboardAuthRedirect />} />
             <Route path="/reset-password" element={<DashboardAuthRedirect />} />
             <Route path="/verify-email" element={<DashboardAuthRedirect />} />
+            <Route path="*" element={<PageFade><NotFoundPage /></PageFade>} />
           </Routes>
         </AnimatePresence>
       </main>

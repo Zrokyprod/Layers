@@ -313,6 +313,15 @@ const faqs = [
 
 const revealEase = [0.16, 1, 0.3, 1] as const;
 
+const eyebrowClass =
+  'inline-flex items-center gap-2 text-sm font-semibold text-[#3f4942]';
+const cardClass =
+  'rounded-2xl border border-[#d8dbd2] bg-[#fbfcf8] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(42,45,40,0.04),0_24px_48px_-30px_rgba(42,45,40,0.18)]';
+const btnPrimaryClass =
+  'inline-flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[linear-gradient(180deg,#5f675f,#343a34)] px-5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_-12px_rgba(42,45,40,0.55)] transition duration-150 hover:-translate-y-px hover:bg-[#4f5a52] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[#4f5a52]/25 active:translate-y-0 active:scale-[0.98]';
+const btnGhostClass =
+  'inline-flex h-11 items-center justify-center gap-2 rounded-[10px] border border-[#d8dbd2] bg-[#fbfcf8] px-5 text-sm font-semibold text-[#20231f] shadow-[0_1px_2px_rgba(42,45,40,0.04)] transition duration-150 hover:-translate-y-px hover:border-[#c7cbc2] hover:bg-[#f7f8f4] focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[#4f5a52]/25 active:translate-y-0 active:scale-[0.98]';
+
 function SectionReveal({
   className,
   children,
@@ -343,102 +352,99 @@ export default function PricingPage() {
   const heroSignUpUrl = buildPricingSignUpUrl('pro', 'pricing-hero');
 
   return (
-    <div className="w-full overflow-x-hidden">
-      <section className="relative isolate border-b border-line px-4 pb-12 pt-28 sm:px-6 sm:pb-16 sm:pt-32 lg:px-8">
+    <div className="w-full overflow-x-hidden bg-[#fbfcfa] text-[#20231f]">
+      <section className="relative isolate border-b border-[#e3e5de] px-4 pb-12 pt-28 sm:px-6 sm:pb-16 sm:pt-32 lg:px-8">
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="grid-bg absolute inset-x-0 top-0 h-[34rem] opacity-70" />
-          <motion.div
-            aria-hidden="true"
-            animate={reduceMotion ? undefined : { rotate: 360 }}
-            transition={{ duration: 34, repeat: Infinity, ease: 'linear' }}
-            className="absolute right-[8%] top-24 h-72 w-72 rounded-full border border-line bg-[conic-gradient(from_130deg,transparent,rgba(255,255,255,0.18),transparent,rgba(255,255,255,0.1),transparent)] blur-2xl"
+          <div
+            className="absolute inset-0"
+            style={{ background: 'radial-gradient(60% 45% at 50% 0%, rgba(79,90,82,0.07), transparent 70%)' }}
           />
         </div>
 
         <div className="mx-auto grid max-w-[92rem] items-start gap-10 lg:grid-cols-2">
           <div>
-            <span className="eyebrow">
-              <CircleDollarSign className="h-3.5 w-3.5" />
+            <span className={eyebrowClass}>
+              <CircleDollarSign className="h-4 w-4 text-[#4f5a52]" />
               Risk-value pricing
             </span>
-            <h1 className="mt-6 max-w-4xl text-balance text-4xl font-semibold leading-[1.04] text-primary sm:text-6xl">
+            <h1 className="mt-6 max-w-4xl text-balance text-4xl font-semibold leading-[1.04] tracking-[-0.025em] text-[#20231f] sm:text-6xl">
               Price Zroky against the action it protects.
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-8 text-secondary sm:text-lg">
+            <p className="mt-6 max-w-2xl text-base leading-8 text-[#5b615a] sm:text-lg">
               Stop unsafe actions before they commit, then prove the outcome in the system of record.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href={heroSignUpUrl} className="btn-primary">
+              <a href={heroSignUpUrl} className={btnPrimaryClass}>
                 Start free
                 <ArrowRight className="h-4 w-4" />
               </a>
-              <a href="#plan-fit" className="btn-ghost">
+              <a href="#plan-fit" className={btnGhostClass}>
                 Match a plan to risk
               </a>
             </div>
 
             <div className="mt-8 grid grid-cols-3 gap-2">
               {['Allow', 'Hold for approval', 'Block'].map((status) => (
-                <div key={status} className="rounded-xl border border-line bg-ink px-3 py-3 sm:px-4">
-                  <div className="font-mono text-[9px] uppercase tracking-wider text-tertiary sm:text-[10px]">
+                <div key={status} className="rounded-xl border border-[#d8dbd2] bg-[#f4f6f1] px-3 py-3 sm:px-4">
+                  <div className="font-mono text-[9px] uppercase tracking-wider text-[#8b9288] sm:text-[10px]">
                     <span className="sm:hidden">Decision</span>
                     <span className="hidden sm:inline">Runtime decision</span>
                   </div>
-                  <p className="mt-2 text-xs font-semibold leading-5 text-primary sm:text-sm">{status}</p>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-[#20231f] sm:text-sm">{status}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="browser-frame hidden overflow-hidden p-2 lg:block">
+          <div className="hidden overflow-hidden rounded-[16px] border border-[#d8dbd2] bg-[#fbfcf8] p-2 shadow-[0_30px_70px_-40px_rgba(42,45,40,0.28)] lg:block">
             <img
               src="/product-ci-gate.png"
               alt="Zroky product screen showing protected agent action controls"
-              className="max-h-[460px] w-full rounded-xl border border-line object-cover object-top"
+              className="max-h-[460px] w-full rounded-xl border border-[#e3e5de] object-cover object-top"
             />
           </div>
         </div>
       </section>
 
-      <SectionReveal className="border-b border-line px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+      <SectionReveal className="border-b border-[#e3e5de] bg-[#f4f6f1] px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto grid max-w-[92rem] gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl border border-line bg-white/[0.03] p-5 sm:p-7">
+          <div className="rounded-2xl border border-[#d8dbd2] bg-white p-5 sm:p-7">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                  <Banknote className="h-4 w-4" />
+                <span className={eyebrowClass}>
+                  <Banknote className="h-4 w-4 text-[#4f5a52]" />
                   Dollar anchor
                 </span>
-                <h2 className="mt-4 max-w-3xl text-balance text-3xl font-semibold leading-tight text-primary md:text-5xl">
+                <h2 className="mt-4 max-w-3xl text-balance text-3xl font-semibold leading-tight text-[#20231f] md:text-5xl">
                   The right plan is cheaper than one bad autonomous action.
                 </h2>
               </div>
-              <span className="rounded-full border border-line bg-ink px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-tertiary">
+              <span className="rounded-full border border-[#d8dbd2] bg-[#f4f6f1] px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-[#8b9288]">
                 Example, not a claim
               </span>
             </div>
 
             <div className="mt-8 grid gap-3 md:grid-cols-3">
               {riskMetrics.map((metric) => (
-                <div key={metric.label} className="rounded-xl border border-line bg-ink p-4">
-                  <div className="font-mono text-[10px] uppercase tracking-wider text-tertiary">{metric.label}</div>
-                  <div className="mt-3 text-3xl font-semibold text-primary">{metric.value}</div>
-                  <p className="mt-3 text-sm leading-6 text-secondary">{metric.body}</p>
+                <div key={metric.label} className="rounded-xl border border-[#e0e2db] bg-[#f7f8f4] p-4">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-[#8b9288]">{metric.label}</div>
+                  <div className="mt-3 text-3xl font-semibold text-[#20231f]">{metric.value}</div>
+                  <p className="mt-3 text-sm leading-6 text-[#5b615a]">{metric.body}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-line bg-ink p-5 sm:p-7">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-              <ShieldCheck className="h-4 w-4" />
+          <div className="rounded-2xl border border-[#d8dbd2] bg-white p-5 sm:p-7">
+            <span className={eyebrowClass}>
+              <ShieldCheck className="h-4 w-4 text-[#4f5a52]" />
               Buying rule
             </span>
-            <p className="mt-5 text-2xl font-semibold leading-tight text-primary">
+            <p className="mt-5 text-2xl font-semibold leading-tight text-[#20231f]">
               Buy when a human is still approving the agent because the consequence is too expensive to trust blindly.
             </p>
-            <div className="mt-6 divider" />
+            <div className="mt-6 h-px bg-[#e3e5de]" />
             <div className="mt-6 grid gap-3">
               {[
                 'One wrong action has a direct dollar cost.',
@@ -446,8 +452,8 @@ export default function PricingPage() {
                 'Risk, audit, or an enterprise customer requires accountability evidence.',
               ].map((item) => (
                 <div key={item} className="flex items-start gap-3">
-                  <Check className="mt-1 h-4 w-4 shrink-0 text-primary" />
-                  <p className="text-sm font-semibold leading-6 text-secondary">{item}</p>
+                  <Check className="mt-1 h-4 w-4 shrink-0 text-[#4f5a52]" />
+                  <p className="text-sm font-semibold leading-6 text-[#5b615a]">{item}</p>
                 </div>
               ))}
             </div>
@@ -455,14 +461,14 @@ export default function PricingPage() {
         </div>
       </SectionReveal>
 
-      <SectionReveal className="border-b border-line px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+      <SectionReveal className="border-b border-[#e3e5de] px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-[92rem]">
           <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-              <Scale className="h-4 w-4" />
+            <span className={eyebrowClass}>
+              <Scale className="h-4 w-4 text-[#4f5a52]" />
               Plan fit
             </span>
-            <h2 id="plan-fit" className="mt-4 text-balance text-4xl font-semibold leading-tight text-primary md:text-5xl">
+            <h2 id="plan-fit" className="mt-4 text-balance text-4xl font-semibold leading-tight text-[#20231f] md:text-5xl">
               Start with evidence. Upgrade when the agent can hurt the business.
             </h2>
           </div>
@@ -472,13 +478,13 @@ export default function PricingPage() {
               const Icon = item.icon;
 
               return (
-                <article key={item.plan} className="rounded-2xl border border-line bg-white/[0.03] p-5">
-                  <span className="grid h-11 w-11 place-items-center rounded-xl border border-line bg-ink">
-                    <Icon className="h-5 w-5 text-primary" />
+                <article key={item.plan} className="rounded-2xl border border-[#d8dbd2] bg-[#fbfcf8] p-5">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl border border-[#e0e2db] bg-[#f4f6f1] text-[#4f5a52]">
+                    <Icon className="h-5 w-5" />
                   </span>
-                  <h3 className="mt-5 text-xl font-semibold text-primary">{item.plan}</h3>
-                  <p className="mt-3 text-sm leading-7 text-secondary">{item.fit}</p>
-                  <p className="mt-4 rounded-xl border border-line bg-ink px-3 py-3 text-xs font-semibold leading-5 text-tertiary">
+                  <h3 className="mt-5 text-xl font-semibold text-[#20231f]">{item.plan}</h3>
+                  <p className="mt-3 text-sm leading-7 text-[#5b615a]">{item.fit}</p>
+                  <p className="mt-4 rounded-xl border border-[#e0e2db] bg-[#f4f6f1] px-3 py-3 text-xs font-semibold leading-5 text-[#8b9288]">
                     {item.trigger}
                   </p>
                 </article>
@@ -488,7 +494,7 @@ export default function PricingPage() {
         </div>
       </SectionReveal>
 
-      <SectionReveal className="border-b border-line px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+      <SectionReveal className="border-b border-[#e3e5de] bg-[#f4f6f1] px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="mx-auto max-w-[92rem]">
           <div className="grid gap-3 md:grid-cols-3">
             {plans.map((plan, index) => {
@@ -501,48 +507,53 @@ export default function PricingPage() {
                   whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.44, delay: index * 0.05, ease: revealEase }}
-                  className={`card flex min-h-[35rem] flex-col p-5 ${
-                    plan.featured ? 'border-line-strong bg-white/[0.06]' : ''
+                  className={`flex min-h-[35rem] flex-col rounded-2xl border p-5 ${
+                    plan.featured
+                      ? 'border-[#c7cbc2] bg-white shadow-[0_1px_2px_rgba(42,45,40,0.05),0_34px_64px_-34px_rgba(42,45,40,0.3)]'
+                      : 'border-[#d8dbd2] bg-[#fbfcf8] shadow-[0_1px_2px_rgba(42,45,40,0.04),0_24px_48px_-30px_rgba(42,45,40,0.18)]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <span
                       className={`grid h-11 w-11 place-items-center rounded-xl border ${
-                        plan.featured ? 'border-line-strong bg-white/[0.08]' : 'border-line bg-white/[0.04]'
-                      }`}
+                        plan.featured ? 'border-[#c7cbc2] bg-[#eef0eb]' : 'border-[#e0e2db] bg-[#f4f6f1]'
+                      } text-[#4f5a52]`}
                     >
-                      <Icon className={plan.featured ? 'h-5 w-5 text-primary' : 'h-5 w-5 text-secondary'} />
+                      <Icon className="h-5 w-5" />
                     </span>
                     {plan.featured && (
-                      <span className="rounded-full border border-line-strong bg-white/[0.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
+                      <span className="rounded-full border border-[#c7cbc2] bg-[#eef0eb] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-[#3f4942]">
                         Main plan
                       </span>
                     )}
                   </div>
 
-                  <h2 className="mt-6 text-2xl font-semibold text-primary">{plan.name}</h2>
+                  <h2 className="mt-6 text-2xl font-semibold text-[#20231f]">{plan.name}</h2>
                   <div className="mt-3 flex items-end gap-1">
-                    <span className="text-5xl font-semibold tracking-normal text-primary">{plan.price}</span>
-                    <span className="pb-1 text-sm font-semibold text-tertiary">{plan.period}</span>
+                    <span className="text-5xl font-semibold tracking-normal text-[#20231f]">{plan.price}</span>
+                    <span className="pb-1 text-sm font-semibold text-[#8b9288]">{plan.period}</span>
                   </div>
-                  <p className="mt-4 min-h-14 text-sm leading-7 text-secondary">{plan.desc}</p>
+                  <p className="mt-4 min-h-14 text-sm leading-7 text-[#5b615a]">{plan.desc}</p>
 
-                  <div className="mt-5 divider" />
+                  <div className="mt-5 h-px bg-[#e3e5de]" />
 
                   <div className="mt-5 grid gap-3">
                     {plan.bullets.map((bullet) => (
                       <div key={bullet} className="flex items-start gap-2 text-sm leading-6">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        <span className="font-semibold text-secondary">{bullet}</span>
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#4f5a52]" />
+                        <span className="font-semibold text-[#5b615a]">{bullet}</span>
                       </div>
                     ))}
                   </div>
 
-                  <p className="mt-5 rounded-xl border border-line bg-ink px-3 py-3 text-xs font-semibold leading-5 text-tertiary">
+                  <p className="mt-5 rounded-xl border border-[#e0e2db] bg-[#f4f6f1] px-3 py-3 text-xs font-semibold leading-5 text-[#8b9288]">
                     {plan.note}
                   </p>
 
-                  <a href={plan.href} className={`mt-auto ${plan.featured ? 'btn-primary' : 'btn-ghost'} !w-full`}>
+                  <a
+                    href={plan.href}
+                    className={`mt-auto w-full ${plan.featured ? btnPrimaryClass : btnGhostClass}`}
+                  >
                     {plan.cta}
                     <ArrowRight className="h-4 w-4" />
                   </a>
@@ -551,19 +562,19 @@ export default function PricingPage() {
             })}
           </div>
 
-          <div className="mt-4 grid gap-4 rounded-2xl border border-line bg-ink p-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div className="mt-4 grid gap-4 rounded-2xl border border-[#d8dbd2] bg-white p-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                <Server className="h-4 w-4" />
+              <span className={eyebrowClass}>
+                <Server className="h-4 w-4 text-[#4f5a52]" />
                 Enterprise
               </span>
-              <h3 className="mt-3 text-2xl font-semibold text-primary">For agents that need audit, private execution, or custom connectors.</h3>
+              <h3 className="mt-3 text-2xl font-semibold text-[#20231f]">For agents that need audit, private execution, or custom connectors.</h3>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-              <p className="text-sm leading-7 text-secondary">
+              <p className="text-sm leading-7 text-[#5b615a]">
                 Enterprise maps to contract entitlements: custom protected-action volume, private runners, custom retention, SSO, self-hosting, and system-of-record integration planning.
               </p>
-              <a href={enterpriseHref} className="btn-ghost">
+              <a href={enterpriseHref} className={btnGhostClass}>
                 Talk to Zroky
                 <ArrowRight className="h-4 w-4" />
               </a>
@@ -572,18 +583,18 @@ export default function PricingPage() {
         </div>
       </SectionReveal>
 
-      <SectionReveal className="border-b border-line px-4 py-16 sm:px-6 lg:px-8">
+      <SectionReveal className="border-b border-[#e3e5de] px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[92rem]">
           <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr]">
             <div>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                <Activity className="h-4 w-4" />
+              <span className={eyebrowClass}>
+                <Activity className="h-4 w-4 text-[#4f5a52]" />
                 Highest-pain agents
               </span>
-              <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-primary md:text-5xl">
+              <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-[#20231f] md:text-5xl">
                 Not just refunds. Protect every agent that mutates reality.
               </h2>
-              <p className="mt-5 text-base leading-8 text-secondary">
+              <p className="mt-5 text-base leading-8 text-[#5b615a]">
                 The first paid wedge should be where error cost is obvious, but the same loop covers any autonomous agent with irreversible operations.
               </p>
             </div>
@@ -593,25 +604,25 @@ export default function PricingPage() {
                 const Icon = row.icon;
 
                 return (
-                  <article key={row.agent} className="rounded-2xl border border-line bg-white/[0.03] p-4">
+                  <article key={row.agent} className="rounded-2xl border border-[#d8dbd2] bg-[#fbfcf8] p-4">
                     <div className="grid gap-4 lg:grid-cols-[2.1fr_1.35fr_1.1fr] lg:items-start">
                       <div className="flex gap-4">
-                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-ink">
-                          <Icon className="h-5 w-5 text-primary" />
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[#e0e2db] bg-[#f4f6f1] text-[#4f5a52]">
+                          <Icon className="h-5 w-5" />
                         </span>
                         <div>
-                          <h3 className="text-base font-semibold text-primary">{row.agent}</h3>
-                          <p className="mt-1 text-sm leading-6 text-tertiary">{row.action}</p>
-                          <p className="mt-3 text-sm leading-6 text-secondary">{row.pain}</p>
+                          <h3 className="text-base font-semibold text-[#20231f]">{row.agent}</h3>
+                          <p className="mt-1 text-sm leading-6 text-[#8b9288]">{row.action}</p>
+                          <p className="mt-3 text-sm leading-6 text-[#5b615a]">{row.pain}</p>
                         </div>
                       </div>
                       <div>
-                        <div className="font-mono text-[10px] uppercase tracking-wider text-tertiary">Zroky proof</div>
-                        <p className="mt-2 text-sm font-semibold leading-6 text-secondary">{row.proof}</p>
+                        <div className="font-mono text-[10px] uppercase tracking-wider text-[#8b9288]">Zroky proof</div>
+                        <p className="mt-2 text-sm font-semibold leading-6 text-[#5b615a]">{row.proof}</p>
                       </div>
-                      <div className="rounded-xl border border-line bg-ink px-3 py-3">
-                        <div className="font-mono text-[10px] uppercase tracking-wider text-tertiary">Plan</div>
-                        <p className="mt-2 text-sm font-semibold text-primary">{row.plan}</p>
+                      <div className="rounded-xl border border-[#e0e2db] bg-[#f4f6f1] px-3 py-3">
+                        <div className="font-mono text-[10px] uppercase tracking-wider text-[#8b9288]">Plan</div>
+                        <p className="mt-2 text-sm font-semibold text-[#20231f]">{row.plan}</p>
                       </div>
                     </div>
                   </article>
@@ -622,23 +633,23 @@ export default function PricingPage() {
         </div>
       </SectionReveal>
 
-      <SectionReveal className="border-b border-line px-4 py-16 sm:px-6 lg:px-8">
+      <SectionReveal className="border-b border-[#e3e5de] bg-[#f4f6f1] px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[92rem]">
           <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-            <div className="browser-frame overflow-hidden p-2">
+            <div className="overflow-hidden rounded-[16px] border border-[#d8dbd2] bg-[#fbfcf8] p-2 shadow-[0_30px_70px_-40px_rgba(42,45,40,0.28)]">
               <img
                 src="/product-replay-detail.png"
                 alt="Zroky evidence screen showing verified proof for an agent action"
-                className="h-full w-full rounded-xl border border-line object-cover"
+                className="h-full w-full rounded-xl border border-[#e3e5de] object-cover"
               />
             </div>
 
             <div>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                <FileCheck2 className="h-4 w-4" />
+              <span className={eyebrowClass}>
+                <FileCheck2 className="h-4 w-4 text-[#4f5a52]" />
                 Proof chain
               </span>
-              <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-primary md:text-5xl">
+              <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-[#20231f] md:text-5xl">
                 Every paid claim has to end in evidence.
               </h2>
               <div className="mt-8 grid gap-3">
@@ -646,13 +657,13 @@ export default function PricingPage() {
                   const Icon = step.icon;
 
                   return (
-                    <div key={step.title} className="flex gap-4 rounded-2xl border border-line bg-white/[0.03] p-4">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line bg-ink">
-                        <Icon className="h-5 w-5 text-primary" />
+                    <div key={step.title} className="flex gap-4 rounded-2xl border border-[#d8dbd2] bg-white p-4">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#e0e2db] bg-[#f4f6f1] text-[#4f5a52]">
+                        <Icon className="h-5 w-5" />
                       </span>
                       <div>
-                        <h3 className="text-sm font-semibold text-primary">{step.title}</h3>
-                        <p className="mt-2 text-sm leading-6 text-secondary">{step.body}</p>
+                        <h3 className="text-sm font-semibold text-[#20231f]">{step.title}</h3>
+                        <p className="mt-2 text-sm leading-6 text-[#5b615a]">{step.body}</p>
                       </div>
                     </div>
                   );
@@ -663,14 +674,14 @@ export default function PricingPage() {
         </div>
       </SectionReveal>
 
-      <SectionReveal className="border-b border-line px-4 py-16 sm:px-6 lg:px-8">
+      <SectionReveal className="border-b border-[#e3e5de] px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[92rem]">
           <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-              <KeyRound className="h-4 w-4" />
+            <span className={eyebrowClass}>
+              <KeyRound className="h-4 w-4 text-[#4f5a52]" />
               Predictable usage
             </span>
-            <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-primary md:text-5xl">
+            <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-[#20231f] md:text-5xl">
               Subscription covers the protection system. Usage covers the parts that can spike.
             </h2>
           </div>
@@ -680,23 +691,23 @@ export default function PricingPage() {
               const Icon = rule.icon;
 
               return (
-                <div key={rule.title} className="card p-6">
-                  <span className="grid h-11 w-11 place-items-center rounded-xl border border-line bg-white/[0.04]">
-                    <Icon className="h-5 w-5 text-primary" />
+                <div key={rule.title} className={`${cardClass} p-6`}>
+                  <span className="grid h-11 w-11 place-items-center rounded-xl border border-[#e0e2db] bg-[#f4f6f1] text-[#4f5a52]">
+                    <Icon className="h-5 w-5" />
                   </span>
-                  <h3 className="mt-5 text-xl font-semibold text-primary">{rule.title}</h3>
-                  <p className="mt-3 text-sm leading-7 text-secondary">{rule.body}</p>
+                  <h3 className="mt-5 text-xl font-semibold text-[#20231f]">{rule.title}</h3>
+                  <p className="mt-3 text-sm leading-7 text-[#5b615a]">{rule.body}</p>
                 </div>
               );
             })}
           </div>
 
-          <div className="mt-5 rounded-2xl border border-line bg-ink p-4">
+          <div className="mt-5 rounded-2xl border border-[#d8dbd2] bg-[#f4f6f1] p-4">
             <div className="grid gap-3 md:grid-cols-2">
               {overages.map(([label, price]) => (
-                <div key={label} className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-line bg-white/[0.03] px-4 py-3">
-                  <span className="text-sm font-semibold text-secondary">{label}</span>
-                  <span className="font-mono text-sm text-primary">{price}</span>
+                <div key={label} className="flex min-h-20 items-center justify-between gap-4 rounded-xl border border-[#e0e2db] bg-white px-4 py-3">
+                  <span className="text-sm font-semibold text-[#5b615a]">{label}</span>
+                  <span className="font-mono text-sm text-[#20231f]">{price}</span>
                 </div>
               ))}
             </div>
@@ -708,23 +719,23 @@ export default function PricingPage() {
         <div className="mx-auto max-w-[92rem]">
           <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr]">
             <div>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                <ShieldCheck className="h-4 w-4" />
+              <span className={eyebrowClass}>
+                <ShieldCheck className="h-4 w-4 text-[#4f5a52]" />
                 FAQ
               </span>
-              <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-primary md:text-5xl">
+              <h2 className="mt-4 text-balance text-4xl font-semibold leading-tight text-[#20231f] md:text-5xl">
                 Clear rules before the team depends on it.
               </h2>
-              <p className="mt-5 text-base leading-8 text-secondary">
+              <p className="mt-5 text-base leading-8 text-[#5b615a]">
                 Zroky is priced to be easy to start and safe to scale. The expensive model execution path stays explicit.
               </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
               {faqs.map((faq) => (
-                <article key={faq.q} className="card p-5">
-                  <h3 className="text-base font-semibold leading-6 text-primary">{faq.q}</h3>
-                  <p className="mt-3 text-sm leading-7 text-secondary">{faq.a}</p>
+                <article key={faq.q} className={`${cardClass} p-5`}>
+                  <h3 className="text-base font-semibold leading-6 text-[#20231f]">{faq.q}</h3>
+                  <p className="mt-3 text-sm leading-7 text-[#5b615a]">{faq.a}</p>
                 </article>
               ))}
             </div>

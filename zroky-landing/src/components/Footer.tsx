@@ -7,8 +7,8 @@ const COLS = [
     links: [
       { label: 'Protected actions', href: '/#product' },
       { label: 'Receipts', href: '/#receipts' },
-      { label: 'Agent categories', href: '/#agents' },
-      { label: 'Pricing', href: '/#pricing' },
+      { label: 'Agent categories', href: '/pricing' },
+      { label: 'Pricing', href: '/pricing' },
     ],
   },
   {
@@ -16,7 +16,7 @@ const COLS = [
     links: [
       { label: 'Docs', href: '/docs' },
       { label: 'Quickstart', href: '/#quickstart' },
-      { label: 'Agent setup', href: '/#agents' },
+      { label: 'Agent setup', href: '/docs' },
       { label: 'Changelog', href: '/changelog' },
     ],
   },
@@ -44,7 +44,7 @@ export default function Footer() {
             Agent reliability control plane for high-risk actions, approval gates, system-of-record verification, and signed receipts.
           </p>
           <div className="mt-5 flex items-center gap-3 text-[#8b9288]">
-            <a href="https://github.com/zroky" className="transition hover:text-[#4f5a52]" aria-label="Zroky on GitHub">
+            <a href="https://github.com/zroky-ai" className="transition hover:text-[#4f5a52]" aria-label="Zroky on GitHub">
               <Github size={18} />
             </a>
             <a href="https://x.com/zroky" className="transition hover:text-[#4f5a52]" aria-label="Zroky on X">
