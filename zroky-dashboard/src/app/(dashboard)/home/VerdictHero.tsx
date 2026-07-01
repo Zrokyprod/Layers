@@ -18,6 +18,7 @@ type VerdictHeroProps = {
   updatedLabel: string;
   loading: boolean;
   errorCount: number;
+  hideCta?: boolean;
   quotaWarning: string | null;
   onRefresh: () => void;
 };
@@ -37,6 +38,7 @@ export function VerdictHero({
   updatedLabel,
   loading,
   errorCount,
+  hideCta = false,
   quotaWarning,
   onRefresh,
 }: VerdictHeroProps) {
@@ -67,9 +69,11 @@ export function VerdictHero({
           <DashboardButton icon={<RefreshCw />} onClick={onRefresh} disabled={loading} variant="soft">
             Refresh
           </DashboardButton>
-          <DashboardButtonLink href={verdict.ctaHref} variant="primary">
-            {verdict.ctaLabel}
-          </DashboardButtonLink>
+          {hideCta ? null : (
+            <DashboardButtonLink href={verdict.ctaHref} variant="primary">
+              {verdict.ctaLabel}
+            </DashboardButtonLink>
+          )}
         </div>
       </div>
     </section>

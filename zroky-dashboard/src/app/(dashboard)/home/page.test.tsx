@@ -497,6 +497,7 @@ describe("Mission Control Home", () => {
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
     expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Start agent setup/i }).getAttribute("href")).toBe("/agents/setup");
   });
 

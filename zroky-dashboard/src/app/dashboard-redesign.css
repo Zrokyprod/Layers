@@ -4569,6 +4569,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: #ffffff !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .dashboard-button-primary .dashboard-button-label,
+.app-shell[data-dashboard-system="control-v1"] .dashboard-button-primary .dashboard-button-glyph {
+  color: #ffffff !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .dashboard-button-primary:hover {
   background: var(--mc-accent-hover) !important;
 }

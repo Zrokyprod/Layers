@@ -333,6 +333,7 @@ export default function HomePage() {
           updatedLabel={updatedLabel}
           loading={isLoading}
           errorCount={loadErrors}
+          hideCta={showFirstRun}
           quotaWarning={quotaWarning(data.billingUsage)}
           onRefresh={() => void load()}
         />
