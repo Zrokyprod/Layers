@@ -29,8 +29,9 @@ _NEW_CHECK = (
 
 
 def upgrade() -> None:
-    op.drop_constraint(_CHECK_NAME, _TABLE, type_="check")
-    op.create_check_constraint(_CHECK_NAME, _TABLE, _NEW_CHECK)
+    with op.batch_alter_table(_TABLE) as batch_op:
+        batch_op.drop_constraint(_CHECK_NAME, type_="check")
+        batch_op.create_check_constraint(_CHECK_NAME, _NEW_CHECK)
 
 
 def downgrade() -> None:
@@ -39,5 +40,6 @@ def downgrade() -> None:
         "SET is_active = false "
         "WHERE connector_type = 'razorpay_refund'"
     )
-    op.drop_constraint(_CHECK_NAME, _TABLE, type_="check")
-    op.create_check_constraint(_CHECK_NAME, _TABLE, _OLD_CHECK)
+    with op.batch_alter_table(_TABLE) as batch_op:
+        batch_op.drop_constraint(_CHECK_NAME, type_="check")
+        batch_op.create_check_constraint(_CHECK_NAME, _OLD_CHECK)
