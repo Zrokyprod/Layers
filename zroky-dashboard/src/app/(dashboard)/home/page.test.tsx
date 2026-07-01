@@ -492,6 +492,26 @@ describe("Mission Control Home", () => {
     expect(screen.getAllByRole("link", { name: /Set up agent/i })[0].getAttribute("href")).toBe("/agents/setup");
   });
 
+  it("opens the mission dashboard after the agent setup wizard saves a profile", async () => {
+    mockHomeData({
+      apiKeys: [],
+      profiles: [
+        profile({
+          metadata: {
+            setup_source: "agent_control_setup_wizard",
+          },
+        }),
+      ],
+    });
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Protect your first agent action" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
+    expect(screen.getByLabelText("Decision queue")).toBeInTheDocument();
+  });
+
   it("surfaces stale runner attempts as a P2 queue item", async () => {
     mockHomeData({
       intents: [
