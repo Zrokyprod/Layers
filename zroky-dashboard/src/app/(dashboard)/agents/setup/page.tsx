@@ -506,6 +506,154 @@ const DEFAULT_DRAFT: SetupDraft = {
   idempotencyScope: "workflow_id + resource_id + action_type",
 };
 
+type SetupStepGuidance = {
+  title: string;
+  detail: string;
+  tone: "green" | "yellow" | "blue";
+};
+
+function stepMissingChecks(readinessItems: SetupCheck[], ids: string[]): SetupCheck[] {
+  const wanted = new Set(ids);
+  return readinessItems.filter((item) => wanted.has(item.id) && !item.done);
+}
+
+function missingLabels(items: SetupCheck[]): string {
+  return items.map((item) => item.label.toLowerCase()).join(", ");
+}
+
+function setupStepGuidance({
+  activeStep,
+  draft,
+  firstActionCount,
+  firstActionsLoading,
+  firstReceiptMatched,
+  policyEnforced,
+  readiness,
+  readinessItems,
+  toolNames,
+}: {
+  activeStep: WizardStepId;
+  draft: SetupDraft;
+  firstActionCount: number;
+  firstActionsLoading: boolean;
+  firstReceiptMatched: boolean;
+  policyEnforced: boolean;
+  readiness: SetupReadiness;
+  readinessItems: SetupCheck[];
+  toolNames: string[];
+}): SetupStepGuidance {
+  if (activeStep === "agent") {
+    if (!draft.agentName.trim()) {
+      return {
+        tone: "yellow",
+        title: "Name the agent before saving",
+        detail: "Framework and environment already have launch defaults; owner/team context can stay in Advanced.",
+      };
+    }
+    return {
+      tone: "green",
+      title: "Agent identity is ready",
+      detail: "Continue when the runtime path matches where this agent will call protected tools.",
+    };
+  }
+
+  if (activeStep === "risk") {
+    const missing = stepMissingChecks(readinessItems, ["first_action"]);
+    if (missing.length > 0) {
+      return {
+        tone: "yellow",
+        title: "Choose the first protected action",
+        detail: "Pick a template or detect risky actions from tool names so Zroky knows what to control.",
+      };
+    }
+    return {
+      tone: "green",
+      title: `${draft.selectedActionTypes.length} protected action path${draft.selectedActionTypes.length === 1 ? "" : "s"} selected`,
+      detail: `${toolNames.length} tool key${toolNames.length === 1 ? "" : "s"} will be matched against this control plan.`,
+    };
+  }
+
+  if (activeStep === "control") {
+    const missing = stepMissingChecks(readinessItems, ["policy_thresholds", "credential_alias"]);
+    if (missing.length > 0) {
+      return {
+        tone: "yellow",
+        title: "Control path needs one more guardrail",
+        detail: `Fix ${missingLabels(missing)} before enabling the project policy.`,
+      };
+    }
+    if (readiness.runnerStatus !== "ready") {
+      return {
+        tone: "blue",
+        title: "Policy shape is ready; runner still needs to come online",
+        detail: "You can save the plan now, then start the protected runner before the first live action.",
+      };
+    }
+    return {
+      tone: "green",
+      title: "Policy and runner path are ready",
+      detail: "The action will be gated by policy and executed through the protected runner.",
+    };
+  }
+
+  if (activeStep === "proof") {
+    const missing = readinessItems.filter((item) => !item.done);
+    if (missing.length > 0) {
+      return {
+        tone: "yellow",
+        title: "Finish essentials before enforcement",
+        detail: `Still missing: ${missingLabels(missing)}.`,
+      };
+    }
+    if (!policyEnforced) {
+      return {
+        tone: "green",
+        title: "Ready to enable the project policy",
+        detail: "Enable once, then run the dry-run and route the first real action.",
+      };
+    }
+    if (readiness.verifierStatus !== "ready") {
+      return {
+        tone: "yellow",
+        title: "Policy is enabled; verifier still needs a healthy connector",
+        detail: "Connect or retest the source-of-record verifier before trusting live proof.",
+      };
+    }
+    return {
+      tone: "green",
+      title: "Proof path is ready for a real receipt",
+      detail: "Go live and run the first protected action to close the loop.",
+    };
+  }
+
+  if (firstReceiptMatched) {
+    return {
+      tone: "green",
+      title: "Home can unlock from this first matched receipt",
+      detail: "The agent produced matched proof and a signed receipt through the protected path.",
+    };
+  }
+  if (!readiness.canRunFirstAction) {
+    return {
+      tone: "yellow",
+      title: "Live action is not ready yet",
+      detail: "Policy, runner, and verifier must all be ready before the first receipt can arrive.",
+    };
+  }
+  if (firstActionCount === 0) {
+    return {
+      tone: firstActionsLoading ? "blue" : "yellow",
+      title: firstActionsLoading ? "Polling for the first protected action" : "No protected action received yet",
+      detail: "Run the starter snippet with the project API key and this agent_id; the wizard will update when traffic arrives.",
+    };
+  }
+  return {
+    tone: "blue",
+    title: "Action received; proof is still resolving",
+    detail: "Use Actions or Evidence if the action needs approval, verification, or receipt review.",
+  };
+}
+
 function slugify(value: string): string {
   return value
     .trim()
@@ -1440,6 +1588,8 @@ export default function AgentControlSetupPage() {
     refetchInterval: 5_000,
   });
   const firstReceiptMatched = (firstReceiptQuery.data?.items.length ?? 0) > 0;
+  const firstActions = firstActionQuery.data?.items ?? [];
+  const firstActionsLoading = firstActionQuery.isLoading || firstActionQuery.isFetching;
 
   const readiness = useMemo(() => deriveSetupReadiness({
     agentName: draft.agentName,
@@ -1470,6 +1620,27 @@ export default function AgentControlSetupPage() {
   const enrichmentItems = readiness.enrichmentChecks;
   const canSaveControlPlan = readiness.canEnablePolicy;
   const setupFlow = useMemo(() => buildSetupFlowView(readiness, draft.agentName), [draft.agentName, readiness]);
+  const stepGuidance = useMemo(() => setupStepGuidance({
+    activeStep,
+    draft,
+    firstActionCount: firstActions.length,
+    firstActionsLoading,
+    firstReceiptMatched,
+    policyEnforced,
+    readiness,
+    readinessItems,
+    toolNames,
+  }), [
+    activeStep,
+    draft,
+    firstActions.length,
+    firstActionsLoading,
+    firstReceiptMatched,
+    policyEnforced,
+    readiness,
+    readinessItems,
+    toolNames,
+  ]);
 
   const saveMutation = useMutation({
     mutationFn: async (mode: ProtectionState) => {
@@ -1758,13 +1929,15 @@ export default function AgentControlSetupPage() {
               draft={draft}
               readiness={readiness}
               activeProfile={activeProfile}
-              firstActions={firstActionQuery.data?.items ?? []}
-              firstActionsLoading={firstActionQuery.isLoading || firstActionQuery.isFetching}
+              firstActions={firstActions}
+              firstActionsLoading={firstActionsLoading}
               firstReceiptMatched={firstReceiptMatched}
               firstReceiptAction={firstReceiptQuery.data?.items[0] ?? null}
               policyDryRunResult={policyDryRunResult}
             />
           ) : null}
+
+          <SetupStepGuidancePanel guidance={stepGuidance} />
 
           <div className="agent-setup-actions">
             <DashboardButton icon={<ArrowLeft />} onClick={previousStep} disabled={stepIndex === 0} variant="soft">
@@ -1812,6 +1985,19 @@ export default function AgentControlSetupPage() {
   );
 }
 
+function SetupStepGuidancePanel({ guidance }: { guidance: SetupStepGuidance }) {
+  const Icon = guidance.tone === "green" ? CheckCircle2 : guidance.tone === "blue" ? PlayCircle : ShieldAlert;
+  return (
+    <div className="agent-setup-step-guidance" data-tone={guidance.tone} aria-label="Setup step guidance">
+      <Icon aria-hidden="true" />
+      <span>
+        <strong>{guidance.title}</strong>
+        <small>{guidance.detail}</small>
+      </span>
+    </div>
+  );
+}
+
 function AgentBasicsStep({
   draft,
   updateDraft,
@@ -1836,10 +2022,6 @@ function AgentBasicsStep({
           />
         </label>
         <label className="agent-setup-field">
-          <span>Owner team</span>
-          <input value={draft.ownerTeam} onChange={(event) => updateDraft({ ownerTeam: event.target.value })} />
-        </label>
-        <label className="agent-setup-field">
           <span>Agent framework</span>
           <select value={draft.framework} onChange={(event) => updateDraft({ framework: event.target.value })}>
             {FRAMEWORK_OPTIONS.map((item) => (
@@ -1856,16 +2038,12 @@ function AgentBasicsStep({
           </select>
         </label>
       </div>
-      <label className="agent-setup-field">
-        <span>Primary business goal</span>
-        <textarea
-          value={draft.businessGoal}
-          onChange={(event) => updateDraft({ businessGoal: event.target.value })}
-          rows={3}
-        />
-      </label>
       <AdvancedDetails title="Advanced agent context">
         <div className="agent-setup-form-grid">
+          <label className="agent-setup-field">
+            <span>Owner team</span>
+            <input value={draft.ownerTeam} onChange={(event) => updateDraft({ ownerTeam: event.target.value })} />
+          </label>
           <label className="agent-setup-field">
             <span>Workflow name</span>
             <input
@@ -1904,6 +2082,14 @@ function AgentBasicsStep({
             />
           </label>
         </div>
+        <label className="agent-setup-field">
+          <span>Primary business goal</span>
+          <textarea
+            value={draft.businessGoal}
+            onChange={(event) => updateDraft({ businessGoal: event.target.value })}
+            rows={3}
+          />
+        </label>
         <label className="agent-setup-field">
           <span>Workflow notes</span>
           <textarea
@@ -2751,6 +2937,21 @@ function GoLiveStep({
           <span>{firstReceiptMatched ? "matched receipt generated" : action?.receipt_status?.replace(/_/g, " ") ?? "waiting"}</span>
         </div>
       </div>
+
+      {!action && !firstActionsLoading && readiness.canRunFirstAction && !firstReceiptMatched ? (
+        <div className="agent-setup-intent-note" data-tone="yellow" aria-label="No protected action received yet">
+          <KeyRound aria-hidden="true" />
+          <span>
+            <strong>No protected action received yet</strong>
+            <small>
+              Check that the starter snippet is running with the project API key, this agent_id, and the selected contract/action_type.
+            </small>
+            <Link href="/settings/keys" className="agent-setup-inline-link">
+              Check project keys
+            </Link>
+          </span>
+        </div>
+      ) : null}
 
       {action?.status === "approval_pending" ? (
         <div className="agent-setup-intent-note" data-tone="yellow">

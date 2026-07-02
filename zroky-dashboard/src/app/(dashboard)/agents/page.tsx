@@ -54,14 +54,6 @@ function EmptyFirstRun() {
           <small>Verifier resolves matched, mismatched, or not verified.</small>
         </div>
       </div>
-      <div className="agents-empty-actions">
-        <DashboardButtonLink href="/agents/setup" icon={<ArrowRight />} iconPosition="right" variant="primary">
-          Add agent
-        </DashboardButtonLink>
-        <DashboardButtonLink href="/agents/setup" variant="soft">
-          Open setup
-        </DashboardButtonLink>
-      </div>
     </section>
   );
 }
@@ -206,6 +198,7 @@ export default function AgentsPage() {
     (intentsQuery.error || approvalsQuery.error) && "Action feed",
   ].filter(Boolean) as string[];
   const setupStatus = getAgentControlSetupStatus(profiles as AgentProfileResponse[], null);
+  const setupPrimaryActive = !setupStatus.complete && setupStatus.ctaHref === "/agents/setup";
   const firstTelemetryRow = fleet.rows.find((row) => row.kind === "telemetry") ?? null;
 
   function refresh() {
@@ -227,6 +220,7 @@ export default function AgentsPage() {
         loading={loading}
         error={error}
         degradedFeeds={degradedFeeds}
+        setupIncomplete={setupPrimaryActive}
         onRefresh={refresh}
       />
 

@@ -371,6 +371,7 @@ describe("AgentControlSetupPage", () => {
     expect(within(preview).getAllByText("Primary business system API").length).toBeGreaterThan(0);
     expect(within(screen.getByLabelText("Agent setup readiness")).getByText("Ready")).toBeInTheDocument();
     expect(within(preview).getByText("Advanced technical preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Setup step guidance").textContent).toContain("Agent identity is ready");
   });
 
   it("prefills create mode from an observed telemetry agent name", async () => {
@@ -404,7 +405,8 @@ describe("AgentControlSetupPage", () => {
   it("allows essentials-only enable without optional business context or simulation", async () => {
     renderWizard();
 
-    fireEvent.change(await screen.findByLabelText("Primary business goal"), {
+    fireEvent.click(await screen.findByText("Advanced agent context"));
+    fireEvent.change(screen.getByLabelText("Primary business goal"), {
       target: { value: "" },
     });
     clickStep("Proof & Readiness");
@@ -514,6 +516,8 @@ describe("AgentControlSetupPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Go Live" })).toBeInTheDocument();
     expect(screen.getByText("Waiting for first protected action")).toBeInTheDocument();
+    expect(await screen.findByLabelText("No protected action received yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Check project keys" }).getAttribute("href")).toBe("/settings/keys");
     expect(screen.getByText(/zroky.verified_action/)).toBeInTheDocument();
     expect(screen.getByText(/agent_id=\"agent_1\"/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Copy First protected action starter" }));

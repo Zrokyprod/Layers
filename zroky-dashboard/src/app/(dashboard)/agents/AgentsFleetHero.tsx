@@ -16,6 +16,7 @@ type AgentsFleetHeroProps = {
   loading: boolean;
   error: boolean;
   degradedFeeds?: string[];
+  setupIncomplete?: boolean;
   onRefresh: () => void;
 };
 
@@ -104,12 +105,14 @@ export function AgentsFleetHero({
   fleet,
   loading,
   onRefresh,
+  setupIncomplete = false,
 }: AgentsFleetHeroProps) {
   const copy = heroCopy(fleet, error);
   const capLabel = fleet.meter.cap === -1
     ? `${formatCount(fleet.meter.active)} managed \u00b7 unlimited`
     : `${formatCount(fleet.meter.active)} / ${formatCount(fleet.meter.cap)}`;
   const addDisabled = fleet.meter.reached || loading;
+  const showPrimaryAction = !setupIncomplete;
   const coverageLabel = fleet.totals.coveragePercent == null
     ? "No coverage"
     : `${fleet.totals.coveragePercent}%`;
@@ -130,21 +133,23 @@ export function AgentsFleetHero({
         ) : null}
         actions={(
           <>
-            {fleet.meter.reached ? (
-              <DashboardButton disabled icon={<Lock />} title="Plan cap reached" variant="soft">
-                Upgrade to add agents
-              </DashboardButton>
-            ) : (
-              <DashboardButtonLink
-                aria-disabled={addDisabled || undefined}
-                href={copy.ctaHref}
-                icon={<ArrowRight />}
-                iconPosition="right"
-                variant="primary"
-              >
-                {copy.cta}
-              </DashboardButtonLink>
-            )}
+            {showPrimaryAction ? (
+              fleet.meter.reached ? (
+                <DashboardButton disabled icon={<Lock />} title="Plan cap reached" variant="soft">
+                  Upgrade to add agents
+                </DashboardButton>
+              ) : (
+                <DashboardButtonLink
+                  aria-disabled={addDisabled || undefined}
+                  href={copy.ctaHref}
+                  icon={<ArrowRight />}
+                  iconPosition="right"
+                  variant="primary"
+                >
+                  {copy.cta}
+                </DashboardButtonLink>
+              )
+            ) : null}
             <DashboardButton icon={<RefreshCw />} onClick={onRefresh} variant="soft">
               Refresh
             </DashboardButton>

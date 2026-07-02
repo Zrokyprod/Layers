@@ -3263,6 +3263,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-registry-strip,
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance,
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-success {
   display: grid !important;
   grid-template-columns: 34px minmax(0, 1fr) !important;
@@ -3277,6 +3278,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-registry-strip svg,
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note svg,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance svg,
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-success > svg {
   width: 18px !important;
   height: 18px !important;
@@ -3285,10 +3287,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-registry-strip div,
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note span,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance span,
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-success div {
   display: grid !important;
   gap: 4px !important;
   min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance {
+  margin-top: 4px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note {
@@ -3300,22 +3307,35 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--dash-green) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="green"] {
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="green"],
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance[data-tone="green"] {
   border-color: rgba(6, 118, 71, 0.2) !important;
   background: var(--dash-green-soft) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="green"] svg {
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="green"] svg,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance[data-tone="green"] svg {
   color: var(--dash-green) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="yellow"] {
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="yellow"],
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance[data-tone="yellow"] {
   border-color: rgba(183, 121, 31, 0.28) !important;
   background: rgba(183, 121, 31, 0.08) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="yellow"] svg {
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="yellow"] svg,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance[data-tone="yellow"] svg {
   color: #b7791f !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance[data-tone="blue"] {
+  border-color: rgba(29, 78, 216, 0.18) !important;
+  background: var(--dash-blue-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance[data-tone="blue"] svg {
+  color: var(--dash-blue) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note[data-tone="red"] {
@@ -3327,14 +3347,16 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-danger) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note strong {
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note strong,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance strong {
   color: var(--dash-text) !important;
   font-size: 0.86rem !important;
   font-weight: 820 !important;
   line-height: 1.25 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note small {
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-intent-note small,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-step-guidance small {
   color: var(--dash-text-soft) !important;
   font-size: 0.76rem !important;
   line-height: 1.4 !important;

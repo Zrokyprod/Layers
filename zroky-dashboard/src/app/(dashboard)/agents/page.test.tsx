@@ -94,6 +94,44 @@ function profile(overrides: Partial<AgentProfileResponse> = {}): AgentProfileRes
   };
 }
 
+function setupPolicyProfile(overrides: Partial<AgentProfileResponse> = {}): AgentProfileResponse {
+  return profile({
+    metadata: {
+      setup_source: "agent_control_setup_wizard",
+      runtime_policy_mandate_enforced: true,
+      product_context: {
+        product_name: "Production Agent Workflow",
+        business_goal: "Protect high-risk inventory changes.",
+        critical_objects: ["inventory item"],
+        source_systems: ["Generic REST"],
+      },
+      workflow_manifest: {
+        workflow_id: "inventory_control",
+        owner_team: "AI Platform",
+        protected_actions: ["inventory.item.delete"],
+      },
+      action_contracts: [
+        {
+          id: "inventory_control.inventory_item_delete",
+          verb: "DELETE",
+          risk_class: "R3",
+        },
+      ],
+      policy_preview: {
+        approval_required_above_usd: 500,
+        deny_above_usd: 5000,
+        unknown_contract_decision: "deny",
+      },
+      runner_verification: {
+        credential_ref: "cred_inventory",
+        verifier_connector: "generic_rest",
+        source_of_record: "Inventory API",
+      },
+    },
+    ...overrides,
+  });
+}
+
 function score(overrides: Partial<AgentScoreView> = {}): AgentScoreView {
   return {
     agent_name: "inventory-agent",
@@ -364,7 +402,7 @@ describe("AgentsPage", () => {
   });
 
   it("locks add-agent when the backend plan meter is reached", async () => {
-    mockAgents({ activeCount: 1, cap: 1, limitReached: true });
+    mockAgents({ profiles: [setupPolicyProfile()], activeCount: 1, cap: 1, limitReached: true });
 
     renderAgentsPage();
 
@@ -573,7 +611,9 @@ describe("AgentsPage", () => {
     renderAgentsPage();
 
     expect(await screen.findByRole("heading", { name: "Setup required", level: 1 })).toBeInTheDocument();
-    const addLinks = screen.getAllByRole("link", { name: /^Add agent$/i });
-    expect(addLinks.some((link) => link.getAttribute("href") === "/agents/setup")).toBe(true);
+    const setupStatus = screen.getByLabelText("Agent control setup status");
+    expect(within(setupStatus).getByRole("link", { name: /^Start setup$/i }).getAttribute("href")).toBe("/agents/setup");
+    expect(screen.queryByRole("link", { name: /^Add agent$/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Open setup$/i })).toBeNull();
   });
 });
