@@ -31,7 +31,7 @@ import { buildDecisionQueue, homeVerdictForQueue, type HomeQueueRow } from "@/li
 import { useDashboardStore } from "@/lib/store";
 import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/lib/types";
 
-import { ControlLoopStrip } from "./ControlLoopStrip";
+import { ControlLoopStrip, type ControlLoopStats } from "./ControlLoopStrip";
 import { DecisionQueue, type HomeQueueFilter } from "./DecisionQueue";
 import { FleetContextLine } from "./FleetContextLine";
 import { FirstRunPanel, type FirstRunSignals } from "./FirstRunPanel";
@@ -398,6 +398,32 @@ function proofMetrics(data: MissionData): ProofMetric[] {
   ];
 }
 
+function hasSequenceRiskSignal(decision: RuntimePolicyDecisionResponse): boolean {
+  const reasonHit = decision.reasons.some((reason) => reason.toLowerCase().includes("sequence risk"));
+  const policyHit = Object.prototype.hasOwnProperty.call(decision.policy_hit ?? {}, "sequence_risk");
+  return reasonHit || policyHit;
+}
+
+function controlLoopStats(data: MissionData): ControlLoopStats {
+  const matchedOutcomes = data.outcomes.filter(
+    (outcome) => outcome.verdict === "matched" || outcome.verification_status === "matched",
+  ).length;
+  const verifiedCount = data.outcomeSummary?.matched ?? matchedOutcomes;
+  const generatedReceipts = data.intents.filter((intent) => intent.receipt_status === "generated").length;
+  const sourceReceipts = data.sourceSummary?.matched_receipt ?? 0;
+  const bypassMutations = data.mutations.filter((mutation) => mutation.classification === "policy_bypass").length;
+  const sourceBypassCount = data.sourceSummary?.policy_bypass ?? 0;
+
+  return {
+    actionCount: data.intents.length,
+    approvalCount: data.approvals.length,
+    verifiedCount,
+    receiptCount: Math.max(generatedReceipts, sourceReceipts),
+    bypassCount: Math.max(bypassMutations, sourceBypassCount),
+    sequenceRiskCount: data.approvals.filter(hasSequenceRiskSignal).length,
+  };
+}
+
 export default function HomePage() {
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
@@ -560,6 +586,8 @@ export default function HomePage() {
   const verdict = homeVerdictForQueue(rows, homeUnlocked);
   const metrics = proofMetrics(data);
   const previewMetrics = proofMetrics(FIRST_RUN_PREVIEW_DATA);
+  const loopStats = controlLoopStats(data);
+  const previewLoopStats = controlLoopStats(FIRST_RUN_PREVIEW_DATA);
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? rows[0] ?? null;
   const selectedIntent = selectedRow?.actionId
     ? data.intents.find((intent) => intent.action_id === selectedRow.actionId) ?? null
@@ -576,6 +604,7 @@ export default function HomePage() {
     <>
       <ProofStrip metrics={metrics} loading={initialLoading} />
       <FleetContextLine fleet={fleet} loading={initialLoading} />
+      <ControlLoopStrip {...loopStats} />
       <div className="mc-main-grid">
         <DecisionQueue
           rows={rows}
@@ -593,6 +622,7 @@ export default function HomePage() {
     <>
       <ProofStrip metrics={previewMetrics} loading={false} />
       <FleetContextLine fleet={previewFleet} loading={false} />
+      <ControlLoopStrip {...previewLoopStats} />
       <div className="mc-main-grid">
         <DecisionQueue
           rows={previewRows}
@@ -631,7 +661,6 @@ export default function HomePage() {
           liveDashboardBody
         )}
 
-        <ControlLoopStrip />
       </div>
     </main>
   );

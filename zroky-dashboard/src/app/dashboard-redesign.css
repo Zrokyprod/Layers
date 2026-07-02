@@ -17280,7 +17280,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-queue-panel,
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-rail,
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run,
-.app-shell[data-dashboard-system="control-v1"] .mc-loop-strip {
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-panel {
   background: var(--mc-card);
   border: 1px solid var(--mc-border);
   border-radius: 8px;
@@ -17326,7 +17326,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-hero h1,
 .app-shell[data-dashboard-system="control-v1"] .mc-section-head h2,
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-rail h2,
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run h2 {
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run h2,
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-panel h2,
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-card h3 {
   margin: 0;
   color: var(--mc-text);
   font-weight: 600;
@@ -17339,7 +17341,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-section-head h2,
 .app-shell[data-dashboard-system="control-v1"] .mc-proof-rail h2,
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run h2 {
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run h2,
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-panel h2 {
   font-size: 18px;
 }
 
@@ -17935,14 +17938,143 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   justify-content: flex-end;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-loop-strip {
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 16px;
+  padding: 16px;
+  align-items: stretch;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-main,
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-head > p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--mc-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-diagram {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  height: 100%;
+  min-height: 128px;
+  padding: 11px;
+  border: 1px solid rgba(47, 95, 102, 0.18);
+  border-radius: 8px;
+  background: var(--mc-soft);
+  color: var(--mc-text);
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node:hover,
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node:focus-visible {
+  border-color: rgba(47, 95, 102, 0.38);
+  background: #ffffff;
+  box-shadow: var(--mc-shadow-rest);
+  outline: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(47, 95, 102, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--mc-accent);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node-copy strong {
+  color: var(--mc-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node-copy span {
+  color: var(--mc-text-secondary);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-node-copy em {
+  align-self: end;
+  width: fit-content;
+  margin-top: 2px;
+  padding: 3px 7px;
+  border: 1px solid rgba(47, 95, 102, 0.16);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--mc-accent);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-arrow {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: -13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--mc-border);
+  border-radius: 999px;
+  background: var(--mc-card);
+  color: var(--mc-text-tertiary);
+  transform: translateY(-50%);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-nav {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 12px;
+  padding-top: 2px;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-loop-strip a {
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-nav a {
   min-height: 30px;
   padding: 7px 10px;
   border-radius: 8px;
@@ -17952,9 +18084,116 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   text-decoration: none;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-loop-strip a:hover {
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-nav a:hover,
+.app-shell[data-dashboard-system="control-v1"] .mc-loop-nav a:focus-visible {
   background: var(--mc-accent-soft);
   color: var(--mc-accent);
+  outline: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-card {
+  align-content: start;
+  padding: 14px;
+  border: 1px solid rgba(183, 121, 31, 0.24);
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  padding: 5px 8px;
+  border: 1px solid rgba(183, 121, 31, 0.28);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #8a5a12;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-card h3 {
+  font-size: 18px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-card p {
+  margin: 0;
+  color: var(--mc-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(183, 121, 31, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--mc-text-tertiary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-chain span,
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-chain strong {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-chain span {
+  background: var(--mc-soft);
+  color: var(--mc-text-secondary);
+  font-weight: 600;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-chain strong {
+  background: rgba(183, 121, 31, 0.12);
+  color: #8a5a12;
+  font-weight: 800;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-stats a {
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+  padding: 10px;
+  border: 1px solid rgba(183, 121, 31, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-stats a:hover,
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-stats a:focus-visible {
+  border-color: rgba(183, 121, 31, 0.42);
+  outline: 0;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-stats strong {
+  color: #8a5a12;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-risk-stats span {
+  color: var(--mc-text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-tone-success {
@@ -17996,6 +18235,20 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   height: 12px;
 }
 
+@media (max-width: 1320px) {
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-diagram {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-arrow {
+    display: none;
+  }
+}
+
 @media (max-width: 980px) {
   .app-shell[data-dashboard-system="control-v1"] .mc-hero {
     align-items: flex-start;
@@ -18010,6 +18263,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .mc-proof-strip,
   .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-head {
+    display: grid;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-locked-home {
@@ -18036,6 +18293,32 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .mc-proof-strip,
   .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel,
+  .app-shell[data-dashboard-system="control-v1"] .mc-risk-card {
+    padding: 12px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-diagram {
+    grid-auto-columns: minmax(190px, 76vw);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-node-wrap {
+    scroll-snap-align: start;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-node {
+    min-height: 132px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-risk-stats {
     grid-template-columns: 1fr;
   }
 

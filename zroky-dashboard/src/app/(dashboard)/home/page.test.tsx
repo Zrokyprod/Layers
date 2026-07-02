@@ -423,6 +423,10 @@ describe("Mission Control Home", () => {
     expect(await screen.findByRole("heading", { name: "Action mismatch" })).toBeInTheDocument();
     expect(screen.getByText("Controlled actions")).toBeInTheDocument();
     expect(screen.getByText("66.67% matched")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Propose to evidence, with policy in the middle" })).toBeInTheDocument();
+    expect(screen.getByText("Verified action loop")).toBeInTheDocument();
+    expect(screen.getByText("Sequence risk caught")).toBeInTheDocument();
+    expect(screen.getByText("bulk read")).toBeInTheDocument();
     const queue = screen.getByLabelText("Decision queue");
     expect(within(queue).getByText(/Source-of-record mismatch/)).toBeInTheDocument();
     expect(within(queue).getByText(/Policy bypass mutation/)).toBeInTheDocument();
@@ -496,6 +500,8 @@ describe("Mission Control Home", () => {
     expect(lockedPreview?.querySelector('[aria-label="Proof metrics"]')).toBeInTheDocument();
     expect(lockedPreview?.textContent).toContain("Controlled actions");
     expect(lockedPreview?.textContent).toContain("Refund Agent");
+    expect(lockedPreview?.textContent).toContain("Verified action loop");
+    expect(lockedPreview?.textContent).toContain("Sequence risk caught");
     expect(lockedPreview?.textContent).toContain("Policy bypass mutation");
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
     expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
