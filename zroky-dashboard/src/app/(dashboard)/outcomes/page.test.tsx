@@ -1,8 +1,13 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import OutcomesPage from "./page";
+
+const apiState = vi.hoisted(() => ({
+  reconcileSavedConnector: vi.fn(),
+}));
 
 const hookState = vi.hoisted(() => ({
   summaryRefetch: vi.fn(),
@@ -143,6 +148,14 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return {
+    ...actual,
+    reconcileSavedConnector: apiState.reconcileSavedConnector,
+  };
+});
+
 vi.mock("@/lib/hooks", () => ({
   useOutcomeReconciliationSummary: () => ({
     data: hookState.summary,
@@ -186,8 +199,25 @@ function metric(label: string): HTMLElement {
   return card as HTMLElement;
 }
 
+function renderOutcomesPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <OutcomesPage />
+    </QueryClientProvider>,
+  );
+}
+
 describe("OutcomesPage", () => {
   beforeEach(() => {
+    apiState.reconcileSavedConnector.mockReset();
+    apiState.reconcileSavedConnector.mockResolvedValue(hookState.checks[0]);
     hookState.summaryRefetch.mockClear();
     hookState.checksRefetch.mockClear();
     hookState.sourceMutationSummaryRefetch.mockClear();
@@ -195,7 +225,7 @@ describe("OutcomesPage", () => {
   });
 
   it("renders the verification cockpit with honest metrics and bypass signal", () => {
-    render(<OutcomesPage />);
+    renderOutcomesPage();
 
     expect(screen.getByRole("heading", { name: "Verified action mismatch" })).toBeInTheDocument();
     expect(within(metric("Verified")).getByText("1")).toBeInTheDocument();
@@ -206,7 +236,12 @@ describe("OutcomesPage", () => {
 
     const bypass = screen.getByRole("region", { name: "Bypass risk" });
     expect(within(bypass).getByRole("heading", { name: "3 system changes with no receipt" })).toBeInTheDocument();
-    expect(within(bypass).getByText("stripe:rf_bypass")).toBeInTheDocument();
+    expect(within(bypass).getAllByText("stripe:rf_bypass").length).toBeGreaterThan(0);
+    expect(within(bypass).getByRole("button", { name: /stripe:rf_bypass/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Selected bypass mutation" })).toBeInTheDocument();
+
+    expect(screen.getByRole("region", { name: "Verified rate trend" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Connector health" })).toBeInTheDocument();
 
     expect(screen.getByRole("region", { name: "Reconciliation feed" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Selected outcome check" })).toBeInTheDocument();
@@ -215,7 +250,7 @@ describe("OutcomesPage", () => {
   });
 
   it("shows a field-level claimed-vs-actual diff instead of raw JSON first", () => {
-    render(<OutcomesPage />);
+    renderOutcomesPage();
 
     const diff = screen.getByRole("table", { name: "Claimed versus actual field comparison" });
     expect(within(diff).getByText("amount_usd")).toBeInTheDocument();
@@ -231,7 +266,7 @@ describe("OutcomesPage", () => {
   });
 
   it("filters locally by verdict and search", () => {
-    render(<OutcomesPage />);
+    renderOutcomesPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Not verified" }));
 
@@ -248,7 +283,7 @@ describe("OutcomesPage", () => {
   });
 
   it("refreshes reconciliation and source mutation feeds", () => {
-    render(<OutcomesPage />);
+    renderOutcomesPage();
 
     fireEvent.click(screen.getByRole("button", { name: /Refresh/ }));
 
@@ -256,5 +291,27 @@ describe("OutcomesPage", () => {
     expect(hookState.checksRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.sourceMutationSummaryRefetch).toHaveBeenCalledTimes(1);
     expect(hookState.unreceiptedMutationsRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs a real saved-connector re-verification for unresolved checks", async () => {
+    renderOutcomesPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Re-verify saved connector" }));
+
+    await waitFor(() => {
+      expect(apiState.reconcileSavedConnector).toHaveBeenCalledWith(expect.objectContaining({
+        action_type: "refund",
+        connector: "ledger_refund_api",
+        claimed: expect.objectContaining({ refund_id: "rf_999" }),
+        match_fields: ["amount_usd", "currency"],
+        runtime_policy_decision_id: "decision_1",
+        system_ref: "ledger:rf_999",
+        trace_id: "trace_refund_api",
+      }));
+    });
+    await waitFor(() => {
+      expect(hookState.checksRefetch).toHaveBeenCalled();
+    });
+    expect(screen.getByText("Re-check created: Mismatched.")).toBeInTheDocument();
   });
 });

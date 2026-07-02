@@ -43,6 +43,7 @@ export type OutcomeBypassRow = {
   classification: string;
   detail: string;
   id: string;
+  mutation: SourceMutationView;
   occurredAt: string;
   systemLabel: string;
   title: string;
@@ -287,6 +288,7 @@ export function buildOutcomeLedger({
     classification: mutation.classification,
     detail: `${humanize(mutation.source_system)} / ${humanize(mutation.action_type ?? mutation.resource_type, "Unknown mutation")}`,
     id: mutation.id,
+    mutation,
     occurredAt: mutation.occurred_at,
     systemLabel: humanize(mutation.source_system, "Unknown system"),
     title: mutation.system_ref ?? mutation.resource_id ?? mutation.mutation_id,

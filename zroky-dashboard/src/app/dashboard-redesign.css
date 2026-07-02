@@ -5256,6 +5256,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-error-banner,
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-panel,
 .app-shell[data-dashboard-system="control-v1"] .outcomes-feed-panel,
 .app-shell[data-dashboard-system="control-v1"] .outcomes-inspector-panel {
   border: 1px solid var(--mc-border) !important;
@@ -5273,6 +5275,134 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-danger) !important;
   font-size: 13px !important;
   font-weight: 500 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-ops-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-panel,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-panel {
+  display: grid !important;
+  gap: 14px !important;
+  min-width: 0 !important;
+  padding: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-summary {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  padding: 10px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-soft) !important;
+  color: var(--mc-text-secondary) !important;
+  font-size: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-summary strong {
+  color: var(--mc-text) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-summary span {
+  justify-self: end !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-bars {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(28px, 1fr)) !important;
+  gap: 8px !important;
+  align-items: end !important;
+  min-height: 92px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-bar {
+  display: grid !important;
+  gap: 6px !important;
+  justify-items: center !important;
+  align-items: end !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-bar span {
+  display: block !important;
+  width: 100% !important;
+  max-width: 32px !important;
+  border: 1px solid rgba(47, 95, 102, 0.2) !important;
+  border-radius: 6px 6px 2px 2px !important;
+  background: var(--mc-accent-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-bar span[data-rate="100"] {
+  border-color: rgba(45, 139, 86, 0.28) !important;
+  background: var(--mc-success-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-trend-bar small {
+  color: var(--mc-text-tertiary) !important;
+  font-size: 11px !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-list {
+  display: grid !important;
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  padding: 10px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-left: 3px solid var(--mc-border-strong) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row[data-tone="danger"] {
+  border-left-color: var(--mc-danger) !important;
+  background: var(--mc-danger-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row[data-tone="warning"] {
+  border-left-color: var(--mc-warning) !important;
+  background: var(--mc-warning-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row[data-tone="success"] {
+  border-left-color: var(--mc-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row span {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row span:last-child {
+  justify-items: end !important;
+  text-align: right !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row strong {
+  color: var(--mc-text) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row small {
+  color: var(--mc-text-secondary) !important;
+  font-size: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip {
@@ -5312,15 +5442,51 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 8px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-detail {
+  display: grid !important;
+  gap: 6px !important;
+  margin-top: 8px !important;
+  padding: 10px !important;
+  border: 1px solid rgba(209, 67, 67, 0.22) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-danger-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-detail strong {
+  color: var(--mc-text) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-detail span,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-detail small {
+  color: var(--mc-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row,
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-clear {
   display: grid !important;
   gap: 5px !important;
   min-width: 0 !important;
+  width: 100% !important;
   padding: 10px !important;
   border: 1px solid var(--mc-border) !important;
   border-radius: var(--mc-radius-control) !important;
   background: var(--mc-soft) !important;
+  color: inherit !important;
+  text-align: left !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row {
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row:hover,
+.app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row.is-selected {
+  border-color: rgba(47, 95, 102, 0.28) !important;
+  background: var(--mc-accent-soft) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-row[data-tone="danger"] {
@@ -5577,6 +5743,67 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 10px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 14px !important;
+  align-items: center !important;
+  padding: 12px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-left: 3px solid var(--mc-border-strong) !important;
+  border-radius: var(--mc-radius-card) !important;
+  background: var(--mc-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel[data-tone="danger"] {
+  border-left-color: var(--mc-danger) !important;
+  background: var(--mc-danger-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel[data-tone="warning"] {
+  border-left-color: var(--mc-warning) !important;
+  background: var(--mc-warning-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel[data-tone="success"] {
+  border-left-color: var(--mc-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel strong {
+  color: var(--mc-text) !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel p {
+  margin-top: 4px !important;
+  color: var(--mc-text-secondary) !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-actions {
+  display: grid !important;
+  gap: 6px !important;
+  justify-items: end !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-actions small {
+  max-width: 220px !important;
+  color: var(--mc-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  text-align: right !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-actions small[data-tone="danger"] {
+  color: var(--mc-danger) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-actions small[data-tone="success"] {
+  color: var(--mc-success) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .outcomes-diff-table {
   display: grid !important;
   overflow: hidden !important;
@@ -5699,6 +5926,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     grid-template-columns: 1fr !important;
   }
 
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-ops-grid,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-bypass-strip {
+    grid-template-columns: 1fr !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .evidence-receipt-stepper {
     grid-template-columns: 1fr !important;
   }
@@ -5732,6 +5964,20 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-toolbar,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-actions {
+    justify-items: start !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-investigation-actions small {
+    max-width: none !important;
+    text-align: left !important;
+  }
+
 }
 
 @media (max-width: 820px) {
@@ -5754,6 +6000,34 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .dashboard-verdict-buttons,
   .app-shell[data-dashboard-system="control-v1"] .dashboard-verdict-buttons .dashboard-button {
     width: 100% !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-fact-grid,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-json-grid,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-diff-head,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-diff-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-proof-callout,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row,
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-inspector-actions {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-connector-row span:last-child {
+    justify-items: start !important;
+    text-align: left !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-trend-summary {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .outcomes-trend-summary span {
+    grid-column: 1 / -1 !important;
+    justify-self: start !important;
   }
 }
 
