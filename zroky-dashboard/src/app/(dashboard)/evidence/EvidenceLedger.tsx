@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Search } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import { StatusPill } from "@/components/status-pill";
@@ -18,8 +19,10 @@ type EvidenceLedgerProps = {
   isError: boolean;
   isLoading: boolean;
   onFilterChange: (filter: EvidenceLedgerFilter) => void;
+  onSearchChange: (value: string) => void;
   onSelectRow: (row: EvidenceLedgerRow) => void;
   rows: EvidenceLedgerRow[];
+  search: string;
   selectedRowId: string | null;
 };
 
@@ -41,11 +44,13 @@ export function EvidenceLedger({
   isError,
   isLoading,
   onFilterChange,
+  onSearchChange,
   onSelectRow,
   rows,
+  search,
   selectedRowId,
 }: EvidenceLedgerProps) {
-  const filteredRows = filterEvidenceLedger(rows, filter);
+  const filteredRows = filterEvidenceLedger(rows, filter, search);
 
   return (
     <section className="ev-ledger-panel" aria-label="Evidence ledger">
@@ -72,6 +77,15 @@ export function EvidenceLedger({
         ))}
       </div>
 
+      <label className="ev-search-field">
+        <Search size={14} aria-hidden="true" />
+        <input
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Search action, agent, system ref, digest..."
+        />
+      </label>
+
       {isLoading ? (
         <div className="ev-skeleton-list" aria-label="Loading evidence rows">
           <span />
@@ -92,7 +106,7 @@ export function EvidenceLedger({
           </div>
         </div>
       ) : filteredRows.length === 0 ? (
-        <div className="ev-empty-state">No records match this filter.</div>
+        <div className="ev-empty-state">No records match this filter or search.</div>
       ) : (
         <div className="ev-ledger-list">
           {filteredRows.map((row) => {

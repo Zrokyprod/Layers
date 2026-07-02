@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 
+import { DashboardButton } from "@/components/dashboard-button";
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
   getActionIntentReceipt,
@@ -16,6 +18,7 @@ import {
 import {
   buildEvidenceLedger,
   evidenceLedgerCounts,
+  filterEvidenceLedger,
   resolveEvidenceLedgerDeepLink,
   type EvidenceLedgerFilter,
   type EvidenceLedgerRow,
@@ -42,6 +45,41 @@ type EvidenceVerdict = {
   tone: "danger" | "neutral" | "success" | "warning";
 };
 
+type EvidenceAuditManifest = {
+  artifact: "zroky.evidence_manifest";
+  schema_version: "zroky.evidence_manifest.v1";
+  generated_at: string;
+  scope: {
+    filter: EvidenceLedgerFilter;
+    search: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    total_records: number;
+    exportable_records: number;
+    non_exportable_records: number;
+  };
+  verification: {
+    external_verify_url: string;
+    instructions: string[];
+  };
+  records: Array<{
+    action_id: string | null;
+    checked_at: string | null;
+    decision_id: string | null;
+    digest: string | null;
+    export_kind: EvidenceLedgerRow["exportKind"];
+    exportable: boolean;
+    href: string;
+    id: string;
+    kind: EvidenceLedgerRow["kind"];
+    source_label: string;
+    status: string;
+    system_ref: string | null;
+    title: string;
+    trace_id: string | null;
+  }>;
+};
+
 function safeFilePart(value: string) {
   return value.replace(/[^a-zA-Z0-9_.-]+/g, "_");
 }
@@ -56,6 +94,77 @@ function downloadJsonFile(payload: unknown, filename: string) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+function dayKey(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function rowsInDateRange(rows: EvidenceLedgerRow[], startDate: string, endDate: string): EvidenceLedgerRow[] {
+  if (!startDate && !endDate) return rows;
+  return rows.filter((row) => {
+    const checkedDay = dayKey(row.checkedAt);
+    if (!checkedDay) return false;
+    if (startDate && checkedDay < startDate) return false;
+    if (endDate && checkedDay > endDate) return false;
+    return true;
+  });
+}
+
+function buildEvidenceManifest({
+  endDate,
+  filter,
+  rows,
+  search,
+  startDate,
+}: {
+  endDate: string;
+  filter: EvidenceLedgerFilter;
+  rows: EvidenceLedgerRow[];
+  search: string;
+  startDate: string;
+}): EvidenceAuditManifest {
+  return {
+    artifact: "zroky.evidence_manifest",
+    generated_at: new Date().toISOString(),
+    records: rows.map((row) => ({
+      action_id: row.actionId,
+      checked_at: row.checkedAt,
+      decision_id: row.decisionId,
+      digest: row.digest,
+      export_kind: row.exportKind,
+      exportable: row.exportable,
+      href: row.href,
+      id: row.id,
+      kind: row.kind,
+      source_label: row.sourceLabel,
+      status: row.status,
+      system_ref: row.systemRef,
+      title: row.title,
+      trace_id: row.traceId,
+    })),
+    schema_version: "zroky.evidence_manifest.v1",
+    scope: {
+      end_date: endDate || null,
+      exportable_records: rows.filter((row) => row.exportable).length,
+      filter,
+      non_exportable_records: rows.filter((row) => !row.exportable).length,
+      search: search.trim() || null,
+      start_date: startDate || null,
+      total_records: rows.length,
+    },
+    verification: {
+      external_verify_url: "https://verify.zroky.com",
+      instructions: [
+        "Use this manifest as an index, not as a signed evidence bundle.",
+        "Export each referenced Action Receipt or Evidence Pack JSON for cryptographic verification.",
+        "Compare the receipt_digest or evidence_hash in the exported proof with the value shown in Zroky.",
+      ],
+    },
+  };
 }
 
 function readSearchParams(): { deepLink: DeepLinkState; filter: EvidenceLedgerFilter } {
@@ -253,11 +362,64 @@ function metricsForCounts(counts: ReturnType<typeof evidenceLedgerCounts>): Evid
   ];
 }
 
+function EvidenceAuditTools({
+  endDate,
+  filter,
+  onEndDateChange,
+  onExportManifest,
+  onStartDateChange,
+  rows,
+  search,
+  startDate,
+}: {
+  endDate: string;
+  filter: EvidenceLedgerFilter;
+  onEndDateChange: (value: string) => void;
+  onExportManifest: () => void;
+  onStartDateChange: (value: string) => void;
+  rows: EvidenceLedgerRow[];
+  search: string;
+  startDate: string;
+}) {
+  const exportableCount = rows.filter((row) => row.exportable).length;
+  return (
+    <section className="ev-audit-tools" aria-label="Audit export tools">
+      <div>
+        <span className="ev-eyebrow">Audit export</span>
+        <h2>Filtered proof manifest</h2>
+        <p>Export a date-scoped index of visible proof records. Individual receipts and Evidence Packs remain separately signed.</p>
+      </div>
+      <div className="ev-audit-controls">
+        <label>
+          <span>Start</span>
+          <input type="date" value={startDate} onChange={(event) => onStartDateChange(event.target.value)} />
+        </label>
+        <label>
+          <span>End</span>
+          <input type="date" value={endDate} onChange={(event) => onEndDateChange(event.target.value)} />
+        </label>
+        <DashboardButton icon={<Download size={15} />} onClick={onExportManifest} variant="primary">
+          Export audit manifest
+        </DashboardButton>
+      </div>
+      <div className="ev-audit-scope" aria-label="Manifest scope">
+        <strong>{rows.length} in scope</strong>
+        <span>{exportableCount} exportable</span>
+        <span>{rows.length - exportableCount} visible but not exportable</span>
+        <span>{filter.replace("_", " ")}{search.trim() ? ` / ${search.trim()}` : ""}</span>
+      </div>
+    </section>
+  );
+}
+
 export default function EvidencePage() {
   const [initial] = useState(() => readSearchParams());
+  const [auditEndDate, setAuditEndDate] = useState("");
+  const [auditStartDate, setAuditStartDate] = useState("");
   const [deepLink, setDeepLink] = useState<DeepLinkState>(initial.deepLink);
   const [filter, setFilter] = useState<EvidenceLedgerFilter>(initial.filter);
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -285,6 +447,11 @@ export default function EvidencePage() {
   const loading = actionsQuery.isLoading || decisionsQuery.isLoading || outcomesQuery.isLoading;
   const error = actionsQuery.error || decisionsQuery.error || outcomesQuery.error;
   const counts = useMemo(() => evidenceLedgerCounts(rows), [rows]);
+  const visibleRows = useMemo(() => filterEvidenceLedger(rows, filter, search), [filter, rows, search]);
+  const auditRows = useMemo(
+    () => rowsInDateRange(visibleRows, auditStartDate, auditEndDate),
+    [auditEndDate, auditStartDate, visibleRows],
+  );
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? null;
   const focusedRow = selectedRow ?? fallbackRowFromDeepLink(deepLink);
   const selectedActionId = focusedRow?.exportKind === "receipt" ? focusedRow.actionId : null;
@@ -372,6 +539,24 @@ export default function EvidencePage() {
     }
   }
 
+  function exportAuditManifest() {
+    const manifest = buildEvidenceManifest({
+      endDate: auditEndDate,
+      filter,
+      rows: auditRows,
+      search,
+      startDate: auditStartDate,
+    });
+    const scope = [
+      filter,
+      search.trim() ? safeFilePart(search.trim()) : "all",
+      auditStartDate || "start",
+      auditEndDate || "end",
+    ].join("-");
+    downloadJsonFile(manifest, `zroky-evidence-manifest-${safeFilePart(scope)}.json`);
+    setMessage(`Audit manifest exported for ${auditRows.length} proof record${auditRows.length === 1 ? "" : "s"}.`);
+  }
+
   const verdict = buildVerdict({ counts, error, loading });
   const updatedAt = latestCheckedAt(rows);
   const isRefreshing = actionsQuery.isFetching || decisionsQuery.isFetching || outcomesQuery.isFetching;
@@ -386,6 +571,16 @@ export default function EvidencePage() {
         updatedLabel={loading ? "Syncing" : updatedAt ? `Updated ${formatDateTime(updatedAt)}` : "No records"}
       />
       <EvidenceProofStrip metrics={metricsForCounts(counts)} onMetricClick={applyFilterHref} />
+      <EvidenceAuditTools
+        endDate={auditEndDate}
+        filter={filter}
+        onEndDateChange={setAuditEndDate}
+        onExportManifest={exportAuditManifest}
+        onStartDateChange={setAuditStartDate}
+        rows={auditRows}
+        search={search}
+        startDate={auditStartDate}
+      />
       <DashboardWorkspace
         left={(
           <EvidenceLedger
@@ -393,8 +588,10 @@ export default function EvidencePage() {
             isError={Boolean(error)}
             isLoading={loading}
             onFilterChange={setFilter}
+            onSearchChange={setSearch}
             onSelectRow={selectRow}
             rows={rows}
+            search={search}
             selectedRowId={focusedRow?.id ?? null}
           />
         )}

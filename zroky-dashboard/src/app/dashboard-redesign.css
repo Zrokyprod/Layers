@@ -6883,6 +6883,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-ledger-panel,
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-tools,
 .app-shell[data-dashboard-system="control-v1"] .ev-focused-card,
 .app-shell[data-dashboard-system="control-v1"] .ev-proof-detail {
   border: 1px solid var(--ev-border) !important;
@@ -6892,6 +6893,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-section-head p,
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-tools p,
 .app-shell[data-dashboard-system="control-v1"] .ev-ledger-main p,
 .app-shell[data-dashboard-system="control-v1"] .ev-ledger-main small,
 .app-shell[data-dashboard-system="control-v1"] .ev-focused-copy p {
@@ -6901,9 +6903,80 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-proof-actions,
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-controls,
 .app-shell[data-dashboard-system="control-v1"] .ev-filter-group {
   display: flex !important;
   align-items: center !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-tools {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto minmax(210px, auto) !important;
+  gap: 16px !important;
+  align-items: center !important;
+  padding: 16px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-tools h2 {
+  margin-top: 4px !important;
+  color: var(--ev-text) !important;
+  font-size: 1.12rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-controls {
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  justify-content: flex-end !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-controls label,
+.app-shell[data-dashboard-system="control-v1"] .ev-search-field {
+  border: 1px solid var(--ev-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-controls label {
+  display: grid !important;
+  gap: 2px !important;
+  min-width: 134px !important;
+  padding: 7px 9px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-controls label span {
+  color: var(--ev-text-muted) !important;
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-controls input,
+.app-shell[data-dashboard-system="control-v1"] .ev-search-field input {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--ev-text) !important;
+  font: inherit !important;
+  outline: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-scope {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  padding: 10px !important;
+  border: 1px solid var(--ev-border) !important;
+  border-radius: 8px !important;
+  background: var(--ev-panel) !important;
+  color: var(--ev-text-soft) !important;
+  font-size: 0.78rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-audit-scope strong {
+  color: var(--ev-text) !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-proof-actions {
@@ -6947,6 +7020,22 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   flex-wrap: wrap !important;
   gap: 8px !important;
   margin-bottom: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-search-field {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 38px !important;
+  margin-bottom: 14px !important;
+  padding: 0 10px !important;
+  color: var(--ev-text-muted) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-search-field input {
+  width: 100% !important;
+  min-width: 0 !important;
+  font-size: 0.84rem !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-filter-chip {
@@ -7105,6 +7194,57 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .ev-proof-actions {
   justify-content: flex-end !important;
   flex-wrap: wrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify {
+  display: grid !important;
+  gap: 10px !important;
+  padding: 12px !important;
+  border: 1px solid rgba(47, 95, 102, 0.24) !important;
+  border-left: 3px solid var(--ev-accent) !important;
+  border-radius: 8px !important;
+  background: var(--ev-accent-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify > div:first-child {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
+  color: var(--ev-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify > div:first-child span {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify strong {
+  color: var(--ev-text) !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify small {
+  color: var(--ev-text-soft) !important;
+  font-size: 0.78rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify code {
+  display: block !important;
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  padding: 9px !important;
+  border: 1px solid var(--ev-border) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .ev-external-verify-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  justify-content: flex-end !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .ev-proof-detail {
@@ -7389,8 +7529,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .ev-print-brand img {
-    width: 34px !important;
-    height: 34px !important;
+    width: 132px !important;
+    height: auto !important;
     object-fit: contain !important;
   }
 
@@ -7561,6 +7701,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1120px) {
+  .app-shell[data-dashboard-system="control-v1"] .ev-audit-tools {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .ev-audit-controls {
+    justify-content: flex-start !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .ev-proof-detail .evidence-proof-seal {
     grid-template-columns: 1fr !important;
   }
@@ -7581,14 +7729,16 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .ev-ledger-actions,
-  .app-shell[data-dashboard-system="control-v1"] .ev-proof-actions {
+  .app-shell[data-dashboard-system="control-v1"] .ev-proof-actions,
+  .app-shell[data-dashboard-system="control-v1"] .ev-external-verify-actions {
     align-items: stretch !important;
     justify-items: stretch !important;
     justify-content: stretch !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .ev-ledger-actions .dashboard-button,
-  .app-shell[data-dashboard-system="control-v1"] .ev-proof-actions .dashboard-button {
+  .app-shell[data-dashboard-system="control-v1"] .ev-proof-actions .dashboard-button,
+  .app-shell[data-dashboard-system="control-v1"] .ev-external-verify-actions .dashboard-button {
     width: 100% !important;
   }
 }

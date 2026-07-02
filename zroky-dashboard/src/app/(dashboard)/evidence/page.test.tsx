@@ -334,6 +334,11 @@ describe("EvidencePage", () => {
     const panel = await screen.findByLabelText("Focused proof panel");
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Audit export tools" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "External hash verification" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Verify externally" }).getAttribute("href")).toContain(
+      "https://verify.zroky.com/?digest=sha256%3Areceipt_1",
+    );
     expect(screen.getByText("Signature validity is verified by the backend; the browser never receives the signing secret.")).toBeInTheDocument();
     expect(screen.getAllByText("sha256:receipt_1").length).toBeGreaterThan(0);
     expect(api.getActionIntentReceipt).toHaveBeenCalledTimes(1);
@@ -358,6 +363,37 @@ describe("EvidencePage", () => {
     expect(api.getRuntimePolicyEvidencePack).toHaveBeenCalledTimes(1);
     expect(api.getRuntimePolicyEvidencePack.mock.calls[0]?.[0]).toBe("decision_1");
     expect(api.getActionIntentReceipt).not.toHaveBeenCalled();
+  });
+
+  it("searches the ledger and exports a scoped audit manifest", async () => {
+    renderEvidencePage();
+
+    const ledger = await screen.findByLabelText("Evidence ledger");
+    await within(ledger).findByText("Close ticket T-1001");
+
+    fireEvent.change(screen.getByPlaceholderText("Search action, agent, system ref, digest..."), {
+      target: { value: "sha256:intent_1" },
+    });
+    expect(within(ledger).getByText("Close ticket T-1001")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Start"), { target: { value: "2026-06-20" } });
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "2026-06-20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Export audit manifest" }));
+
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
+    const exported = await blob.text();
+    expect(exported).toContain('"artifact": "zroky.evidence_manifest"');
+    expect(exported).toContain('"search": "sha256:intent_1"');
+    expect(exported).toContain('"start_date": "2026-06-20"');
+    expect(exported).toContain('"digest": "sha256:intent_1"');
+    expect(exported).toContain('"external_verify_url": "https://verify.zroky.com"');
+    expect(await screen.findByText("Audit manifest exported for 1 proof record.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Search action, agent, system ref, digest..."), {
+      target: { value: "missing-digest" },
+    });
+    expect(await screen.findByText("No records match this filter or search.")).toBeInTheDocument();
   });
 
   it("filters exception rows and keeps unlinked outcomes visible but non-exportable", async () => {
@@ -387,7 +423,7 @@ describe("EvidencePage", () => {
 
     expect(await screen.findByRole("heading", { name: "Exception needs review" }, { timeout: 5_000 })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Exceptions" }));
-    expect(screen.getByText("sha256:mismatch")).toBeInTheDocument();
+    expect(screen.getAllByText("sha256:mismatch").length).toBeGreaterThan(0);
     expect(screen.queryByText("crm:CUS-1001")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Needs verification" }));
@@ -417,7 +453,7 @@ describe("EvidencePage", () => {
 
     await screen.findByText("Evidence + Signature");
     expect(screen.getByLabelText("Printable evidence report")).toBeInTheDocument();
-    expect(screen.getByAltText("Zroky")).toBeInTheDocument();
+    expect(screen.getByAltText("Zroky").getAttribute("src")).toBe("/zroky.logo.png");
     expect(screen.getByText("Verified Action Control Plane")).toBeInTheDocument();
     expect(screen.getByText("Zroky Evidence Report")).toBeInTheDocument();
     expect(screen.getAllByText("Proof seal").length).toBeGreaterThan(0);

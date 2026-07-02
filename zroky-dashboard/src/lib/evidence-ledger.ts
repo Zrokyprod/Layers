@@ -314,17 +314,50 @@ export function buildEvidenceLedger({
   });
 }
 
-export function filterEvidenceLedger(rows: EvidenceLedgerRow[], filter: EvidenceLedgerFilter): EvidenceLedgerRow[] {
-  if (filter === "all") {
-    return rows;
-  }
-  if (filter === "matched") {
-    return rows.filter((row) => row.status === "matched");
-  }
-  if (filter === "needs_verification") {
-    return rows.filter(isNeedsVerification);
-  }
-  return rows.filter(isException);
+function matchesEvidenceSearch(row: EvidenceLedgerRow, search: string): boolean {
+  const needle = search.trim().toLowerCase();
+  if (!needle) return true;
+  return [
+    row.actionId,
+    row.actionType,
+    row.agentName,
+    row.callId,
+    row.decisionId,
+    row.detail,
+    row.digest,
+    row.href,
+    row.id,
+    row.outcomeId,
+    row.sourceLabel,
+    row.statusLabel,
+    row.systemRef,
+    row.title,
+    row.traceId,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(needle);
+}
+
+export function filterEvidenceLedger(
+  rows: EvidenceLedgerRow[],
+  filter: EvidenceLedgerFilter,
+  search = "",
+): EvidenceLedgerRow[] {
+  const filtered = (() => {
+    if (filter === "all") {
+      return rows;
+    }
+    if (filter === "matched") {
+      return rows.filter((row) => row.status === "matched");
+    }
+    if (filter === "needs_verification") {
+      return rows.filter(isNeedsVerification);
+    }
+    return rows.filter(isException);
+  })();
+  return filtered.filter((row) => matchesEvidenceSearch(row, search));
 }
 
 export function evidenceLedgerCounts(rows: EvidenceLedgerRow[]): EvidenceLedgerCounts {

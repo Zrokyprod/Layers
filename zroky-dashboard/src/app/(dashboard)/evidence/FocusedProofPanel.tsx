@@ -1,6 +1,9 @@
-import { Download, Printer } from "lucide-react";
+"use client";
 
-import { DashboardButton } from "@/components/dashboard-button";
+import { useState } from "react";
+import { Copy, Download, ExternalLink, Printer, ShieldCheck } from "lucide-react";
+
+import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { EvidencePackView } from "@/components/evidence-pack-view";
 import { StatusPill } from "@/components/status-pill";
 import type {
@@ -33,6 +36,49 @@ function unavailableCopy(row: EvidenceLedgerRow | null): string {
   return "The selected proof could not be loaded. Keep the row status visible and retry from the source record.";
 }
 
+function verificationSummary({
+  evidencePack,
+  receipt,
+  row,
+}: {
+  evidencePack: RuntimePolicyEvidencePackResponse | undefined;
+  receipt: ActionReceiptResponse | undefined;
+  row: EvidenceLedgerRow | null;
+}) {
+  if (receipt) {
+    const hash = receipt.evidence_hash ?? row?.digest ?? null;
+    return {
+      algorithm: receipt.signature_algorithm,
+      digest: receipt.receipt_digest,
+      fingerprint: hash ?? receipt.receipt_digest,
+      label: "Action Receipt",
+      status: receipt.signature_valid ? "Signature valid" : "Signature review required",
+      verifyHref: `https://verify.zroky.com/?digest=${encodeURIComponent(receipt.receipt_digest)}`,
+    };
+  }
+  if (evidencePack) {
+    return {
+      algorithm: evidencePack.hash_algorithm,
+      digest: null,
+      fingerprint: evidencePack.evidence_hash,
+      label: "Evidence Pack",
+      status: evidencePack.verification_status === "pass" ? "Evidence hash passed" : "Evidence needs review",
+      verifyHref: `https://verify.zroky.com/?hash=${encodeURIComponent(evidencePack.evidence_hash)}`,
+    };
+  }
+  if (row?.digest) {
+    return {
+      algorithm: "sha256",
+      digest: row.digest,
+      fingerprint: row.digest,
+      label: row.sourceLabel,
+      status: "Digest available",
+      verifyHref: `https://verify.zroky.com/?digest=${encodeURIComponent(row.digest)}`,
+    };
+  }
+  return null;
+}
+
 export function FocusedProofPanel({
   evidenceError,
   evidencePack,
@@ -45,11 +91,23 @@ export function FocusedProofPanel({
   receiptError,
   row,
 }: FocusedProofPanelProps) {
+  const [copyState, setCopyState] = useState("");
   const isLoading = isEvidenceLoading || isReceiptLoading;
   const error = receiptError ?? evidenceError;
   const loaded = Boolean(receipt || evidencePack);
   const canExport = Boolean(row?.exportable) && !isLoading && !isExporting;
   const canPrint = loaded && !isLoading;
+  const verification = verificationSummary({ evidencePack, receipt, row });
+
+  async function copyFingerprint() {
+    if (!verification?.fingerprint) return;
+    try {
+      await navigator.clipboard.writeText(verification.fingerprint);
+      setCopyState("Copied");
+    } catch {
+      setCopyState("Copy failed");
+    }
+  }
 
   return (
     <aside className="ev-proof-panel" aria-label="Focused proof panel">
@@ -85,6 +143,26 @@ export function FocusedProofPanel({
             {isExporting ? "Exporting" : row?.exportKind === "receipt" ? "Export receipt JSON" : "Export proof JSON"}
           </DashboardButton>
         </div>
+        {verification ? (
+          <section className="ev-external-verify" aria-label="External hash verification">
+            <div>
+              <ShieldCheck size={16} aria-hidden="true" />
+              <span>
+                <strong>External verification</strong>
+                <small>{verification.label} / {verification.status} / {verification.algorithm}</small>
+              </span>
+            </div>
+            <code>{verification.fingerprint}</code>
+            <div className="ev-external-verify-actions">
+              <DashboardButton icon={<Copy size={14} />} onClick={() => void copyFingerprint()} size="sm" variant="soft">
+                {copyState || "Copy fingerprint"}
+              </DashboardButton>
+              <DashboardButtonLink href={verification.verifyHref} icon={<ExternalLink size={14} />} size="sm" target="_blank" variant="ghost">
+                Verify externally
+              </DashboardButtonLink>
+            </div>
+          </section>
+        ) : null}
       </section>
 
       <section className="ev-proof-detail" aria-label="Selected proof detail">
