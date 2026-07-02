@@ -20623,7 +20623,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
   gap: 14px !important;
   width: 100% !important;
   border: 1px solid var(--mc-border) !important;
@@ -20634,6 +20635,31 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: inherit !important;
   text-align: left !important;
   cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-logo {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 10px !important;
+  flex-shrink: 0 !important;
+  color: var(--connector-brand, #635BFF) !important;
+  background: color-mix(in srgb, var(--connector-brand, #635BFF) 10%, #fff) !important;
+  border: 1px solid color-mix(in srgb, var(--connector-brand, #635BFF) 22%, transparent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-inspector-title {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-inspector-title .connector-logo {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row:hover,

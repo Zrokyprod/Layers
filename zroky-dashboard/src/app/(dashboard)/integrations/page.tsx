@@ -85,6 +85,7 @@ import {
   type ConnectorInventoryRow,
   type ConnectorTransportGroup,
 } from "@/lib/connector-inventory";
+import { ConnectorLogo } from "@/lib/connector-logo";
 import { externalNavigator } from "@/lib/external-navigation";
 import { compactJson, formatCount, formatPercent, humanize } from "@/lib/format";
 import type {
@@ -567,6 +568,7 @@ function ConnectorInventoryList({
                     key={row.id}
                     onClick={() => onSelect(row.id)}
                   >
+                    <ConnectorLogo id={row.id} />
                     <span className="connector-row-main">
                       <strong>{row.title}</strong>
                       <small>{row.category}</small>
@@ -2230,10 +2232,13 @@ function ConnectorInspector({
   return (
     <section className="panel connector-inspector-panel" aria-label="Selected connector">
       <div className="connector-inspector-head">
-        <div>
-          <span className="dashboard-eyebrow">{row.kind === "proof" ? "Selected verifier" : "Selected workflow"}</span>
-          <h2>{row.title}</h2>
-          <p>{row.description}</p>
+        <div className="connector-inspector-title">
+          <ConnectorLogo id={row.id} size={26} />
+          <div>
+            <span className="dashboard-eyebrow">{row.kind === "proof" ? "Selected verifier" : "Selected workflow"}</span>
+            <h2>{row.title}</h2>
+            <p>{row.description}</p>
+          </div>
         </div>
         <StatusPill value={row.state} label={connectorStateLabel(row.state)} tone={row.tone} />
       </div>
