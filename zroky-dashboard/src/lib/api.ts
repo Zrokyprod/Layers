@@ -662,6 +662,7 @@ export interface PilotPolicyPayload {
   runtime_amount_deny_threshold_usd: number | null;
   runtime_production_deploys_require_approval: boolean;
   runtime_changed_recipient_deny: boolean;
+  runtime_sequence_risk_enabled: boolean;
 }
 
 export interface PilotPolicyResponse {

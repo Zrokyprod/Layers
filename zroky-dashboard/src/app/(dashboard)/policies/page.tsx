@@ -1076,6 +1076,12 @@ export default function PoliciesPage() {
                     onChange={(checked) => updatePolicyField("runtime_block_prompt_injected_external_action", checked)}
                   />
                   <ToggleRow
+                    label="Sequence risk holds"
+                    description="Hold cross-action patterns that are unsafe together — bulk read then external send, repeated money movement, or credential change then external transfer — even when each action is individually allowed."
+                    checked={policy.runtime_sequence_risk_enabled}
+                    onChange={(checked) => updatePolicyField("runtime_sequence_risk_enabled", checked)}
+                  />
+                  <ToggleRow
                     label="Production deploy approval"
                     description="Hold production deploy actions until a human approves the exact intent."
                     checked={policy.runtime_production_deploys_require_approval}

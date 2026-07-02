@@ -106,6 +106,9 @@ export function describePolicyPatch(patch: Partial<PilotPolicyPayload>): string[
   if (patch.runtime_changed_recipient_deny != null) {
     conditions.push(boolLabel(Boolean(patch.runtime_changed_recipient_deny), "Changed recipient denied", "Recipient changes allowed"));
   }
+  if (patch.runtime_sequence_risk_enabled != null) {
+    conditions.push(boolLabel(Boolean(patch.runtime_sequence_risk_enabled), "Sequence risk holds on", "Sequence risk holds off"));
+  }
   if (patch.runtime_production_deploys_require_approval != null) {
     conditions.push(
       boolLabel(

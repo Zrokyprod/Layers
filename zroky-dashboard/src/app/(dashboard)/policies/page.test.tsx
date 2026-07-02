@@ -80,6 +80,7 @@ function policy(overrides: Partial<PilotPolicyPayload> = {}): PilotPolicyPayload
     runtime_amount_deny_threshold_usd: 5000,
     runtime_production_deploys_require_approval: true,
     runtime_changed_recipient_deny: true,
+    runtime_sequence_risk_enabled: false,
     ...overrides,
   };
 }
@@ -356,6 +357,19 @@ describe("PoliciesPage mandate control", () => {
         runtime_allowed_tools: ["ledger.lookup", "crm.update"],
         runtime_sensitive_tools: ["ledger.refund", "email.send", "crm.delete"],
       }),
+    );
+  });
+
+  it("enables sequence-risk holds through the mandate toggle", async () => {
+    renderPoliciesPage();
+
+    await screen.findByRole("heading", { name: "Human review waiting" });
+    fireEvent.click(screen.getByLabelText(/Sequence risk holds/i));
+    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+
+    await waitFor(() => expect(api.updatePilotPolicy).toHaveBeenCalled());
+    expect(api.updatePilotPolicy.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ runtime_sequence_risk_enabled: true }),
     );
   });
 
