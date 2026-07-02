@@ -156,8 +156,11 @@ describe("buildActionLifecycle", () => {
       mutations: [mutation()],
     });
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
+    const actionRow = rows.find((row) => row.kind === "action_intent");
+    const bypassRow = rows.find((row) => row.kind === "bypass_mutation");
+
+    expect(rows).toHaveLength(2);
+    expect(actionRow).toMatchObject({
       kind: "action_intent",
       actionId: "act_ready",
       decisionId: "decision_ready",
@@ -167,13 +170,22 @@ describe("buildActionLifecycle", () => {
       status: "matched",
       sourceLabel: "Action Intent",
     });
-    expect(rows[0].proofChain.map((step) => step.step)).toEqual([
+    expect(actionRow?.proofChain.map((step) => step.step)).toEqual([
       "action",
       "policy",
       "execution",
       "verification",
       "receipt",
     ]);
+    expect(bypassRow).toMatchObject({
+      kind: "bypass_mutation",
+      status: "policy_bypass",
+      stage: { id: "bypassed", tone: "danger" },
+      receiptStatus: "missing",
+      bypassDetail: {
+        title: "Control bypass detected",
+      },
+    });
   });
 
   it("keeps guard-only decisions visible as secondary partial chains", () => {
@@ -319,6 +331,9 @@ describe("buildActionLifecycle", () => {
     });
     expect(filterActionLifecycle(rows, "mismatched").map((row) => row.actionId)).toEqual(["act_mismatch"]);
     expect(filterActionLifecycle(rows, "not_verified").map((row) => row.actionId)).toEqual(["act_unverified"]);
+    expect(rows.find((row) => row.actionId === "act_mismatch")?.verificationIssue).toMatchObject({
+      title: "Verification failed",
+    });
     expect(actionLifecycleCounts(rows)).toMatchObject({
       protectedActions: 3,
       mismatched: 1,
@@ -361,5 +376,20 @@ describe("buildActionLifecycle", () => {
 
     expect(filterActionLifecycle(rows, "held").map((row) => row.actionId)).toEqual(["act_held"]);
     expect(filterActionLifecycle(rows, "executing").map((row) => row.actionId)).toEqual(["act_executing"]);
+  });
+
+  it("filters bypassed source mutations as first-class lifecycle rows", () => {
+    const rows = buildActionLifecycle({
+      intents: [],
+      decisions: [],
+      outcomes: [],
+      mutations: [mutation()],
+    });
+
+    expect(filterActionLifecycle(rows, "bypassed").map((row) => row.id)).toEqual(["mutation:mutation_123"]);
+    expect(actionLifecycleCounts(rows)).toMatchObject({
+      bypassed: 1,
+      protectedActions: 0,
+    });
   });
 });

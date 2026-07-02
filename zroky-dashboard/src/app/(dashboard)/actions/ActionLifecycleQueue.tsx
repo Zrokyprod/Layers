@@ -15,6 +15,7 @@ const FILTERS: Array<{ id: ActionLifecycleFilter; label: string }> = [
   { id: "executing", label: "Executing" },
   { id: "mismatched", label: "Mismatched" },
   { id: "not_verified", label: "Not verified" },
+  { id: "bypassed", label: "Bypassed" },
 ];
 
 type ActionLifecycleQueueProps = {
@@ -73,7 +74,7 @@ export function ActionLifecycleQueue({
                 <span className="al-queue-kicker">
                   <span className="al-stage-marker" data-tone={row.stage.tone}>
                     <span className="al-stage-dot" aria-hidden="true" />
-                    {row.kind === "orphan_decision" ? "Guard-only" : row.stage.label}
+                    {row.kind === "orphan_decision" ? "Guard-only" : row.kind === "bypass_mutation" ? "Bypass" : row.stage.label}
                   </span>
                   <small>{formatDateTime(row.updatedAt ?? row.createdAt)}</small>
                 </span>

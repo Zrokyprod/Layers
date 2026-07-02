@@ -108,6 +108,68 @@ function AttemptList({ attempts, fallback }: { attempts: ActionExecutionAttemptR
   );
 }
 
+function VerificationIssueCard({ row }: { row: ActionLifecycleRow }) {
+  if (!row.verificationIssue) return null;
+  return (
+    <section className="al-truth-card al-tone-danger" aria-label="Verification mismatch">
+      <div className="al-truth-card-head">
+        <div>
+          <span className="al-eyebrow">Verification failed because</span>
+          <strong>{row.verificationIssue.title}</strong>
+          <p>{row.verificationIssue.detail}</p>
+        </div>
+        <StatusPill value="mismatched" label="Mismatched" tone="danger" />
+      </div>
+      {row.verificationIssue.fields.length > 0 ? (
+        <div className="al-diff-table" role="table" aria-label="Claimed versus actual mismatch">
+          <div role="row">
+            <span role="columnheader">Field</span>
+            <span role="columnheader">Claimed</span>
+            <span role="columnheader">Actual</span>
+          </div>
+          {row.verificationIssue.fields.map((field) => (
+            <div role="row" key={field.field}>
+              <span role="cell">{field.field}</span>
+              <code role="cell">{field.claimed}</code>
+              <code role="cell">{field.actual}</code>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function BypassCard({ row }: { row: ActionLifecycleRow }) {
+  if (!row.bypassDetail) return null;
+  return (
+    <section className="al-truth-card al-tone-danger" aria-label="Bypass risk detail">
+      <div className="al-truth-card-head">
+        <div>
+          <span className="al-eyebrow">Bypass risk</span>
+          <strong>{row.bypassDetail.title}</strong>
+          <p>{row.bypassDetail.detail}</p>
+        </div>
+        <StatusPill value={row.bypassDetail.classification} label={humanize(row.bypassDetail.classification)} tone="danger" />
+      </div>
+      <dl className="al-bypass-facts">
+        <div>
+          <dt>Actor</dt>
+          <dd>{row.bypassDetail.actor}</dd>
+        </div>
+        <div>
+          <dt>System</dt>
+          <dd>{row.systemRef ?? "-"}</dd>
+        </div>
+        <div>
+          <dt>Mutation</dt>
+          <dd>{row.mutation?.mutation_id ?? "-"}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 export function ActionInspector({ attempts, row, timeline }: ActionInspectorProps) {
   if (!row) {
     return (
@@ -128,12 +190,15 @@ export function ActionInspector({ attempts, row, timeline }: ActionInspectorProp
     { label: "Operation", value: row.operationKind ? humanize(row.operationKind) : null },
     { label: "Attempt", value: row.attemptId, mono: true },
     { label: "Outcome", value: row.outcomeId, mono: true },
+    { label: "Mutation", value: row.mutation?.mutation_id, mono: true },
+    { label: "Source", value: row.sourceLabel },
   ];
   const sections: InspectorJsonSection[] = [
     { title: "Intent", value: row.intent?.canonical_intent },
     { title: "Policy decision", value: row.decision?.intended_action ?? row.decision?.policy_hit },
     { title: "Runner execution", value: row.attempt?.execution_plan ?? row.attempt?.result_summary },
     { title: "Verification", value: row.outcome ? { claimed: row.outcome.claimed, actual: row.outcome.actual, comparison: row.outcome.comparison } : null },
+    { title: "Source mutation", value: row.mutation },
   ];
 
   return (
@@ -161,6 +226,8 @@ export function ActionInspector({ attempts, row, timeline }: ActionInspectorProp
         </div>
       </div>
 
+      <BypassCard row={row} />
+      <VerificationIssueCard row={row} />
       <ProofChainStepper steps={row.proofChain} variant="compact" />
       <FactGrid facts={facts} />
 

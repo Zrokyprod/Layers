@@ -407,7 +407,7 @@ describe("ActionsPage", () => {
     });
   });
 
-  it("shows lifecycle metrics, intent-primary queue, and bypass as a metric only", async () => {
+  it("shows lifecycle metrics, quota, intent rows, and bypass as a first-class queue filter", async () => {
     renderActionsPage();
 
     expect(
@@ -424,12 +424,20 @@ describe("ActionsPage", () => {
     expect(within(metrics).getByText("Runner executions")).toBeInTheDocument();
     expect(within(metrics).getByText("Receipts")).toBeInTheDocument();
     expect(within(metrics).getByText("Bypass risk")).toBeInTheDocument();
+    const quota = screen.getByRole("region", { name: "Protected action quota" });
+    expect(within(quota).getByText("12 / 25,000")).toBeInTheDocument();
+    expect(within(quota).getByText("Resets 2026-07-01.")).toBeInTheDocument();
 
     const queue = screen.getByRole("region", { name: "Action lifecycle queue" });
     expect(within(queue).getByText("Refund RF-1001")).toBeInTheDocument();
     expect(within(queue).getByText("Deploy production release")).toBeInTheDocument();
-    expect(within(queue).queryByText("Bypass: stripe:rf_bypass")).not.toBeInTheDocument();
+    expect(within(queue).getByText("Bypass: stripe:rf_bypass")).toBeInTheDocument();
 
+    fireEvent.click(within(queue).getByRole("button", { name: "Bypassed" }));
+    expect(within(queue).getByText("Bypass: stripe:rf_bypass")).toBeInTheDocument();
+    expect(within(queue).queryByText("Deploy production release")).not.toBeInTheDocument();
+
+    fireEvent.click(within(queue).getByRole("button", { name: "All" }));
     fireEvent.click(within(queue).getByRole("button", { name: /Refund RF-1001/ }));
 
     const selected = screen.getByRole("region", { name: "Selected action lifecycle" });
@@ -440,7 +448,10 @@ describe("ActionsPage", () => {
       "/evidence?decision_id=decision_1",
     );
 
-    expect(screen.queryByRole("region", { name: "Bypass risk watch" })).not.toBeInTheDocument();
+    fireEvent.click(within(queue).getByRole("button", { name: /Bypass: stripe:rf_bypass/ }));
+    const bypass = screen.getByRole("region", { name: "Bypass risk detail" });
+    expect(within(bypass).getByText("Control bypass detected")).toBeInTheDocument();
+    expect(within(bypass).getByText("ai_agent:refund-agent")).toBeInTheDocument();
   });
 
   it("shows action-intent lifecycle details with receipt, timeline, and execution attempts", async () => {
@@ -501,6 +512,50 @@ describe("ActionsPage", () => {
     expect(within(selected).getByRole("link", { name: "Open Action Receipt" }).getAttribute("href")).toBe(
       "/evidence?action_id=act_1",
     );
+  });
+
+  it("surfaces verification mismatches without opening raw JSON", async () => {
+    queryState.intents = [
+      actionIntent({
+        proof_status: "mismatched",
+        receipt_status: "generated",
+      }),
+    ];
+    queryState.decisions = [decision()];
+    queryState.outcomes = [
+      outcome({
+        verdict: "mismatched",
+        reason: "amount did not match ledger",
+        claimed: { refund_id: "RF-1001", amount_usd: 42.5 },
+        actual: { refund_id: "RF-1001", amount_usd: 0 },
+        comparison: {
+          compared_fields: ["refund_id", "amount_usd"],
+          mismatches: [{ field: "amount_usd" }],
+        },
+      }),
+    ];
+    queryState.sourceMutationSummary = {
+      total: 0,
+      matched_receipt: 0,
+      authorized_external: 0,
+      legacy_path: 0,
+      unmanaged_agent_action: 0,
+      policy_bypass: 0,
+      unknown_actor: 0,
+      unreceipted: 0,
+    };
+    queryState.unreceiptedMutations = [];
+
+    renderActionsPage();
+
+    const selected = await screen.findByRole("region", { name: "Selected action lifecycle" });
+    const mismatch = within(selected).getByRole("region", { name: "Verification mismatch" });
+    expect(within(mismatch).getByText("Verification failed")).toBeInTheDocument();
+    expect(within(mismatch).getByText("amount did not match ledger")).toBeInTheDocument();
+    const diff = within(mismatch).getByRole("table", { name: "Claimed versus actual mismatch" });
+    expect(within(diff).getByText("amount_usd")).toBeInTheDocument();
+    expect(within(diff).getByText("42.5")).toBeInTheDocument();
+    expect(within(diff).getByText("0")).toBeInTheDocument();
   });
 
   it("renders a ready state when no protected action data exists yet", async () => {

@@ -18,6 +18,7 @@ import {
   listOutcomeReconciliations,
   listProjectActionExecutionAttempts,
   listRuntimePolicyApprovals,
+  listUnreceiptedSourceMutations,
 } from "@/lib/api";
 import {
   actionLifecycleCounts,
@@ -44,6 +45,37 @@ function meterHelper(label: string, meter: BillingUsageMeter | null | undefined)
   if (meter.state === "blocked") return `${label} is blocked on this plan.`;
   if (meter.unlimited) return `${label} is unlimited on this plan.`;
   return meter.resets_at ? `Resets ${meter.resets_at}.` : "Current billing period.";
+}
+
+function meterPercent(meter: BillingUsageMeter | null | undefined): number {
+  if (!meter || meter.unlimited || meter.limit == null || meter.limit <= 0) return 0;
+  return Math.min(100, Math.max(0, (meter.used / meter.limit) * 100));
+}
+
+function quotaState(meter: BillingUsageMeter | null | undefined): StatusTone {
+  if (!meter || meter.unlimited || meter.limit == null) return "neutral";
+  if (meter.state === "blocked" || meter.state === "exceeded") return "danger";
+  if (meter.state === "near_limit" || meter.used / meter.limit >= 0.8) return "warning";
+  return "success";
+}
+
+function ProtectedActionQuota({ meter }: { meter: BillingUsageMeter | null | undefined }) {
+  const percent = meterPercent(meter);
+  const tone = quotaState(meter);
+  return (
+    <section className={`al-quota-gauge al-tone-${tone}`} aria-label="Protected action quota">
+      <div>
+        <span className="al-eyebrow">Protected action quota</span>
+        <strong>{formatMeter(meter)}</strong>
+        <p>{meterHelper("Protected actions", meter)}</p>
+      </div>
+      {meter && !meter.unlimited && meter.limit != null ? (
+        <div className="al-quota-meter" aria-label={`${Math.round(percent)}% of protected action quota used`}>
+          <span style={{ width: `${percent}%` }} />
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 type HeroState = {
@@ -206,6 +238,12 @@ export default function ActionsPage() {
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
+  const sourceMutationsQuery = useQuery({
+    queryKey: ["outcomes", "actions", "source-mutations", "unreceipted"],
+    queryFn: ({ signal }) => listUnreceiptedSourceMutations(100, signal),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
 
   const billing = billingQuery.data;
   const sourceSummary = sourceMutationSummaryQuery.data;
@@ -214,6 +252,7 @@ export default function ActionsPage() {
   const decisions = useMemo(() => decisionsQuery.data?.items ?? [], [decisionsQuery.data?.items]);
   const outcomes = useMemo(() => outcomesQuery.data?.items ?? [], [outcomesQuery.data?.items]);
   const staleAttempts = useMemo(() => staleAttemptsQuery.data?.items ?? [], [staleAttemptsQuery.data?.items]);
+  const sourceMutations = useMemo(() => sourceMutationsQuery.data?.items ?? [], [sourceMutationsQuery.data?.items]);
   const rows = useMemo(
     () => buildActionLifecycle({
       intents,
@@ -221,8 +260,9 @@ export default function ActionsPage() {
       outcomes,
       attempts: staleAttempts,
       staleAttemptIds: staleAttempts.map((attempt) => attempt.attempt_id),
+      mutations: sourceMutations,
     }),
-    [decisions, intents, outcomes, staleAttempts],
+    [decisions, intents, outcomes, sourceMutations, staleAttempts],
   );
   const filteredRows = useMemo(() => filterActionLifecycle(rows, filter), [filter, rows]);
   const counts = useMemo(() => actionLifecycleCounts(rows), [rows]);
@@ -254,7 +294,8 @@ export default function ActionsPage() {
     outcomesQuery.isLoading ||
     staleAttemptsQuery.isLoading ||
     outcomeSummaryQuery.isLoading ||
-    sourceMutationSummaryQuery.isLoading;
+    sourceMutationSummaryQuery.isLoading ||
+    sourceMutationsQuery.isLoading;
   const hasError =
     billingQuery.isError ||
     actionIntentsQuery.isError ||
@@ -262,7 +303,8 @@ export default function ActionsPage() {
     outcomesQuery.isError ||
     staleAttemptsQuery.isError ||
     outcomeSummaryQuery.isError ||
-    sourceMutationSummaryQuery.isError;
+    sourceMutationSummaryQuery.isError ||
+    sourceMutationsQuery.isError;
   const bypassRisk = sourceSummary?.unreceipted ?? 0;
   const matched = outcomeSummary?.matched ?? outcomes.filter((item) => item.verdict === "matched").length;
   const mismatched = counts.mismatched || outcomeSummary?.mismatched || 0;
@@ -283,6 +325,7 @@ export default function ActionsPage() {
     staleAttemptsQuery.dataUpdatedAt ?? 0,
     outcomeSummaryQuery.dataUpdatedAt ?? 0,
     sourceMutationSummaryQuery.dataUpdatedAt ?? 0,
+    sourceMutationsQuery.dataUpdatedAt ?? 0,
   );
   const updatedLabel = lastUpdatedMs > 0
     ? `Updated ${timeSince(new Date(lastUpdatedMs).toISOString(), nowMs)}`
@@ -321,6 +364,7 @@ export default function ActionsPage() {
       staleAttemptsQuery.refetch(),
       outcomeSummaryQuery.refetch(),
       sourceMutationSummaryQuery.refetch(),
+      sourceMutationsQuery.refetch(),
       actionTimelineQuery.refetch(),
       actionAttemptsQuery.refetch(),
     ]);
@@ -360,6 +404,8 @@ export default function ActionsPage() {
           bypassRisk: bypassRisk > 0 ? "danger" : "success",
         }}
       />
+
+      <ProtectedActionQuota meter={billing?.protected_actions} />
 
       <DashboardWorkspace
         left={(

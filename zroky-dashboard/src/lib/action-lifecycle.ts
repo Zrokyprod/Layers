@@ -15,9 +15,9 @@ import {
 } from "@/lib/action-view";
 import { humanize } from "@/lib/format";
 
-export type ActionLifecycleRowKind = "action_intent" | "orphan_decision";
+export type ActionLifecycleRowKind = "action_intent" | "orphan_decision" | "bypass_mutation";
 
-export type ActionLifecycleFilter = "all" | "held" | "executing" | "mismatched" | "not_verified";
+export type ActionLifecycleFilter = "all" | "held" | "executing" | "mismatched" | "not_verified" | "bypassed";
 
 export type ActionLifecycleStageId =
   | "proposed"
@@ -28,6 +28,7 @@ export type ActionLifecycleStageId =
   | "verification"
   | "receipted"
   | "blocked"
+  | "bypassed"
   | "no_runner"
   | "execution_stalled"
   | "guard_only";
@@ -66,6 +67,17 @@ export type ActionLifecycleRow = {
   receiptTone: StatusTone;
   stage: ActionLifecycleStage;
   sourceLabel: string;
+  verificationIssue: {
+    title: string;
+    detail: string;
+    fields: Array<{ field: string; claimed: string; actual: string }>;
+  } | null;
+  bypassDetail: {
+    title: string;
+    detail: string;
+    classification: string;
+    actor: string;
+  } | null;
   createdAt: string | null;
   updatedAt: string | null;
   hrefs: {
@@ -79,6 +91,7 @@ export type ActionLifecycleRow = {
   decision: RuntimePolicyDecisionResponse | null;
   outcome: OutcomeReconciliationView | null;
   attempt: ActionExecutionAttemptResponse | null;
+  mutation: SourceMutationView | null;
   proofChain: ProofChainStep[];
 };
 
@@ -91,6 +104,7 @@ export type ActionLifecycleCounts = {
   mismatched: number;
   notVerified: number;
   stalled: number;
+  bypassed: number;
 };
 
 type BuildActionLifecycleInput = {
@@ -108,6 +122,14 @@ function recordFrom(value: unknown): Record<string, unknown> {
 
 function stringFrom(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function fieldValue(value: unknown): string {
+  if (value == null || value === "") return "-";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
 }
 
 function latestByDate<T>(items: T[], dateOf: (item: T) => string | null | undefined): T | null {
@@ -163,6 +185,17 @@ function latestOutcomeForDecision(
   byDecision: Map<string, OutcomeReconciliationView[]>,
 ): OutcomeReconciliationView | null {
   return latestByDate(byDecision.get(decision.id) ?? [], (outcome) => outcome.checked_at ?? outcome.created_at);
+}
+
+function mutationMatchesKnownAction(
+  mutation: SourceMutationView,
+  knownActionIds: Set<string>,
+  knownReceipts: Set<string>,
+): boolean {
+  return Boolean(
+    (mutation.zroky_action_id && knownActionIds.has(mutation.zroky_action_id)) ||
+      (mutation.action_receipt_id && knownReceipts.has(mutation.action_receipt_id)),
+  );
 }
 
 function latestAttemptForAction(
@@ -318,6 +351,42 @@ function rowTone(status: string, stage: ActionLifecycleStage): StatusTone {
   return "neutral";
 }
 
+function verificationIssueForOutcome(outcome: OutcomeReconciliationView | null): ActionLifecycleRow["verificationIssue"] {
+  if (!outcome || (outcome.verdict !== "mismatched" && outcome.verification_status !== "mismatched")) {
+    return null;
+  }
+  const claimed = recordFrom(outcome.claimed);
+  const actual = recordFrom(outcome.actual);
+  const comparison = recordFrom(outcome.comparison);
+  const mismatchItems = Array.isArray(comparison.mismatches) ? comparison.mismatches : [];
+  const fields = mismatchItems
+    .map((item) => {
+      const field = stringFrom(recordFrom(item).field);
+      return field
+        ? {
+            field,
+            claimed: fieldValue(claimed[field]),
+            actual: fieldValue(actual[field]),
+          }
+        : null;
+    })
+    .filter((item): item is { field: string; claimed: string; actual: string } => Boolean(item));
+  const compared = Array.isArray(comparison.compared_fields) ? comparison.compared_fields : [];
+  const fallbackFields = fields.length > 0
+    ? fields
+    : compared
+        .map((item) => stringFrom(typeof item === "string" ? item : recordFrom(item).field))
+        .filter((field): field is string => Boolean(field))
+        .filter((field) => fieldValue(claimed[field]) !== fieldValue(actual[field]))
+        .map((field) => ({ field, claimed: fieldValue(claimed[field]), actual: fieldValue(actual[field]) }));
+
+  return {
+    title: "Verification failed",
+    detail: outcome.reason || "Claimed action result does not match the source of record.",
+    fields: fallbackFields.slice(0, 4),
+  };
+}
+
 function isHeld(row: ActionLifecycleRow): boolean {
   return row.status === "approval_pending" || row.stage.id === "approval";
 }
@@ -335,6 +404,10 @@ function isNotVerified(row: ActionLifecycleRow): boolean {
     || ["not_verified", "pending", "missing"].includes(row.status);
 }
 
+function isBypassed(row: ActionLifecycleRow): boolean {
+  return row.kind === "bypass_mutation";
+}
+
 function titleForDecision(decision: RuntimePolicyDecisionResponse): string {
   const intendedAction = recordFrom(decision.intended_action);
   return (
@@ -343,6 +416,20 @@ function titleForDecision(decision: RuntimePolicyDecisionResponse): string {
     decision.action_type ??
     decision.id
   );
+}
+
+function titleForMutation(mutation: SourceMutationView): string {
+  return `Bypass: ${mutation.system_ref ?? mutation.resource_id ?? mutation.mutation_id}`;
+}
+
+function proofChainForBypass(mutation: SourceMutationView): ProofChainStep[] {
+  return [
+    { step: "action", label: "Action", status: "No Zroky intent", detail: "No protected action intent is linked.", tone: "danger" },
+    { step: "policy", label: "Policy", status: "Bypassed", detail: "The runtime policy gate did not see this mutation.", tone: "danger" },
+    { step: "execution", label: "Execution", status: "Source mutation", detail: mutation.source_system, tone: "warning" },
+    { step: "verification", label: "Verification", status: humanize(mutation.classification), detail: "Source mutation needs receipt matching or exception review.", tone: "warning" },
+    { step: "receipt", label: "Receipt", status: "Missing", detail: "No Zroky receipt is attached.", tone: "danger" },
+  ];
 }
 
 function latestRowTime(row: ActionLifecycleRow): number {
@@ -357,9 +444,12 @@ export function buildActionLifecycle({
   outcomes,
   attempts = [],
   staleAttemptIds = [],
+  mutations = [],
 }: BuildActionLifecycleInput): ActionLifecycleRow[] {
   const rows: ActionLifecycleRow[] = [];
   const actionDecisionIds = new Set<string>();
+  const actionIds = new Set(intents.map((intent) => intent.action_id));
+  const receiptIds = new Set(intents.map((intent) => intent.action_id).filter(Boolean));
   const decisionById = new Map(decisions.map((decision) => [decision.id, decision]));
   const { byDecision, byIdempotency } = buildOutcomeIndexes(outcomes);
   const attemptsByAction = buildAttemptIndex(attempts);
@@ -407,6 +497,8 @@ export function buildActionLifecycle({
         tone: rowTone(status, stage),
       },
       sourceLabel: "Action Intent",
+      verificationIssue: verificationIssueForOutcome(outcome),
+      bypassDetail: null,
       createdAt: intent.created_at,
       updatedAt: attempt?.updated_at ?? outcome?.checked_at ?? intent.authorized_at ?? intent.decided_at ?? intent.created_at,
       hrefs: {
@@ -422,6 +514,7 @@ export function buildActionLifecycle({
       decision,
       outcome,
       attempt,
+      mutation: null,
       proofChain: buildProofChain(view, { attempt, decision, outcome }),
     });
   }
@@ -470,6 +563,8 @@ export function buildActionLifecycle({
       receiptTone: "neutral",
       stage,
       sourceLabel: "Guard-only Decision",
+      verificationIssue: verificationIssueForOutcome(outcome),
+      bypassDetail: null,
       createdAt: decision.created_at,
       updatedAt: outcome?.checked_at ?? decision.resolved_at ?? decision.created_at,
       hrefs: {
@@ -483,12 +578,73 @@ export function buildActionLifecycle({
       decision,
       outcome,
       attempt: null,
+      mutation: null,
       proofChain: buildGuardOnlyProofChain(decision, outcome),
     });
   }
 
+  for (const mutation of mutations) {
+    if (mutationMatchesKnownAction(mutation, actionIds, receiptIds)) {
+      continue;
+    }
+    const actor = [mutation.actor_type, mutation.actor_id].filter(Boolean).join(":") || "Unknown actor";
+    rows.push({
+      id: `mutation:${mutation.id}`,
+      kind: "bypass_mutation",
+      actionId: null,
+      decisionId: null,
+      outcomeId: null,
+      attemptId: null,
+      traceId: null,
+      callId: null,
+      title: titleForMutation(mutation),
+      agentName: actor,
+      actionType: humanize(mutation.action_type ?? mutation.resource_type, "Source mutation"),
+      operationKind: null,
+      environment: null,
+      digest: null,
+      systemRef: mutation.system_ref ?? mutation.resource_id ?? mutation.mutation_id,
+      ...rowStatus("policy_bypass"),
+      proofStatus: "not_verified",
+      proofLabel: "Bypass",
+      proofTone: "danger",
+      receiptStatus: "missing",
+      receiptLabel: "No receipt",
+      receiptTone: "danger",
+      stage: {
+        id: "bypassed",
+        label: "Bypassed control",
+        detail: "Source-of-record mutation has no matching Zroky action intent or receipt.",
+        tone: "danger",
+      },
+      sourceLabel: "Source Mutation",
+      verificationIssue: null,
+      bypassDetail: {
+        title: "Control bypass detected",
+        detail: "The source system changed without a matching protected action receipt.",
+        classification: mutation.classification,
+        actor,
+      },
+      createdAt: mutation.occurred_at,
+      updatedAt: mutation.created_at,
+      hrefs: {
+        action: null,
+        approvals: null,
+        outcomes: "/outcomes",
+        evidence: "/evidence",
+      },
+      view: null,
+      intent: null,
+      decision: null,
+      outcome: null,
+      attempt: null,
+      mutation,
+      proofChain: proofChainForBypass(mutation),
+    });
+  }
+
   return rows.sort((a, b) => {
-    const rank = { action_intent: 0, orphan_decision: 1 } satisfies Record<ActionLifecycleRowKind, number>;
+    const rank = { bypass_mutation: 0, action_intent: 1, orphan_decision: 2 } satisfies Record<ActionLifecycleRowKind, number>;
     if (rank[a.kind] !== rank[b.kind]) return rank[a.kind] - rank[b.kind];
     return latestRowTime(b) - latestRowTime(a);
   });
@@ -502,6 +658,7 @@ export function filterActionLifecycle(
   if (filter === "held") return rows.filter(isHeld);
   if (filter === "executing") return rows.filter(isExecuting);
   if (filter === "mismatched") return rows.filter(isMismatched);
+  if (filter === "bypassed") return rows.filter(isBypassed);
   return rows.filter(isNotVerified);
 }
 
@@ -515,5 +672,6 @@ export function actionLifecycleCounts(rows: ActionLifecycleRow[]): ActionLifecyc
     mismatched: rows.filter(isMismatched).length,
     notVerified: rows.filter(isNotVerified).length,
     stalled: rows.filter((row) => row.stage.id === "no_runner" || row.stage.id === "execution_stalled").length,
+    bypassed: rows.filter(isBypassed).length,
   };
 }
