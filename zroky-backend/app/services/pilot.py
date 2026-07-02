@@ -85,6 +85,10 @@ DEFAULT_POLICY: dict[str, Any] = {
     "runtime_amount_deny_threshold_usd": 5000.0,
     "runtime_production_deploys_require_approval": True,
     "runtime_changed_recipient_deny": True,
+    # Cross-action ("sequence") risk escalation. Off by default: it can turn an
+    # otherwise-allowed action into hold_for_approval/block based on the recent
+    # action window, so projects opt in deliberately. See services.sequence_risk.
+    "runtime_sequence_risk_enabled": False,
 }
 
 # Keys + their expected types (validation contract — see validate_policy_payload)
@@ -115,6 +119,7 @@ _POLICY_FIELDS: dict[str, tuple[type | tuple[type, ...], str]] = {
     "runtime_amount_deny_threshold_usd": ((int, float, type(None)), "non-negative number or null"),
     "runtime_production_deploys_require_approval": (bool, "boolean"),
     "runtime_changed_recipient_deny": (bool, "boolean"),
+    "runtime_sequence_risk_enabled": (bool, "boolean"),
 }
 
 

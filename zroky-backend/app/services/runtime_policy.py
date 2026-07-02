@@ -14,6 +14,10 @@ from sqlalchemy.orm import Session
 from app.db.models import Call, RuntimePolicyAuditEvent, RuntimePolicyDecision, TraceSpan
 from app.services.runtime_policy_rules import resolve_runtime_policy
 from app.services.privacy import mask_payload, mask_text, mask_value
+from app.services.sequence_risk import SEQUENCE_BLOCK, SequenceRiskSignal
+
+
+_DECISION_RANK = {"allow": 0, "requires_approval": 1, "block": 2}
 
 
 _PROMPT_INJECTION_PATTERNS = (
@@ -976,6 +980,107 @@ def evaluate_runtime_policy(
         reasons=["runtime policy checks passed"],
         allowed=True,
         requires_approval=False,
+    )
+
+
+def _sequence_risk_enabled_from_policy(policy_snapshot: Any) -> bool:
+    return isinstance(policy_snapshot, dict) and policy_snapshot.get("runtime_sequence_risk_enabled") is True
+
+
+def runtime_sequence_risk_enabled(result: RuntimePolicyResult) -> bool:
+    """Return whether sequence-risk detection is enabled for this policy result."""
+
+    policy_snapshot = _json_loads(result.decision.policy_snapshot_json, {})
+    return _sequence_risk_enabled_from_policy(policy_snapshot)
+
+
+def escalate_runtime_policy_result_for_sequence_risk(
+    db: Session,
+    *,
+    project_id: str,
+    result: RuntimePolicyResult,
+    signal: SequenceRiskSignal | None,
+    actor: str | None = None,
+) -> RuntimePolicyResult:
+    """Escalate a persisted runtime-policy decision when cross-action risk is
+    detected. ``evaluate_runtime_policy`` has already committed ``result``, so
+    this updates the *persisted* row (decision, status, reasons, policy_hit) and
+    emits the matching audit event + trace span. It never *downgrades* - if the
+    single-action decision is already at least as restrictive as the sequence
+    recommendation, the result is returned untouched.
+    """
+
+    if signal is None:
+        return result
+
+    # Opt-in only: a project must enable sequence-risk escalation. The resolved
+    # policy is already captured on the persisted decision, so read it there.
+    policy_snapshot = _json_loads(result.decision.policy_snapshot_json, {})
+    if not _sequence_risk_enabled_from_policy(policy_snapshot):
+        return result
+
+    if signal.recommended == SEQUENCE_BLOCK:
+        target_rank, decision, status = 2, "block", "blocked"
+        allowed, requires_approval = False, False
+    else:  # hold_for_approval
+        target_rank, decision, status = 1, "requires_approval", "pending_approval"
+        allowed, requires_approval = False, True
+
+    current_rank = _DECISION_RANK.get(result.decision.decision, 0)
+    if current_rank >= target_rank:
+        return result
+
+    row = result.decision
+    before = _decision_snapshot(row)
+
+    existing_reasons = _json_loads(row.reasons_json, [])
+    if not isinstance(existing_reasons, list):
+        existing_reasons = []
+    seq_reason = _reason(f"sequence risk: {signal.reason}")
+    merged_reasons = [*[str(item) for item in existing_reasons], seq_reason]
+
+    policy_hit = _json_loads(row.policy_hit_json, {})
+    if not isinstance(policy_hit, dict):
+        policy_hit = {}
+    policy_hit["sequence_risk"] = {
+        "pattern": signal.pattern,
+        "recommended": signal.recommended,
+        "confidence": signal.confidence,
+        "reason": signal.reason,
+        "trace_id": signal.trace_id,
+        "contributing_action_ids": signal.contributing_action_ids,
+    }
+
+    row.decision = decision
+    row.status = status
+    row.reasons_json = _json_dumps([_reason(item) for item in merged_reasons])
+    row.policy_hit_json = _json_dumps(policy_hit)
+    if status == "pending_approval":
+        if row.expires_at is None:
+            row.expires_at = _approval_expiry(policy_snapshot)
+        if (row.required_approval_count or 0) <= 0:
+            row.required_approval_count = 1
+    db.add(row)
+    db.flush()
+
+    _log_audit_event(
+        db,
+        decision=row,
+        event_type=_audit_event_type(decision=decision, status=status),
+        actor=actor,
+        reason=seq_reason,
+        before=before,
+        after=_decision_snapshot(row),
+    )
+    _update_trace_policy_span(db, project_id=project_id, decision=row)
+    db.commit()
+    db.refresh(row)
+
+    return RuntimePolicyResult(
+        row,
+        allowed=allowed,
+        requires_approval=requires_approval,
+        reasons=merged_reasons,
     )
 
 

@@ -30,7 +30,137 @@ from app.main import app
 from app.services.action_post_execution import process_action_post_execution_jobs, sweep_stale_execution_attempts
 from app.services.entitlements import set_override_entitlement
 from app.services.outcome_reconciliation import SourceRecord
+from app.services.pilot import upsert_policy
 from app.services.system_of_record_connectors import GenericRestApiConnector
+
+
+def _enable_sequence_risk(client: TestClient, project_id: str, *, ttl_minutes: int | None = None) -> None:
+    payload: dict[str, object] = {"runtime_sequence_risk_enabled": True}
+    if ttl_minutes is not None:
+        payload["runtime_approval_ttl_minutes"] = ttl_minutes
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        upsert_policy(
+            session,
+            project_id=project_id,
+            payload=payload,
+            updated_by="test",
+        )
+        session.commit()
+
+
+def _register_export_contract(client: TestClient, project_id: str) -> dict:
+    # A deliberately NON-sensitive action: a lone export is allowed by the
+    # single-action policy, so any escalation must come from the sequence rule.
+    response = client.post(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+        json={
+            "contract_key": "customer.records.export",
+            "version": "1.0",
+            "action_type": "customer.records.export",
+            "operation_kind": "EXECUTE",
+            "domain_family": "customer_operations",
+            "risk_class": "R2",
+            "connector_family": "generic_rest_api",
+            "schema": {
+                "type": "object",
+                "required": ["resource", "parameters"],
+                "properties": {
+                    "resource": {"type": "object"},
+                    "parameters": {"type": "object"},
+                },
+            },
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _export_intent_payload(**overrides) -> dict:
+    payload = {
+        "contract_version": "customer.records.export/1.0",
+        "action_type": "customer.records.export",
+        "operation_kind": "EXECUTE",
+        "environment": "production",
+        "principal": {"type": "user", "id": "usr_777"},
+        "actor_chain": [{"type": "agent", "id": "offboard-agent", "version": "1.0.0"}],
+        "purpose": {"code": "offboarding", "case_id": "case_777", "summary": "Offboard departing employee"},
+        "resource": {"type": "records.export", "id": "exp_1", "destination": "https://external.example.com/drop"},
+        "parameters": {"scope": "all_customer_records"},
+        "trace_context": {"trace_id": "trace_exfil_1", "agent_name": "offboard-agent"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _decide(client: TestClient, project_id: str, action_id: str) -> dict:
+    response = client.post(
+        f"/v1/action-intents/{action_id}/decide",
+        headers={"X-Project-Id": project_id},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_sequence_risk_escalates_repeated_external_export_when_enabled(client: TestClient) -> None:
+    project_id = "proj_sequence_risk_on"
+    _seed_project(client, project_id)
+    _register_export_contract(client, project_id)
+    _enable_sequence_risk(client, project_id, ttl_minutes=7)
+
+    # First external export in the run: no prior data-gathering step, so the
+    # single-action policy allows it outright.
+    first = _create_intent(
+        client,
+        project_id,
+        idempotency_key="export_1",
+        **_export_intent_payload(),
+    )
+    first_decision = _decide(client, project_id, first["action_id"])
+    assert first_decision["status"] == "authorized", first_decision
+
+    # Second external export in the SAME run completes an exfiltration shape
+    # (collect-then-send-out). The sequence rule must escalate it to approval
+    # even though the identical action was just allowed.
+    second = _create_intent(
+        client,
+        project_id,
+        idempotency_key="export_2",
+        **_export_intent_payload(),
+    )
+    second_decision = _decide(client, project_id, second["action_id"])
+    assert second_decision["status"] == "approval_pending", second_decision
+
+    decision_id = second_decision["runtime_policy_decision_id"]
+    with client._session_factory() as session:  # type: ignore[attr-defined]
+        row = session.get(RuntimePolicyDecision, decision_id)
+        assert row is not None
+        assert row.decision == "requires_approval"
+        assert row.status == "pending_approval"
+        assert "sequence risk" in row.reasons_json
+        assert "sequence_risk" in (row.policy_hit_json or "")
+        assert row.expires_at is not None
+        assert row.created_at is not None
+        assert 6 * 60 <= (row.expires_at - row.created_at).total_seconds() <= 8 * 60
+
+
+def test_sequence_risk_is_off_by_default(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Same scenario, flag NOT enabled: both exports stay allowed. Proves the
+    # escalation is strictly opt-in and does not change default behavior.
+    project_id = "proj_sequence_risk_off"
+    _seed_project(client, project_id)
+    _register_export_contract(client, project_id)
+
+    def _fail_sequence_scan(*args, **kwargs):
+        raise AssertionError("sequence detector should not run when the policy flag is off")
+
+    monkeypatch.setattr("app.services.action_kernel.evaluate_sequence_risk", _fail_sequence_scan)
+
+    first = _create_intent(client, project_id, idempotency_key="export_1", **_export_intent_payload())
+    assert _decide(client, project_id, first["action_id"])["status"] == "authorized"
+
+    second = _create_intent(client, project_id, idempotency_key="export_2", **_export_intent_payload())
+    assert _decide(client, project_id, second["action_id"])["status"] == "authorized"
 
 
 def test_verified_action_public_routes_are_rate_limited() -> None:

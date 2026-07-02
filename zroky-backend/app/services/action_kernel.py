@@ -16,7 +16,13 @@ from app.services.protected_action_billing import (
     METER_PROTECTED_ACTIONS,
     reserve_usage_meter,
 )
-from app.services.runtime_policy import RuntimePolicyResult, evaluate_runtime_policy
+from app.services.runtime_policy import (
+    RuntimePolicyResult,
+    escalate_runtime_policy_result_for_sequence_risk,
+    evaluate_runtime_policy,
+    runtime_sequence_risk_enabled,
+)
+from app.services.sequence_risk import evaluate_sequence_risk
 
 
 class ActionKernelError(ValueError):
@@ -685,6 +691,19 @@ def decide_action_intent(
         project_id=project_id,
         payload=build_runtime_policy_payload(intent, approval_id=effective_approval_id, actor=actor),
     )
+    # Cross-action ("sequence") risk: a bulk read + external send, repeated money
+    # movement, or a credential change + external transfer are dangerous only as
+    # a *pattern*. The single-action policy above cannot see them; escalate the
+    # persisted decision here if the recent action window completes such a shape.
+    if runtime_sequence_risk_enabled(result):
+        sequence_signal = evaluate_sequence_risk(db, project_id=project_id, intent=intent)
+        result = escalate_runtime_policy_result_for_sequence_risk(
+            db,
+            project_id=project_id,
+            result=result,
+            signal=sequence_signal,
+            actor=actor,
+        )
     intent.runtime_policy_decision_id = result.decision.id
     intent.decided_at = _now()
     if result.allowed:
