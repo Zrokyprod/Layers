@@ -8,7 +8,7 @@ const LOOP_LINKS = [
   { label: "Approvals", href: "/approvals" },
   { label: "Outcomes", href: "/outcomes" },
   { label: "Evidence", href: "/evidence" },
-  { label: "Connectors", href: "/connectors" },
+  { label: "Connectors", href: "/integrations" },
 ] as const;
 
 export function ControlLoopStrip() {

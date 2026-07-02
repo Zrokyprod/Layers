@@ -17782,7 +17782,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   min-height: 96px;
@@ -17792,6 +17792,20 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   background: var(--mc-soft);
   color: inherit;
   text-decoration: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="done"] {
+  border-color: rgba(22, 163, 74, 0.28);
+  background: rgba(22, 163, 74, 0.055);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] {
+  border-color: rgba(47, 95, 102, 0.34);
+  background: var(--mc-accent-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="locked"] {
+  color: var(--mc-text-tertiary);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card:hover,
@@ -17816,6 +17830,16 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-variant-numeric: tabular-nums;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="done"] .mc-step-index {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] .mc-step-index {
+  background: var(--mc-accent);
+  color: #ffffff;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-step-icon {
   display: inline-flex;
   align-items: center;
@@ -17836,6 +17860,30 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-arrow {
   color: var(--mc-text-tertiary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-step-state {
+  min-width: 48px;
+  padding: 4px 8px;
+  border: 1px solid var(--mc-border);
+  border-radius: 999px;
+  background: var(--mc-card);
+  color: var(--mc-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="done"] .mc-step-state {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: rgba(22, 163, 74, 0.08);
+  color: #15803d;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] .mc-step-state {
+  border-color: rgba(47, 95, 102, 0.2);
+  background: var(--mc-card);
+  color: var(--mc-accent);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-footer {
@@ -17872,6 +17920,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-color: rgba(47, 95, 102, 0.34);
   background: var(--mc-accent);
   color: #ffffff;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-progress span.is-done {
+  border-color: rgba(22, 163, 74, 0.3);
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-actions {
