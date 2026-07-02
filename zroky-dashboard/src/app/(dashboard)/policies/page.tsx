@@ -1360,60 +1360,6 @@ export default function PoliciesPage() {
                   </div>
                 </div>
               </section>
-
-              <section className="panel settings-control-panel" aria-label="Pilot and autofix policy">
-                <header className="panel-header">
-                  <div>
-                    <h2>Pilot / Autofix policy</h2>
-                    <p>Legacy autopilot rules remain secondary. Runtime action control is the primary Zroky policy.</p>
-                  </div>
-                  <StatusPill
-                    value={policy.tier1_enabled || policy.tier2_enabled ? "enabled" : "disabled"}
-                    label={policy.tier1_enabled || policy.tier2_enabled ? "Enabled" : "Disabled"}
-                    tone={policy.tier1_enabled || policy.tier2_enabled ? "warning" : "neutral"}
-                  />
-                </header>
-                <div className="settings-form-grid">
-                  <ToggleRow
-                    label="Tier 1 reversible autopilot"
-                    description="Legacy low-risk autopilot actions such as rollback or retry tuning."
-                    checked={policy.tier1_enabled}
-                    onChange={(checked) => updatePolicyField("tier1_enabled", checked)}
-                  />
-                  <ToggleRow
-                    label="Tier 2 PR autofix"
-                    description="Legacy replay-gated PR generation for prompt/schema fixes."
-                    checked={policy.tier2_enabled}
-                    onChange={(checked) => updatePolicyField("tier2_enabled", checked)}
-                  />
-                  <NumberField
-                    label="Tier 1 daily cap"
-                    min={0}
-                    value={policy.tier1_daily_cap}
-                    onChange={(value) => updatePolicyField("tier1_daily_cap", Number(value))}
-                  />
-                  <NumberField
-                    label="Tier 2 daily cap"
-                    min={0}
-                    value={policy.tier2_daily_cap ?? ""}
-                    onChange={(value) => updatePolicyField("tier2_daily_cap", value === "" ? null : Number(value))}
-                  />
-                  <TextareaField
-                    label="Tier 1 actions"
-                    value={listToText(policy.tier1_actions)}
-                    onChange={(value) => updatePolicyField("tier1_actions", textToList(value))}
-                  />
-                  <TextareaField
-                    label="Tier 2 actions"
-                    value={listToText(policy.tier2_actions)}
-                    onChange={(value) => updatePolicyField("tier2_actions", textToList(value))}
-                  />
-                </div>
-                <div className="policy-empty-state">
-                  Near-term launch keeps this in the shared policy row, but runtime scoped rules should become a separate
-                  versioned policy model after launch.
-                </div>
-              </section>
             </>
           }
         />

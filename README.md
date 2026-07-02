@@ -24,8 +24,8 @@ Core promise:
 
 The product is not a generic AI observability platform, eval tool, or agent IAM
 console. The product is the gate that controls high-stakes agent actions,
-verifies what actually happened, and turns important production failures into
-replayable regression protection.
+verifies what actually happened against the system of record, and proves it
+with tamper-evident evidence.
 
 ## Mandatory Core Loop
 
@@ -38,8 +38,7 @@ Autonomous agent intends a high-stakes action
 -> approved/allowed action executes
 -> Zroky verifies the real-world outcome against the system of record
 -> Evidence Pack records decision, approval, outcome match, hash, and audit trail
--> important failures become replay/golden regression contracts
--> CI/runtime gates block repeat failures
+-> repeat-risk patterns tighten policy so the same unsafe action is caught earlier
 -> owner sees proof
 ```
 
@@ -57,19 +56,19 @@ AI agents are not deterministic software. They fail because:
 - loops, retries, or long-running autonomous plans drift
 - output looks confident while the business task fails
 - high-risk actions happen without policy or human approval
-- production failures do not automatically become regression tests
+- an action is claimed as done while the real system tells a different story
 
-Zroky exists to make these failures observable, understandable, replayable, and
-blocked from repeating.
+Zroky exists to make these failures controlled, verified, provable, and blocked
+from repeating.
 
 ## Positioning
 
 Preferred language:
 
-- Production-derived regression firewall for AI agents
-- Reliability control plane for autonomous AI agents
-- Turn production AI failures into CI gates
-- Stop AI agent regressions before they ship
+- Control plane for autonomous AI agent actions
+- Stops risky agent actions before they cause damage
+- Verifies real-world outcomes against the system of record
+- Tamper-evident evidence for every high-stakes action
 
 Avoid:
 
@@ -83,15 +82,14 @@ Avoid:
 
 ```text
 AI Agent / App
-  -> SDK / Gateway / Trace Hook
-  -> Agent Flight Recorder
-  -> Trace Graph Store
-  -> Failure Intelligence Engine
-  -> Issue Inbox
-  -> Replay Engine
-  -> Golden Regression Registry
-  -> CI Gate + Runtime Policy Gate
-  -> Owner Evidence + Billing
+  -> SDK / Gateway (preflight captures the proposed action)
+  -> Action Contract (normalized intent + digest)
+  -> Runtime Policy Gate (allow / hold_for_approval / block, incl. sequence risk)
+  -> Human Approval (only when held)
+  -> Runner (executes with an isolated credential; the agent never holds secrets)
+  -> Verifier (checks the system of record: matched / mismatched / not verified)
+  -> Evidence Pack (signed receipt, outcome match, audit hash)
+  -> Owner Dashboard + Billing
 ```
 
 ## Current Dashboard Contract

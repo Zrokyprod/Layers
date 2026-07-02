@@ -228,7 +228,7 @@ export default function ProjectsPage() {
             <div className="settings-project-toolbar">
               <div>
                 <h2>Projects</h2>
-                <p>Project context controls capture keys, provider vaults, replay evidence, Contracts, and CI gates.</p>
+                <p>Project context controls SDK keys, provider vaults, runner credentials, policies, and evidence.</p>
               </div>
               <button type="button" className="btn btn-soft" onClick={() => void load()} disabled={loading}>
                 <RefreshCw aria-hidden="true" />
@@ -313,7 +313,7 @@ export default function ProjectsPage() {
                 <div className="settings-project-empty" role="status">
                   <FolderOpen aria-hidden="true" />
                   <strong>No active project found</strong>
-                  <span>Create or join a project before capture keys and replay evidence can attach to it.</span>
+                  <span>Create or join a project before SDK keys and action evidence can attach to it.</span>
                 </div>
               )}
             </div>

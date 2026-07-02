@@ -331,12 +331,6 @@ describe("PoliciesPage mandate control", () => {
     expect(within(feed).getByText("pending approval")).toBeInTheDocument();
     expect(within(feed).getByText("delete")).toBeInTheDocument();
     expect(within(feed).getByText("tool_not_allowed")).toBeInTheDocument();
-
-    const legacy = screen.getByLabelText("Pilot and autofix policy");
-    expect(within(legacy).getByText("Pilot / Autofix policy")).toBeInTheDocument();
-    expect(
-      within(legacy).getByText("Legacy autopilot rules remain secondary. Runtime action control is the primary Zroky policy."),
-    ).toBeInTheDocument();
   });
 
   it("saves comma-separated tool policy as structured arrays", async () => {
