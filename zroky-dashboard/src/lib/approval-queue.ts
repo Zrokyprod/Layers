@@ -37,6 +37,19 @@ export type ApprovalQueueRow = {
   impactLabel: string;
   riskLabel: string;
   approvalProgress: string;
+  approvalAction: string;
+  approverSubjects: string[];
+  requiredApprovalCount: number;
+  recordedApprovalCount: number;
+  holdReason: {
+    title: string;
+    detail: string;
+    tone: StatusTone;
+    source: "sequence" | "policy" | "reason" | "fallback";
+  };
+  isExpiringSoon: boolean;
+  isExpired: boolean;
+  isSequenceRisk: boolean;
   priority: {
     score: number;
     label: string;
@@ -94,6 +107,13 @@ function moneyLabel(amount: number | null): string {
   }).format(amount);
 }
 
+function readableReason(value: string | null | undefined): string | null {
+  const raw = stringFrom(value);
+  if (!raw) return null;
+  const stripped = raw.replace(/^sequence risk:\s*/i, "");
+  return humanize(stripped);
+}
+
 function titleForDecision(decision: RuntimePolicyDecisionResponse): string {
   const intendedAction = recordFrom(decision.intended_action);
   return (
@@ -141,6 +161,81 @@ function approvalProgress(decision: RuntimePolicyDecisionResponse): string {
   return required > 1 ? `${current}/${required} approvals` : "Approval required";
 }
 
+function sequenceRiskHit(decision: RuntimePolicyDecisionResponse): Record<string, unknown> | null {
+  const hit = recordFrom(decision.policy_hit).sequence_risk;
+  const record = recordFrom(hit);
+  return Object.keys(record).length > 0 ? record : null;
+}
+
+function sequencePatternLabel(pattern: string | null): string {
+  if (pattern === "sensitive_read_then_external_send") return "bulk read -> external send";
+  if (pattern === "rapid_repeated_money_movement") return "rapid money movement";
+  if (pattern === "credential_change_then_external_transfer") return "credential change -> external send";
+  return pattern ? humanize(pattern) : "cross-action pattern";
+}
+
+function holdReasonForDecision(decision: RuntimePolicyDecisionResponse): ApprovalQueueRow["holdReason"] {
+  const sequence = sequenceRiskHit(decision);
+  if (sequence) {
+    const pattern = sequencePatternLabel(stringFrom(sequence.pattern));
+    const detail = readableReason(stringFrom(sequence.reason)) ?? "Multiple individually safe actions matched a risky sequence.";
+    return {
+      title: `Sequence risk: ${pattern}`,
+      detail,
+      tone: stringFrom(sequence.recommended) === "block" ? "danger" : "warning",
+      source: "sequence",
+    };
+  }
+
+  const reason = readableReason(decision.reasons[0]);
+  if (reason) {
+    return {
+      title: "Held by runtime policy",
+      detail: reason,
+      tone: statusTone(decision.status, "runtime_policy"),
+      source: "reason",
+    };
+  }
+
+  const policyHit = recordFrom(decision.policy_hit);
+  const policy = stringFrom(policyHit.policy) ?? stringFrom(policyHit.rule) ?? stringFrom(policyHit.risk_class);
+  if (policy) {
+    return {
+      title: `Held by rule: ${humanize(policy)}`,
+      detail: "The runtime policy matched this action before execution.",
+      tone: statusTone(decision.status, "runtime_policy"),
+      source: "policy",
+    };
+  }
+
+  return {
+    title: "Held by runtime gate",
+    detail: "Zroky paused this action before execution so a human can review the decision.",
+    tone: statusTone(decision.status, "runtime_policy"),
+    source: "fallback",
+  };
+}
+
+function approversForDecision(decision: RuntimePolicyDecisionResponse): string[] {
+  return (decision.approver_subjects ?? [])
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+}
+
+function approvalActionForDecision(
+  decision: RuntimePolicyDecisionResponse,
+  intent: ActionIntentResponse | null,
+  amount: number | null,
+): string {
+  const summary = titleForDecision(decision);
+  const operation = intent?.operation_kind ? humanize(intent.operation_kind) : humanize(decision.action_type ?? decision.tool_name, "Action");
+  const resource = recordFrom(intent?.canonical_intent?.resource);
+  const resourceId = stringFrom(resource.id) ?? stringFrom(resource.external_id) ?? stringFrom(decision.call_id);
+  const amountText = amount != null ? ` for ${moneyLabel(amount)}` : "";
+  const target = resourceId ? ` on ${resourceId}` : "";
+  return `${operation}: ${summary}${target}${amountText}`;
+}
+
 function expiresSoon(expiresAt: string | null, nowMs: number): boolean {
   if (!expiresAt) return false;
   const time = new Date(expiresAt).getTime();
@@ -162,22 +257,25 @@ function priorityForDecision(
   if (decision.status === "pending_approval" && isExpired(decision.expires_at, nowMs)) {
     return { score: 0, label: "P0", detail: "expired hold", tone: "danger" };
   }
-  if (decision.status === "pending_approval" && amount != null) {
-    return { score: 1, label: "P0", detail: "money-touching hold", tone: "warning" };
-  }
   if (decision.status === "pending_approval" && expiresSoon(decision.expires_at, nowMs)) {
-    return { score: 2, label: "P0", detail: "expiring hold", tone: "warning" };
+    return { score: 1, label: "P0", detail: "expiring hold", tone: "warning" };
+  }
+  if (decision.status === "pending_approval" && sequenceRiskHit(decision)) {
+    return { score: 2, label: "P0", detail: "sequence-risk hold", tone: "warning" };
+  }
+  if (decision.status === "pending_approval" && amount != null) {
+    return { score: 3, label: "P0", detail: "money-touching hold", tone: "warning" };
   }
   if (decision.status === "blocked" || decision.status === "rejected") {
-    return { score: 3, label: "P0", detail: "damage stopped", tone: "danger" };
+    return { score: 4, label: "P0", detail: "damage stopped", tone: "danger" };
   }
   if (decision.status === "pending_approval") {
-    return { score: 4, label: "P1", detail: "needs decision", tone: "warning" };
+    return { score: 5, label: "P1", detail: "needs decision", tone: "warning" };
   }
   if (decision.status === "approved") {
-    return { score: 5, label: "P2", detail: "released with audit", tone: "success" };
+    return { score: 6, label: "P2", detail: "released with audit", tone: "success" };
   }
-  return { score: 6, label: "P3", detail: "audit only", tone: statusTone(decision.status, "runtime_policy") };
+  return { score: 7, label: "P3", detail: "audit only", tone: statusTone(decision.status, "runtime_policy") };
 }
 
 function linkedIntentForDecision(
@@ -208,6 +306,8 @@ export function buildApprovalQueue({
     const priority = priorityForDecision(decision, amount, nowMs);
     const status = decision.status;
     const view = intent ? buildActionView(intent, { decision }) : null;
+    const requiredCount = requiredApprovals(decision);
+    const recordedCount = approvalCount(decision);
     return {
       id: `decision:${decision.id}`,
       kind: intent ? "action_intent_hold" : "guard_only_hold",
@@ -230,6 +330,14 @@ export function buildApprovalQueue({
       impactLabel: impactLabel(decision, amount),
       riskLabel: riskLabelForDecision(decision),
       approvalProgress: approvalProgress(decision),
+      approvalAction: approvalActionForDecision(decision, intent, amount),
+      approverSubjects: approversForDecision(decision),
+      requiredApprovalCount: requiredCount,
+      recordedApprovalCount: recordedCount,
+      holdReason: holdReasonForDecision(decision),
+      isExpiringSoon: status === "pending_approval" && expiresSoon(decision.expires_at, nowMs),
+      isExpired: status === "pending_approval" && isExpired(decision.expires_at, nowMs),
+      isSequenceRisk: Boolean(sequenceRiskHit(decision)),
       priority,
       createdAt: decision.created_at,
       expiresAt: decision.expires_at,
@@ -258,6 +366,8 @@ export function approvalQueueCounts(rows: ApprovalQueueRow[]) {
     pending: rows.filter((row) => row.status === "pending_approval").length,
     damageStopped: rows.filter((row) => row.status === "blocked" || row.status === "rejected").length,
     moneyTouching: rows.filter((row) => row.impactValueUsd != null).length,
+    expiringSoon: rows.filter((row) => row.isExpiringSoon).length,
+    sequenceRisk: rows.filter((row) => row.isSequenceRisk).length,
     evidenceLinked: rows.filter((row) => row.decision.trace_id || row.decision.call_id || row.actionId).length,
     guardOnly: rows.filter((row) => row.kind === "guard_only_hold").length,
   };

@@ -98,6 +98,14 @@ describe("buildApprovalQueue", () => {
       statusLabel: "Pending approval",
       proofStatus: "not_started",
       receiptStatus: "missing",
+      holdReason: {
+        title: "Held by runtime policy",
+        detail: "Delete requires approval",
+      },
+      approvalAction: "DELETE: Archive inventory item on item_123",
+      approverSubjects: [],
+      requiredApprovalCount: 1,
+      recordedApprovalCount: 0,
     });
     expect(rows[0].proofChain.map((step) => step.step)).toEqual([
       "action",
@@ -137,7 +145,7 @@ describe("buildApprovalQueue", () => {
     });
   });
 
-  it("prioritizes money-touching and expiring holds without keyword guessing", () => {
+  it("prioritizes expiring, sequence-risk, and money-touching holds without keyword guessing", () => {
     const rows = buildApprovalQueue({
       decisions: [
         decision({
@@ -154,6 +162,19 @@ describe("buildApprovalQueue", () => {
           expires_at: "2026-06-28T11:00:00Z",
         }),
         decision({
+          id: "sequence_hold",
+          intended_action: { summary: "Send exported customer file" },
+          action_type: "customer.email.send",
+          policy_hit: {
+            sequence_risk: {
+              pattern: "sensitive_read_then_external_send",
+              reason: "a sensitive/bulk read was followed by an external send/export in the same run - data-exfiltration shape",
+              recommended: "hold_for_approval",
+            },
+          },
+          expires_at: "2026-06-28T11:00:00Z",
+        }),
+        decision({
           id: "expiring_hold",
           intended_action: { summary: "Restart workflow" },
           action_type: "workflow.restart",
@@ -164,21 +185,33 @@ describe("buildApprovalQueue", () => {
     });
 
     expect(rows.map((row) => row.decisionId)).toEqual([
-      "money_hold",
       "expiring_hold",
+      "sequence_hold",
+      "money_hold",
       "normal_hold",
     ]);
-    expect(rows[0].priority).toMatchObject({ label: "P0", detail: "money-touching hold" });
-    expect(rows[1].priority).toMatchObject({ label: "P0", detail: "expiring hold" });
-    expect(rows[2].priority).toMatchObject({ label: "P1", detail: "needs decision" });
+    expect(rows[0].priority).toMatchObject({ label: "P0", detail: "expiring hold" });
+    expect(rows[1].priority).toMatchObject({ label: "P0", detail: "sequence-risk hold" });
+    expect(rows[1].holdReason).toMatchObject({
+      title: "Sequence risk: bulk read -> external send",
+      source: "sequence",
+    });
+    expect(rows[2].priority).toMatchObject({ label: "P0", detail: "money-touching hold" });
+    expect(rows[3].priority).toMatchObject({ label: "P1", detail: "needs decision" });
   });
 
-  it("counts pending, stopped, evidence-linked, money-touching, and guard-only rows", () => {
+  it("counts pending, stopped, evidence-linked, expiring, sequence-risk, money-touching, and guard-only rows", () => {
     const rows = buildApprovalQueue({
       decisions: [
-        decision(),
+        decision({ expires_at: "2026-06-28T10:20:00Z" }),
         decision({ id: "blocked", status: "blocked", business_impact: { amount_usd: 50 }, trace_id: null, call_id: null }),
-        decision({ id: "rejected", status: "rejected", trace_id: null, call_id: null }),
+        decision({
+          id: "rejected",
+          status: "rejected",
+          trace_id: null,
+          call_id: null,
+          policy_hit: { sequence_risk: { pattern: "rapid_repeated_money_movement" } },
+        }),
       ],
       intents: [intent()],
     });
@@ -188,6 +221,8 @@ describe("buildApprovalQueue", () => {
       pending: 1,
       damageStopped: 2,
       moneyTouching: 1,
+      expiringSoon: 1,
+      sequenceRisk: 1,
       evidenceLinked: 1,
       guardOnly: 2,
     });
@@ -200,6 +235,7 @@ describe("buildApprovalQueue", () => {
           id: "dual_hold",
           required_approval_count: 2,
           approval_count: 1,
+          approver_subjects: ["ops@example.com"],
         }),
       ],
       intents: [intent({ runtime_policy_decision_id: "dual_hold" })],
@@ -207,6 +243,9 @@ describe("buildApprovalQueue", () => {
 
     expect(rows[0]).toMatchObject({
       approvalProgress: "1/2 approvals",
+      approverSubjects: ["ops@example.com"],
+      requiredApprovalCount: 2,
+      recordedApprovalCount: 1,
       hrefs: {
         approvals: "/approvals?decision_id=dual_hold",
         evidence: "/evidence?decision_id=dual_hold",

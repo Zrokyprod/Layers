@@ -264,12 +264,20 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(hookState.approvalsStatus).toBe("all");
     const metrics = screen.getByRole("region", { name: "Approval control metrics" });
     expect(within(metrics).getByText("Pending holds")).toBeInTheDocument();
-    expect(within(metrics).getByText("Money-touching")).toBeInTheDocument();
+    expect(within(metrics).getByText("Expiring soon")).toBeInTheDocument();
+    expect(within(metrics).getByText("Sequence risk")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Held action queue" })).toBeInTheDocument();
     const selected = screen.getByRole("region", { name: "Selected action control" });
     expect(screen.getByText("P0")).toBeInTheDocument();
     expect(screen.getByText(/money-touching hold/)).toBeInTheDocument();
     expect(screen.getAllByText("Action intent").length).toBeGreaterThan(0);
+    expect(within(selected).getByText("Held by runtime policy")).toBeInTheDocument();
+    expect(within(selected).getByText("Refund amount above runtime mandate")).toBeInTheDocument();
+    expect(within(selected).getByText("Approve releases")).toBeInTheDocument();
+    expect(within(selected).getByText(/Business mutation: Refund payment rf_100/)).toBeInTheDocument();
+    expect(within(selected).getByText("0/1 approvals recorded")).toBeInTheDocument();
+    expect(within(selected).getByText("No approvers recorded yet.")).toBeInTheDocument();
+    expect(within(selected).getByRole("link", { name: "Slack route" }).getAttribute("href")).toBe("/integrations/slack");
     expect(screen.getByText("act_1")).toBeInTheDocument();
     expect(screen.getByText("intent_digest_1")).toBeInTheDocument();
     expect(within(selected).getByRole("navigation", { name: "Proof chain" })).toBeInTheDocument();
@@ -353,6 +361,14 @@ describe("RuntimeApprovalsPage evidence pack", () => {
         reason: "support ticket verified",
       }),
     );
+  });
+
+  it("lets approvers fill a consistent reason with quick chips", () => {
+    render(<RuntimeApprovalsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Suspicious sequence" }));
+
+    expect(screen.getByLabelText("Decision reason")).toHaveProperty("value", "Suspicious sequence");
   });
 
   it("requires confirmation before enabling the runtime kill switch", async () => {

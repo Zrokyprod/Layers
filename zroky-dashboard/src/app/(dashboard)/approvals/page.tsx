@@ -253,8 +253,8 @@ export default function RuntimeApprovalsPage() {
       <ApprovalsMetricStrip
         pending={counts.pending}
         damageStopped={counts.damageStopped}
-        moneyTouching={counts.moneyTouching}
-        guardOnly={counts.guardOnly}
+        expiringSoon={counts.expiringSoon}
+        sequenceRisk={counts.sequenceRisk}
       />
 
       {message ? <div className="approval-v2-notice">{message}</div> : null}

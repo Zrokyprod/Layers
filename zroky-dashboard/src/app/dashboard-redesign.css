@@ -19141,6 +19141,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-intent-card,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-console,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-mechanism,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain,
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-evidence {
   display: grid;
   gap: 12px;
@@ -19157,6 +19159,107 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
+  background: var(--mc-card);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--mc-border);
+  border-radius: 999px;
+  background: var(--mc-soft);
+  color: var(--mc-accent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason strong,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview strong,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain strong {
+  display: block;
+  color: var(--mc-text);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain {
+  background: var(--mc-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approver-chain li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid rgba(22, 163, 74, 0.24);
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.08);
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  background: var(--mc-soft);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview p {
+  grid-column: 1 / -1;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-reason-chips {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-reason-chips button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--mc-border);
+  border-radius: 999px;
+  background: var(--mc-soft);
+  color: var(--mc-text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-reason-chips button:hover,
+.app-shell[data-dashboard-system="control-v1"] .approval-v2-reason-chips button:focus-visible {
+  border-color: rgba(47, 95, 102, 0.35);
+  background: var(--mc-accent-soft);
+  color: var(--mc-accent);
+  outline: 0;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .approval-v2-intent-card strong {
@@ -19487,6 +19590,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .approval-v2-queue-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-hold-reason,
+  .app-shell[data-dashboard-system="control-v1"] .approval-v2-approve-preview {
     grid-template-columns: 1fr;
   }
 

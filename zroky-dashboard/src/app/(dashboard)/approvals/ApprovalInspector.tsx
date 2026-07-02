@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, FileText, X } from "lucide-react";
+import { Check, FileText, MessageSquare, X } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { EvidencePackView } from "@/components/evidence-pack-view";
@@ -43,6 +43,13 @@ const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: "raw", label: "Raw" },
 ];
 
+const REASON_CHIPS = [
+  "Evidence matches request",
+  "Wrong target",
+  "Policy violation",
+  "Suspicious sequence",
+] as const;
+
 function valuePresent(value: unknown): boolean {
   if (value == null || value === "") return false;
   if (Array.isArray(value)) return value.length > 0;
@@ -62,6 +69,49 @@ function approveLabel(row: ApprovalQueueRow): string {
   const required = requiredApprovals(row);
   const remaining = Math.max(0, required - recordedApprovals(row));
   return required > 1 && remaining > 1 ? "Record Approval" : "Approve";
+}
+
+function ApproverChain({ row }: { row: ApprovalQueueRow }) {
+  const remaining = Math.max(0, row.requiredApprovalCount - row.recordedApprovalCount);
+  return (
+    <section className="approval-v2-approver-chain">
+      <div className="approval-v2-tab-panel-head">
+        <div>
+          <span className="approval-v2-eyebrow">Approver chain</span>
+          <strong>
+            {row.recordedApprovalCount}/{row.requiredApprovalCount} approvals recorded
+          </strong>
+        </div>
+        <span>{remaining === 0 ? "Complete" : `${remaining} needed`}</span>
+      </div>
+      {row.approverSubjects.length > 0 ? (
+        <ol>
+          {row.approverSubjects.map((subject) => (
+            <li key={subject}>
+              <Check aria-hidden="true" size={14} />
+              <span>{subject}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p>No approvers recorded yet.</p>
+      )}
+    </section>
+  );
+}
+
+function HoldReasonCard({ row }: { row: ApprovalQueueRow }) {
+  return (
+    <section className={`approval-v2-hold-reason approval-v2-tone-${row.holdReason.tone}`}>
+      <div>
+        <span className="approval-v2-eyebrow">Held because</span>
+        <strong>{row.holdReason.title}</strong>
+        <p>{row.holdReason.detail}</p>
+      </div>
+      {row.isSequenceRisk ? <span>Sequence</span> : null}
+      {row.isExpiringSoon ? <span>Expiring</span> : null}
+    </section>
+  );
 }
 
 function FactGrid({ facts }: { facts: Fact[] }) {
@@ -268,8 +318,25 @@ export function ApprovalInspector({
           <span>{approvalCopy}</span>
           <StatusPill value={row.status} label={row.statusLabel} tone={row.statusTone} />
         </div>
+        <div className="approval-v2-approve-preview">
+          <div>
+            <span className="approval-v2-eyebrow">Approve releases</span>
+            <strong>{row.approvalAction}</strong>
+          </div>
+          <DashboardButtonLink href="/integrations/slack" icon={<MessageSquare />} variant="soft">
+            Slack route
+          </DashboardButtonLink>
+          <p>Dashboard and Slack approvals resolve the same decision when Slack is connected.</p>
+        </div>
         {canResolve ? (
           <div className="approval-v2-actions">
+            <div className="approval-v2-reason-chips" aria-label="Quick decision reasons">
+              {REASON_CHIPS.map((chip) => (
+                <button key={chip} type="button" onClick={() => setReason(chip)}>
+                  {chip}
+                </button>
+              ))}
+            </div>
             <input
               value={reason}
               onChange={(event) => setReason(event.target.value)}
@@ -315,6 +382,8 @@ export function ApprovalInspector({
         <div className="approval-v2-tab-panel" role="tabpanel">
           {activeTab === "decision" ? (
             <div className="approval-v2-tab-stack">
+              <HoldReasonCard row={row} />
+              <ApproverChain row={row} />
               <section className={`approval-v2-intent-card approval-v2-tone-${row.statusTone}`}>
                 <div>
                   <span className="approval-v2-eyebrow">Action intent</span>

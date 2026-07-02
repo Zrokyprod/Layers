@@ -4,8 +4,7 @@ import type { ComponentType } from "react";
 import {
   AlertTriangle,
   Clock3,
-  FileText,
-  LockKeyhole,
+  ShieldAlert,
 } from "lucide-react";
 
 import { DashboardMetricStrip, type DashboardMetric } from "@/components/dashboard-scaffold";
@@ -23,15 +22,15 @@ type Metric = {
 type ApprovalsMetricStripProps = {
   pending: number;
   damageStopped: number;
-  moneyTouching: number;
-  guardOnly: number;
+  expiringSoon: number;
+  sequenceRisk: number;
 };
 
 export function ApprovalsMetricStrip({
   damageStopped,
-  guardOnly,
-  moneyTouching,
+  expiringSoon,
   pending,
+  sequenceRisk,
 }: ApprovalsMetricStripProps) {
   const metrics: Metric[] = [
     {
@@ -42,25 +41,25 @@ export function ApprovalsMetricStrip({
       Icon: Clock3,
     },
     {
+      label: "Expiring soon",
+      value: expiringSoon,
+      helper: "Pending holds near their approval deadline.",
+      tone: expiringSoon > 0 ? "warning" : "success",
+      Icon: Clock3,
+    },
+    {
+      label: "Sequence risk",
+      value: sequenceRisk,
+      helper: "Cross-action patterns held before execution.",
+      tone: sequenceRisk > 0 ? "warning" : "neutral",
+      Icon: ShieldAlert,
+    },
+    {
       label: "Damage stopped",
       value: damageStopped,
       helper: "Blocked or rejected actions preserved for audit.",
       tone: damageStopped > 0 ? "danger" : "neutral",
       Icon: AlertTriangle,
-    },
-    {
-      label: "Money-touching",
-      value: moneyTouching,
-      helper: "Held actions with explicit monetary impact.",
-      tone: moneyTouching > 0 ? "warning" : "neutral",
-      Icon: FileText,
-    },
-    {
-      label: "Guard-only",
-      value: guardOnly,
-      helper: "Runtime guard decisions without kernel intent.",
-      tone: guardOnly > 0 ? "neutral" : "success",
-      Icon: LockKeyhole,
     },
   ];
 
