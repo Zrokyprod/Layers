@@ -50,6 +50,7 @@ export function ControlLoopStrip({
   bypassCount,
   sequenceRiskCount,
 }: ControlLoopStats) {
+  const sequenceRiskLabel = sequenceRiskCount > 0 ? "Sequence risk caught" : "Sequence risk watch";
   const steps: LoopStep[] = [
     {
       id: "propose",
@@ -160,7 +161,7 @@ export function ControlLoopStrip({
       <aside className="mc-risk-card" aria-label="Sequence risk control">
         <span className="mc-risk-badge">
           <TriangleAlert aria-hidden="true" size={15} />
-          Sequence risk caught
+          {sequenceRiskLabel}
         </span>
         <h3>Stops safe-looking steps that become unsafe together.</h3>
         <p>

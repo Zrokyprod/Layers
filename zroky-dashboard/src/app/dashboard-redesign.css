@@ -18302,20 +18302,25 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-loop-diagram {
-    grid-auto-columns: minmax(190px, 76vw);
-    grid-auto-flow: column;
-    grid-template-columns: none;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    scroll-snap-type: x mandatory;
+    grid-auto-flow: row;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    overflow: visible;
+    padding-bottom: 0;
+    scroll-snap-type: none;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-loop-node-wrap {
-    scroll-snap-align: start;
+    scroll-snap-align: none;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-loop-node {
-    min-height: 132px;
+    min-height: 76px;
+    padding: 10px;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .mc-loop-node-copy {
+    gap: 3px;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-risk-stats {
