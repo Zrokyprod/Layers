@@ -2481,14 +2481,8 @@ function ProofReadinessStep({
       </div>
       <AdvancedDetails title="Advanced implementation snippets">
         <div className="agent-setup-code-split">
-          <div className="agent-setup-code-panel">
-            <span>SDK capture starter</span>
-            <pre>{snippet}</pre>
-          </div>
-          <div className="agent-setup-code-panel">
-            <span>Mandate starter</span>
-            <pre>{mandate}</pre>
-          </div>
+          <CopyableCode label="SDK capture starter" value={snippet} />
+          <CopyableCode label="Mandate starter" value={mandate} />
         </div>
       </AdvancedDetails>
       <AdvancedDetails title="Advanced proof settings">
@@ -2609,8 +2603,7 @@ function SetupHandoff({
       <Link href={href}>{cta}</Link>
       {readiness.canRunFirstAction && readiness.state !== "live" ? (
         <div className="agent-setup-handoff-code">
-          <span>First receipt starter</span>
-          <pre>{snippet}</pre>
+          <CopyableCode label="First receipt starter" value={snippet} />
         </div>
       ) : null}
     </div>
@@ -2789,10 +2782,7 @@ function GoLiveStep({
         </div>
       ) : null}
 
-      <div className="agent-setup-code-panel">
-        <span>First protected action starter</span>
-        <pre>{snippet}</pre>
-      </div>
+      <CopyableCode label="First protected action starter" value={snippet} />
 
       <div className="agent-setup-inline-actions">
         <DashboardButtonLink href={actionHref} variant="soft">
@@ -2984,6 +2974,39 @@ function AdvancedDetails({
       <summary>{title}</summary>
       <div>{children}</div>
     </details>
+  );
+}
+
+function CopyableCode({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="agent-setup-code-panel">
+      <div className="agent-setup-code-head">
+        <span>{label}</span>
+        <button type="button" onClick={copyCode} aria-label={`Copy ${label}`}>
+          {copied ? <Check aria-hidden="true" /> : <ClipboardCheck aria-hidden="true" />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre>{value}</pre>
+    </div>
   );
 }
 

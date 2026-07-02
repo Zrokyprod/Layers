@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Bot, Cpu, PlayCircle } from "lucide-react";
 
@@ -57,8 +56,8 @@ function AgentFleetTable({
             <tr>
               <th>Agent</th>
               <th>Status</th>
-              <th>Actions</th>
-              <th>Proof</th>
+              <th>Coverage</th>
+              <th>Signals</th>
               <th>Runners</th>
               <th>Last activity</th>
               <th>Open</th>
@@ -93,16 +92,16 @@ function AgentFleetTable({
                   <StatusPill value={row.status} label={row.statusLabel} tone={row.tone} />
                 </td>
                 <td>
-                  <strong>{formatCount(row.actionRollup.total)}</strong>
+                  <strong>{row.coverage.label}</strong>
                   <span className="agents-cell-note">
-                    {formatCount(row.actionRollup.held)} held / {formatCount(row.actionRollup.stalled)} stalled
+                    {row.coverage.detail}
                   </span>
                 </td>
                 <td>
                   <div className="agents-proof-cell">
-                    <span>{formatCount(row.actionRollup.matched)} matched</span>
+                    <span>{row.riskSignals.label}</span>
                     <span className="agents-cell-note">
-                      {formatCount(row.actionRollup.mismatched)} mismatch / {formatCount(row.actionRollup.notVerified)} not verified
+                      {formatCount(row.riskSignals.bypassed)} bypass / {formatCount(row.riskSignals.sequenceRisk)} sequence
                     </span>
                   </div>
                 </td>
@@ -173,18 +172,29 @@ function AgentInspector({
             </small>
           </div>
 
+          <div className="agents-mandate-card" aria-label="Agent mandate summary">
+            <span>Mandate scope</span>
+            <strong>{row.mandate.label}</strong>
+            <small>{row.mandate.detail}</small>
+            <div>
+              <em>{row.mandate.runnerMode ? humanize(row.mandate.runnerMode) : "runner not bound"}</em>
+              <em>{formatCount(row.mandate.verifierCount)} verifier{row.mandate.verifierCount === 1 ? "" : "s"}</em>
+              <em>{formatCount(row.actionRollup.total)} observed action{row.actionRollup.total === 1 ? "" : "s"}</em>
+            </div>
+          </div>
+
           <div className="agents-inspector-score">
             <div>
-              <span>Actions</span>
-              <strong>{formatCount(row.actionRollup.total)}</strong>
+              <span>Coverage</span>
+              <strong>{row.coverage.percent == null ? "No signal" : `${row.coverage.percent}%`}</strong>
             </div>
             <div>
-              <span>Held</span>
-              <strong>{formatCount(row.actionRollup.held)}</strong>
+              <span>Bypass</span>
+              <strong>{formatCount(row.riskSignals.bypassed)}</strong>
             </div>
             <div>
-              <span>Not verified</span>
-              <strong>{formatCount(row.actionRollup.notVerified)}</strong>
+              <span>Sequence risk</span>
+              <strong>{formatCount(row.riskSignals.sequenceRisk)}</strong>
             </div>
             <div>
               <span>Health</span>

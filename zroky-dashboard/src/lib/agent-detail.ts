@@ -201,6 +201,8 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
     tone: "neutral",
     actionRollup: {
       total: 0,
+      protectedActions: 0,
+      bypassed: 0,
       held: 0,
       executing: 0,
       stalled: 0,
@@ -209,6 +211,35 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
       notVerified: 0,
       receiptsGenerated: 0,
       receiptsMissing: 0,
+    },
+    coverage: {
+      configured: profile.allowed_action_types.length,
+      protectedObserved: 0,
+      bypassedObserved: 0,
+      observed: 0,
+      percent: null,
+      label: profile.allowed_action_types.length > 0 ? `${profile.allowed_action_types.length} mandated` : "No coverage yet",
+      detail: profile.allowed_action_types.length > 0
+        ? `${profile.allowed_action_types.length} protected action ${profile.allowed_action_types.length === 1 ? "type" : "types"} configured`
+        : "No protected action mandate configured",
+      tone: profile.allowed_action_types.length > 0 ? "neutral" : "warning",
+    },
+    riskSignals: {
+      bypassed: 0,
+      sequenceRisk: 0,
+      mismatched: 0,
+      label: "No risky drift",
+      tone: "success",
+    },
+    mandate: {
+      label: profile.allowed_action_types.length > 0
+        ? profile.allowed_action_types.slice(0, 2).join(" / ").replace(/_/g, " ")
+        : "Mandate not scoped",
+      detail: `${profile.verification_connectors.length} verifier${profile.verification_connectors.length === 1 ? "" : "s"} / ${profile.tool_names.length} tools`,
+      actionTypes: profile.allowed_action_types.map((type) => type.replace(/_/g, " ")),
+      toolCount: profile.tool_names.length,
+      verifierCount: profile.verification_connectors.length,
+      runnerMode: null,
     },
     runnerCount: 0,
     runners: [],

@@ -24,6 +24,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
   title: string;
   body: string;
   cta: string;
+  ctaHref: string;
 } {
   if (error) {
     return {
@@ -31,6 +32,16 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
       title: "Agent visibility unavailable",
       body: "One or more agent fleet feeds did not refresh cleanly.",
       cta: "Retry refresh",
+      ctaHref: "/agents",
+    };
+  }
+  if (fleet.totals.bypassed > 0) {
+    return {
+      tone: "danger",
+      title: "Agent control bypass detected",
+      body: `${formatCount(fleet.totals.bypassed)} source mutation${fleet.totals.bypassed === 1 ? "" : "s"} happened without a matching protected action receipt.`,
+      cta: "Review bypass",
+      ctaHref: "/actions?filter=bypassed",
     };
   }
   if (fleet.totals.mismatched > 0) {
@@ -39,6 +50,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
       title: "Agent proof mismatch",
       body: `${formatCount(fleet.totals.mismatched)} managed action path has source-of-record proof that does not match.`,
       cta: "Review exceptions",
+      ctaHref: "/actions?filter=mismatched",
     };
   }
   if (fleet.totals.held > 0) {
@@ -47,6 +59,16 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
       title: "Agents need decisions",
       body: `${formatCount(fleet.totals.held)} action is held before execution. Review approvals before letting the fleet continue.`,
       cta: "Review holds",
+      ctaHref: "/approvals",
+    };
+  }
+  if (fleet.totals.sequenceRisk > 0) {
+    return {
+      tone: "warning",
+      title: "Sequence risk caught",
+      body: `${formatCount(fleet.totals.sequenceRisk)} agent action sequence matched a cross-action risk pattern before execution.`,
+      cta: "Review signals",
+      ctaHref: "/approvals",
     };
   }
   if (fleet.totals.notVerified > 0) {
@@ -55,6 +77,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
       title: "Agents need proof",
       body: `${formatCount(fleet.totals.notVerified)} action path is controlled but not verified yet.`,
       cta: "Review proof",
+      ctaHref: "/actions?filter=not_verified",
     };
   }
   if (fleet.rows.length === 0) {
@@ -63,6 +86,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
       title: "Setup required",
       body: "Create one managed agent profile, run one protected action, and attach a runner plus verifier.",
       cta: "Add agent",
+      ctaHref: "/agents/setup",
     };
   }
   return {
@@ -70,6 +94,7 @@ function heroCopy(fleet: AgentFleetView, error: boolean): {
     title: "Agents controlled",
     body: "Managed profiles, runner attempts, and proof states are visible through the verified-action loop.",
     cta: "Add agent",
+    ctaHref: "/agents/setup",
   };
 }
 
@@ -85,6 +110,10 @@ export function AgentsFleetHero({
     ? `${formatCount(fleet.meter.active)} managed \u00b7 unlimited`
     : `${formatCount(fleet.meter.active)} / ${formatCount(fleet.meter.cap)}`;
   const addDisabled = fleet.meter.reached || loading;
+  const coverageLabel = fleet.totals.coveragePercent == null
+    ? "No coverage"
+    : `${fleet.totals.coveragePercent}%`;
+  const riskSignalCount = fleet.totals.bypassed + fleet.totals.sequenceRisk;
 
   return (
     <>
@@ -108,7 +137,7 @@ export function AgentsFleetHero({
             ) : (
               <DashboardButtonLink
                 aria-disabled={addDisabled || undefined}
-                href="/agents/setup"
+                href={copy.ctaHref}
                 icon={<ArrowRight />}
                 iconPosition="right"
                 variant="primary"
@@ -133,22 +162,22 @@ export function AgentsFleetHero({
             value: capLabel,
           },
           {
-            helper: "Actions waiting at the policy gate.",
-            label: "Held actions",
-            tone: fleet.totals.held > 0 ? "warning" : "success",
-            value: formatCount(fleet.totals.held),
+            helper: "Observed high-risk paths protected by Zroky versus bypassed source mutations.",
+            label: "Coverage",
+            tone: fleet.totals.bypassed > 0 ? "danger" : fleet.totals.coveragePercent === 100 ? "success" : "warning",
+            value: coverageLabel,
+          },
+          {
+            helper: `${formatCount(fleet.totals.bypassed)} bypass / ${formatCount(fleet.totals.sequenceRisk)} sequence-risk.`,
+            label: "Risk signals",
+            tone: fleet.totals.bypassed > 0 ? "danger" : fleet.totals.sequenceRisk > 0 ? "warning" : "success",
+            value: formatCount(riskSignalCount),
           },
           {
             helper: "Protected runners with active heartbeat.",
             label: "Runners online",
             tone: fleet.runners.online > 0 ? "success" : fleet.runners.total > 0 ? "warning" : "neutral",
             value: `${formatCount(fleet.runners.online)} / ${formatCount(fleet.runners.total)}`,
-          },
-          {
-            helper: "Signed receipts linked to managed actions.",
-            label: "Receipts generated",
-            tone: fleet.totals.receiptReady > 0 ? "success" : "neutral",
-            value: formatCount(fleet.totals.receiptReady),
           },
         ]}
       />

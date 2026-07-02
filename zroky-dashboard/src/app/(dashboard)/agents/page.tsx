@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 
 import { DashboardButtonLink } from "@/components/dashboard-button";
-import { listAgentProfiles } from "@/lib/api";
+import { listAgentProfiles, listUnreceiptedSourceMutations } from "@/lib/api";
 import type { AgentProfileResponse } from "@/lib/api";
 import {
   useActionIntents,
@@ -149,6 +149,12 @@ export default function AgentsPage() {
   const outcomesQuery = useOutcomeReconciliations("all", 200);
   const runnersQuery = useActionRunners();
   const attemptsQuery = useProjectActionExecutionAttempts({ limit: 200 });
+  const sourceMutationsQuery = useQuery({
+    queryKey: ["agents", "source-mutations", "unreceipted"],
+    queryFn: ({ signal }) => listUnreceiptedSourceMutations(200, signal),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
   const staleAttemptsQuery = useProjectActionExecutionAttempts({
     status: ["planned", "claimed", "dispatched", "running"],
     stale: true,
@@ -156,9 +162,16 @@ export default function AgentsPage() {
     limit: 200,
   });
 
-  const profiles = profilesQuery.data?.items ?? [];
-  const attempts = attemptsQuery.data?.items ?? [];
-  const staleAttemptIds = (staleAttemptsQuery.data?.items ?? []).map((attempt) => attempt.attempt_id);
+  const profiles = useMemo(() => profilesQuery.data?.items ?? [], [profilesQuery.data?.items]);
+  const attempts = useMemo(() => attemptsQuery.data?.items ?? [], [attemptsQuery.data?.items]);
+  const sourceMutations = useMemo(
+    () => sourceMutationsQuery.data?.items ?? [],
+    [sourceMutationsQuery.data?.items],
+  );
+  const staleAttemptIds = useMemo(
+    () => (staleAttemptsQuery.data?.items ?? []).map((attempt) => attempt.attempt_id),
+    [staleAttemptsQuery.data?.items],
+  );
   const fleet = useMemo(() => buildFleetView({
     profiles,
     profileMeta: profilesQuery.data ?? null,
@@ -169,6 +182,7 @@ export default function AgentsPage() {
     runners: runnersQuery.data?.items ?? [],
     attempts,
     staleAttemptIds,
+    mutations: sourceMutations,
   }), [
     profiles,
     profilesQuery.data,
@@ -179,6 +193,7 @@ export default function AgentsPage() {
     runnersQuery.data?.items,
     attempts,
     staleAttemptIds,
+    sourceMutations,
   ]);
 
   const loading = profilesQuery.isLoading;
@@ -187,6 +202,7 @@ export default function AgentsPage() {
     (outcomesQuery.error || leaderboardQuery.error) && "Proof feed",
     runnersQuery.error && "Runner feed",
     attemptsQuery.error && "Attempt feed",
+    sourceMutationsQuery.error && "Bypass feed",
     (intentsQuery.error || approvalsQuery.error) && "Action feed",
   ].filter(Boolean) as string[];
   const setupStatus = getAgentControlSetupStatus(profiles as AgentProfileResponse[], null);
@@ -200,6 +216,7 @@ export default function AgentsPage() {
     outcomesQuery.refetch();
     runnersQuery.refetch();
     attemptsQuery.refetch();
+    sourceMutationsQuery.refetch();
     staleAttemptsQuery.refetch();
   }
 

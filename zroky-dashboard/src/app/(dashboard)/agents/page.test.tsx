@@ -11,6 +11,7 @@ import type {
   AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
+  SourceMutationView,
 } from "@/lib/api";
 import AgentsPage from "./page";
 
@@ -22,6 +23,7 @@ const api = vi.hoisted(() => ({
   listOutcomeReconciliations: vi.fn(),
   listProjectActionExecutionAttempts: vi.fn(),
   listRuntimePolicyApprovals: vi.fn(),
+  listUnreceiptedSourceMutations: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -247,6 +249,29 @@ function attempt(overrides: Partial<ActionExecutionAttemptResponse> = {}): Actio
   };
 }
 
+function mutation(overrides: Partial<SourceMutationView> = {}): SourceMutationView {
+  return {
+    id: "mutation_inventory",
+    project_id: "proj_1",
+    source_system: "stripe",
+    mutation_id: "rf_bypass",
+    action_type: "stripe_refund",
+    resource_type: "refund",
+    resource_id: "rf_bypass",
+    system_ref: "stripe:rf_bypass",
+    actor_type: "ai_agent",
+    actor_id: "inventory-agent",
+    zroky_action_id: null,
+    action_receipt_id: null,
+    idempotency_key: null,
+    classification: "policy_bypass",
+    metadata: {},
+    occurred_at: now,
+    created_at: now,
+    ...overrides,
+  };
+}
+
 function mockAgents({
   profiles = [profile()],
   activeCount = profiles.filter((item) => item.is_active).length,
@@ -259,6 +284,7 @@ function mockAgents({
   runners = [runner()],
   attempts = [attempt()],
   staleAttempts = [] as ActionExecutionAttemptResponse[],
+  mutations = [] as SourceMutationView[],
 }: {
   profiles?: AgentProfileResponse[];
   activeCount?: number;
@@ -271,6 +297,7 @@ function mockAgents({
   runners?: ActionRunnerResponse[];
   attempts?: ActionExecutionAttemptResponse[];
   staleAttempts?: ActionExecutionAttemptResponse[];
+  mutations?: SourceMutationView[];
 } = {}) {
   api.listAgentProfiles.mockResolvedValue({
     items: profiles,
@@ -297,6 +324,10 @@ function mockAgents({
     total_in_page: outcomes.length,
   });
   api.listActionRunners.mockResolvedValue({ items: runners });
+  api.listUnreceiptedSourceMutations.mockResolvedValue({
+    items: mutations,
+    total_in_page: mutations.length,
+  });
   api.listProjectActionExecutionAttempts.mockImplementation((query: { stale?: boolean }) => Promise.resolve({
     items: query?.stale ? staleAttempts : attempts,
   }));
@@ -314,15 +345,19 @@ describe("AgentsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Agents controlled", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(screen.getAllByText("Coverage").length).toBeGreaterThan(0);
     expect(screen.getByText("Runners online")).toBeInTheDocument();
 
     const table = screen.getByLabelText("Agent fleet table");
     expect(within(table).getByText("Inventory Agent")).toBeInTheDocument();
     expect(within(table).getByText("Matched")).toBeInTheDocument();
+    expect(within(table).getByText("100% covered")).toBeInTheDocument();
+    expect(within(table).getByText("No risky drift")).toBeInTheDocument();
     expect(within(table).getByText("observed compatible")).toBeInTheDocument();
 
     const inspector = screen.getByLabelText("Selected agent control");
     expect(within(inspector).getByText("Managed profile")).toBeInTheDocument();
+    expect(within(inspector).getByLabelText("Agent mandate summary")).toBeInTheDocument();
     expect(within(inspector).getByLabelText("Proof chain")).toBeInTheDocument();
     expect(within(inspector).getByText("Archive inventory item")).toBeInTheDocument();
     expect(within(inspector).getByRole("link", { name: "Open evidence" }).getAttribute("href")).toBe("/evidence?action_id=act_inventory");
@@ -402,6 +437,37 @@ describe("AgentsPage", () => {
     expect(within(table).getByText("Inventory Agent")).toBeInTheDocument();
     expect(within(table).getByText("shadow-agent")).toBeInTheDocument();
     expect(within(table).getByText("Telemetry-only / unmanaged")).toBeInTheDocument();
+  });
+
+  it("surfaces managed-agent bypass and sequence-risk signals in fleet governance", async () => {
+    mockAgents({
+      decisions: [
+        decision({
+          policy_hit: {
+            sequence_risk: {
+              pattern: "sensitive_read_then_external_send",
+            },
+          },
+          reasons: ["sequence risk: sensitive read before external send"],
+        }),
+      ],
+      mutations: [mutation()],
+    });
+
+    renderAgentsPage();
+
+    expect(await screen.findByRole("heading", { name: "Agent control bypass detected", level: 1 })).toBeInTheDocument();
+    expect(screen.getByText("Risk signals")).toBeInTheDocument();
+
+    const table = screen.getByLabelText("Agent fleet table");
+    expect(within(table).getByText("Control bypass")).toBeInTheDocument();
+    expect(within(table).getByText("50% covered")).toBeInTheDocument();
+    expect(within(table).getByText("2 signals")).toBeInTheDocument();
+    expect(within(table).getByText("1 bypass / 1 sequence")).toBeInTheDocument();
+
+    const inspector = screen.getByLabelText("Selected agent control");
+    expect(within(inspector).getByText("Bypass")).toBeInTheDocument();
+    expect(within(inspector).getByText("Sequence risk")).toBeInTheDocument();
   });
 
   it("routes a telemetry-only identity into setup prefilled with the observed agent name", async () => {

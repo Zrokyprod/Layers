@@ -34,6 +34,10 @@ const api = vi.hoisted(() => ({
   updateAgentProfile: vi.fn(),
 }));
 
+const clipboard = vi.hoisted(() => ({
+  writeText: vi.fn(),
+}));
+
 const navigation = vi.hoisted(() => ({
   query: "",
 }));
@@ -307,6 +311,11 @@ function clickStep(label: string) {
 describe("AgentControlSetupPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clipboard.writeText.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: clipboard,
+    });
     navigation.query = "";
     window.localStorage.clear();
     api.getToolRegistry.mockResolvedValue(registry());
@@ -507,6 +516,8 @@ describe("AgentControlSetupPage", () => {
     expect(screen.getByText("Waiting for first protected action")).toBeInTheDocument();
     expect(screen.getByText(/zroky.verified_action/)).toBeInTheDocument();
     expect(screen.getByText(/agent_id=\"agent_1\"/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy First protected action starter" }));
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("agent_id=\"agent_1\"")));
   });
 
   it("marks the wizard live only after a matched generated receipt exists", async () => {
