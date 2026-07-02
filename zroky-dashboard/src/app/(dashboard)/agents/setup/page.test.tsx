@@ -301,8 +301,17 @@ function renderWizard() {
   );
 }
 
+function openAdvancedSetup() {
+  const existingStepper = screen.queryByLabelText("Agent setup steps");
+  if (existingStepper) return existingStepper;
+  const advancedButton = screen.getAllByRole("button", { name: "Advanced setup" })[0];
+  if (!advancedButton) throw new Error("Missing Advanced setup button");
+  fireEvent.click(advancedButton);
+  return screen.getByLabelText("Agent setup steps");
+}
+
 function clickStep(label: string) {
-  const stepper = screen.getByLabelText("Agent setup steps");
+  const stepper = openAdvancedSetup();
   const button = within(stepper).getAllByRole("button").find((item) => item.textContent?.includes(label));
   if (!button) throw new Error(`Missing step button for ${label}`);
   fireEvent.click(button);
@@ -351,10 +360,20 @@ describe("AgentControlSetupPage", () => {
     });
   });
 
-  it("renders the full control setup workflow and protection plan preview", async () => {
+  it("renders the developer quickstart by default and keeps the full setup wizard available", async () => {
     renderWizard();
 
     expect(await screen.findByText("Agent Control Setup")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Connect, run, then govern" })).toBeInTheDocument();
+    const quickstart = screen.getByLabelText("Developer quickstart");
+    expect(within(quickstart).getByText("Connect")).toBeInTheDocument();
+    expect(within(quickstart).getByText("Run")).toBeInTheDocument();
+    expect(within(quickstart).getByText("Govern what Zroky saw")).toBeInTheDocument();
+    expect(within(quickstart).getByRole("link", { name: "Project keys" }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByLabelText("Auto-derived control plan")).toBeInTheDocument();
+
+    openAdvancedSetup();
+
     expect(screen.getByRole("heading", { name: /Enable protection for this agent/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Agent setup readiness")).toBeInTheDocument();
 
@@ -380,6 +399,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByDisplayValue("shadow-agent")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Stale draft")).toBeNull();
   });
@@ -405,6 +425,7 @@ describe("AgentControlSetupPage", () => {
   it("allows essentials-only enable without optional business context or simulation", async () => {
     renderWizard();
 
+    openAdvancedSetup();
     fireEvent.click(await screen.findByText("Advanced agent context"));
     fireEvent.change(screen.getByLabelText("Primary business goal"), {
       target: { value: "" },
@@ -511,6 +532,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByRole("heading", { name: /Run the first protected action/i })).toBeInTheDocument();
     clickStep("Go Live");
 
@@ -544,6 +566,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByRole("heading", { name: /Operations Agent is live and verified/i })).toBeInTheDocument();
     clickStep("Go Live");
 
@@ -577,6 +600,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByDisplayValue("Existing Agent")).toBeInTheDocument();
     clickStep("Proof & Readiness");
     fireEvent.click(screen.getByRole("button", { name: /Save changes/i }));
@@ -603,6 +627,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByDisplayValue("Existing Agent")).toBeInTheDocument();
     clickStep("Proof & Readiness");
     fireEvent.click(screen.getByRole("button", { name: /Enable project policy/i }));
@@ -619,6 +644,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByDisplayValue("Operations Agent")).toBeInTheDocument();
     clickStep("Control Path");
 
@@ -642,6 +668,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByDisplayValue("Operations Agent")).toBeInTheDocument();
     clickStep("Control Path");
 
@@ -675,6 +702,7 @@ describe("AgentControlSetupPage", () => {
 
     renderWizard();
 
+    openAdvancedSetup();
     expect(await screen.findByDisplayValue("Operations Agent")).toBeInTheDocument();
     await waitFor(() => expect(api.listActionIntents).toHaveBeenCalledWith(
       {

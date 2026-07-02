@@ -2781,6 +2781,175 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   background: var(--dash-green) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart {
+  display: grid !important;
+  gap: 14px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-main {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  align-items: start !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan {
+  display: grid !important;
+  gap: 13px !important;
+  min-width: 0 !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card {
+  align-content: start !important;
+  min-height: 100% !important;
+  padding: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="connect"] {
+  border-left: 4px solid var(--dash-blue) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="run"] {
+  border-left: 4px solid var(--dash-amber) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="govern"] {
+  border-left: 4px solid var(--dash-green) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head {
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  align-items: start !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head > span {
+  display: grid !important;
+  place-items: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.76rem !important;
+  font-weight: 860 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head div {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head strong {
+  color: var(--dash-text) !important;
+  font-size: 1rem !important;
+  font-weight: 840 !important;
+  line-height: 1.16 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.78rem !important;
+  line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-observed,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid {
+  display: grid !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy > div {
+  display: grid !important;
+  grid-template-columns: 28px minmax(0, 1fr) !important;
+  gap: 9px !important;
+  align-items: start !important;
+  min-width: 0 !important;
+  padding: 10px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: var(--dash-surface-subtle) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy > div[data-done="true"] {
+  border-color: rgba(6, 118, 71, 0.22) !important;
+  background: var(--dash-green-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: var(--dash-blue) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy > div[data-done="true"] svg {
+  color: var(--dash-green) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy span,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-observed > div,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid > div {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy strong,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-observed strong,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid strong {
+  color: var(--dash-text) !important;
+  font-size: 0.84rem !important;
+  font-weight: 820 !important;
+  line-height: 1.28 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy small,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.75rem !important;
+  line-height: 1.38 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-observed {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-observed > div,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid > div {
+  padding: 10px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: var(--dash-surface-subtle) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-observed span,
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid span {
+  color: var(--dash-text-muted) !important;
+  font-size: 0.7rem !important;
+  font-weight: 820 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan {
+  padding: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-layout {
   display: grid !important;
   grid-template-columns: minmax(210px, 248px) minmax(0, 1fr) !important;
@@ -4112,6 +4281,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     grid-template-columns: 1fr !important;
   }
 
+  .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-main {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-stepper,
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-preview {
     position: static !important;
@@ -4185,6 +4362,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-preview-grid,
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-plan-grid,
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-plan-path,
+  .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-observed,
+  .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid,
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-preview .agent-setup-preview-section:last-child {
     grid-template-columns: 1fr !important;
   }

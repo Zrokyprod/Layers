@@ -102,6 +102,7 @@ type RunnerMode = "managed" | "customer_hosted";
 type RiskClass = "R0" | "R1" | "R2" | "R3" | "R4";
 type ProtectionState = "draft" | "plan_saved" | "enforced";
 type ConnectorFamily = "ledger" | "stripe" | "razorpay" | "netsuite" | "customer" | "generic" | "hubspot" | "salesforce" | "zoho" | "postgres" | "zendesk" | "jira";
+type SetupMode = "quickstart" | "advanced";
 type ConnectorStatus =
   | CustomerRecordConnectorStatusResponse
   | GenericRestConnectorStatusResponse
@@ -1363,6 +1364,7 @@ export default function AgentControlSetupPage() {
   const searchParams = useSearchParams();
   const editAgentId = searchParams.get("agentId") ?? searchParams.get("agent_id");
   const initialAgentName = searchParams.get("agentName") ?? searchParams.get("agent_name");
+  const [setupMode, setSetupMode] = useState<SetupMode>("quickstart");
   const [activeStep, setActiveStep] = useState<WizardStepId>("agent");
   const [draft, setDraft] = useState<SetupDraft>(DEFAULT_DRAFT);
   const [dryRunAmountUsd, setDryRunAmountUsd] = useState("600");
@@ -1784,6 +1786,21 @@ export default function AgentControlSetupPage() {
     policyDryRunMutation.mutate(amountUsd);
   }
 
+  function enableDefaultPolicy() {
+    if (editAgentId && profileQuery.isLoading) {
+      setFormError("Wait for the agent profile to finish loading before enabling policy.");
+      return;
+    }
+    if (!canSaveControlPlan) {
+      setSetupMode("advanced");
+      setActiveStep("proof");
+      setFormError("Complete the essential readiness checklist before enabling the project policy.");
+      return;
+    }
+    setFormError(null);
+    saveMutation.mutate("enforced");
+  }
+
   function saveDraft() {
     if (!draft.agentName.trim()) {
       setFormError("Add an agent name before saving a draft.");
@@ -1809,16 +1826,24 @@ export default function AgentControlSetupPage() {
     saveMutation.mutate("enforced");
   }
 
+  const heroTitle = setupMode === "quickstart" ? "Connect, run, then govern" : setupFlow.title;
+  const heroCopy = setupMode === "quickstart"
+    ? "Install one SDK snippet, run the agent once, then set policy from actions Zroky actually observes."
+    : setupFlow.copy;
+  const heroUpdatedLabel = setupMode === "quickstart"
+    ? "Developer quickstart"
+    : `Step ${stepIndex + 1} of ${STEPS.length}`;
+
   return (
     <div className="agent-setup-screen">
       <DashboardVerdictHero
         eyebrow="Agent Control Setup"
         icon={<Workflow aria-hidden="true" size={18} />}
-        title={setupFlow.title}
-        copy={setupFlow.copy}
+        title={heroTitle}
+        copy={heroCopy}
         tone={setupFlow.tone}
         pill={setupFlow.pill}
-        updatedLabel={`Step ${stepIndex + 1} of ${STEPS.length}`}
+        updatedLabel={heroUpdatedLabel}
         notices={(
           <Link href="/agents" className="agents-text-link">
             <ArrowLeft aria-hidden="true" />
@@ -1835,6 +1860,9 @@ export default function AgentControlSetupPage() {
             <DashboardButtonLink href="/integrations" variant="soft">
               Connectors
             </DashboardButtonLink>
+            <DashboardButton onClick={() => setSetupMode(setupMode === "quickstart" ? "advanced" : "quickstart")} variant="soft">
+              {setupMode === "quickstart" ? "Advanced setup" : "Developer quickstart"}
+            </DashboardButton>
           </>
         )}
       />
@@ -1844,144 +1872,347 @@ export default function AgentControlSetupPage() {
         metrics={setupFlow.metrics}
       />
 
-      <section className="agent-setup-layout">
-        <aside className="agent-setup-stepper" aria-label="Agent setup steps">
-          <div className="agent-setup-progress">
-            <span>Setup progress</span>
-            <strong>{progress}%</strong>
-            <div>
-              <i style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-          {STEPS.map((step, index) => {
-            const Icon = step.icon;
-            const active = step.id === activeStep;
-            const complete = index < stepIndex;
-            return (
-              <button
-                key={step.id}
-                type="button"
-                className={`agent-setup-step${active ? " is-active" : ""}${complete ? " is-complete" : ""}`}
-                onClick={() => goToStep(step.id)}
-              >
-                <span className="agent-setup-step-icon">
-                  {complete ? <Check aria-hidden="true" /> : <Icon aria-hidden="true" />}
-                </span>
-                <span>
-                  <strong>{step.label}</strong>
-                  <small>{step.kicker}</small>
-                </span>
-              </button>
-            );
-          })}
-        </aside>
-
-        <form className="agent-setup-card" onSubmit={submitSetup}>
-          {activeStep === "agent" ? (
-            <AgentBasicsStep draft={draft} updateDraft={updateDraft} />
-          ) : null}
-          {activeStep === "risk" ? (
-            <RiskActionStep
-              draft={draft}
-              registry={registry}
-              registryLoading={registryQuery.isLoading}
-              selectedActions={selectedActions}
-              toolNames={toolNames}
-              updateDraft={updateDraft}
-              onApplyTemplate={applyActionTemplate}
-              onDiscover={discoverRiskActions}
-            />
-          ) : null}
-          {activeStep === "control" ? (
-            <ControlRulesStep
-              draft={draft}
-              expectedOperationKinds={expectedOperationKinds}
-              runner={setupRunner}
-              runnerCapabilityMatches={runnerCapabilityMatches}
-              runnerEnvironmentMatches={runnerEnvironmentMatches}
-              updateDraft={updateDraft}
-            />
-          ) : null}
-          {activeStep === "proof" ? (
-            <ProofReadinessStep
-              draft={draft}
-              readinessItems={readinessItems}
-              enrichmentItems={enrichmentItems}
-              verifierConnector={verifierConnectorStatus}
-              verifierConnectorFamily={verifierConnectorFamily}
-              verifierCompatible={verifierCompatible}
-              readiness={readiness}
-              policyEnforced={policyEnforced}
-              dryRunAmountUsd={dryRunAmountUsd}
-              policyDryRunResult={policyDryRunResult}
-              dryRunPending={policyDryRunMutation.isPending}
-              savedMode={savedMode}
-              savedProfile={savedProfile}
-              saving={saveMutation.isPending}
-              formError={formError}
-              updateDraft={updateDraft}
-              onDryRunAmountChange={setDryRunAmountUsd}
-              onRunPolicyDryRun={runPolicyDryRun}
-            />
-          ) : null}
-          {activeStep === "live" ? (
-            <GoLiveStep
-              draft={draft}
-              readiness={readiness}
-              activeProfile={activeProfile}
-              firstActions={firstActions}
-              firstActionsLoading={firstActionsLoading}
-              firstReceiptMatched={firstReceiptMatched}
-              firstReceiptAction={firstReceiptQuery.data?.items[0] ?? null}
-              policyDryRunResult={policyDryRunResult}
-            />
-          ) : null}
-
-          <SetupStepGuidancePanel guidance={stepGuidance} />
-
-          <div className="agent-setup-actions">
-            <DashboardButton icon={<ArrowLeft />} onClick={previousStep} disabled={stepIndex === 0} variant="soft">
-              Back
-            </DashboardButton>
-            {activeStep === "proof" ? (
-              <span className="agent-setup-action-cluster">
-                <DashboardButton icon={<Save />} onClick={saveDraft} disabled={saveMutation.isPending} variant="soft">
-                  {saveMutation.isPending ? "Saving..." : editAgentId ? "Save changes" : "Save draft"}
-                </DashboardButton>
-                <DashboardButton icon={<ShieldCheck />} type="submit" disabled={saveMutation.isPending} variant="primary">
-                  {saveMutation.isPending ? "Enforcing..." : "Enable project policy"}
-                </DashboardButton>
-                <DashboardButton icon={<ArrowRight />} iconPosition="right" onClick={nextStep} variant="soft">
-                  Go live
-                </DashboardButton>
-              </span>
-            ) : activeStep === "live" ? (
-              <span className="agent-setup-action-cluster">
-                <DashboardButtonLink href="/actions" variant="soft">
-                  Open Actions
-                </DashboardButtonLink>
-                <DashboardButtonLink href="/evidence" variant="primary">
-                  Open Evidence
-                </DashboardButtonLink>
-              </span>
-            ) : (
-              <DashboardButton icon={<ArrowRight />} iconPosition="right" onClick={nextStep} variant="primary">
-                Continue
-              </DashboardButton>
-            )}
-          </div>
-        </form>
-
-        <ProtectionPlanPreview
+      {setupMode === "quickstart" ? (
+        <DeveloperQuickstart
+          activeProfile={activeProfile}
           draft={draft}
-          registry={registry}
-          registryLoading={registryQuery.isLoading}
+          firstActions={firstActions}
+          firstActionsLoading={firstActionsLoading}
+          firstReceiptAction={firstReceiptQuery.data?.items[0] ?? null}
+          firstReceiptMatched={firstReceiptMatched}
+          formError={formError}
+          policyEnforced={policyEnforced}
+          readiness={readiness}
+          saving={saveMutation.isPending}
           selectedAction={selectedAction}
           selectedActions={selectedActions}
           toolNames={toolNames}
+          onEnableDefaultPolicy={enableDefaultPolicy}
         />
-      </section>
+      ) : (
+        <section className="agent-setup-layout">
+          <aside className="agent-setup-stepper" aria-label="Agent setup steps">
+            <div className="agent-setup-progress">
+              <span>Setup progress</span>
+              <strong>{progress}%</strong>
+              <div>
+                <i style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+            {STEPS.map((step, index) => {
+              const Icon = step.icon;
+              const active = step.id === activeStep;
+              const complete = index < stepIndex;
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  className={`agent-setup-step${active ? " is-active" : ""}${complete ? " is-complete" : ""}`}
+                  onClick={() => goToStep(step.id)}
+                >
+                  <span className="agent-setup-step-icon">
+                    {complete ? <Check aria-hidden="true" /> : <Icon aria-hidden="true" />}
+                  </span>
+                  <span>
+                    <strong>{step.label}</strong>
+                    <small>{step.kicker}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </aside>
+
+          <form className="agent-setup-card" onSubmit={submitSetup}>
+            {activeStep === "agent" ? (
+              <AgentBasicsStep draft={draft} updateDraft={updateDraft} />
+            ) : null}
+            {activeStep === "risk" ? (
+              <RiskActionStep
+                draft={draft}
+                registry={registry}
+                registryLoading={registryQuery.isLoading}
+                selectedActions={selectedActions}
+                toolNames={toolNames}
+                updateDraft={updateDraft}
+                onApplyTemplate={applyActionTemplate}
+                onDiscover={discoverRiskActions}
+              />
+            ) : null}
+            {activeStep === "control" ? (
+              <ControlRulesStep
+                draft={draft}
+                expectedOperationKinds={expectedOperationKinds}
+                runner={setupRunner}
+                runnerCapabilityMatches={runnerCapabilityMatches}
+                runnerEnvironmentMatches={runnerEnvironmentMatches}
+                updateDraft={updateDraft}
+              />
+            ) : null}
+            {activeStep === "proof" ? (
+              <ProofReadinessStep
+                draft={draft}
+                readinessItems={readinessItems}
+                enrichmentItems={enrichmentItems}
+                verifierConnector={verifierConnectorStatus}
+                verifierConnectorFamily={verifierConnectorFamily}
+                verifierCompatible={verifierCompatible}
+                readiness={readiness}
+                policyEnforced={policyEnforced}
+                dryRunAmountUsd={dryRunAmountUsd}
+                policyDryRunResult={policyDryRunResult}
+                dryRunPending={policyDryRunMutation.isPending}
+                savedMode={savedMode}
+                savedProfile={savedProfile}
+                saving={saveMutation.isPending}
+                formError={formError}
+                updateDraft={updateDraft}
+                onDryRunAmountChange={setDryRunAmountUsd}
+                onRunPolicyDryRun={runPolicyDryRun}
+              />
+            ) : null}
+            {activeStep === "live" ? (
+              <GoLiveStep
+                draft={draft}
+                readiness={readiness}
+                activeProfile={activeProfile}
+                firstActions={firstActions}
+                firstActionsLoading={firstActionsLoading}
+                firstReceiptMatched={firstReceiptMatched}
+                firstReceiptAction={firstReceiptQuery.data?.items[0] ?? null}
+                policyDryRunResult={policyDryRunResult}
+              />
+            ) : null}
+
+            <SetupStepGuidancePanel guidance={stepGuidance} />
+
+            <div className="agent-setup-actions">
+              <DashboardButton icon={<ArrowLeft />} onClick={previousStep} disabled={stepIndex === 0} variant="soft">
+                Back
+              </DashboardButton>
+              {activeStep === "proof" ? (
+                <span className="agent-setup-action-cluster">
+                  <DashboardButton icon={<Save />} onClick={saveDraft} disabled={saveMutation.isPending} variant="soft">
+                    {saveMutation.isPending ? "Saving..." : editAgentId ? "Save changes" : "Save draft"}
+                  </DashboardButton>
+                  <DashboardButton icon={<ShieldCheck />} type="submit" disabled={saveMutation.isPending} variant="primary">
+                    {saveMutation.isPending ? "Enforcing..." : "Enable project policy"}
+                  </DashboardButton>
+                  <DashboardButton icon={<ArrowRight />} iconPosition="right" onClick={nextStep} variant="soft">
+                    Go live
+                  </DashboardButton>
+                </span>
+              ) : activeStep === "live" ? (
+                <span className="agent-setup-action-cluster">
+                  <DashboardButtonLink href="/actions" variant="soft">
+                    Open Actions
+                  </DashboardButtonLink>
+                  <DashboardButtonLink href="/evidence" variant="primary">
+                    Open Evidence
+                  </DashboardButtonLink>
+                </span>
+              ) : (
+                <DashboardButton icon={<ArrowRight />} iconPosition="right" onClick={nextStep} variant="primary">
+                  Continue
+                </DashboardButton>
+              )}
+            </div>
+          </form>
+
+          <ProtectionPlanPreview
+            draft={draft}
+            registry={registry}
+            registryLoading={registryQuery.isLoading}
+            selectedAction={selectedAction}
+            selectedActions={selectedActions}
+            toolNames={toolNames}
+          />
+        </section>
+      )}
     </div>
+  );
+}
+
+function DeveloperQuickstart({
+  activeProfile,
+  draft,
+  firstActions,
+  firstActionsLoading,
+  firstReceiptAction,
+  firstReceiptMatched,
+  formError,
+  policyEnforced,
+  readiness,
+  saving,
+  selectedAction,
+  selectedActions,
+  toolNames,
+  onEnableDefaultPolicy,
+}: {
+  activeProfile: AgentProfileResponse | null;
+  draft: SetupDraft;
+  firstActions: ActionIntentResponse[];
+  firstActionsLoading: boolean;
+  firstReceiptAction: ActionIntentResponse | null;
+  firstReceiptMatched: boolean;
+  formError: string | null;
+  policyEnforced: boolean;
+  readiness: SetupReadiness;
+  saving: boolean;
+  selectedAction: ActionCatalogItem;
+  selectedActions: ActionCatalogItem[];
+  toolNames: string[];
+  onEnableDefaultPolicy: () => void;
+}) {
+  const action = latestIntent(firstActions);
+  const snippet = buildFirstReceiptSnippet(draft, activeProfile);
+  const actionHref = action ? `/actions?action_id=${encodeURIComponent(action.action_id)}` : "/actions";
+  const evidenceHref = firstReceiptAction
+    ? `/evidence?action_id=${encodeURIComponent(firstReceiptAction.action_id)}`
+    : action
+      ? `/evidence?action_id=${encodeURIComponent(action.action_id)}`
+      : "/evidence";
+  const actionStatus = action
+    ? action.status.replace(/_/g, " ")
+    : firstActionsLoading
+      ? "polling"
+      : "waiting";
+  const proofStatus = firstReceiptMatched
+    ? "matched receipt generated"
+    : action?.proof_status?.replace(/_/g, " ") ?? "waiting for first action";
+
+  return (
+    <section className="agent-quickstart" aria-label="Developer quickstart">
+      <div className="agent-quickstart-main">
+        <div className="agent-quickstart-card" data-step="connect">
+          <div className="agent-quickstart-card-head">
+            <span>01</span>
+            <div>
+              <strong>Connect</strong>
+              <small>Use one project key and one SDK wrapper. No upfront action inventory required.</small>
+            </div>
+          </div>
+          <CopyableCode label="Minimal SDK starter" value={snippet} />
+          <div className="agent-setup-inline-actions">
+            <DashboardButtonLink href="/settings/keys" variant="primary">
+              Project keys
+            </DashboardButtonLink>
+          </div>
+        </div>
+
+        <div className="agent-quickstart-card" data-step="run">
+          <div className="agent-quickstart-card-head">
+            <span>02</span>
+            <div>
+              <strong>Run</strong>
+              <small>Enable the safe default policy, run the snippet, and let Zroky capture the first real action.</small>
+            </div>
+          </div>
+          <div className="agent-quickstart-policy" aria-label="Default policy model">
+            <div data-done={policyEnforced ? "true" : "false"}>
+              <ShieldCheck aria-hidden="true" />
+              <span>
+                <strong>{policyEnforced ? "Default policy enabled" : "Safe default ready"}</strong>
+                <small>Unknown contracts deny. High-risk actions hold. Captured actions get receipts.</small>
+              </span>
+            </div>
+            <div data-done={action ? "true" : "false"}>
+              {action ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
+              <span>
+                <strong>Action capture</strong>
+                <small>{actionStatus}</small>
+              </span>
+            </div>
+          </div>
+          {!policyEnforced ? (
+            <DashboardButton onClick={onEnableDefaultPolicy} disabled={saving} variant="primary">
+              {saving ? "Enabling..." : "Enable safe default policy"}
+            </DashboardButton>
+          ) : null}
+          {readiness.verifierStatus !== "ready" ? (
+            <div className="agent-setup-intent-note" data-tone="yellow">
+              <Database aria-hidden="true" />
+              <span>
+                <strong>Verifier can be connected later</strong>
+                <small>Actions can be observed now; matched source-of-record proof needs a healthy connector.</small>
+                <Link href="/integrations" className="agent-setup-inline-link">
+                  Open connectors
+                </Link>
+              </span>
+            </div>
+          ) : null}
+          {formError ? <p className="agent-setup-error">{formError}</p> : null}
+        </div>
+
+        <div className="agent-quickstart-card" data-step="govern">
+          <div className="agent-quickstart-card-head">
+            <span>03</span>
+            <div>
+              <strong>Govern what Zroky saw</strong>
+              <small>Use real captured actions to tighten policy instead of guessing every path upfront.</small>
+            </div>
+          </div>
+          <div className="agent-quickstart-observed" aria-label="Observed action status">
+            <div>
+              <span>Agent</span>
+              <strong>{activeProfile?.display_name ?? draft.agentName}</strong>
+            </div>
+            <div>
+              <span>Latest action</span>
+              <strong>{action ? businessActionLabel(selectedAction) : "not received yet"}</strong>
+            </div>
+            <div>
+              <span>Status</span>
+              <strong>{actionStatus}</strong>
+            </div>
+            <div>
+              <span>Proof</span>
+              <strong>{proofStatus}</strong>
+            </div>
+          </div>
+          <div className="agent-setup-inline-actions">
+            <DashboardButtonLink href={actionHref} variant="soft">
+              Open Actions
+            </DashboardButtonLink>
+            <DashboardButtonLink href={evidenceHref} variant={firstReceiptMatched ? "primary" : "soft"}>
+              Open Evidence
+            </DashboardButtonLink>
+          </div>
+        </div>
+      </div>
+
+      <aside className="agent-quickstart-plan" aria-label="Auto-derived control plan">
+        <div className="agent-setup-plan-head">
+          <div>
+            <span>Control Plan</span>
+            <strong>Auto-derived from the snippet and observed traffic.</strong>
+            <small>{draft.agentName} / {draft.environment}</small>
+          </div>
+          <span className="alert-cat-badge badge-green">default</span>
+        </div>
+        <div className="agent-quickstart-plan-grid">
+          <div>
+            <span>Protected path</span>
+            <strong>{businessActionLabel(selectedAction)}</strong>
+            <small>{selectedActions.length} selected by default; adjust after observing traffic.</small>
+          </div>
+          <div>
+            <span>Tools observed</span>
+            <strong>{toolNames.slice(0, 2).join(", ")}</strong>
+            <small>{toolNames.length > 2 ? `${toolNames.length - 2} more tool key${toolNames.length - 2 === 1 ? "" : "s"}` : "Ready for first run"}</small>
+          </div>
+          <div>
+            <span>Policy</span>
+            <strong>Fail closed by default</strong>
+            <small>Unknown deny, risky hold, receipt for controlled actions.</small>
+          </div>
+          <div>
+            <span>Next decision</span>
+            <strong>{firstReceiptMatched ? "Review evidence" : action ? "Inspect captured action" : "Run the snippet"}</strong>
+            <small>Policy tuning happens from what the agent actually did.</small>
+          </div>
+        </div>
+      </aside>
+    </section>
   );
 }
 
