@@ -82,7 +82,7 @@ function heroState({
   if (damageStopped > 0) {
     return {
       title: "Unsafe action stopped",
-      copy: `${damageStopped} blocked or rejected decision${damageStopped === 1 ? "" : "s"} remain preserved with audit evidence.`,
+      copy: `${damageStopped} blocked or rejected decision${damageStopped === 1 ? "" : "s"} ${damageStopped === 1 ? "remains" : "remain"} preserved with audit evidence.`,
       pill: `${damageStopped} stopped`,
       tone: "danger",
     };
@@ -109,9 +109,35 @@ function initialDeepLink(rows: ApprovalQueueRow[], search: URLSearchParams): str
   return rows.find((row) => row.decisionId === decisionId)?.id ?? null;
 }
 
+function filterForStatus(status: string): ApprovalFilter {
+  if (
+    status === "pending_approval" ||
+    status === "blocked" ||
+    status === "approved" ||
+    status === "rejected"
+  ) {
+    return status;
+  }
+  return "all";
+}
+
+function defaultFilterForRows(rows: ApprovalQueueRow[], search: URLSearchParams): ApprovalFilter {
+  const decisionId = search.get("decision_id");
+  const linked = decisionId ? rows.find((row) => row.decisionId === decisionId) : null;
+  if (linked) {
+    return filterForStatus(linked.status);
+  }
+  if (rows.some((row) => row.status === "pending_approval")) return "pending_approval";
+  if (rows.some((row) => row.status === "blocked")) return "blocked";
+  if (rows.some((row) => row.status === "rejected")) return "rejected";
+  if (rows.some((row) => row.status === "approved")) return "approved";
+  return "all";
+}
+
 export default function RuntimeApprovalsPage() {
   const [filter, setFilter] = useState<ApprovalFilter>("pending_approval");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [initialFilterSettled, setInitialFilterSettled] = useState(false);
   const [decisionReason, setDecisionReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [killSwitchArmed, setKillSwitchArmed] = useState(false);
@@ -135,9 +161,8 @@ export default function RuntimeApprovalsPage() {
   const filteredRows = useMemo(() => filterApprovalQueue(rows, filter), [filter, rows]);
   const counts = useMemo(() => approvalQueueCounts(rows), [rows]);
   const selectedRow =
-    rows.find((row) => row.id === selectedId) ??
+    filteredRows.find((row) => row.id === selectedId) ??
     filteredRows[0] ??
-    rows[0] ??
     null;
   const evidencePackQuery = useRuntimePolicyEvidencePack(selectedRow?.decisionId ?? null);
   const loading = approvalsQuery.isLoading || actionIntentsQuery.isLoading;
@@ -157,6 +182,14 @@ export default function RuntimeApprovalsPage() {
       setSelectedId(null);
       return;
     }
+    if (!initialFilterSettled) {
+      const nextFilter = defaultFilterForRows(rows, search);
+      setInitialFilterSettled(true);
+      if (nextFilter !== filter) {
+        setFilter(nextFilter);
+        return;
+      }
+    }
     const linked = initialDeepLink(rows, search);
     if (linked && selectedId == null) {
       setSelectedId(linked);
@@ -167,9 +200,13 @@ export default function RuntimeApprovalsPage() {
       return;
     }
     if (!selectedId || !rows.some((row) => row.id === selectedId)) {
-      setSelectedId(rows[0].id);
+      setSelectedId(filteredRows[0]?.id ?? null);
+      return;
     }
-  }, [filteredRows, rows, search, selectedId]);
+    if (filteredRows.length === 0 && selectedId != null) {
+      setSelectedId(null);
+    }
+  }, [filter, filteredRows, initialFilterSettled, rows, search, selectedId]);
 
   useEffect(() => {
     setDecisionReason("");

@@ -159,6 +159,8 @@ const fixtures = vi.hoisted(() => {
 const hookState = vi.hoisted(() => ({
   evidenceMode: "matched" as "matched" | "missing",
   evidenceDecisionId: null as string | null,
+  decisions: null as RuntimePolicyDecisionResponse[] | null,
+  intents: null as ActionIntentResponse[] | null,
   approvalsStatus: null as string | null,
   approvalsRefetch: vi.fn(),
   approve: vi.fn(),
@@ -186,7 +188,10 @@ vi.mock("@/lib/hooks", () => ({
   useRuntimePolicyApprovals: (status: string) => {
     hookState.approvalsStatus = status;
     return {
-      data: { items: [fixtures.decision], total_in_page: 1 },
+      data: {
+        items: hookState.decisions ?? [fixtures.decision],
+        total_in_page: hookState.decisions?.length ?? 1,
+      },
       isLoading: false,
       isError: false,
       error: null,
@@ -195,7 +200,12 @@ vi.mock("@/lib/hooks", () => ({
     };
   },
   useActionIntents: () => ({
-    data: { items: [fixtures.actionIntent], total_in_page: 1, limit: 100, offset: 0 },
+    data: {
+      items: hookState.intents ?? [fixtures.actionIntent],
+      total_in_page: hookState.intents?.length ?? 1,
+      limit: 100,
+      offset: 0,
+    },
     isLoading: false,
     isError: false,
     error: null,
@@ -229,6 +239,8 @@ describe("RuntimeApprovalsPage evidence pack", () => {
   beforeEach(() => {
     hookState.evidenceMode = "matched";
     hookState.evidenceDecisionId = null;
+    hookState.decisions = null;
+    hookState.intents = null;
     hookState.approvalsStatus = null;
     hookState.approvalsRefetch.mockClear();
     hookState.approve.mockClear();
@@ -271,6 +283,52 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(within(evidence).getByText(fixtures.matchedPack.evidence_hash)).toBeInTheDocument();
     expect(within(evidence).getByText("ledger:rf_100")).toBeInTheDocument();
     expect(hookState.evidenceDecisionId).toBe("decision_1");
+  });
+
+  it("opens a blocked-only approval set on the visible blocked queue", async () => {
+    hookState.decisions = [
+      {
+        ...fixtures.decision,
+        status: "blocked",
+        decision: "block",
+        resolved_at: "2026-06-20T09:01:00Z",
+        resolved_by: "runtime-policy",
+        resolution_reason: "unsafe action blocked",
+      },
+    ];
+
+    render(<RuntimeApprovalsPage />);
+
+    expect(await screen.findByRole("heading", { name: "Unsafe action stopped" })).toBeInTheDocument();
+    expect(screen.getByText("1 blocked or rejected decision remains preserved with audit evidence.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Blocked" }).className).toContain("is-active");
+    const queue = screen.getByRole("region", { name: "Held action queue" });
+    expect(within(queue).getByText("1 action shown")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Selected action control" })).toBeInTheDocument();
+    expect(screen.getByText("Decision already resolved")).toBeInTheDocument();
+    expect(screen.queryByText("No held actions in this view")).not.toBeInTheDocument();
+  });
+
+  it("keeps the inspector empty when the selected filter has no rows", async () => {
+    hookState.decisions = [
+      {
+        ...fixtures.decision,
+        status: "blocked",
+        decision: "block",
+        resolved_at: "2026-06-20T09:01:00Z",
+        resolved_by: "runtime-policy",
+        resolution_reason: "unsafe action blocked",
+      },
+    ];
+
+    render(<RuntimeApprovalsPage />);
+
+    expect((await screen.findByRole("button", { name: "Blocked" })).className).toContain("is-active");
+    fireEvent.click(screen.getByRole("button", { name: "Pending" }));
+
+    expect(await screen.findByText("No held actions in this view")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Select a held action" })).toBeInTheDocument();
+    expect(screen.queryByText("Decision already resolved")).not.toBeInTheDocument();
   });
 
   it("requires an audit reason before approving or rejecting a held action", async () => {
