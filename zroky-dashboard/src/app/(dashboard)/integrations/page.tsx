@@ -14,6 +14,7 @@ import {
   RadioTower,
   RefreshCw,
   Save,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 
@@ -79,11 +80,11 @@ import {
   buildConnectorInventory,
   connectorStateLabel,
   connectorUpdatedLabel,
+  type ConnectorCategoryGroup,
   type ConnectorCoverageRow,
   type ConnectorInventory,
   type ConnectorInventoryId,
   type ConnectorInventoryRow,
-  type ConnectorTransportGroup,
 } from "@/lib/connector-inventory";
 import { ConnectorLogo } from "@/lib/connector-logo";
 import { externalNavigator } from "@/lib/external-navigation";
@@ -92,7 +93,6 @@ import type {
   GithubConnectionStatusResponse,
   SlackInstallStatusResponse,
 } from "@/lib/types";
-import SystemOfRecordConnectors from "./system-of-record-connectors";
 
 type ConnectorsOverviewState = {
   github: GithubConnectionStatusResponse | null;
@@ -476,6 +476,38 @@ function statusValue(row: ConnectorInventoryRow | ConnectorCoverageRow) {
   return row.status;
 }
 
+function connectorSearchText(row: ConnectorInventoryRow): string {
+  return [
+    row.title,
+    row.category,
+    row.description,
+    row.transport,
+    row.templateKind,
+    row.statusLabel,
+    row.detail,
+    row.metadata.connectorType,
+    row.metadata.maskedEndpoint,
+    ...row.supportedActionTypes,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function filterCategoryGroups(
+  groups: ConnectorCategoryGroup[],
+  query: string,
+): ConnectorCategoryGroup[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return groups;
+  return groups
+    .map((group) => ({
+      ...group,
+      rows: group.rows.filter((row) => connectorSearchText(row).includes(normalized)),
+    }))
+    .filter((group) => group.rows.length > 0);
+}
+
 function Fact({
   label,
   value,
@@ -533,11 +565,15 @@ function CoverageMap({ rows }: { rows: ConnectorCoverageRow[] }) {
 
 function ConnectorInventoryList({
   groups,
+  searchQuery,
   selectedId,
+  onSearchQueryChange,
   onSelect,
 }: {
-  groups: ConnectorTransportGroup[];
+  groups: ConnectorCategoryGroup[];
+  searchQuery: string;
   selectedId: ConnectorInventoryId | null;
+  onSearchQueryChange: (value: string) => void;
   onSelect: (id: ConnectorInventoryId) => void;
 }) {
   return (
@@ -545,51 +581,63 @@ function ConnectorInventoryList({
       <div className="connectors-section-head">
         <div>
           <span className="dashboard-eyebrow">Connector inventory</span>
-          <h2>Read-only verifier transports</h2>
-          <p>REST and SQL are proof verifiers. Slack and GitHub are workflow integrations, not evidence sources.</p>
+          <h2>Browse by system category</h2>
+          <p>Payments, CRM, support, finance, database, and workflow systems grouped around how teams verify actions.</p>
         </div>
       </div>
 
-      <div className="connector-transport-list">
+      <label className="connector-search-field">
+        <Search aria-hidden="true" />
+        <span className="sr-only">Search connectors</span>
+        <input
+          aria-label="Search connectors"
+          placeholder="Search connectors, systems, action types..."
+          type="search"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+        />
+      </label>
+
+      <div className="connector-category-list">
         {groups.map((group) => (
-          <section className="connector-transport-group" key={group.transport} aria-label={group.label}>
-            <div className="connector-transport-head">
+          <section className="connector-category-group" key={group.category} aria-label={group.label}>
+            <div className="connector-category-head">
               <strong>{group.label}</strong>
               <span>{group.description}</span>
             </div>
-            {group.rows.length > 0 ? (
-              <div className="connector-row-list">
-                {group.rows.map((row) => (
-                  <button
-                    type="button"
-                    className="connector-inventory-row"
-                    data-selected={selectedId === row.id}
-                    data-tone={row.tone}
-                    key={row.id}
-                    onClick={() => onSelect(row.id)}
-                  >
-                    <ConnectorLogo id={row.id} />
-                    <span className="connector-row-main">
-                      <strong>{row.title}</strong>
-                      <small>{row.category}</small>
-                      <span>{row.description}</span>
-                    </span>
-                    <span className="connector-row-status">
-                      <StatusPill value={statusValue(row)} label={row.statusLabel} tone={row.tone} />
-                      <small>{connectorUpdatedLabel(row)}</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="connector-planned-row">
-                <strong>Planned transport</strong>
-                <span>Webhook / bridge verifiers will be added after REST and SQL verifier coverage is stable.</span>
-              </div>
-            )}
+            <div className="connector-row-list">
+              {group.rows.map((row) => (
+                <button
+                  type="button"
+                  className="connector-inventory-row"
+                  data-selected={selectedId === row.id}
+                  data-tone={row.tone}
+                  key={row.id}
+                  onClick={() => onSelect(row.id)}
+                >
+                  <ConnectorLogo id={row.id} />
+                  <span className="connector-row-main">
+                    <strong>{row.title}</strong>
+                    <small>{row.category}</small>
+                    <span>{row.description}</span>
+                  </span>
+                  <span className="connector-row-status">
+                    <StatusPill value={statusValue(row)} label={row.statusLabel} tone={row.tone} />
+                    <small>{connectorUpdatedLabel(row)}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
           </section>
         ))}
       </div>
+
+      {groups.length === 0 ? (
+        <div className="connectors-empty-state">
+          <strong>No connectors match this search</strong>
+          <span>Try a system name, connector type, or action type such as refund, CRM, Jira, or SQL.</span>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2185,7 +2233,6 @@ function ConnectorInspector({
   stripeStatus,
   zendeskStatus,
   zohoStatus,
-  onShowDetails,
   onGenericStatusChange,
   onHubSpotStatusChange,
   onJiraStatusChange,
@@ -2206,7 +2253,6 @@ function ConnectorInspector({
   stripeStatus: StripeRefundConnectorStatusResponse | null;
   zendeskStatus: ZendeskTicketConnectorStatusResponse | null;
   zohoStatus: ZohoCrmConnectorStatusResponse | null;
-  onShowDetails: () => void;
   onGenericStatusChange: (status: GenericRestConnectorStatusResponse) => void;
   onHubSpotStatusChange: (status: HubSpotCrmConnectorStatusResponse) => void;
   onJiraStatusChange: (status: JiraIssueConnectorStatusResponse) => void;
@@ -2281,9 +2327,6 @@ function ConnectorInspector({
         <DashboardButtonLink href={row.href} variant="primary">
           {row.ctaLabel}
         </DashboardButtonLink>
-        <DashboardButton onClick={onShowDetails} variant="soft">
-          Detailed controls
-        </DashboardButton>
       </div>
 
       {row.id === "generic_rest" ? (
@@ -2358,7 +2401,7 @@ export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true);
   const [partialFailure, setPartialFailure] = useState(false);
   const [selectedId, setSelectedId] = useState<ConnectorInventoryId | null>(initialConnectorFromUrl);
-  const [showDetailedControls, setShowDetailedControls] = useState(false);
+  const [connectorSearch, setConnectorSearch] = useState("");
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
@@ -2452,6 +2495,10 @@ export default function IntegrationsPage() {
   }, [inventory, selectedId]);
 
   const selectedRow = inventory.rows.find((row) => row.id === selectedId) ?? null;
+  const filteredCategoryGroups = useMemo(
+    () => filterCategoryGroups(inventory.categoryGroups, connectorSearch),
+    [connectorSearch, inventory.categoryGroups],
+  );
 
   const metrics = [
     {
@@ -2530,8 +2577,10 @@ export default function IntegrationsPage() {
         className="connectors-workspace"
         left={
           <ConnectorInventoryList
-            groups={inventory.transportGroups}
+            groups={filteredCategoryGroups}
+            onSearchQueryChange={setConnectorSearch}
             onSelect={setSelectedId}
+            searchQuery={connectorSearch}
             selectedId={selectedId}
           />
         }
@@ -2546,7 +2595,6 @@ export default function IntegrationsPage() {
             stripeStatus={overview.stripe}
             zendeskStatus={overview.zendesk}
             zohoStatus={overview.zoho}
-            onShowDetails={() => setShowDetailedControls(true)}
             onGenericStatusChange={(generic) => setOverview((current) => ({ ...current, generic }))}
             onHubSpotStatusChange={(hubspot) => setOverview((current) => ({ ...current, hubspot }))}
             onJiraStatusChange={(jira) => setOverview((current) => ({ ...current, jira }))}
@@ -2565,10 +2613,10 @@ export default function IntegrationsPage() {
         <div className="connectors-section-head">
           <div>
             <span className="dashboard-eyebrow">Launch truth</span>
-            <h2>Backend coverage stays honest</h2>
+            <h2>Native verifier coverage</h2>
             <p>
-              The UI is transport-first, but the current backend still exposes one saved config per verifier type.
-              Templates are quick-start presets under REST, not unlimited named connector instances.
+              Native panels handle the saved source-of-record setup and preflight for each verifier type. Templates
+              remain quick-start presets for REST or SQL paths when a native app connector is not available yet.
             </p>
           </div>
         </div>
@@ -2597,20 +2645,6 @@ export default function IntegrationsPage() {
           Some connector status checks could not load. Coverage is shown from the sources that responded.
         </div>
       ) : null}
-
-      <section className="panel connectors-detail-section" aria-label="Detailed connector controls">
-        <div className="connectors-section-head">
-          <div>
-            <span className="dashboard-eyebrow">Detailed setup</span>
-            <h2>System-of-record connector controls</h2>
-            <p>Open the existing backend-specific controls for ledger, customer record, SQL read, GitHub, and Slack setup.</p>
-          </div>
-          <DashboardButton onClick={() => setShowDetailedControls((open) => !open)} variant="soft">
-            {showDetailedControls ? "Hide controls" : "Show controls"}
-          </DashboardButton>
-        </div>
-        {showDetailedControls ? <SystemOfRecordConnectors /> : null}
-      </section>
     </div>
   );
 }

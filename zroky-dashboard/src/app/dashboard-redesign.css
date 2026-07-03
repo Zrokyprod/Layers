@@ -20586,31 +20586,70 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-text) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connector-category-list,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-list,
 .app-shell[data-dashboard-system="control-v1"] .connector-row-list,
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main {
   display: grid !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connector-search-field {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: #fff !important;
+  padding: 10px 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-search-field svg {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0 !important;
+  color: var(--mc-text-tertiary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-search-field input {
+  width: 100% !important;
+  min-width: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: var(--mc-text) !important;
+  font: inherit !important;
+  font-size: 0.84rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-search-field input::placeholder {
+  color: var(--mc-text-tertiary) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-category-list,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-list {
   gap: 18px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connector-category-group,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-group {
   display: grid !important;
   gap: 10px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connector-category-head,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-head {
   display: grid !important;
   gap: 4px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connector-category-head strong,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-head strong {
   color: var(--mc-text) !important;
   font-size: 0.9rem !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connector-category-head span,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-head span {
   color: var(--mc-text-secondary) !important;
   font-size: 0.78rem !important;

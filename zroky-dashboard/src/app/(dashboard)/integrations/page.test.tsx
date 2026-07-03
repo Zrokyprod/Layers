@@ -987,7 +987,7 @@ describe("IntegrationsPage", () => {
     });
   });
 
-  it("frames connectors as transport-first verifier inventory with coverage", async () => {
+  it("frames connectors as category-first verifier inventory with coverage and search", async () => {
     render(<IntegrationsPage />);
 
     expect(
@@ -1000,10 +1000,13 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("custom")).toBeInTheDocument();
     expect(screen.getByText("No verifier")).toBeInTheDocument();
 
-    expect(screen.getByRole("region", { name: "REST / HTTP JSON verifier" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "SQL / database read verifier" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Webhook / bridge verifier" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Workflow integrations" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Browse by system category" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Finance & ERP" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Database & Custom" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
     expect(screen.getAllByText("REST / HTTP JSON verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("HubSpot CRM verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Salesforce CRM verifier").length).toBeGreaterThan(0);
@@ -1017,12 +1020,20 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("Slack")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Backend coverage stays honest" })).toBeInTheDocument();
-    expect(screen.getByText("one saved config per verifier type", { exact: false })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Integration status" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "stripe" } });
+    expect(screen.getByRole("button", { name: /Stripe refund verifier/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /HubSpot CRM verifier/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show controls" }));
-    expect(screen.getByRole("region", { name: "Integration status" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
+    expect(screen.getByText("No connectors match this search")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "" } });
+
+    expect(screen.getByRole("heading", { name: "Native verifier coverage" })).toBeInTheDocument();
+    expect(screen.getByText("Native panels handle the saved source-of-record setup", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Integration status" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Detailed connector controls" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Detailed controls" })).not.toBeInTheDocument();
 
     await waitFor(() => expect(api.listOutcomeReconciliations).toHaveBeenCalledWith({ limit: 50 }));
     await waitFor(() => expect(api.getGenericRestConnectorStatus).toHaveBeenCalledTimes(1));

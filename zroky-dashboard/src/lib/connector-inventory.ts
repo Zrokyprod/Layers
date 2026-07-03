@@ -134,11 +134,27 @@ export type ConnectorTransportGroup = {
   rows: ConnectorInventoryRow[];
 };
 
+export type ConnectorBusinessCategory =
+  | "payments"
+  | "crm"
+  | "support_itsm"
+  | "finance_erp"
+  | "database_custom"
+  | "workflow";
+
+export type ConnectorCategoryGroup = {
+  category: ConnectorBusinessCategory;
+  label: string;
+  description: string;
+  rows: ConnectorInventoryRow[];
+};
+
 export type ConnectorInventory = {
   rows: ConnectorInventoryRow[];
   proofRows: ConnectorInventoryRow[];
   supportRows: ConnectorInventoryRow[];
   transportGroups: ConnectorTransportGroup[];
+  categoryGroups: ConnectorCategoryGroup[];
   coverageRows: ConnectorCoverageRow[];
   counts: ConnectorInventoryCounts;
   verdict: ConnectorInventoryVerdict;
@@ -219,6 +235,59 @@ const TRANSPORT_COPY: Record<ConnectorTransport, { label: string; description: s
     label: "Workflow integrations",
     description: "Slack and GitHub support approvals, alerts, and change workflows. They are not proof verifiers.",
   },
+};
+
+const CATEGORY_ORDER: ConnectorBusinessCategory[] = [
+  "payments",
+  "crm",
+  "support_itsm",
+  "finance_erp",
+  "database_custom",
+  "workflow",
+];
+
+const CATEGORY_COPY: Record<ConnectorBusinessCategory, { label: string; description: string }> = {
+  payments: {
+    label: "Payments",
+    description: "Refund, payout, invoice, and payment-adjustment systems that prove money movement.",
+  },
+  crm: {
+    label: "CRM",
+    description: "Customer, lead, deal, account, and contact records used by sales and support agents.",
+  },
+  support_itsm: {
+    label: "Support & ITSM",
+    description: "Ticket, incident, access, and change-management systems for service operations.",
+  },
+  finance_erp: {
+    label: "Finance & ERP",
+    description: "Procurement, vendor bill, purchase-order, and finance source-of-record checks.",
+  },
+  database_custom: {
+    label: "Database & Custom",
+    description: "Read-only SQL and custom REST paths for internal systems or unsupported SaaS products.",
+  },
+  workflow: {
+    label: "Workflow",
+    description: "Approval, alerting, change, and collaboration channels. These do not produce evidence by themselves.",
+  },
+};
+
+const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCategory> = {
+  generic_rest: "database_custom",
+  hubspot_crm: "crm",
+  salesforce_crm: "crm",
+  zoho_crm: "crm",
+  zendesk_ticket: "support_itsm",
+  jira_issue: "support_itsm",
+  stripe_refund: "payments",
+  razorpay_refund: "payments",
+  netsuite_finance: "finance_erp",
+  ledger_template: "payments",
+  customer_template: "crm",
+  postgres_read: "database_custom",
+  github: "workflow",
+  slack: "workflow",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -595,6 +664,16 @@ function buildTransportGroups(rows: ConnectorInventoryRow[]): ConnectorTransport
     .filter((group) => group.rows.length > 0 || group.transport === "webhook_bridge");
 }
 
+function buildCategoryGroups(rows: ConnectorInventoryRow[]): ConnectorCategoryGroup[] {
+  return CATEGORY_ORDER
+    .map((category) => ({
+      category,
+      ...CATEGORY_COPY[category],
+      rows: rows.filter((row) => CATEGORY_BY_CONNECTOR[row.id] === category),
+    }))
+    .filter((group) => group.rows.length > 0);
+}
+
 function coveragePercent(rows: ConnectorCoverageRow[]): number {
   if (rows.length === 0) return 0;
   const covered = rows.filter((row) => row.status === "healthy" || row.status === "generic_fallback").length;
@@ -888,6 +967,7 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
     proofRows,
     supportRows,
     transportGroups: buildTransportGroups(rows),
+    categoryGroups: buildCategoryGroups(rows),
     coverageRows,
     counts,
     verdict: inventoryVerdict(counts, Boolean(input.partialFailure)),

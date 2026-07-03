@@ -390,7 +390,7 @@ function registry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryRe
 }
 
 describe("connector-inventory", () => {
-  it("groups REST templates under REST, Postgres under SQL, and Slack/GitHub under workflow", () => {
+  it("keeps transport groups and adds business category groups for the live catalog", () => {
     const inventory = buildConnectorInventory({
       ledger: ledgerStatus(),
       customer: customerStatus(),
@@ -404,6 +404,12 @@ describe("connector-inventory", () => {
     const rest = inventory.transportGroups.find((group) => group.transport === "rest_http");
     const sql = inventory.transportGroups.find((group) => group.transport === "sql_read");
     const workflow = inventory.transportGroups.find((group) => group.transport === "workflow");
+    const payments = inventory.categoryGroups.find((group) => group.category === "payments");
+    const crm = inventory.categoryGroups.find((group) => group.category === "crm");
+    const supportItsm = inventory.categoryGroups.find((group) => group.category === "support_itsm");
+    const financeErp = inventory.categoryGroups.find((group) => group.category === "finance_erp");
+    const databaseCustom = inventory.categoryGroups.find((group) => group.category === "database_custom");
+    const workflowCategory = inventory.categoryGroups.find((group) => group.category === "workflow");
 
     expect(rest?.rows.map((row) => row.id)).toEqual([
       "generic_rest",
@@ -433,6 +439,12 @@ describe("connector-inventory", () => {
     ]);
     expect(sql?.rows.map((row) => row.id)).toEqual(["postgres_read"]);
     expect(workflow?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
+    expect(payments?.rows.map((row) => row.id)).toEqual(["stripe_refund", "razorpay_refund", "ledger_template"]);
+    expect(crm?.rows.map((row) => row.id)).toEqual(["hubspot_crm", "salesforce_crm", "zoho_crm", "customer_template"]);
+    expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "jira_issue"]);
+    expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance"]);
+    expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["generic_rest", "postgres_read"]);
+    expect(workflowCategory?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
     expect(inventory.supportRows.every((row) => row.kind === "support" && row.transport === "workflow")).toBe(true);
   });
 
