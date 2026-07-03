@@ -2820,7 +2820,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-left: 4px solid var(--dash-amber) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="govern"] {
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="govern"],
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="live"] {
   border-left: 4px solid var(--dash-green) !important;
 }
 
@@ -2948,6 +2949,92 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-next-hint {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  padding: 11px !important;
+  border: 1px solid rgba(161, 92, 7, 0.22) !important;
+  border-radius: 8px !important;
+  background: var(--dash-amber-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-next-hint span {
+  color: var(--dash-amber) !important;
+  font-size: 0.72rem !important;
+  font-weight: 840 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-next-hint strong {
+  color: var(--dash-text) !important;
+  font-size: 0.84rem !important;
+  font-weight: 780 !important;
+  line-height: 1.36 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-next-actions[data-locked="true"] .dashboard-button {
+  opacity: 0.62 !important;
+  pointer-events: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr) !important;
+  gap: 16px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  padding: 14px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip > div {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip span {
+  color: var(--dash-text-muted) !important;
+  font-size: 0.72rem !important;
+  font-weight: 840 !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip strong {
+  color: var(--dash-text) !important;
+  font-size: 0.92rem !important;
+  font-weight: 820 !important;
+  line-height: 1.3 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip ol {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip li {
+  display: grid !important;
+  place-items: center !important;
+  min-width: 0 !important;
+  min-height: 38px !important;
+  padding: 8px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.78rem !important;
+  font-weight: 780 !important;
+  text-align: center !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-layout {
@@ -4285,6 +4372,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
     grid-template-columns: 1fr !important;
   }
 
+  .app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-plan-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -4342,6 +4437,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-hero h1 {
     font-size: 1.65rem !important;
     line-height: 1.08 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-control-loop-strip ol {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-hero-card,

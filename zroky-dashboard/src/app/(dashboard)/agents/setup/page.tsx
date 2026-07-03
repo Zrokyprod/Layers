@@ -34,6 +34,7 @@ const FRAMEWORKS = [
 ];
 
 const ENVIRONMENTS = ["production", "staging", "development"];
+const CONTROL_LOOP_STEPS = ["Propose", "Policy", "Approval", "Execution", "Verification", "Receipt"];
 
 function CopyableCode({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -43,7 +44,7 @@ function CopyableCode({ label, value }: { label: string; value: string }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard unavailable — the snippet is still selectable
+      // Clipboard can be unavailable in restricted browser contexts.
     }
   }
   return (
@@ -151,13 +152,13 @@ export default function ProtectedAgentSetupPage() {
       ? {
           tone: "warning" as const,
           title: "Waiting for the first protected action",
-          copy: "Run your agent with the snippet below. Zroky captures and verifies the first real action automatically — no action list to declare.",
+          copy: "Run your agent with the snippet below. Zroky captures and verifies the first real action automatically, with no upfront action list to declare.",
           pill: "Capturing",
         }
       : {
           tone: "neutral" as const,
           title: "Protect an agent",
-          copy: "Name the agent and install the SDK. Zroky applies a safe default policy and verifies real actions — configure the details later, on real data.",
+          copy: "Name the agent and install the SDK. Zroky applies a safe default policy and verifies real actions. Configure policies, verifiers, and approvals later from real captured actions.",
           pill: "Setup",
         };
 
@@ -190,7 +191,7 @@ export default function ProtectedAgentSetupPage() {
 
       <section className="agent-quickstart" aria-label="Protect an agent">
         <div className="agent-quickstart-main">
-          {/* 1 — Connect */}
+          {/* 1 - Connect */}
           <div className="agent-quickstart-card" data-step="connect" data-done={created ? "true" : "false"}>
             <div className="agent-quickstart-card-head">
               <span>{created ? <CheckCircle2 aria-hidden="true" size={16} /> : "01"}</span>
@@ -275,7 +276,7 @@ export default function ProtectedAgentSetupPage() {
             )}
           </div>
 
-          {/* 2 — Run */}
+          {/* 2 - Run */}
           <div className="agent-quickstart-card" data-step="run" data-done={live ? "true" : "false"} aria-disabled={!created}>
             <div className="agent-quickstart-card-head">
               <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "02"}</span>
@@ -284,30 +285,26 @@ export default function ProtectedAgentSetupPage() {
                 <small>Run your agent with the snippet. Zroky captures and verifies the first real action.</small>
               </div>
             </div>
-            {created ? (
-              <div className="agent-setup-readiness-grid" aria-label="Live capture status">
-                <div data-done={firstAction ? "true" : "false"}>
-                  {firstAction ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
-                  <strong>Action received</strong>
-                  <span>{actionStatus}</span>
-                </div>
-                <div data-done={firstAction?.proof_status === "matched" ? "true" : "false"}>
-                  {firstAction?.proof_status === "matched" ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
-                  <strong>Proof</strong>
-                  <span>{firstAction?.proof_status?.replace(/_/g, " ") ?? "waiting"}</span>
-                </div>
-                <div data-done={live ? "true" : "false"}>
-                  {live ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
-                  <strong>Signed receipt</strong>
-                  <span>{live ? "generated" : firstAction?.receipt_status?.replace(/_/g, " ") ?? "waiting"}</span>
-                </div>
+            <div className="agent-setup-readiness-grid" aria-label="Live capture status">
+              <div data-done={created ? "true" : "false"}>
+                {created ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
+                <strong>SDK ready</strong>
+                <span>{created ? "install the snippet" : "create agent first"}</span>
               </div>
-            ) : (
-              <p className="agent-setup-muted">Create the agent above to start capturing its first action.</p>
-            )}
+              <div data-done={firstAction ? "true" : "false"}>
+                {firstAction ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
+                <strong>Action received</strong>
+                <span>{created ? actionStatus : "waiting for SDK run"}</span>
+              </div>
+              <div data-done={live ? "true" : "false"}>
+                {live ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
+                <strong>Signed receipt</strong>
+                <span>{live ? "generated" : firstAction?.receipt_status?.replace(/_/g, " ") ?? "waiting for proof"}</span>
+              </div>
+            </div>
           </div>
 
-          {/* 3 — Live / what's next */}
+          {/* 3 - Live / what's next */}
           <div className="agent-quickstart-card" data-step="live" data-done={live ? "true" : "false"} aria-disabled={!created}>
             <div className="agent-quickstart-card-head">
               <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : <Rocket aria-hidden="true" size={16} />}</span>
@@ -320,18 +317,36 @@ export default function ProtectedAgentSetupPage() {
                 </small>
               </div>
             </div>
-            <div className="agent-setup-inline-actions">
-              <DashboardButtonLink href="/policies" variant="soft">
+            {!live ? (
+              <div className="agent-next-hint">
+                <span>Available after the first receipt</span>
+                <strong>Use real captured actions to tune policy, verifier coverage, and evidence.</strong>
+              </div>
+            ) : null}
+            <div className="agent-setup-inline-actions agent-next-actions" data-locked={!live ? "true" : "false"}>
+              <DashboardButtonLink href="/policies" variant={live ? "primary" : "soft"} aria-disabled={!live || undefined}>
                 Set a policy
               </DashboardButtonLink>
-              <DashboardButtonLink href="/integrations" variant="soft">
+              <DashboardButtonLink href="/integrations" variant="soft" aria-disabled={!live || undefined}>
                 Connect a verifier
               </DashboardButtonLink>
-              <DashboardButtonLink href="/actions" variant="soft">
+              <DashboardButtonLink href="/actions" variant="soft" aria-disabled={!live || undefined}>
                 Actions
               </DashboardButtonLink>
             </div>
           </div>
+        </div>
+
+        <div className="agent-control-loop-strip" aria-label="Zroky control loop">
+          <div>
+            <span>Control loop after first run</span>
+            <strong>Every protected action moves through the same proof path.</strong>
+          </div>
+          <ol>
+            {CONTROL_LOOP_STEPS.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
         </div>
       </section>
     </div>

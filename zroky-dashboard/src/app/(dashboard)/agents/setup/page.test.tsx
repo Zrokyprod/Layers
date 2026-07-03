@@ -65,6 +65,20 @@ describe("Protected agent setup (minimal)", () => {
     api.listActionIntents.mockReset().mockResolvedValue({ items: [] });
   });
 
+  it("shows the pending capture path and defers advanced next steps", () => {
+    renderPage();
+
+    expect(screen.getByText(/Configure policies, verifiers, and approvals later from real captured actions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Live capture status").textContent).toContain("SDK ready");
+    expect(screen.getByLabelText("Live capture status").textContent).toContain("waiting for SDK run");
+    expect(screen.getByText("Available after the first receipt")).toBeInTheDocument();
+    const loop = screen.getByLabelText("Zroky control loop");
+    for (const step of ["Propose", "Policy", "Approval", "Execution", "Verification", "Receipt"]) {
+      expect(loop.textContent).toContain(step);
+    }
+    expect(screen.getByRole("link", { name: "Set a policy" }).getAttribute("aria-disabled")).toBe("true");
+  });
+
   it("creates and enforces an agent from a minimal form", async () => {
     renderPage();
 
