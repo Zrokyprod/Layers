@@ -242,8 +242,8 @@ const CATEGORY_ORDER: ConnectorBusinessCategory[] = [
   "crm",
   "support_itsm",
   "finance_erp",
-  "database_custom",
   "workflow",
+  "database_custom",
 ];
 
 const CATEGORY_COPY: Record<ConnectorBusinessCategory, { label: string; description: string }> = {
@@ -264,8 +264,8 @@ const CATEGORY_COPY: Record<ConnectorBusinessCategory, { label: string; descript
     description: "Procurement, vendor bill, purchase-order, and finance source-of-record checks.",
   },
   database_custom: {
-    label: "Database & Custom",
-    description: "Read-only SQL and custom REST paths for internal systems or unsupported SaaS products.",
+    label: "Developer / Custom APIs",
+    description: "Advanced read-only SQL and custom REST paths for internal systems or unsupported SaaS products.",
   },
   workflow: {
     label: "Workflow",

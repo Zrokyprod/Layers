@@ -1001,16 +1001,18 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText("No verifier")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Browse by system category" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Stripe refund verifier setup" })).not.toBeInTheDocument();
     expect(screen.getByText("Read-only by design")).toBeInTheDocument();
     expect(screen.getByText("Zroky reads Stripe refund", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Connect read access first")).toBeInTheDocument();
+    expect(screen.getByText("Read-only access not connected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
+    expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Finance & ERP" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Database & Custom" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Developer / Custom APIs" })).toBeInTheDocument();
     expect(screen.getAllByText("REST / HTTP JSON verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("HubSpot CRM verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Salesforce CRM verifier").length).toBeGreaterThan(0);
@@ -1054,6 +1056,7 @@ describe("IntegrationsPage", () => {
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
     fireEvent.click(screen.getByRole("button", { name: /REST \/ HTTP JSON verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Set up custom REST" }));
     fireEvent.change(screen.getByLabelText("Base URL"), {
       target: { value: "https://internal.example.com/api" },
     });
@@ -1128,6 +1131,7 @@ describe("IntegrationsPage", () => {
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
     fireEvent.click(screen.getByRole("button", { name: /Razorpay refund verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect Razorpay" }));
     fireEvent.change(screen.getByLabelText("Razorpay key id"), {
       target: { value: "rzp_test_key" },
     });
@@ -1186,6 +1190,7 @@ describe("IntegrationsPage", () => {
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
     fireEvent.click(screen.getByRole("button", { name: /HubSpot CRM verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect HubSpot" }));
     fireEvent.change(screen.getByLabelText("Private app token"), {
       target: { value: "hubspot-private-app-token" },
     });
@@ -1238,6 +1243,7 @@ describe("IntegrationsPage", () => {
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
     fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect Zoho" }));
     fireEvent.change(screen.getByLabelText("Manual bearer token"), {
       target: { value: "zoho-oauth-access-token" },
     });
@@ -1294,6 +1300,7 @@ describe("IntegrationsPage", () => {
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
     fireEvent.click(screen.getByRole("button", { name: /Jira \/ JSM verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect Jira" }));
     fireEvent.change(screen.getByLabelText("Atlassian email"), {
       target: { value: "agent@example.com" },
     });
@@ -1347,6 +1354,7 @@ describe("IntegrationsPage", () => {
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
     fireEvent.click(screen.getByRole("button", { name: /NetSuite finance verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect NetSuite" }));
     fireEvent.change(screen.getByLabelText("Bearer token"), {
       target: { value: "netsuite-token" },
     });
@@ -1412,6 +1420,7 @@ describe("IntegrationsPage", () => {
 
       await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
       fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Connect Zoho" }));
       fireEvent.click(await screen.findByRole("button", { name: /Connect Zoho CRM/i }));
 
       await waitFor(() => expect(api.startZohoCrmOAuth).toHaveBeenCalledTimes(1));

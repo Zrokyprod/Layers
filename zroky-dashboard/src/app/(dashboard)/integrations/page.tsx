@@ -379,6 +379,18 @@ const ADVANCED_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "postgres_read",
 ]);
 
+const SETUP_PANEL_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
+  "generic_rest",
+  "stripe_refund",
+  "razorpay_refund",
+  "hubspot_crm",
+  "salesforce_crm",
+  "zoho_crm",
+  "zendesk_ticket",
+  "jira_issue",
+  "netsuite_finance",
+]);
+
 function firstSelectedId(inventory: ConnectorInventory): ConnectorInventoryId | null {
   const primaryProofRows = inventory.categoryGroups
     .flatMap((group) => group.rows)
@@ -555,15 +567,15 @@ function connectorPreflightSummary(row: ConnectorInventoryRow) {
   if (row.state === "ready") {
     return {
       label: "Matched",
-      title: "Preflight matched",
-      detail: "The last proof test matched the source-of-record data. Evidence from this connector is export-ready.",
+      title: "Read-only access verified",
+      detail: "Zroky read the source system and matched the real record. Evidence from this connector is export-ready.",
       tone: "success" as const,
     };
   }
   if (row.state === "mismatched") {
     return {
       label: "Mismatched",
-      title: "Preflight mismatch",
+      title: "Last proof check mismatched",
       detail: row.detail,
       tone: "danger" as const,
     };
@@ -571,23 +583,23 @@ function connectorPreflightSummary(row: ConnectorInventoryRow) {
   if (row.state === "failing") {
     return {
       label: "Blocked",
-      title: "Preflight blocked",
+      title: "Connection check blocked",
       detail: row.detail,
       tone: "danger" as const,
     };
   }
   if (row.state === "not_tested") {
     return {
-      label: "Needs test",
-      title: "Run preflight to prove this connection",
-      detail: "Save read access, then run the proof test so Zroky can prove it can read and compare the real record.",
+      label: "Needs check",
+      title: "Read-only access connected",
+      detail: "Run an optional proof test in Advanced setup to confirm Zroky can read and compare a real record.",
       tone: "warning" as const,
     };
   }
   return {
     label: "Not configured",
-    title: "Connect read access first",
-    detail: "Save a read-only token or endpoint, then run a preflight test before relying on evidence.",
+    title: "Read-only access not connected",
+    detail: "Connect OAuth where available, or use a read-only key fallback. Zroky will verify real agent actions after connection.",
     tone: "neutral" as const,
   };
 }
@@ -2373,6 +2385,12 @@ function ConnectorInspector({
   onZohoStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
   row: ConnectorInventoryRow | null;
 }) {
+  const [setupOpen, setSetupOpen] = useState(false);
+
+  useEffect(() => {
+    setSetupOpen(false);
+  }, [row?.id]);
+
   if (!row) {
     return (
       <section className="panel connector-inspector-panel" aria-label="Selected connector">
@@ -2418,7 +2436,7 @@ function ConnectorInspector({
       <div className="connector-preflight-panel" data-tone={preflight.tone}>
         <div className="connector-preflight-main">
           <div>
-            <span className="dashboard-eyebrow">Preflight test</span>
+            <span className="dashboard-eyebrow">Connection status</span>
             <h3>{preflight.title}</h3>
             <p>{preflight.detail}</p>
           </div>
@@ -2435,9 +2453,15 @@ function ConnectorInspector({
       </div>
 
       <div className="connector-inspector-actions">
-        <DashboardButtonLink href={row.href} variant="primary">
-          {connectorPrimaryCtaLabel(row)}
-        </DashboardButtonLink>
+        {row.kind === "proof" ? (
+          <DashboardButton onClick={() => setSetupOpen(true)} variant="primary">
+            {connectorPrimaryCtaLabel(row)}
+          </DashboardButton>
+        ) : (
+          <DashboardButtonLink href={row.href} variant="primary">
+            {connectorPrimaryCtaLabel(row)}
+          </DashboardButtonLink>
+        )}
       </div>
 
       <details className="connector-advanced-details">
@@ -2476,68 +2500,93 @@ function ConnectorInspector({
         ) : null}
       </details>
 
-      {row.id === "generic_rest" ? (
-        <GenericRestSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onGenericStatusChange}
-          status={genericStatus}
-        />
-      ) : null}
-      {row.id === "stripe_refund" ? (
-        <StripeRefundSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onStripeStatusChange}
-          status={stripeStatus}
-        />
-      ) : null}
-      {row.id === "razorpay_refund" ? (
-        <RazorpayRefundSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onRazorpayStatusChange}
-          status={razorpayStatus}
-        />
-      ) : null}
-      {row.id === "hubspot_crm" ? (
-        <HubSpotSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onHubSpotStatusChange}
-          status={hubspotStatus}
-        />
-      ) : null}
-      {row.id === "salesforce_crm" ? (
-        <SalesforceSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onSalesforceStatusChange}
-          status={salesforceStatus}
-        />
-      ) : null}
-      {row.id === "zoho_crm" ? (
-        <ZohoSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onZohoStatusChange}
-          status={zohoStatus}
-        />
-      ) : null}
-      {row.id === "zendesk_ticket" ? (
-        <ZendeskSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onZendeskStatusChange}
-          status={zendeskStatus}
-        />
-      ) : null}
-      {row.id === "jira_issue" ? (
-        <JiraSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onJiraStatusChange}
-          status={jiraStatus}
-        />
-      ) : null}
-      {row.id === "netsuite_finance" ? (
-        <NetSuiteSetupPanel
-          latestCheck={row.latestCheck}
-          onStatusChange={onNetSuiteStatusChange}
-          status={netsuiteStatus}
-        />
+      {row.kind === "proof" ? (
+        <details
+          className="connector-setup-details"
+          open={setupOpen}
+          onToggle={(event) => setSetupOpen(event.currentTarget.open)}
+        >
+          <summary>
+            <span>{row.id === "generic_rest" || row.id === "postgres_read" ? "Developer setup" : "Advanced setup and proof test"}</span>
+            <small>Read-only key fallback, manual proof test, and low-level verifier settings</small>
+          </summary>
+          {setupOpen ? (
+            <div className="connector-setup-body">
+              {!SETUP_PANEL_CONNECTOR_IDS.has(row.id) ? (
+                <div className="connectors-empty-state">
+                  <strong>{connectorSystemLabel(row)} uses an advanced setup path</strong>
+                  <span>
+                    Use the Custom REST API connector for template-based systems, or request a native connector for this
+                    source system.
+                  </span>
+                </div>
+              ) : null}
+              {row.id === "generic_rest" ? (
+                <GenericRestSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onGenericStatusChange}
+                  status={genericStatus}
+                />
+              ) : null}
+              {row.id === "stripe_refund" ? (
+                <StripeRefundSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onStripeStatusChange}
+                  status={stripeStatus}
+                />
+              ) : null}
+              {row.id === "razorpay_refund" ? (
+                <RazorpayRefundSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onRazorpayStatusChange}
+                  status={razorpayStatus}
+                />
+              ) : null}
+              {row.id === "hubspot_crm" ? (
+                <HubSpotSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onHubSpotStatusChange}
+                  status={hubspotStatus}
+                />
+              ) : null}
+              {row.id === "salesforce_crm" ? (
+                <SalesforceSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onSalesforceStatusChange}
+                  status={salesforceStatus}
+                />
+              ) : null}
+              {row.id === "zoho_crm" ? (
+                <ZohoSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onZohoStatusChange}
+                  status={zohoStatus}
+                />
+              ) : null}
+              {row.id === "zendesk_ticket" ? (
+                <ZendeskSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onZendeskStatusChange}
+                  status={zendeskStatus}
+                />
+              ) : null}
+              {row.id === "jira_issue" ? (
+                <JiraSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onJiraStatusChange}
+                  status={jiraStatus}
+                />
+              ) : null}
+              {row.id === "netsuite_finance" ? (
+                <NetSuiteSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onNetSuiteStatusChange}
+                  status={netsuiteStatus}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </details>
       ) : null}
     </section>
   );

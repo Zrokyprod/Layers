@@ -21066,6 +21066,52 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   margin-inline: 14px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details {
+  border: 1px dashed var(--mc-border-strong) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-soft) !important;
+  padding: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 14px !important;
+  cursor: pointer !important;
+  list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary span {
+  color: var(--mc-text) !important;
+  font-size: 0.9rem !important;
+  font-weight: 800 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary small {
+  max-width: 420px !important;
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.76rem !important;
+  line-height: 1.4 !important;
+  text-align: right !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-body {
+  display: grid !important;
+  gap: 14px !important;
+  border-top: 1px solid var(--mc-border) !important;
+  padding: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-body > .connectors-generic-panel {
+  margin: 0 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .connector-details-json {
   border: 1px solid var(--mc-border) !important;
   border-radius: var(--mc-radius-control) !important;
@@ -21342,12 +21388,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-preflight-main,
-  .app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary {
+  .app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary,
+  .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary {
     align-items: flex-start !important;
     flex-direction: column !important;
   }
 
-  .app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary small {
+  .app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary small,
+  .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary small {
     text-align: left !important;
   }
 
