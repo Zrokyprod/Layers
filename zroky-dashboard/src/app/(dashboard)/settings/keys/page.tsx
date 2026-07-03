@@ -4,22 +4,15 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  ArrowRight,
-  CheckCircle2,
-  Code2,
   Copy,
   KeyRound,
   Plug,
   RotateCcw,
-  Route,
-  ShieldCheck,
-  Terminal,
 } from "lucide-react";
 
-import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
+import { DashboardButton } from "@/components/dashboard-button";
 import {
   SettingsHero,
-  SettingsMetricStrip,
   SettingsScaffold,
 } from "@/components/settings-scaffold";
 import { formatDateTime } from "@/lib/format";
@@ -35,10 +28,8 @@ import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
 import { SDK } from "@/lib/sdk";
 
 const defaultKeyName = "Production verified-action key";
-const controlPath = ["Create key", "Configure agent", "Run verified action", "Signed receipt"];
 const jsSdkInstall = SDK.install;
 const pythonSdkInstall = "pip install zroky";
-const jsVerifiedActionImport = SDK.verifiedActionImportStatement;
 
 function configuredApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
@@ -138,7 +129,6 @@ function ApiKeysContent() {
   const error = projectQuery.error?.message ?? keysQuery.error?.message ?? null;
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
-  const currentStepIndex = hasActiveKey ? 1 : 0;
   const snippetProjectId = projectId || "proj_...";
   const apiBaseUrl = configuredApiBaseUrl();
   const jsSetupSnippet = `${jsSdkInstall}
@@ -149,174 +139,100 @@ export ZROKY_ENDPOINT="${apiBaseUrl}"`;
 export ZROKY_PROJECT="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
 export ZROKY_INGEST_URL="${apiBaseUrl}"`;
-  const jsVerifiedActionSnippet = `${jsVerifiedActionImport}
-
-init({
-  projectId: process.env.ZROKY_PROJECT_ID,
-  apiKey: process.env.ZROKY_API_KEY,
-  endpoint: process.env.ZROKY_ENDPOINT,
-  agentId: "agent_profile_id",
-});
-
-const decision = await verifiedAction({
-  contractVersion: "zroky.agent_action.v1",
-  actionType: "inventory.item.update",
-  operationKind: "UPDATE",
-  environment: "production",
-  purpose: { summary: "Update one inventory item under policy control" },
-  resource: { type: "inventory_item", id: "item_123" },
-  parameters: { fields: { status: "archived" } },
-  executionRequest: {
-    capability: { operation: "UPDATE" },
-    executionPlan: {
-      tool: "inventory.item.update",
-      target: { resource_ref: "item_123" },
-    },
-  },
-  raiseOnApproval: false,
-});
-
-const proof = await awaitActionProof(decision.action_id);
-console.log(proof.proofStatus, proof.receiptStatus);`;
-  const pythonVerifiedActionSnippet = `import os
-import zroky
-
-zroky.init(
-    api_key=os.environ["ZROKY_API_KEY"],
-    project=${JSON.stringify(snippetProjectId)},
-    agent_id="agent_profile_id",
-    ingest_url=os.environ.get("ZROKY_INGEST_URL", ${JSON.stringify(apiBaseUrl)}),
-)
-
-decision = zroky.verified_action(
-    contract_version="zroky.agent_action.v1",
-    action_type="inventory.item.update",
-    operation_kind="UPDATE",
-    environment="production",
-    purpose={"summary": "Update one inventory item under policy control"},
-    resource={"type": "inventory_item", "id": "item_123"},
-    parameters={"fields": {"status": "archived"}},
-    execution_request={
-        "capability": "UPDATE",
-        "execution_plan": {
-            "tool": "inventory.item.update",
-            "target": {"resource_ref": "item_123"},
-        },
-    },
-    raise_on_approval=False,
-)
-
-proof = zroky.await_action_proof(decision["action_id"])
-print(proof["proof_status"], proof["receipt_status"])`;
-  const gatewaySnippet = `docker run -p 8090:8090 \\
-  -e ZROKY_API_KEY=zk_live_... \\
-  ghcr.io/zroky-ai/zroky-gateway:latest
-
-export OPENAI_BASE_URL=http://localhost:8090/v1`;
   const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
-  const keyTone: "success" | "setup" = hasActiveKey ? "success" : "setup";
-  const latestKey = activeKeys[0];
-  const latestKeyHelper = latestKey
-    ? latestKey.last_used_at
-      ? `Last used ${formatDateTime(latestKey.last_used_at)}`
-      : "Created, not used yet"
-    : "Create one before running the SDK";
+
+  const keyTableSection = (
+    <section className="panel keys-table-panel">
+      <header className="panel-header">
+        <div>
+          <h2>Project keys</h2>
+          <p>{keys.length} key{keys.length !== 1 ? "s" : ""} for this project.</p>
+        </div>
+      </header>
+
+      {loading && <div className="loading" />}
+      {error && <p className="field-error">{error}</p>}
+      {!loading && !error && keys.length === 0 && (
+        <div className="empty">No project keys yet. Create one to run your first verified action.</div>
+      )}
+
+      {!loading && !error && keys.length > 0 && (
+        <div className="table-wrap">
+          <table className="settings-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Prefix</th>
+                <th>Scope</th>
+                <th>Expires</th>
+                <th>Created</th>
+                <th>Last used</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {keys.map((key) => (
+                <tr key={key.key_id} className={key.revoked ? "keys-row-revoked" : ""}>
+                  <td>{key.name}</td>
+                  <td className="mono">{key.key_prefix}...</td>
+                  <td>{key.scopes?.join(", ") || "project:member"}</td>
+                  <td>{key.expires_at ? formatDateTime(key.expires_at) : "Never"}</td>
+                  <td>{formatDateTime(key.created_at)}</td>
+                  <td>{key.last_used_at ? formatDateTime(key.last_used_at) : "Never"}</td>
+                  <td>
+                    {key.revoked ? (
+                      <span className="pill pill-red">Revoked</span>
+                    ) : key.expired ? (
+                      <span className="pill pill-red">Expired</span>
+                    ) : (
+                      <span className="pill pill-green">Active</span>
+                    )}
+                  </td>
+                  <td>
+                    {!key.revoked && !key.expired && (
+                      <div className="actions">
+                        <DashboardButton
+                          type="button"
+                          size="sm"
+                          variant="soft"
+                          icon={<RotateCcw />}
+                          disabled={rotateMutation.isPending}
+                          onClick={() => setRotateTarget(key)}
+                        >
+                          Rotate
+                        </DashboardButton>
+                        <DashboardButton type="button" size="sm" variant="danger" onClick={() => setRevokeTarget(key)}>
+                          Revoke
+                        </DashboardButton>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 
   return (
-    <SettingsScaffold className="keys-setup-page" aria-labelledby="project-key-setup-title">
+    <SettingsScaffold className="keys-setup-page">
       <SettingsHero
         ariaLabel="API key setup"
         eyebrow="API Keys"
         icon={<KeyRound aria-hidden="true" />}
-        title={error ? "API key visibility unavailable" : "Verified action access"}
+        title={error ? "API key visibility unavailable" : "Project API keys"}
         copy={
           error
             ? "Project key data did not refresh cleanly. Retry before rotating or revoking keys."
-            : "Create a project key, configure the agent boundary, run one verified action, and confirm the signed receipt."
+            : "Create and manage project keys for SDK, Gateway, and verified-action calls. Keys do not grant model-provider access."
         }
         tone={heroTone}
-        pill={hasActiveKey ? "Key active" : "Setup required"}
+        pill={hasActiveKey ? `${activeKeys.length || 1} active` : "No active key"}
         updatedLabel={loading ? "Loading" : "Settings live"}
-        actions={
-          <>
-            <DashboardButtonLink href="/agents/setup" icon={<ShieldCheck />} variant="primary">
-              Configure agent
-            </DashboardButtonLink>
-            <DashboardButtonLink href="/evidence" icon={<ArrowRight />} iconPosition="right" variant="soft">
-              Open evidence
-            </DashboardButtonLink>
-          </>
-        }
       />
-
-      <SettingsMetricStrip
-        ariaLabel="API key setup metrics"
-        metrics={[
-          {
-            id: "active-keys",
-            label: "Active keys",
-            value: String(activeKeys.length),
-            helper: latestKeyHelper,
-            tone: keyTone,
-            icon: <KeyRound aria-hidden="true" />,
-          },
-          {
-            id: "agent-setup",
-            label: "Agent setup",
-            value: "Open setup",
-            helper: "Boundaries and policy live in Agent Setup",
-            tone: "setup",
-            href: "/agents/setup",
-            icon: <ShieldCheck aria-hidden="true" />,
-          },
-          {
-            id: "sdk",
-            label: "SDK path",
-            value: "verified_action()",
-            helper: "Backend-owned approve, execute, verify, receipt",
-            tone: "setup",
-            icon: <Terminal aria-hidden="true" />,
-          },
-          {
-            id: "receipt",
-            label: "Receipt proof",
-            value: "Evidence",
-            helper: "Matched proof becomes a signed receipt",
-            tone: "success",
-            href: "/evidence",
-            icon: <CheckCircle2 aria-hidden="true" />,
-          },
-        ]}
-      />
-
-      <section className="panel keys-onboarding-panel" aria-labelledby="project-key-setup-title">
-        <header className="keys-onboarding-header">
-          <div>
-            <span className="settings-section-kicker">
-              <KeyRound aria-hidden="true" />
-              Control setup
-            </span>
-            <h2 id="project-key-setup-title">Project key setup</h2>
-            <p>Create one key, configure the agent, run one verified action, then inspect the signed receipt.</p>
-          </div>
-          <DashboardButtonLink href="/evidence" icon={<ArrowRight />} iconPosition="right" variant="soft">
-            Open evidence
-          </DashboardButtonLink>
-        </header>
-        <div className="keys-control-path" aria-label="Project key to signed receipt path">
-          {controlPath.map((step, index) => (
-            <span
-              key={step}
-              className={
-                index < currentStepIndex ? "is-done" : index === currentStepIndex ? "is-current" : undefined
-              }
-            >
-              {String(index + 1).padStart(2, "0")}
-              <strong>{step}</strong>
-            </span>
-          ))}
-        </div>
-      </section>
 
       {newKey && (
         <section className="panel keys-newkey-banner" aria-label="One-time project key">
@@ -367,9 +283,6 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
             <DashboardButton type="button" variant="soft" onClick={() => setNewKey(null)}>
               Done
             </DashboardButton>
-            <DashboardButtonLink href="/evidence" icon={<ArrowRight />} iconPosition="right" variant="primary">
-              Open evidence
-            </DashboardButtonLink>
           </div>
         </section>
       )}
@@ -379,6 +292,8 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
           {statusMsg}
         </p>
       )}
+
+      {hasActiveKey ? keyTableSection : null}
 
       <section className="keys-primary-grid">
         <article className="panel keys-create-panel" id="create-project-key">
@@ -429,136 +344,28 @@ export OPENAI_BASE_URL=http://localhost:8090/v1`;
           <div className="keys-provider-note">
             <Plug aria-hidden="true" />
             <div>
-              <strong>No model-provider setup is needed for verified actions.</strong>
-              <span>Use a project key for access; policy, runner, and verifier setup stays in Agent Setup.</span>
+              <strong>Runtime access only.</strong>
+              <span>This key authenticates runtime requests; it does not change policies, verifiers, or model-provider access.</span>
             </div>
           </div>
         </article>
 
         <aside className="panel keys-setup-card">
           <span className="settings-section-kicker">
-            <Terminal aria-hidden="true" />
-            First run
+            <KeyRound aria-hidden="true" />
+            Key rules
           </span>
-          <h2>What to do next</h2>
-          <p>After the key exists, configure an agent and run one verified action until Evidence shows a receipt.</p>
-          <ol className="keys-checklist">
-            {["Create project key", "Configure agent", "Run verified action", "Confirm signed receipt"].map((step, index) => (
-              <li key={step} className={index === 0 && hasActiveKey ? "is-done" : undefined}>
-                <CheckCircle2 aria-hidden="true" />
-                {step}
-              </li>
-            ))}
-          </ol>
+          <h2>Keep it simple</h2>
+          <p>Create a key, copy the secret once, then store it in the agent runtime environment.</p>
+          <ul className="keys-compact-list">
+            <li>Full secrets are shown once.</li>
+            <li>Only prefixes are stored for display.</li>
+            <li>Rotate or revoke active keys from the table.</li>
+          </ul>
         </aside>
       </section>
 
-      <section className="keys-snippet-grid" aria-label="Verified action setup snippets">
-        <article className="panel keys-snippet-card">
-          <div className="keys-snippet-head">
-            <Code2 aria-hidden="true" />
-            <div>
-              <h2>SDK verified action</h2>
-              <p>Use when your agent can call the Zroky SDK before executing a protected tool.</p>
-            </div>
-          </div>
-          <div className="keys-code-grid">
-            <pre aria-label="TypeScript SDK project key snippet">
-              <code>{jsVerifiedActionSnippet}</code>
-            </pre>
-            <pre aria-label="Python SDK project key snippet">
-              <code>{pythonVerifiedActionSnippet}</code>
-            </pre>
-          </div>
-        </article>
-
-        <article className="panel keys-snippet-card">
-          <div className="keys-snippet-head">
-            <Route aria-hidden="true" />
-            <div>
-              <h2>Gateway fallback</h2>
-              <p>Use when you need gateway-level access before moving the agent to verified_action().</p>
-            </div>
-          </div>
-          <pre aria-label="Gateway project key snippet">
-            <code>{gatewaySnippet}</code>
-          </pre>
-        </article>
-      </section>
-
-      <section className="panel keys-table-panel">
-        <header className="panel-header">
-          <div>
-            <h2>Project keys</h2>
-            <p>{keys.length} key{keys.length !== 1 ? "s" : ""} for this project.</p>
-          </div>
-        </header>
-
-        {loading && <div className="loading" />}
-        {error && <p className="field-error">{error}</p>}
-        {!loading && !error && keys.length === 0 && (
-          <div className="empty">No project keys yet. Create one to run your first verified action.</div>
-        )}
-
-        {!loading && !error && keys.length > 0 && (
-          <div className="table-wrap">
-            <table className="settings-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Prefix</th>
-                  <th>Scope</th>
-                  <th>Expires</th>
-                  <th>Created</th>
-                  <th>Last used</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map((key) => (
-                  <tr key={key.key_id} className={key.revoked ? "keys-row-revoked" : ""}>
-                    <td>{key.name}</td>
-                    <td className="mono">{key.key_prefix}...</td>
-                    <td>{key.scopes?.join(", ") || "project:member"}</td>
-                    <td>{key.expires_at ? formatDateTime(key.expires_at) : "Never"}</td>
-                    <td>{formatDateTime(key.created_at)}</td>
-                    <td>{key.last_used_at ? formatDateTime(key.last_used_at) : "Never"}</td>
-                    <td>
-                      {key.revoked ? (
-                        <span className="pill pill-red">Revoked</span>
-                      ) : key.expired ? (
-                        <span className="pill pill-red">Expired</span>
-                      ) : (
-                        <span className="pill pill-green">Active</span>
-                      )}
-                    </td>
-                    <td>
-                      {!key.revoked && !key.expired && (
-                        <div className="actions">
-                          <DashboardButton
-                            type="button"
-                            size="sm"
-                            variant="soft"
-                            icon={<RotateCcw />}
-                            disabled={rotateMutation.isPending}
-                            onClick={() => setRotateTarget(key)}
-                          >
-                            Rotate
-                          </DashboardButton>
-                          <DashboardButton type="button" size="sm" variant="danger" onClick={() => setRevokeTarget(key)}>
-                            Revoke
-                          </DashboardButton>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      {!hasActiveKey ? keyTableSection : null}
 
       {revokeTarget && (
         <div

@@ -18021,6 +18021,36 @@ pre {
   color: var(--brand-orange-hover);
 }
 
+.app-shell .keys-compact-list {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-shell .keys-compact-list li {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 10px 8px 28px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.app-shell .keys-compact-list li::before {
+  position: absolute;
+  top: 13px;
+  left: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--brand-teal, #2f6f73);
+  content: "";
+}
+
 .app-shell .keys-snippet-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);

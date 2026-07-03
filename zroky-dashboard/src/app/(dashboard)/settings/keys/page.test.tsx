@@ -102,25 +102,23 @@ describe("ApiKeysPage", () => {
     });
   });
 
-  it("renders a verified-action setup page and empty state", () => {
+  it("renders a minimal API key management page and empty state", () => {
     render(<ApiKeysPage />);
 
-    expect(screen.getByRole("heading", { name: "Verified action access" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Project key setup" })).toBeInTheDocument();
-    expect(screen.getByText("Create key")).toBeInTheDocument();
-    expect(screen.getAllByText("Configure agent").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Run verified action").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Signed receipt").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Project API keys" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Create project key" })).toBeInTheDocument();
-    expect(screen.getByText("No model-provider setup is needed for verified actions.")).toBeInTheDocument();
-    expect(screen.getByText("Use a project key for access; policy, runner, and verifier setup stays in Agent Setup.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Keep it simple" })).toBeInTheDocument();
+    expect(screen.getByText("Runtime access only.")).toBeInTheDocument();
+    expect(screen.getByText("This key authenticates runtime requests; it does not change policies, verifiers, or model-provider access.")).toBeInTheDocument();
+    expect(screen.getByText("Full secrets are shown once.")).toBeInTheDocument();
     expect(screen.getByText("No project keys yet. Create one to run your first verified action.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Configure agent" }).getAttribute("href")).toBe("/agents/setup");
-    expect(screen.getAllByRole("link", { name: "Open evidence" }).some((link) => link.getAttribute("href") === "/evidence")).toBe(true);
+    expect(screen.queryByRole("heading", { name: "Project key setup" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Configure agent" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Provider settings" })).not.toBeInTheDocument();
-    expect(screen.getAllByText((content) => content.includes("verifiedAction")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText((content) => content.includes("zroky.verified_action")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText((content) => content.includes('import { init, verifiedAction, awaitActionProof } from "@zroky-ai/sdk";')).length).toBeGreaterThan(0);
+    expect(screen.queryByText((content) => content.includes("verifiedAction"))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("zroky.verified_action"))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes('import { init, verifiedAction, awaitActionProof } from "@zroky-ai/sdk";'))).not.toBeInTheDocument();
     expect(screen.queryByText((content) => content.includes("traceRun"))).not.toBeInTheDocument();
     expect(screen.queryByText((content) => content.includes("captureToolCall"))).not.toBeInTheDocument();
     expect(screen.queryByText((content) => content.includes("wrap("))).not.toBeInTheDocument();
@@ -130,7 +128,7 @@ describe("ApiKeysPage", () => {
   it("keeps agent configuration out of API Keys even with setup query params", () => {
     render(<ApiKeysPage />);
 
-    expect(screen.getByRole("heading", { name: "Verified action access" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project API keys" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "First protected agent setup" })).not.toBeInTheDocument();
     expect(screen.queryByText("Pilot handoff readiness")).not.toBeInTheDocument();
     expect(screen.queryByText("Copy mandate")).not.toBeInTheDocument();
@@ -158,7 +156,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getAllByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"')).length).toBe(2);
     expect(screen.getAllByText((content) => content.includes("npm install @zroky-ai/sdk")).length).toBeGreaterThan(0);
     expect(screen.getAllByText((content) => content.includes("pip install zroky")).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Open evidence" }).some((link) => link.getAttribute("href") === "/evidence")).toBe(true);
+    expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy key" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("zk_live_created_secret"));
