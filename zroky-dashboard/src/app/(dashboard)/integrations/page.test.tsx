@@ -994,13 +994,14 @@ describe("IntegrationsPage", () => {
       await screen.findByRole("heading", { name: "Some agent actions are unverifiable" }),
     ).toBeInTheDocument();
 
-    expect(screen.getByRole("region", { name: "Verifier coverage map" })).toBeInTheDocument();
-    expect(screen.getByText("refund")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Verification coverage audit" })).toBeInTheDocument();
+    expect(screen.getAllByText("refund").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Verifier healthy").length).toBeGreaterThan(0);
     expect(screen.getByText("custom")).toBeInTheDocument();
     expect(screen.getByText("No verifier")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Browse by system category" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();
@@ -1079,6 +1080,7 @@ describe("IntegrationsPage", () => {
       },
     });
 
+    fireEvent.click(screen.getByText("Advanced: webhook bridge request"));
     fireEvent.click(screen.getByRole("button", { name: "Copy bridge request" }));
     await waitFor(() => {
       expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("/v1/outcomes/reconciliation/saved"));

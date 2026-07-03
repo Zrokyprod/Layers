@@ -372,12 +372,24 @@ const defaultNetSuiteForm: NetSuiteFormState = {
   matchFieldsText: "netsuite_record_id,record_type,tran_id,amount_minor,currency,status",
 };
 
+const ADVANCED_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
+  "generic_rest",
+  "ledger_template",
+  "customer_template",
+  "postgres_read",
+]);
+
 function firstSelectedId(inventory: ConnectorInventory): ConnectorInventoryId | null {
+  const primaryProofRows = inventory.categoryGroups
+    .flatMap((group) => group.rows)
+    .filter((row) => row.kind === "proof" && !ADVANCED_CONNECTOR_IDS.has(row.id));
+
   return (
-    inventory.rows.find((row) => row.state === "failing" || row.state === "mismatched")?.id
-    ?? inventory.rows.find((row) => row.state === "not_tested")?.id
-    ?? inventory.proofRows.find((row) => row.state === "missing")?.id
-    ?? inventory.proofRows[0]?.id
+    primaryProofRows.find((row) => row.state === "failing" || row.state === "mismatched")?.id
+    ?? inventory.rows.find((row) => row.state === "failing" || row.state === "mismatched")?.id
+    ?? primaryProofRows.find((row) => row.state === "not_tested")?.id
+    ?? primaryProofRows.find((row) => row.state === "missing")?.id
+    ?? primaryProofRows[0]?.id
     ?? inventory.rows[0]?.id
     ?? null
   );
@@ -526,39 +538,50 @@ function Fact({
 
 function CoverageMap({ rows }: { rows: ConnectorCoverageRow[] }) {
   return (
-    <section className="panel connectors-coverage-panel" aria-label="Verifier coverage map">
-      <div className="connectors-section-head">
-        <div>
-          <span className="dashboard-eyebrow">Coverage map</span>
-          <h2>Which agent actions can Zroky verify?</h2>
-          <p>
-            This map is generated from observed action types and the tool registry. Actions without a healthy verifier
-            will resolve to not_verified until a REST, SQL, or bridge verifier is configured.
-          </p>
-        </div>
-        <DashboardButtonLink href="/outcomes" variant="soft" size="sm">
-          Open Outcomes
-        </DashboardButtonLink>
-      </div>
+    <section className="panel connectors-coverage-panel connectors-coverage-panel-secondary" aria-label="Verification coverage audit">
+      <details className="connectors-coverage-details">
+        <summary>
+          <span>
+            <span className="dashboard-eyebrow">Coverage audit</span>
+            <strong>Which agent actions can Zroky verify?</strong>
+          </span>
+          <small>{rows.length > 0 ? `${formatCount(rows.length)} observed action types` : "No observed action types yet"}</small>
+        </summary>
 
-      {rows.length > 0 ? (
-        <div className="connectors-coverage-grid">
-          {rows.map((row) => (
-            <article className="connectors-coverage-row" data-tone={row.tone} key={row.actionType}>
-              <div>
-                <strong>{row.actionType}</strong>
-                <span>{row.detail}</span>
-              </div>
-              <StatusPill value={row.status} label={row.label} tone={row.tone} />
-            </article>
-          ))}
+        <div className="connectors-coverage-body">
+          <div className="connectors-section-head">
+            <div>
+              <h2>Verification coverage audit</h2>
+              <p>
+                Advanced view generated from observed action types and the tool registry. Actions without a healthy
+                verifier resolve to not_verified until a REST, SQL, or bridge verifier is configured.
+              </p>
+            </div>
+            <DashboardButtonLink href="/outcomes" variant="soft" size="sm">
+              Open Outcomes
+            </DashboardButtonLink>
+          </div>
+
+          {rows.length > 0 ? (
+            <div className="connectors-coverage-grid">
+              {rows.map((row) => (
+                <article className="connectors-coverage-row" data-tone={row.tone} key={row.actionType}>
+                  <div>
+                    <strong>{row.actionType}</strong>
+                    <span>{row.detail}</span>
+                  </div>
+                  <StatusPill value={row.status} label={row.label} tone={row.tone} />
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="connectors-empty-state">
+              <strong>No action types observed yet</strong>
+              <span>Run a protected action or configure an agent catalog to see verifier coverage.</span>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="connectors-empty-state">
-          <strong>No action types observed yet</strong>
-          <span>Run a protected action or configure an agent catalog to see verifier coverage.</span>
-        </div>
-      )}
+      </details>
     </section>
   );
 }
@@ -834,21 +857,25 @@ function GenericRestSetupPanel({
           </DashboardButton>
         </form>
 
-        <article className="connectors-generic-bridge" aria-label="Generic REST webhook bridge request">
-          <div className="connectors-generic-form-head">
-            <strong>3. Copy webhook bridge request</strong>
-            <span>For agents that cannot install the SDK.</span>
+        <details className="connectors-generic-bridge" aria-label="Generic REST webhook bridge request">
+          <summary>
+            <span>
+              <strong>Advanced: webhook bridge request</strong>
+              <small>For systems Zroky cannot poll directly.</small>
+            </span>
+          </summary>
+          <div className="connectors-generic-bridge-body">
+            <p>
+              Call this after the agent reports success. Zroky uses the saved REST verifier to independently read the real record.
+            </p>
+            <pre aria-label="Generic REST saved connector bridge curl">
+              <code>{bridgeCurl}</code>
+            </pre>
+            <DashboardButton icon={<Copy />} onClick={() => void copyBridge()} variant="soft">
+              {copiedBridge ? "Copied" : "Copy bridge request"}
+            </DashboardButton>
           </div>
-          <p>
-            Call this after the agent reports success. Zroky uses the saved REST verifier to independently read the real record.
-          </p>
-          <pre aria-label="Generic REST saved connector bridge curl">
-            <code>{bridgeCurl}</code>
-          </pre>
-          <DashboardButton icon={<Copy />} onClick={() => void copyBridge()} variant="soft">
-            {copiedBridge ? "Copied" : "Copy bridge request"}
-          </DashboardButton>
-        </article>
+        </details>
       </div>
 
       {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
@@ -2571,8 +2598,6 @@ export default function IntegrationsPage() {
         metrics={metrics}
       />
 
-      <CoverageMap rows={inventory.coverageRows} />
-
       <DashboardWorkspace
         className="connectors-workspace"
         left={
@@ -2638,6 +2663,8 @@ export default function IntegrationsPage() {
           </article>
         </div>
       </section>
+
+      <CoverageMap rows={inventory.coverageRows} />
 
       {partialFailure ? (
         <div className="alert-strip connectors-alert">

@@ -20569,6 +20569,52 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   line-height: 1.45 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-panel-secondary {
+  padding: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details {
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  padding: 18px 20px !important;
+  cursor: pointer !important;
+  list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary > span {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary strong {
+  color: var(--mc-text) !important;
+  font-size: 0.94rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary small {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.78rem !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-coverage-body {
+  display: grid !important;
+  gap: 16px !important;
+  border-top: 1px solid var(--mc-border) !important;
+  padding: 20px !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .connectors-empty-state,
 .app-shell[data-dashboard-system="control-v1"] .connector-planned-row {
   display: grid !important;
@@ -20917,6 +20963,62 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-radius: var(--mc-radius-control) !important;
   background: var(--mc-soft) !important;
   padding: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge {
+  grid-column: 1 / -1 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge > summary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  cursor: pointer !important;
+  list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge > summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge > summary > span,
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge-body {
+  display: grid !important;
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge > summary strong {
+  color: var(--mc-text) !important;
+  font-size: 0.86rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge > summary small,
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge-body p {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.78rem !important;
+  line-height: 1.45 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge-body {
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--mc-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-generic-bridge-body pre {
+  max-height: 320px !important;
+  overflow: auto !important;
+  margin: 0 !important;
+  border: 1px solid var(--mc-border) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: #111827 !important;
+  color: #f8fafc !important;
+  padding: 12px !important;
+  font-family: var(--font-jetbrains-mono), "SF Mono", Consolas, monospace !important;
+  font-size: 0.76rem !important;
+  line-height: 1.55 !important;
+  white-space: pre !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connectors-generic-grid input,
