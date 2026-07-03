@@ -880,42 +880,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--dash-text-muted) !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-current,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link {
-  border: 1px solid var(--dash-border) !important;
-  border-radius: 8px !important;
-  background: #ffffff !important;
-  color: var(--dash-text) !important;
-  box-shadow: none !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link:hover,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link:focus-visible,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link.is-active,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-current {
-  border-color: #b8c7dc !important;
-  background: #f7f9fc !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail,
 .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tabs-nav {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   gap: 8px !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link,
 .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tab-link {
   min-width: 0 !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link {
-  display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) auto !important;
-  gap: 8px !important;
-  align-items: center !important;
-  min-height: 42px !important;
-  padding: 8px 10px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tab-link {
@@ -924,30 +896,18 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 8px !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link span,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tab-link span,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-current span {
+.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tab-link span {
   display: grid !important;
   gap: 1px !important;
   min-width: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link strong,
 .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tab-link strong,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-current strong,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link small,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tab-link small,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-current small {
+.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tab-link small {
   display: block !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-link svg,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-current svg,
-.app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail-arrow {
-  color: var(--dash-text-muted) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tabs-nav {
@@ -973,14 +933,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1100px) {
-  .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail,
   .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tabs-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
 
 @media (max-width: 640px) {
-  .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-hero-rail,
   .app-shell[data-dashboard-system="control-v1"] .settings-shell .settings-tabs-nav {
     grid-template-columns: 1fr !important;
   }

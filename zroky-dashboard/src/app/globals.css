@@ -12393,75 +12393,13 @@ pre {
     linear-gradient(90deg, rgba(17, 24, 39, 0.05), rgba(202, 138, 4, 0.08));
 }
 
-.settings-hero-current {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  min-width: 230px;
-  padding: 11px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: var(--shadow-soft);
-}
-
-.settings-hero-current svg {
-  width: 18px;
-  height: 18px;
-  color: #111827;
-}
-
-.settings-hero-current span {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.settings-hero-current strong {
-  color: #111827;
-  font-size: 0.84rem;
-  line-height: 1.2;
-}
-
-.settings-hero-current small {
-  overflow: hidden;
-  color: #667085;
-  font-size: 0.75rem;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-hero-rail {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-  max-width: 1100px;
-}
-
-.settings-hero-rail-link {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  min-width: 0;
-  min-height: 42px;
-  padding: 8px 10px;
-  text-decoration: none;
-}
-
-.settings-hero-rail-link span,
 .settings-tab-link span {
   display: grid;
   gap: 1px;
   min-width: 0;
 }
 
-.settings-hero-rail-link strong,
 .settings-tab-link strong,
-.settings-hero-rail-link small,
 .settings-tab-link small {
   display: block;
   overflow: hidden;
@@ -12469,7 +12407,6 @@ pre {
   white-space: nowrap;
 }
 
-.settings-hero-rail-link strong,
 .settings-tab-link strong {
   color: inherit;
   font-size: 0.82rem;
@@ -12477,7 +12414,6 @@ pre {
   line-height: 1.18;
 }
 
-.settings-hero-rail-link small,
 .settings-tab-link small {
   color: #667085;
   font-size: 0.72rem;
@@ -12485,14 +12421,8 @@ pre {
   line-height: 1.24;
 }
 
-.settings-hero-rail-link svg,
 .settings-tab-link svg {
   flex: 0 0 auto;
-}
-
-.settings-hero-rail-arrow {
-  width: 14px;
-  height: 14px;
 }
 
 .settings-tabs-nav {
@@ -12551,14 +12481,12 @@ pre {
 }
 
 @media (max-width: 1100px) {
-  .settings-hero-rail,
   .settings-tabs-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .settings-hero-rail,
   .settings-tabs-nav {
     grid-template-columns: 1fr;
   }

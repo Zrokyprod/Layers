@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -33,7 +33,7 @@ describe("SettingsLayout", () => {
     navigation.pathname = "/settings";
   });
 
-  it("renders the real workspace settings tabs without redirect aliases", () => {
+  it("renders one real workspace settings nav without redirect aliases", () => {
     render(
       <SettingsLayout>
         <div>Settings content</div>
@@ -41,7 +41,7 @@ describe("SettingsLayout", () => {
     );
 
     for (const label of ["API Keys", "Members", "Plan & Billing", "Workspace"]) {
-      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+      expect(screen.getAllByRole("link", { name: label })).toHaveLength(1);
     }
     expect(screen.queryByText("Advanced")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Provider Vault" })).not.toBeInTheDocument();
@@ -60,15 +60,14 @@ describe("SettingsLayout", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Workspace control plane" })).toBeInTheDocument();
-    const controlLoop = screen.getByLabelText("Workspace control loop");
-    expect(controlLoop).toBeInTheDocument();
-    for (const label of ["API access", "Team access", "Spend guard", "Workspace record"]) {
-      expect(within(controlLoop).getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
-    }
-    expect(within(controlLoop).queryByRole("link", { name: /Provider vault/ })).not.toBeInTheDocument();
-    expect(within(controlLoop).queryByRole("link", { name: /Evaluation defaults/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Workspace control loop")).not.toBeInTheDocument();
+    expect(screen.queryByText("API access")).not.toBeInTheDocument();
+    expect(screen.queryByText("Team access")).not.toBeInTheDocument();
+    expect(screen.queryByText("Spend guard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Workspace record")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Evidence route/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Current section")).toBeInTheDocument();
+    expect(screen.queryByText("Current section")).not.toBeInTheDocument();
   });
 
   it("does not include provider vault in the Settings chrome", () => {
