@@ -1002,6 +1002,9 @@ describe("IntegrationsPage", () => {
 
     expect(screen.getByRole("heading", { name: "Browse by system category" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
+    expect(screen.getByText("Read-only by design")).toBeInTheDocument();
+    expect(screen.getByText("Zroky reads Stripe refund", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText("Connect read access first")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();

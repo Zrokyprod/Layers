@@ -528,6 +528,70 @@ function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
   return row.ctaLabel.replace(/^Configure /, "Connect ");
 }
 
+function connectorSystemLabel(row: ConnectorInventoryRow): string {
+  if (row.id === "generic_rest") return "Custom REST API";
+  if (row.id === "postgres_read") return "SQL database";
+  return row.title
+    .replace(/\s+verifier$/i, "")
+    .replace(/\s+template$/i, "");
+}
+
+function connectorActionSummary(row: ConnectorInventoryRow): string {
+  if (row.supportedActionTypes.includes("*")) return "custom agent actions";
+  const actions = row.supportedActionTypes.slice(0, 3).map((item) => humanize(item));
+  if (actions.length === 0) return row.kind === "support" ? "workflow events" : "agent actions";
+  return `${actions.join(", ")}${row.supportedActionTypes.length > actions.length ? ", and more" : ""}`;
+}
+
+function connectorPurposeCopy(row: ConnectorInventoryRow): string {
+  const system = connectorSystemLabel(row);
+  if (row.kind === "support") {
+    return `Zroky uses ${system} for approvals, alerts, and operating workflows around protected agent actions.`;
+  }
+  return `Zroky reads ${system} to confirm whether your agent's ${connectorActionSummary(row)} actually happened. It does not write records back to ${system}.`;
+}
+
+function connectorPreflightSummary(row: ConnectorInventoryRow) {
+  if (row.state === "ready") {
+    return {
+      label: "Matched",
+      title: "Preflight matched",
+      detail: "The last proof test matched the source-of-record data. Evidence from this connector is export-ready.",
+      tone: "success" as const,
+    };
+  }
+  if (row.state === "mismatched") {
+    return {
+      label: "Mismatched",
+      title: "Preflight mismatch",
+      detail: row.detail,
+      tone: "danger" as const,
+    };
+  }
+  if (row.state === "failing") {
+    return {
+      label: "Blocked",
+      title: "Preflight blocked",
+      detail: row.detail,
+      tone: "danger" as const,
+    };
+  }
+  if (row.state === "not_tested") {
+    return {
+      label: "Needs test",
+      title: "Run preflight to prove this connection",
+      detail: "Save read access, then run the proof test so Zroky can prove it can read and compare the real record.",
+      tone: "warning" as const,
+    };
+  }
+  return {
+    label: "Not configured",
+    title: "Connect read access first",
+    detail: "Save a read-only token or endpoint, then run a preflight test before relying on evidence.",
+    tone: "neutral" as const,
+  };
+}
+
 function Fact({
   label,
   value,
@@ -2320,6 +2384,8 @@ function ConnectorInspector({
     );
   }
 
+  const preflight = connectorPreflightSummary(row);
+
   return (
     <section className="panel connector-inspector-panel" aria-label="Selected connector">
       <div className="connector-inspector-head">
@@ -2334,9 +2400,38 @@ function ConnectorInspector({
         <StatusPill value={row.state} label={connectorStateLabel(row.state)} tone={row.tone} />
       </div>
 
-      <div className="connector-inspector-callout" data-tone={row.tone}>
-        <strong>{row.statusLabel}</strong>
-        <span>{row.detail}</span>
+      {row.kind === "proof" ? (
+        <div className="connector-readonly-banner">
+          <ShieldCheck aria-hidden="true" />
+          <div>
+            <strong>Read-only by design</strong>
+            <span>Zroky only reads this system to verify agent actions. This connector cannot create, update, delete, refund, or close anything.</span>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="connector-purpose-panel">
+        <span className="dashboard-eyebrow">What this connection proves</span>
+        <p>{connectorPurposeCopy(row)}</p>
+      </div>
+
+      <div className="connector-preflight-panel" data-tone={preflight.tone}>
+        <div className="connector-preflight-main">
+          <div>
+            <span className="dashboard-eyebrow">Preflight test</span>
+            <h3>{preflight.title}</h3>
+            <p>{preflight.detail}</p>
+          </div>
+          <StatusPill value={row.lastVerdict ?? row.state} label={preflight.label} tone={preflight.tone} />
+        </div>
+        <div className="connector-preflight-meta">
+          <span>
+            Last checked <strong>{connectorUpdatedLabel(row)}</strong>
+          </span>
+          <span>
+            Last verdict <strong>{row.lastVerdict ? humanize(row.lastVerdict) : "No result yet"}</strong>
+          </span>
+        </div>
       </div>
 
       <div className="connector-inspector-actions">
