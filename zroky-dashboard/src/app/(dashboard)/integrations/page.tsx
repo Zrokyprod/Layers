@@ -750,7 +750,7 @@ function GenericRestSetupPanel({
   const bridgeCurl = buildBridgeCurl(form);
 
   return (
-    <section className="connectors-generic-panel" aria-label="Generic REST verifier setup">
+    <section className="connectors-generic-panel connectors-rest-panel" aria-label="Generic REST verifier setup">
       <div className="connectors-section-head">
         <div>
           <span className="dashboard-eyebrow">REST / HTTP JSON verifier</span>
@@ -764,14 +764,17 @@ function GenericRestSetupPanel({
         />
       </div>
 
-      <div className="connectors-generic-layout">
-        <form className="connectors-generic-form" onSubmit={saveConfig}>
-          <div className="connectors-generic-form-head">
-            <strong>1. Save read-only endpoint</strong>
-            <span>Secrets stay server-side. The browser never renders saved tokens.</span>
+      <div className="connectors-generic-layout connectors-rest-layout">
+        <form className="connectors-generic-form connectors-rest-card connectors-rest-card-primary" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head connectors-rest-card-head">
+            <span className="connectors-rest-step">1</span>
+            <div>
+              <strong>Save read-only endpoint</strong>
+              <span>Store a read-scoped source-of-record path. Secrets stay server-side.</span>
+            </div>
           </div>
-          <div className="connectors-generic-grid">
-            <label>
+          <div className="connectors-generic-grid connectors-rest-field-grid">
+            <label className="connectors-generic-wide">
               <span>Base URL</span>
               <input
                 value={form.baseUrl}
@@ -780,7 +783,7 @@ function GenericRestSetupPanel({
                 required
               />
             </label>
-            <label>
+            <label className="connectors-generic-wide">
               <span>Path template</span>
               <input
                 value={form.pathTemplate}
@@ -807,18 +810,23 @@ function GenericRestSetupPanel({
               />
             </label>
           </div>
-          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
-            Save verifier
-          </DashboardButton>
+          <div className="connectors-rest-actions">
+            <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+              Save verifier
+            </DashboardButton>
+          </div>
         </form>
 
-        <form className="connectors-generic-form" onSubmit={runTest}>
-          <div className="connectors-generic-form-head">
-            <strong>2. Run proof test</strong>
-            <span>Compare claimed fields to the real source-of-record record.</span>
+        <form className="connectors-generic-form connectors-rest-card" onSubmit={runTest}>
+          <div className="connectors-generic-form-head connectors-rest-card-head">
+            <span className="connectors-rest-step">2</span>
+            <div>
+              <strong>Run proof test</strong>
+              <span>Compare claimed fields to the real source-of-record record.</span>
+            </div>
           </div>
-          <div className="connectors-generic-grid">
-            <label>
+          <div className="connectors-generic-grid connectors-rest-field-grid">
+            <label className="connectors-generic-wide">
               <span>Record ref</span>
               <input
                 value={form.recordRef}
@@ -827,7 +835,7 @@ function GenericRestSetupPanel({
                 required
               />
             </label>
-            <label>
+            <label className="connectors-generic-wide">
               <span>Action type</span>
               <input
                 value={form.actionType}
@@ -852,12 +860,14 @@ function GenericRestSetupPanel({
               />
             </label>
           </div>
-          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
-            Run proof test
-          </DashboardButton>
+          <div className="connectors-rest-actions">
+            <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+              Run proof test
+            </DashboardButton>
+          </div>
         </form>
 
-        <details className="connectors-generic-bridge" aria-label="Generic REST webhook bridge request">
+        <details className="connectors-generic-bridge connectors-rest-advanced" aria-label="Generic REST webhook bridge request">
           <summary>
             <span>
               <strong>Advanced: webhook bridge request</strong>

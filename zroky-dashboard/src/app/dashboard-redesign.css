@@ -21021,11 +21021,128 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   white-space: pre !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-panel {
+  gap: 18px !important;
+  padding: 22px !important;
+  background: #fff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-panel .connectors-section-head {
+  align-items: center !important;
+  gap: 18px !important;
+  padding-bottom: 18px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-layout {
+  grid-template-columns: 1fr !important;
+  gap: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-card {
+  display: grid !important;
+  gap: 16px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-radius: var(--mc-radius-card) !important;
+  background: #fff !important;
+  padding: 18px !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-card-primary {
+  border-left: 3px solid var(--mc-accent) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-card-head {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-card-head > div {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-card-head strong {
+  color: var(--mc-text) !important;
+  font-size: 0.95rem !important;
+  line-height: 1.3 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-card-head span:not(.connectors-rest-step) {
+  max-width: 560px !important;
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.82rem !important;
+  line-height: 1.45 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-step {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 auto !important;
+  border: 1px solid color-mix(in srgb, var(--mc-accent) 28%, #fff) !important;
+  border-radius: 999px !important;
+  background: var(--mc-accent-soft) !important;
+  color: var(--mc-accent) !important;
+  font-size: 0.78rem !important;
+  font-weight: 800 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-field-grid label {
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-field-grid :where(input, textarea) {
+  min-height: 40px !important;
+  border-color: var(--mc-border) !important;
+  border-radius: var(--mc-radius-control) !important;
+  padding: 9px 10px !important;
+  font-size: 0.86rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-field-grid textarea {
+  min-height: 132px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-actions .dashboard-button {
+  width: auto !important;
+  min-width: 168px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-advanced {
+  border-style: dashed !important;
+  background: var(--mc-soft) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-advanced > summary strong {
+  font-size: 0.9rem !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .connectors-generic-grid input,
 .app-shell[data-dashboard-system="control-v1"] .connectors-generic-grid textarea {
   border-color: var(--mc-border-strong) !important;
   background: #fff !important;
   color: var(--mc-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-rest-field-grid :where(input, textarea) {
+  border-color: var(--mc-border) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connectors-success-strip {
@@ -21049,5 +21166,18 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
     align-items: flex-start !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-rest-panel .connectors-section-head,
+  .app-shell[data-dashboard-system="control-v1"] .connectors-rest-card-head {
+    align-items: flex-start !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-rest-field-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connectors-rest-actions .dashboard-button {
+    width: 100% !important;
   }
 }
