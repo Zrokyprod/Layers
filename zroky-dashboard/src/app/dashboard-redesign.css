@@ -20573,10 +20573,16 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   padding: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-panel {
+  padding: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details {
   min-width: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary {
   display: flex !important;
   align-items: center !important;
@@ -20587,27 +20593,32 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   list-style: none !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary::-webkit-details-marker,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary::-webkit-details-marker {
   display: none !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary > span,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary > span {
   display: grid !important;
   gap: 4px !important;
   min-width: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary strong,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary strong {
   color: var(--mc-text) !important;
   font-size: 0.94rem !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary small,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary small {
   color: var(--mc-text-secondary) !important;
   font-size: 0.78rem !important;
   white-space: nowrap !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-body,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-body {
   display: grid !important;
   gap: 16px !important;
@@ -20703,20 +20714,22 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-list {
-  gap: 8px !important;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
+  gap: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
   display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) auto !important;
-  align-items: center !important;
-  gap: 14px !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: flex-start !important;
+  gap: 13px !important;
   width: 100% !important;
+  min-height: 170px !important;
   border: 1px solid var(--mc-border) !important;
-  border-left: 3px solid transparent !important;
+  border-left: 0 !important;
   border-radius: var(--mc-radius-control) !important;
   background: #fff !important;
-  padding: 14px !important;
+  padding: 16px !important;
   color: inherit !important;
   text-align: left !important;
   cursor: pointer !important;
@@ -20750,23 +20763,25 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row:hover,
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-selected="true"] {
   border-color: var(--mc-border-strong) !important;
-  background: var(--mc-accent-soft) !important;
+  background: #fff !important;
+  box-shadow: var(--mc-shadow-rest) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-selected="true"] {
-  border-left-color: var(--mc-accent) !important;
+  border-color: color-mix(in srgb, var(--mc-accent) 56%, var(--mc-border)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mc-accent) 36%, transparent), var(--mc-shadow-rest) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="success"] {
-  border-left-color: var(--mc-success) !important;
+  border-top: 3px solid var(--mc-success) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="warning"] {
-  border-left-color: var(--mc-warning) !important;
+  border-top: 3px solid var(--mc-warning) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="danger"] {
-  border-left-color: var(--mc-danger) !important;
+  border-top: 3px solid var(--mc-danger) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main {
@@ -20789,10 +20804,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
   display: flex !important;
-  flex-direction: column !important;
-  align-items: flex-end !important;
-  gap: 8px !important;
-  min-width: 112px !important;
+  grid-column: 1 / -1 !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  margin-top: auto !important;
+  border-top: 1px solid var(--mc-border) !important;
+  padding-top: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inspector-head {
@@ -20891,6 +20910,49 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   padding: 5px 8px !important;
   color: var(--mc-text-secondary) !important;
   font-size: 0.72rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-advanced-details {
+  border: 1px solid var(--mc-border) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: #fff !important;
+  padding: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 13px 14px !important;
+  cursor: pointer !important;
+  list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary span {
+  color: var(--mc-text) !important;
+  font-size: 0.86rem !important;
+  font-weight: 700 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-advanced-details > summary small {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.74rem !important;
+  text-align: right !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-advanced-details[open] {
+  display: grid !important;
+  gap: 12px !important;
+  padding-bottom: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-advanced-details[open] > :not(summary) {
+  margin-inline: 14px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-details-json {

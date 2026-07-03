@@ -520,6 +520,14 @@ function filterCategoryGroups(
     .filter((group) => group.rows.length > 0);
 }
 
+function connectorPrimaryCtaLabel(row: ConnectorInventoryRow): string {
+  if (row.kind === "support") return row.ctaLabel;
+  if (row.id === "generic_rest") return "Set up custom REST";
+  if (row.id === "postgres_read") return "Set up SQL verifier";
+  if (row.id === "ledger_template" || row.id === "customer_template") return "Set up template";
+  return row.ctaLabel.replace(/^Configure /, "Connect ");
+}
+
 function Fact({
   label,
   value,
@@ -2331,40 +2339,47 @@ function ConnectorInspector({
         <span>{row.detail}</span>
       </div>
 
-      <div className="connector-fact-grid">
-        <Fact label="Transport" value={humanize(row.transport)} />
-        <Fact label="Template" value={row.templateKind ? humanize(row.templateKind) : "Custom"} />
-        <Fact label="Connector type" value={row.metadata.connectorType} />
-        <Fact label="Endpoint" value={row.metadata.maskedEndpoint} />
-        <Fact label="Credential saved" value={row.metadata.credentialSaved} />
-        <Fact label="Health" value={row.healthStatus ? humanize(row.healthStatus) : null} />
-        <Fact label="Readiness" value={row.readinessStatus ? humanize(row.readinessStatus) : null} />
-        <Fact label="Last verdict" value={row.lastVerdict ? humanize(row.lastVerdict) : null} />
-        <Fact label="Updated" value={connectorUpdatedLabel(row)} />
-      </div>
-
-      {row.supportedActionTypes.length > 0 ? (
-        <div className="connector-action-tags" aria-label="Supported action types">
-          {row.supportedActionTypes.map((item) => (
-            <span key={item}>{item}</span>
-          ))}
-        </div>
-      ) : null}
-
-      {row.latestCheck ? (
-        <details className="connector-details-json">
-          <summary>Latest verification check</summary>
-          <pre>
-            <code>{compactJson(row.latestCheck)}</code>
-          </pre>
-        </details>
-      ) : null}
-
       <div className="connector-inspector-actions">
         <DashboardButtonLink href={row.href} variant="primary">
-          {row.ctaLabel}
+          {connectorPrimaryCtaLabel(row)}
         </DashboardButtonLink>
       </div>
+
+      <details className="connector-advanced-details">
+        <summary>
+          <span>Advanced details</span>
+          <small>Transport, coverage tags, endpoint, and latest check</small>
+        </summary>
+
+        <div className="connector-fact-grid">
+          <Fact label="Transport" value={humanize(row.transport)} />
+          <Fact label="Template" value={row.templateKind ? humanize(row.templateKind) : "Custom"} />
+          <Fact label="Connector type" value={row.metadata.connectorType} />
+          <Fact label="Endpoint" value={row.metadata.maskedEndpoint} />
+          <Fact label="Credential saved" value={row.metadata.credentialSaved} />
+          <Fact label="Health" value={row.healthStatus ? humanize(row.healthStatus) : null} />
+          <Fact label="Readiness" value={row.readinessStatus ? humanize(row.readinessStatus) : null} />
+          <Fact label="Last verdict" value={row.lastVerdict ? humanize(row.lastVerdict) : null} />
+          <Fact label="Updated" value={connectorUpdatedLabel(row)} />
+        </div>
+
+        {row.supportedActionTypes.length > 0 ? (
+          <div className="connector-action-tags" aria-label="Supported action types">
+            {row.supportedActionTypes.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        ) : null}
+
+        {row.latestCheck ? (
+          <div className="connector-details-json">
+            <strong>Latest verification check</strong>
+            <pre>
+              <code>{compactJson(row.latestCheck)}</code>
+            </pre>
+          </div>
+        ) : null}
+      </details>
 
       {row.id === "generic_rest" ? (
         <GenericRestSetupPanel
@@ -2602,12 +2617,6 @@ export default function IntegrationsPage() {
         updatedLabel={loading ? "Refreshing" : "Updated live"}
       />
 
-      <DashboardMetricStrip
-        ariaLabel="Connector readiness metrics"
-        columns={5}
-        metrics={metrics}
-      />
-
       <DashboardWorkspace
         className="connectors-workspace"
         left={
@@ -2672,6 +2681,27 @@ export default function IntegrationsPage() {
             <span>Visible roadmap, not sold as live coverage.</span>
           </article>
         </div>
+      </section>
+
+      <section className="panel connectors-readiness-panel" aria-label="Connector readiness diagnostics">
+        <details className="connectors-readiness-details">
+          <summary>
+            <span>
+              <span className="dashboard-eyebrow">Diagnostics</span>
+              <strong>Connector readiness metrics</strong>
+            </span>
+            <small>
+              {formatCount(inventory.counts.notConfigured)} not configured · {formatCount(inventory.counts.unverifiableActionTypes)} uncovered actions
+            </small>
+          </summary>
+          <div className="connectors-readiness-body">
+            <DashboardMetricStrip
+              ariaLabel="Connector readiness metrics"
+              columns={5}
+              metrics={metrics}
+            />
+          </div>
+        </details>
       </section>
 
       <CoverageMap rows={inventory.coverageRows} />
