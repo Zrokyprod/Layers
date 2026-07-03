@@ -12433,9 +12433,71 @@ pre {
   white-space: nowrap;
 }
 
+.settings-hero-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 1100px;
+}
+
+.settings-hero-rail-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.settings-hero-rail-link span,
+.settings-tab-link span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.settings-hero-rail-link strong,
+.settings-tab-link strong,
+.settings-hero-rail-link small,
+.settings-tab-link small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-hero-rail-link strong,
+.settings-tab-link strong {
+  color: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.18;
+}
+
+.settings-hero-rail-link small,
+.settings-tab-link small {
+  color: #667085;
+  font-size: 0.72rem;
+  font-weight: 520;
+  line-height: 1.24;
+}
+
+.settings-hero-rail-link svg,
+.settings-tab-link svg {
+  flex: 0 0 auto;
+}
+
+.settings-hero-rail-arrow {
+  width: 14px;
+  height: 14px;
+}
+
 .settings-tabs-nav {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin: 0;
   padding: 8px;
@@ -12447,7 +12509,8 @@ pre {
 }
 
 .settings-tab-link {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 7px;
   padding: 8px 10px;
@@ -12485,6 +12548,20 @@ pre {
 .settings-content {
   display: grid;
   gap: 14px;
+}
+
+@media (max-width: 1100px) {
+  .settings-hero-rail,
+  .settings-tabs-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-hero-rail,
+  .settings-tabs-nav {
+    grid-template-columns: 1fr;
+  }
 }
 
 .settings-content > .page-content {
