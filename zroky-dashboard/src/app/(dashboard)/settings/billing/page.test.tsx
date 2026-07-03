@@ -129,7 +129,7 @@ describe("BillingPage", () => {
     expect(screen.getAllByText("7 / 25").length).toBeGreaterThan(0);
     expect(screen.getByText("Policy checks")).toBeInTheDocument();
     expect(screen.getByText("Runner executions")).toBeInTheDocument();
-    expect(screen.getByText("Source mutations")).toBeInTheDocument();
+    expect(screen.getAllByText("Source mutations").length).toBeGreaterThan(0);
     expect(screen.getByText("Managed AgentProfile capacity")).toBeInTheDocument();
     expect(screen.getByText("Evidence retention days")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Actions" }).getAttribute("href")).toBe("/actions");

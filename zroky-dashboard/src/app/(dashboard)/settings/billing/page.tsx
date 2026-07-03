@@ -240,6 +240,9 @@ function isProblemMessage(value: string): boolean {
 }
 
 function paymentStatusLabel(billing: BillingMeResponse | null): { label: string; detail: string } {
+  if (!billing) {
+    return { label: "Loading", detail: "Billing status is loading." };
+  }
   if (billing?.payment_provider === "manual" && billing.status === "active") {
     return { label: "Manual activation", detail: "Plan access is active through a Zroky-administered billing record." };
   }
@@ -414,21 +417,11 @@ function BillingSettingsContent() {
   const paymentStatus = paymentStatusLabel(billingMe);
   const pendingPaymentConfirmation = Boolean(billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref);
   const billingTone = error ? "danger" : pendingPaymentConfirmation ? "warning" : billingMe?.status === "active" ? "success" : "neutral";
-  const protectedActionMeters = [
+  const primaryUsageMeters = [
     {
       label: "Protected actions",
       detailLabel: "Protected actions",
       meter: billingUsage?.protected_actions,
-    },
-    {
-      label: "Policy checks",
-      detailLabel: "Policy checks",
-      meter: billingUsage?.policy_checks,
-    },
-    {
-      label: "Runner executions",
-      detailLabel: "Runner executions",
-      meter: billingUsage?.runner_executions,
     },
     {
       label: "Receipts",
@@ -449,6 +442,23 @@ function BillingSettingsContent() {
       label: "SOR connectors",
       detailLabel: "System-of-record connectors",
       meter: billingUsage?.active_connectors,
+    },
+  ];
+  const advancedUsageMeters = [
+    {
+      label: "Policy checks",
+      detailLabel: "Policy checks",
+      meter: billingUsage?.policy_checks,
+    },
+    {
+      label: "Runner executions",
+      detailLabel: "Runner executions",
+      meter: billingUsage?.runner_executions,
+    },
+    {
+      label: "Source mutations",
+      detailLabel: "Source mutations",
+      meter: billingUsage?.source_mutations,
     },
   ];
   const entitlementCards = [
@@ -483,6 +493,12 @@ function BillingSettingsContent() {
       helper: "Evidence retention days",
     },
   ];
+  const visiblePlans = PLAN_CATALOG.filter((plan) => {
+    if (plan.code === "free") return false;
+    if (plan.code === "pro") return planRank(currentCatalogCode) <= planRank("pro");
+    return planRank(plan.code) >= planRank(currentCatalogCode);
+  });
+  const heroTitle = billingMe ? `${displayPlanCode(currentPlanCode)} plan` : "Plan & Billing";
 
   useEffect(() => {
     if (!pendingPaymentConfirmation) {
@@ -500,8 +516,8 @@ function BillingSettingsContent() {
         ariaLabel="Plan and billing settings"
         eyebrow="Plan & Billing"
         icon={<CreditCard aria-hidden="true" />}
-        title={`${displayPlanCode(currentPlanCode)} plan`}
-        copy="Plan access, Razorpay checkout, protected-action quotas, connector capacity, and AI spend guardrails for this workspace."
+        title={heroTitle}
+        copy="Plan status, protected-action quotas, connector capacity, and spend limits for this workspace."
         tone={billingTone}
         pill={paymentStatus.label}
         updatedLabel={loading ? "Loading" : "Settings live"}
@@ -529,7 +545,7 @@ function BillingSettingsContent() {
           {
             id: "current-plan",
             label: "Current plan",
-            value: displayPlanCode(currentPlanCode),
+            value: billingMe ? displayPlanCode(currentPlanCode) : "Loading",
             helper: legacyPlanAliasNote ?? billingMe?.status ?? "Loading billing status",
             tone: billingMe?.status === "active" ? "success" : "neutral",
             icon: <CreditCard aria-hidden="true" />,
@@ -565,7 +581,7 @@ function BillingSettingsContent() {
         id="billing-plan-controls"
         eyebrow="Plan"
         title="Plan controls"
-        copy="Current entitlement template and available paid-plan upgrades."
+        copy="Current plan and available upgrades. Free remains the default until a paid plan is activated."
       >
 
         {isProblemMessage(actionMsg) ? (
@@ -582,7 +598,7 @@ function BillingSettingsContent() {
           <div className="loading" />
         ) : (
           <div className="billing-plans-grid">
-            {PLAN_CATALOG.map((plan) => {
+            {visiblePlans.map((plan) => {
               const isCurrent = plan.code === currentCatalogCode;
               const canChangeToPlan = !isCurrent && planRank(plan.code) > planRank(currentCatalogCode);
               return (
@@ -621,7 +637,7 @@ function BillingSettingsContent() {
           id="billing-usage-entitlements"
           eyebrow="Usage"
           title="Usage and entitlements"
-          copy={`${billingMe.status} plan for org ${billingMe.org_id}. Meters are hard plan gates until overage billing is explicitly enabled.`}
+          copy={`${billingMe.status} plan for org ${billingMe.org_id}. These meters are hard plan gates until overage billing is explicitly enabled.`}
           actions={
             <StatusPill
               value={billingUsage?.metering_health.state ?? "loading"}
@@ -631,14 +647,29 @@ function BillingSettingsContent() {
           }
         >
 
-          <div className="kpi-grid billing-usage-kpis" role="region" aria-label="Protected action usage">
-            {protectedActionMeters.map((item) => (
-              <div className="kpi-card" key={item.label}>
-                <div className="kpi-value">{formatUsageMeter(item.meter)}</div>
-                <div className="kpi-label">{item.label}</div>
-                <small>{usageDetail(item.detailLabel, item.meter)}</small>
+          <div className="billing-usage-layout">
+            <div className="kpi-grid billing-usage-kpis" role="region" aria-label="Protected action usage">
+              {primaryUsageMeters.map((item) => (
+                <div className="kpi-card" key={item.label}>
+                  <div className="kpi-value">{formatUsageMeter(item.meter)}</div>
+                  <div className="kpi-label">{item.label}</div>
+                  <small>{usageDetail(item.detailLabel, item.meter)}</small>
+                </div>
+              ))}
+            </div>
+
+            <aside className="billing-entitlement-panel" aria-label="Plan entitlements">
+              <h3>Plan limits</h3>
+              <div className="billing-entitlement-list">
+                {entitlementCards.map((item) => (
+                  <div key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    <small>{item.helper}</small>
+                  </div>
+                ))}
               </div>
-            ))}
+            </aside>
           </div>
 
           <div className="actions billing-control-links">
@@ -653,15 +684,18 @@ function BillingSettingsContent() {
             </DashboardButtonLink>
           </div>
 
-          <div className="kpi-grid billing-usage-kpis">
-            {entitlementCards.map((item) => (
-              <div className="kpi-card" key={item.label}>
-                <div className="kpi-value">{item.value}</div>
-                <div className="kpi-label">{item.label}</div>
-                <small>{item.helper}</small>
-              </div>
-            ))}
-          </div>
+          <details className="billing-advanced-meters">
+            <summary>Advanced metering</summary>
+            <div className="kpi-grid billing-usage-kpis">
+              {advancedUsageMeters.map((item) => (
+                <div className="kpi-card" key={item.label}>
+                  <div className="kpi-value">{formatUsageMeter(item.meter)}</div>
+                  <div className="kpi-label">{item.label}</div>
+                  <small>{usageDetail(item.detailLabel, item.meter)}</small>
+                </div>
+              ))}
+            </div>
+          </details>
         </SettingsSection>
       )}
 
@@ -720,19 +754,6 @@ function BillingSettingsContent() {
         </form>
       </SettingsSection>
 
-      <SettingsSection
-        id="billing-invoices"
-        eyebrow="Invoices"
-        title="Razorpay receipts"
-        copy="Razorpay is the self-serve payment surface; Zroky verifies paid plans into entitlements."
-      >
-        <div className="actions billing-invoices-empty">
-          <span className="hint">Razorpay payment receipts are confirmed immediately after checkout verification.</span>
-          {!billingMe?.payment_request_ref && !billingMe?.payment_subscription_ref && (
-            <span className="hint">Start a paid plan to create a Razorpay payment reference.</span>
-          )}
-        </div>
-      </SettingsSection>
     </SettingsScaffold>
   );
 }
