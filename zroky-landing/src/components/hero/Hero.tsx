@@ -50,7 +50,7 @@ export default function Hero() {
 
           <Reveal delay={0.06}>
             <h1 className="mt-6 text-[2.55rem] font-semibold leading-[0.98] tracking-[-0.03em] text-[#12140f] sm:text-[3.25rem] md:text-[4.1rem] lg:text-[4.8rem] lg:tracking-[-0.035em]">
-              <span className="block">Scale enterprise agents</span>
+              <span className="block">Scale enterprise agents </span>
               <span className="block text-[#2f5f66]">with governed execution.</span>
             </h1>
           </Reveal>
