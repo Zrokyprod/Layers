@@ -198,6 +198,142 @@ def test_verified_action_creates_intent_and_decides_without_runner_or_credential
     _reset_sdk()
 
 
+def test_protect_maps_action_quickstart_to_verified_action(monkeypatch):
+    _reset_sdk()
+    calls: list[dict[str, object]] = []
+    responses = [
+        {"action_id": "act_access", "status": "validated"},
+        {"action_id": "act_access", "status": "authorized", "allowed": True, "requires_approval": False},
+    ]
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_request(method, url, *, headers, json, timeout):
+        calls.append({"method": method, "url": url, "headers": headers, "json": json, "timeout": timeout})
+        return _Response(responses[len(calls) - 1])
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_actions", agent_id="agent_profile_default")
+
+    decision = zroky.protect(
+        action="access.grant",
+        operation_kind="update",
+        params={"system": "github", "user_id": "user_123", "role": "admin"},
+        resource={"type": "workspace_access", "id": "github:user_123"},
+        purpose={"reason": "Grant temporary admin access after approval."},
+        verification_profile="github-role-match",
+        idempotency_key="access_user_123_admin",
+    )
+
+    assert decision["status"] == "authorized"
+    assert calls[0]["url"] == "https://api.zroky.com/v1/action-intents"
+    assert calls[1]["url"] == "https://api.zroky.com/v1/action-intents/act_access/decide"
+    body = calls[0]["json"]  # type: ignore[assignment]
+    assert body["contract_version"] == "access.grant/1.0"  # type: ignore[index]
+    assert body["action_type"] == "access.grant"  # type: ignore[index]
+    assert body["operation_kind"] == "UPDATE"  # type: ignore[index]
+    assert body["parameters"]["role"] == "admin"  # type: ignore[index]
+    assert body["verification_profile"] == "github-role-match"  # type: ignore[index]
+    assert calls[0]["headers"]["Idempotency-Key"] == "access_user_123_admin"  # type: ignore[index]
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_protect_can_wait_for_receipt(monkeypatch):
+    _reset_sdk()
+    calls: list[dict[str, object]] = []
+    responses = [
+        {"action_id": "act_done", "status": "validated"},
+        {"action_id": "act_done", "status": "authorized", "allowed": True, "requires_approval": False},
+        {"action_id": "act_done", "proof_status": "matched", "receipt_status": "generated"},
+        {"receipt_id": "receipt_done", "signature_valid": True},
+    ]
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return _Response(responses[len(calls) - 1])
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_actions")
+
+    result = zroky.protect(
+        action="access.grant",
+        params={"user_id": "user_123"},
+        wait_for_receipt=True,
+        poll_interval_seconds=0.01,
+    )
+
+    assert result["action_id"] == "act_done"
+    assert result["decision"]["status"] == "authorized"
+    assert result["receipt"]["receipt_id"] == "receipt_done"
+    assert result["signature_valid"] is True
+    assert calls[-1]["url"] == "https://api.zroky.com/v1/action-intents/act_done/receipt"
+    zroky.shutdown()
+    _reset_sdk()
+
+
+def test_protect_raises_on_approval(monkeypatch):
+    _reset_sdk()
+    responses = [
+        {"action_id": "act_pending", "status": "validated"},
+        {
+            "action_id": "act_pending",
+            "status": "approval_pending",
+            "allowed": False,
+            "requires_approval": True,
+            "runtime_policy_decision_id": "decision_pending",
+        },
+    ]
+    index = {"value": 0}
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def _fake_request(*_args, **_kwargs):
+        payload = responses[index["value"]]
+        index["value"] += 1
+        return _Response(payload)
+
+    monkeypatch.setattr("zroky._verified_action.httpx.request", _fake_request)
+    with patch("zroky._internal.queue.IngestClient"):
+        zroky.init(api_key="zk_live_test", project="proj_actions")
+
+    with pytest.raises(ZrokyVerifiedActionApprovalRequired) as error:
+        zroky.protect(action="access.grant", operation_kind="UPDATE", params={"role": "admin"})
+
+    assert error.value.action_id == "act_pending"
+    assert error.value.approval_id == "decision_pending"
+    zroky.shutdown()
+    _reset_sdk()
+
+
 def test_verified_action_allows_per_call_agent_id_override(monkeypatch):
     _reset_sdk()
     calls: list[dict[str, object]] = []

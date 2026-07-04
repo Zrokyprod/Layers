@@ -79,6 +79,7 @@ from zroky._internal.timeout_manager import TimeoutManager
 
 # Re-export outcome() — Cost-of-Failure Attribution
 from zroky._outcome import outcome  # noqa: F401
+from zroky._protect import protect  # noqa: F401
 from zroky._runtime_policy import check_runtime_policy, guard  # noqa: F401
 from zroky._verified_action import await_action_proof, verified_action  # noqa: F401
 from zroky._runner import (  # noqa: F401

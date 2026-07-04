@@ -5,8 +5,11 @@
 
 Subcommands
 -----------
-- ``zroky health``               — pings the ingest endpoint.
+- ``zroky doctor``               — validates SDK setup for first run.
+- ``zroky init``                 — writes protected-action starter files.
+- ``zroky health``               — pings the backend health endpoint.
 - ``zroky config``               — prints the resolved SDK configuration.
+- ``zroky ingest --test``        — sends one smoke event to the ingest endpoint.
 - ``zroky buffer status``        — shows offline-buffer size & path.
 - ``zroky buffer flush``         — replays buffered events to the backend.
 - ``zroky buffer clear``         — empties the offline buffer (irreversible).
@@ -26,11 +29,13 @@ import os
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 
 import httpx
 
 from zroky._internal.config import load_config
+from zroky._internal.models import CallEvent
 from zroky._internal.offline_buffer import OfflineBuffer
 from zroky._runner import (
     RUNNER_CAPABILITY_VERSION,
@@ -39,24 +44,174 @@ from zroky._runner import (
     default_runner_metadata,
 )
 
+_HEALTH_PATH = "/health/live"
+_INGEST_PATH = "/api/v1/ingest"
+
+_ENV_EXAMPLE = """# Zroky SDK
+# Create this key in the Zroky dashboard, then copy it into your real .env.
+ZROKY_API_KEY=zk_live_your_key_here
+
+# Optional if your API key is already scoped to one project.
+ZROKY_PROJECT=your_project_id
+
+ZROKY_ENVIRONMENT=production
+"""
+
+_QUICKSTART = '''"""Zroky protected-action quickstart.
+
+Run:
+  python zroky_quickstart.py
+
+This submits an action intent to Zroky. Real production actions should be backed
+by a registered runner and verifier in your dashboard.
+"""
+from __future__ import annotations
+
+import os
+
+import zroky
+
+
+zroky.init(
+    api_key=os.environ.get("ZROKY_API_KEY"),
+    project=os.environ.get("ZROKY_PROJECT"),
+)
+
+result = zroky.protect(
+    action="access.grant",
+    operation_kind="UPDATE",
+    params={
+        "system": "github",
+        "user_id": "user_123",
+        "role": "admin",
+    },
+    resource={
+        "type": "workspace_access",
+        "id": "github:user_123",
+    },
+    purpose={
+        "reason": "Grant temporary admin access after approval.",
+    },
+    verification_profile="github-role-match",
+)
+
+print(result)
+'''
+
 
 def _print_json(obj: object) -> None:
     print(json.dumps(obj, indent=2, default=str))
 
 
+def _auth_headers(config: object, *, json_content: bool = False) -> dict[str, str]:
+    headers: dict[str, str] = {"Content-Type": "application/json"} if json_content else {}
+    api_key = getattr(config, "api_key", None)
+    project = getattr(config, "project", None)
+    if api_key:
+        headers["x-api-key"] = api_key
+    if project:
+        headers["x-project-id"] = project
+    return headers
+
+
+def _url(base: str, path: str) -> str:
+    return f"{base.rstrip('/')}{path}"
+
+
 # ------------------------------------------------------------------ commands
+
+def cmd_init(args: argparse.Namespace) -> int:
+    target = Path(args.path).expanduser().resolve()
+    target.mkdir(parents=True, exist_ok=True)
+    files = {
+        ".env.example": _ENV_EXAMPLE,
+        "zroky_quickstart.py": _QUICKSTART,
+    }
+    written: list[str] = []
+    skipped: list[str] = []
+
+    for name, content in files.items():
+        path = target / name
+        if path.exists() and not args.force:
+            skipped.append(str(path))
+            continue
+        path.write_text(content, encoding="utf-8")
+        written.append(str(path))
+
+    _print_json(
+        {
+            "ok": True,
+            "path": str(target),
+            "written": written,
+            "skipped": skipped,
+            "next": [
+                "Set ZROKY_API_KEY in your environment.",
+                "Run `zroky doctor`.",
+                "Run `zroky ingest --test`.",
+                "Use `zroky.protect(...)` around real-world agent actions.",
+            ],
+        }
+    )
+    return 0
+
+
+def cmd_doctor(_args: argparse.Namespace) -> int:
+    config = load_config()
+    checks: list[dict[str, object]] = []
+
+    checks.append(
+        {
+            "name": "api_key",
+            "ok": bool(config.api_key),
+            "message": "ZROKY_API_KEY is set" if config.api_key else "Set ZROKY_API_KEY",
+        }
+    )
+    checks.append(
+        {
+            "name": "project",
+            "ok": True,
+            "message": (
+                f"ZROKY_PROJECT={config.project}"
+                if config.project
+                else "ZROKY_PROJECT is optional when the API key carries project context"
+            ),
+        }
+    )
+
+    health_url = _url(config.ingest_url, _HEALTH_PATH)
+    try:
+        resp = httpx.get(health_url, headers=_auth_headers(config), timeout=8.0)
+    except httpx.HTTPError as exc:
+        checks.append({"name": "backend_health", "ok": False, "url": health_url, "error": str(exc)})
+    else:
+        checks.append(
+            {
+                "name": "backend_health",
+                "ok": resp.status_code < 400,
+                "url": health_url,
+                "status": resp.status_code,
+                "body_preview": resp.text[:200],
+            }
+        )
+
+    ok = all(bool(check["ok"]) for check in checks)
+    _print_json(
+        {
+            "ok": ok,
+            "mode": config.mode,
+            "ingest_url": config.ingest_url,
+            "checks": checks,
+            "next": "Run `zroky ingest --test` to send a smoke event." if ok else None,
+        }
+    )
+    return 0 if ok else 1
 
 def cmd_health(_args: argparse.Namespace) -> int:
     config = load_config()
-    url = f"{config.ingest_url}/api/v1/healthz"
-    headers: dict[str, str] = {}
-    if config.api_key:
-        headers["x-api-key"] = config.api_key
-    if config.project:
-        headers["x-project-id"] = config.project
+    url = _url(config.ingest_url, _HEALTH_PATH)
 
     try:
-        resp = httpx.get(url, headers=headers, timeout=8.0)
+        resp = httpx.get(url, headers=_auth_headers(config), timeout=8.0)
     except httpx.HTTPError as exc:
         _print_json({"status": "error", "url": url, "error": str(exc)})
         return 1
@@ -84,6 +239,75 @@ def cmd_config(_args: argparse.Namespace) -> int:
     }
     _print_json(redacted)
     return 0
+
+
+def _test_ingest_payload() -> dict[str, object]:
+    event = CallEvent(
+        provider="zroky",
+        model="ingest-test",
+        messages=[
+            {
+                "role": "user",
+                "content": "Zroky SDK ingest smoke test",
+            }
+        ],
+        status="success",
+        output_content="Zroky ingest smoke test accepted.",
+        latency_ms=1.0,
+        metadata={
+            "source": "zroky_cli",
+            "command": "zroky ingest --test",
+            "created_at_ms": int(time.time() * 1000),
+        },
+    )
+    return event.to_ingest_payload()
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    if not args.test:
+        print("Nothing to ingest. Use: zroky ingest --test", file=sys.stderr)
+        return 2
+
+    config = load_config()
+    if not config.api_key:
+        _print_json(
+            {
+                "ok": False,
+                "error": "ZROKY_API_KEY is not set",
+                "hint": "Set ZROKY_API_KEY, then run `zroky ingest --test` again.",
+            }
+        )
+        return 1
+
+    payload = _test_ingest_payload()
+    body = {"events": [payload]}
+    url = _url(config.ingest_url, _INGEST_PATH)
+    try:
+        resp = httpx.post(
+            url,
+            content=json.dumps(body, default=str),
+            headers=_auth_headers(config, json_content=True),
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        _print_json({"ok": False, "url": url, "error": str(exc)})
+        return 1
+
+    ok = resp.status_code < 400
+    _print_json(
+        {
+            "ok": ok,
+            "url": url,
+            "status": resp.status_code,
+            "event_id": payload.get("event_id"),
+            "call_id": payload.get("call_id"),
+            "body_preview": resp.text[:300],
+            "next": "Open the dashboard and look for the `zroky ingest --test` event."
+            if ok
+            else None,
+        }
+    )
+    return 0 if ok else 1
 
 
 def cmd_buffer_status(_args: argparse.Namespace) -> int:
@@ -118,7 +342,7 @@ def cmd_buffer_flush(_args: argparse.Namespace) -> int:
     if config.project:
         headers["x-project-id"] = config.project
 
-    url = f"{config.ingest_url}/api/v1/ingest"
+    url = _url(config.ingest_url, _INGEST_PATH)
     try:
         resp = httpx.post(
             url,
@@ -214,7 +438,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
     if config.project:
         headers["x-project-id"] = config.project
 
-    url = f"{config.ingest_url}/api/v1/ingest"
+    url = _url(config.ingest_url, _INGEST_PATH)
     try:
         resp = httpx.post(
             url,
@@ -301,8 +525,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="zroky", description="ZROKY SDK debugging CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    init_parser = sub.add_parser("init", help="write protected-action starter files")
+    init_parser.add_argument(
+        "--path",
+        default=".",
+        help="directory where starter files should be written",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite existing starter files",
+    )
+    init_parser.set_defaults(func=cmd_init)
+
+    sub.add_parser("doctor", help="validate SDK setup").set_defaults(func=cmd_doctor)
     sub.add_parser("health", help="ping the ingest backend").set_defaults(func=cmd_health)
     sub.add_parser("config", help="print resolved SDK configuration").set_defaults(func=cmd_config)
+
+    ingest_parser = sub.add_parser("ingest", help="send a test event to the ingest backend")
+    ingest_parser.add_argument(
+        "--test",
+        action="store_true",
+        help="send one synthetic SDK smoke event",
+    )
+    ingest_parser.set_defaults(func=cmd_ingest)
 
     buf_parser = sub.add_parser("buffer", help="manage the offline buffer")
     buf_sub = buf_parser.add_subparsers(dest="buffer_command", required=True)

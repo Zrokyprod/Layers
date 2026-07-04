@@ -226,27 +226,28 @@ function TraceCard() {
           );
         })}
 
-        <AnimatePresence>
-          {stage >= 3 && (
-            <motion.div
-              initial={reduce ? false : { opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.4, ease }}
-              className="overflow-hidden"
-            >
-              <div className="mt-0.5 flex items-center gap-3 rounded-[9px] border border-[#cfe0dd] bg-[#eaf1ef] px-3.5 py-3">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-[#2f5f66] text-white">
-                  <ShieldCheck size={14} />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#2f5f66]">Zroky verdict</p>
-                  <p className="mt-0.5 truncate text-[12.5px] font-semibold text-[#171a15]">Held for approval - privilege + sequence risk</p>
-                </div>
+        <div className="mt-0.5 min-h-[59px] overflow-hidden">
+          <motion.div
+            aria-hidden={stage < 3}
+            initial={false}
+            animate={{
+              opacity: stage >= 3 ? 1 : 0,
+              y: stage >= 3 || reduce ? 0 : 8,
+            }}
+            transition={{ duration: 0.4, ease }}
+            className={stage >= 3 ? '' : 'pointer-events-none'}
+          >
+            <div className="flex items-center gap-3 rounded-[9px] border border-[#cfe0dd] bg-[#eaf1ef] px-3.5 py-3">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-[#2f5f66] text-white">
+                <ShieldCheck size={14} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#2f5f66]">Zroky verdict</p>
+                <p className="mt-0.5 truncate text-[12.5px] font-semibold text-[#171a15]">Held for approval - privilege + sequence risk</p>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </motion.div>
+        </div>
       </div>
 
       <p className="mt-4 text-center text-[11.5px] leading-relaxed text-[#8a867a]">
@@ -350,36 +351,37 @@ function SequenceRiskTraceCard() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {stage >= 4 && (
-          <motion.div
-            initial={reduce ? false : { opacity: 0, y: 12, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.4, ease }}
-            className="overflow-hidden"
-          >
-            <div className="mt-4 rounded-[12px] border border-[#dfc899] bg-[#fff8ea] p-3.5 sm:mt-5 sm:p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-[#8a5a16] text-white">
-                    <AlertTriangle size={16} />
-                  </span>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a5a16]">Sequence risk detected</p>
-                    <p className="mt-1 text-sm font-semibold leading-relaxed text-[#171a15]">
-                      Individually safe actions formed an unsafe pattern.
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-full border border-[#dfc899] bg-[#fffdfa] px-3 py-1 text-xs font-semibold text-[#8a5a16]">
-                  Held
+      <div className="min-h-[126px] overflow-hidden sm:min-h-[132px]">
+        <motion.div
+          aria-hidden={stage < 4}
+          initial={false}
+          animate={{
+            opacity: stage >= 4 ? 1 : 0,
+            y: stage >= 4 || reduce ? 0 : 12,
+          }}
+          transition={{ duration: 0.4, ease }}
+          className={stage >= 4 ? '' : 'pointer-events-none'}
+        >
+          <div className="mt-4 rounded-[12px] border border-[#dfc899] bg-[#fff8ea] p-3.5 sm:mt-5 sm:p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-[#8a5a16] text-white">
+                  <AlertTriangle size={16} />
                 </span>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a5a16]">Sequence risk detected</p>
+                  <p className="mt-1 text-sm font-semibold leading-relaxed text-[#171a15]">
+                    Individually safe actions formed an unsafe pattern.
+                  </p>
+                </div>
               </div>
+              <span className="rounded-full border border-[#dfc899] bg-[#fffdfa] px-3 py-1 text-xs font-semibold text-[#8a5a16]">
+                Held
+              </span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </motion.div>
+      </div>
 
       <p className="mt-4 text-center text-[11.5px] leading-relaxed text-[#8a867a]">
         The same sequence-risk signal appears in the dashboard today.

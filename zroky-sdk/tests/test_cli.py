@@ -33,6 +33,38 @@ def test_config_command_prints_redacted(capsys: pytest.CaptureFixture[str]) -> N
     assert "ingest_url" in data
 
 
+def test_init_writes_protected_action_starter_files(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rc = cli.main(["init", "--path", str(tmp_path)])
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert out["ok"] is True
+    env_file = tmp_path / ".env.example"
+    quickstart = tmp_path / "zroky_quickstart.py"
+    assert env_file.exists()
+    assert quickstart.exists()
+    assert "ZROKY_API_KEY" in env_file.read_text(encoding="utf-8")
+    assert "zroky.protect(" in quickstart.read_text(encoding="utf-8")
+
+
+def test_init_skips_existing_files_without_force(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    quickstart = tmp_path / "zroky_quickstart.py"
+    quickstart.write_text("# keep me\n", encoding="utf-8")
+
+    rc = cli.main(["init", "--path", str(tmp_path)])
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert str(quickstart) in out["skipped"]
+    assert quickstart.read_text(encoding="utf-8") == "# keep me\n"
+
+
 def test_buffer_status_when_empty(capsys: pytest.CaptureFixture[str]) -> None:
     rc = cli.main(["buffer", "status"])
     captured = capsys.readouterr()
@@ -54,7 +86,10 @@ def test_health_handles_connection_error(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _raise(*_args, **_kwargs):  # noqa: ANN001
+    captured: dict[str, object] = {}
+
+    def _raise(url: str, **_kwargs):  # noqa: ANN001
+        captured["url"] = url
         raise httpx.ConnectError("boom")
 
     monkeypatch.setattr(cli.httpx, "get", _raise)
@@ -63,7 +98,82 @@ def test_health_handles_connection_error(
     data = json.loads(captured.out)
     assert rc == 1
     assert data["status"] == "error"
+    assert data["url"].endswith("/health/live")
     assert "boom" in data["error"]
+
+
+def test_doctor_reports_healthy_setup(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_get: dict[str, object] = {}
+
+    class _FakeResponse:
+        status_code = 200
+        text = '{"status":"ok"}'
+
+    def _fake_get(url: str, headers: dict, timeout: float):  # noqa: ANN001
+        captured_get["url"] = url
+        captured_get["headers"] = headers
+        captured_get["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(cli.httpx, "get", _fake_get)
+
+    rc = cli.main(["doctor"])
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert out["ok"] is True
+    assert captured_get["url"] == "http://localhost:8000/health/live"
+    assert captured_get["headers"]["x-api-key"] == "test-key"  # type: ignore[index]
+    assert captured_get["headers"]["x-project-id"] == "test-project"  # type: ignore[index]
+
+
+def test_ingest_test_requires_api_key(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ZROKY_API_KEY")
+
+    rc = cli.main(["ingest", "--test"])
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert out["ok"] is False
+    assert "ZROKY_API_KEY" in out["error"]
+
+
+def test_ingest_test_posts_smoke_event(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_post: dict[str, object] = {}
+
+    class _FakeResponse:
+        status_code = 202
+        text = '{"accepted":1}'
+
+    def _fake_post(url: str, content: str, headers: dict, timeout: float):  # noqa: ANN001
+        captured_post["url"] = url
+        captured_post["headers"] = headers
+        captured_post["timeout"] = timeout
+        captured_post["body"] = json.loads(content)
+        return _FakeResponse()
+
+    monkeypatch.setattr(cli.httpx, "post", _fake_post)
+
+    rc = cli.main(["ingest", "--test"])
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert out["ok"] is True
+    assert captured_post["url"] == "http://localhost:8000/api/v1/ingest"
+    assert captured_post["headers"]["x-api-key"] == "test-key"  # type: ignore[index]
+    event = captured_post["body"]["events"][0]  # type: ignore[index]
+    assert event["provider"] == "zroky"
+    assert event["model"] == "ingest-test"
+    assert event["metadata"]["command"] == "zroky ingest --test"
 
 
 def test_replay_with_missing_file(
