@@ -31,7 +31,7 @@ const releases = [
       'Pricing copy now explains that keys are requested only for verified replay.',
     ],
     proof: 'No signup key wall. No silent real replay failure.',
-    href: '/docs/provider-keys',
+    href: '/docs#provider-keys',
     cta: 'Provider key docs',
   },
   {
@@ -48,7 +48,7 @@ const releases = [
       'Troubleshooting separates capture, replay, Golden, and CI failure modes.',
     ],
     proof: 'A new user can follow one ordered path instead of guessing where to start.',
-    href: '/docs/quickstart',
+    href: '/docs#quickstart',
     cta: 'Open quickstart',
   },
   {
@@ -82,7 +82,7 @@ const releases = [
       'Proof sections now describe decisions, not dashboard tourism.',
     ],
     proof: 'Every major page now points back to capture, proof, memory, and release decision.',
-    href: '/#product',
+    href: '/#architecture',
     cta: 'View product loop',
   },
   {
@@ -184,11 +184,11 @@ export default function ChangelogPage() {
               Zroky ships changes when they make capture, replay proof, Golden memory, CI gates, pricing, or onboarding clearer for production AI teams.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/docs/quickstart" className="btn-primary">
+              <Link to="/docs#quickstart" className="btn-primary">
                 Start with docs
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link to="/#product" className="btn-ghost">
+              <Link to="/#architecture" className="btn-ghost">
                 View product loop
                 <Workflow className="h-4 w-4" />
               </Link>
@@ -342,7 +342,7 @@ export default function ChangelogPage() {
                 Protect an agent
                 <ArrowRight className="h-4 w-4" />
               </a>
-              <Link to="/docs/ci-gates" className="btn-ghost">
+              <Link to="/docs#ci-gates" className="btn-ghost">
                 CI gate docs
                 <GitBranch className="h-4 w-4" />
               </Link>

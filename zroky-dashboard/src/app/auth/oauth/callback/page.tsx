@@ -40,10 +40,14 @@ function OAuthCallbackHandler() {
 
   return (
     <AuthShell>
-      <AuthCard title="Signing you in" subtitle="Completing secure access.">
+      <AuthCard
+        eyebrow="OAuth session"
+        title="Completing secure sign in"
+        subtitle="Finishing the workspace handoff before dashboard access."
+      >
         <div className="auth-status">
           <div className="spinner" />
-          <p>Creating your session...</p>
+          <p>Securing your Zroky session...</p>
         </div>
       </AuthCard>
     </AuthShell>
@@ -54,7 +58,11 @@ export default function OAuthCallbackPage() {
   return (
     <Suspense fallback={
       <AuthShell>
-        <AuthCard title="Signing you in" subtitle="Preparing secure access.">
+        <AuthCard
+          eyebrow="OAuth session"
+          title="Preparing secure sign in"
+          subtitle="Loading the workspace handoff."
+        >
           <p className="hint">Loading...</p>
         </AuthCard>
       </AuthShell>

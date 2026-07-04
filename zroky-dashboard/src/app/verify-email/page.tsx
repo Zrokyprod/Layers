@@ -13,7 +13,7 @@ function VerifyEmailContent() {
   const token = searchParams.get("token");
   const email = searchParams.get("email") ?? "";
   const nextPath = safeAppPath(searchParams.get("next"), "/home");
-  const isSetupNext = nextPath.startsWith("/settings/keys");
+  const isSetupNext = nextPath.startsWith("/agents/setup");
   const [status, setStatus] = useState<"pending" | "loading" | "success" | "error">(token ? "loading" : "pending");
   const [message, setMessage] = useState("");
   const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -64,7 +64,7 @@ function VerifyEmailContent() {
         <AuthAssuranceList
           items={[
             "Verification protects workspace access",
-            isSetupNext ? "Next step opens project key setup" : "Resend is available if it expires",
+            isSetupNext ? "Next step opens agent setup" : "Receipts and policies remain tied to this identity",
           ]}
         />
         <p className="auth-small-copy">

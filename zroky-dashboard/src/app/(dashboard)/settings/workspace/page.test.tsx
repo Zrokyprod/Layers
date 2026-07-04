@@ -87,8 +87,11 @@ describe("WorkspaceSettingsPage", () => {
     render(<WorkspaceSettingsPage />);
 
     expect(screen.getAllByText("Refund Operations").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Workspace access boundary")).toBeInTheDocument();
+    expect(screen.getByLabelText("Workspace routing")).toBeInTheDocument();
+    expect(screen.getByLabelText("Workspace authority")).toBeInTheDocument();
     expect(screen.getByText("Stable dashboard project context")).toBeInTheDocument();
-    expect(screen.getByText("Owner")).toBeInTheDocument();
+    expect(screen.getAllByText("Owner").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Open projects" }).getAttribute("href")).toBe("/projects");
     expect(screen.getByRole("link", { name: "Manage members" }).getAttribute("href")).toBe("/settings/team");
 

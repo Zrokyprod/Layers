@@ -1,7 +1,18 @@
 "use client";
 
-import { CheckCircle2, Eye, EyeOff, KeyRound, Mail } from "lucide-react";
-import { motion, useReducedMotion, type Variants } from "motion/react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  DatabaseZap,
+  Eye,
+  EyeOff,
+  FileCheck2,
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { useState } from "react";
 import { FaGithub } from "react-icons/fa";
@@ -33,62 +44,96 @@ type AuthButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 type AuthProvider = "google" | "github";
 
-const authFade: Variants = {
-  hidden: { opacity: 0, y: 14 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.42, ease: "easeOut" },
-  },
-};
+const authLogoSrc = "/zroky-brand.png";
 
-const authStagger: Variants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
+const authBrandSteps: Array<{
+  icon: LucideIcon;
+  label: string;
+  detail: string;
+  status: string;
+}> = [
+  {
+    icon: ShieldCheck,
+    label: "Policy gate",
+    detail: "Hold risky actions before execution.",
+    status: "hold",
   },
-};
-
-const authLogoSrc = "/logo.png?v=landing-white";
+  {
+    icon: LockKeyhole,
+    label: "Scoped runner",
+    detail: "Execute only the approved operation.",
+    status: "run",
+  },
+  {
+    icon: DatabaseZap,
+    label: "Source proof",
+    detail: "Verify reality in the system of record.",
+    status: "match",
+  },
+  {
+    icon: FileCheck2,
+    label: "Signed receipt",
+    detail: "Keep export-ready evidence.",
+    status: "signed",
+  },
+];
 
 export function AuthBrandPanel() {
-  const shouldReduceMotion = useReducedMotion();
-  const motionProps = shouldReduceMotion
-    ? { initial: false as const }
-    : { initial: "hidden", animate: "visible", variants: authStagger };
-
   return (
-    <motion.section className="auth-brand-panel" aria-label="Zroky reliability platform" {...motionProps}>
-      <motion.div className="auth-mark-row" variants={authFade}>
+    <section className="auth-brand-panel" aria-label="Zroky action control platform">
+      <div className="auth-mark-row">
         <div className="auth-logo-wrap">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={authLogoSrc} alt="Zroky" className="auth-logo" />
         </div>
-      </motion.div>
-      <motion.div className="auth-brand-copy" variants={authFade}>
-        <p className="auth-kicker">AI agent reliability</p>
-        <h1>Workspace access.</h1>
-        <p className="auth-brand-subtitle">Capture failures. Replay fixes. Gate releases.</p>
-      </motion.div>
-    </motion.section>
+      </div>
+      <div className="auth-brand-copy">
+        <p className="auth-kicker">AI agent action control plane</p>
+        <h1>Scale enterprise agents with governed execution.</h1>
+        <p className="auth-brand-subtitle">
+          Keep risky actions behind policy, verify outcomes against source systems, and sign evidence your team can trust.
+        </p>
+      </div>
+      <div className="auth-brand-loop" aria-label="Protected action preview">
+        <div className="auth-loop-top">
+          <span>protected action</span>
+          <strong>access.grant</strong>
+        </div>
+        <div className="auth-loop-steps">
+          {authBrandSteps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <div className="auth-loop-step" key={step.label}>
+                <span className="auth-loop-icon">
+                  <Icon size={15} />
+                </span>
+                <div>
+                  <strong>{step.label}</strong>
+                  <p>{step.detail}</p>
+                </div>
+                <span className="auth-loop-status">{step.status}</span>
+                {index < authBrandSteps.length - 1 && (
+                  <ArrowRight className="auth-loop-arrow" size={14} aria-hidden="true" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }
 
 export function AuthShell({ children }: AuthShellProps) {
-  const shouldReduceMotion = useReducedMotion();
-
   return (
     <main className="auth-shell">
       <AuthBrandPanel />
-      <motion.section
+      <section
         className="auth-form-panel"
         aria-label="Authentication form"
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 18 }}
-        animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.44, ease: "easeOut" as const, delay: 0.08 }}
       >
         {children}
-      </motion.section>
+      </section>
     </main>
   );
 }

@@ -39,7 +39,7 @@ import { selectStep, summarize, type LoopStep, type Module } from "@/lib/landing
  * structural rewrite. See the island map at the bottom of this file.
  */
 
-const logoSrc = "/logo.png?v=landing-white";
+const logoSrc = "/zroky-brand.png";
 
 // ---------------------------------------------------------------------------
 // Hero proofline — smoke-required strings mapped to verdict tones (R1.3, R5.5).

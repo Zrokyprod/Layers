@@ -14,7 +14,7 @@ export function PublicInfoPage({ eyebrow, title, summary, children }: PublicInfo
     <main className="public-info-page">
       <nav className="public-info-nav" aria-label="Public page navigation">
         <Link href="/" className="public-info-brand">
-          <Image src="/logo.png" alt="Zroky" width={1550} height={509} priority />
+          <Image src="/zroky-brand.png" alt="Zroky" width={1740} height={587} priority />
         </Link>
         <div>
           <Link href="/login">Sign in</Link>

@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
       <AuthCard
         eyebrow="Account recovery"
         title="Reset your password"
-        subtitle="Send a secure reset link."
+        subtitle="Recover access to your control-plane workspace."
         footer={<Link href="/login" className="auth-link">Back to login</Link>}
       >
         {message && <div className={`auth-banner ${isSuccess ? "auth-banner-success" : "auth-banner-error"}`}>{message}</div>}

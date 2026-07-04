@@ -17,6 +17,23 @@ const navState = vi.hoisted(() => ({
   planCode: "pro" as string | undefined,
   billingDataAvailable: true,
   billingLoading: false,
+  billingUsageDataAvailable: true,
+  billingUsageLoading: false,
+  protectedActionsUsage: {
+    used: 250,
+    limit: 10_000,
+    unlimited: false,
+    overage: null,
+    state: "ok",
+    resets_at: null,
+  } as {
+    used: number;
+    limit: number | null;
+    unlimited: boolean;
+    overage: number | null;
+    state: string;
+    resets_at: string | null;
+  },
   budgetDataAvailable: true,
   issueCount: 0,
   projectData: { project_id: "proj_1", name: "Acme Corp" } as { project_id: string; name: string } | undefined,
@@ -124,6 +141,14 @@ vi.mock("@tanstack/react-query", () => ({
         isLoading: navState.billingLoading,
       };
     }
+    if (key === "billing:usage") {
+      return {
+        data: navState.billingUsageDataAvailable
+          ? { protected_actions: navState.protectedActionsUsage }
+          : undefined,
+        isLoading: navState.billingUsageLoading,
+      };
+    }
     if (key === "shell-budget-status") {
       return {
         data: navState.budgetDataAvailable
@@ -151,6 +176,7 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("@/lib/api", () => ({
   getBillingMe: vi.fn(),
+  getBillingUsage: vi.fn(),
   getBudgetStatus: vi.fn(),
   listIssues: vi.fn(),
 }));
@@ -225,6 +251,16 @@ describe("DashboardShell primary navigation", () => {
     navState.planCode = "pro";
     navState.billingDataAvailable = true;
     navState.billingLoading = false;
+    navState.billingUsageDataAvailable = true;
+    navState.billingUsageLoading = false;
+    navState.protectedActionsUsage = {
+      used: 250,
+      limit: 10_000,
+      unlimited: false,
+      overage: null,
+      state: "ok",
+      resets_at: null,
+    };
     navState.budgetDataAvailable = true;
     navState.issueCount = 0;
     navState.projectData = { project_id: "proj_1", name: "Acme Corp" };
@@ -306,7 +342,7 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     const logo = screen.getByRole("img", { name: "Zroky" });
-    expect(logo.getAttribute("src")).toBe("/zroky-sidebar-logo-transparent.png");
+    expect(logo.getAttribute("src")).toBe("/zroky-brand.png");
     expect(logo.classList.contains("sidebar-logo-image")).toBe(true);
     expect(screen.queryByText("ZROKY")).not.toBeInTheDocument();
   });
@@ -497,11 +533,59 @@ describe("DashboardShell primary navigation", () => {
     expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
   });
 
+  it("renders protected-action usage from the active subscription meter", () => {
+    navState.planCode = "free";
+    navState.planTemplate = {
+      ...navState.planTemplate,
+      "actions.protected.monthly_quota": 25,
+    };
+    navState.protectedActionsUsage = {
+      used: 7,
+      limit: 25,
+      unlimited: false,
+      overage: null,
+      state: "ok",
+      resets_at: null,
+    };
+
+    const { container } = render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Free Plan")).toBeInTheDocument();
+    expect(screen.getByText("Protected actions")).toBeInTheDocument();
+    expect(screen.getByText("7 / 25")).toBeInTheDocument();
+    expect(screen.getByText("used this month")).toBeInTheDocument();
+    expect(container.querySelector(".plan-usage-track")).toBeInTheDocument();
+  });
+
+  it("keeps the subscription quota visible while usage is still syncing", () => {
+    navState.planCode = "free";
+    navState.planTemplate = {
+      ...navState.planTemplate,
+      "actions.protected.monthly_quota": 25,
+    };
+    navState.billingUsageLoading = true;
+    navState.billingUsageDataAvailable = false;
+
+    render(<DashboardShell>content</DashboardShell>);
+
+    expect(screen.getByText("Free Plan")).toBeInTheDocument();
+    expect(screen.getByText("0 / 25")).toBeInTheDocument();
+    expect(screen.getByText("syncing usage")).toBeInTheDocument();
+  });
+
   it("renders unlimited protected-action quota without exposing backend sentinel values or a meter", () => {
     navState.planCode = "enterprise";
     navState.planTemplate = {
       ...navState.planTemplate,
       "actions.protected.monthly_quota": -1,
+    };
+    navState.protectedActionsUsage = {
+      used: 1200,
+      limit: null,
+      unlimited: true,
+      overage: null,
+      state: "ok",
+      resets_at: null,
     };
     navState.budgetDataAvailable = false;
 
@@ -564,7 +648,10 @@ describe("DashboardShell primary navigation", () => {
     expect((projectMenu as HTMLElement).style.position).toBe("fixed");
     expect((projectMenu as HTMLElement).style.width).toBe("312px");
     expect(screen.getByRole("menuitem", { name: /Manage projects/ }).getAttribute("href")).toBe("/projects");
-    expect(screen.getByRole("menuitem", { name: /New project/ }).getAttribute("href")).toBe("/projects");
+    expect(screen.queryByText("Project switcher")).not.toBeInTheDocument();
+    expect(screen.queryByText(/projects used/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /New project/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Upgrade to add more/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Project settings/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open dashboard navigation menu" }));

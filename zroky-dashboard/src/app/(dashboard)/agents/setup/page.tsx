@@ -10,19 +10,22 @@ import {
   Copy,
   KeyRound,
   PlayCircle,
-  Rocket,
   ShieldCheck,
 } from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { DashboardVerdictHero } from "@/components/dashboard-scaffold";
 import {
+  createProjectApiKey,
   createAgentProfile,
   enforceAgentProfile,
+  getProjectSettings,
   listActionIntents,
+  listProjectApiKeys,
   type AgentProfileResponse,
 } from "@/lib/api";
 import { buildProtectedAgentSnippet, protectedAgentTemplates } from "@/lib/protected-agent-setup";
+import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 
 const FRAMEWORKS = [
   "OpenAI Agents SDK",
@@ -35,6 +38,23 @@ const FRAMEWORKS = [
 
 const ENVIRONMENTS = ["production", "staging", "development"];
 const CONTROL_LOOP_STEPS = ["Propose", "Policy", "Approval", "Execution", "Verification", "Receipt"];
+const DEFAULT_RUNTIME_KEY_NAME = "Protected agent runtime key";
+
+function configuredApiBaseUrl() {
+  return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
+}
+
+function keyIsActive(key: ApiKeyResponse) {
+  return !key.revoked && !key.expired;
+}
+
+function runtimeCredentialRef(keyPrefix: string | undefined) {
+  const normalized = (keyPrefix ?? "project-runtime-key")
+    .trim()
+    .replace(/[^a-zA-Z0-9_.-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `customer-runner-secret://zroky/project-key/${normalized || "project-runtime-key"}`;
+}
 
 function CopyableCode({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -69,7 +89,49 @@ export default function ProtectedAgentSetupPage() {
   const [framework, setFramework] = useState(FRAMEWORKS[0]);
   const [environment, setEnvironment] = useState(ENVIRONMENTS[0]);
   const [profile, setProfile] = useState<AgentProfileResponse | null>(null);
+  const [newRuntimeKey, setNewRuntimeKey] = useState<ApiKeyCreateResponse | null>(null);
+  const [runtimeKeyCopied, setRuntimeKeyCopied] = useState(false);
+  const [runtimeStatus, setRuntimeStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const projectQuery = useQuery({
+    queryKey: ["agent-setup", "project"],
+    queryFn: ({ signal }) => getProjectSettings(signal),
+    retry: false,
+  });
+  const projectId = projectQuery.data?.project_id ?? "";
+  const keysQuery = useQuery({
+    queryKey: ["agent-setup", "project-api-keys", projectId],
+    queryFn: ({ signal }) => listProjectApiKeys(projectId, signal),
+    enabled: Boolean(projectId),
+    retry: false,
+  });
+  const activeRuntimeKeys = (keysQuery.data ?? []).filter(keyIsActive);
+  const hasRuntimeKey = Boolean(newRuntimeKey) || activeRuntimeKeys.length > 0;
+  const runtimeKeyPrefix = newRuntimeKey?.key_prefix ?? activeRuntimeKeys[0]?.key_prefix;
+  const apiBaseUrl = configuredApiBaseUrl();
+
+  const createKeyMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectId) {
+        throw new Error("Project is still loading. Try again in a moment.");
+      }
+      return createProjectApiKey(projectId, {
+        name: DEFAULT_RUNTIME_KEY_NAME,
+        expires_in_days: 90,
+        scopes: ["project:member"],
+      });
+    },
+    onSuccess: (created) => {
+      setNewRuntimeKey(created);
+      setRuntimeStatus("Project key created. Copy it before leaving this page.");
+      void queryClient.invalidateQueries({ queryKey: ["agent-setup", "project-api-keys", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["project-api-keys", projectId] });
+    },
+    onError: (err) => {
+      setRuntimeStatus(err instanceof Error ? err.message : "Could not create the project key.");
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -81,8 +143,8 @@ export default function ProtectedAgentSetupPage() {
         environment,
         model_provider: "",
         model_name: "",
-        tool_names: [],
-        allowed_action_types: [],
+        tool_names: ["agent.protected_action"],
+        allowed_action_types: ["internal_api_mutation"],
         blocked_action_types: [],
         risk_limits: {
           auto_allow_amount_usd: 0,
@@ -91,7 +153,12 @@ export default function ProtectedAgentSetupPage() {
           approval_ttl_minutes: 60,
         },
         verification_connectors: [],
-        metadata: {},
+        metadata: {
+          runner_verification: {
+            runner_mode: "customer_hosted",
+            credential_ref: runtimeCredentialRef(runtimeKeyPrefix),
+          },
+        },
       });
       // Enforcing with no declared action map applies the safe fail-closed
       // default: unknown actions deny, sensitive actions hold for approval.
@@ -135,11 +202,25 @@ export default function ProtectedAgentSetupPage() {
 
   const snippet = useMemo(
     () =>
-      buildProtectedAgentSnippet(protectedAgentTemplates[0], "current-project", {
+      buildProtectedAgentSnippet(protectedAgentTemplates[0], projectId || "proj_...", {
         agentId: profile?.id ?? "agent_profile_id",
+        apiBaseUrl,
       }),
-    [profile?.id],
+    [apiBaseUrl, profile?.id, projectId],
   );
+  const runtimeEnvSnippet = `pip install zroky
+export ZROKY_API_KEY="${newRuntimeKey?.api_key ?? "zk_live_..."}"
+export ZROKY_INGEST_URL="${apiBaseUrl}"`;
+
+  async function copyRuntimeKey(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setRuntimeKeyCopied(true);
+      window.setTimeout(() => setRuntimeKeyCopied(false), 1500);
+    } catch {
+      setRuntimeStatus("Copy failed. Select the key and copy it manually.");
+    }
+  }
 
   const verdict = live
     ? {
@@ -191,10 +272,67 @@ export default function ProtectedAgentSetupPage() {
 
       <section className="agent-quickstart" aria-label="Protect an agent">
         <div className="agent-quickstart-main">
-          {/* 1 - Connect */}
+          {/* 1 - Project key */}
+          <div className="agent-quickstart-card agent-runtime-key-card" data-step="key" data-done={hasRuntimeKey ? "true" : "false"}>
+            <div className="agent-quickstart-card-head">
+              <span>{hasRuntimeKey ? <CheckCircle2 aria-hidden="true" size={16} /> : "01"}</span>
+              <div>
+                <strong>Project key</strong>
+                <small>Create the runtime key your agent uses to call Zroky.</small>
+              </div>
+            </div>
+
+            {projectQuery.error ? (
+              <p className="agent-setup-status is-error">Project context did not load. Refresh before creating a key.</p>
+            ) : newRuntimeKey ? (
+              <div className="agent-runtime-key-reveal">
+                <div className="agent-runtime-secret">
+                  <span className="mono">{newRuntimeKey.api_key}</span>
+                  <button type="button" onClick={() => void copyRuntimeKey(newRuntimeKey.api_key)}>
+                    <Copy size={13} aria-hidden="true" />
+                    {runtimeKeyCopied ? "Copied" : "Copy key"}
+                  </button>
+                </div>
+                <CopyableCode label="Runtime environment" value={runtimeEnvSnippet} />
+                <p className="agent-setup-muted">This secret is shown once. Store it in the agent runtime before closing the page.</p>
+              </div>
+            ) : hasRuntimeKey ? (
+              <div className="agent-runtime-ready">
+                <CheckCircle2 aria-hidden="true" />
+                <div>
+                  <strong>Runtime key ready</strong>
+                  <span>
+                    {activeRuntimeKeys[0]?.key_prefix ? `${activeRuntimeKeys[0].key_prefix}...` : "Active project key found"}
+                  </span>
+                </div>
+                <DashboardButtonLink href="/settings/keys" icon={<KeyRound />} variant="soft">
+                  Manage keys
+                </DashboardButtonLink>
+              </div>
+            ) : (
+              <div className="agent-runtime-create">
+                <p className="agent-setup-muted">
+                  Keys authenticate SDK and verified-action requests. They do not grant model-provider access.
+                </p>
+                <DashboardButton
+                  icon={<KeyRound />}
+                  type="button"
+                  variant="primary"
+                  loading={createKeyMutation.isPending}
+                  disabled={!projectId || createKeyMutation.isPending}
+                  onClick={() => createKeyMutation.mutate()}
+                >
+                  Create project key
+                </DashboardButton>
+              </div>
+            )}
+            {runtimeStatus ? <p className="agent-setup-status">{runtimeStatus}</p> : null}
+          </div>
+
+          {/* 2 - Connect */}
           <div className="agent-quickstart-card" data-step="connect" data-done={created ? "true" : "false"}>
             <div className="agent-quickstart-card-head">
-              <span>{created ? <CheckCircle2 aria-hidden="true" size={16} /> : "01"}</span>
+              <span>{created ? <CheckCircle2 aria-hidden="true" size={16} /> : "02"}</span>
               <div>
                 <strong>Connect</strong>
                 <small>Name the agent and add one SDK wrapper. No upfront action or system list.</small>
@@ -220,6 +358,10 @@ export default function ProtectedAgentSetupPage() {
                   event.preventDefault();
                   if (!agentName.trim()) {
                     setError("Give the agent a name to continue.");
+                    return;
+                  }
+                  if (!hasRuntimeKey) {
+                    setError("Create a project key before connecting the agent runtime.");
                     return;
                   }
                   setError(null);
@@ -269,17 +411,18 @@ export default function ProtectedAgentSetupPage() {
                   type="submit"
                   variant="primary"
                   loading={createMutation.isPending}
+                  disabled={!hasRuntimeKey || createMutation.isPending}
                 >
-                  Create &amp; enable protection
+                  {hasRuntimeKey ? "Create & enable protection" : "Create project key first"}
                 </DashboardButton>
               </form>
             )}
           </div>
 
-          {/* 2 - Run */}
+          {/* 3 - Run */}
           <div className="agent-quickstart-card" data-step="run" data-done={live ? "true" : "false"} aria-disabled={!created}>
             <div className="agent-quickstart-card-head">
-              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "02"}</span>
+              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "03"}</span>
               <div>
                 <strong>Run</strong>
                 <small>Run your agent with the snippet. Zroky captures and verifies the first real action.</small>
@@ -304,10 +447,10 @@ export default function ProtectedAgentSetupPage() {
             </div>
           </div>
 
-          {/* 3 - Live / what's next */}
+          {/* 4 - Live / what's next */}
           <div className="agent-quickstart-card" data-step="live" data-done={live ? "true" : "false"} aria-disabled={!created}>
             <div className="agent-quickstart-card-head">
-              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : <Rocket aria-hidden="true" size={16} />}</span>
+              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "04"}</span>
               <div>
                 <strong>{live ? "You're live" : "What's next"}</strong>
                 <small>

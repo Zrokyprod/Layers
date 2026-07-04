@@ -14,7 +14,7 @@ export const LogoWordmark: React.FC<LogoWordmarkProps> = ({
   size = 32,
   color = "currentColor",
   layout = "inline",
-  showText = true,
+  showText = false,
   className,
   textClassName,
 }) => {

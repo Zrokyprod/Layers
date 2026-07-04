@@ -14,8 +14,19 @@ import NotFoundPage from './pages/NotFoundPage';
 import { buildDashboardAuthUrl, isDashboardAuthAlias } from './lib/links';
 
 function ScrollToTop() {
-  const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  const { hash, pathname } = useLocation();
+
+  useEffect(() => {
+    if (hash) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
+      });
+      return;
+    }
+
+    window.scrollTo(0, 0);
+  }, [hash, pathname]);
+
   return null;
 }
 

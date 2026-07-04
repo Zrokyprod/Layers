@@ -4,7 +4,17 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, CreditCard, Gauge, ReceiptText, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  CreditCard,
+  Gauge,
+  LockKeyhole,
+  ReceiptText,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { SettingsHero, SettingsMetricStrip, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
@@ -24,6 +34,8 @@ type PlanCatalogItem = {
   name: string;
   monthlyCostUsd: number | null;
   features: string[];
+  fit: string;
+  proof: string;
   selfServe: boolean;
 };
 
@@ -84,6 +96,8 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
       "1 system-of-record connector",
       "Signed receipts and bypass watch",
     ],
+    fit: "For the first protected agent and basic evidence collection.",
+    proof: "Start with quota-backed controls before production rollout.",
     selfServe: false,
   },
   {
@@ -100,6 +114,8 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
       "Dashboard and Slack approvals",
       "Exportable Evidence Packs",
     ],
+    fit: "For production teams scaling protected actions across live agents.",
+    proof: "Raises the control-plane quota while keeping receipt and verifier limits visible.",
     selfServe: true,
   },
   {
@@ -113,6 +129,8 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
       "Customer-hosted runner scale-out",
       "SSO, self-hosting, audit, retention, and support controls",
     ],
+    fit: "For enterprises rolling out high-risk AI agents across business units.",
+    proof: "Contracted limits, audit posture, and deployment support align to your operating model.",
     selfServe: false,
   },
 ];
@@ -210,6 +228,15 @@ function meterTone(meter: BillingUsageMeter | null | undefined): "success" | "wa
   if (meter.state === "exceeded" || meter.state === "blocked") return "danger";
   if (meter.state === "near_limit") return "warning";
   return "success";
+}
+
+function meterPercent(meter: BillingUsageMeter | null | undefined): number {
+  if (!meter || meter.unlimited || meter.limit == null || meter.limit <= 0) return 0;
+  return Math.min(100, Math.max(0, (meter.used / meter.limit) * 100));
+}
+
+function hasMeterLimit(meter: BillingUsageMeter | null | undefined): boolean {
+  return Boolean(meter && !meter.unlimited && meter.limit != null && meter.limit > 0);
 }
 
 function upgradeHintMessage(value: string | null): string | null {
@@ -421,26 +448,31 @@ function BillingSettingsContent() {
     {
       label: "Protected actions",
       detailLabel: "Protected actions",
+      icon: <ShieldCheck aria-hidden="true" />,
       meter: billingUsage?.protected_actions,
     },
     {
       label: "Receipts",
       detailLabel: "Action receipts",
+      icon: <ReceiptText aria-hidden="true" />,
       meter: billingUsage?.action_receipts,
     },
     {
       label: "Verification checks",
       detailLabel: "Verification checks",
+      icon: <LockKeyhole aria-hidden="true" />,
       meter: billingUsage?.verification_checks,
     },
     {
       label: "Source mutations",
       detailLabel: "Source mutations",
+      icon: <Gauge aria-hidden="true" />,
       meter: billingUsage?.source_mutations,
     },
     {
       label: "SOR connectors",
       detailLabel: "System-of-record connectors",
+      icon: <CreditCard aria-hidden="true" />,
       meter: billingUsage?.active_connectors,
     },
   ];
@@ -499,6 +531,10 @@ function BillingSettingsContent() {
     return planRank(plan.code) >= planRank(currentCatalogCode);
   });
   const heroTitle = billingMe ? `${displayPlanCode(currentPlanCode)} plan` : "Plan & Billing";
+  const currentCatalogPlan = PLAN_CATALOG.find((plan) => plan.code === currentCatalogCode) ?? PLAN_CATALOG[0];
+  const commandMeters = primaryUsageMeters.filter((item) =>
+    ["Protected actions", "Receipts", "SOR connectors"].includes(item.label),
+  );
 
   useEffect(() => {
     if (!pendingPaymentConfirmation) {
@@ -577,11 +613,58 @@ function BillingSettingsContent() {
         ]}
       />
 
+      <section className="billing-command-card" aria-label="Subscription status">
+        <div className="billing-command-main">
+          <span className="billing-command-kicker">Subscription control plane</span>
+          <h2>Run protected agents on the {displayPlanCode(currentPlanCode)} plan.</h2>
+          <p>
+            Quota, payment status, and evidence limits stay attached to this workspace before agent actions reach
+            runners, systems of record, or signed receipts.
+          </p>
+          <div className="billing-command-pills" aria-label="Billing posture">
+            <span>
+              <ShieldCheck aria-hidden="true" />
+              {billingMe?.status ?? "loading"}
+            </span>
+            <span>
+              <ReceiptText aria-hidden="true" />
+              {paymentStatus.label}
+            </span>
+            <span>
+              <Gauge aria-hidden="true" />
+              {billingUsage?.metering_health.state ?? "metering"}
+            </span>
+          </div>
+        </div>
+        <div className="billing-command-panel">
+          <div className="billing-command-panel-head">
+            <span>Current package</span>
+            <strong>{currentCatalogPlan?.name ?? displayPlanCode(currentPlanCode)}</strong>
+          </div>
+          <p>{currentCatalogPlan?.fit}</p>
+          <div className="billing-command-meter-list">
+            {commandMeters.map((item) => (
+              <div className="billing-command-meter" key={item.label}>
+                <div>
+                  <span>{item.label}</span>
+                  <strong>{formatUsageMeter(item.meter)}</strong>
+                </div>
+                {hasMeterLimit(item.meter) ? (
+                  <div className="billing-command-meter-track" aria-hidden="true">
+                    <span style={{ width: `${meterPercent(item.meter)}%` }} />
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <SettingsSection
         id="billing-plan-controls"
         eyebrow="Plan"
-        title="Plan controls"
-        copy="Current plan and available upgrades. Free remains the default until a paid plan is activated."
+        title="Upgrade path"
+        copy="Choose the next subscription level for protected actions, receipts, verifiers, and system-of-record connectors."
       >
 
         {isProblemMessage(actionMsg) ? (
@@ -602,16 +685,32 @@ function BillingSettingsContent() {
               const isCurrent = plan.code === currentCatalogCode;
               const canChangeToPlan = !isCurrent && planRank(plan.code) > planRank(currentCatalogCode);
               return (
-                <div key={plan.code} className={`billing-plan-card${isCurrent ? " billing-plan-current" : ""}`}>
-                  {isCurrent && <span className="pill pill-green billing-plan-badge">Current</span>}
+                <div
+                  key={plan.code}
+                  className={`billing-plan-card${isCurrent ? " billing-plan-current" : ""}`}
+                  role="article"
+                  aria-label={`${plan.name} plan`}
+                >
+                  <div className="billing-plan-topline">
+                    <span>{plan.selfServe ? "Self serve" : "Contract"}</span>
+                    {isCurrent && <span className="pill pill-green billing-plan-badge">Current</span>}
+                  </div>
                   <div className="billing-plan-name">{plan.name}</div>
                   <div className="billing-plan-price">
                     {plan.monthlyCostUsd == null ? "Custom" : `$${plan.monthlyCostUsd.toFixed(2)}`}{" "}
                     <span className="billing-plan-period">/ mo</span>
                   </div>
+                  <p className="billing-plan-fit">{plan.fit}</p>
+                  <div className="billing-plan-proof">
+                    <LockKeyhole aria-hidden="true" />
+                    <span>{plan.proof}</span>
+                  </div>
                   <ul className="billing-plan-features">
                     {plan.features.map((feature) => (
-                      <li key={feature}>✓ {feature}</li>
+                      <li key={feature}>
+                        <CheckCircle2 aria-hidden="true" />
+                        <span>{feature}</span>
+                      </li>
                     ))}
                   </ul>
                   {canChangeToPlan && (
@@ -623,6 +722,7 @@ function BillingSettingsContent() {
                       disabled={loading || checkoutBusy}
                     >
                       {plan.selfServe ? (checkoutBusy ? "Opening checkout..." : `Pay with Razorpay for ${plan.name}`) : `Contact Zroky for ${plan.name}`}
+                      <ArrowRight aria-hidden="true" />
                     </DashboardButton>
                   )}
                 </div>
@@ -648,11 +748,19 @@ function BillingSettingsContent() {
         >
 
           <div className="billing-usage-layout">
-            <div className="kpi-grid billing-usage-kpis" role="region" aria-label="Protected action usage">
+            <div className="billing-meter-grid billing-usage-kpis" role="region" aria-label="Protected action usage">
               {primaryUsageMeters.map((item) => (
-                <div className="kpi-card" key={item.label}>
-                  <div className="kpi-value">{formatUsageMeter(item.meter)}</div>
-                  <div className="kpi-label">{item.label}</div>
+                <div className={`billing-meter-card billing-meter-${meterTone(item.meter)}`} key={item.label}>
+                  <div className="billing-meter-card-head">
+                    <span>{item.icon}</span>
+                    <strong>{item.label}</strong>
+                  </div>
+                  <div className="billing-meter-value">{formatUsageMeter(item.meter)}</div>
+                  {hasMeterLimit(item.meter) ? (
+                    <div className="billing-meter-track" aria-label={`${Math.round(meterPercent(item.meter))}% used`}>
+                      <span style={{ width: `${meterPercent(item.meter)}%` }} />
+                    </div>
+                  ) : null}
                   <small>{usageDetail(item.detailLabel, item.meter)}</small>
                 </div>
               ))}

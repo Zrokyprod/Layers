@@ -77,9 +77,8 @@ function PrintBrandHeader({
     <header className="ev-print-brand-header">
       <div className="ev-print-brand">
         {/* eslint-disable-next-line @next/next/no-img-element -- Print-only report needs a plain image element for browser PDF output. */}
-        <img src="/zroky.logo.png" alt="Zroky" />
+        <img src="/zroky-brand.png" alt="Zroky" />
         <div>
-          <strong>Zroky</strong>
           <span>Verified Action Control Plane</span>
         </div>
       </div>

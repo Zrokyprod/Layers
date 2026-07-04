@@ -9,7 +9,7 @@ describe("AuthShell", () => {
       <AuthShell>
         <AuthCard
           title="Welcome back"
-          subtitle="Sign in to inspect traces, replays, incidents, and reliability fixes."
+          subtitle="Sign in to inspect protected actions, approvals, and signed evidence."
           footer={<a href="/signup">Create account</a>}
         >
           <button type="button">Sign in</button>
@@ -18,13 +18,12 @@ describe("AuthShell", () => {
     );
 
     const logo = screen.getByRole("img", { name: "Zroky" });
-    expect(logo.getAttribute("src")).toBe("/logo.png?v=landing-white");
-    expect(screen.queryByText("ZROKY RELIABILITY")).not.toBeInTheDocument();
-    expect(screen.getByText("Workspace access.")).toBeInTheDocument();
-    expect(screen.queryByText("Protected access")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Zroky reliability preview")).not.toBeInTheDocument();
-    expect(screen.queryByText("Incidents")).not.toBeInTheDocument();
-    expect(screen.queryByText("Reliability path")).not.toBeInTheDocument();
+    expect(logo.getAttribute("src")).toBe("/zroky-brand.png");
+    expect(screen.getByText("Scale enterprise agents with governed execution.")).toBeInTheDocument();
+    expect(screen.getByText("AI agent action control plane")).toBeInTheDocument();
+    expect(screen.getByText("access.grant")).toBeInTheDocument();
+    expect(screen.getByText("Policy gate")).toBeInTheDocument();
+    expect(screen.getByText("Signed receipt")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe("/signup");

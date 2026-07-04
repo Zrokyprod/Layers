@@ -5,6 +5,7 @@ import TeamPage from "./page";
 
 const api = vi.hoisted(() => ({
   createProjectInvitation: vi.fn(),
+  getBillingMe: vi.fn(),
   listProjectInvitations: vi.fn(),
   listProjectMembers: vi.fn(),
   revokeProjectInvitation: vi.fn(),
@@ -52,12 +53,29 @@ describe("TeamPage", () => {
       },
     ]);
     api.listProjectInvitations.mockResolvedValue([]);
+    api.getBillingMe.mockResolvedValue({
+      org_id: "org_1",
+      plan_code: "pro",
+      status: "active",
+      seats: 5,
+      payment_provider: "razorpay",
+      payment_customer_ref: "billing@example.com",
+      payment_subscription_ref: "sub_1",
+      payment_request_ref: null,
+      current_period_end: null,
+      trial_end: null,
+      sla_tier: "standard",
+      plan_template: {},
+    });
   });
 
   it("renders backend array membership responses directly", async () => {
     render(<TeamPage />);
 
     expect(await screen.findByText("owner@example.com")).toBeInTheDocument();
+    expect(screen.getByLabelText("Workspace access command center")).toBeInTheDocument();
+    expect(screen.getByLabelText("Seat usage")).toBeInTheDocument();
+    expect(screen.getByText("1 / 5")).toBeInTheDocument();
     expect(screen.queryByText("No members found.")).not.toBeInTheDocument();
     expect(api.listProjectMembers).toHaveBeenCalledWith("proj_1");
   });

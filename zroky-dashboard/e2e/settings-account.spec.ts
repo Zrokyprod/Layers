@@ -9,15 +9,16 @@ test.describe("settings and account", () => {
     test.setTimeout(180_000);
 
     const pages = [
-      { path: "/settings", labels: ["Settings", "Workspace control plane", "Capture key"] },
-      { path: "/settings/keys", labels: ["Project key setup", "Create project key"] },
-      { path: "/settings/providers", labels: ["BYOK replay", "Provider key vault", "OpenAI"] },
+      { path: "/settings", labels: ["Settings", "Workspace control plane", "Create project key"] },
+      { path: "/settings/keys", labels: ["Project API keys", "Create project key"] },
+      { path: "/settings/providers", labels: ["Settings", "Workspace control plane", "API Keys"] },
       { path: "/settings/team", labels: ["Project Members", "teammate@zroky.local"] },
       { path: "/settings/billing", labels: ["Plan", "Billing", "Pro"] },
-      { path: "/settings/evaluation", labels: ["Evaluation", "Calibration"] },
-      { path: "/settings/integrations", labels: ["Integrations", "Slack"] },
+      { path: "/settings/evaluation", labels: ["Settings", "Workspace control plane", "Plan & Billing"] },
+      { path: "/settings/integrations", labels: ["Connectors", "Slack"] },
       { path: "/settings/integrations/slack", labels: ["Slack", "Not connected", "Connect Slack"] },
-      { path: "/account", labels: ["Your Identity", "Account Security"] },
+      { path: "/settings/workspace", labels: ["Workspace boundary", "Workspace identity", "Manage members"] },
+      { path: "/account", labels: ["Your identity", "Account security"] },
     ];
 
     for (const item of pages) {
@@ -31,7 +32,7 @@ test.describe("settings and account", () => {
     await page.goto("/settings/profile");
     await expect(page).toHaveURL(/\/account/);
     await expectDashboardShell(page);
-    await expect(page.getByText("Your Identity", { exact: false })).toBeVisible();
+    await expect(page.getByText("Your identity", { exact: false })).toBeVisible();
   });
 
   test("API key create, rotate, and revoke flow works", async ({ page }, testInfo) => {

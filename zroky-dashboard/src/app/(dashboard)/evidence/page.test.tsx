@@ -453,7 +453,7 @@ describe("EvidencePage", () => {
 
     await screen.findByText("Evidence + Signature");
     expect(screen.getByLabelText("Printable evidence report")).toBeInTheDocument();
-    expect(screen.getByAltText("Zroky").getAttribute("src")).toBe("/zroky.logo.png");
+    expect(screen.getByAltText("Zroky").getAttribute("src")).toBe("/zroky-brand.png");
     expect(screen.getByText("Verified Action Control Plane")).toBeInTheDocument();
     expect(screen.getByText("Zroky Evidence Report")).toBeInTheDocument();
     expect(screen.getAllByText("Proof seal").length).toBeGreaterThan(0);

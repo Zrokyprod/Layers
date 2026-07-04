@@ -84,11 +84,11 @@ describe("auth pages", () => {
     vi.mocked(storeAuthSession).mockReset();
   });
 
-  it("renders login with Zroky reliability copy", () => {
+  it("renders login with Zroky control-plane copy", () => {
     render(<LoginPage />);
 
     expect(screen.getByRole("heading", { name: "Sign in to Zroky" })).toBeInTheDocument();
-    expect(screen.getByText("Access traces, replays, and release gates.")).toBeInTheDocument();
+    expect(screen.getByText("Access policy gates, approvals, source proof, and signed evidence.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Zroky" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
@@ -131,7 +131,7 @@ describe("auth pages", () => {
     render(<SignupPage />);
 
     expect(screen.getByRole("heading", { name: "Create your Zroky workspace" })).toBeInTheDocument();
-    expect(screen.getByText("Start capturing failed agent runs.")).toBeInTheDocument();
+    expect(screen.getByText("Start with one governed action, then expand by policy.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
@@ -152,11 +152,11 @@ describe("auth pages", () => {
 
     render(<SignupPage />);
 
-    expect(screen.getByText("Next step: project key setup for the agent you want Zroky to protect.")).toBeInTheDocument();
-    expect(screen.getByText("Next step opens project key setup")).toBeInTheDocument();
-    expect(screen.getByText("First capture works with a project key only")).toBeInTheDocument();
+    expect(screen.getByText("Next step: guided agent setup for the runtime you want Zroky to protect.")).toBeInTheDocument();
+    expect(screen.getByText("Next step opens agent setup")).toBeInTheDocument();
+    expect(screen.getByText("Key, SDK, and first receipt stay in one path")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Already have an account? Sign in" }).getAttribute("href")).toBe(
-      "/login?next=%2Fsettings%2Fkeys%3Fintent%3Dprotect-agent%26plan%3Dpro%26source%3Dpricing",
+      "/login?next=%2Fagents%2Fsetup%3Fintent%3Dprotect-agent%26plan%3Dpro%26source%3Dpricing",
     );
 
     fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "buyer@example.com" } });
@@ -166,7 +166,7 @@ describe("auth pages", () => {
 
     await waitFor(() => {
       expect(storeAuthSession).toHaveBeenCalled();
-      expect(navigation.push).toHaveBeenCalledWith("/settings/keys?intent=protect-agent&plan=pro&source=pricing");
+      expect(navigation.push).toHaveBeenCalledWith("/agents/setup?intent=protect-agent&plan=pro&source=pricing");
     });
   });
 
@@ -192,7 +192,7 @@ describe("auth pages", () => {
 
     await waitFor(() => {
       expect(navigation.push).toHaveBeenCalledWith(
-        "/verify-email?email=pilot%40example.com&next=%2Fsettings%2Fkeys%3Fintent%3Dprotect-agent%26plan%3Dstarter%26source%3Dpricing",
+        "/verify-email?email=pilot%40example.com&next=%2Fagents%2Fsetup%3Fintent%3Dprotect-agent%26plan%3Dstarter%26source%3Dpricing",
       );
     });
   });
@@ -201,7 +201,7 @@ describe("auth pages", () => {
     render(<ForgotPasswordPage />);
 
     expect(screen.getByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
-    expect(screen.getByText("Send a secure reset link.")).toBeInTheDocument();
+    expect(screen.getByText("Recover access to your control-plane workspace.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send reset link" })).toBeInTheDocument();
   });
 
@@ -211,7 +211,7 @@ describe("auth pages", () => {
     render(<ResetPasswordPage />);
 
     expect(screen.getByRole("heading", { name: "Create new password" })).toBeInTheDocument();
-    expect(screen.getByText("Choose a new workspace password.")).toBeInTheDocument();
+    expect(screen.getByText("Restore access to governed actions and signed evidence.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update password" })).toBeInTheDocument();
   });
 
@@ -224,13 +224,13 @@ describe("auth pages", () => {
 
   it("continues to protected-agent setup after successful email verification", async () => {
     navigation.searchParams = new URLSearchParams(
-      "token=verify-token&next=%2Fsettings%2Fkeys%3Fintent%3Dprotect-agent%26plan%3Dpro",
+      "token=verify-token&next=%2Fagents%2Fsetup%3Fintent%3Dprotect-agent%26plan%3Dpro",
     );
     vi.mocked(verifyEmail).mockResolvedValue({ detail: "Email verified." });
 
     render(<VerifyEmailPage />);
 
     const continueLink = await screen.findByRole("link", { name: "Continue setup" });
-    expect(continueLink.getAttribute("href")).toBe("/settings/keys?intent=protect-agent&plan=pro");
+    expect(continueLink.getAttribute("href")).toBe("/agents/setup?intent=protect-agent&plan=pro");
   });
 });

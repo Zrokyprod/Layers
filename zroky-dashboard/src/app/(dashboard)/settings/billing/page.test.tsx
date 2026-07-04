@@ -122,7 +122,9 @@ describe("BillingPage", () => {
     expect(
       screen.getByText("That legacy quota is gated by your current plan. Billing now centers on protected actions, receipts, verification, and connectors."),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Plan controls")).toBeInTheDocument();
+    expect(await screen.findByText("Upgrade path")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Subscription status" })).toBeInTheDocument();
+    expect(screen.getByText("Run protected agents on the FREE plan.")).toBeInTheDocument();
     expect(screen.queryByText("Capture events")).not.toBeInTheDocument();
     expect(screen.queryByText("Replay runs")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
@@ -143,7 +145,7 @@ describe("BillingPage", () => {
     expect(screen.queryByText("Starter")).not.toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
     expect(screen.getByText("$399.00")).toBeInTheDocument();
-    const proCard = screen.getByText("Pro").closest(".billing-plan-card") as HTMLElement;
+    const proCard = screen.getByRole("article", { name: "Pro plan" });
     expect(within(proCard).getByText(/25K protected actions\/mo/)).toBeInTheDocument();
     expect(within(proCard).getByText(/100K policy checks\/mo/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pay with Razorpay for Pro" })).toBeInTheDocument();
@@ -197,7 +199,7 @@ describe("BillingPage", () => {
     expect(await screen.findByText("PLUS")).toBeInTheDocument();
     expect(screen.getByText("Legacy Plus maps to Pro entitlements.")).toBeInTheDocument();
 
-    const proCard = screen.getByText("Pro").closest(".billing-plan-card");
+    const proCard = screen.getByRole("article", { name: "Pro plan" });
     expect(proCard?.className).toContain("billing-plan-current");
     expect(within(proCard as HTMLElement).getByText("Current")).toBeInTheDocument();
   });

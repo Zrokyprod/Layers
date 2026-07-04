@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-
-import { PublicLanding } from "@/components/public-landing";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "AI Agent Reliability Control Plane",
-  description:
-    "Zroky turns failed AI-agent runs into trace evidence, replay proof, regression contracts, CI gates, and release readiness.",
+  title: "Zroky Dashboard",
+  description: "Mission control for protected agent actions, approvals, outcomes, evidence, and workspace controls.",
 };
 
 export default function HomePage() {
-  return <PublicLanding />;
+  redirect("/home");
 }

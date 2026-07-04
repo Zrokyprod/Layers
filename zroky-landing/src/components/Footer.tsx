@@ -5,9 +5,9 @@ const COLS = [
   {
     title: 'Control plane',
     links: [
-      { label: 'Protected actions', href: '/#product' },
+      { label: 'Control loop', href: '/#architecture' },
+      { label: 'Sequence risk', href: '/#sequence-risk' },
       { label: 'Receipts', href: '/#receipts' },
-      { label: 'Agent categories', href: '/pricing' },
       { label: 'Pricing', href: '/pricing' },
     ],
   },
@@ -23,7 +23,7 @@ const COLS = [
   {
     title: 'Company',
     links: [
-      { label: 'Security', href: '/#trust' },
+      { label: 'Enterprise readiness', href: '/#trust' },
       { label: 'Privacy', href: '/privacy' },
       { label: 'Terms', href: '/terms' },
       { label: 'Contact', href: 'mailto:hello@zroky.com' },
@@ -34,14 +34,17 @@ const COLS = [
 export default function Footer() {
   return (
     <footer className="relative z-10 w-full border-t border-[#d8dbd2] bg-[#eef0eb] text-[#20231f]">
-      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-6 py-16 md:grid-cols-5">
-        <div className="col-span-2">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src="/zroky.png" alt="Zroky" className="h-7 w-7 rounded-[8px] object-contain" />
-            <span className="text-[15px] font-semibold tracking-[-0.02em] text-[#20231f]">Zroky</span>
+      <div className="mx-auto grid max-w-[1260px] grid-cols-1 gap-10 px-6 py-16 sm:grid-cols-2 md:grid-cols-5">
+        <div className="sm:col-span-2">
+          <Link to="/" className="flex min-w-0 items-center">
+            <img
+              src="/zroky-brand.png"
+              alt="Zroky"
+              className="h-8 w-[118px] object-contain object-left"
+            />
           </Link>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#5b615a]">
-            Agent reliability control plane for high-risk actions, approval gates, system-of-record verification, and signed receipts.
+            AI agent action control plane for policy gates, scoped execution, source-of-record verification, and signed receipts.
           </p>
           <div className="mt-5 flex items-center gap-3 text-[#8b9288]">
             <a href="https://github.com/zroky-ai" className="transition hover:text-[#4f5a52]" aria-label="Zroky on GitHub">
@@ -71,9 +74,9 @@ export default function Footer() {
         ))}
       </div>
       <div className="border-t border-[#d8dbd2]">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-6 text-xs text-[#8b9288] sm:flex-row">
+        <div className="mx-auto flex max-w-[1260px] flex-col items-center justify-between gap-3 px-6 py-6 text-xs text-[#8b9288] sm:flex-row">
           <p>Copyright {new Date().getFullYear()} Zroky. Built for production AI agents.</p>
-          <p className="font-mono">AI explains. Policy decides. System of record proves.</p>
+          <p className="font-mono">Policy decides. Systems prove. Receipts travel.</p>
         </div>
       </div>
     </footer>

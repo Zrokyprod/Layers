@@ -1,7 +1,17 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { RefreshCw, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { type CSSProperties, type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Clock3,
+  Crown,
+  MailCheck,
+  RefreshCw,
+  ShieldCheck,
+  UserCog,
+  UserPlus,
+  Users,
+} from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
 import { SettingsHero, SettingsMetricStrip, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
@@ -10,13 +20,50 @@ import { useDashboardStore } from "@/lib/store";
 import { useProjectSettings } from "@/lib/hooks";
 import {
   createProjectInvitation,
+  getBillingMe,
   listProjectInvitations,
   listProjectMembers,
   revokeProjectInvitation,
 } from "@/lib/api";
 import { upsertProjectMember } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import type { ProjectInvitationItem, ProjectMembershipResponse } from "@/lib/types";
+import type { BillingMeResponse, ProjectInvitationItem, ProjectMembershipResponse } from "@/lib/types";
+
+const ROLE_OPTIONS = ["viewer", "member", "admin", "owner"] as const;
+
+function roleLabel(role: string | null | undefined): string {
+  const normalized = role?.trim().toLowerCase();
+  if (normalized === "owner") return "Owner";
+  if (normalized === "admin") return "Admin";
+  if (normalized === "viewer") return "Viewer";
+  return "Member";
+}
+
+function roleDescription(role: string | null | undefined): string {
+  const normalized = role?.trim().toLowerCase();
+  if (normalized === "owner") return "Full control, billing, access, and policy authority.";
+  if (normalized === "admin") return "Can manage workspace operations and most access settings.";
+  if (normalized === "viewer") return "Read-only visibility into workspace state and evidence.";
+  return "Can operate assigned project workflows without ownership controls.";
+}
+
+function principalLabel(member: ProjectMembershipResponse): string {
+  return member.email ?? member.subject;
+}
+
+function initialsFor(value: string): string {
+  const clean = value.replace(/^user:/, "").trim();
+  const parts = clean.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "U";
+  const second = parts[1]?.[0] ?? parts[0]?.[1] ?? "";
+  return `${first}${second}`.toUpperCase();
+}
+
+function invitationStatus(invitation: ProjectInvitationItem): "accepted" | "revoked" | "pending" {
+  if (invitation.accepted_at) return "accepted";
+  if (invitation.revoked_at) return "revoked";
+  return "pending";
+}
 
 export default function TeamPage() {
   const { selectedProject } = useDashboardStore();
@@ -25,6 +72,7 @@ export default function TeamPage() {
 
   const [members, setMembers] = useState<ProjectMembershipResponse[]>([]);
   const [invitations, setInvitations] = useState<ProjectInvitationItem[]>([]);
+  const [billing, setBilling] = useState<BillingMeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
@@ -45,12 +93,14 @@ export default function TeamPage() {
     setLoading(true);
     setError(null);
     try {
-      const [m, i] = await Promise.all([
+      const [m, i, billingState] = await Promise.all([
         listProjectMembers(projectId),
         listProjectInvitations(projectId),
+        getBillingMe().catch(() => null),
       ]);
       setMembers(m);
       setInvitations(i ?? []);
+      setBilling(billingState);
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
       setError(msg || "Failed to load team data.");
@@ -159,8 +209,15 @@ export default function TeamPage() {
   }
 
   const activeMembers = members.filter((member) => member.is_active);
+  const inactiveMembers = members.filter((member) => !member.is_active);
   const ownerCount = activeMembers.filter((member) => member.role === "owner").length;
-  const pendingInvites = invitations.filter((invitation) => !invitation.accepted_at && !invitation.revoked_at).length;
+  const adminCount = activeMembers.filter((member) => member.role === "admin").length;
+  const pendingInvitationItems = invitations.filter((invitation) => invitationStatus(invitation) === "pending");
+  const pendingInvites = pendingInvitationItems.length;
+  const seatLimit = typeof billing?.seats === "number" && billing.seats > 0 ? billing.seats : null;
+  const seatPercent = seatLimit ? Math.min(100, Math.round((activeMembers.length / seatLimit) * 100)) : 0;
+  const seatMeterStyle = { "--team-seat-meter": `${seatPercent}%` } as CSSProperties;
+  const planLabel = billing?.plan_code ? `${billing.plan_code.charAt(0).toUpperCase()}${billing.plan_code.slice(1)} plan` : "Plan unavailable";
 
   return (
     <SettingsScaffold className="team-settings-page" aria-labelledby="team-settings-title">
@@ -169,7 +226,7 @@ export default function TeamPage() {
         eyebrow="Members"
         icon={<Users aria-hidden="true" />}
         title="Workspace access"
-        copy="Invite teammates, manage roles, and keep at least one active owner on the project."
+        copy="Control who can enter this project, what authority they carry, and which invitations can still become access."
         tone={!projectId || error ? "danger" : "success"}
         pill={projectId ? `${activeMembers.length} active` : "Project missing"}
         updatedLabel={loading ? "Refreshing" : "Settings live"}
@@ -182,6 +239,7 @@ export default function TeamPage() {
 
       <SettingsMetricStrip
         ariaLabel="Members settings summary"
+        columns={4}
         metrics={[
           {
             id: "active-members",
@@ -200,6 +258,14 @@ export default function TeamPage() {
             icon: <ShieldCheck aria-hidden="true" />,
           },
           {
+            id: "admins",
+            label: "Admins",
+            value: String(adminCount),
+            helper: "Operational managers below owner authority",
+            tone: adminCount > 0 ? "setup" : "success",
+            icon: <UserCog aria-hidden="true" />,
+          },
+          {
             id: "pending-invites",
             label: "Pending invites",
             value: String(pendingInvites),
@@ -210,52 +276,104 @@ export default function TeamPage() {
         ]}
       />
 
+      <section className="team-access-command-card" aria-label="Workspace access command center">
+        <div className="team-access-command-main">
+          <span className="team-command-kicker">
+            <ShieldCheck aria-hidden="true" />
+            Access command center
+          </span>
+          <h2>Every workspace action starts with a known human boundary.</h2>
+          <p>
+            Keep owner authority protected, invite people into the right role, and revoke pending access before it turns into a live membership.
+          </p>
+          <div className="team-access-rail" aria-label="Access controls">
+            <span>
+              <Crown aria-hidden="true" />
+              Owner floor protected
+            </span>
+            <span>
+              <UserCog aria-hidden="true" />
+              Role scope explicit
+            </span>
+            <span>
+              <MailCheck aria-hidden="true" />
+              Invites remain revocable
+            </span>
+          </div>
+        </div>
+
+        <aside className="team-seat-card" aria-label="Seat usage">
+          <div className="team-seat-card-head">
+            <span>Seat usage</span>
+            <strong>{seatLimit ? `${activeMembers.length} / ${seatLimit}` : `${activeMembers.length} active`}</strong>
+          </div>
+          <div className="team-seat-meter" style={seatMeterStyle} aria-hidden="true" />
+          <div className="team-seat-facts">
+            <span>{planLabel}</span>
+            <span>{pendingInvites} pending invite{pendingInvites === 1 ? "" : "s"}</span>
+            <span>{inactiveMembers.length} inactive member{inactiveMembers.length === 1 ? "" : "s"}</span>
+          </div>
+        </aside>
+      </section>
+
       {/* Invite form */}
       <SettingsSection
         id="invite-team-member"
         eyebrow="Access"
-        title="Invite team member"
-        copy="Send an email invitation to collaborate on this project."
+        title="Invite a teammate"
+        copy="Create a pending access grant with a clear role before the person joins the project."
+        className="team-invite-section"
       >
 
         {!projectId ? <p className="notif-error team-error">Project context is missing. Reload the dashboard before changing members.</p> : null}
         {error && <p className="notif-error team-error">{error}</p>}
 
-        <form onSubmit={onInvite} className="keys-create-form team-invite-form">
-          <div className="field team-field-email">
-            <label htmlFor="invite-email" className="field-label">Email</label>
-            <input
-              id="invite-email"
-              type="email"
-              required
-              placeholder="teammate@company.com"
-              className="input"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-            />
+        <form onSubmit={onInvite} className="team-invite-form">
+          <div className="team-invite-panel">
+            <div className="team-invite-icon" aria-hidden="true">
+              <UserPlus />
+            </div>
+            <div>
+              <strong>New access invitation</strong>
+              <span>Pending invites appear below until they are accepted or revoked.</span>
+            </div>
           </div>
-          <div className="field team-field-role">
-            <label htmlFor="invite-role" className="field-label">Role</label>
-            <select
-              id="invite-role"
-              className="input"
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
+
+          <div className="team-invite-fields">
+            <div className="field team-field-email">
+              <label htmlFor="invite-email" className="field-label">Email</label>
+              <input
+                id="invite-email"
+                type="email"
+                required
+                placeholder="teammate@company.com"
+                className="input"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+            </div>
+            <div className="field team-field-role">
+              <label htmlFor="invite-role" className="field-label">Role</label>
+              <select
+                id="invite-role"
+                className="input"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+              >
+                {ROLE_OPTIONS.map((role) => (
+                  <option key={role} value={role}>{roleLabel(role)}</option>
+                ))}
+              </select>
+            </div>
+            <DashboardButton
+              type="submit"
+              variant="primary"
+              loading={inviteBusy}
+              disabled={inviteBusy || !inviteEmail.trim()}
             >
-              <option value="viewer">Viewer</option>
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-              <option value="owner">Owner</option>
-            </select>
+              {inviteBusy ? "Sending..." : "Send invite"}
+            </DashboardButton>
           </div>
-          <DashboardButton
-            type="submit"
-            variant="primary"
-            loading={inviteBusy}
-            disabled={inviteBusy || !inviteEmail.trim()}
-          >
-            {inviteBusy ? "Sending..." : "Send invite"}
-          </DashboardButton>
         </form>
       </SettingsSection>
 
@@ -263,8 +381,9 @@ export default function TeamPage() {
       <SettingsSection
         id="project-members"
         eyebrow="Members"
-        title="Project members"
-        copy={`${members.length} member${members.length !== 1 ? "s" : ""} in this project.`}
+        title="Project Members"
+        copy={`${members.length} member${members.length !== 1 ? "s" : ""} in this project, with ${activeMembers.length} active right now.`}
+        className="team-list-section"
       >
 
         {loading && members.length === 0 ? (
@@ -272,15 +391,26 @@ export default function TeamPage() {
         ) : members.length === 0 ? (
           <div className="empty">No members found.</div>
         ) : (
-          <div className="list">
+          <div className="team-member-list">
             {members.map((m) => (
               <div key={m.membership_id} className="team-member-row">
-                <div className="team-avatar">{(m.email ?? m.subject).slice(0, 2).toUpperCase()}</div>
+                <div className="team-avatar">{initialsFor(principalLabel(m))}</div>
 
                 <div className="team-member-info">
-                  <strong>{m.email ?? m.subject}</strong>
-                  <span className="provider-meta">Role: {m.role}</span>
+                  <div className="team-member-name-row">
+                    <strong>{principalLabel(m)}</strong>
+                    <span className={`team-role-badge is-${m.role}`}>{roleLabel(m.role)}</span>
+                  </div>
+                  <span className="provider-meta">
+                    {roleDescription(m.role)} Updated {formatDateTime(m.updated_at)}.
+                  </span>
                 </div>
+
+                <StatusPill
+                  value={m.is_active ? "active" : "inactive"}
+                  label={m.is_active ? "Active" : "Inactive"}
+                  tone={m.is_active ? "success" : "neutral"}
+                />
 
                 <div className="team-member-actions">
                   <label className="sr-only">Change role</label>
@@ -291,10 +421,9 @@ export default function TeamPage() {
                     onChange={(e) => requestRoleChange(m, e.target.value)}
                     disabled={busyMemberId === m.membership_id}
                   >
-                    <option value="viewer">Viewer</option>
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                    <option value="owner">Owner</option>
+                    {ROLE_OPTIONS.map((role) => (
+                      <option key={role} value={role}>{roleLabel(role)}</option>
+                    ))}
                   </select>
 
                   {m.is_active ? (
@@ -318,12 +447,6 @@ export default function TeamPage() {
                     </DashboardButton>
                   )}
                 </div>
-
-                <StatusPill
-                  value={m.is_active ? "active" : "inactive"}
-                  label={m.is_active ? "Active" : "Inactive"}
-                  tone={m.is_active ? "success" : "neutral"}
-                />
               </div>
             ))}
           </div>
@@ -335,43 +458,41 @@ export default function TeamPage() {
         id="pending-invitations"
         eyebrow="Invitations"
         title="Pending invitations"
-        copy={`${invitations.length} invitation${invitations.length !== 1 ? "s" : ""} loaded for this project.`}
+        copy={`${pendingInvites} pending invite${pendingInvites === 1 ? "" : "s"} can still become project access.`}
+        className="team-list-section"
       >
 
-        {loading && invitations.length === 0 ? (
+        {loading && pendingInvitationItems.length === 0 ? (
           <div className="loading" />
-        ) : invitations.length === 0 ? (
+        ) : pendingInvitationItems.length === 0 ? (
           <div className="empty">No pending invitations.</div>
         ) : (
-          <div className="list">
-            {invitations.map((inv) => (
-              <div key={inv.invitation_id} className="team-member-row">
-                <div className="team-inv-icon">INV</div>
+          <div className="team-member-list">
+            {pendingInvitationItems.map((inv) => (
+              <div key={inv.invitation_id} className="team-member-row team-invitation-row">
+                <div className="team-inv-icon" aria-hidden="true">
+                  <Clock3 />
+                </div>
                 <div className="team-member-info">
-                  <strong>{inv.email}</strong>
+                  <div className="team-member-name-row">
+                    <strong>{inv.email}</strong>
+                    <span className={`team-role-badge is-${inv.role}`}>{roleLabel(inv.role)}</span>
+                  </div>
                   <span className="provider-meta">
-                    Role: {inv.role} - Expires {formatDateTime(inv.expires_at)}
+                    Invited by {inv.invited_by_subject ?? "workspace admin"}. Expires {formatDateTime(inv.expires_at)}.
                   </span>
                 </div>
                 <div className="team-invite-actions">
-                  {inv.accepted_at ? (
-                    <StatusPill value="accepted" label="Accepted" tone="success" />
-                  ) : inv.revoked_at ? (
-                    <StatusPill value="revoked" label="Revoked" tone="neutral" />
-                  ) : (
-                    <>
-                      <StatusPill value="pending" label="Pending" tone="warning" />
-                      <DashboardButton
-                        type="button"
-                        size="sm"
-                        variant="danger"
-                        title="Revoke invitation"
-                        onClick={() => void onRevoke(inv.invitation_id)}
-                      >
-                        Revoke
-                      </DashboardButton>
-                    </>
-                  )}
+                  <StatusPill value="pending" label="Pending" tone="warning" />
+                  <DashboardButton
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    title="Revoke invitation"
+                    onClick={() => void onRevoke(inv.invitation_id)}
+                  >
+                    Revoke
+                  </DashboardButton>
                 </div>
               </div>
             ))}

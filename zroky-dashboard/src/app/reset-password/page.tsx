@@ -95,7 +95,7 @@ export default function ResetPasswordPage() {
       <AuthCard
         eyebrow="Secure reset"
         title="Create new password"
-        subtitle="Choose a new workspace password."
+        subtitle="Restore access to governed actions and signed evidence."
         footer={<Link href="/login" className="auth-link">Back to login</Link>}
       >
         <Suspense fallback={<p className="hint">Loading...</p>}>

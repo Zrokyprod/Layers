@@ -7,20 +7,24 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
+  CreditCard,
   Fingerprint,
+  Gauge,
   KeyRound,
   LogOut,
   MonitorX,
+  ReceiptText,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 
-import { deleteAccount, getSecurityStatus, logoutAllSessions } from "@/lib/api";
+import { deleteAccount, getBillingMe, getBillingUsage, getSecurityStatus, logoutAllSessions } from "@/lib/api";
 import { clearAccessToken } from "@/lib/auth";
 import { useChangePassword, useMe, useUpdateMe } from "@/lib/hooks";
 import { passwordChangeSchema, type PasswordChangeFormData } from "@/lib/schemas";
-import type { SecurityStatusResponse } from "@/lib/types";
-import { DashboardButton } from "./dashboard-button";
+import type { BillingMeResponse, BillingUsageMeter, BillingUsageResponse, SecurityStatusResponse } from "@/lib/types";
+import { formatPlanLabel } from "./feature-gate";
+import { DashboardButton, DashboardButtonLink } from "./dashboard-button";
 
 function connectedLoginLabel(security: SecurityStatusResponse | null): string {
   if (!security) return "Loading";
@@ -44,6 +48,13 @@ function accountPostureLabel(me: ReturnType<typeof useMe>["data"] | null, securi
   return "Limited login";
 }
 
+function formatBillingMeter(meter: BillingUsageMeter | null | undefined): string {
+  if (!meter) return "Loading";
+  const used = meter.used.toLocaleString();
+  if (meter.unlimited || meter.limit == null) return `${used} used`;
+  return `${used} / ${meter.limit.toLocaleString()}`;
+}
+
 export default function AccountPage() {
   const router = useRouter();
   const meQuery = useMe();
@@ -58,6 +69,10 @@ export default function AccountPage() {
   const [security, setSecurity] = useState<SecurityStatusResponse | null>(null);
   const [securityMessage, setSecurityMessage] = useState("");
   const [securityLoading, setSecurityLoading] = useState(true);
+  const [billingMe, setBillingMe] = useState<BillingMeResponse | null>(null);
+  const [billingUsage, setBillingUsage] = useState<BillingUsageResponse | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingMessage, setBillingMessage] = useState("");
   const [logoutAllLoading, setLogoutAllLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
@@ -76,12 +91,96 @@ export default function AccountPage() {
   const me = meQuery.data ?? null;
   const loadError = meQuery.error?.message ?? "";
   const displayName = me?.display_name?.trim() || me?.email?.split("@")[0] || "User";
-  const accountPosture = securityLoading ? "Checking" : accountPostureLabel(me, security);
+  const accountPosture = securityLoading
+    ? "Checking"
+    : securityMessage && !security
+      ? "Needs review"
+      : accountPostureLabel(me, security);
   const accountInitial = displayName.charAt(0).toUpperCase();
-  const connectedLogin = connectedLoginLabel(security);
+  const connectedLogin = securityLoading ? "Loading" : security ? connectedLoginLabel(security) : "Unavailable";
   const memberSince = me?.created_at
     ? new Date(me.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "-";
+  const sessionStatus = securityLoading
+    ? "Loading"
+    : security?.global_logout_available
+      ? "Available"
+      : security
+        ? "Unavailable"
+        : "Needs refresh";
+  const sessionExpiry = securityLoading
+    ? "Loading expiry"
+    : security?.current_session_expires_at
+      ? `Expires ${sessionExpiryLabel(security.current_session_expires_at)}`
+      : "Expiry unavailable";
+  const passwordStatus = securityLoading
+    ? "Loading"
+    : security?.password_login_enabled
+      ? "Enabled"
+      : security
+        ? "OAuth only"
+        : "Needs refresh";
+  const passwordHelp = me?.has_password
+    ? "Password changes are available."
+    : "Use account recovery to set a password.";
+  const planLabel = billingLoading ? "Loading plan" : formatPlanLabel(billingMe?.plan_code);
+  const planStatus = billingLoading ? "Loading" : billingMe?.status ?? "Unavailable";
+  const planPayment = billingLoading
+    ? "Loading payment"
+    : billingMe?.payment_subscription_ref
+      ? "Payment confirmed"
+      : billingMe?.payment_request_ref
+        ? "Payment pending"
+        : billingMe?.payment_provider === "manual"
+          ? "Manual billing"
+          : "No paid checkout";
+  const accountPlanItems = [
+    {
+      icon: <ShieldCheck aria-hidden="true" />,
+      label: "Protected actions",
+      value: formatBillingMeter(billingUsage?.protected_actions),
+    },
+    {
+      icon: <ReceiptText aria-hidden="true" />,
+      label: "Receipts",
+      value: formatBillingMeter(billingUsage?.action_receipts),
+    },
+    {
+      icon: <Gauge aria-hidden="true" />,
+      label: "Connectors",
+      value: formatBillingMeter(billingUsage?.active_connectors),
+    },
+  ];
+  const accountStatusItems = [
+    {
+      icon: <ShieldCheck aria-hidden="true" />,
+      label: "Email",
+      value: me?.email_verified ? "Verified" : me ? "Not verified" : "Loading",
+      detail: "Recovery and workspace invites.",
+      tone: me?.email_verified ? "ready" : "warn",
+    },
+    {
+      icon: <KeyRound aria-hidden="true" />,
+      label: "Password",
+      value: passwordStatus,
+      detail: passwordHelp,
+      tone: security?.password_login_enabled ? "ready" : "neutral",
+    },
+    {
+      icon: <UserRound aria-hidden="true" />,
+      label: "Connected login",
+      value: connectedLogin,
+      detail: connectedLogin === "None" ? "No OAuth provider connected." : "OAuth provider status.",
+      tone: connectedLogin !== "None" && connectedLogin !== "Loading" && connectedLogin !== "Unavailable" ? "ready" : "neutral",
+    },
+    {
+      icon: <MonitorX aria-hidden="true" />,
+      label: "Sessions",
+      value: sessionStatus,
+      detail: sessionExpiry,
+      tone: security?.global_logout_available ? "ready" : "warn",
+    },
+  ];
 
   useEffect(() => {
     if (me) {
@@ -104,6 +203,24 @@ export default function AccountPage() {
   useEffect(() => {
     void loadSecurity();
   }, [loadSecurity]);
+
+  const loadBilling = useCallback(async () => {
+    setBillingLoading(true);
+    setBillingMessage("");
+    try {
+      const [meBilling, usage] = await Promise.all([getBillingMe(), getBillingUsage()]);
+      setBillingMe(meBilling);
+      setBillingUsage(usage);
+    } catch (err) {
+      setBillingMessage(err instanceof Error ? err.message : "Failed to load billing status.");
+    } finally {
+      setBillingLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBilling();
+  }, [loadBilling]);
 
   async function onUpdateProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -164,64 +281,102 @@ export default function AccountPage() {
 
   return (
     <div className="page-content account-page settings-profile-page">
-      <section className="account-command-hero" aria-label="Account security overview">
-        <div className="account-hero-copy">
-          <span className="account-eyebrow">
-            <Fingerprint aria-hidden="true" />
-            Personal account
-          </span>
-          <h1>{displayName}</h1>
-          <p>Manage the identity, login method, and browser sessions used to access protected Zroky workspaces.</p>
-          <div className="account-hero-meta" aria-label="Account identifiers">
-            <span>{me?.email ?? "No email set"}</span>
-            <span>{me?.user_id ?? "User loading"}</span>
-            <span>Member since {memberSince}</span>
+      <section className="account-overview-panel" aria-label="Account overview">
+        <div className="account-overview-main">
+          <div className="account-avatar">{accountInitial}</div>
+          <div className="account-overview-copy">
+            <span className="account-eyebrow">
+              <Fingerprint aria-hidden="true" />
+              Personal account
+            </span>
+            <h1>{displayName}</h1>
+            <p>{me?.email ?? "No email set"}</p>
           </div>
         </div>
-        <aside className={`account-posture-card is-${accountPosture.toLowerCase().replaceAll(" ", "-")}`}>
-          <span>Account posture</span>
-          <strong>{accountPosture}</strong>
-          <small>
-            {securityLoading
-              ? "Loading current session and login status."
-              : securityMessage
-                ? "Security status could not be loaded."
-                : "Identity and session controls are backed by the account API."}
-          </small>
-        </aside>
+        <div className="account-overview-side">
+          <span className={`account-posture-badge is-${accountPosture.toLowerCase().replaceAll(" ", "-")}`}>
+            {accountPosture}
+          </span>
+          <span>Member since {memberSince}</span>
+        </div>
       </section>
 
-      <section className="account-status-grid" aria-label="Account control summary">
-        <article className={me?.email_verified ? "account-status-card is-ready" : "account-status-card is-warn"}>
-          <ShieldCheck aria-hidden="true" />
-          <span>Email verification</span>
-          <strong>{me?.email_verified ? "Verified" : me ? "Not verified" : "Loading"}</strong>
-          <small>Used for account recovery and workspace invites.</small>
-        </article>
-        <article className={security?.password_login_enabled ? "account-status-card is-ready" : "account-status-card is-warn"}>
-          <KeyRound aria-hidden="true" />
-          <span>Password login</span>
-          <strong>{securityLoading ? "Loading" : security?.password_login_enabled ? "Enabled" : "OAuth only"}</strong>
-          <small>{me?.has_password ? "Password changes are available." : "Use recovery flow to set a password."}</small>
-        </article>
-        <article className={connectedLogin !== "None" && connectedLogin !== "Loading" ? "account-status-card is-ready" : "account-status-card"}>
-          <UserRound aria-hidden="true" />
-          <span>Connected login</span>
-          <strong>{connectedLogin}</strong>
-          <small>OAuth providers linked to this account.</small>
-        </article>
-        <article className={security?.global_logout_available ? "account-status-card is-ready" : "account-status-card is-warn"}>
-          <MonitorX aria-hidden="true" />
-          <span>Session control</span>
-          <strong>{securityLoading ? "Loading" : security?.global_logout_available ? "Available" : "Unavailable"}</strong>
-          <small>Expires {securityLoading ? "after security status loads" : sessionExpiryLabel(security?.current_session_expires_at)}.</small>
-        </article>
+      <section className="panel account-plan-panel" aria-label="Account plan">
+        <header className="account-panel-header">
+          <div>
+            <h3>Plan and workspace access</h3>
+            <p>Subscription state used by project quotas and protected-action limits.</p>
+          </div>
+          <DashboardButtonLink href="/settings/billing" variant="soft" icon={<CreditCard />}>
+            Open billing
+          </DashboardButtonLink>
+        </header>
+
+        {billingMessage ? <p className="account-message is-error">{billingMessage}</p> : null}
+
+        <div className="account-plan-card">
+          <div className="account-plan-primary">
+            <span className="account-plan-kicker">Current plan</span>
+            <strong>{planLabel}</strong>
+            <small>{planPayment}</small>
+          </div>
+          <span className="account-plan-status">{planStatus}</span>
+        </div>
+
+        <div className="account-plan-meter-grid">
+          {accountPlanItems.map((item) => (
+            <article key={item.label}>
+              <span>{item.icon}</span>
+              <strong>{item.value}</strong>
+              <small>{item.label}</small>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel account-security-panel" aria-label="Account security">
+        <header className="account-panel-header">
+          <div>
+            <h3>Account security</h3>
+            <p>Email, login, and session status.</p>
+          </div>
+          <DashboardButton type="button" variant="soft" onClick={() => void loadSecurity()} loading={securityLoading}>
+            Refresh
+          </DashboardButton>
+        </header>
+
+        {securityMessage && <p className="account-message is-error">{securityMessage}</p>}
+
+        <div className="account-status-list">
+          {accountStatusItems.map((item) => (
+            <article className={`account-status-row is-${item.tone}`} key={item.label}>
+              <span className="account-status-icon">{item.icon}</span>
+              <span className="account-status-copy">
+                <strong>{item.label}</strong>
+                <small>{item.detail}</small>
+              </span>
+              <span className="account-status-value">{item.value}</span>
+            </article>
+          ))}
+        </div>
+
+        <div className="account-security-actions">
+          <DashboardButton
+            type="button"
+            variant="danger"
+            disabled={logoutAllLoading || security?.global_logout_available === false}
+            loading={logoutAllLoading}
+            icon={<LogOut />}
+            onClick={() => void onLogoutAllSessions()}
+          >
+            {logoutAllLoading ? "Revoking..." : "Log out all sessions"}
+          </DashboardButton>
+        </div>
       </section>
 
       <section className="panel profile-section-gap" id="identity">
-        <header className="panel-header">
+        <header className="account-panel-header">
           <h3>Your identity</h3>
-          <p className="panel-sub">Account email and connected login methods.</p>
         </header>
 
         {loadError && <p className="field-error profile-msg-gap-lg">{loadError}</p>}
@@ -243,12 +398,8 @@ export default function AccountPage() {
 
             <dl className="field-list">
               <div className="field-row">
-                <dt>Display name</dt>
-                <dd>{me.display_name ? <span>{me.display_name}</span> : <span className="muted">Not set</span>}</dd>
-              </div>
-              <div className="field-row">
-                <dt>Email verification</dt>
-                <dd>{me.email_verified ? <span className="pill pill-green">Verified</span> : <span className="pill">Not verified</span>}</dd>
+                <dt>Email</dt>
+                <dd>{me.email ?? "No email set"}</dd>
               </div>
               <div className="field-row">
                 <dt>GitHub</dt>
@@ -277,10 +428,9 @@ export default function AccountPage() {
                   maxLength={80}
                   disabled={updateMeMutation.isPending}
                 />
-                <span className="field-hint">Used in account and team surfaces. Leave blank to clear it.</span>
               </div>
-              {profileError && <p className="field-error profile-msg-gap-sm">{profileError}</p>}
-              {profileSuccess && <p className="field-success profile-msg-gap-sm">{profileSuccess}</p>}
+              {profileError && <p className="account-message is-error">{profileError}</p>}
+              {profileSuccess && <p className="account-message is-success">{profileSuccess}</p>}
               <div className="actions">
                 <DashboardButton type="submit" variant="primary" loading={updateMeMutation.isPending}>
                   {updateMeMutation.isPending ? "Saving..." : "Save profile"}
@@ -292,7 +442,7 @@ export default function AccountPage() {
       </section>
 
       <section className="panel profile-section-gap" id="login-method">
-        <header className="panel-header">
+        <header className="account-panel-header">
           <h3>Change password</h3>
           <p className="panel-sub">
             {me && !me.has_password
@@ -339,8 +489,8 @@ export default function AccountPage() {
               />
               {errors.confirmPassword && <span className="field-error">{errors.confirmPassword.message}</span>}
             </div>
-            {pwError && <p className="field-error profile-msg-gap-sm">{pwError}</p>}
-            {pwSuccess && <p className="field-success profile-msg-gap-sm">{pwSuccess}</p>}
+            {pwError && <p className="account-message is-error">{pwError}</p>}
+            {pwSuccess && <p className="account-message is-success">{pwSuccess}</p>}
             <div className="actions">
               <DashboardButton type="submit" variant="primary" loading={changePasswordMutation.isPending}>
                 {changePasswordMutation.isPending ? "Saving..." : "Change password"}
@@ -350,56 +500,8 @@ export default function AccountPage() {
         )}
       </section>
 
-      <section className="panel" id="session-control">
-        <header className="panel-header">
-          <div>
-            <h3>Account security</h3>
-            <p>Password/OAuth status and session revocation controls.</p>
-          </div>
-          <DashboardButton type="button" variant="soft" onClick={() => void loadSecurity()} loading={securityLoading}>
-            Refresh
-          </DashboardButton>
-        </header>
-
-        {securityMessage && <p className="field-error profile-msg-gap-sm">{securityMessage}</p>}
-        {securityLoading ? (
-          <p className="muted">Loading...</p>
-        ) : security ? (
-          <dl className="field-list">
-            <div className="field-row">
-              <dt>Password login</dt>
-              <dd>{security.password_login_enabled ? <span className="pill">Enabled</span> : <span className="muted">OAuth only</span>}</dd>
-            </div>
-            <div className="field-row">
-              <dt>Current session expires</dt>
-              <dd>{sessionExpiryLabel(security.current_session_expires_at)}</dd>
-            </div>
-            <div className="field-row">
-              <dt>Connected OAuth</dt>
-              <dd>{connectedLoginLabel(security)}</dd>
-            </div>
-            <div className="field-row">
-              <dt>Global session revoke</dt>
-              <dd>{security.global_logout_available ? <span className="pill pill-green">Available</span> : <span className="muted">Unavailable</span>}</dd>
-            </div>
-          </dl>
-        ) : null}
-        <div className="actions">
-          <DashboardButton
-            type="button"
-            variant="danger"
-            disabled={logoutAllLoading || security?.global_logout_available === false}
-            loading={logoutAllLoading}
-            icon={<LogOut />}
-            onClick={() => void onLogoutAllSessions()}
-          >
-            {logoutAllLoading ? "Revoking..." : "Log out all sessions"}
-          </DashboardButton>
-        </div>
-      </section>
-
       <section className="panel profile-danger-zone" id="danger-zone">
-        <header className="panel-header">
+        <header className="account-panel-header">
           <div>
             <h3 className="profile-danger-title">Danger zone</h3>
             <p>Permanently delete your account and all associated data. This cannot be undone.</p>

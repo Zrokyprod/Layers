@@ -25,9 +25,7 @@ import {
   LogOut,
   Menu,
   Plug,
-  Plus,
   RotateCcw,
-  Search,
   Settings2,
   ShieldAlert,
   ShieldCheck,
@@ -36,7 +34,7 @@ import {
 } from "lucide-react";
 
 import { clearAccessToken } from "@/lib/auth";
-import { getBillingMe, getBudgetStatus, listIssues } from "@/lib/api";
+import { getBillingMe, getBillingUsage, getBudgetStatus, listIssues } from "@/lib/api";
 import { isDashboardPrimaryPath } from "@/lib/dashboard-route-contract";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
@@ -200,14 +198,6 @@ function formatCompactNumber(value: number): string {
   }).format(value);
 }
 
-function formatMoney(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: value >= 100 ? 0 : 2,
-  }).format(value);
-}
-
 function formatDateShort(date: Date): string {
   return new Intl.DateTimeFormat("en", {
     month: "short",
@@ -219,6 +209,22 @@ function formatDateShort(date: Date): string {
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
+}
+
+function formatStatusLabel(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized) return "Unavailable";
+  if (normalized === "loading") return "Syncing";
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function formatClassToken(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+  return normalized || "unavailable";
 }
 
 function safeDate(value: string | null | undefined): Date | null {
@@ -252,13 +258,6 @@ function numericEntitlement(planTemplate: Record<string, unknown> | undefined, k
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
-}
-
-function projectLimitCopy(projectCount: number, maxProjects: number | null): string {
-  const projectLabel = projectCount === 1 ? "project" : "projects";
-  if (maxProjects === -1) return `${projectCount} ${projectLabel} - unlimited`;
-  if (maxProjects == null) return `${projectCount} ${projectLabel}`;
-  return `${projectCount} / ${maxProjects} projects used`;
 }
 
 function dateRangeLabel(
@@ -370,23 +369,6 @@ function initials(name: string): string {
       .join("")
       .toUpperCase() || "AC"
   );
-}
-
-function compactIdentifier(value: string | null | undefined, lead = 9, tail = 4): string {
-  const normalized = value?.trim();
-  if (!normalized) return "Unavailable";
-  if (normalized.length <= lead + tail + 1) return normalized;
-  return `${normalized.slice(0, lead)}...${normalized.slice(-tail)}`;
-}
-
-function formatRoleLabel(role: string | null | undefined): string {
-  const normalized = role?.trim();
-  if (!normalized) return "Member";
-  return normalized
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
 }
 
 function ProjectContextGate({
@@ -629,6 +611,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
+  const billingUsageQuery = useQuery({
+    queryKey: ["billing", "usage"],
+    queryFn: ({ signal }) => getBillingUsage(signal),
+    enabled: projectContextReady,
+    staleTime: 60_000,
+  });
+
   const budgetQuery = useQuery({
     queryKey: ["shell-budget-status"],
     queryFn: ({ signal }) => getBudgetStatus(signal),
@@ -640,46 +629,80 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const issuesCount = issuesQuery.data?.items?.length ?? 0;
   const planTemplate = billingQuery.data?.plan_template;
   const planCode = billingQuery.data?.plan_code;
-  const planLabel = formatPlanLabel(planCode);
-  const billingStatus = billingQuery.data?.status ?? (billingQuery.isLoading ? "loading" : "unavailable");
+  const subscriptionContextLoading = !projectContextReady && projectContextLoading;
+  const billingLoading = subscriptionContextLoading || billingQuery.isLoading;
+  const planLabel = billingLoading ? "Loading" : formatPlanLabel(planCode);
+  const billingStatus = billingQuery.data?.status ?? (billingLoading ? "loading" : "unavailable");
+  const billingStatusLabel = formatStatusLabel(billingStatus);
+  const billingStatusClass = formatClassToken(billingStatus);
   const protectedActionsQuota = numericEntitlement(planTemplate, "actions.protected.monthly_quota");
+  const protectedActionsMeter = billingUsageQuery.data?.protected_actions;
+  const protectedActionsUsed = typeof protectedActionsMeter?.used === "number" ? protectedActionsMeter.used : null;
+  const protectedActionsLimit = protectedActionsMeter?.unlimited
+    ? -1
+    : typeof protectedActionsMeter?.limit === "number"
+      ? protectedActionsMeter.limit
+      : protectedActionsQuota;
   const protectedActionsQuotaLabel = protectedActionsQuota === -1
     ? "Unlimited"
     : protectedActionsQuota != null
       ? formatCompactNumber(protectedActionsQuota)
       : null;
-  const planPeriod = billingQuery.isLoading
-    ? "Loading billing period"
-    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && protectedActionsQuotaLabel
-      ? protectedActionsQuota === -1
-        ? "Unlimited protected actions"
-        : `${protectedActionsQuotaLabel} protected actions/month`
+  const protectedActionsLimitLabel = protectedActionsLimit === -1
+    ? "Unlimited"
+    : protectedActionsLimit != null
+      ? formatCompactNumber(protectedActionsLimit)
+      : protectedActionsQuotaLabel;
+  const planPeriod = billingLoading
+    ? "Syncing subscription"
+    : !billingQuery.data?.current_period_end && !billingQuery.data?.trial_end && protectedActionsLimitLabel
+      ? protectedActionsLimit === -1
+        ? "Unlimited plan"
+        : "Monthly quota"
       : periodCopy(billingQuery.data?.current_period_end, billingQuery.data?.trial_end);
   const budgetStatus = budgetQuery.data;
   const hasBudgetLimit = typeof budgetStatus?.limit_usd === "number" && budgetStatus.limit_usd > 0;
   const budgetPercent = hasBudgetLimit
     ? clampPercent(budgetStatus.percent_used ?? (budgetStatus.spent_usd / budgetStatus.limit_usd!) * 100)
     : 0;
-  const planMetricMain = hasBudgetLimit
-    ? formatMoney(budgetStatus!.spent_usd)
-    : protectedActionsQuotaLabel
-      ? protectedActionsQuotaLabel
-      : billingQuery.isLoading
-        ? "Loading"
-      : "Quota n/a";
-  const planMetricTotal = hasBudgetLimit
-    ? `/ ${formatMoney(budgetStatus!.limit_usd!)} budget`
-    : protectedActionsQuota != null
-      ? protectedActionsQuota === -1
-        ? "protected actions"
-        : "protected actions / month"
-      : "usage unavailable";
-  const maxProjects = numericEntitlement(planTemplate, "max_projects");
-  const projectLimitReached = maxProjects !== null && maxProjects !== -1 && myProjects.length >= maxProjects;
-  const projectLimitStatus = projectLimitCopy(myProjects.length, maxProjects);
-  const showPlanUsageTrack = hasBudgetLimit;
+  const protectedActionsPercent = protectedActionsLimit != null && protectedActionsLimit > 0 && protectedActionsUsed != null
+    ? clampPercent((protectedActionsUsed / protectedActionsLimit) * 100)
+    : 0;
+  const protectedActionsUsagePending = billingUsageQuery.isLoading && !protectedActionsMeter;
+  const planMetricMain = billingLoading
+    ? "Loading"
+    : protectedActionsLimit === -1
+      ? "Unlimited"
+      : protectedActionsUsed != null && protectedActionsLimitLabel
+        ? `${formatCompactNumber(protectedActionsUsed)} / ${protectedActionsLimitLabel}`
+        : protectedActionsLimitLabel
+          ? `0 / ${protectedActionsLimitLabel}`
+          : "Quota n/a";
+  const planMetricTotal = billingLoading
+    ? "usage"
+    : protectedActionsLimit === -1
+      ? "protected actions"
+      : protectedActionsUsagePending
+        ? "syncing usage"
+        : protectedActionsMeter
+          ? "used this month"
+          : "plan quota";
+  const showPlanUsageTrack = protectedActionsLimit != null && protectedActionsLimit > 0;
+  const planUsagePercent = showPlanUsageTrack ? protectedActionsPercent : budgetPercent;
+  const protectedActionsUsageTone =
+    protectedActionsMeter?.state === "exceeded" ||
+    protectedActionsMeter?.state === "blocked" ||
+    protectedActionsPercent >= 100
+      ? "critical"
+      : protectedActionsMeter?.state === "near_limit" || protectedActionsPercent >= 80
+        ? "warning"
+        : "ok";
   const planCardStatusClass =
-    budgetStatus?.status === "critical" ? "is-critical" : budgetStatus?.status === "warning" ? "is-warning" : "is-ok";
+    budgetStatus?.status === "critical" || protectedActionsUsageTone === "critical"
+      ? "is-critical"
+      : budgetStatus?.status === "warning" || protectedActionsUsageTone === "warning"
+        ? "is-warning"
+        : "is-ok";
   const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);
   const currentRoute = getRouteMeta(pathname);
   const settingsNavActive = pathname === "/settings" || pathname.startsWith("/settings/");
@@ -769,11 +792,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     router.push(`/projects/${encodeURIComponent(projectId)}`);
   }
 
-  function openCommandPalette() {
-    setOpenMenu(null);
-    window.dispatchEvent(new CustomEvent("open-command-palette"));
-  }
-
   function onLogout() {
     setOpenMenu(null);
     clearAccessToken();
@@ -789,15 +807,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       aria-label="Project menu"
       style={workspacePopoverStyle}
     >
-      <div className="shell-popover-head">
-        <span>Projects</span>
-        <strong>{projectSelectionRequired ? "Select a project" : "Project switcher"}</strong>
-        <small>{projectLimitStatus}</small>
-      </div>
       {myProjects.length > 0 ? (
         myProjects.map((project) => {
           const isSelected = project.project_id === selectedProject;
-          const projectRoleLabel = formatRoleLabel(project.role);
           return (
             <button
               key={project.project_id}
@@ -810,12 +822,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <FolderOpen size={15} aria-hidden="true" />
               <span>
                 <strong>{project.project_name}</strong>
-                <small>
-                  <span className="org-menu-project-id" title={project.project_id}>
-                    {compactIdentifier(project.project_id)}
-                  </span>
-                  <span className="org-role-badge">{projectRoleLabel}</span>
-                </small>
               </span>
               {isSelected ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
             </button>
@@ -830,17 +836,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </span>
         </div>
       )}
-      <Link
-        href={projectLimitReached ? "/settings/billing" : "/projects"}
-        className={`shell-menu-item${projectLimitReached ? " is-muted-action" : ""}`}
-        role="menuitem"
-        onClick={() => setOpenMenu(null)}
-      >
-        {projectLimitReached ? <CreditCard size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
-        <span>
-          <strong>{projectLimitReached ? "Upgrade to add more" : "New project"}</strong>
-        </span>
-      </Link>
+      <div className="org-popover-divider" aria-hidden="true" />
       <Link href="/projects" className="shell-menu-item" role="menuitem" onClick={() => setOpenMenu(null)}>
         <Settings2 size={15} aria-hidden="true" />
         <span>
@@ -866,14 +862,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <aside className={`sidebar ${sidebarVisible ? "" : "sidebar-hidden"}`}>
         <Link href="/home" className="sidebar-logo" aria-label="Zroky dashboard home">
           <Image
-            src="/zroky-sidebar-logo-transparent.png"
+            src="/zroky-brand.png"
             alt="Zroky"
-            width={34}
-            height={34}
+            width={148}
+            height={50}
             priority
             className="sidebar-logo-image"
           />
-          <span className="sidebar-logo-word">Zroky</span>
         </Link>
 
         <nav className="nav-links" aria-label="Primary">
@@ -944,21 +939,26 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <Link href="/settings/billing" className={`plan-card ${planCardStatusClass}`} aria-label="Open billing and usage">
             <div className="plan-card-head">
               <span className="plan-badge">{planLabel}</span>
-              <span className="plan-status">{billingStatus}</span>
+              <span className={`plan-status plan-status-${billingStatusClass}`}>{billingStatusLabel}</span>
             </div>
-            <span className="plan-renew">{planPeriod}</span>
-            <div className="plan-usage-label">
-              <span>{planMetricMain}</span>
-              <span className="plan-usage-total">{planMetricTotal}</span>
+            <div className="plan-usage-summary">
+              <span className="plan-usage-kicker">Protected actions</span>
+              <div className="plan-usage-label">
+                <span>{planMetricMain}</span>
+                <span className="plan-usage-total">{planMetricTotal}</span>
+              </div>
             </div>
             {showPlanUsageTrack ? (
               <div className="plan-usage-track">
-                <div className="plan-usage-fill" style={{ width: `${budgetPercent}%` }} />
+                <div className="plan-usage-fill" style={{ width: `${planUsagePercent}%` }} />
               </div>
             ) : null}
-            <span className="plan-usage-link">
-              View billing <ArrowRight size={12} aria-hidden="true" />
-            </span>
+            <div className="plan-card-footrow">
+              <span className="plan-renew">{planPeriod}</span>
+              <span className="plan-usage-link">
+                Billing <ArrowRight size={12} aria-hidden="true" />
+              </span>
+            </div>
           </Link>
 
           <div className="org-menu" ref={workspaceMenuRef}>
@@ -1012,19 +1012,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               aria-expanded={openMenu === "route"}
               onClick={() => toggleMenu("route")}
             >
-              <FolderOpen size={14} className="topbar-bc-icon" />
-              <span className="topbar-bc-org">Dashboard</span>
-              <span className="topbar-bc-sep">/</span>
               <span className="topbar-bc-page">{currentRoute?.label ?? getTitle(pathname)}</span>
               <ChevronDown size={12} className="topbar-bc-chevron" />
             </button>
 
             {openMenu === "route" ? (
               <div className="shell-popover topbar-popover route-popover" role="menu" aria-label="Dashboard navigation">
-                <div className="shell-popover-head">
-                  <span>Jump to module</span>
-                  <strong>{currentRoute?.subtitle ?? "Open a dashboard module."}</strong>
-                </div>
                 {VISIBLE_NAV.map((item) => {
                   const Icon = item.Icon;
                   const isActive = item.href ? pathname === item.href || pathname.startsWith(`${item.href}/`) : false;
@@ -1039,7 +1032,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                       <Icon size={15} aria-hidden="true" />
                       <span>
                         <strong>{item.label}</strong>
-                        <small>{item.subtitle}</small>
                       </span>
                       {isActive ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
                     </Link>
@@ -1048,17 +1040,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </div>
             ) : null}
           </div>
-
-          <button
-            type="button"
-            className="topbar-search"
-            onClick={openCommandPalette}
-            aria-label="Search actions, agents, and evidence"
-          >
-            <Search className="topbar-search-icon" size={14} aria-hidden="true" />
-            <span className="topbar-search-hint">Search actions, agents, evidence...</span>
-            <kbd className="topbar-search-kbd">⌘K</kbd>
-          </button>
 
           <div className="topbar-controls">
             <div className="topbar-menu-wrap" ref={dateMenuRef}>
@@ -1076,10 +1057,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </button>
               {openMenu === "date" ? (
                 <div className="shell-popover topbar-popover date-popover" role="menu" aria-label="Dashboard time window">
-                  <div className="shell-popover-head">
-                    <span>Time window</span>
-                    <strong>Updates the global dashboard range.</strong>
-                  </div>
                   {DATE_PRESETS.map((preset) => (
                     <button
                       key={preset.id}
@@ -1091,7 +1068,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                       <Clock3 size={15} aria-hidden="true" />
                       <span>
                         <strong>{preset.label}</strong>
-                        <small>{preset.helper}</small>
                       </span>
                       {activeDatePreset === preset.id ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
                     </button>
@@ -1115,15 +1091,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               </button>
               {openMenu === "env" ? (
                 <div className="shell-popover topbar-popover env-popover" role="menu" aria-label="Environment status">
-                  <div className="shell-popover-head">
-                    <span>Environment</span>
-                    <strong>{envDisplay} build target</strong>
-                  </div>
                   <div className="shell-menu-item is-static" role="menuitem" aria-disabled="true">
                     <Gauge size={15} aria-hidden="true" />
                     <span>
                       <strong>Runtime environment</strong>
-                      <small>Set by NEXT_PUBLIC_DASHBOARD_ENV.</small>
                     </span>
                     <Check size={14} className="shell-menu-check" aria-hidden="true" />
                   </div>
@@ -1136,7 +1107,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     <RotateCcw size={15} aria-hidden="true" />
                     <span>
                       <strong>Live dashboard refresh</strong>
-                      <small>{realTimeEnabled ? "Enabled for polling-backed widgets." : "Paused in this browser."}</small>
                     </span>
                     {realTimeEnabled ? <Check size={14} className="shell-menu-check" aria-hidden="true" /> : null}
                   </button>
@@ -1178,7 +1148,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     <UserRound size={15} aria-hidden="true" />
                     <span>
                       <strong>Profile & security</strong>
-                      <small>Identity, password, and sessions.</small>
                     </span>
                   </Link>
                   <button
@@ -1191,7 +1160,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     <LogOut size={15} aria-hidden="true" />
                     <span>
                       <strong>Log out</strong>
-                      <small>End this browser session.</small>
                     </span>
                   </button>
                 </div>

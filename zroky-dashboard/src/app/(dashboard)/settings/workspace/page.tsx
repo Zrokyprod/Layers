@@ -2,9 +2,14 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  CalendarClock,
   Check,
   Copy,
+  Database,
   FolderOpen,
+  KeyRound,
+  LockKeyhole,
   RefreshCw,
   ShieldCheck,
   UserRound,
@@ -44,6 +49,14 @@ function canRenameWorkspace(role: string | null | undefined): boolean {
   return normalized === "owner" || normalized === "admin";
 }
 
+function authorityCopy(role: string | null | undefined): string {
+  const normalized = role?.toLowerCase();
+  if (normalized === "owner") return "Full workspace authority, member access, billing, and policy changes.";
+  if (normalized === "admin") return "Operational authority for workspace setup and most project controls.";
+  if (normalized === "viewer") return "Read-only visibility into workspace state and evidence.";
+  return "Project operator access without owner-level controls.";
+}
+
 export default function WorkspaceSettingsPage() {
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const projectQuery = useProjectSettings();
@@ -66,6 +79,8 @@ export default function WorkspaceSettingsPage() {
   const role = roleLabel(membership?.role);
   const renameAllowed = canRenameWorkspace(membership?.role);
   const renameDisabled = !renameAllowed || !projectId || updateProject.isPending || draftName.trim().length < 2;
+  const dashboardEnvironment = process.env.NEXT_PUBLIC_DASHBOARD_ENV ?? "production";
+  const projectTimestamp = formatDateTime(project?.updated_at ?? membership?.updated_at);
 
   useEffect(() => {
     setDraftName(workspaceName === "Project unavailable" ? "" : workspaceName);
@@ -148,13 +163,74 @@ export default function WorkspaceSettingsPage() {
           {
             id: "updated",
             label: "Updated",
-            value: formatDateTime(project?.updated_at ?? membership?.updated_at),
+            value: projectTimestamp,
             helper: "Latest project metadata timestamp",
             tone: "setup",
             icon: <RefreshCw aria-hidden="true" />,
           },
         ]}
       />
+
+      <section className="workspace-command-card" aria-label="Workspace access boundary">
+        <div className="workspace-command-main">
+          <span className="workspace-command-kicker">
+            <LockKeyhole aria-hidden="true" />
+            Workspace boundary
+          </span>
+          <h2>One project identity governs agents, members, keys, billing, and evidence.</h2>
+          <p>
+            This is the stable control context Zroky uses when a protected action is proposed, approved, verified, and signed.
+          </p>
+          <div className="workspace-command-rail" aria-label="Workspace routing controls">
+            <span>
+              <KeyRound aria-hidden="true" />
+              SDK keys resolve here
+            </span>
+            <span>
+              <UserRound aria-hidden="true" />
+              Member role gates controls
+            </span>
+            <span>
+              <Database aria-hidden="true" />
+              Receipts keep this project ID
+            </span>
+          </div>
+        </div>
+
+        <aside className="workspace-routing-card" aria-label="Workspace routing">
+          <div className="workspace-routing-head">
+            <span>Routing state</span>
+            <StatusPill
+              value={active ? "active" : "inactive"}
+              label={active ? "Active" : "Inactive"}
+              tone={active ? "success" : "danger"}
+            />
+          </div>
+          <div className="workspace-routing-list">
+            <div>
+              <Activity aria-hidden="true" />
+              <span>
+                <small>Environment</small>
+                <strong>{roleLabel(dashboardEnvironment)}</strong>
+              </span>
+            </div>
+            <div>
+              <ShieldCheck aria-hidden="true" />
+              <span>
+                <small>Your authority</small>
+                <strong>{role}</strong>
+              </span>
+            </div>
+            <div>
+              <CalendarClock aria-hidden="true" />
+              <span>
+                <small>Last metadata update</small>
+                <strong>{projectTimestamp}</strong>
+              </span>
+            </div>
+          </div>
+        </aside>
+      </section>
 
       <SettingsSection
         id="workspace-identity"
@@ -169,38 +245,51 @@ export default function WorkspaceSettingsPage() {
           />
         }
       >
-        <form onSubmit={onRename} className="settings-workspace-form">
-          <div className="field">
-            <label htmlFor="workspace-name" className="field-label">
-              Workspace name
-            </label>
-            <input
-              id="workspace-name"
-              type="text"
-              className="input"
-              value={draftName}
-              onChange={(event) => setDraftName(event.target.value)}
-              disabled={!renameAllowed}
-              minLength={2}
-              maxLength={120}
-            />
-            <span className="field-hint">
-              {renameAllowed
-                ? "Owners and admins can rename this workspace."
-                : "Only owners and admins can rename this workspace."}
+        <div className="workspace-identity-grid">
+          <form onSubmit={onRename} className="settings-workspace-form">
+            <div className="field">
+              <label htmlFor="workspace-name" className="field-label">
+                Workspace name
+              </label>
+              <input
+                id="workspace-name"
+                type="text"
+                className="input"
+                value={draftName}
+                onChange={(event) => setDraftName(event.target.value)}
+                disabled={!renameAllowed}
+                minLength={2}
+                maxLength={120}
+              />
+              <span className="field-hint">
+                {renameAllowed
+                  ? "Owners and admins can rename this workspace."
+                  : "Only owners and admins can rename this workspace."}
+              </span>
+            </div>
+            <DashboardButton type="submit" variant="primary" loading={updateProject.isPending} disabled={renameDisabled || draftName.trim() === workspaceName}>
+              Save workspace name
+            </DashboardButton>
+          </form>
+
+          <div className="workspace-authority-card" aria-label="Workspace authority">
+            <span className="workspace-authority-icon">
+              <ShieldCheck aria-hidden="true" />
             </span>
+            <div>
+              <span>Your role</span>
+              <strong>{role}</strong>
+              <p>{authorityCopy(membership?.role)}</p>
+            </div>
           </div>
-          <DashboardButton type="submit" variant="primary" loading={updateProject.isPending} disabled={renameDisabled || draftName.trim() === workspaceName}>
-            Save workspace name
-          </DashboardButton>
-        </form>
+        </div>
         {statusMessage ? (
           <p className={statusMessage.toLowerCase().includes("failed") ? "field-error" : "field-success"}>
             {statusMessage}
           </p>
         ) : null}
 
-        <div className="list">
+        <div className="workspace-fact-list">
           <div className="list-row">
             <div className="list-main">
               <strong>Project ID</strong>
@@ -214,6 +303,12 @@ export default function WorkspaceSettingsPage() {
             <div className="list-main">
               <strong>Owner reference</strong>
               <span className="mono">{compactIdentifier(project?.owner_ref)}</span>
+            </div>
+          </div>
+          <div className="list-row">
+            <div className="list-main">
+              <strong>Dashboard environment</strong>
+              <span>{roleLabel(dashboardEnvironment)}</span>
             </div>
           </div>
           <div className="list-row">

@@ -505,10 +505,14 @@ describe("Mission Control Home", () => {
     expect(lockedPreview?.textContent).toContain("Policy bypass mutation");
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
     expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe(
+      "/agents/setup?intent=protect-agent&source=home",
+    );
     expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("data-state")).toBe("current");
     expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Start agent setup/i }).getAttribute("href")).toBe("/agents/setup");
+    expect(screen.getByRole("link", { name: /Start agent setup/i }).getAttribute("href")).toBe(
+      "/agents/setup?intent=protect-agent&source=home",
+    );
   });
 
   it("tracks key and active-agent progress before the first action signal", async () => {

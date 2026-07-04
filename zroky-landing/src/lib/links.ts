@@ -17,7 +17,11 @@ export function buildSignUpUrl(params: Record<string, string | undefined> = {}) 
   return url.toString();
 }
 
-export const SIGN_UP_URL = buildSignUpUrl();
+export const SIGN_UP_URL = buildSignUpUrl({
+  intent: 'protect-agent',
+  plan: 'free',
+  source: 'landing',
+});
 
 const AUTH_ALIASES: Record<string, string> = {
   '/auth': '/login',

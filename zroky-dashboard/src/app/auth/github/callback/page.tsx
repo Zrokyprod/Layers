@@ -55,7 +55,11 @@ function CallbackContent() {
 
   return (
     <AuthShell>
-      <AuthCard title="Signing in with GitHub" subtitle="Completing secure access.">
+      <AuthCard
+        eyebrow="GitHub sign in"
+        title="Completing GitHub sign in"
+        subtitle="Verifying identity before workspace access."
+      >
         {error ? (
           <div className="auth-banner auth-banner-error">
             {error} <Link href="/login" className="auth-link">Return to login</Link>
@@ -63,7 +67,7 @@ function CallbackContent() {
         ) : (
           <div className="auth-status">
             <div className="spinner" />
-            <p>Redirecting to dashboard...</p>
+            <p>Opening your governed workspace...</p>
           </div>
         )}
       </AuthCard>
@@ -74,7 +78,11 @@ function CallbackContent() {
 function CallbackFallback() {
   return (
     <AuthShell>
-      <AuthCard title="Signing in with GitHub" subtitle="Preparing secure access.">
+      <AuthCard
+        eyebrow="GitHub sign in"
+        title="Preparing GitHub sign in"
+        subtitle="Loading the identity handoff."
+      >
         <p className="hint">Loading...</p>
       </AuthCard>
     </AuthShell>

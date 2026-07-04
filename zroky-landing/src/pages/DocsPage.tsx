@@ -1,149 +1,106 @@
 import { type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
+  AlertTriangle,
   ArrowRight,
   Check,
   Code2,
-  ExternalLink,
+  DatabaseZap,
+  FileCheck2,
   GitBranch,
-  Github,
   KeyRound,
-  Layers,
-  PlayCircle,
+  LockKeyhole,
   Route,
+  Server,
   ShieldCheck,
   Terminal,
   Workflow,
   Zap,
+  type LucideIcon,
 } from 'lucide-react';
-import { docsNav } from './docs/docsContent';
-import { SIGN_UP_URL } from '../lib/links';
+import { DEMO_URL, SIGN_UP_URL } from '../lib/links';
 
-const pythonSnippet = `import os
-import openai
-import zroky
+const revealEase = [0.16, 1, 0.3, 1] as const;
 
-zroky.init(
-    api_key=os.environ["ZROKY_API_KEY"],
-    project=os.environ["ZROKY_PROJECT"],
-    agent_framework="custom-python",
-    environment="production",
+const pythonSnippet = `import zroky
+
+decision = zroky.verified_action(
+    agent_id="ops_agent",
+    action_type="access.grant",
+    parameters={"role": "admin", "target_user": "user_881"},
+    source_of_record="okta",
 )
 
-response = zroky.call(
-    provider="openai",
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": "Summarize this refund request"}],
-    _client=openai.OpenAI(),
-)`;
+proof = zroky.await_action_proof(decision["action_id"])
+assert proof["proof_status"] == "matched"`;
 
-const typescriptSnippet = `import OpenAI from "openai";
-import { init, wrap } from "@zroky-ai/sdk";
+const typescriptSnippet = `import { zroky } from "@zroky-ai/sdk";
 
-init({
-  projectId: process.env.ZROKY_PROJECT_ID,
-  apiKey: process.env.ZROKY_API_KEY,
+const decision = await zroky.verifiedAction({
+  agentId: "release-agent",
+  actionType: "production.deploy",
+  parameters: { service: "billing-api", version: "2026.07.04" },
+  sourceOfRecord: "deployments",
 });
 
-const openai = wrap(new OpenAI(), {
-  agentName: "support-agent",
-  workflowId: "refund-review",
-  environment: "production",
-});
-
-const response = await openai.chat.completions.create({
-  model: "gpt-4o-mini",
-  messages: [{ role: "user", content: "Summarize this refund request" }],
-});`;
+const receipt = await zroky.receipts.get(decision.actionId);`;
 
 const gatewaySnippet = `docker run -d \\
   -p 8090:8090 \\
-  -e ZROKY_EMIT_MODE=http \\
   -e ZROKY_API_URL=https://api.zroky.com \\
-  -e ZROKY_INGEST_URL=https://api.zroky.com/api/v1/ingest \\
   -e ZROKY_GATEWAY_API_KEY=$ZROKY_GATEWAY_API_KEY \\
   ghcr.io/zroky-ai/zroky-gateway:latest
 
 export OPENAI_BASE_URL=http://localhost:8090/v1`;
 
-const ciActionSnippet = [
-  'name: Zroky Regression CI',
-  'on:',
-  '  pull_request:',
-  '    branches: [main]',
-  '',
-  'jobs:',
-  '  replay-ci:',
-  '    runs-on: ubuntu-latest',
-  '    permissions:',
-  '      pull-requests: write',
-  '    steps:',
-  '      - uses: actions/checkout@v4',
-  '      - uses: zroky/regression-ci@v1',
-  '        with:',
-  '          api_key: ${{ secrets.ZROKY_API_KEY }}',
-  '          project_id: ${{ vars.ZROKY_PROJECT_ID }}',
-  '          post_pr_comment: true',
-  '          fail_on_regression: true',
-  '        env:',
-  '          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}',
-].join('\n');
+const ciSnippet = `name: Zroky protected action checks
+on: [pull_request]
 
-const capturePaths = [
-  {
-    icon: Terminal,
-    title: 'Python SDK',
-    body: 'Instrument Python agents directly when your team controls the runtime and wants capture close to the provider call.',
-    signal: 'zroky.init + zroky.call',
-    href: '/docs/python-sdk',
-  },
-  {
-    icon: Code2,
-    title: 'TypeScript SDK',
-    body: 'Wrap the OpenAI client in Node, Next.js, or agent services so traces and failures stay attached to the workflow.',
-    signal: 'init + wrap',
-    href: '/docs/typescript-sdk',
-  },
-  {
-    icon: Route,
-    title: 'Gateway',
-    body: 'Route OpenAI-compatible traffic through Zroky when you need capture without changing every agent implementation.',
-    signal: 'proxy capture',
-    href: '/docs/gateway',
-  },
-];
+jobs:
+  zroky:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: zroky/protected-action-ci@v1
+        with:
+          api_key: \${{ secrets.ZROKY_API_KEY }}
+          project_id: \${{ vars.ZROKY_PROJECT_ID }}
+          fail_on_unverified_receipt: true`;
 
-const timeline = [
+const quickstartSteps = [
   {
-    icon: Zap,
-    label: 'Capture',
-    body: 'SDK or Gateway sends production calls, prompt context, tool path, latency, and cost evidence.',
-  },
-  {
-    icon: Workflow,
-    label: 'Diagnose',
-    body: 'Zroky identifies the failure mode, affected workflow, prompt fingerprint, and evidence trail.',
-  },
-  {
-    icon: Layers,
-    label: 'Issue',
-    body: 'Repeated failures become one diagnosis queue with ownership, impact, and replay candidates.',
-  },
-  {
-    icon: PlayCircle,
-    label: 'Replay',
-    body: 'Run stub checks for sanity, then verified replay against the original incident before trusting a fix.',
+    icon: KeyRound,
+    title: 'Create a project key',
+    body: 'Use a scoped project key for one environment and one first protected action.',
+    signal: 'settings',
   },
   {
     icon: ShieldCheck,
-    label: 'Golden',
-    body: 'Promote passing replay proof into release memory so the fixed incident keeps protecting future changes.',
+    title: 'Define the policy gate',
+    body: 'Choose who can approve, what must be held, and what fails closed.',
+    signal: 'policy',
   },
   {
-    icon: GitBranch,
-    label: 'CI Gate',
-    body: 'Run Goldens in CI and block the same agent failure before it reaches users again.',
+    icon: DatabaseZap,
+    title: 'Connect source of record',
+    body: 'Pick the system that proves reality after the action runs.',
+    signal: 'verifier',
   },
+  {
+    icon: Terminal,
+    title: 'Wrap the action',
+    body: 'Route only the risky operation through Zroky first, then expand by policy.',
+    signal: 'sdk',
+  },
+];
+
+const loopSteps = [
+  ['Propose', 'Agent submits intent, parameters, actor, and environment.'],
+  ['Policy', 'Zroky decides allow, hold, or block before mutation.'],
+  ['Approve', 'The right owner approves high-risk actions with context.'],
+  ['Run', 'A scoped runner executes only the approved operation.'],
+  ['Verify', 'The source of record confirms what actually changed.'],
+  ['Receipt', 'A signed evidence record is created and retained.'],
 ];
 
 const codePanels = [
@@ -151,131 +108,207 @@ const codePanels = [
     id: 'sdk',
     icon: Terminal,
     label: 'Python SDK',
-    title: 'Capture a production call from Python.',
-    body: 'Initialize Zroky once, then capture the provider call with the project and workflow context your release process needs.',
+    title: 'Protect one high-risk action from Python.',
+    body: 'Start with the action that can hurt the business. The SDK returns a decision before execution and a proof state after verification.',
     language: 'python',
     code: pythonSnippet,
   },
   {
-    id: 'typescript-sdk',
+    id: 'typescript',
     icon: Code2,
     label: 'TypeScript SDK',
-    title: 'Wrap the client used by your agent service.',
-    body: 'Use the same provider client, but send Zroky enough context to connect traces, issues, replay proof, and CI gates.',
+    title: 'Wrap a production service action.',
+    body: 'Use the same application flow, but route the risky operation through policy, runner, verification, and receipt state.',
     language: 'ts',
     code: typescriptSnippet,
   },
   {
     id: 'gateway',
     icon: Route,
-    label: 'Gateway Docker',
-    title: 'Proxy compatible traffic through Zroky.',
-    body: 'Run the Gateway near your service and point compatible provider traffic at it when SDK changes are not the fastest path.',
+    label: 'Gateway',
+    title: 'Adopt routing-level control when SDK changes are slower.',
+    body: 'Run the gateway near your service and move compatible provider traffic through Zroky while you plan direct SDK integration.',
     language: 'bash',
     code: gatewaySnippet,
   },
   {
-    id: 'ci-gate',
+    id: 'ci-gates',
     icon: GitBranch,
-    label: 'GitHub Action',
-    title: 'Run replay proof in pull requests.',
-    body: 'Attach promoted Goldens to CI so production incidents can become pass or block decisions before deploy.',
+    label: 'CI gate',
+    title: 'Block releases that lose proof.',
+    body: 'Use CI when protected-action behavior has to remain stable before new code reaches production.',
     language: 'yaml',
-    code: ciActionSnippet,
+    code: ciSnippet,
   },
 ];
 
 const providerRules = [
   {
     icon: Check,
-    title: 'Capture first',
-    body: 'Signup, capture, traces, issues, and basic dashboard review stay usable before a provider key is connected.',
+    title: 'Core control does not depend on model output.',
+    body: 'Policy decisions, runner state, source verification, and receipts are control-plane behavior.',
   },
   {
     icon: KeyRound,
-    title: 'BYOK for verified replay',
-    body: 'Verified replay uses your provider account so model spend remains visible, auditable, and controlled by your team.',
+    title: 'Use provider keys only for optional AI assistance.',
+    body: 'Summaries or policy suggestions can use BYOK so model spend stays visible in your provider account.',
   },
   {
-    icon: PlayCircle,
-    title: 'Stub replay stays available',
-    body: 'Stub replay remains a sanity-only path when you want structure checks without a real model call.',
+    icon: AlertTriangle,
+    title: 'Never mark tool-call success as proof.',
+    body: 'A 200 response can be recorded, but the receipt is signed only after source-of-record verification.',
   },
 ];
 
-const references = [
-  {
-    icon: Terminal,
-    title: 'Python SDK path',
-    body: 'Install, initialize, and capture provider calls in Python agent services.',
-    href: 'https://github.com/zroky-ai/zroky-sdk',
-  },
-  {
-    icon: Code2,
-    title: 'TypeScript SDK path',
-    body: 'Wrap Node and browser-adjacent agent clients with workflow context.',
-    href: 'https://github.com/zroky-ai/zroky-sdk-js',
-  },
-  {
-    icon: Route,
-    title: 'Gateway path',
-    body: 'Deploy a compatible proxy for teams that want routing-level capture.',
-    href: 'https://github.com/zroky-ai/zroky-gateway',
-  },
-  {
-    icon: GitBranch,
-    title: 'CI gate path',
-    body: 'Run promoted Goldens in pull requests with regression blocking.',
-    href: 'https://github.com/zroky-ai/zroky-regression-ci-action',
-  },
+const troubleshooting = [
+  ['Decision stays held', 'Check the policy owner, approval route, and whether the action class requires a human gate.'],
+  ['Proof is not verified', 'Confirm the source connector can read the final state and the action id maps to the system record.'],
+  ['Receipt is missing', 'Check that runner execution completed and verification reached matched or not_verified state.'],
+  ['CI does not block', 'Confirm the workflow uses the right project id and fail_on_unverified_receipt is enabled.'],
 ];
 
-const revealEase = [0.16, 1, 0.3, 1] as const;
-
-function SectionReveal({
-  className,
+function Reveal({
   children,
+  className = '',
   delay = 0,
 }: {
-  className?: string;
   children: ReactNode;
+  className?: string;
   delay?: number;
 }) {
   const reduceMotion = useReducedMotion();
 
   return (
-    <motion.section
-      initial={reduceMotion ? false : { opacity: 0, y: 22 }}
-      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.14, margin: '-80px' }}
-      transition={{ duration: 0.52, delay, ease: revealEase }}
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.58, ease: revealEase, delay }}
       className={className}
     >
       {children}
-    </motion.section>
+    </motion.div>
+  );
+}
+
+function Section({
+  children,
+  id,
+  className = '',
+}: {
+  children: ReactNode;
+  id?: string;
+  className?: string;
+}) {
+  return (
+    <section id={id} className={`w-full scroll-mt-28 px-4 py-16 text-[#171a15] md:py-20 ${className}`}>
+      <div className="mx-auto max-w-[1260px]">{children}</div>
+    </section>
+  );
+}
+
+function Eyebrow({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <p className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">
+      <Icon size={14} />
+      {children}
+    </p>
   );
 }
 
 function SectionHeader({
-  label,
+  icon,
+  eyebrow,
   title,
-  body,
-  align = 'left',
+  copy,
 }: {
-  label: string;
+  icon: LucideIcon;
+  eyebrow: string;
   title: string;
-  body: string;
-  align?: 'left' | 'center';
+  copy: string;
 }) {
   return (
-    <div className={align === 'center' ? 'mx-auto max-w-3xl text-center' : 'max-w-3xl'}>
-      <span className="eyebrow">
-        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-        {label}
-      </span>
-      <h2 className="mt-5 text-balance text-3xl font-semibold leading-tight text-primary sm:text-4xl lg:text-5xl">{title}</h2>
-      <p className="mt-4 text-base leading-8 text-secondary sm:text-lg">{body}</p>
-    </div>
+    <Reveal>
+      <div className="max-w-3xl">
+        <Eyebrow icon={icon}>{eyebrow}</Eyebrow>
+        <h2 className="mt-3 text-[2.1rem] font-semibold leading-[1.05] tracking-[-0.03em] text-[#151713] md:text-[3.05rem]">
+          {title}
+        </h2>
+        <p className="mt-4 text-[1.04rem] leading-[1.65] text-[#5b615a]">{copy}</p>
+      </div>
+    </Reveal>
+  );
+}
+
+function PrimaryButton({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-[linear-gradient(180deg,#376f77,#2f5f66)] px-5 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_14px_28px_-16px_rgba(47,95,102,0.75)] transition duration-150 hover:-translate-y-px active:translate-y-0 sm:w-auto"
+    >
+      {children}
+    </a>
+  );
+}
+
+function GhostButton({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] border border-[#d4d0c4] bg-[#fffdfa] px-5 text-sm font-semibold text-[#252821] shadow-[0_1px_2px_rgba(32,35,31,0.05)] transition hover:-translate-y-px hover:border-[#c4bfb2] sm:w-auto"
+    >
+      {children}
+    </a>
+  );
+}
+
+function DocsConsoleVisual() {
+  return (
+    <Reveal delay={0.08}>
+      <div className="overflow-hidden rounded-[24px] border border-[#d7d4ca] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_42px_90px_-54px_rgba(28,31,26,0.5)]">
+        <div className="flex items-center gap-2 border-b border-[#dedacf] bg-[#f8f7f2] px-4 py-3">
+          <span className="h-3 w-3 rounded-full bg-[#ef6a5b]" />
+          <span className="h-3 w-3 rounded-full bg-[#f4bd4f]" />
+          <span className="h-3 w-3 rounded-full bg-[#61c454]" />
+          <span className="ml-2 truncate rounded-[8px] border border-[#dedacf] bg-[#fffdfa] px-3 py-1 font-mono text-[11px] text-[#777266]">
+            docs.zroky.com/protected-action
+          </span>
+        </div>
+
+        <div className="grid gap-4 p-4 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="rounded-[16px] bg-[#171a15] p-4 text-[#eef1ec]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9fb8b2]">quickstart</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-[#dce7e3]">matched</span>
+            </div>
+            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[12px] leading-6 text-[#e8ece6]">
+              {pythonSnippet}
+            </pre>
+          </div>
+
+          <div className="grid gap-3">
+            {[
+              ['Policy decision', 'Held until owner approval', 'hold'],
+              ['Scoped runner', 'Admin grant executed with limited credential', 'run'],
+              ['Source verification', 'Directory role matched target state', 'matched'],
+              ['Signed receipt', 'sha256:7f3a9e10... ready for export', 'signed'],
+            ].map(([label, body, status]) => (
+              <div key={label} className="rounded-[14px] border border-[#dedacf] bg-[#f8f7f2] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#171a15]">{label}</p>
+                    <p className="mt-1 text-[13px] leading-relaxed text-[#5b615a]">{body}</p>
+                  </div>
+                  <span className="rounded-full border border-[#cfe0dd] bg-[#eaf1ef] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#2f5f66]">
+                    {status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Reveal>
   );
 }
 
@@ -283,315 +316,257 @@ function CodePanel({ panel }: { panel: (typeof codePanels)[number] }) {
   const Icon = panel.icon;
 
   return (
-    <article id={panel.id} className="card scroll-mt-28 overflow-hidden p-0">
-      <div className="border-b border-line bg-white/[0.03] p-4 sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-secondary">
-              <Icon className="h-3.5 w-3.5" />
-              {panel.label}
+    <Reveal>
+      <article id={panel.id} className="scroll-mt-28 overflow-hidden rounded-[18px] border border-[#d7d4ca] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.04)]">
+        <div className="border-b border-[#dedacf] bg-[#f8f7f2] p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#dedacf] bg-[#fffdfa] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#2f5f66]">
+                <Icon size={14} />
+                {panel.label}
+              </span>
+              <h3 className="mt-4 text-xl font-semibold leading-tight text-[#171a15]">{panel.title}</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5b615a]">{panel.body}</p>
+            </div>
+            <span className="w-fit shrink-0 rounded-[8px] border border-[#dedacf] bg-[#fffdfa] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#777266]">
+              {panel.language}
             </span>
-            <h3 className="mt-4 text-xl font-semibold leading-tight text-primary sm:text-2xl">{panel.title}</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">{panel.body}</p>
           </div>
-          <span className="w-fit shrink-0 rounded-md border border-line bg-ink px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-tertiary">
-            {panel.language}
-          </span>
         </div>
-      </div>
-      <div className="max-w-full bg-ink p-4 sm:p-5">
-        <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-6 text-secondary">
-          <code className="block max-w-full">{panel.code}</code>
-        </pre>
-      </div>
-    </article>
+        <div className="bg-[#171a15] p-5">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-6 text-[#eef1ec]">
+            <code>{panel.code}</code>
+          </pre>
+        </div>
+      </article>
+    </Reveal>
   );
 }
 
 export default function DocsPage() {
-  const reduceMotion = useReducedMotion();
-
   return (
-    <div className="w-full overflow-x-hidden">
-      <section className="relative isolate border-b border-line px-4 pb-14 pt-40 sm:px-6 sm:pb-20 sm:pt-44 lg:px-8">
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="grid-bg absolute inset-x-0 top-0 h-[34rem] opacity-70" />
-          <motion.div
-            aria-hidden="true"
-            animate={reduceMotion ? undefined : { rotate: 360 }}
-            transition={{ duration: 38, repeat: Infinity, ease: 'linear' }}
-            className="absolute left-1/2 top-24 h-72 w-72 -ml-36 rounded-full border border-line bg-[conic-gradient(from_120deg,transparent,rgba(255,255,255,0.18),transparent,rgba(255,255,255,0.1),transparent)] blur-2xl"
-          />
-        </div>
+    <div className="w-full overflow-x-hidden bg-[#fbfcfa] text-[#171a15]">
+      <section
+        className="relative overflow-hidden px-4 pb-14 pt-28 md:pb-16 md:pt-32"
+        style={{
+          background: 'linear-gradient(180deg,#fbfaf6 0%,#f3f4ee 58%,#fbfcfa 100%)',
+          fontFeatureSettings: "'ss01','cv01'",
+        }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[520px]"
+          style={{
+            background:
+              'radial-gradient(60% 38% at 50% 0%, rgba(255,255,255,0.95), transparent 76%), linear-gradient(180deg, rgba(234,231,220,0.72), transparent 64%)',
+          }}
+        />
 
-        <div className="mx-auto grid max-w-[92rem] items-center gap-10 lg:grid-cols-[1.02fr_0.98fr]">
-          <div>
-            <span className="eyebrow">
-              <Workflow className="h-3.5 w-3.5" />
-              AI Agent Regression Firewall docs
-            </span>
-            <h1 className="mt-6 max-w-5xl text-balance text-4xl font-semibold leading-[1.04] text-primary sm:text-6xl lg:text-7xl">
-              Stop shipping the same agent failure twice.
-            </h1>
-            <p className="mt-6 max-w-3xl text-base leading-8 text-secondary sm:text-lg">
-              Follow the same product loop everywhere: capture, diagnose, issue, replay, Golden, and CI gate. Provider keys appear only when verified replay needs to run.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href="/docs/quickstart" className="btn-primary">
-                Start with SDK
-                <ArrowRight className="h-4 w-4" />
-              </a>
-              <a href="/docs/gateway" className="btn-ghost">
-                Use Gateway
-                <Route className="h-4 w-4" />
-              </a>
-              <a href="/docs/ci-gates" className="btn-ghost">
-                Add CI gate
-                <GitBranch className="h-4 w-4" />
-              </a>
-            </div>
-          </div>
-
-          <motion.div
-            initial={reduceMotion ? false : { opacity: 0, y: 18 }}
-            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            transition={{ duration: 0.58, ease: revealEase }}
-            className="browser-frame"
-          >
-            <div className="browser-bar">
-              <span className="browser-dot" />
-              <span className="browser-dot" />
-              <span className="browser-dot" />
-              <span className="ml-2 truncate rounded-md border border-line bg-ink px-3 py-1 font-mono text-[11px] text-tertiary">
-                docs.zroky.com/quickstart
-              </span>
-            </div>
-            <div className="bg-ink-2 p-4 sm:p-5">
-              <div className="rounded-xl border border-line bg-ink p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-tertiary">failure-to-release</span>
-                  <span className="badge badge-verified">verified</span>
-                </div>
-                <div className="grid gap-2">
-                  {['capture incident', 'diagnose failure', 'create issue', 'run replay', 'promote golden', 'run CI gate'].map(
-                    (item, index) => (
-                      <div key={item} className="flex items-center gap-3 rounded-lg border border-line bg-white/[0.03] px-3 py-2.5">
-                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-line bg-white/[0.04] font-mono text-[10px] text-secondary">
-                          {index + 1}
-                        </span>
-                        <span className="font-mono text-xs text-secondary">{item}</span>
-                      </div>
-                    ),
-                  )}
-                </div>
+        <div className="relative z-10 mx-auto grid max-w-[1260px] gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <Reveal>
+            <div>
+              <Eyebrow icon={Workflow}>Docs</Eyebrow>
+              <h1 className="mt-6 max-w-4xl text-[2.65rem] font-semibold leading-[1] tracking-[-0.035em] text-[#12140f] sm:text-[3.4rem] md:text-[4.35rem]">
+                Build your first governed agent action.
+              </h1>
+              <p className="mt-6 max-w-2xl text-[1.06rem] leading-[1.7] text-[#555b53] md:text-[1.16rem]">
+                Use Zroky where an agent can change money, access, customer state, or production. Start with one action, prove the loop, then expand by policy.
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <PrimaryButton href="#quickstart">
+                  Start quickstart <ArrowRight size={15} />
+                </PrimaryButton>
+                <GhostButton href="#sdk">View SDK setup</GhostButton>
+                <GhostButton href={DEMO_URL}>Book a demo</GhostButton>
               </div>
             </div>
-          </motion.div>
+          </Reveal>
+
+          <DocsConsoleVisual />
         </div>
       </section>
 
-      <SectionReveal className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="mx-auto max-w-[92rem]">
-          <SectionHeader
-            label="Capture paths"
-            title="Choose the path that matches how your agent already runs."
-            body="Start with the smallest integration that gets production evidence into Zroky. The replay and CI workflow can follow after capture is working."
-          />
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            {capturePaths.map((path) => {
-              const Icon = path.icon;
-              return (
-                <a key={path.title} href={path.href} className="card group p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <span className="grid h-11 w-11 place-items-center rounded-xl border border-line bg-white/[0.04]">
-                      <Icon className="h-5 w-5 text-primary" />
+      <Section id="quickstart" className="bg-[#fbfcfa] py-14 md:py-20">
+        <SectionHeader
+          icon={Zap}
+          eyebrow="Quickstart"
+          title="Protect the action before you protect the whole agent."
+          copy="The clean rollout is narrow: one risky operation, one policy owner, one source of record, one signed receipt. Once that loop works, add more action classes."
+        />
+
+        <div className="mt-10 grid gap-4 lg:grid-cols-4">
+          {quickstartSteps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <Reveal key={step.title} delay={index * 0.04}>
+                <article className="h-full rounded-[16px] border border-[#d7d4ca] bg-[#fffdfa] p-5 shadow-[0_1px_2px_rgba(28,31,26,0.04)]">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="grid h-11 w-11 place-items-center rounded-[12px] border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
+                      <Icon size={19} />
                     </span>
-                    <span className="rounded-full border border-line bg-white/[0.04] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-secondary">
-                      {path.signal}
+                    <span className="rounded-full border border-[#dedacf] bg-[#f8f7f2] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#777266]">
+                      {step.signal}
                     </span>
                   </div>
-                  <h3 className="mt-5 text-xl font-semibold text-primary">{path.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-secondary">{path.body}</p>
-                  <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                    View setup
-                    <ArrowRight className="h-4 w-4 transition duration-200 group-hover:translate-x-0.5" />
-                  </span>
-                </a>
-              );
-            })}
-          </div>
+                  <h3 className="mt-5 text-base font-semibold text-[#171a15]">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#5b615a]">{step.body}</p>
+                </article>
+              </Reveal>
+            );
+          })}
         </div>
-      </SectionReveal>
+      </Section>
 
-      <SectionReveal className="border-y border-line px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="mx-auto max-w-[92rem]">
+      <Section id="control-loop" className="bg-[#f3f4ee] py-14 md:py-20">
+        <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
           <SectionHeader
-            label="Complete docs path"
-            title="Follow the product in the same order teams adopt it."
-            body="Each guide is built around one job in the contract: capture evidence, diagnose it, group the issue, replay the candidate, promote the Golden, then let CI protect the release."
+            icon={ShieldCheck}
+            eyebrow="Control loop"
+            title="Every protected action moves through the same contract."
+            copy="Nothing skips the line: not urgency, not scale, not a confident-looking tool response. Zroky checks authority before execution and checks reality before evidence is signed."
           />
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {docsNav.map((item, index) => (
-              <a key={item.slug} href={`/docs/${item.slug}`} className="card group p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-tertiary">0{index + 1}</span>
-                  <span className="rounded-md border border-line bg-ink px-2 py-1 text-[10px] font-semibold text-tertiary">
-                    {item.category}
-                  </span>
-                </div>
-                <h3 className="mt-4 text-base font-semibold leading-6 text-primary">{item.title}</h3>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                  Open guide
-                  <ArrowRight className="h-4 w-4 transition duration-200 group-hover:translate-x-0.5" />
-                </span>
-              </a>
-            ))}
-          </div>
-        </div>
-      </SectionReveal>
 
-      <SectionReveal className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="mx-auto max-w-[92rem]">
-          <SectionHeader
-            label="Quickstart"
-            title="The adoption path is capture first, then release protection."
-            body="Zroky does not need to interrupt signup or basic inspection with provider credentials. Keys appear only when real replay proof is required."
-          />
-          <div className="mt-10 grid gap-3 lg:grid-cols-6">
-            {timeline.map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="card relative p-4">
-                  {index < timeline.length - 1 && (
-                    <div className="pointer-events-none absolute -right-3 top-8 hidden h-px w-3 bg-line-strong lg:block" />
-                  )}
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white/[0.04]">
-                      <Icon className="h-5 w-5 text-primary" />
+          <Reveal delay={0.08}>
+            <div className="rounded-[20px] border border-[#d7d4ca] bg-[#fffdfa] p-4 shadow-[0_1px_2px_rgba(28,31,26,0.04),0_38px_76px_-58px_rgba(28,31,26,0.42)]">
+              <div className="grid gap-3 md:grid-cols-3">
+                {loopSteps.map(([label, body], index) => (
+                  <div key={label} className="relative rounded-[14px] border border-[#dedacf] bg-[#f8f7f2] p-4">
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">
+                      0{index + 1}
                     </span>
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-tertiary">0{index + 1}</span>
+                    <h3 className="mt-3 text-base font-semibold text-[#171a15]">{label}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#5b615a]">{body}</p>
                   </div>
-                  <h3 className="mt-4 text-base font-semibold text-primary">{item.label}</h3>
-                  <p className="mt-2 text-xs leading-5 text-tertiary">{item.body}</p>
-                </div>
-              );
-            })}
-          </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-[14px] border border-[#cfe0dd] bg-[#eaf1ef] p-4">
+                <p className="text-sm font-semibold leading-relaxed text-[#2f5f66]">
+                  The receipt is not a log line. It is the signed answer to three questions: who allowed this, did the real system match, and can we prove it later?
+                </p>
+              </div>
+            </div>
+          </Reveal>
         </div>
-      </SectionReveal>
+      </Section>
 
-      <SectionReveal className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="mx-auto max-w-[92rem]">
-          <SectionHeader
-            label="Code-first setup"
-            title="Four setup panels cover the full failure loop."
-            body="Use SDK capture for application code, Gateway capture for routing-level adoption, and CI replay when verified incidents become release gates."
-          />
-          <div className="mt-9 grid gap-5 xl:grid-cols-2">
-            {codePanels.map((panel) => (
-              <CodePanel key={panel.id} panel={panel} />
-            ))}
-          </div>
+      <Section className="bg-[#fbfcfa] py-14 md:py-20">
+        <SectionHeader
+          icon={Terminal}
+          eyebrow="Code setup"
+          title="Use the path that matches your deployment."
+          copy="Direct SDK integration is best for owned services. Gateway adoption helps when traffic needs to move first. CI gates keep proof requirements from regressing."
+        />
+        <div className="mt-9 grid gap-5 xl:grid-cols-2">
+          {codePanels.map((panel) => (
+            <CodePanel key={panel.id} panel={panel} />
+          ))}
         </div>
-      </SectionReveal>
+      </Section>
 
-      <SectionReveal className="border-y border-line px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="mx-auto grid max-w-[92rem] gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+      <Section id="provider-keys" className="bg-[#f3f4ee] py-14 md:py-20">
+        <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
           <SectionHeader
-            label="Provider key rule"
-            title="Provider keys are for verified replay, not for getting started."
-            body="Capture works without a model provider key. When your team chooses verified replay, Zroky asks for the key at the replay moment so model spend stays visible in your provider account."
+            icon={KeyRound}
+            eyebrow="Provider keys"
+            title="Keep model spend explicit. Keep control deterministic."
+            copy="Zroky does not need a provider key to make core control decisions. Use BYOK for optional AI assistance, summaries, or analysis that would otherwise hide model cost inside the product."
           />
-          <div className="grid gap-4">
-            {providerRules.map((rule) => {
+          <div className="grid gap-3">
+            {providerRules.map((rule, index) => {
               const Icon = rule.icon;
               return (
-                <div key={rule.title} className="card p-5">
-                  <div className="flex gap-4">
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-white/[0.04]">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </span>
-                    <div>
-                      <h3 className="text-lg font-semibold text-primary">{rule.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-secondary">{rule.body}</p>
+                <Reveal key={rule.title} delay={index * 0.04}>
+                  <article className="rounded-[16px] border border-[#d7d4ca] bg-[#fffdfa] p-5 shadow-[0_1px_2px_rgba(28,31,26,0.04)]">
+                    <div className="flex gap-4">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[11px] border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
+                        <Icon size={18} />
+                      </span>
+                      <div>
+                        <h3 className="text-base font-semibold text-[#171a15]">{rule.title}</h3>
+                        <p className="mt-2 text-sm leading-relaxed text-[#5b615a]">{rule.body}</p>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </article>
+                </Reveal>
               );
             })}
-            <div className="rounded-2xl border border-line bg-ink p-5">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="max-w-2xl text-sm font-semibold leading-6 text-primary">
-                  Real replay modes, Golden replay, and CI replay require an active provider key. Stub replay remains sanity-only.
+          </div>
+        </div>
+      </Section>
+
+      <Section id="receipts" className="bg-[#fbfcfa] py-14 md:py-20">
+        <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+          <Reveal>
+            <div className="rounded-[20px] border border-[#d7d4ca] bg-[#fffdfa] p-5 shadow-[0_1px_2px_rgba(28,31,26,0.04)]">
+              <div className="grid gap-3">
+                {[
+                  ['policy_snapshot', 'approval required for admin role'],
+                  ['approval_trail', 'owner approved from dashboard'],
+                  ['runner_event', 'scoped credential executed once'],
+                  ['source_comparison', 'directory role matched'],
+                  ['evidence_hash', 'sha256:7f3a9e10...'],
+                ].map(([key, value]) => (
+                  <div key={key} className="grid gap-2 rounded-[12px] border border-[#dedacf] bg-[#f8f7f2] px-4 py-3 sm:grid-cols-[11rem_1fr]">
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#777266]">{key}</span>
+                    <span className="text-sm font-semibold text-[#171a15]">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+          <SectionHeader
+            icon={FileCheck2}
+            eyebrow="Receipts"
+            title="Treat proof as an artifact your team can inspect."
+            copy="A receipt should carry policy context, approval state, runner execution, source comparison, and evidence hash. That is what makes autonomy reviewable after the moment has passed."
+          />
+        </div>
+      </Section>
+
+      <Section id="troubleshooting" className="bg-[#f3f4ee] py-14 md:py-20">
+        <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr]">
+          <SectionHeader
+            icon={Server}
+            eyebrow="Troubleshooting"
+            title="Debug the loop by state, not guesswork."
+            copy="When something looks stuck, locate the state: decision, approval, runner, verifier, or receipt. The fix usually belongs to that boundary."
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            {troubleshooting.map(([title, body], index) => (
+              <Reveal key={title} delay={index * 0.03}>
+                <article className="h-full rounded-[16px] border border-[#d7d4ca] bg-[#fffdfa] p-5 shadow-[0_1px_2px_rgba(28,31,26,0.04)]">
+                  <h3 className="text-base font-semibold text-[#171a15]">{title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-[#5b615a]">{body}</p>
+                </article>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      <section className="w-full bg-[#fbfcfa] px-4 py-20 text-[#171a15]">
+        <Reveal>
+          <div className="mx-auto max-w-6xl rounded-[24px] border border-[#d7d4ca] bg-[#fffdfa] p-8 shadow-[0_40px_90px_-52px_rgba(28,31,26,0.38)] md:p-12">
+            <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl">
+                <Eyebrow icon={LockKeyhole}>First protected action</Eyebrow>
+                <h2 className="mt-3 text-[2.15rem] font-semibold leading-[1.05] tracking-[-0.03em] text-[#151713] md:text-[3.15rem]">
+                  Put one real action behind Zroky.
+                </h2>
+                <p className="mt-4 text-[1.04rem] leading-[1.65] text-[#5b615a]">
+                  Start with the operation your team would never want an agent to run invisibly.
                 </p>
-                <a href="/pricing" className="btn-ghost shrink-0">
-                  See replay pricing
-                  <ArrowRight className="h-4 w-4" />
-                </a>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <PrimaryButton href={SIGN_UP_URL}>
+                  Start free <ArrowRight size={15} />
+                </PrimaryButton>
+                <GhostButton href="/pricing">Review plans</GhostButton>
               </div>
             </div>
           </div>
-        </div>
-      </SectionReveal>
-
-      <SectionReveal className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="mx-auto max-w-[92rem]">
-          <SectionHeader
-            label="Reference paths"
-            title="Use the integration resource that maps to your rollout."
-            body="These links are the implementation paths for capture, routing, and CI gates. Choose the one that gets your first production failure into Zroky fastest."
-          />
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {references.map((reference) => {
-              const Icon = reference.icon;
-              return (
-                <a key={reference.title} href={reference.href} target="_blank" rel="noreferrer" className="card group p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-white/[0.04]">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </span>
-                    <Github className="h-4 w-4 text-tertiary" />
-                  </div>
-                  <h3 className="mt-5 text-base font-semibold text-primary">{reference.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-secondary">{reference.body}</p>
-                  <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                    View integration
-                    <ExternalLink className="h-4 w-4 transition duration-200 group-hover:translate-x-0.5" />
-                  </span>
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      </SectionReveal>
-
-      <SectionReveal className="px-4 pb-24 pt-6 sm:px-6 lg:px-8">
-        <div className="card mx-auto max-w-[92rem] overflow-hidden p-6 sm:p-8 lg:p-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <span className="eyebrow">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                first protected flow
-              </span>
-              <h2 className="mt-5 text-balance text-3xl font-semibold leading-tight text-primary sm:text-5xl">
-                Protect your first agent flow.
-              </h2>
-              <p className="mt-4 text-base leading-8 text-secondary">
-                Capture the failure, replay the fix, promote the proof, and let CI remember what production already taught you.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <a href={SIGN_UP_URL} className="btn-primary">
-                Protect your first agent flow
-                <ArrowRight className="h-4 w-4" />
-              </a>
-              <a href="/pricing" className="btn-ghost">
-                Review plans
-              </a>
-            </div>
-          </div>
-        </div>
-      </SectionReveal>
+        </Reveal>
+      </section>
     </div>
   );
 }

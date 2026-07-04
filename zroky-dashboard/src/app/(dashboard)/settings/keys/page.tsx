@@ -4,10 +4,17 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
   Copy,
+  Database,
   KeyRound,
+  LockKeyhole,
   Plug,
   RotateCcw,
+  Terminal,
 } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
@@ -15,6 +22,7 @@ import {
   SettingsHero,
   SettingsScaffold,
 } from "@/components/settings-scaffold";
+import { StatusPill } from "@/components/status-pill";
 import { formatDateTime } from "@/lib/format";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 import {
@@ -33,6 +41,26 @@ const pythonSdkInstall = "pip install zroky";
 
 function configuredApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
+}
+
+function keyStatus(key: ApiKeyResponse): "revoked" | "expired" | "active" {
+  if (key.revoked) return "revoked";
+  if (key.expired) return "expired";
+  return "active";
+}
+
+function keyStatusTone(key: ApiKeyResponse): "success" | "danger" | "neutral" {
+  const status = keyStatus(key);
+  if (status === "active") return "success";
+  if (status === "revoked" || status === "expired") return "danger";
+  return "neutral";
+}
+
+function keyStatusLabel(key: ApiKeyResponse): string {
+  const status = keyStatus(key);
+  if (status === "active") return "Active";
+  if (status === "expired") return "Expired";
+  return "Revoked";
 }
 
 function ApiKeysContent() {
@@ -128,6 +156,8 @@ function ApiKeysContent() {
   const loading = projectQuery.isLoading || keysQuery.isLoading;
   const error = projectQuery.error?.message ?? keysQuery.error?.message ?? null;
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
+  const revokedKeys = keys.filter((key) => key.revoked);
+  const expiredKeys = keys.filter((key) => key.expired);
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const snippetProjectId = projectId || "proj_...";
   const apiBaseUrl = configuredApiBaseUrl();
@@ -140,6 +170,7 @@ export ZROKY_PROJECT="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
 export ZROKY_INGEST_URL="${apiBaseUrl}"`;
   const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
+  const runtimePosture = error ? "Needs refresh" : hasActiveKey ? "Runtime ready" : "Setup required";
 
   const keyTableSection = (
     <section className="panel keys-table-panel">
@@ -157,61 +188,55 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
       )}
 
       {!loading && !error && keys.length > 0 && (
-        <div className="table-wrap">
-          <table className="settings-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Prefix</th>
-                <th>Scope</th>
-                <th>Expires</th>
-                <th>Created</th>
-                <th>Last used</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((key) => (
-                <tr key={key.key_id} className={key.revoked ? "keys-row-revoked" : ""}>
-                  <td>{key.name}</td>
-                  <td className="mono">{key.key_prefix}...</td>
-                  <td>{key.scopes?.join(", ") || "project:member"}</td>
-                  <td>{key.expires_at ? formatDateTime(key.expires_at) : "Never"}</td>
-                  <td>{formatDateTime(key.created_at)}</td>
-                  <td>{key.last_used_at ? formatDateTime(key.last_used_at) : "Never"}</td>
-                  <td>
-                    {key.revoked ? (
-                      <span className="pill pill-red">Revoked</span>
-                    ) : key.expired ? (
-                      <span className="pill pill-red">Expired</span>
-                    ) : (
-                      <span className="pill pill-green">Active</span>
-                    )}
-                  </td>
-                  <td>
-                    {!key.revoked && !key.expired && (
-                      <div className="actions">
-                        <DashboardButton
-                          type="button"
-                          size="sm"
-                          variant="soft"
-                          icon={<RotateCcw />}
-                          disabled={rotateMutation.isPending}
-                          onClick={() => setRotateTarget(key)}
-                        >
-                          Rotate
-                        </DashboardButton>
-                        <DashboardButton type="button" size="sm" variant="danger" onClick={() => setRevokeTarget(key)}>
-                          Revoke
-                        </DashboardButton>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="keys-card-list">
+          {keys.map((key) => (
+            <article key={key.key_id} className={`keys-card-row is-${keyStatus(key)}`}>
+              <div className="keys-card-icon" aria-hidden="true">
+                {keyStatus(key) === "active" ? <CheckCircle2 /> : <AlertTriangle />}
+              </div>
+
+              <div className="keys-card-main">
+                <div className="keys-card-title-row">
+                  <strong>{key.name}</strong>
+                  <StatusPill value={keyStatus(key)} label={keyStatusLabel(key)} tone={keyStatusTone(key)} />
+                </div>
+                <div className="keys-card-meta">
+                  <span className="mono">{key.key_prefix}...</span>
+                  <span>{key.scopes?.join(", ") || "project:member"}</span>
+                  <span>Created {formatDateTime(key.created_at)}</span>
+                </div>
+              </div>
+
+              <div className="keys-card-facts" aria-label={`${key.name} timing`}>
+                <span>
+                  <small>Expires</small>
+                  <strong>{key.expires_at ? formatDateTime(key.expires_at) : "Never"}</strong>
+                </span>
+                <span>
+                  <small>Last used</small>
+                  <strong>{key.last_used_at ? formatDateTime(key.last_used_at) : "Never"}</strong>
+                </span>
+              </div>
+
+              {!key.revoked && !key.expired ? (
+                <div className="keys-card-actions">
+                  <DashboardButton
+                    type="button"
+                    size="sm"
+                    variant="soft"
+                    icon={<RotateCcw />}
+                    disabled={rotateMutation.isPending}
+                    onClick={() => setRotateTarget(key)}
+                  >
+                    Rotate
+                  </DashboardButton>
+                  <DashboardButton type="button" size="sm" variant="danger" onClick={() => setRevokeTarget(key)}>
+                    Revoke
+                  </DashboardButton>
+                </div>
+              ) : null}
+            </article>
+          ))}
         </div>
       )}
     </section>
@@ -233,6 +258,63 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
         pill={hasActiveKey ? `${activeKeys.length || 1} active` : "No active key"}
         updatedLabel={loading ? "Loading" : "Settings live"}
       />
+
+      <section className="keys-command-card" aria-label="Runtime access command center">
+        <div className="keys-command-main">
+          <span className="keys-command-kicker">
+            <LockKeyhole aria-hidden="true" />
+            Runtime access command center
+          </span>
+          <h2>Project keys let agents reach Zroky without widening human authority.</h2>
+          <p>
+            Create short-lived runtime credentials, copy the secret once, and rotate or revoke active keys when a runner changes.
+          </p>
+          <div className="keys-command-rail" aria-label="Runtime key guarantees">
+            <span>
+              <Terminal aria-hidden="true" />
+              SDK runtime only
+            </span>
+            <span>
+              <Database aria-hidden="true" />
+              Prefix display only
+            </span>
+            <span>
+              <RotateCcw aria-hidden="true" />
+              Rotate without changing project ID
+            </span>
+          </div>
+        </div>
+
+        <aside className="keys-posture-card" aria-label="API key posture">
+          <div className="keys-posture-head">
+            <span>Key posture</span>
+            <strong>{runtimePosture}</strong>
+          </div>
+          <div className="keys-posture-grid">
+            <div>
+              <Activity aria-hidden="true" />
+              <span>
+                <small>Active keys</small>
+                <strong>{activeKeys.length}</strong>
+              </span>
+            </div>
+            <div>
+              <Clock3 aria-hidden="true" />
+              <span>
+                <small>Expired keys</small>
+                <strong>{expiredKeys.length}</strong>
+              </span>
+            </div>
+            <div>
+              <AlertTriangle aria-hidden="true" />
+              <span>
+                <small>Revoked keys</small>
+                <strong>{revokedKeys.length}</strong>
+              </span>
+            </div>
+          </div>
+        </aside>
+      </section>
 
       {newKey && (
         <section className="panel keys-newkey-banner" aria-label="One-time project key">

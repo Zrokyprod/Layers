@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 const protectedSetupHref = "/signup?source=pilot&intent=protect-agent&plan=pro";
-const dashboardSetupHref = "/settings/keys?intent=protect-agent&source=pilot&plan=pro";
+const dashboardSetupHref = "/agents/setup?intent=protect-agent&source=pilot&plan=pro";
 
 const proofCards = [
   {
@@ -46,10 +46,10 @@ const installCommands = [
 const handoffSteps = [
   {
     Icon: KeyRound,
-    title: "Create protected-agent key",
-    body: "Open dashboard setup with pilot intent, choose the closest agent type, and copy the mandate plus SDK wrapper.",
+    title: "Create protected-agent setup",
+    body: "Open dashboard setup with pilot intent, create the runtime key, and connect the first SDK wrapper.",
     href: dashboardSetupHref,
-    cta: "Open key setup",
+    cta: "Open agent setup",
   },
   {
     Icon: Plug,

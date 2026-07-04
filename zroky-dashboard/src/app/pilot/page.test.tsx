@@ -45,13 +45,13 @@ describe("PilotPage", () => {
       "/signup?source=pilot&intent=protect-agent&plan=pro"
     );
     expect(screen.getByRole("link", { name: "Open dashboard runbook" }).getAttribute("href")).toBe(
-      "/settings/keys?intent=protect-agent&source=pilot&plan=pro"
+      "/agents/setup?intent=protect-agent&source=pilot&plan=pro"
     );
     expect(screen.getByText("Pre-action stop")).toBeInTheDocument();
     expect(screen.getByText("System-of-record match")).toBeInTheDocument();
     expect(screen.getByText("Exportable evidence")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open key setup" }).getAttribute("href")).toBe(
-      "/settings/keys?intent=protect-agent&source=pilot&plan=pro"
+    expect(screen.getByRole("link", { name: "Open agent setup" }).getAttribute("href")).toBe(
+      "/agents/setup?intent=protect-agent&source=pilot&plan=pro"
     );
     expect(screen.getByRole("link", { name: "Open connector setup" }).getAttribute("href")).toBe(
       "/integrations#ledger-refund-connector"

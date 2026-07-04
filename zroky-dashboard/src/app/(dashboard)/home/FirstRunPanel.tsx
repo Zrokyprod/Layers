@@ -25,7 +25,7 @@ const STEPS = [
     label: "Install SDK",
     detail: "Add the verified action client to one agent runtime.",
     completeDetail: "Project key is ready for the SDK runtime.",
-    href: "/settings/keys",
+    href: "/agents/setup?intent=protect-agent&source=home",
     icon: Code2,
   },
   {
@@ -141,7 +141,7 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
           })}
         </div>
         <div className="mc-first-run-actions">
-          <DashboardButtonLink href="/agents/setup" icon={<ShieldCheck />} variant="primary">
+          <DashboardButtonLink href="/agents/setup?intent=protect-agent&source=home" icon={<ShieldCheck />} variant="primary">
             Start agent setup
           </DashboardButtonLink>
           <DashboardButtonLink href="/settings/keys" icon={<KeyRound />} variant="soft">

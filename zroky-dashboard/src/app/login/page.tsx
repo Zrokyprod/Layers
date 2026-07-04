@@ -72,7 +72,7 @@ function LoginForm() {
     <AuthCard
       eyebrow="Existing workspace"
       title="Sign in to Zroky"
-      subtitle="Access traces, replays, and release gates."
+      subtitle="Access policy gates, approvals, source proof, and signed evidence."
       footer={<Link href={buildSignupHref(nextPath)} className="auth-link">Don&apos;t have an account? Sign up</Link>}
     >
       {visibleError && <div className="auth-banner auth-banner-error">{visibleError}</div>}
@@ -108,6 +108,7 @@ function LoginForm() {
         items={[
           "OAuth and password supported",
           "Protected workspace session",
+          "Receipts and evidence stay attached",
         ]}
       />
     </AuthCard>

@@ -65,18 +65,18 @@ function SignupForm() {
 
   return (
     <AuthCard
-      eyebrow={protectedAgentIntent ? "Protected agent setup" : "New reliability workspace"}
+      eyebrow={protectedAgentIntent ? "Protected agent setup" : "New control-plane workspace"}
       title="Create your Zroky workspace"
       subtitle={
         protectedAgentIntent
-          ? "Create a project key and connect your first protected agent after signup."
-          : "Start capturing failed agent runs."
+          ? "Create a runtime key, connect your first agent, and send the first protected action."
+          : "Start with one governed action, then expand by policy."
       }
       footer={<Link href={signInHref} className="auth-link">Already have an account? Sign in</Link>}
     >
       {protectedAgentIntent && (
         <div className="auth-banner auth-banner-info">
-          Next step: project key setup for the agent you want Zroky to protect.
+          Next step: guided agent setup for the runtime you want Zroky to protect.
         </div>
       )}
       <div className="auth-oauth-stack">
@@ -119,12 +119,12 @@ function SignupForm() {
         items={
           protectedAgentIntent
             ? [
-                "Next step opens project key setup",
-                "First capture works with a project key only",
+                "Next step opens agent setup",
+                "Key, SDK, and first receipt stay in one path",
               ]
             : [
                 "Email verification protects workspace access",
-                "Replay and CI gates stay connected",
+                "First protected action can start free",
               ]
         }
       />

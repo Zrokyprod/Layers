@@ -14,10 +14,14 @@ function HandoffContent() {
 
   return (
     <AuthShell>
-      <AuthCard title="Signing you in" subtitle="Completing secure access.">
+      <AuthCard
+        eyebrow="Secure handoff"
+        title="Completing workspace handoff"
+        subtitle="Returning you to governed workspace access."
+      >
         <div className="auth-status">
           <div className="spinner" />
-          <p>Redirecting to dashboard...</p>
+          <p>Redirecting to sign in...</p>
         </div>
       </AuthCard>
     </AuthShell>

@@ -3,30 +3,37 @@ import { expect, test } from "@playwright/test";
 import { expectDashboardShell, expectNoHorizontalOverflow } from "./helpers";
 
 test.describe("agent control setup wizard", () => {
-  test("renders the protected-action setup flow and local readiness simulation", async ({ page }) => {
-    await page.goto("/agents/setup");
+  test("renders the guided protected-agent setup flow", async ({ page }) => {
+    await page.goto("/agents/setup?intent=protect-agent&source=e2e");
     await expectDashboardShell(page);
 
+    const quickstart = page.getByLabel("Protect an agent");
+
     await expect(page.getByText("Agent Control Setup")).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Protect your first agent action/i })).toBeVisible();
-    await expect(page.getByLabel("Protection plan")).toContainText("Internal API change");
-    await expect(page.getByLabel("Setup checklist")).toContainText("2 items left");
+    await expect(page.getByRole("heading", { name: /Protect an agent|Waiting for the first protected action|Agent is live/i })).toBeVisible();
+    await expect(quickstart.locator('[data-step="key"]')).toContainText("Project key");
+    await expect(quickstart.locator('[data-step="connect"]')).toContainText("Connect");
+    await expect(quickstart.locator('[data-step="run"]')).toContainText("Run");
+    await expect(quickstart.locator('[data-step="live"]')).toContainText(/What's next|You're live/);
 
-    await page.getByRole("button", { name: /Protected Action/i }).click();
-    await expect(page.getByRole("heading", { name: "Protected Action" })).toBeVisible();
-    await page.getByLabel("Agent tools or function names").fill("stripe.refunds.create, zendesk.tickets.update, sendgrid.messages.send, deploy.service");
-    await page.getByRole("button", { name: /Detect risky actions/i }).click();
-    await expect(page.getByLabel("Detected risky actions")).toContainText("Refund customer payment");
-    await expect(page.getByLabel("Detected risky actions")).toContainText("Update or close support ticket");
-    await expect(page.getByLabel("Available launch tools")).toContainText("Dashboard approvals");
+    const createProjectKey = page.getByRole("button", { name: "Create project key" });
+    if (await createProjectKey.isVisible().catch(() => false)) {
+      await createProjectKey.click();
+      await expect(page.getByText("Runtime environment")).toBeVisible({ timeout: 30_000 });
+    } else {
+      await expect(page.getByText("Runtime key ready")).toBeVisible();
+    }
+    await expect(page.getByLabel("Agent name")).toBeVisible();
+    await expect(page.getByLabel("Framework")).toBeVisible();
+    await expect(quickstart.getByLabel("Environment", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Zroky control loop")).toContainText("Propose");
+    await expect(page.getByLabel("Zroky control loop")).toContainText("Receipt");
 
-    await page.getByRole("button", { name: /Proof & Readiness Test/i }).click();
-    await page.getByRole("button", { name: /Run local readiness test/i }).click();
-    await expect(page.getByRole("button", { name: /Local readiness test passed/i })).toBeVisible();
-    await expect(page.getByLabel("Sample Action Receipt")).toContainText("Preview generated");
-    await page.getByText("Advanced implementation snippets").click();
-    await expect(page.getByText("SDK capture starter")).toBeVisible();
-    await expect(page.getByText("Mandate starter")).toBeVisible();
+    await quickstart.getByLabel("Agent name").fill("E2E Setup Agent");
+    await page.getByRole("button", { name: /Create & enable protection/i }).click();
+    await expect(page.getByText(/is protected with the safe default policy/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Minimal SDK starter")).toBeVisible();
+    await expect(page.getByLabel("Live capture status")).toContainText("SDK ready");
 
     await expectNoHorizontalOverflow(page);
   });
