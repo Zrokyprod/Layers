@@ -79,11 +79,17 @@ def _detect_token_overflow(payload: Mapping[str, Any]) -> dict[str, Any] | None:
         and estimated_prompt_tokens / max(model_limit, 1) > TOKEN_OVERFLOW_ESTIMATE_THRESHOLD_RATIO
         and _estimate_detection_allowed(payload)
     )
+    usage_near_limit = (
+        model_limit > 0
+        and prompt_tokens > 0
+        and prompt_tokens / max(model_limit, 1) > TOKEN_OVERFLOW_ESTIMATE_THRESHOLD_RATIO
+        and _estimate_detection_allowed(payload)
+    )
     detection_signals = _token_overflow_detection_signals(
         error_code=error_code,
         matched_error_pattern=matched_error_pattern,
         usage_over_limit=usage_over_limit,
-        estimate_near_limit=estimate_near_limit,
+        estimate_near_limit=estimate_near_limit or usage_near_limit,
     )
 
     if "error_code" in detection_signals:
@@ -98,9 +104,9 @@ def _detect_token_overflow(payload: Mapping[str, Any]) -> dict[str, Any] | None:
         confidence = _RULE_CONFIDENCE_TOKEN_OVERFLOW
     elif "token_estimate" in detection_signals:
         detected_by = "token_estimate"
-        signal_tokens = estimated_prompt_tokens
+        signal_tokens = estimated_prompt_tokens or prompt_tokens
         confidence = _token_estimate_confidence(
-            estimated_tokens=estimated_prompt_tokens, model_limit=model_limit,
+            estimated_tokens=signal_tokens, model_limit=model_limit,
         )
     else:
         return None
@@ -183,6 +189,7 @@ def _detect_token_overflow(payload: Mapping[str, Any]) -> dict[str, Any] | None:
             "history_tokens": history_tokens,
             "threshold_prompt_tokens_gt_model_limit": usage_over_limit,
             "threshold_estimated_prompt_tokens_gt_90pct_model_limit": estimate_near_limit,
+            "threshold_prompt_tokens_gt_90pct_model_limit": usage_near_limit,
         },
     }
 
@@ -195,7 +202,12 @@ def _token_overflow_detection_signals(
     estimate_near_limit: bool,
 ) -> list[str]:
     signals: list[str] = []
-    if error_code == "TOKEN_OVERFLOW":
+    if error_code in {
+        "TOKEN_OVERFLOW",
+        "CONTEXT_LENGTH_EXCEEDED",
+        "TOKEN_LIMIT_EXCEEDED",
+        "CONTEXT_LIMIT_EXCEEDED",
+    }:
         signals.append("error_code")
     if matched_error_pattern is not None:
         signals.append("error_message_pattern")

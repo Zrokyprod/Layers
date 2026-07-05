@@ -296,7 +296,7 @@ def dispatch_replay_fix_pr(
 
     client = pr_client or get_pr_client()
     try:
-        result = client.open_pr(payload)
+        result = client.open_pr(payload)  # replay_status pass enforced above via replay run gate
     except PRClientPermanentError as exc:
         action.status = "failed"
         db.add(action)

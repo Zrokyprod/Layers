@@ -125,10 +125,22 @@ def _detect_loop(payload: Mapping[str, Any], now: datetime) -> dict[str, Any] | 
         tool_cycle_repeat_count >= 3 and tool_window_seconds > 0 and not tool_state_changed
     )
 
+    simple_prompt_repeat = (
+        repeat_count >= 3
+        and repeat_window_seconds > 0
+        and repeat_window_seconds <= 300
+    )
+    simple_tool_cycle = (
+        tool_cycle_repeat_count >= 3
+        and tool_window_seconds > 0
+        and tool_window_seconds <= 300
+        and not tool_state_changed
+    )
+
     score_result = _loop_score(
-        prompt_repeat=repeat_count >= 5 and repeat_window_seconds <= 90 and no_progress,
+        prompt_repeat=simple_prompt_repeat,
         output_signal=output_signal_key,
-        tool_cycle_repeat=tool_cycle_detected,
+        tool_cycle_repeat=tool_cycle_detected or simple_tool_cycle,
         retry_pattern=retry_count >= 3 and (repeated_retry_reason_count >= 3 or max_steps_reached),
         no_progress=no_progress,
     )
@@ -275,9 +287,9 @@ def _loop_score(
     no_progress: bool,
 ) -> dict[str, Any]:
     weights = {
-        "prompt_repeat": 0.20,
+        "prompt_repeat": 0.70,
         "output_fingerprint": 0.35,
-        "tool_cycle": 0.30,
+        "tool_cycle": 0.75,
         "retry_pattern": 0.15,
     }
     detected_by: list[str] = []

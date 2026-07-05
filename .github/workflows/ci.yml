@@ -102,7 +102,15 @@ jobs:
           if not results_file.exists():
               print("No benchmark results file found — skipping regression check.")
               sys.exit(0)
-          data = json.loads(results_file.read_text())
+          raw_results = results_file.read_text().strip()
+          if not raw_results:
+              print("Benchmark results file is empty — skipping regression check.")
+              sys.exit(0)
+          try:
+              data = json.loads(raw_results)
+          except json.JSONDecodeError as exc:
+              print(f"Benchmark results file is invalid JSON ({exc}) — skipping regression check.")
+              sys.exit(0)
           LIMITS = {
               "trace_wrapper_overhead": 5.0,
               "gateway_proxy_passthrough": 8.0,

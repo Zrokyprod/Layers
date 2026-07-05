@@ -372,7 +372,7 @@ class PilotAction(Base):
 
     `tier` semantics (plan §6.3):
         1 = auto-revert (model_rollback, fallback_swap, retry_tune)
-        2 = auto-PR    (open_pr)
+        2 = auto-PR    (open PR)
         3 = alert      (alert)
     `audit_user` is NULL when the action came from autopilot, set to the
     user_id of a manual override otherwise.

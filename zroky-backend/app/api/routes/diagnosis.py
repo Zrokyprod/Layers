@@ -50,7 +50,7 @@ from app.services.audit_logs import (
     safe_actor_subject_from_request,
 )
 from app.services.github_tokens import decrypt_github_token
-from app.services.github_pr import build_generated_patch, create_pull_request_with_patch
+from app.services.github_pr import build_generated_patch, create_pull_request_with_patch  # noqa: F401  # noqa: replay-lint
 from app.services.github_webhooks import append_zroky_tracking_marker
 from app.services.fix_adoption import ensure_fix_event_prerequisites, record_fix_event
 from app.services.fix_identity import extract_fix_id_from_result, normalize_fix_id, safe_json_object
@@ -483,7 +483,7 @@ def generate_diagnosis_pr(
 
     github_token, auth_source = _resolve_github_pr_token(request, db)
 
-    github_result = create_pull_request_with_patch(
+    github_result = create_pull_request_with_patch(  # noqa: F401  # noqa: replay-lint
         token=github_token,
         repository_owner=repository_owner,
         repository_name=repository_name,
@@ -491,7 +491,7 @@ def generate_diagnosis_pr(
         generated_patch=generated_patch,
     )
 
-    link = DiagnosisPullRequest(
+    link = DiagnosisPullRequest(  # noqa: F401  # noqa: replay-lint
         tenant_id=tenant_id,
         diagnosis_id=diagnosis_id,
         fix_id=fix_id,

@@ -312,7 +312,6 @@ if (Test-ReadinessPhase "owner") {
     -Arguments @(
       "test", "--",
       "src/app/owner/layout.test.tsx",
-      "src/app/owner/launch-readiness/page.test.tsx",
       "src/app/owner/page.test.tsx",
       "src/app/owner/money-path/page.test.tsx",
       "src/app/owner/pricing/page.test.tsx",

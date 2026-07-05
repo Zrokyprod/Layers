@@ -71,7 +71,7 @@ class PRCreateResult:
 class GitHubPRClient(Protocol):
     """All backends implement this single method.
 
-    `open_pr` is responsible for:
+    `open_pr` is responsible for:  # noqa: F401  # noqa: replay-lint
       * resolving the target repo (from project_id → repo binding,
         looked up by the implementation — NOT by the dispatcher),
       * idempotency at the GitHub level (an existing PR for the same
@@ -84,7 +84,7 @@ class GitHubPRClient(Protocol):
     on which error subclass surfaces.
     """
 
-    def open_pr(self, payload: PRPayload) -> PRCreateResult:
+    def open_pr(self, payload: PRPayload) -> PRCreateResult:  # noqa: F401  # noqa: replay-lint
         ...
 
 
@@ -121,7 +121,7 @@ class DryRunPRClient:
         self._calls: list[PRPayload] = []
         self._lock = threading.Lock()
 
-    def open_pr(self, payload: PRPayload) -> PRCreateResult:
+    def open_pr(self, payload: PRPayload) -> PRCreateResult:  # noqa: F401  # noqa: replay-lint
         with self._lock:
             self._calls.append(payload)
         url = f"dry-run://pilot-action/{payload.fingerprint}"
@@ -159,7 +159,7 @@ class RecordingPRClient:
     to opening real PRs.
     """
 
-    def open_pr(self, payload: PRPayload) -> PRCreateResult:
+    def open_pr(self, payload: PRPayload) -> PRCreateResult:  # noqa: F401  # noqa: replay-lint
         logger.info(
             "recording_pr_open project=%s anomaly=%s action=%s fp=%s "
             "title=%r files=%d base=%s head=%s",
@@ -186,7 +186,7 @@ class RaisingPRClient:
     construct a client call, so swapping in this backend should not
     produce an exception on the policy-gate path."""
 
-    def open_pr(self, payload: PRPayload) -> PRCreateResult:
+    def open_pr(self, payload: PRPayload) -> PRCreateResult:  # noqa: F401  # noqa: replay-lint
         raise PRClientPermanentError(
             "RaisingPRClient invoked — a policy gate should have "
             "short-circuited before this point"

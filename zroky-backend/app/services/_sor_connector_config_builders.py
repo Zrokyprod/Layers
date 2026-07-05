@@ -42,6 +42,73 @@ def decrypt_connector_database_url(
     )
 
 
+def build_inline_ledger_refund_connector(
+    *,
+    base_url: str,
+    refund_id: str,
+    bearer_token: str | None,
+    path_template: str,
+    query: Mapping[str, Any] | None,
+    record_path: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+    allow_private_hosts: bool,
+) -> LedgerRefundApiConnector:
+    return LedgerRefundApiConnector(
+        base_url=base_url,
+        refund_id=refund_id,
+        bearer_token=bearer_token,
+        path_template=path_template,
+        query=query,
+        record_path=record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        allow_private_hosts=allow_private_hosts,
+    )
+
+
+def build_inline_customer_record_connector(
+    *,
+    base_url: str,
+    customer_id: str,
+    bearer_token: str | None,
+    path_template: str,
+    query: Mapping[str, Any] | None,
+    record_path: str | None,
+    timeout_seconds: float,
+    max_attempts: int,
+    allow_private_hosts: bool,
+) -> CustomerRecordApiConnector:
+    return CustomerRecordApiConnector(
+        base_url=base_url,
+        customer_id=customer_id,
+        bearer_token=bearer_token,
+        path_template=path_template,
+        query=query,
+        record_path=record_path,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        allow_private_hosts=allow_private_hosts,
+    )
+
+
+def build_inline_postgres_read_connector(
+    *,
+    database_url: str,
+    query: str,
+    params: Mapping[str, Any] | None,
+    timeout_seconds: float,
+    allow_private_hosts: bool,
+) -> PostgresReadOnlyConnector:
+    return PostgresReadOnlyConnector(
+        database_url=database_url,
+        query=query,
+        params=params,
+        timeout_seconds=timeout_seconds,
+        allow_private_hosts=allow_private_hosts,
+    )
+
+
 def build_ledger_refund_connector(
     row: SystemOfRecordConnectorConfig,
     *,

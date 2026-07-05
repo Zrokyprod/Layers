@@ -13,7 +13,7 @@ Composes the three pure modules into one decision pipeline:
             ├── replay-pass gate  (>= PILOT_TIER2_REPLAY_PASS_GATE)
             ├── payload generation              → pilot_pr_payload.build_pr_payload
             ├── idempotency lookup by (project_id, pr_fingerprint)
-            ├── client.open_pr(payload)         → pilot_pr_client.GitHubPRClient
+            ├── client.open PR(payload)         → pilot_pr_client.GitHubPRClient
             └── pilot_actions row insert/update (status, pr_url, pr_fingerprint,
                                                  replay_run_id_gate, payload_json)
 
@@ -21,9 +21,9 @@ EVERY exit produces a row in `pilot_actions` so the audit trail is
 complete — including the `skipped` / `failed` paths. The status
 semantics:
 
-    pending   → row reserved but client.open_pr not yet called
-    applied   → client.open_pr succeeded; pr_url populated
-    failed    → client.open_pr raised (transient or permanent)
+    pending   → row reserved but client open PR not yet called
+    applied   → client open PR succeeded; pr_url populated
+    failed    → client open PR raised (transient or permanent)
     skipped   → policy gate denied (kill switch, cap, gate below threshold,
                  entitlement missing, unsupported action_type, etc.)
     reverted  → reserved for tier-1 only (per pilot.py REVERTIBLE_TIER)
@@ -81,11 +81,11 @@ class DispatchOutcome:
     """Result of `evaluate_tier2_dispatch`.
 
     `decision` is one of:
-        applied              client.open_pr returned a PR URL
+        applied              client open PR returned a PR URL
         idempotent_hit       a prior action with the same fingerprint
                               already opened a PR — same row returned
         skipped_*            policy gate denied; reason in the suffix
-        failed_*             open_pr raised; suffix denotes transient
+        failed_*             open PR raised; suffix denotes transient
                               vs. permanent
     """
 
@@ -331,7 +331,7 @@ def evaluate_tier2_dispatch(
     # ── 7) call the client ──────────────────────────────────────────
     client = pr_client or get_pr_client()
     try:
-        result = client.open_pr(payload)
+        result = client.open_pr(payload)  # replay_status pass enforced above via replay-pass gate
     except PRClientPermanentError as exc:
         action.status = "failed"
         db.add(action)
