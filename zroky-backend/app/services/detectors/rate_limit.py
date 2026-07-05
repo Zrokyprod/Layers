@@ -47,9 +47,21 @@ def _detect_rate_limit(payload: Mapping[str, Any]) -> dict[str, Any] | None:
     )
     provider_request_id = _as_str(_pick(payload, ("failure_reason", "provider_request_id"))) or None
 
-    is_rate_limit = status_code == 429 or any(
+    rate_limit_signals = (
+        "rate_limit",
+        "rate limit",
+        "too_many_requests",
+        "too many requests",
+        "quota",
+        "overload_error",
+        "requests_per_minute",
+        "tokens_per_minute",
+        "concurrent_requests",
+        "daily_limit",
+    )
+    is_rate_limit = status_code == 429 or retry_after_seconds > 0 or any(
         signal in error_code or signal in error_message
-        for signal in ("rate_limit", "too_many_requests", "quota")
+        for signal in rate_limit_signals
     )
     if not is_rate_limit:
         return None

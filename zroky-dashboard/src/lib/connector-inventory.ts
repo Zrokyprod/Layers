@@ -9,6 +9,8 @@ import type {
   PostgresReadConnectorStatusResponse,
   RazorpayRefundConnectorStatusResponse,
   SalesforceCrmConnectorStatusResponse,
+  ShopifyConnectorStatusResponse,
+  StripePaymentConnectorStatusResponse,
   StripeRefundConnectorStatusResponse,
   ZendeskTicketConnectorStatusResponse,
   ZohoCrmConnectorStatusResponse,
@@ -26,8 +28,10 @@ export type ProofConnectorId =
   | "zendesk_ticket"
   | "jira_issue"
   | "stripe_refund"
+  | "stripe_payment"
   | "razorpay_refund"
   | "netsuite_finance"
+  | "shopify_admin"
   | "ledger_template"
   | "customer_template"
   | "postgres_read";
@@ -43,8 +47,10 @@ export type ConnectorTemplateKind =
   | "zendesk_ticket"
   | "jira_issue"
   | "stripe_refund"
+  | "stripe_payment"
   | "razorpay_refund"
   | "netsuite_finance"
+  | "shopify_admin"
   | "refund_ledger"
   | "customer_record"
   | null;
@@ -136,6 +142,7 @@ export type ConnectorTransportGroup = {
 
 export type ConnectorBusinessCategory =
   | "payments"
+  | "commerce"
   | "crm"
   | "support_itsm"
   | "finance_erp"
@@ -174,8 +181,10 @@ type ProofConnectorStatus =
   | ZendeskTicketConnectorStatusResponse
   | JiraIssueConnectorStatusResponse
   | StripeRefundConnectorStatusResponse
+  | StripePaymentConnectorStatusResponse
   | RazorpayRefundConnectorStatusResponse
   | NetSuiteFinanceConnectorStatusResponse
+  | ShopifyConnectorStatusResponse
   | ZohoCrmConnectorStatusResponse
   | PostgresReadConnectorStatusResponse;
 
@@ -188,8 +197,10 @@ export type BuildConnectorInventoryInput = {
   zendesk?: ZendeskTicketConnectorStatusResponse | null;
   jira?: JiraIssueConnectorStatusResponse | null;
   stripe?: StripeRefundConnectorStatusResponse | null;
+  stripePayment?: StripePaymentConnectorStatusResponse | null;
   razorpay?: RazorpayRefundConnectorStatusResponse | null;
   netsuite?: NetSuiteFinanceConnectorStatusResponse | null;
+  shopify?: ShopifyConnectorStatusResponse | null;
   zoho?: ZohoCrmConnectorStatusResponse | null;
   postgres: PostgresReadConnectorStatusResponse | null;
   github: GithubConnectionStatusResponse | null;
@@ -239,6 +250,7 @@ const TRANSPORT_COPY: Record<ConnectorTransport, { label: string; description: s
 
 const CATEGORY_ORDER: ConnectorBusinessCategory[] = [
   "payments",
+  "commerce",
   "crm",
   "support_itsm",
   "finance_erp",
@@ -250,6 +262,10 @@ const CATEGORY_COPY: Record<ConnectorBusinessCategory, { label: string; descript
   payments: {
     label: "Payments",
     description: "Refund, payout, invoice, and payment-adjustment systems that prove money movement.",
+  },
+  commerce: {
+    label: "Commerce",
+    description: "Order, fulfillment, inventory, and storefront systems that prove commerce operations.",
   },
   crm: {
     label: "CRM",
@@ -281,8 +297,10 @@ const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCateg
   zendesk_ticket: "support_itsm",
   jira_issue: "support_itsm",
   stripe_refund: "payments",
+  stripe_payment: "payments",
   razorpay_refund: "payments",
   netsuite_finance: "finance_erp",
+  shopify_admin: "commerce",
   ledger_template: "payments",
   customer_template: "crm",
   postgres_read: "database_custom",
@@ -521,7 +539,14 @@ function registryConnectorIds(item: ToolRegistryResponse["verification_connector
     item.category,
   ].filter(Boolean).join(" "));
   const ids: ProofConnectorId[] = [];
-  if (haystack.includes("stripe")) ids.push("stripe_refund");
+  if (
+    haystack.includes("stripe_payment")
+    || haystack.includes("stripe payments")
+    || haystack.includes("paymentintent")
+    || haystack.includes("payment_intent")
+  ) ids.push("stripe_payment");
+  if (haystack.includes("stripe_refund") || (haystack.includes("stripe") && haystack.includes("refund"))) ids.push("stripe_refund");
+  if (haystack.includes("shopify")) ids.push("shopify_admin");
   if (haystack.includes("razorpay")) ids.push("razorpay_refund");
   if (haystack.includes("netsuite") || haystack.includes("procurement") || haystack.includes("finance")) ids.push("netsuite_finance");
   if (haystack.includes("hubspot")) ids.push("hubspot_crm");
@@ -864,6 +889,19 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       status: input.stripe ?? null,
     },
     {
+      id: "stripe_payment",
+      transport: "rest_http",
+      templateKind: "stripe_payment",
+      title: "Stripe payment verifier",
+      category: "Native REST verifier",
+      description: "Native Stripe PaymentIntent reader for payment, payout, invoice, and charge-status proof. Uses a restricted Stripe secret key.",
+      href: "/integrations?connector=stripe_payment",
+      ctaLabel: "Configure Stripe Payment",
+      connectorTypes: ["stripe_payment", "stripe_payments", "payment_intent", "paymentintent", "system_of_record.stripe_payment"],
+      supportedActionTypes: ["payment_adjustment", "vendor_payout", "invoice_spend_approval", "payment", "payout", "invoice", "charge"],
+      status: input.stripePayment ?? null,
+    },
+    {
       id: "razorpay_refund",
       transport: "rest_http",
       templateKind: "razorpay_refund",
@@ -898,6 +936,19 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
         "internal_api_mutation",
       ],
       status: input.netsuite ?? null,
+    },
+    {
+      id: "shopify_admin",
+      transport: "rest_http",
+      templateKind: "shopify_admin",
+      title: "Shopify Admin verifier",
+      category: "Native REST verifier",
+      description: "Shopify Admin order reader for order, fulfillment, cancellation, discount, and inventory proof.",
+      href: "/integrations?connector=shopify_admin",
+      ctaLabel: "Configure Shopify",
+      connectorTypes: ["shopify_admin", "shopify", "shopify_order", "system_of_record.shopify_admin"],
+      supportedActionTypes: ["order_cancel", "inventory_adjust", "discount_issue", "fulfillment", "refund", "commerce", "order"],
+      status: input.shopify ?? null,
     },
     {
       id: "ledger_template",

@@ -26,8 +26,8 @@ const tickets: OwnerSupportTicketsResponse = {
       user_id: "user_1",
       subject: "email:user@example.com",
       email: "user@example.com",
-      title: "Replay gate failed",
-      description: "CI gate failed after the prompt change.",
+      title: "Release check failed",
+      description: "Release check failed after the prompt change.",
       category: "ci",
       priority: "high",
       status: "open",
@@ -47,7 +47,7 @@ const detail: OwnerSupportTicketDetailResponse = {
       message_id: "msg_1",
       sender_type: "user",
       sender_subject: "email:user@example.com",
-      body: "The CI gate is blocking my PR.",
+      body: "The release check is blocking my PR.",
       is_internal: false,
       created_at: "2026-06-05T10:00:00Z",
     },
@@ -133,20 +133,20 @@ describe("OwnerSupportPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders ticket money-path evidence in list and detail", () => {
+  it("renders ticket control evidence in list and detail", () => {
     mockHooks();
 
     render(<OwnerSupportPage />);
 
-    expect(screen.getByText("Product Evidence")).toBeInTheDocument();
-    expect(screen.getAllByText("Review blocked CI").length).toBeGreaterThan(0);
+    expect(screen.getByText("Control Evidence")).toBeInTheDocument();
+    expect(screen.getAllByText("Review release block").length).toBeGreaterThan(0);
     expect(screen.getByText("Ticket Tenant")).toBeInTheDocument();
-    expect(screen.getByText("Provider: configured (1)")).toBeInTheDocument();
-    expect(screen.getByText("Replay quota: 90 / 100")).toBeInTheDocument();
+    expect(screen.getByText("Connector: configured (1)")).toBeInTheDocument();
+    expect(screen.getByText("Proof quota: 90 / 100")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Project detail" }).getAttribute("href")).toBe("/owner/projects/proj_ticket");
   });
 
-  it("does not synthesize product evidence when money-path health fails", () => {
+  it("does not synthesize control evidence when health fails", () => {
     mockHooks(new Error("HTTP 500"));
 
     render(<OwnerSupportPage />);
@@ -154,6 +154,6 @@ describe("OwnerSupportPage", () => {
     expect(screen.getAllByText("HTTP 500").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Evidence unavailable").length).toBeGreaterThan(0);
     expect(screen.queryByText("Ticket Tenant")).toBe(null);
-    expect(screen.queryByText("Provider: configured (1)")).toBe(null);
+    expect(screen.queryByText("Connector: configured (1)")).toBe(null);
   });
 });

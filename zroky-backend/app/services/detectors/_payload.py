@@ -164,12 +164,20 @@ def _resolve_model_context_limit_details(payload: Mapping[str, Any]) -> dict[str
     model = _as_str(_pick(payload, ("model",), ("request", "model")))
 
     explicit_limit = _as_int(
-        _pick(payload, ("model_limit_tokens",), ("usage", "model_limit_tokens")),
+        _pick(
+            payload,
+            ("model_limit_tokens",),
+            ("context_limit",),
+            ("usage", "model_limit_tokens"),
+            ("usage", "context_limit"),
+            ("token_usage", "model_limit_tokens"),
+            ("token_usage", "context_limit"),
+        ),
     )
     if explicit_limit > 0:
         return _payload_model_context_limit_resolution(
             payload, model=model, limit=explicit_limit,
-            source="payload_explicit", source_detail="model_limit_tokens", confidence=1.0,
+            source="payload_explicit", source_detail="model_limit_tokens/context_limit", confidence=1.0,
         )
 
     sdk_limit = _as_int(_pick(payload, ("model_context_limit",)))

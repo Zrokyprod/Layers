@@ -105,13 +105,13 @@
         "monthly_usd": 49,
         "period": "/mo"
       },
-      "description": "For small teams proving replay, diagnosis, and release-safety checks on real agent traffic.",
+      "description": "For small teams putting the first production agent actions behind policy, verification, and receipt proof.",
       "cta": {
         "label": "Start Starter",
         "href": "/auth/register"
       },
       "featured": false,
-      "note": "Use Starter to validate issue grouping, root-cause diagnosis, mocked-tool replay, and basic Goldens.",
+      "note": "Use Starter to validate protected-action setup, source-of-record checks, and receipt workflow before scaling volume.",
       "pricing": {
         "calls_per_month": 50000,
         "retention_days": 30,

@@ -37,8 +37,8 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
 
 function Section({ children, id, className = '' }: { children: ReactNode; id?: string; className?: string }) {
   return (
-    <section id={id} className={`w-full scroll-mt-28 px-4 py-16 text-[#171a15] md:py-20 ${className}`}>
-      <div className="mx-auto max-w-[1260px]">{children}</div>
+    <section id={id} className={`w-full scroll-mt-28 overflow-hidden px-4 py-14 text-[#171a15] sm:py-16 md:py-20 ${className}`}>
+      <div className="mx-auto min-w-0 max-w-[1260px]">{children}</div>
     </section>
   );
 }
@@ -56,12 +56,12 @@ function SectionHeader({
 }) {
   return (
     <Reveal>
-      <div className={align === 'center' ? 'mx-auto max-w-3xl text-center' : 'max-w-3xl'}>
+      <div className={align === 'center' ? 'mx-auto min-w-0 max-w-3xl text-center' : 'min-w-0 max-w-3xl'}>
         <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">{eyebrow}</p>
-        <h2 className="mt-3 text-balance text-[2.15rem] font-semibold leading-[1.05] tracking-[-0.03em] text-[#151713] md:text-[3.15rem]">
+        <h2 className="mt-3 text-balance text-[1.9rem] font-semibold leading-[1.08] tracking-[-0.025em] text-[#151713] min-[380px]:text-[2.08rem] md:text-[3.15rem] md:leading-[1.05] md:tracking-[-0.03em]">
           {title}
         </h2>
-        {copy ? <p className="mt-4 text-[1.04rem] leading-[1.65] text-[#5b615a]">{copy}</p> : null}
+        {copy ? <p className="mt-4 text-[0.98rem] leading-[1.62] text-[#5b615a] md:text-[1.04rem] md:leading-[1.65]">{copy}</p> : null}
       </div>
     </Reveal>
   );
@@ -152,7 +152,7 @@ function TraceCard() {
   const stepDone = [stage >= 1, stage >= 2, stage >= 3];
 
   return (
-    <div className="relative mx-auto w-full max-w-[480px] overflow-hidden rounded-[16px] border border-[#d6d3c8] bg-[#fffdfa] p-6 shadow-[0_1px_2px_rgba(28,31,26,0.05),0_44px_90px_-54px_rgba(28,31,26,0.54)]">
+    <div className="relative mx-auto w-full max-w-[480px] overflow-hidden rounded-[14px] border border-[#d6d3c8] bg-[#fffdfa] p-4 shadow-[0_1px_2px_rgba(28,31,26,0.05),0_34px_70px_-50px_rgba(28,31,26,0.5)] sm:rounded-[16px] sm:p-6 sm:shadow-[0_1px_2px_rgba(28,31,26,0.05),0_44px_90px_-54px_rgba(28,31,26,0.54)]">
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#8a867a]">
           <span className="relative flex h-2 w-2">
@@ -206,16 +206,16 @@ function TraceCard() {
           return (
             <div
               key={row.key}
-              className="flex items-center justify-between gap-3 rounded-[9px] border border-[#e6e2d7] bg-[#fbfaf5] px-3.5 py-2.5"
+              className="flex min-w-0 items-center justify-between gap-3 rounded-[9px] border border-[#e6e2d7] bg-[#fbfaf5] px-3 py-2.5 sm:px-3.5"
             >
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8a867a]">{row.label}</span>
+              <span className="min-w-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#8a867a] sm:text-[11px]">{row.label}</span>
               <AnimatePresence mode="wait" initial={false}>
                 <motion.span
                   key={state.text}
                   initial={reduce ? false : { opacity: 0, y: 4, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.28, ease }}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] font-semibold"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:text-[11.5px]"
                   style={{ background: tone.bg, borderColor: tone.border, color: tone.text }}
                 >
                   {Icon ? <Icon size={12} className={state.tone === 'checking' ? 'animate-spin' : ''} /> : null}
@@ -226,27 +226,28 @@ function TraceCard() {
           );
         })}
 
-        <AnimatePresence>
-          {stage >= 3 && (
-            <motion.div
-              initial={reduce ? false : { opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.4, ease }}
-              className="overflow-hidden"
-            >
-              <div className="mt-0.5 flex items-center gap-3 rounded-[9px] border border-[#cfe0dd] bg-[#eaf1ef] px-3.5 py-3">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-[#2f5f66] text-white">
-                  <ShieldCheck size={14} />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#2f5f66]">Zroky verdict</p>
-                  <p className="mt-0.5 truncate text-[12.5px] font-semibold text-[#171a15]">Held for approval - privilege + sequence risk</p>
-                </div>
+        <div className="mt-0.5 min-h-[59px] overflow-hidden">
+          <motion.div
+            aria-hidden={stage < 3}
+            initial={false}
+            animate={{
+              opacity: stage >= 3 ? 1 : 0,
+              y: stage >= 3 || reduce ? 0 : 8,
+            }}
+            transition={{ duration: 0.4, ease }}
+            className={stage >= 3 ? '' : 'pointer-events-none'}
+          >
+            <div className="flex items-center gap-3 rounded-[9px] border border-[#cfe0dd] bg-[#eaf1ef] px-3.5 py-3">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-[#2f5f66] text-white">
+                <ShieldCheck size={14} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#2f5f66]">Zroky verdict</p>
+                <p className="mt-0.5 truncate text-[12.5px] font-semibold text-[#171a15]">Held for approval - privilege + sequence risk</p>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </motion.div>
+        </div>
       </div>
 
       <p className="mt-4 text-center text-[11.5px] leading-relaxed text-[#8a867a]">
@@ -294,8 +295,8 @@ function SequenceRiskTraceCard() {
   ];
 
   return (
-    <div className="relative mx-auto w-full max-w-[520px] overflow-hidden rounded-[16px] border border-[#d6d3c8] bg-[#fffdfa] p-6 shadow-[0_1px_2px_rgba(28,31,26,0.05),0_44px_90px_-54px_rgba(28,31,26,0.54)]">
-      <div className="flex items-center justify-between gap-3">
+    <div className="relative mx-auto w-full max-w-[520px] overflow-hidden rounded-[14px] border border-[#d6d3c8] bg-[#fffdfa] p-4 shadow-[0_1px_2px_rgba(28,31,26,0.05),0_34px_70px_-50px_rgba(28,31,26,0.5)] sm:rounded-[16px] sm:p-6 sm:shadow-[0_1px_2px_rgba(28,31,26,0.05),0_44px_90px_-54px_rgba(28,31,26,0.54)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         <span className="inline-flex items-center gap-2 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#8a867a]">
           <span className="h-2 w-2 rounded-full bg-[#2f5f66]" />
           Sequence monitor
@@ -310,7 +311,7 @@ function SequenceRiskTraceCard() {
           {stage >= 4 && (
             <motion.div
               aria-hidden="true"
-              className="absolute -inset-2 rounded-[15px] border border-[#dfc899] bg-[#fff8ea]/40 shadow-[0_0_0_6px_rgba(223,200,153,0.12)]"
+              className="absolute -inset-1.5 rounded-[15px] border border-[#dfc899] bg-[#fff8ea]/40 shadow-[0_0_0_6px_rgba(223,200,153,0.12)] sm:-inset-2"
               initial={reduce ? false : { opacity: 0, scale: 0.985 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
@@ -329,10 +330,10 @@ function SequenceRiskTraceCard() {
                 initial={reduce ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: visible ? 1 : 0.34, y: visible ? 0 : 10 }}
                 transition={{ duration: 0.32, ease }}
-                className="flex items-center justify-between gap-3 rounded-[10px] border border-[#e1ddd3] bg-[#fbfaf5] px-3.5 py-3"
+                className="flex min-w-0 items-center justify-between gap-2 rounded-[10px] border border-[#e1ddd3] bg-[#fbfaf5] px-3 py-2.5 sm:gap-3 sm:px-3.5 sm:py-3"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-[#d8e2df] bg-[#eaf1ef] text-[#2f5f66]">
+                <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] border border-[#d8e2df] bg-[#eaf1ef] text-[#2f5f66] sm:h-9 sm:w-9">
                     <Icon size={16} />
                   </span>
                   <div className="min-w-0">
@@ -340,7 +341,7 @@ function SequenceRiskTraceCard() {
                     <p className="mt-0.5 truncate font-mono text-[10.5px] text-[#777266]">{action.detail}</p>
                   </div>
                 </div>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#c2e4cf] bg-[#e7f5ec] px-2.5 py-1 text-[11px] font-semibold text-[#256b45]">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#c2e4cf] bg-[#e7f5ec] px-2 py-1 text-[10.5px] font-semibold text-[#256b45] sm:gap-1.5 sm:px-2.5 sm:text-[11px]">
                   <Check size={12} />
                   Allowed
                 </span>
@@ -350,36 +351,37 @@ function SequenceRiskTraceCard() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {stage >= 4 && (
-          <motion.div
-            initial={reduce ? false : { opacity: 0, y: 12, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.4, ease }}
-            className="overflow-hidden"
-          >
-            <div className="mt-5 rounded-[12px] border border-[#dfc899] bg-[#fff8ea] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-[#8a5a16] text-white">
-                    <AlertTriangle size={16} />
-                  </span>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a5a16]">Sequence risk detected</p>
-                    <p className="mt-1 text-sm font-semibold leading-relaxed text-[#171a15]">
-                      Individually safe actions formed an unsafe pattern.
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-full border border-[#dfc899] bg-[#fffdfa] px-3 py-1 text-xs font-semibold text-[#8a5a16]">
-                  Held
+      <div className="min-h-[126px] overflow-hidden sm:min-h-[132px]">
+        <motion.div
+          aria-hidden={stage < 4}
+          initial={false}
+          animate={{
+            opacity: stage >= 4 ? 1 : 0,
+            y: stage >= 4 || reduce ? 0 : 12,
+          }}
+          transition={{ duration: 0.4, ease }}
+          className={stage >= 4 ? '' : 'pointer-events-none'}
+        >
+          <div className="mt-4 rounded-[12px] border border-[#dfc899] bg-[#fff8ea] p-3.5 sm:mt-5 sm:p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-[#8a5a16] text-white">
+                  <AlertTriangle size={16} />
                 </span>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a5a16]">Sequence risk detected</p>
+                  <p className="mt-1 text-sm font-semibold leading-relaxed text-[#171a15]">
+                    Individually safe actions formed an unsafe pattern.
+                  </p>
+                </div>
               </div>
+              <span className="rounded-full border border-[#dfc899] bg-[#fffdfa] px-3 py-1 text-xs font-semibold text-[#8a5a16]">
+                Held
+              </span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </motion.div>
+      </div>
 
       <p className="mt-4 text-center text-[11.5px] leading-relaxed text-[#8a867a]">
         The same sequence-risk signal appears in the dashboard today.
@@ -397,7 +399,7 @@ function StakesSection() {
 
   return (
     <Section id="risk" className="bg-[#fbfcfa]">
-      <div className="grid gap-14 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+      <div className="grid min-w-0 gap-10 sm:gap-14 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
         <Reveal>
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">The stakes</p>
           <h2 className="mt-3 text-balance text-[2.15rem] font-semibold leading-[1.08] tracking-[-0.03em] text-[#151713] md:text-[2.85rem]">
@@ -473,7 +475,7 @@ function ArchitectureDiagram() {
 function SequenceRiskMoment() {
   return (
     <Section id="sequence-risk" className="bg-[#fbfcfa]">
-      <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+      <div className="grid min-w-0 gap-8 sm:gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <SectionHeader
           eyebrow="Sequence risk"
           title="One safe action is safe. Three in sequence may not be."
@@ -500,8 +502,8 @@ function PrintedReceiptArtifact() {
   ];
 
   return (
-    <div className="relative mx-auto w-full max-w-[330px] origin-top sm:max-w-[350px] lg:scale-[0.88]">
-      <div className="absolute -inset-x-8 bottom-4 h-20 rounded-full bg-[#171a15]/12 blur-2xl" />
+    <div className="relative mx-auto w-full max-w-[315px] origin-top sm:max-w-[350px] lg:scale-[0.88]">
+      <div className="absolute -inset-x-4 bottom-4 h-20 rounded-full bg-[#171a15]/12 blur-2xl sm:-inset-x-8" />
       <motion.div
         className="relative overflow-hidden border border-[#d4d0c4] bg-[#fffdf7] shadow-[0_1px_2px_rgba(28,31,26,0.06),0_42px_90px_-56px_rgba(28,31,26,0.58)]"
         style={{ clipPath: receiptClip }}
@@ -522,7 +524,7 @@ function PrintedReceiptArtifact() {
         >
           Signed
         </motion.div>
-        <div className="relative px-6 pb-7 pt-8 font-mono">
+        <div className="relative px-5 pb-7 pt-8 font-mono sm:px-6">
           <div className="text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#2f5f66]">Zroky</p>
             <h3 className="mt-1 text-[1.12rem] font-semibold uppercase tracking-[0.08em] text-[#171a15]">Action Receipt</h3>
@@ -601,7 +603,7 @@ function ProofStandard() {
   return (
     <Section id="receipts" className="bg-[#f3f4ee] py-10 md:py-12">
       <Reveal delay={0.08}>
-        <div className="grid gap-8 md:gap-12 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
+        <div className="grid min-w-0 gap-8 md:gap-12 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
           <PrintedReceiptArtifact />
           <div>
             <SectionHeader
@@ -665,7 +667,7 @@ function EnterpriseReadiness() {
 
   return (
     <Section id="trust" className="bg-[#fbfcfa] py-14 md:py-20">
-      <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+      <div className="grid min-w-0 gap-10 sm:gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <div>
           <SectionHeader
             eyebrow="Enterprise readiness"
@@ -685,7 +687,7 @@ function EnterpriseReadiness() {
         </div>
 
         <Reveal delay={0.08}>
-          <div className="overflow-hidden rounded-[20px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_42px_90px_-54px_rgba(28,31,26,0.48)]">
+          <div className="min-w-0 overflow-hidden rounded-[18px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_34px_70px_-52px_rgba(28,31,26,0.42)] sm:rounded-[20px] sm:shadow-[0_1px_2px_rgba(28,31,26,0.05),0_42px_90px_-54px_rgba(28,31,26,0.48)]">
             <div className="border-b border-[#dedacf] bg-[#f8f7f2] px-5 py-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -791,8 +793,8 @@ function Quickstart() {
 
   return (
     <Section id="quickstart" className="bg-[#f3f4ee] py-14 md:py-20">
-      <div className="grid items-center gap-12 lg:grid-cols-[1.18fr_0.82fr]">
-        <div className="lg:order-2">
+      <div className="grid min-w-0 items-center gap-10 sm:gap-12 lg:grid-cols-[1.18fr_0.82fr]">
+        <div className="min-w-0 lg:order-2">
           <SectionHeader
             eyebrow="Implementation"
             title="Wrap the action that can hurt you first."
@@ -816,9 +818,9 @@ function Quickstart() {
           </Reveal>
         </div>
 
-        <Reveal delay={0.08} className="lg:order-1">
-          <div className="overflow-hidden rounded-[20px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_42px_90px_-54px_rgba(28,31,26,0.48)]">
-            <div className="border-b border-[#dedacf] bg-[#f8f7f2] px-5 py-4">
+        <Reveal delay={0.08} className="min-w-0 lg:order-1">
+          <div className="min-w-0 overflow-hidden rounded-[18px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_34px_70px_-52px_rgba(28,31,26,0.42)] sm:rounded-[20px] sm:shadow-[0_1px_2px_rgba(28,31,26,0.05),0_42px_90px_-54px_rgba(28,31,26,0.48)]">
+            <div className="border-b border-[#dedacf] bg-[#f8f7f2] px-4 py-4 sm:px-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">Control wrapper</p>
@@ -830,7 +832,7 @@ function Quickstart() {
               </div>
             </div>
 
-            <div className="px-5 py-5">
+            <div className="px-4 py-4 sm:px-5 sm:py-5">
               <div className="grid gap-2 md:grid-cols-3">
                 {flow.map(([label, title, detail], index) => (
                   <div key={label} className="relative rounded-[12px] border border-[#e1ddd3] bg-[#f7f6f1] p-3.5">
@@ -846,7 +848,7 @@ function Quickstart() {
                 ))}
               </div>
 
-              <div className="mt-4 overflow-hidden rounded-[14px] bg-[#252922]">
+              <div className="mt-4 min-w-0 overflow-hidden rounded-[14px] bg-[#252922]">
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                   <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#d9ded4]">python</span>
                   <button
@@ -857,7 +859,7 @@ function Quickstart() {
                     {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'copied' : 'copy'}
                   </button>
                 </div>
-                <pre className="overflow-auto p-5 font-mono text-[12.5px] leading-relaxed text-[#eef1ec]">{SNIPPET}</pre>
+                <pre className="max-w-full overflow-x-auto p-4 font-mono text-[11.5px] leading-relaxed text-[#eef1ec] sm:p-5 sm:text-[12.5px]">{SNIPPET}</pre>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -887,9 +889,9 @@ function FinalCTA() {
   return (
     <section className="w-full bg-[#fbfcfa] px-4 py-20 text-[#171a15] md:py-24">
       <Reveal>
-        <div className="mx-auto max-w-6xl rounded-[24px] border border-[#d7d4ca] bg-[#fffdfa] p-8 text-center shadow-[0_40px_90px_-52px_rgba(28,31,26,0.38)] md:p-14">
+        <div className="mx-auto max-w-6xl rounded-[20px] border border-[#d7d4ca] bg-[#fffdfa] p-5 text-center shadow-[0_34px_78px_-54px_rgba(28,31,26,0.34)] sm:p-8 md:rounded-[24px] md:p-14 md:shadow-[0_40px_90px_-52px_rgba(28,31,26,0.38)]">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">Operationalize autonomy</p>
-          <h2 className="mx-auto mt-3 max-w-3xl text-balance text-[2.25rem] font-semibold leading-[1.05] tracking-[-0.03em] text-[#151713] md:text-[3.4rem]">
+          <h2 className="mx-auto mt-3 max-w-3xl text-balance text-[1.95rem] font-semibold leading-[1.08] tracking-[-0.025em] text-[#151713] min-[380px]:text-[2.15rem] md:text-[3.4rem] md:leading-[1.05] md:tracking-[-0.03em]">
             Give agents authority only when your business can prove the outcome.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-[1.02rem] leading-relaxed text-[#5b615a]">

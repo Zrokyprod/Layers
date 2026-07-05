@@ -54,7 +54,7 @@ export default function OwnerUsersPage() {
           <table className="owner-table">
             <thead>
               <tr>
-                {["Email / Login", "Provider", "Projects", "Status", "Joined", ""].map((h) => (
+                {["Email / Login", "Login method", "Projects", "Status", "Joined", ""].map((h) => (
                   <th key={h} className="owner-th">{h}</th>
                 ))}
               </tr>

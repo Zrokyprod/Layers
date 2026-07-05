@@ -53,9 +53,6 @@ from app.services.protected_action_billing import (
 )
 from app.services.system_of_record_connectors import (
     ConnectorConfigError,
-    CustomerRecordApiConnector,
-    LedgerRefundApiConnector,
-    PostgresReadOnlyConnector,
 )
 from app.services.system_of_record_connector_config import (
     CUSTOMER_RECORD_CONNECTOR_TYPE,
@@ -75,6 +72,9 @@ from app.services.system_of_record_connector_config import (
     build_customer_record_connector,
     build_generic_rest_connector,
     build_hubspot_crm_connector,
+    build_inline_customer_record_connector,
+    build_inline_ledger_refund_connector,
+    build_inline_postgres_read_connector,
     build_jira_issue_connector,
     build_ledger_refund_connector,
     build_netsuite_finance_connector,
@@ -2122,7 +2122,7 @@ def create_postgres_read_reconciliation(
     """Verify a claimed state against one read-only PostgreSQL source row."""
     settings = get_settings()
     timeout = body.connector.timeout_seconds or settings.OUTCOME_CONNECTOR_TIMEOUT_SECONDS
-    connector = PostgresReadOnlyConnector(
+    connector = build_inline_postgres_read_connector(
         database_url=body.connector.database_url,
         query=body.connector.query,
         params=body.connector.params,
@@ -2183,7 +2183,7 @@ def create_ledger_refund_reconciliation(
     max_attempts = (
         body.connector.max_attempts or settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS
     )
-    connector = LedgerRefundApiConnector(
+    connector = build_inline_ledger_refund_connector(
         base_url=body.connector.base_url,
         refund_id=refund_id,
         bearer_token=body.connector.bearer_token,
@@ -2310,7 +2310,7 @@ def create_customer_record_reconciliation(
     max_attempts = (
         body.connector.max_attempts or settings.OUTCOME_CONNECTOR_MAX_ATTEMPTS
     )
-    connector = CustomerRecordApiConnector(
+    connector = build_inline_customer_record_connector(
         base_url=body.connector.base_url,
         customer_id=customer_id,
         bearer_token=body.connector.bearer_token,

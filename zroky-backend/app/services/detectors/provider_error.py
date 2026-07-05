@@ -63,6 +63,8 @@ def _detect_provider_error(payload: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     if status_code in {401, 403, 429}:
         return None
+    if 400 <= status_code < 500 and not failure_reason_data:
+        return None
     if match_token_overflow_error_pattern(error_message) is not None:
         return None
 

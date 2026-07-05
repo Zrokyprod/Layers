@@ -1655,6 +1655,34 @@ export interface StripeRefundConnectorTestResponse {
   connector: StripeRefundConnectorStatusResponse;
 }
 
+export type StripePaymentConnectorStatusResponse = LedgerRefundConnectorStatusResponse & {
+  connector_type: "stripe_payment" | string;
+};
+
+export type StripePaymentConnectorConfigPayload = Omit<LedgerRefundConnectorConfigPayload, "base_url"> & {
+  base_url?: string;
+};
+
+export interface StripePaymentConnectorTestPayload {
+  payment_id: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface StripePaymentConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: StripePaymentConnectorStatusResponse;
+}
+
 export type RazorpayRefundConnectorStatusResponse = LedgerRefundConnectorStatusResponse & {
   connector_type: "razorpay_refund" | string;
 };
@@ -1710,6 +1738,39 @@ export interface NetSuiteFinanceConnectorTestResponse {
   ok: boolean;
   check: OutcomeReconciliationView;
   connector: NetSuiteFinanceConnectorStatusResponse;
+}
+
+export type ShopifyConnectorStatusResponse = LedgerRefundConnectorStatusResponse & {
+  connector_type: "shopify_admin" | string;
+};
+
+export interface ShopifyConnectorConfigPayload {
+  base_url: string;
+  path_template?: string;
+  record_path?: string | null;
+  query?: Record<string, string | number | boolean> | null;
+  bearer_token?: string | null;
+  clear_bearer_token?: boolean;
+}
+
+export interface ShopifyConnectorTestPayload {
+  record_ref: string;
+  claimed: Record<string, unknown>;
+  call_id?: string | null;
+  trace_id?: string | null;
+  runtime_policy_decision_id?: string | null;
+  action_type?: string | null;
+  match_fields?: string[] | null;
+  amount_usd?: number | null;
+  currency?: string | null;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface ShopifyConnectorTestResponse {
+  ok: boolean;
+  check: OutcomeReconciliationView;
+  connector: ShopifyConnectorStatusResponse;
 }
 
 export interface CustomerRecordConnectorStatusResponse {
@@ -2212,6 +2273,40 @@ export function testStripeRefundConnector(
   );
 }
 
+export function getStripePaymentConnectorStatus(
+  signal?: AbortSignal,
+): Promise<StripePaymentConnectorStatusResponse> {
+  return request<StripePaymentConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/stripe-payment/status",
+    { signal },
+  );
+}
+
+export function saveStripePaymentConnectorConfig(
+  body: StripePaymentConnectorConfigPayload,
+): Promise<StripePaymentConnectorStatusResponse> {
+  return request<StripePaymentConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/stripe-payment/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testStripePaymentConnector(
+  body: StripePaymentConnectorTestPayload,
+): Promise<StripePaymentConnectorTestResponse> {
+  return request<StripePaymentConnectorTestResponse>(
+    "/v1/integrations/system-of-record/stripe-payment/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
 export function getRazorpayRefundConnectorStatus(
   signal?: AbortSignal,
 ): Promise<RazorpayRefundConnectorStatusResponse> {
@@ -2272,6 +2367,40 @@ export function testNetSuiteFinanceConnector(
 ): Promise<NetSuiteFinanceConnectorTestResponse> {
   return request<NetSuiteFinanceConnectorTestResponse>(
     "/v1/integrations/system-of-record/netsuite-finance/test",
+    {
+      method: "POST",
+      body,
+      timeoutMs: 45_000,
+    },
+  );
+}
+
+export function getShopifyConnectorStatus(
+  signal?: AbortSignal,
+): Promise<ShopifyConnectorStatusResponse> {
+  return request<ShopifyConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/shopify/status",
+    { signal },
+  );
+}
+
+export function saveShopifyConnectorConfig(
+  body: ShopifyConnectorConfigPayload,
+): Promise<ShopifyConnectorStatusResponse> {
+  return request<ShopifyConnectorStatusResponse>(
+    "/v1/integrations/system-of-record/shopify/config",
+    {
+      method: "PUT",
+      body,
+    },
+  );
+}
+
+export function testShopifyConnector(
+  body: ShopifyConnectorTestPayload,
+): Promise<ShopifyConnectorTestResponse> {
+  return request<ShopifyConnectorTestResponse>(
+    "/v1/integrations/system-of-record/shopify/test",
     {
       method: "POST",
       body,

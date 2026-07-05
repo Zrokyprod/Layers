@@ -4,7 +4,9 @@ import {
   anonymizeOwnerUser,
   clearRateLimitOverrides,
   clearProjectRateLimit,
+  commitOwnerPlanGrant,
   confirmOwnerRazorpayPayment,
+  createOwnerPlanGrantChallenge,
   deleteOwnerUser,
   fetchOwnerLaunchReadiness,
   fetchAuditLog,
@@ -14,6 +16,7 @@ import {
   fetchOwnerHealth,
   fetchOwnerInfra,
   fetchOwnerMoneyPathHealth,
+  fetchOwnerPlanGrantAudit,
   fetchOwnerPricing,
   fetchOwnerPricingPlans,
   fetchOwnerProductionReadiness,
@@ -39,7 +42,11 @@ import {
   updateOwnerPricing,
   updateOwnerSupportTicket,
 } from "./owner-api";
-import type { OwnerBillingPaymentConfirmRequest } from "./owner-api";
+import type {
+  OwnerBillingPaymentConfirmRequest,
+  PlanGrantChallengeRequest,
+  PlanGrantCommitRequest,
+} from "./owner-api";
 
 export function useOwnerHealth() {
   return useQuery({
@@ -196,6 +203,34 @@ export function useClearProjectRateLimit(projectId: string) {
   return useMutation({
     mutationFn: () => clearProjectRateLimit(projectId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["owner", "projects", projectId, "rate-limit"] }),
+  });
+}
+
+export function useOwnerPlanGrantAudit(orgId?: string | null, limit = 20) {
+  return useQuery({
+    queryKey: ["owner", "plan-grants", "audit", orgId ?? "", limit],
+    queryFn: () => fetchOwnerPlanGrantAudit({ org_id: orgId ?? undefined, limit }),
+  });
+}
+
+export function useCreateOwnerPlanGrantChallenge() {
+  return useMutation({
+    mutationFn: (body: PlanGrantChallengeRequest) => createOwnerPlanGrantChallenge(body),
+  });
+}
+
+export function useCommitOwnerPlanGrant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PlanGrantCommitRequest) => commitOwnerPlanGrant(body),
+    onSuccess: (_, body) => {
+      queryClient.invalidateQueries({ queryKey: ["owner", "plan-grants"] });
+      queryClient.invalidateQueries({ queryKey: ["owner", "projects", body.org_id] });
+      queryClient.invalidateQueries({ queryKey: ["owner", "projects"] });
+      queryClient.invalidateQueries({ queryKey: ["owner", "billing"] });
+      queryClient.invalidateQueries({ queryKey: ["owner", "pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["owner", "money-path-health"] });
+    },
   });
 }
 

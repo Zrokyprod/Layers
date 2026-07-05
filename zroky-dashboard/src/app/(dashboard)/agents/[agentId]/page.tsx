@@ -111,7 +111,7 @@ function AgentDetailHero({
               value: formatCount(detail.runners.length),
             },
             {
-              helper: "Reliability score from recent telemetry.",
+              helper: "Operational health from recent protected-action signals.",
               label: "Health score",
               tone: detail.score?.health_score == null ? "neutral" : "success",
               value: detail.score?.health_score == null ? "Not scored yet" : String(Math.round(detail.score.health_score)),

@@ -31,32 +31,32 @@ type RiskFilter =
 type Tone = "ok" | "warn" | "danger" | "neutral";
 
 const ACTION_LABELS: Record<string, string> = {
-  review_blocked_ci: "Review blocked CI",
+  review_blocked_ci: "Review release block",
   restore_capture: "Restore capture",
-  connect_provider_key: "Connect provider key",
-  review_replay_quota: "Review replay quota",
+  connect_provider_key: "Connect analysis key",
+  review_replay_quota: "Review proof quota",
   review_event_quota: "Review event quota",
-  restore_replay_worker: "Restore replay worker",
+  restore_replay_worker: "Restore proof worker",
   fix_metering: "Fix metering",
   refresh_pricing: "Refresh pricing",
   fix_billing: "Fix billing",
   review_support: "Review support",
-  run_replay: "Run replay",
-  promote_golden: "Promote Golden",
-  run_ci_gate: "Run CI gate",
+  run_replay: "Run proof check",
+  promote_golden: "Promote receipt baseline",
+  run_ci_gate: "Run release check",
   continue_triage: "Continue triage",
   monitor: "Monitor",
 };
 
 const FILTERS: Array<{ id: RiskFilter; label: string }> = [
   { id: "all", label: "All" },
-  { id: "no-capture", label: "No capture" },
-  { id: "no-goldens", label: "No Goldens" },
-  { id: "failed-ci", label: "Failed CI" },
-  { id: "provider-missing", label: "Provider missing" },
-  { id: "stale-worker", label: "Stale worker" },
+  { id: "no-capture", label: "No actions" },
+  { id: "no-goldens", label: "No receipt baseline" },
+  { id: "failed-ci", label: "Release blocked" },
+  { id: "provider-missing", label: "Connector gap" },
+  { id: "stale-worker", label: "Proof worker stale" },
   { id: "stale-pricing", label: "Stale pricing" },
-  { id: "quota-risk", label: "Quota risk" },
+  { id: "quota-risk", label: "Proof quota" },
   { id: "billing-risk", label: "Billing risk" },
   { id: "support", label: "Support" },
   { id: "getting-value", label: "Getting value" },
@@ -184,20 +184,20 @@ function RiskMetric({
 
 function PlatformLoop({ platform }: { platform: OwnerMoneyPathPlatformSummary }) {
   const steps = [
-    { label: "Capture", value: platform.captures_24h, sub: "calls in 24h" },
+    { label: "Protected actions", value: platform.captures_24h, sub: "captured in 24h" },
     { label: "Issue", value: platform.issues_open, sub: "open groups" },
-    { label: "Replay", value: platform.replay_runs_7d, sub: "runs in 7d" },
-    { label: "Verified", value: platform.verified_replay_runs_7d, sub: "verified runs" },
-    { label: "Golden", value: platform.golden_traces_active, sub: "active traces" },
-    { label: "CI Gate", value: platform.ci_runs_7d, sub: "runs in 7d" },
-    { label: "Blocked", value: platform.ci_blocks_7d, sub: "failed gates" },
+    { label: "Proof checks", value: platform.replay_runs_7d, sub: "checks in 7d" },
+    { label: "Verified outcomes", value: platform.verified_replay_runs_7d, sub: "source matched" },
+    { label: "Receipt baseline", value: platform.golden_traces_active, sub: "active receipts" },
+    { label: "Release checks", value: platform.ci_runs_7d, sub: "checks in 7d" },
+    { label: "Release blocks", value: platform.ci_blocks_7d, sub: "blocked changes" },
   ];
 
   return (
     <section className="panel owner-money-path-loop">
       <div className="panel-header">
-        <h3>Platform Money Path</h3>
-        <span className="panel-header-note">Backend-reported loop state</span>
+        <h3>Platform Control Path</h3>
+        <span className="panel-header-note">Backend-reported action control state</span>
       </div>
       <div className="owner-money-path-loop-grid">
         {steps.map((step, index) => (
@@ -215,11 +215,11 @@ function PlatformLoop({ platform }: { platform: OwnerMoneyPathPlatformSummary })
 
 function TenantLoopEvidence({ tenant }: { tenant: OwnerMoneyPathTenantRow }) {
   const steps = [
-    { id: "capture", label: "Capture", value: `${fmtCount(tenant.captures_24h)} in 24h`, detail: fmtDate(tenant.last_capture_at) },
+    { id: "capture", label: "Protected actions", value: `${fmtCount(tenant.captures_24h)} in 24h`, detail: fmtDate(tenant.last_capture_at) },
     { id: "issue", label: "Issue", value: `${fmtCount(tenant.open_issue_count)} open`, detail: tenant.open_issue_count ? "triage required" : "no open issue" },
-    { id: "replay", label: "Replay", value: `${fmtCount(tenant.replay_run_count_7d)} runs`, detail: `${fmtCount(tenant.verified_replay_count_7d)} verified` },
-    { id: "golden", label: "Golden", value: `${fmtCount(tenant.golden_trace_count)} active`, detail: tenant.golden_trace_count ? "CI eligible" : "no active trace" },
-    { id: "ci", label: "CI Gate", value: `${fmtCount(tenant.ci_run_count_7d)} runs`, detail: `${fmtCount(tenant.blocking_ci_failures_7d)} blocked` },
+    { id: "replay", label: "Proof checks", value: `${fmtCount(tenant.replay_run_count_7d)} checks`, detail: `${fmtCount(tenant.verified_replay_count_7d)} verified` },
+    { id: "golden", label: "Receipt baseline", value: `${fmtCount(tenant.golden_trace_count)} active`, detail: tenant.golden_trace_count ? "release-ready proof" : "no active receipt" },
+    { id: "ci", label: "Release check", value: `${fmtCount(tenant.ci_run_count_7d)} checks`, detail: `${fmtCount(tenant.blocking_ci_failures_7d)} blocked` },
   ];
 
   return (
@@ -258,7 +258,7 @@ function TenantEvidencePanel({ tenant }: { tenant: OwnerMoneyPathTenantRow | nul
           <EvidenceItem label="Project" value={tenant.project_id} />
           <EvidenceItem label="Plan" value={tenant.plan_code} />
           <EvidenceItem label="Capture durability" value={captureDurabilityLabel(tenant)} />
-          <EvidenceItem label="Provider keys" value={`${tenant.provider_key_status.state} (${tenant.provider_key_status.active_provider_count})`} />
+          <EvidenceItem label="Connector keys" value={`${tenant.provider_key_status.state} (${tenant.provider_key_status.active_provider_count})`} />
           <EvidenceItem label="Value status" value={(tenant.value_status ?? "unknown").replaceAll("_", " ")} />
           <EvidenceItem
             label="Event metering"
@@ -268,12 +268,12 @@ function TenantEvidencePanel({ tenant }: { tenant: OwnerMoneyPathTenantRow | nul
                 : `${tenant.event_metering_status?.state ?? "unknown"} / ${fmtCount(tenant.event_metering_status?.used ?? 0)} of ${fmtCount(tenant.event_metering_status.limit)}`
             }
           />
-          <EvidenceItem label="Replay worker" value={`${tenant.replay_jobs_pending ?? 0} pending, ${tenant.replay_jobs_stale ?? 0} stale`} />
+          <EvidenceItem label="Proof worker" value={`${tenant.replay_jobs_pending ?? 0} pending, ${tenant.replay_jobs_stale ?? 0} stale`} />
           <EvidenceItem label="Pricing" value={`${tenant.pricing_cost_status?.state ?? "unknown"} (${tenant.pricing_cost_status?.pricing_age_days ?? "-"}d)`} />
           <EvidenceItem label="Billing" value={`${tenant.billing_status?.state ?? "unknown"} / ${tenant.billing_status?.subscription_status ?? tenant.billing_status?.plan_code ?? tenant.plan_code}`} />
           <EvidenceItem label="Support" value={`${tenant.support_status?.state ?? "none"} (${tenant.support_status?.open_count ?? 0} open)`} />
           <EvidenceItem
-            label="Replay quota"
+            label="Proof quota"
             value={
               tenant.replay_quota_status.limit === -1
                 ? `${fmtCount(tenant.replay_quota_status.used)} used`
@@ -332,7 +332,7 @@ export default function OwnerMoneyPathPage() {
       <div className="owner-page-header">
         <div>
           <h2 className="owner-page-title">Money Path</h2>
-          <p className="hint">Tenant drill-down for Capture -&gt; Issue -&gt; Replay -&gt; Golden -&gt; CI Gate proof.</p>
+          <p className="hint">Tenant drill-down for protected actions, issues, proof checks, receipt baselines, and release checks.</p>
         </div>
         <div className="owner-page-header-actions">
           {moneyPath ? <span className="hint">Generated {new Date(moneyPath.generated_at).toLocaleTimeString()}</span> : null}
@@ -349,14 +349,14 @@ export default function OwnerMoneyPathPage() {
       {platform ? (
         <>
           <div className="owner-money-path-summary">
-            <RiskMetric label="No capture" value={platform.tenants_without_recent_capture} detail="Tenants without production capture in 24h." tone={platform.tenants_without_recent_capture > 0 ? "danger" : "ok"} />
-            <RiskMetric label="No Goldens" value={platform.tenants_without_goldens ?? 0} detail="Tenants missing active regression contracts." tone={(platform.tenants_without_goldens ?? 0) > 0 ? "warn" : "ok"} />
-            <RiskMetric label="Failed CI" value={platform.tenants_with_failed_ci ?? platform.ci_blocks_7d} detail="Tenants with blocking gate failures." tone={platform.ci_blocks_7d > 0 ? "danger" : "ok"} />
+            <RiskMetric label="No actions" value={platform.tenants_without_recent_capture} detail="Tenants without protected actions in 24h." tone={platform.tenants_without_recent_capture > 0 ? "danger" : "ok"} />
+            <RiskMetric label="No receipt baseline" value={platform.tenants_without_goldens ?? 0} detail="Tenants missing active receipt baselines." tone={(platform.tenants_without_goldens ?? 0) > 0 ? "warn" : "ok"} />
+            <RiskMetric label="Release blocked" value={platform.tenants_with_failed_ci ?? platform.ci_blocks_7d} detail="Tenants with blocked release checks." tone={platform.ci_blocks_7d > 0 ? "danger" : "ok"} />
             <RiskMetric label="Capture durability" value={platform.gateway_unhealthy_tenants ?? 0} detail="Tenants with unhealthy gateway capture guarantees." tone={(platform.gateway_loss_tenants ?? 0) > 0 ? "danger" : (platform.gateway_unhealthy_tenants ?? 0) > 0 ? "warn" : "ok"} />
-            <RiskMetric label="Provider gaps" value={platform.tenants_missing_provider_key} detail="Tenants unable to run provider-backed replay." tone={platform.tenants_missing_provider_key > 0 ? "warn" : "ok"} />
-            <RiskMetric label="Stale workers" value={platform.tenants_with_stale_replay_workers ?? 0} detail="Tenants with stale replay leases." tone={(platform.tenants_with_stale_replay_workers ?? 0) > 0 ? "danger" : "ok"} />
+            <RiskMetric label="Connector gaps" value={platform.tenants_missing_provider_key} detail="Tenants missing connector or analysis readiness." tone={platform.tenants_missing_provider_key > 0 ? "warn" : "ok"} />
+            <RiskMetric label="Proof workers" value={platform.tenants_with_stale_replay_workers ?? 0} detail="Tenants with stale proof worker leases." tone={(platform.tenants_with_stale_replay_workers ?? 0) > 0 ? "danger" : "ok"} />
             <RiskMetric label="Stale pricing" value={platform.tenants_with_stale_pricing ?? 0} detail="Tenants with weak cost evidence." tone={(platform.tenants_with_stale_pricing ?? 0) > 0 ? "warn" : "ok"} />
-            <RiskMetric label="Quota risk" value={platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota} detail="Tenants near or above replay limits." tone={(platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota) > 0 ? "warn" : "ok"} />
+            <RiskMetric label="Proof quota" value={platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota} detail="Tenants near or above proof-check limits." tone={(platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota) > 0 ? "warn" : "ok"} />
             <RiskMetric label="Billing risk" value={platform.tenants_with_billing_risk ?? 0} detail="Tenants with broken subscription state." tone={(platform.tenants_with_billing_risk ?? 0) > 0 ? "danger" : "ok"} />
             <RiskMetric label="Metering failures" value={platform.metering_failure_tenants ?? 0} detail={`${fmtCount(platform.event_counter_failure_count ?? 0)} event counter failure(s).`} tone={(platform.metering_failure_tenants ?? 0) > 0 ? "danger" : "ok"} />
             <RiskMetric label="Support" value={platform.support_tickets_open ?? 0} detail={`${fmtCount(platform.support_tickets_urgent ?? 0)} urgent ticket(s).`} tone={(platform.support_tickets_urgent ?? 0) > 0 ? "danger" : (platform.support_tickets_open ?? 0) > 0 ? "warn" : "ok"} />
@@ -395,7 +395,7 @@ export default function OwnerMoneyPathPage() {
                 <table className="owner-table">
                   <thead>
                     <tr>
-                      {["Tenant", "Value", "Breaks", "Capture", "Replay", "Golden", "CI", "Provider", "Worker", "Metering", "Pricing", "Billing", "Support", "Quota", "Next", ""].map((header) => (
+                      {["Tenant", "Value", "Breaks", "Protected actions", "Proof checks", "Receipt baseline", "Release check", "Connector", "Worker", "Metering", "Pricing", "Billing", "Support", "Proof quota", "Next", ""].map((header) => (
                         <th key={header || "action"} className="owner-th">{header}</th>
                       ))}
                     </tr>
@@ -432,13 +432,13 @@ export default function OwnerMoneyPathPage() {
                             <div className="owner-user-id">{fmtDate(tenant.last_capture_at)}</div>
                           </td>
                           <td className="owner-td">
-                            <div>{fmtCount(tenant.replay_run_count_7d)} runs</div>
+                            <div>{fmtCount(tenant.replay_run_count_7d)} checks</div>
                             <span className="owner-td-secondary">{fmtCount(tenant.verified_replay_count_7d)} verified</span>
                           </td>
                           <td className="owner-td">{fmtCount(tenant.golden_trace_count)}</td>
                           <td className="owner-td">
                             <StatusBadge
-                              value={tenant.blocking_ci_failures_7d > 0 ? `${fmtCount(tenant.blocking_ci_failures_7d)} blocked` : `${fmtCount(tenant.ci_run_count_7d)} runs`}
+                              value={tenant.blocking_ci_failures_7d > 0 ? `${fmtCount(tenant.blocking_ci_failures_7d)} blocked` : `${fmtCount(tenant.ci_run_count_7d)} checks`}
                               tone={tenant.blocking_ci_failures_7d > 0 ? "danger" : tenant.ci_run_count_7d > 0 ? "ok" : "neutral"}
                             />
                           </td>
@@ -502,23 +502,23 @@ export default function OwnerMoneyPathPage() {
 
           <section className="owner-money-path-risk-panels">
             <RiskListPanel
-              title="Blocked CI Evidence"
+              title="Release Block Evidence"
               icon={<GitBranch size={16} aria-hidden="true" />}
-              empty="No blocking CI failures in the 7-day window."
+              empty="No blocked release checks in the 7-day window."
               tenants={tenants.filter((tenant) => tenant.blocking_ci_failures_7d > 0)}
-              getDetail={(tenant) => `${fmtCount(tenant.blocking_ci_failures_7d)} blocked gate(s), ${fmtCount(tenant.golden_trace_count)} active Golden trace(s)`}
+              getDetail={(tenant) => `${fmtCount(tenant.blocking_ci_failures_7d)} blocked check(s), ${fmtCount(tenant.golden_trace_count)} receipt baseline(s)`}
             />
             <RiskListPanel
-              title="Provider Key Gaps"
+              title="Connector Gaps"
               icon={<KeyRound size={16} aria-hidden="true" />}
-              empty="Every active tenant has at least one provider key."
+              empty="Every active tenant has connector readiness."
               tenants={tenants.filter((tenant) => tenant.provider_key_status.state === "missing")}
               getDetail={(tenant) => `${actionLabel(tenant.next_owner_action)} - ${fmtCount(tenant.open_issue_count)} open issue(s)`}
             />
             <RiskListPanel
-              title="Replay Quota Risk"
+              title="Proof Quota Risk"
               icon={<AlertTriangle size={16} aria-hidden="true" />}
-              empty="No tenant is near or above replay quota."
+              empty="No tenant is near or above proof quota."
               tenants={tenants.filter((tenant) => ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state))}
               getDetail={(tenant) =>
                 tenant.replay_quota_status.limit === -1
@@ -527,9 +527,9 @@ export default function OwnerMoneyPathPage() {
               }
             />
             <RiskListPanel
-              title="Stale Capture"
+              title="Stale Protected Actions"
               icon={<ShieldAlert size={16} aria-hidden="true" />}
-              empty="Every active tenant has capture in the 24-hour window."
+              empty="Every active tenant has protected actions in the 24-hour window."
               tenants={tenants.filter((tenant) => tenant.captures_24h === 0)}
               getDetail={(tenant) => `Last capture: ${fmtDate(tenant.last_capture_at)}`}
             />

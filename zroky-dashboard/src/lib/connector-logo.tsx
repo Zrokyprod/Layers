@@ -7,6 +7,7 @@ import {
   SiPostgresql,
   SiRazorpay,
   SiSalesforce,
+  SiShopify,
   SiSlack,
   SiStripe,
   SiZendesk,
@@ -26,7 +27,9 @@ type LogoDef = {
 // connector still reads as a first-class tile.
 const CONNECTOR_LOGOS: Record<ConnectorInventoryId, LogoDef> = {
   stripe_refund: { Icon: SiStripe, color: "#635BFF", branded: true },
+  stripe_payment: { Icon: SiStripe, color: "#635BFF", branded: true },
   razorpay_refund: { Icon: SiRazorpay, color: "#3395FF", branded: true },
+  shopify_admin: { Icon: SiShopify, color: "#95BF47", branded: true },
   salesforce_crm: { Icon: SiSalesforce, color: "#00A1E0", branded: true },
   hubspot_crm: { Icon: SiHubspot, color: "#FF7A59", branded: true },
   zoho_crm: { Icon: SiZoho, color: "#E42527", branded: true },

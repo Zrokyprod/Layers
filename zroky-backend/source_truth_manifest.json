@@ -2,6 +2,6 @@
   "schema_version": 1,
   "source": "README.md",
   "readme_marker": "single product, implementation, and execution source of truth",
-  "readme_sha256": "05ac265b17226c9c4261994f01cc7d1f1c8c1086887b981e35c6f80f9c04df63",
+  "readme_sha256": "a20bfb0ddf62a35b5041abf62ad069f3119f5588ab7d094e7b306ae9ee398065",
   "stale_product_doc_paths_present": []
 }

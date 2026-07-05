@@ -22,22 +22,25 @@ vi.mock("@/lib/owner-api", () => ({
 const EXPECTED_NAV = [
   { href: "/owner", label: "Overview" },
   { href: "/owner/money-path", label: "Money Path" },
-  { href: "/owner/launch-readiness", label: "Launch Gate" },
-  { href: "/owner/projects", label: "Projects" },
+  { href: "/owner/infrastructure", label: "Infrastructure" },
+  { href: "/owner/projects", label: "Tenants" },
+  { href: "/owner/users", label: "Users" },
   { href: "/owner/pricing", label: "Billing" },
-  { href: "/owner/audit", label: "Audit Log" },
+  { href: "/owner/support", label: "Support" },
+  { href: "/owner/tool-catalog", label: "Connector Catalog" },
+  { href: "/owner/audit", label: "Audit" },
   { href: "/owner/settings", label: "Settings" },
 ];
 
-const HIDDEN_SUPPORT_NAV = [
-  { href: "/owner/ops", label: "Ops" },
-  { href: "/owner/infrastructure", label: "Infrastructure" },
-  { href: "/owner/support", label: "Support" },
-  { href: "/owner/users", label: "Users" },
-  { href: "/owner/rate-limits", label: "Rate Limits" },
-  { href: "/owner/platform-llm", label: "LLM Usage" },
-  { href: "/owner/feature-flags", label: "Feature Flags" },
-  { href: "/owner/feature-votes", label: "Feature Interest" },
+// Old-IA routes that were removed in the Owner 360 consolidation. They must not
+// appear in the nav and their route files must no longer exist.
+const REMOVED_ROUTES = [
+  "/owner/launch-readiness",
+  "/owner/ops",
+  "/owner/rate-limits",
+  "/owner/platform-llm",
+  "/owner/feature-flags",
+  "/owner/feature-votes",
 ];
 
 function routeFileFor(href: string): string {
@@ -61,6 +64,8 @@ describe("OwnerLayout regression guard", () => {
     );
 
     await waitFor(() => expect(screen.getByText("Owner child route")).toBeInTheDocument());
+    expect(screen.getByText("Local dev")).toBeInTheDocument();
+    expect(screen.queryByText("Production scoped")).toBe(null);
 
     const navLinks = screen.getByLabelText("Owner navigation").querySelectorAll("a");
     const actual = Array.from(navLinks).map((link) => ({
@@ -69,13 +74,15 @@ describe("OwnerLayout regression guard", () => {
     }));
 
     expect(actual).toEqual(EXPECTED_NAV);
-    expect(actual.some((item) => item.href === "/owner/issues-ci-risk")).toBe(false);
-    expect(actual.some((item) => item.href === "/owner/revenue-entitlements")).toBe(false);
-    for (const item of HIDDEN_SUPPORT_NAV) {
-      expect(actual.some((navItem) => navItem.href === item.href || navItem.label === item.label)).toBe(false);
+
+    // Removed old-IA routes: not in nav, and route files deleted.
+    for (const href of REMOVED_ROUTES) {
+      expect(actual.some((navItem) => navItem.href === href)).toBe(false);
+      expect(fs.existsSync(routeFileFor(href))).toBe(false);
     }
 
-    for (const item of [...EXPECTED_NAV, ...HIDDEN_SUPPORT_NAV]) {
+    // Every visible nav route is backed by a real page file.
+    for (const item of EXPECTED_NAV) {
       expect(fs.existsSync(routeFileFor(item.href))).toBe(true);
     }
   });

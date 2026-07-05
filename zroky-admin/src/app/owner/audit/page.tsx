@@ -19,13 +19,13 @@ const KNOWN_ACTIONS = [
 ];
 
 const ACTION_LABELS: Record<string, string> = {
-  review_blocked_ci: "Review blocked CI",
-  restore_capture: "Restore capture",
-  connect_provider_key: "Connect provider key",
-  review_replay_quota: "Review replay quota",
-  run_replay: "Run replay",
-  promote_golden: "Promote Golden",
-  run_ci_gate: "Run CI gate",
+  review_blocked_ci: "Review release block",
+  restore_capture: "Restore action intake",
+  connect_provider_key: "Connect connector key",
+  review_replay_quota: "Review proof quota",
+  run_replay: "Run proof check",
+  promote_golden: "Promote receipt baseline",
+  run_ci_gate: "Run release check",
   continue_triage: "Continue triage",
   monitor: "Monitor",
 };
@@ -90,7 +90,7 @@ function AuditProductEvidence({
   if (!tenant) {
     return (
       <div className="owner-audit-evidence">
-        <span className="owner-ops-badge owner-ops-badge-neutral">No tenant proof</span>
+        <span className="owner-ops-badge owner-ops-badge-neutral">No tenant evidence</span>
         <small>{tenantId}</small>
       </div>
     );
@@ -100,7 +100,7 @@ function AuditProductEvidence({
       <span className={`owner-ops-badge owner-ops-badge-${evidenceTone(tenant)}`}>
         {actionLabel(tenant.next_owner_action)}
       </span>
-      <small>{fmtCount(tenant.open_issue_count)} issue(s), {fmtCount(tenant.blocking_ci_failures_7d)} CI block(s)</small>
+      <small>{fmtCount(tenant.open_issue_count)} issue(s), {fmtCount(tenant.blocking_ci_failures_7d)} release block(s)</small>
       <Link href={`/owner/projects/${tenant.project_id}`} className="owner-row-link">Project</Link>
     </div>
   );
@@ -137,7 +137,7 @@ export default function AuditLogPage() {
         <div>
           <h2 className="owner-page-title">Audit Log</h2>
           <p className="hint">
-            Immutable owner action trail with current tenant product evidence. {data ? `${data.total.toLocaleString()} total entries.` : ""}
+            Immutable owner action trail with current tenant control evidence. {data ? `${data.total.toLocaleString()} total entries.` : ""}
           </p>
         </div>
         <button
@@ -191,7 +191,7 @@ export default function AuditLogPage() {
           <table className="owner-table">
             <thead>
               <tr>
-                {["Timestamp", "Action", "Actor", "Tenant", "Product Evidence", "Diagnosis", "Metadata"].map((h) => (
+                {["Timestamp", "Action", "Actor", "Tenant", "Control Evidence", "Diagnosis", "Metadata"].map((h) => (
                   <th key={h} className="owner-th">{h}</th>
                 ))}
               </tr>

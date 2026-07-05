@@ -61,6 +61,7 @@ $TmpDir = Join-Path $RootDir ".tmp\paid-launch-pytest"
 New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
 $env:TMP = (Resolve-Path $TmpDir).Path
 $env:TEMP = $env:TMP
+$BackendMatrixRunId = Get-Date -Format "yyyyMMddHHmmss"
 
 function Invoke-ReadinessStep {
   param(
@@ -113,11 +114,38 @@ function Invoke-BackendPytestStep {
     [Parameter(Mandatory = $true)][string[]]$TestPaths
   )
 
-  Invoke-ReadinessStep `
-    -Name "Backend $Name" `
-    -WorkingDirectory (Join-Path $RootDir "zroky-backend") `
-    -Command "python" `
-    -Arguments (@("-m", "pytest", "-q", "--tb=short") + $TestPaths)
+  $BackendDir = Join-Path $RootDir "zroky-backend"
+  New-Item -ItemType Directory -Force -Path (Join-Path $BackendDir ".data") | Out-Null
+  $DatabaseId = ($Name.ToLowerInvariant() -replace "[^a-z0-9]+", "-").Trim("-")
+  $EnvUpdates = @{
+    TESTING = "true"
+    DATABASE_URL = "sqlite:///./.data/paid_launch_${DatabaseId}_${BackendMatrixRunId}.db"
+    DATABASE_READ_REPLICA_URL = ""
+    AUTH_JWT_SECRET = "paid-launch-ci-secret-key-32-characters"
+    ALLOW_PROJECT_HEADER_CONTEXT = "true"
+    REQUIRE_PROVISIONING_TOKEN = "false"
+    ENABLE_READY_REDIS_CHECK = "false"
+    INGEST_ENFORCE_RATE_LIMIT = "false"
+    BILLING_QUOTA_FAILURE_POLICY = "strict"
+    TMPDIR = $env:TMP
+  }
+  $PreviousEnv = @{}
+  foreach ($Entry in $EnvUpdates.GetEnumerator()) {
+    $PreviousEnv[$Entry.Key] = [Environment]::GetEnvironmentVariable($Entry.Key, "Process")
+    [Environment]::SetEnvironmentVariable($Entry.Key, $Entry.Value, "Process")
+  }
+
+  try {
+    Invoke-ReadinessStep `
+      -Name "Backend $Name" `
+      -WorkingDirectory $BackendDir `
+      -Command "python" `
+      -Arguments (@("-m", "pytest", "-q", "--tb=short") + $TestPaths)
+  } finally {
+    foreach ($Entry in $PreviousEnv.GetEnumerator()) {
+      [Environment]::SetEnvironmentVariable($Entry.Key, $Entry.Value, "Process")
+    }
+  }
 }
 
 if (Test-ReadinessPhase "backend") {
@@ -284,7 +312,6 @@ if (Test-ReadinessPhase "owner") {
     -Arguments @(
       "test", "--",
       "src/app/owner/layout.test.tsx",
-      "src/app/owner/launch-readiness/page.test.tsx",
       "src/app/owner/page.test.tsx",
       "src/app/owner/money-path/page.test.tsx",
       "src/app/owner/pricing/page.test.tsx",

@@ -25,7 +25,7 @@ export default function Hero() {
 
   return (
     <section
-      className="relative w-full overflow-hidden px-3 pt-28 pb-14 text-[#161814] sm:px-4 md:pt-32 lg:pt-36"
+      className="relative w-full overflow-hidden px-3 pb-12 pt-24 text-[#161814] sm:px-4 sm:pb-14 md:pt-32 lg:pt-36"
       style={{
         background: 'linear-gradient(180deg,#fbfaf6 0%,#f4f2eb 50%,#fbfcfa 100%)',
         fontFeatureSettings: "'ss01','cv01'",
@@ -40,30 +40,30 @@ export default function Hero() {
         }}
       />
 
-      <div className="relative z-10 mx-auto max-w-[1260px]">
-        <div className="mx-auto max-w-[980px] text-center">
+      <div className="relative z-10 mx-auto min-w-0 max-w-[1260px]">
+        <div className="mx-auto min-w-0 max-w-[980px] text-center">
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#c9ddda] bg-[#eaf1ef] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66] shadow-[0_1px_2px_rgba(32,35,31,0.04)]">
+            <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-[#c9ddda] bg-[#eaf1ef] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#2f5f66] shadow-[0_1px_2px_rgba(32,35,31,0.04)] sm:text-[11px] sm:tracking-[0.14em]">
               <ShieldCheck size={12} /> AI agent action control plane
             </span>
           </Reveal>
 
           <Reveal delay={0.06}>
-            <h1 className="mt-6 text-[2.55rem] font-semibold leading-[0.98] tracking-[-0.03em] text-[#12140f] sm:text-[3.25rem] md:text-[4.1rem] lg:text-[4.8rem] lg:tracking-[-0.035em]">
+            <h1 className="mt-5 text-[2.28rem] font-semibold leading-[1.02] tracking-[-0.025em] text-[#12140f] min-[380px]:text-[2.5rem] sm:mt-6 sm:text-[3.25rem] md:text-[4.1rem] lg:text-[4.8rem] lg:tracking-[-0.035em]">
               <span className="block">Scale enterprise agents </span>
               <span className="block text-[#2f5f66]">with governed execution.</span>
             </h1>
           </Reveal>
 
           <Reveal delay={0.12}>
-            <p className="mx-auto mt-6 max-w-[760px] text-balance text-[1.08rem] leading-[1.65] text-[#555b53] md:text-[1.16rem]">
+            <p className="mx-auto mt-5 max-w-[760px] text-balance text-[0.98rem] leading-[1.62] text-[#555b53] sm:text-[1.08rem] md:text-[1.16rem]">
               <span className="block">Zroky gives every agent a policy gate, controlled runner, and verifiable proof trail.</span>
               <span className="block">Security, operations, and buyers can trust what scaled autonomy is allowed to do.</span>
             </p>
           </Reveal>
 
           <Reveal delay={0.18}>
-            <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="mx-auto mt-7 flex max-w-[24rem] flex-col items-stretch justify-center gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center">
               <a
                 href={DEMO_URL}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[linear-gradient(180deg,#3a747c,#2f5f66)] px-6 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_18px_34px_-18px_rgba(47,95,102,0.72)] transition duration-150 hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_22px_40px_-20px_rgba(47,95,102,0.78)] active:translate-y-0 sm:w-auto"
@@ -81,7 +81,7 @@ export default function Hero() {
         </div>
 
         <motion.div
-          className="relative z-10 mx-auto mt-12"
+          className="relative z-10 mx-auto mt-9 min-w-0 sm:mt-12"
           initial={reduce ? false : { opacity: 0, y: 34 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease, delay: 0.28 }}

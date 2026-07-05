@@ -347,6 +347,58 @@ export interface ProjectRateLimitUpdate {
   ingest_enforce_rate_limit?: boolean;
 }
 
+export type PlanGrantPlanCode = "free" | "starter" | "pro";
+export type PlanGrantDurationKind = "permanent" | "comp_30d" | "comp_90d";
+
+export interface PlanGrantChallengeRequest {
+  org_id: string;
+  target_plan_code: PlanGrantPlanCode;
+}
+
+export interface PlanGrantChallengeResponse {
+  challenge_id: string;
+  expires_at: string;
+  org_id: string;
+  current_plan_code: string | null;
+  target_plan_code: PlanGrantPlanCode;
+  delivery: "response" | "email" | string;
+  dev_code: string | null;
+}
+
+export interface PlanGrantCommitRequest {
+  challenge_id: string;
+  code: string;
+  typed_confirmation: string;
+  org_id: string;
+  target_plan_code: PlanGrantPlanCode;
+  reason: string;
+  duration_kind: PlanGrantDurationKind;
+}
+
+export interface PlanGrantCommitResponse {
+  ok: boolean;
+  org_id: string;
+  previous_plan_code: string | null;
+  plan_code: PlanGrantPlanCode;
+  duration_kind: PlanGrantDurationKind;
+  granted_at: string;
+}
+
+export interface PlanGrantAuditItem {
+  id: string;
+  actor: string | null;
+  org_id: string;
+  previous_plan_code: string | null;
+  plan_code: string | null;
+  reason: string | null;
+  duration_kind: string | null;
+  created_at: string;
+}
+
+export interface PlanGrantAuditResponse {
+  items: PlanGrantAuditItem[];
+}
+
 export interface PricingConfigResponse {
   config: Record<string, unknown>;
   path: string;
@@ -709,6 +761,32 @@ export async function clearProjectRateLimit(projectId: string): Promise<void> {
   await ownerRequest<unknown>(`/v1/owner/projects/${encodeURIComponent(projectId)}/rate-limit`, {
     method: "DELETE",
   });
+}
+
+export function createOwnerPlanGrantChallenge(
+  body: PlanGrantChallengeRequest,
+): Promise<PlanGrantChallengeResponse> {
+  return ownerRequest<PlanGrantChallengeResponse>("/v1/owner/plan-grants/challenge", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function commitOwnerPlanGrant(body: PlanGrantCommitRequest): Promise<PlanGrantCommitResponse> {
+  return ownerRequest<PlanGrantCommitResponse>("/v1/owner/plan-grants", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchOwnerPlanGrantAudit(
+  opts: { org_id?: string; limit?: number } = {},
+): Promise<PlanGrantAuditResponse> {
+  const params = new URLSearchParams();
+  if (opts.org_id) params.set("org_id", opts.org_id);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return ownerRequest<PlanGrantAuditResponse>(`/v1/owner/plan-grants/audit${qs ? `?${qs}` : ""}`);
 }
 
 export async function setMaintenanceMode(enabled: boolean, message?: string): Promise<void> {

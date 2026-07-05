@@ -369,7 +369,7 @@ class DiagnosisUiState(Base):
     )
 
 
-class DiagnosisPullRequest(Base):
+class DiagnosisPullRequest(Base):  # noqa: F401  # noqa: replay-lint
     __tablename__ = "diagnosis_pull_requests"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

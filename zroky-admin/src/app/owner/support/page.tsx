@@ -15,17 +15,17 @@ import type { OwnerMoneyPathTenantRow, OwnerSupportTicketItem } from "@/lib/owne
 const STATUS_OPTIONS = ["open", "waiting", "resolved", "closed"];
 const PRIORITY_OPTIONS = ["low", "normal", "high", "urgent"];
 const ACTION_LABELS: Record<string, string> = {
-  review_blocked_ci: "Review blocked CI",
-  restore_capture: "Restore capture",
-  connect_provider_key: "Connect provider key",
-  review_replay_quota: "Review replay quota",
-  restore_replay_worker: "Restore replay worker",
+  review_blocked_ci: "Review release block",
+  restore_capture: "Restore action intake",
+  connect_provider_key: "Connect connector key",
+  review_replay_quota: "Review proof quota",
+  restore_replay_worker: "Restore proof worker",
   refresh_pricing: "Refresh pricing",
   fix_billing: "Fix billing",
   review_support: "Review support",
-  run_replay: "Run replay",
-  promote_golden: "Promote Golden",
-  run_ci_gate: "Run CI gate",
+  run_replay: "Run proof check",
+  promote_golden: "Promote receipt baseline",
+  run_ci_gate: "Run release check",
   continue_triage: "Continue triage",
   monitor: "Monitor",
 };
@@ -57,6 +57,19 @@ function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action.replaceAll("_", " ");
 }
 
+function breakLabels(values: string[]): string {
+  return values
+    .map((value) =>
+      value
+        .replaceAll("_", " ")
+        .replace(/\bprovider\b/gi, "connector")
+        .replace(/\breplay\b/gi, "proof")
+        .replace(/\bgolden\b/gi, "receipt baseline")
+        .replace(/\bci\b/gi, "release"),
+    )
+    .join(", ");
+}
+
 function evidenceTone(tenant: OwnerMoneyPathTenantRow): "ok" | "warn" | "danger" | "neutral" {
   if (tenant.value_status === "blocked" || tenant.blocking_ci_failures_7d > 0 || tenant.provider_key_status.state === "missing") return "danger";
   if (tenant.value_status === "at_risk" || tenant.value_status === "setup_missing" || tenant.open_issue_count > 0 || ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)) return "warn";
@@ -75,7 +88,7 @@ function ProductEvidenceBadge({
     return <span className="owner-ops-badge owner-ops-badge-danger">Evidence unavailable</span>;
   }
   if (!tenant) {
-    return <span className="owner-ops-badge owner-ops-badge-neutral">No tenant proof</span>;
+    return <span className="owner-ops-badge owner-ops-badge-neutral">No tenant evidence</span>;
   }
   return (
     <span className={`owner-ops-badge owner-ops-badge-${evidenceTone(tenant)}`}>
@@ -98,10 +111,10 @@ function SupportProductEvidencePanel({
     return (
       <section className="owner-product-evidence-card">
         <div>
-          <span className="owner-section-label">Regression firewall evidence</span>
-          <p className="hint">No money-path health row exists for this ticket tenant.</p>
+          <span className="owner-section-label">Control-plane evidence</span>
+          <p className="hint">No control-plane health row exists for this ticket tenant.</p>
         </div>
-        <Link href="/owner/money-path" className="btn btn-soft">Money path</Link>
+        <Link href="/owner/money-path" className="btn btn-soft">Control plane</Link>
       </section>
     );
   }
@@ -110,7 +123,7 @@ function SupportProductEvidencePanel({
     <section className="owner-product-evidence-card">
       <div className="owner-product-evidence-head">
         <div>
-          <span className="owner-section-label">Regression firewall evidence</span>
+          <span className="owner-section-label">Control-plane evidence</span>
           <strong>{tenant.project_name}</strong>
           <p className="hint">{tenant.project_id} - {tenant.plan_code}</p>
         </div>
@@ -118,25 +131,25 @@ function SupportProductEvidencePanel({
       </div>
       <div className="owner-product-evidence-grid">
         <div><span>Open issues</span><strong>{fmtCount(tenant.open_issue_count)}</strong></div>
-        <div><span>Replay</span><strong>{fmtCount(tenant.replay_run_count_7d)}</strong></div>
-        <div><span>Goldens</span><strong>{fmtCount(tenant.golden_trace_count)}</strong></div>
-        <div><span>CI blocks</span><strong>{fmtCount(tenant.blocking_ci_failures_7d)}</strong></div>
+        <div><span>Proof checks</span><strong>{fmtCount(tenant.replay_run_count_7d)}</strong></div>
+        <div><span>Receipt baselines</span><strong>{fmtCount(tenant.golden_trace_count)}</strong></div>
+        <div><span>Release blocks</span><strong>{fmtCount(tenant.blocking_ci_failures_7d)}</strong></div>
       </div>
       <div className="owner-product-evidence-meta">
         <span>Value: {(tenant.value_status ?? "unknown").replaceAll("_", " ")}</span>
-        <span>Breaks: {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).slice(0, 3).join(", ") || "none"}</span>
-        <span>Provider: {tenant.provider_key_status.state} ({tenant.provider_key_status.active_provider_count})</span>
+        <span>Breaks: {breakLabels((tenant.money_path_breaks ?? tenant.launch_blockers ?? []).slice(0, 3)) || "none"}</span>
+        <span>Connector: {tenant.provider_key_status.state} ({tenant.provider_key_status.active_provider_count})</span>
         <span>Pricing: {tenant.pricing_cost_status?.state ?? "unknown"}</span>
         <span>Billing: {tenant.billing_status?.state ?? "unknown"}</span>
         <span>
-          Replay quota: {tenant.replay_quota_status.limit === -1
+          Proof quota: {tenant.replay_quota_status.limit === -1
             ? `${fmtCount(tenant.replay_quota_status.used)} used`
             : `${fmtCount(tenant.replay_quota_status.used)} / ${fmtCount(tenant.replay_quota_status.limit)}`}
         </span>
       </div>
       <div className="owner-product-evidence-links">
         <Link href={`/owner/projects/${tenant.project_id}`} className="btn btn-soft">Project detail</Link>
-        <Link href="/owner/money-path" className="btn btn-soft">Money path</Link>
+        <Link href="/owner/money-path" className="btn btn-soft">Control plane</Link>
       </div>
     </section>
   );
@@ -235,7 +248,7 @@ export default function OwnerSupportPage() {
       <div className="owner-page-header">
         <div>
           <h2 className="owner-page-title">Support</h2>
-          <p className="hint">Ticket triage with tenant money-path evidence, assignment, priority, status and owner replies.</p>
+          <p className="hint">Ticket triage with tenant control evidence, assignment, priority, status and owner replies.</p>
         </div>
         <button
           className="btn btn-soft"
@@ -294,7 +307,7 @@ export default function OwnerSupportPage() {
           <table className="owner-table">
             <thead>
               <tr>
-                {["Ticket", "Priority", "Product Evidence", "Assignee", "Tenant", "Updated"].map((header) => (
+                {["Ticket", "Priority", "Control Evidence", "Assignee", "Tenant", "Updated"].map((header) => (
                   <th key={header} className="owner-th">{header}</th>
                 ))}
               </tr>

@@ -3,13 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import OwnerOverviewPage from "./page";
 import * as hooks from "@/lib/hooks";
-import type { OwnerHealth, OwnerLaunchReadiness, OwnerMoneyPathHealth } from "@/lib/owner-api";
+import type {
+  OwnerBillingSummary,
+  OwnerHealth,
+  OwnerLaunchReadiness,
+  OwnerMoneyPathHealth,
+} from "@/lib/owner-api";
 
 vi.mock("@/lib/hooks", () => ({
+  useOwnerBillingSummary: vi.fn(),
   useOwnerHealth: vi.fn(),
   useOwnerLaunchReadiness: vi.fn(),
   useOwnerMoneyPathHealth: vi.fn(),
-  useToggleMaintenance: vi.fn(),
 }));
 
 const health: OwnerHealth = {
@@ -103,6 +108,14 @@ const readiness: OwnerLaunchReadiness = {
   ],
 };
 
+const billing: OwnerBillingSummary = {
+  total_subscriptions: 3,
+  overdue: 1,
+  canceled: 0,
+  by_plan: [{ plan: "pro", slug: "pro", tenant_count: 2 }],
+  by_status: [{ status: "active", count: 2 }],
+};
+
 function setHookData(
   data: OwnerMoneyPathHealth | null,
   error: Error | null = null,
@@ -114,24 +127,26 @@ function setHookData(
     error,
     dataUpdatedAt: data ? Date.parse(data.generated_at) : 0,
     refetch: vi.fn(),
-  } as ReturnType<typeof hooks.useOwnerMoneyPathHealth>);
+  } as unknown as ReturnType<typeof hooks.useOwnerMoneyPathHealth>);
   vi.mocked(hooks.useOwnerHealth).mockReturnValue({
     data: health,
     error: null,
     dataUpdatedAt: Date.parse(health.checked_at),
     refetch: vi.fn(),
-  } as ReturnType<typeof hooks.useOwnerHealth>);
+  } as unknown as ReturnType<typeof hooks.useOwnerHealth>);
   vi.mocked(hooks.useOwnerLaunchReadiness).mockReturnValue({
     data: launchData,
     error: launchError,
     dataUpdatedAt: launchData ? Date.parse(launchData.generated_at) : 0,
     isLoading: false,
     refetch: vi.fn(),
-  } as ReturnType<typeof hooks.useOwnerLaunchReadiness>);
-  vi.mocked(hooks.useToggleMaintenance).mockReturnValue({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  } as unknown as ReturnType<typeof hooks.useToggleMaintenance>);
+  } as unknown as ReturnType<typeof hooks.useOwnerLaunchReadiness>);
+  vi.mocked(hooks.useOwnerBillingSummary).mockReturnValue({
+    data: billing,
+    error: null,
+    dataUpdatedAt: Date.parse("2026-06-04T12:00:00Z"),
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof hooks.useOwnerBillingSummary>);
 }
 
 describe("OwnerOverviewPage", () => {
@@ -144,22 +159,27 @@ describe("OwnerOverviewPage", () => {
 
     render(<OwnerOverviewPage />);
 
-    expect(screen.getByText("Owner signal command")).toBeInTheDocument();
-    expect(screen.getByText("Paid launch decision")).toBeInTheDocument();
-    expect(screen.getByText("Paid launch blocked")).toBeInTheDocument();
-    expect(screen.getByText(readiness.product_standard)).toBeInTheDocument();
-    expect(screen.getByText("runtime_risk_stop:runtime_risk_stop_evidence_missing")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open full launch gate" }).getAttribute("href")).toBe("/owner/launch-readiness");
-    expect(screen.getByText("End-to-end signal flow")).toBeInTheDocument();
-    expect(screen.getByText("Outcome proof")).toBeInTheDocument();
-    expect(screen.getByText("Primary Loop")).toBeInTheDocument();
-    expect(screen.getByText("Deployment Smoke")).toBeInTheDocument();
-    expect(screen.getAllByText("Latest deployed smoke CI gate run ended with status=fail.").length).toBeGreaterThan(0);
-    expect(screen.getByText("Good Tenant")).toBeInTheDocument();
-    expect(screen.getByText("Gap Tenant")).toBeInTheDocument();
-    expect(screen.getByText("Review blocked CI")).toBeInTheDocument();
-    expect(screen.getByText("Restore capture")).toBeInTheDocument();
-    expect(screen.getByText("missing")).toBeInTheDocument();
+    expect(screen.getByText("Owner 360 Home")).toBeInTheDocument();
+    expect(screen.getByText("Paid Traffic")).toBeInTheDocument();
+    expect(screen.getByText("Customers Needing Action")).toBeInTheDocument();
+    expect(screen.getByText("Money")).toBeInTheDocument();
+    expect(screen.getByText("Infrastructure")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Control Plane Health chart" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Customer Risk chart" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Money & Infra chart" })).toBeInTheDocument();
+    expect(screen.getByText("Customer Action Queue")).toBeInTheDocument();
+    expect(screen.getAllByText("No recent protected actions").length).toBeGreaterThan(0);
+    expect(screen.getByText("Release check blocked")).toBeInTheDocument();
+    expect(screen.getByText("Protected actions")).toBeInTheDocument();
+    expect(screen.getByText("Proof checks")).toBeInTheDocument();
+    expect(screen.getByText("Verified outcomes")).toBeInTheDocument();
+    expect(screen.getByText("Receipt baselines")).toBeInTheDocument();
+    expect(screen.queryByText("Replays")).toBe(null);
+    expect(screen.queryByText("Goldens")).toBe(null);
+    expect(screen.queryByText("Review blocked CI")).toBe(null);
+    expect(screen.queryByText("Revenue")).toBe(null);
+    expect(screen.getByRole("link", { name: /Customers Needing Action/i }).getAttribute("href")).toBe("/owner/projects");
+    expect(screen.getByText("Good Tenant: Review release block")).toBeInTheDocument();
   }, 10_000);
 
   it("does not render fake success when money-path health fails", () => {
@@ -168,8 +188,8 @@ describe("OwnerOverviewPage", () => {
     render(<OwnerOverviewPage />);
 
     expect(screen.getByText("HTTP 500")).toBeInTheDocument();
-    expect(screen.queryByText("Primary Loop")).toBe(null);
-    expect(screen.queryByText("Tenant Action Queue")).toBe(null);
+    expect(screen.getByText("Owner 360 Home")).toBeInTheDocument();
+    expect(screen.queryByText("Loading owner command center...")).toBe(null);
   });
 
   it("keeps owner launch approval blocked when launch readiness is unavailable", () => {
@@ -177,9 +197,10 @@ describe("OwnerOverviewPage", () => {
 
     render(<OwnerOverviewPage />);
 
-    expect(screen.getByText("Launch gate not verified")).toBeInTheDocument();
     expect(screen.getByText("HTTP 503")).toBeInTheDocument();
-    expect(screen.queryByText("Paid launch allowed")).toBe(null);
-    expect(screen.getByText("End-to-end signal flow")).toBeInTheDocument();
+    expect(screen.getByText("Paid Traffic")).toBeInTheDocument();
+    expect(screen.getByText("Checking")).toBeInTheDocument();
+    expect(screen.queryByText("Allowed")).toBe(null);
+    expect(screen.getByText("Money")).toBeInTheDocument();
   });
 });

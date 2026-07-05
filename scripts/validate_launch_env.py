@@ -29,6 +29,13 @@ PLACEHOLDER_MARKERS = (
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 EXAMPLE_HOST_SUFFIXES = (".example.com",)
+SECRET_REF_SCHEMES = (
+    "railway://",
+    "vercel://",
+    "github-secret://",
+    "secret://",
+    "secretref://",
+)
 
 
 @dataclass(frozen=True)
@@ -77,6 +84,11 @@ def normalized(value: str | None) -> str:
 def is_placeholder(value: str | None) -> bool:
     text = normalized(value)
     return any(marker in text for marker in PLACEHOLDER_MARKERS)
+
+
+def is_secret_ref(value: str | None) -> bool:
+    text = normalized(value)
+    return any(text.startswith(prefix) for prefix in SECRET_REF_SCHEMES)
 
 
 def is_true(value: str | None) -> bool:
@@ -132,6 +144,10 @@ def require_value(
     if is_placeholder(item.value):
         findings.append(f"PLACEHOLDER {key} line={item.line}")
         return
+    if is_secret_ref(item.value):
+        if exact is not None or bool_true or bool_false:
+            findings.append(f"INVALID {key} line={item.line}: secret reference is not allowed for literal config")
+        return
     if min_length is not None and len(item.value) < min_length:
         findings.append(f"WEAK {key} line={item.line} len={len(item.value)} min={min_length}")
     if exact is not None and item.value != exact:
@@ -155,6 +171,8 @@ def require_prefix(
     item = latest(values, key)
     if item is None or not item.value:
         return
+    if is_secret_ref(item.value):
+        return
     if is_placeholder(item.value) and not item.value.startswith("rzp_test_"):
         return
     if not item.value.startswith(prefix):
@@ -171,6 +189,8 @@ def require_one_secret(
     present = [item for key in keys if (item := latest(values, key)) and item.value]
     if not present:
         findings.append(f"MISSING one of {', '.join(keys)}")
+        return
+    if any(is_secret_ref(item.value) for item in present):
         return
     if all(is_placeholder(item.value) for item in present):
         findings.append(f"PLACEHOLDER one of {', '.join(keys)}")
@@ -303,6 +323,7 @@ def validate_admin(values: dict[str, list[EnvValue]]) -> list[str]:
 
 def validate_gateway(values: dict[str, list[EnvValue]]) -> list[str]:
     findings = duplicate_findings(values)
+    require_value(findings, values, "REDIS_URL", url=True)
     require_value(findings, values, "ZROKY_API_URL", url=True)
     require_value(findings, values, "ZROKY_INGEST_URL", url=True)
     require_value(findings, values, "ZROKY_GATEWAY_API_KEY", min_length=16)

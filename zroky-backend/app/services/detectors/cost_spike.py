@@ -27,6 +27,34 @@ def detect_entry(payload: Mapping[str, Any], **kwargs: Any) -> dict[str, Any] | 
 def _detect_cost_spike(
     payload: Mapping[str, Any],
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    per_call_cost = _as_float(
+        _pick(
+            payload,
+            ("cost_usd",),
+            ("cost_total",),
+            ("total_cost",),
+            ("cost", "usd"),
+            ("cost", "total"),
+            ("usage", "cost_usd"),
+        ),
+    )
+    per_session_cost = _as_float(
+        _pick(payload, ("per_session_cost_usd",), ("session", "cost_usd")),
+    )
+    if per_call_cost >= 1.0 or per_session_cost >= 10.0:
+        return _cost_spike_result(
+            current_spend=max(per_call_cost, per_session_cost),
+            baseline_spend=0.0,
+            effective_baseline=0.0,
+            hard_threshold=1.0 if per_call_cost >= 1.0 else 10.0,
+            history_days=0.0,
+            history_calls=0,
+            baseline_window_days=0,
+            spend_bucket_minutes=0,
+            model_coefficient=1.0,
+            trigger_rule="per-call or per-session spend exceeded launch guardrail",
+        ), None
+
     current_spend = _as_float(
         _pick(
             payload,
@@ -88,6 +116,33 @@ def _detect_cost_spike(
     if current_spend <= hard_threshold:
         return None, None
 
+    return _cost_spike_result(
+        current_spend=current_spend,
+        baseline_spend=baseline_spend,
+        effective_baseline=effective_baseline,
+        hard_threshold=hard_threshold,
+        history_days=history_days,
+        history_calls=history_calls,
+        baseline_window_days=baseline_window_days,
+        spend_bucket_minutes=spend_bucket_minutes,
+        model_coefficient=model_coefficient,
+        trigger_rule="current_15m_spend > max(3*baseline, baseline+25)",
+    ), None
+
+
+def _cost_spike_result(
+    *,
+    current_spend: float,
+    baseline_spend: float,
+    effective_baseline: float,
+    hard_threshold: float,
+    history_days: float,
+    history_calls: int,
+    baseline_window_days: int,
+    spend_bucket_minutes: int,
+    model_coefficient: float,
+    trigger_rule: str,
+) -> dict[str, Any]:
     return {
         "category": "COST_SPIKE",
         "speed_class": "pattern",
@@ -109,14 +164,14 @@ def _detect_cost_spike(
             "baseline_15m_spend_usd": baseline_spend,
             "effective_baseline_15m_spend_usd": effective_baseline,
             "hard_threshold_15m_spend_usd": hard_threshold,
-            "trigger_rule": "current_15m_spend > max(3*baseline, baseline+25)",
+            "trigger_rule": trigger_rule,
             "history_days": history_days,
             "history_calls": history_calls,
-            "warmup_gate_met": warmup_ready,
+            "warmup_gate_met": history_days >= 3 and history_calls >= 200,
             "warmup_required_days": 3,
             "warmup_required_calls": 200,
             "baseline_window_days": baseline_window_days,
             "spend_bucket_minutes": spend_bucket_minutes,
             "model_spend_coefficient": model_coefficient,
         },
-    }, None
+    }

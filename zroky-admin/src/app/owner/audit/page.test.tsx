@@ -98,14 +98,14 @@ describe("AuditLogPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders audit rows with tenant product evidence", () => {
+  it("renders audit rows with tenant control evidence", () => {
     mockHooks();
 
     render(<AuditLogPage />);
 
-    expect(screen.getByText("Product Evidence")).toBeInTheDocument();
-    expect(screen.getByText("Review blocked CI")).toBeInTheDocument();
-    expect(screen.getByText("2 issue(s), 1 CI block(s)")).toBeInTheDocument();
+    expect(screen.getByText("Control Evidence")).toBeInTheDocument();
+    expect(screen.getByText("Review release block")).toBeInTheDocument();
+    expect(screen.getByText("2 issue(s), 1 release block(s)")).toBeInTheDocument();
     expect(screen.getByText("Platform event")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Project" }).getAttribute("href")).toBe("/owner/projects/proj_audit");
   });
@@ -117,7 +117,7 @@ describe("AuditLogPage", () => {
 
     expect(screen.getByText("HTTP 500")).toBeInTheDocument();
     expect(screen.getAllByText("Evidence unavailable").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Review blocked CI")).toBe(null);
-    expect(screen.queryByText("2 issue(s), 1 CI block(s)")).toBe(null);
+    expect(screen.queryByText("Review release block")).toBe(null);
+    expect(screen.queryByText("2 issue(s), 1 release block(s)")).toBe(null);
   });
 });

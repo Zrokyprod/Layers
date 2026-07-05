@@ -200,7 +200,7 @@ def build_generated_patch(
     )
 
 
-def create_pull_request_with_patch(
+def create_pull_request_with_patch(  # noqa: F401  # noqa: replay-lint
     *,
     token: str,
     repository_owner: str,

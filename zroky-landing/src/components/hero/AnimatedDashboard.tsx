@@ -215,18 +215,18 @@ function DenseActivity() {
 function DashboardSlice({ module }: { module: ModuleTourItem }) {
   const Icon = module.icon;
   return (
-    <div className="grid h-full gap-3 lg:grid-cols-[1fr_290px]">
-      <div className="min-w-0 rounded-[14px] border border-[#dfdbd0] bg-[#fffdfa] p-4">
+    <div className="grid h-full min-w-0 gap-3 lg:grid-cols-[1fr_290px]">
+      <div className="min-w-0 rounded-[12px] border border-[#dfdbd0] bg-[#fffdfa] p-3 sm:rounded-[14px] sm:p-4">
         <div className="flex items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] border border-[#c9ddda] bg-[#eaf1ef] text-[#2f5f66]">
-            <Icon size={17} />
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-[#c9ddda] bg-[#eaf1ef] text-[#2f5f66] sm:h-9 sm:w-9 sm:rounded-[11px]">
+            <Icon size={16} />
           </span>
           <div className="min-w-0">
             <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8b8578]">{module.group}</p>
-            <h3 className="mt-1 max-w-[660px] text-[17px] font-semibold leading-tight text-[#151713]">
+            <h3 className="mt-1 max-w-[660px] text-[14.5px] font-semibold leading-tight text-[#151713] sm:text-[17px]">
               {module.headline}
             </h3>
-            <p className="mt-1.5 max-w-[660px] text-[11.5px] leading-relaxed text-[#5c6158]">{module.body}</p>
+            <p className="mt-1.5 max-w-[660px] text-[10.5px] leading-relaxed text-[#5c6158] sm:text-[11.5px]">{module.body}</p>
           </div>
         </div>
 
@@ -236,7 +236,7 @@ function DashboardSlice({ module }: { module: ModuleTourItem }) {
           ))}
         </div>
 
-        <div className="mt-4 grid gap-3 xl:grid-cols-[1fr_0.8fr]">
+        <div className="mt-3 grid gap-3 sm:mt-4 xl:grid-cols-[1fr_0.8fr]">
           <div className="rounded-[12px] border border-[#e0ddd3] bg-[#f5f3ec] p-3">
             <div className="flex items-center gap-2 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[#7c7669]">
               <Activity size={13} /> Decision queue
@@ -272,7 +272,7 @@ function DashboardSlice({ module }: { module: ModuleTourItem }) {
         </div>
       </div>
 
-      <div className="rounded-[14px] border border-[#dfdbd0] bg-[#f7f5ee] p-4">
+      <div className="hidden rounded-[14px] border border-[#dfdbd0] bg-[#f7f5ee] p-4 sm:block">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8b8578]">Selected proof</p>
           <span className="rounded-full border border-[#d8d4c8] bg-[#fffdfa] px-2.5 py-1 text-[9px] font-semibold text-[#34362f]">
@@ -325,13 +325,13 @@ export function AnimatedDashboard() {
   }, [reduce]);
 
   return (
-    <div className="mx-auto w-full max-w-[1180px]">
-      <div className="overflow-hidden rounded-[24px] border border-[#d2ccbd] bg-[#ede9df] shadow-[0_46px_100px_-58px_rgba(28,31,26,0.55),0_1px_0_rgba(255,255,255,0.8)_inset]">
-        <div className="flex h-11 items-center justify-between border-b border-[#d8d3c6] bg-[linear-gradient(180deg,#f9f7f1,#eae6dc)] px-4">
+    <div className="mx-auto w-full min-w-0 max-w-[1180px]">
+      <div className="overflow-hidden rounded-[18px] border border-[#d2ccbd] bg-[#ede9df] shadow-[0_34px_76px_-50px_rgba(28,31,26,0.48),0_1px_0_rgba(255,255,255,0.8)_inset] sm:rounded-[24px] sm:shadow-[0_46px_100px_-58px_rgba(28,31,26,0.55),0_1px_0_rgba(255,255,255,0.8)_inset]">
+        <div className="flex h-9 items-center justify-between border-b border-[#d8d3c6] bg-[linear-gradient(180deg,#f9f7f1,#eae6dc)] px-3 sm:h-11 sm:px-4">
           <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-[#ff5f57] shadow-[0_0_0_1px_rgba(0,0,0,0.08)]" />
-            <span className="h-3 w-3 rounded-full bg-[#ffbd2e] shadow-[0_0_0_1px_rgba(0,0,0,0.08)]" />
-            <span className="h-3 w-3 rounded-full bg-[#28c840] shadow-[0_0_0_1px_rgba(0,0,0,0.08)]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57] shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:h-3 sm:w-3" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e] shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:h-3 sm:w-3" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#28c840] shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:h-3 sm:w-3" />
           </div>
           <div className="hidden rounded-full border border-[#d8d3c6] bg-[#fffdfa] px-4 py-1.5 font-mono text-[11px] font-semibold text-[#6b655b] sm:block">
             zroky.dashboard / protected-actions
@@ -339,7 +339,7 @@ export function AnimatedDashboard() {
           <div className="w-[58px]" />
         </div>
 
-        <div className="grid min-h-[500px] bg-[#f8f7f2] md:grid-cols-[184px_1fr]">
+        <div className="grid min-h-[420px] bg-[#f8f7f2] sm:min-h-[500px] md:grid-cols-[184px_1fr]">
           <aside className="hidden border-r border-[#dfdbd0] bg-[#f2efe7] p-4 md:flex md:flex-col">
             <img src="/zroky-brand.png" alt="Zroky" className="h-7 w-[116px] object-contain object-left" />
             <p className="mt-5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8b8578]">Control</p>
@@ -373,8 +373,8 @@ export function AnimatedDashboard() {
             </div>
           </aside>
 
-          <main className="min-w-0 p-3 sm:p-4 lg:p-5">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-[13px] border border-[#dfdbd0] bg-[#fffdfa] px-3 py-2.5 shadow-[0_1px_2px_rgba(30,33,29,0.04)]">
+          <main className="min-w-0 p-2.5 sm:p-4 lg:p-5">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-[12px] border border-[#dfdbd0] bg-[#fffdfa] px-2.5 py-2 shadow-[0_1px_2px_rgba(30,33,29,0.04)] sm:rounded-[13px] sm:px-3 sm:py-2.5">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-[#2f5f66] text-white">
                   <ActiveIcon size={16} />
@@ -395,7 +395,7 @@ export function AnimatedDashboard() {
               </div>
             </div>
 
-            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 md:hidden" aria-label="Dashboard module tour">
+            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden" aria-label="Dashboard module tour">
               {moduleTour.map((module) => (
                 <button
                   key={module.id}
