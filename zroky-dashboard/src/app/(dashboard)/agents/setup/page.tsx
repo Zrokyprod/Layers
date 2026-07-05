@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -24,7 +24,6 @@ import {
   listProjectApiKeys,
   type AgentProfileResponse,
 } from "@/lib/api";
-import { buildProtectedAgentSnippet, protectedAgentTemplates } from "@/lib/protected-agent-setup";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
 
 const FRAMEWORKS = [
@@ -39,6 +38,7 @@ const FRAMEWORKS = [
 const ENVIRONMENTS = ["production", "staging", "development"];
 const CONTROL_LOOP_STEPS = ["Propose", "Policy", "Approval", "Execution", "Verification", "Receipt"];
 const DEFAULT_RUNTIME_KEY_NAME = "Protected agent runtime key";
+type SetupStep = "key" | "connect" | "run" | "next";
 
 function configuredApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
@@ -79,6 +79,12 @@ function CopyableCode({ label, value }: { label: string; value: string }) {
       <pre>{value}</pre>
     </div>
   );
+}
+
+function stepStateLabel(activeStep: SetupStep, step: SetupStep, done: boolean) {
+  if (done) return "Done";
+  if (activeStep === step) return "Now";
+  return "Locked";
 }
 
 export default function ProtectedAgentSetupPage() {
@@ -194,23 +200,31 @@ export default function ProtectedAgentSetupPage() {
   const created = Boolean(profile);
   const firstAction = firstActionQuery.data?.items[0] ?? null;
   const live = (firstReceiptQuery.data?.items.length ?? 0) > 0;
+  const activeStep: SetupStep = !hasRuntimeKey ? "key" : !created ? "connect" : !live ? "run" : "next";
   const actionStatus = firstAction
     ? firstAction.status.replace(/_/g, " ")
     : firstActionQuery.isFetching
       ? "polling"
       : "waiting";
 
-  const snippet = useMemo(
-    () =>
-      buildProtectedAgentSnippet(protectedAgentTemplates[0], projectId || "proj_...", {
-        agentId: profile?.id ?? "agent_profile_id",
-        apiBaseUrl,
-      }),
-    [apiBaseUrl, profile?.id, projectId],
-  );
   const runtimeEnvSnippet = `pip install zroky
 export ZROKY_API_KEY="${newRuntimeKey?.api_key ?? "zk_live_..."}"
-export ZROKY_INGEST_URL="${apiBaseUrl}"`;
+export ZROKY_PROJECT_ID="${projectId || "proj_..."}"
+export ZROKY_INGEST_URL="${apiBaseUrl}"
+
+zroky doctor
+zroky ingest --test`;
+  const firstProtectedActionSnippet = `import zroky
+
+zroky.init()
+
+receipt = zroky.protect(
+    action="customer.access.grant",
+    params={"customer_id": "cus_123", "role": "viewer"},
+    run=lambda: grant_access("cus_123", "viewer"),
+)
+
+print(receipt.status)`;
 
   async function copyRuntimeKey(value: string) {
     try {
@@ -273,13 +287,19 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
       <section className="agent-quickstart" aria-label="Protect an agent">
         <div className="agent-quickstart-main">
           {/* 1 - Project key */}
-          <div className="agent-quickstart-card agent-runtime-key-card" data-step="key" data-done={hasRuntimeKey ? "true" : "false"}>
+          <div
+            className="agent-quickstart-card agent-runtime-key-card"
+            data-step="key"
+            data-active={activeStep === "key" ? "true" : "false"}
+            data-done={hasRuntimeKey ? "true" : "false"}
+          >
             <div className="agent-quickstart-card-head">
               <span>{hasRuntimeKey ? <CheckCircle2 aria-hidden="true" size={16} /> : "01"}</span>
               <div>
                 <strong>Project key</strong>
                 <small>Create the runtime key your agent uses to call Zroky.</small>
               </div>
+              <em>{stepStateLabel(activeStep, "key", hasRuntimeKey)}</em>
             </div>
 
             {projectQuery.error ? (
@@ -330,13 +350,20 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
           </div>
 
           {/* 2 - Connect */}
-          <div className="agent-quickstart-card" data-step="connect" data-done={created ? "true" : "false"}>
+          <div
+            className="agent-quickstart-card"
+            data-step="connect"
+            data-active={activeStep === "connect" ? "true" : "false"}
+            data-done={created ? "true" : "false"}
+            aria-disabled={!hasRuntimeKey || undefined}
+          >
             <div className="agent-quickstart-card-head">
               <span>{created ? <CheckCircle2 aria-hidden="true" size={16} /> : "02"}</span>
               <div>
                 <strong>Connect</strong>
                 <small>Name the agent and add one SDK wrapper. No upfront action or system list.</small>
               </div>
+              <em>{stepStateLabel(activeStep, "connect", created)}</em>
             </div>
 
             {created ? (
@@ -344,11 +371,10 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
                 <p className="agent-setup-muted">
                   <strong>{profile?.display_name}</strong> is protected with the safe default policy.
                 </p>
-                <CopyableCode label="Minimal SDK starter" value={snippet} />
-                <div className="agent-setup-inline-actions">
-                  <DashboardButtonLink href="/settings/keys" icon={<KeyRound />} variant="primary">
-                    Project keys
-                  </DashboardButtonLink>
+                <div className="agent-profile-summary">
+                  <span>{framework}</span>
+                  <span>{environment}</span>
+                  <span>Fail-closed default</span>
                 </div>
               </div>
             ) : (
@@ -374,13 +400,19 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
                     <input
                       value={agentName}
                       onChange={(event) => setAgentName(event.target.value)}
+                      disabled={!hasRuntimeKey}
                       placeholder="Operations Agent"
                       aria-label="Agent name"
                     />
                   </label>
                   <label className="agent-setup-field">
                     <span>Framework</span>
-                    <select value={framework} onChange={(event) => setFramework(event.target.value)} aria-label="Framework">
+                    <select
+                      value={framework}
+                      onChange={(event) => setFramework(event.target.value)}
+                      aria-label="Framework"
+                      disabled={!hasRuntimeKey}
+                    >
                       {FRAMEWORKS.map((item) => (
                         <option key={item} value={item}>
                           {item}
@@ -394,6 +426,7 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
                       value={environment}
                       onChange={(event) => setEnvironment(event.target.value)}
                       aria-label="Environment"
+                      disabled={!hasRuntimeKey}
                     >
                       {ENVIRONMENTS.map((item) => (
                         <option key={item} value={item}>
@@ -420,14 +453,32 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
           </div>
 
           {/* 3 - Run */}
-          <div className="agent-quickstart-card" data-step="run" data-done={live ? "true" : "false"} aria-disabled={!created}>
+          <div
+            className="agent-quickstart-card"
+            data-step="run"
+            data-active={activeStep === "run" ? "true" : "false"}
+            data-done={live ? "true" : "false"}
+            aria-disabled={!created || undefined}
+          >
             <div className="agent-quickstart-card-head">
               <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "03"}</span>
               <div>
                 <strong>Run</strong>
-                <small>Run your agent with the snippet. Zroky captures and verifies the first real action.</small>
+                <small>Run the checks, then send one protected action from your agent runtime.</small>
               </div>
+              <em>{stepStateLabel(activeStep, "run", live)}</em>
             </div>
+            {created ? (
+              <div className="agent-run-snippets">
+                <CopyableCode label="CLI smoke test" value={runtimeEnvSnippet} />
+                <CopyableCode label="Protected action" value={firstProtectedActionSnippet} />
+              </div>
+            ) : (
+              <div className="agent-run-locked">
+                <strong>Create the agent profile first.</strong>
+                <span>The install commands appear here after the runtime key and agent profile are ready.</span>
+              </div>
+            )}
             <div className="agent-setup-readiness-grid" aria-label="Live capture status">
               <div data-done={created ? "true" : "false"}>
                 {created ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
@@ -448,7 +499,13 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
           </div>
 
           {/* 4 - Live / what's next */}
-          <div className="agent-quickstart-card" data-step="live" data-done={live ? "true" : "false"} aria-disabled={!created}>
+          <div
+            className="agent-quickstart-card"
+            data-step="live"
+            data-active={activeStep === "next" ? "true" : "false"}
+            data-done={live ? "true" : "false"}
+            aria-disabled={!live || undefined}
+          >
             <div className="agent-quickstart-card-head">
               <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "04"}</span>
               <div>
@@ -459,6 +516,7 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
                     : "After the first receipt, tune control on the actions Zroky actually saw."}
                 </small>
               </div>
+              <em>{stepStateLabel(activeStep, "next", live)}</em>
             </div>
             {!live ? (
               <div className="agent-next-hint">

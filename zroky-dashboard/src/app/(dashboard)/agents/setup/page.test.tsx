@@ -151,6 +151,10 @@ describe("Protected agent setup (minimal)", () => {
     );
     await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
     expect(await screen.findByText(/is protected with the safe default policy/i)).toBeInTheDocument();
+    expect(screen.getByText("CLI smoke test")).toBeInTheDocument();
+    expect(screen.getByText(/zroky doctor/i)).toBeInTheDocument();
+    expect(screen.getByText(/zroky ingest --test/i)).toBeInTheDocument();
+    expect(screen.getByText(/zroky.protect/i)).toBeInTheDocument();
   });
 
   it("creates a runtime project key inline when none exists", async () => {
@@ -168,6 +172,8 @@ describe("Protected agent setup (minimal)", () => {
     }));
     expect(await screen.findByText("zk_live_created_secret")).toBeInTheDocument();
     expect(screen.getByText(/pip install zroky/i)).toBeInTheDocument();
+    expect(screen.getByText(/zroky doctor/i)).toBeInTheDocument();
+    expect(screen.getByText(/zroky ingest --test/i)).toBeInTheDocument();
   });
 
   it("prefills the agent name from the query param", () => {
