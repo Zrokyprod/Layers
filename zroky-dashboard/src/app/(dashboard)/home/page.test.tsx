@@ -505,14 +505,18 @@ describe("Mission Control Home", () => {
     expect(lockedPreview?.textContent).toContain("Policy bypass mutation");
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
     expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe(
-      "/agents/setup?intent=protect-agent&source=home",
-    );
-    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("data-state")).toBe("current");
+    const installCard = screen.getByText("Install SDK").closest(".mc-first-run-step-card");
+    const submitCard = screen.getByText("Submit action").closest(".mc-first-run-step-card");
+    const proofCard = screen.getByText("Approve and prove").closest(".mc-first-run-step-card");
+    expect(installCard?.getAttribute("data-state")).toBe("current");
+    expect(submitCard?.getAttribute("data-state")).toBe("locked");
+    expect(proofCard?.getAttribute("data-state")).toBe("locked");
     expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Start agent setup/i }).getAttribute("href")).toBe(
       "/agents/setup?intent=protect-agent&source=home",
     );
+    expect(screen.getByRole("link", { name: /Project keys/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.queryByRole("link", { name: /^Actions$/i })).not.toBeInTheDocument();
   });
 
   it("tracks key and active-agent progress before the first action signal", async () => {
@@ -527,9 +531,10 @@ describe("Mission Control Home", () => {
 
     expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("data-state")).toBe("done");
-    expect(screen.getByRole("link", { name: /Submit action/i }).getAttribute("data-state")).toBe("current");
+    expect(screen.getByText("Install SDK").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
+    expect(screen.getByText("Submit action").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("current");
     expect(screen.getByText("Agent profile is active. Send the first verified action.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Send first action/i }).getAttribute("href")).toBe("/agents/setup");
   });
 
   it("opens the mission dashboard after the first protected action signal", async () => {

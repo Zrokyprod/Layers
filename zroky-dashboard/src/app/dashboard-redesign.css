@@ -19687,66 +19687,59 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
+  gap: 12px;
   margin: 0;
   padding: 0;
-  overflow: hidden;
-  border: 1px solid rgba(47, 95, 102, 0.14);
-  border-radius: 10px;
-  background: #f7f8f5;
+  border: 0;
+  background: transparent;
   list-style: none;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps li {
   min-width: 0;
-  border-right: 1px solid rgba(47, 95, 102, 0.12);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps li:last-child {
-  border-right: 0;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  grid-template-areas:
-    "index icon copy"
-    "index icon state";
-  align-items: center;
-  gap: 9px 10px;
-  min-height: 94px;
+  align-content: start;
+  gap: 12px;
+  min-height: 172px;
   height: 100%;
-  padding: 14px 14px 13px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 14px;
+  border: 1px solid rgba(47, 95, 102, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
   color: inherit;
-  text-decoration: none;
+  box-shadow: 0 10px 28px rgba(24, 35, 31, 0.06);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="done"] {
-  background: rgba(22, 163, 74, 0.05);
+  border-color: rgba(22, 163, 74, 0.2);
+  background: rgba(247, 252, 247, 0.92);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] {
+  border-color: rgba(47, 95, 102, 0.34);
   background:
-    linear-gradient(180deg, rgba(47, 95, 102, 0.1), rgba(47, 95, 102, 0.045)),
-    #f6fbfa;
-  box-shadow: inset 0 3px 0 var(--mc-accent);
+    linear-gradient(180deg, rgba(47, 95, 102, 0.1), rgba(47, 95, 102, 0.035)),
+    #fbfdfc;
+  box-shadow: 0 18px 42px rgba(47, 95, 102, 0.14);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="locked"] {
+  border-color: rgba(47, 95, 102, 0.1);
+  background: rgba(247, 248, 245, 0.68);
   color: var(--mc-text-tertiary);
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card:hover,
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card:focus-visible {
-  background: var(--mc-accent-soft);
-  outline: none;
+.app-shell[data-dashboard-system="control-v1"] .mc-step-head {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-index {
-  grid-area: index;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -19771,7 +19764,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-icon {
-  grid-area: icon;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -19784,9 +19776,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-copy {
-  grid-area: copy;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -19796,7 +19787,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-copy span {
-  max-width: 220px;
   font-size: 0.76rem;
   line-height: 1.35;
 }
@@ -19806,8 +19796,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-state {
-  grid-area: state;
-  justify-self: start;
+  justify-self: end;
   min-width: 46px;
   padding: 3px 8px;
   border: 1px solid var(--mc-border);
@@ -19831,6 +19820,37 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-accent);
 }
 
+.app-shell[data-dashboard-system="control-v1"] .mc-step-foot {
+  display: grid;
+  gap: 8px;
+  align-self: end;
+  margin-top: auto;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-step-hint {
+  min-height: 28px;
+  color: var(--mc-text-tertiary);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] .mc-step-hint {
+  color: var(--mc-text-secondary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-step-text-link {
+  width: fit-content;
+  color: var(--mc-accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-step-text-link:hover,
+.app-shell[data-dashboard-system="control-v1"] .mc-step-text-link:focus-visible {
+  text-decoration: underline;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-footer {
   display: flex;
   flex-wrap: wrap;
@@ -19838,6 +19858,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   justify-content: space-between;
   gap: 14px;
   padding-top: 1px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-help {
+  margin: 0;
+  color: var(--mc-text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-progress {
@@ -19871,13 +19898,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-color: rgba(22, 163, 74, 0.3);
   background: rgba(22, 163, 74, 0.1);
   color: #15803d;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel {
@@ -20286,16 +20306,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .mc-first-run-footer {
     align-items: stretch;
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .mc-first-run-actions {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .mc-first-run-actions .dashboard-button {
-    width: 100%;
-    flex: 1 1 100%;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-hero-buttons,

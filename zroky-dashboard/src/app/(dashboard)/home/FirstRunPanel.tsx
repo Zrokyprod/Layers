@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Code2,
   FileCheck2,
-  KeyRound,
   ShieldCheck,
 } from "lucide-react";
 
@@ -25,6 +24,7 @@ const STEPS = [
     label: "Install SDK",
     detail: "Add the verified action client to one agent runtime.",
     completeDetail: "Project key is ready for the SDK runtime.",
+    cta: "Start agent setup",
     href: "/agents/setup?intent=protect-agent&source=home",
     icon: Code2,
   },
@@ -33,6 +33,7 @@ const STEPS = [
     label: "Submit action",
     detail: "Create an action intent with a contract and digest.",
     completeDetail: "First action intent reached the control plane.",
+    cta: "Send first action",
     href: "/agents/setup",
     icon: ShieldCheck,
   },
@@ -41,6 +42,7 @@ const STEPS = [
     label: "Approve and prove",
     detail: "Use dashboard or Slack approval, then inspect the receipt.",
     completeDetail: "Approval, receipt, or outcome proof is available.",
+    cta: "Review proof",
     href: "/evidence",
     icon: FileCheck2,
   },
@@ -82,9 +84,26 @@ function stateLabel(state: StepState): string {
   return "Locked";
 }
 
+function stepHint(stepId: (typeof STEPS)[number]["id"], state: StepState): string {
+  if (state === "done") {
+    return "Completed";
+  }
+  if (state === "locked") {
+    return "Unlocks after the previous step";
+  }
+  if (stepId === "key") {
+    return "Create or copy a project key, then install the SDK.";
+  }
+  if (stepId === "action") {
+    return "Run one protected action from your agent runtime.";
+  }
+  return "Approve the first hold and inspect the signed receipt.";
+}
+
 export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
   const states = STEPS.map((step) => stepState(step.id, signals));
   const currentIndex = states.findIndex((state) => state === "current");
+  const completedCount = states.filter((state) => state === "done").length;
 
   return (
     <section className="mc-first-run" aria-label="First run setup">
@@ -108,20 +127,34 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
           const state = states[index];
           return (
             <li key={step.label}>
-              <Link className="mc-first-run-step-card" href={step.href} data-state={state}>
-                <span className="mc-step-index">
-                  {state === "done" ? <CheckCircle2 aria-hidden="true" size={14} /> : index + 1}
-                </span>
-                <span className="mc-step-icon" aria-hidden="true">
-                  <Icon size={18} />
-                </span>
-                <span className="mc-step-copy">
+              <article className="mc-first-run-step-card" data-state={state}>
+                <div className="mc-step-head">
+                  <span className="mc-step-index">
+                    {state === "done" ? <CheckCircle2 aria-hidden="true" size={14} /> : index + 1}
+                  </span>
+                  <span className="mc-step-icon" aria-hidden="true">
+                    <Icon size={18} />
+                  </span>
+                  <span className="mc-step-state">{stateLabel(state)}</span>
+                </div>
+                <div className="mc-step-copy">
                   <strong>{step.label}</strong>
                   <span>{stepDetail(step, state, signals)}</span>
-                </span>
-                <span className="mc-step-state">{stateLabel(state)}</span>
-                <ArrowRight aria-hidden="true" className="mc-step-arrow" size={15} />
-              </Link>
+                </div>
+                <div className="mc-step-foot">
+                  <span className="mc-step-hint">{stepHint(step.id, state)}</span>
+                  {state === "current" ? (
+                    <DashboardButtonLink href={step.href} icon={<ArrowRight />} iconPosition="right" size="sm" variant="primary">
+                      {step.cta}
+                    </DashboardButtonLink>
+                  ) : null}
+                  {step.id === "key" && state === "current" ? (
+                    <Link className="mc-step-text-link" href="/settings/keys">
+                      Project keys
+                    </Link>
+                  ) : null}
+                </div>
+              </article>
             </li>
           );
         })}
@@ -140,17 +173,7 @@ export function FirstRunPanel({ signals }: { signals: FirstRunSignals }) {
             );
           })}
         </div>
-        <div className="mc-first-run-actions">
-          <DashboardButtonLink href="/agents/setup?intent=protect-agent&source=home" icon={<ShieldCheck />} variant="primary">
-            Start agent setup
-          </DashboardButtonLink>
-          <DashboardButtonLink href="/settings/keys" icon={<KeyRound />} variant="soft">
-            Project keys
-          </DashboardButtonLink>
-          <DashboardButtonLink href="/actions" icon={<ArrowRight />} iconPosition="right" variant="ghost">
-            Actions
-          </DashboardButtonLink>
-        </div>
+        <p className="mc-first-run-help">{completedCount} of {STEPS.length} setup steps complete.</p>
       </div>
     </section>
   );
