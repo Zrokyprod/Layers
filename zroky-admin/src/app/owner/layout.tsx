@@ -6,21 +6,16 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
   BadgeDollarSign,
-  Cpu,
-  Flag,
-  Gauge,
   GitBranch,
   Home,
   KeyRound,
   LogOut,
   MessageSquare,
-  Rocket,
   ServerCog,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
   Users,
-  Vote,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,31 +37,26 @@ const NAV_GROUPS: ReadonlyArray<{ label: string; items: ReadonlyArray<OwnerNavIt
   {
     label: "Operate",
     items: [
-      { href: "/owner", label: "Overview", icon: Home, description: "Regression firewall health" },
-      { href: "/owner/money-path", label: "Money Path", icon: GitBranch, description: "Capture to CI proof" },
-      { href: "/owner/launch-readiness", label: "Launch Gate", icon: Rocket, description: "Final paid launch decision" },
-      { href: "/owner/ops", label: "Ops", icon: Gauge, description: "Founder operating queue", visibleInNav: false },
-      { href: "/owner/infrastructure", label: "Infrastructure", icon: ServerCog, description: "Workers and queues", visibleInNav: false },
-      { href: "/owner/support", label: "Support", icon: MessageSquare, description: "Tickets and replies", visibleInNav: false },
+      { href: "/owner", label: "Overview", icon: Home, description: "Live paid traffic, customer actions, money, and infra" },
+      { href: "/owner/money-path", label: "Money Path", icon: GitBranch, description: "Customer payment, entitlements, proof, and owner actions" },
+      { href: "/owner/infrastructure", label: "Infrastructure", icon: ServerCog, description: "API, DB, Redis, gateway, workers, and smoke checks" },
     ],
   },
   {
     label: "Customers",
     items: [
-      { href: "/owner/users", label: "Users", icon: Users, description: "Accounts and access", visibleInNav: false },
-      { href: "/owner/projects", label: "Projects", icon: Activity, description: "Tenants and spend" },
-      { href: "/owner/pricing", label: "Billing", icon: BadgeDollarSign, description: "Plans and status" },
-      { href: "/owner/rate-limits", label: "Rate Limits", icon: SlidersHorizontal, description: "Global and tenant caps", visibleInNav: false },
+      { href: "/owner/projects", label: "Tenants", icon: Activity, description: "Customers, plan, protected actions, proof quota, and next action" },
+      { href: "/owner/users", label: "Users", icon: Users, description: "Accounts, access, and subscription changes" },
+      { href: "/owner/pricing", label: "Billing", icon: BadgeDollarSign, description: "Accounts, recovery, plan and pricing" },
+      { href: "/owner/support", label: "Support", icon: MessageSquare, description: "Tickets and urgent customer issues" },
     ],
   },
   {
     label: "Platform",
     items: [
-      { href: "/owner/platform-llm", label: "LLM Usage", icon: Cpu, description: "Internal model cost", visibleInNav: false },
-      { href: "/owner/feature-flags", label: "Feature Flags", icon: Flag, description: "Rollouts and overrides", visibleInNav: false },
-      { href: "/owner/feature-votes", label: "Feature Interest", icon: Vote, description: "Demand signals", visibleInNav: false },
-      { href: "/owner/audit", label: "Audit Log", icon: ShieldCheck, description: "Owner action trail" },
-      { href: "/owner/settings", label: "Settings", icon: Settings, description: "Session and guardrails" },
+      { href: "/owner/tool-catalog", label: "Connector Catalog", icon: SlidersHorizontal, description: "Source-of-record connectors and custom fallback" },
+      { href: "/owner/audit", label: "Audit", icon: ShieldCheck, description: "Owner actions, plan grants, deletes" },
+      { href: "/owner/settings", label: "Settings", icon: Settings, description: "Session, guardrails, platform rate limits" },
     ],
   },
 ];
@@ -75,6 +65,9 @@ const VISIBLE_NAV_GROUPS = NAV_GROUPS.map((group) => ({
   ...group,
   items: group.items.filter((item) => item.visibleInNav !== false),
 })).filter((group) => group.items.length > 0);
+
+const OWNER_SCOPE_LABEL = process.env.NODE_ENV === "production" ? "Production scoped" : "Local dev";
+const OWNER_SCOPE_CLASS = process.env.NODE_ENV === "production" ? "owner-env-pill-prod" : "owner-env-pill-local";
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/owner" ? pathname === "/owner" : pathname.startsWith(href);
@@ -229,7 +222,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
           </div>
           <div className="owner-topbar-status">
             <span className="owner-env-pill">Admin</span>
-            <span className="owner-env-pill owner-env-pill-prod">Production scoped</span>
+            <span className={`owner-env-pill ${OWNER_SCOPE_CLASS}`}>{OWNER_SCOPE_LABEL}</span>
           </div>
         </header>
 

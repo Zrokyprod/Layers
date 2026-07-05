@@ -145,10 +145,16 @@ describe("OwnerMoneyPathPage", () => {
     render(<OwnerMoneyPathPage />);
 
     expect(screen.getByRole("heading", { name: "Money Path" })).toBeInTheDocument();
-    expect(screen.getByText("Platform Money Path")).toBeInTheDocument();
+    expect(screen.getByText("Platform Control Path")).toBeInTheDocument();
     expect(screen.getAllByText("Blocked Tenant").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Provider Gap Tenant").length).toBeGreaterThan(0);
-    expect(screen.getByText("Blocked CI Evidence")).toBeInTheDocument();
+    expect(screen.getByText("Release Block Evidence")).toBeInTheDocument();
+    expect(screen.getAllByText("Proof checks").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Receipt baseline").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Release check").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Replay")).toBe(null);
+    expect(screen.queryByText("Golden")).toBe(null);
+    expect(screen.queryByText("CI Gate")).toBe(null);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Inspect" })[1]);
     const panel = screen.getByRole("complementary", { name: "Selected tenant money-path evidence" });
@@ -162,7 +168,7 @@ describe("OwnerMoneyPathPage", () => {
 
     render(<OwnerMoneyPathPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Provider missing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connector gap" }));
     let table = screen.getByRole("table");
     expect(within(table).getByText("Provider Gap Tenant")).toBeInTheDocument();
     expect(within(table).queryByText("Blocked Tenant")).toBe(null);
@@ -183,7 +189,7 @@ describe("OwnerMoneyPathPage", () => {
     render(<OwnerMoneyPathPage />);
 
     expect(screen.getByText("HTTP 500")).toBeInTheDocument();
-    expect(screen.queryByText("Platform Money Path")).toBe(null);
+    expect(screen.queryByText("Platform Control Path")).toBe(null);
     expect(screen.queryByText("Every active tenant has capture in the 24-hour window.")).toBe(null);
   });
 });

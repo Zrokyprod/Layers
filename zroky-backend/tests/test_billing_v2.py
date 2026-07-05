@@ -252,6 +252,21 @@ def _make_event(
     }
 
 
+def _ingest_event(call_id: str) -> dict:
+    return {
+        "call_id": call_id,
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "call_type": "chat",
+        "status": "completed",
+        "prompt_tokens": 8,
+        "completion_tokens": 4,
+        "trace_id": f"trace-{call_id}",
+        "agent_name": "billing-quota-test-agent",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def _post_signed_webhook(client: TestClient, event: dict, *, secret: str = _TEST_WEBHOOK_SECRET):
     body = json.dumps(event).encode("utf-8")
     return client.post(
@@ -407,6 +422,15 @@ class TestRazorpayCheckoutRoute:
             ).scalar_one()
             assert event.result == "applied"
 
+        me_response = client.get("/v1/billing/me")
+        assert me_response.status_code == 200
+        me_body = me_response.json()
+        assert me_body["plan_code"] == "pro"
+        assert me_body["status"] == "active"
+        assert me_body["payment_provider"] == "razorpay"
+        assert me_body["payment_subscription_ref"] == payment_id
+        assert me_body["plan_template"]["events.monthly_quota"] == 250_000
+
     def test_verify_payment_rejects_authorized_provider_state_without_marking_paid(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -537,6 +561,74 @@ class TestPortalRoute:
 
 
 class TestBillingQuota:
+    def test_free_ingest_quota_blocks_then_pro_upgrade_increases_limit(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _MockTaskResult:
+            id = "task-billing-quota-test"
+
+        monkeypatch.setenv("BILLING_ENFORCE_QUOTA", "true")
+        monkeypatch.setattr(
+            "app.api.routes.ingest.process_diagnosis.delay",
+            lambda *_args, **_kwargs: _MockTaskResult(),
+        )
+        fake = _FakeRazorpayClient()
+        monkeypatch.setattr("app.api.routes.billing._razorpay_client", lambda: fake)
+        get_settings.cache_clear()
+        entitlements_resolver.invalidate_all()
+
+        me_response = client.get("/v1/billing/me")
+        assert me_response.status_code == 200
+        assert me_response.json()["plan_code"] == DEFAULT_PLAN_CODE
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            session.add(
+                EventCount(
+                    tenant_id="org-alpha",
+                    month=current_month(),
+                    event_count=5_000,
+                    last_event_at=datetime.now(timezone.utc),
+                )
+            )
+            session.commit()
+
+        blocked = client.post(
+            "/api/v1/ingest",
+            json={"events": [_ingest_event("billing-quota-blocked")]},
+        )
+        assert blocked.status_code == 429
+        assert blocked.headers["X-Quota-Used"] == "5000"
+        assert blocked.headers["X-Quota-Limit"] == "5000"
+        assert "Monthly event quota exceeded" in blocked.json()["detail"]
+
+        assert client.post("/v1/billing/razorpay/order", json={"plan_code": "pro"}).status_code == 200
+        payment_id = "pay_test_123"
+        verify = client.post(
+            "/v1/billing/razorpay/verify",
+            json={
+                "razorpay_payment_id": payment_id,
+                "razorpay_order_id": "order_test_123",
+                "razorpay_signature": _razorpay_signature("order_test_123", payment_id),
+            },
+        )
+        assert verify.status_code == 200
+
+        allowed = client.post(
+            "/api/v1/ingest",
+            json={"events": [_ingest_event("billing-quota-after-pro")]},
+        )
+        assert allowed.status_code == 202
+        assert allowed.json()["accepted"] == 1
+        assert allowed.json()["metered"] == 1
+
+        usage = client.get("/v1/billing/usage")
+        assert usage.status_code == 200
+        usage_body = usage.json()
+        assert usage_body["plan_code"] == "pro"
+        assert usage_body["calls"]["used"] == 5_001
+        assert usage_body["calls"]["limit"] == 250_000
+
     def test_strict_quota_check_failure_denies_and_alerts(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -745,6 +837,17 @@ class TestWebhookRoute:
         assert second.status_code == 200
         assert first.json()["duplicate"] is False
         assert second.json()["duplicate"] is True
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            events = session.execute(
+                select(BillingEvent).where(
+                    BillingEvent.provider == "razorpay",
+                    BillingEvent.provider_event_id == "evt_dup",
+                )
+            ).scalars().all()
+            assert len(events) == 1
+            assert events[0].result == "applied"
 
     def test_idempotent_replay(self, client: TestClient) -> None:
         self.test_duplicate_webhook_is_idempotent(client)

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { AlertTriangle, ArrowRight, BadgeDollarSign, GitBranch, KeyRound, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { OwnerPlanGrantModal } from "@/components/owner-plan-grant-modal";
 import {
   useClearProjectRateLimit,
   useOwnerMoneyPathHealth,
@@ -14,18 +15,24 @@ import {
   useSetProjectRateLimit,
   useSetProjectStatus,
 } from "@/lib/hooks";
-import type { OwnerMoneyPathTenantRow } from "@/lib/owner-api";
+import type { OwnerMoneyPathTenantRow, OwnerProjectItem } from "@/lib/owner-api";
 
 type Tone = "ok" | "warn" | "danger" | "neutral";
 
 const ACTION_LABELS: Record<string, string> = {
-  review_blocked_ci: "Review blocked CI",
-  restore_capture: "Restore capture",
-  connect_provider_key: "Connect provider key",
-  review_replay_quota: "Review replay quota",
-  run_replay: "Run replay",
-  promote_golden: "Promote Golden",
-  run_ci_gate: "Run CI gate",
+  review_blocked_ci: "Review release block",
+  restore_capture: "Restore action intake",
+  connect_provider_key: "Connect connector key",
+  review_replay_quota: "Review proof quota",
+  review_event_quota: "Review event quota",
+  restore_replay_worker: "Restore proof worker",
+  fix_metering: "Fix metering",
+  refresh_pricing: "Refresh pricing",
+  fix_billing: "Fix billing",
+  review_support: "Review support",
+  run_replay: "Run proof check",
+  promote_golden: "Promote receipt baseline",
+  run_ci_gate: "Run release check",
   continue_triage: "Continue triage",
   monitor: "Monitor",
 };
@@ -47,7 +54,7 @@ function fmtCount(value: number): string {
 }
 
 function fmtDate(value: string | null): string {
-  if (!value) return "No recent capture";
+  if (!value) return "No recent action";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "Invalid timestamp";
   return parsed.toLocaleString(undefined, {
@@ -101,6 +108,15 @@ function quotaText(tenant: OwnerMoneyPathTenantRow): string {
   return `${fmtCount(tenant.replay_quota_status.used)} / ${fmtCount(tenant.replay_quota_status.limit)}`;
 }
 
+function breakLabel(value: string): string {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\bprovider\b/gi, "connector")
+    .replace(/\breplay\b/gi, "proof")
+    .replace(/\bgolden\b/gi, "receipt baseline")
+    .replace(/\bci\b/gi, "release");
+}
+
 function eventMeteringText(tenant: OwnerMoneyPathTenantRow): string {
   const metering = tenant.event_metering_status;
   if (!metering) return "No event-metering proof";
@@ -143,11 +159,11 @@ function EvidenceItem({ label, value }: { label: string; value: string }) {
 
 function TenantLoopEvidence({ tenant }: { tenant: OwnerMoneyPathTenantRow }) {
   const steps = [
-    { id: "capture", label: "Capture", value: `${fmtCount(tenant.captures_24h)} in 24h`, detail: fmtDate(tenant.last_capture_at) },
+    { id: "capture", label: "Protected actions", value: `${fmtCount(tenant.captures_24h)} in 24h`, detail: fmtDate(tenant.last_capture_at) },
     { id: "issue", label: "Issue", value: `${fmtCount(tenant.open_issue_count)} open`, detail: tenant.open_issue_count ? "triage required" : "no open issue" },
-    { id: "replay", label: "Replay", value: `${fmtCount(tenant.replay_run_count_7d)} runs`, detail: `${fmtCount(tenant.verified_replay_count_7d)} verified` },
-    { id: "golden", label: "Golden", value: `${fmtCount(tenant.golden_trace_count)} active`, detail: tenant.golden_trace_count ? "CI eligible" : "no active trace" },
-    { id: "ci", label: "CI Gate", value: `${fmtCount(tenant.ci_run_count_7d)} runs`, detail: `${fmtCount(tenant.blocking_ci_failures_7d)} blocked` },
+    { id: "replay", label: "Proof checks", value: `${fmtCount(tenant.replay_run_count_7d)} runs`, detail: `${fmtCount(tenant.verified_replay_count_7d)} verified` },
+    { id: "golden", label: "Receipt baseline", value: `${fmtCount(tenant.golden_trace_count)} active`, detail: tenant.golden_trace_count ? "release eligible" : "no baseline yet" },
+    { id: "ci", label: "Release checks", value: `${fmtCount(tenant.ci_run_count_7d)} runs`, detail: `${fmtCount(tenant.blocking_ci_failures_7d)} blocked` },
   ];
 
   return (
@@ -180,6 +196,85 @@ function CommercialSignal({
       <strong>{value.replaceAll("_", " ")}</strong>
       <small>{detail}</small>
     </div>
+  );
+}
+
+function sdkSignal(tenant: OwnerMoneyPathTenantRow | null): { value: string; detail: string; tone: Tone } {
+  if (!tenant) return { value: "No health row", detail: "No protected-action row yet.", tone: "warn" };
+  if (!tenant.last_capture_at || tenant.captures_24h === 0) {
+    return { value: "No actions", detail: fmtDate(tenant.last_capture_at), tone: "danger" };
+  }
+  return { value: "Active", detail: `${fmtCount(tenant.captures_24h)} protected actions in 24h.`, tone: "ok" };
+}
+
+function proofSignal(tenant: OwnerMoneyPathTenantRow | null): { value: string; detail: string; tone: Tone } {
+  if (!tenant) return { value: "Proof state missing", detail: "Backend has no proof state.", tone: "warn" };
+  if (tenant.verified_replay_count_7d > 0 && tenant.golden_trace_count > 0) {
+    return {
+      value: "Verified",
+      detail: `${fmtCount(tenant.verified_replay_count_7d)} verified, ${fmtCount(tenant.golden_trace_count)} receipt baseline.`,
+      tone: "ok",
+    };
+  }
+  if (tenant.blocking_ci_failures_7d > 0) {
+    return { value: "Release risk", detail: `${fmtCount(tenant.blocking_ci_failures_7d)} blocking failure(s).`, tone: "danger" };
+  }
+  return { value: "Proof missing", detail: `${fmtCount(tenant.replay_run_count_7d)} proof check(s).`, tone: tenant.open_issue_count > 0 ? "warn" : "neutral" };
+}
+
+function customerStatus(project: OwnerProjectItem, tenant: OwnerMoneyPathTenantRow | null): { value: string; detail: string; tone: Tone } {
+  if (!project.is_active) return { value: "Suspended", detail: "Customer access is disabled.", tone: "danger" };
+  if (!tenant) return { value: "No health row", detail: "Backend has not reported customer health.", tone: "warn" };
+  if (!tenant.last_capture_at || tenant.captures_24h === 0) return { value: "Needs action", detail: "No recent protected actions.", tone: "danger" };
+  if (tenant.provider_key_status.state === "missing") return { value: "Needs action", detail: "Connector key missing.", tone: "danger" };
+  if (["risk", "missing_paid", "unknown"].includes(tenant.billing_status?.state ?? "")) return { value: "Needs action", detail: "Billing risk.", tone: "danger" };
+  if (["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)) return { value: "Needs action", detail: "Proof quota risk.", tone: "warn" };
+  if (tenant.open_issue_count > 0 || tenant.blocking_ci_failures_7d > 0) return { value: "Needs action", detail: actionLabel(tenant.next_owner_action), tone: "warn" };
+  if (tenant.next_owner_action !== "monitor") return { value: "Review", detail: actionLabel(tenant.next_owner_action), tone: "warn" };
+  return { value: "Live", detail: "No owner action queued.", tone: "ok" };
+}
+
+function Customer360Summary({
+  project,
+  tenant,
+  memberCount,
+}: {
+  project: OwnerProjectItem;
+  tenant: OwnerMoneyPathTenantRow | null;
+  memberCount: number;
+}) {
+  const status = customerStatus(project, tenant);
+  const sdk = sdkSignal(tenant);
+  const proof = proofSignal(tenant);
+  const connectorValue = tenant?.provider_key_status.state ?? "unknown";
+  const connectorDetail = tenant
+    ? `${fmtCount(tenant.provider_key_status.active_provider_count)} active connector key(s).`
+    : "No connector health row.";
+  const quotaValue = tenant?.replay_quota_status.state ?? "unknown";
+  const quotaDetail = tenant ? quotaText(tenant) : "No quota row.";
+  const planValue = tenant?.plan_code ?? "unknown";
+  const planDetail = tenant ? billingDetail(tenant) : "No billing row.";
+
+  return (
+    <section className="panel owner-customer-summary-panel">
+      <div className="panel-header">
+        <div>
+          <h3>Customer live state</h3>
+          <span className="panel-header-note">Simple status from protected actions, connectors, proof quota, billing, and support rows.</span>
+        </div>
+        <StatusBadge value={status.value} tone={status.tone} />
+      </div>
+      <div className="owner-customer-summary-grid">
+        <CommercialSignal label="Customer status" value={status.value} detail={status.detail} tone={status.tone} />
+        <CommercialSignal label="Plan & subscription" value={planValue} detail={planDetail} tone={stateTone(planValue)} />
+        <CommercialSignal label="Action intake" value={sdk.value} detail={sdk.detail} tone={sdk.tone} />
+        <CommercialSignal label="Connector health" value={connectorValue} detail={connectorDetail} tone={stateTone(connectorValue)} />
+        <CommercialSignal label="Proof quota" value={quotaValue} detail={quotaDetail} tone={stateTone(quotaValue)} />
+        <CommercialSignal label="Proof" value={proof.value} detail={proof.detail} tone={proof.tone} />
+        <CommercialSignal label="Support" value={tenant?.support_status?.state ?? "none"} detail={tenant ? supportDetail(tenant) : "No support row."} tone={stateTone(tenant?.support_status?.state ?? "none")} />
+        <CommercialSignal label="Users" value={fmtCount(memberCount)} detail="Active account members loaded for this tenant." tone={memberCount > 0 ? "ok" : "warn"} />
+      </div>
+    </section>
   );
 }
 
@@ -227,7 +322,7 @@ function TenantProofLedger({
         </div>
         <div className="owner-project-intel-empty">
           <AlertTriangle size={20} aria-hidden="true" />
-          <p>No regression-firewall health row exists for this tenant.</p>
+          <p>No customer health row exists for this tenant.</p>
           <Link href="/owner/money-path" className="btn btn-soft">
             <GitBranch size={15} aria-hidden="true" />
             Money path
@@ -242,7 +337,7 @@ function TenantProofLedger({
   const valueStatus = tenant.value_status ?? "unknown";
   const commercialSignals = [
     {
-      label: "Provider",
+      label: "Connector",
       value: tenant.provider_key_status.state,
       detail: `${fmtCount(tenant.provider_key_status.active_provider_count)} active key(s)`,
     },
@@ -270,11 +365,11 @@ function TenantProofLedger({
 
   return (
     <div className="panel owner-project-intel-panel">
-      <div className="panel-header">
-        <div className="owner-project-intel-heading">
-          <span>Tenant proof ledger</span>
-          <small>Capture, replay, CI, provider, metering, billing, and support evidence for this tenant.</small>
-        </div>
+        <div className="panel-header">
+          <div className="owner-project-intel-heading">
+            <span>Tenant proof ledger</span>
+            <small>Protected actions, proof checks, release checks, connectors, metering, billing, and support evidence for this tenant.</small>
+          </div>
         <div className="owner-project-intel-status">
           <StatusBadge value={valueStatus} />
           <StatusBadge value={actionLabel(tenant.next_owner_action)} tone={actionTone(tenant.next_owner_action)} />
@@ -292,7 +387,7 @@ function TenantProofLedger({
           </div>
           <div className="owner-project-break-list">
             {breaks.length > 0 ? (
-              breaks.slice(0, 5).map((item) => <span key={item}>{item.replaceAll("_", " ")}</span>)
+              breaks.slice(0, 5).map((item) => <span key={item}>{breakLabel(item)}</span>)
             ) : (
               <span>No breaks reported</span>
             )}
@@ -303,20 +398,20 @@ function TenantProofLedger({
           <div className="owner-project-intel-card">
             <span className="owner-stat-label">Open Issues</span>
             <strong>{fmtCount(tenant.open_issue_count)}</strong>
-            <p>{tenant.open_issue_count ? "Failure groups still need replay proof." : "No open issue reported by backend."}</p>
+            <p>{tenant.open_issue_count ? "Open issues still need proof checks." : "No open issue reported by backend."}</p>
           </div>
           <div className="owner-project-intel-card">
-            <span className="owner-stat-label">Verified Replay</span>
+            <span className="owner-stat-label">Verified proof</span>
             <strong>{fmtCount(tenant.verified_replay_count_7d)}</strong>
-            <p>{fmtCount(tenant.replay_run_count_7d)} total replay run(s) in 7 days.</p>
+            <p>{fmtCount(tenant.replay_run_count_7d)} total proof check(s) in 7 days.</p>
           </div>
           <div className="owner-project-intel-card">
-            <span className="owner-stat-label">Goldens</span>
+            <span className="owner-stat-label">Receipt baselines</span>
             <strong>{fmtCount(tenant.golden_trace_count)}</strong>
-            <p>{tenant.golden_trace_count ? "Active Golden trace available for CI." : "No active Golden trace yet."}</p>
+            <p>{tenant.golden_trace_count ? "Receipt baseline available for release checks." : "No receipt baseline yet."}</p>
           </div>
           <div className="owner-project-intel-card">
-            <span className="owner-stat-label">CI Gate</span>
+            <span className="owner-stat-label">Release checks</span>
             <strong>{fmtCount(tenant.ci_run_count_7d)}</strong>
             <p>{fmtCount(tenant.blocking_ci_failures_7d)} blocking failure(s) in 7 days.</p>
           </div>
@@ -342,9 +437,9 @@ function TenantProofLedger({
         <div className="owner-project-intel-proof">
           <div className="owner-money-proof-grid">
             <EvidenceItem label="Project Plan" value={tenant.plan_code} />
-            <EvidenceItem label="Last Capture" value={fmtDate(tenant.last_capture_at)} />
-            <EvidenceItem label="Provider Keys" value={providerValue} />
-            <EvidenceItem label="Replay Quota" value={quotaText(tenant)} />
+            <EvidenceItem label="Last protected action" value={fmtDate(tenant.last_capture_at)} />
+            <EvidenceItem label="Connector keys" value={providerValue} />
+            <EvidenceItem label="Proof quota" value={quotaText(tenant)} />
             <EvidenceItem label="Event Metering" value={eventMeteringText(tenant)} />
             <EvidenceItem label="Pricing Evidence" value={pricingDetail(tenant)} />
           </div>
@@ -352,7 +447,7 @@ function TenantProofLedger({
             <div className="owner-project-intel-action-copy">
               <KeyRound size={16} aria-hidden="true" />
               <span>
-                Provider key is <StatusBadge value={tenant.provider_key_status.state} />, replay quota is{" "}
+                Connector key is <StatusBadge value={tenant.provider_key_status.state} />, proof quota is{" "}
                 <StatusBadge value={tenant.replay_quota_status.state} />, and billing is{" "}
                 <StatusBadge value={tenant.billing_status?.state ?? "unknown"} />.
               </span>
@@ -365,8 +460,8 @@ function TenantProofLedger({
               <Link href="/owner/pricing" className="btn btn-soft">
                 Entitlements
               </Link>
-              <Link href="/owner/rate-limits" className="btn btn-soft">
-                Rate limits
+              <Link href="/owner/settings" className="btn btn-soft">
+                Platform limits
                 <ArrowRight size={14} aria-hidden="true" />
               </Link>
             </div>
@@ -388,6 +483,7 @@ export default function ProjectDetailPage() {
   const clearRateLimitMutation = useClearProjectRateLimit(id);
 
   const [actionMsg, setActionMsg] = useState("");
+  const [grantOpen, setGrantOpen] = useState(false);
   const [softLimit, setSoftLimit] = useState("");
   const [burstLimit, setBurstLimit] = useState("");
   const [enforceLimit, setEnforceLimit] = useState(false);
@@ -460,23 +556,28 @@ export default function ProjectDetailPage() {
   return (
     <div className="owner-page owner-project-detail-page">
       <div className="owner-project-breadcrumb">
-        <Link href="/owner/projects">Projects</Link>
+        <Link href="/owner/projects">Tenants</Link>
         <span>/</span>
         <span>{project.name}</span>
       </div>
 
       <div className="owner-project-hero">
         <div>
-          <span className="owner-section-label">Tenant record</span>
+          <span className="owner-section-label">Customer 360</span>
           <h2>{project.name}</h2>
           <p>
             ID: <code>{project.id}</code>
+            {tenantHealth ? <> - Plan: <strong>{tenantHealth.plan_code}</strong></> : null}
           </p>
         </div>
         <div className="owner-project-hero-actions">
           <span className={project.is_active ? "pill pill-green" : "pill pill-red"}>
             {project.is_active ? "Active" : "Suspended"}
           </span>
+          <button className="btn btn-soft" type="button" onClick={() => setGrantOpen(true)}>
+            <BadgeDollarSign size={15} aria-hidden="true" />
+            Upgrade / change plan
+          </button>
           <button
             className={project.is_active ? "btn btn-danger" : "btn btn-primary"}
             onClick={handleToggleStatus}
@@ -493,9 +594,11 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      <Customer360Summary project={project} tenant={tenantHealth} memberCount={members.length} />
+
       <div className="owner-project-stat-grid">
         {[
-          { label: "Total Calls", value: project.call_count.toLocaleString() },
+          { label: "Protected Actions", value: project.call_count.toLocaleString() },
           { label: "Total Cost (USD)", value: usd(project.total_cost_usd) },
           { label: "Members", value: project.member_count },
         ].map((s) => (
@@ -513,7 +616,7 @@ export default function ProjectDetailPage() {
       />
 
       <div className="panel">
-        <div className="panel-header">Project Details</div>
+        <div className="panel-header">Customer Details</div>
         <div className="owner-info-list">
           <InfoRow label="Project ID" value={<code>{project.id}</code>} />
           <InfoRow label="Name" value={project.name} />
@@ -525,7 +628,7 @@ export default function ProjectDetailPage() {
 
       <div className="panel">
         <div className="panel-header">
-          Project Rate Limits
+          Rate Limit Override
           <span className="panel-header-note">
             {rateLimitQuery.data?.has_override ? "Override active" : "Using global defaults"}
           </span>
@@ -572,7 +675,7 @@ export default function ProjectDetailPage() {
 
       <div className="panel">
         <div className="panel-header">
-          <span>Members</span>
+          <span>Users</span>
           <span className="panel-header-note">
             {members.length} member{members.length !== 1 ? "s" : ""}
           </span>
@@ -616,6 +719,17 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+      {grantOpen && (
+        <OwnerPlanGrantModal
+          orgId={project.id}
+          orgLabel={project.name}
+          onClose={() => setGrantOpen(false)}
+          onGranted={(planCode) => {
+            setActionMsg(`Plan grant applied to ${project.name}: ${planCode}.`);
+            setGrantOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

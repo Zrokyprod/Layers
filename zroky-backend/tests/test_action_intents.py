@@ -685,7 +685,15 @@ def test_action_pack_installs_launch_contracts_for_first_customer_flow(client: T
     listed = client.get("/v1/action-packs", headers={"X-Project-Id": project_id})
     assert listed.status_code == 200
     packs = listed.json()["items"]
-    assert [pack["id"] for pack in packs] == ["support-ops-v1", "devops-release-v1"]
+    assert [pack["id"] for pack in packs] == [
+        "support-ops-v1",
+        "devops-release-v1",
+        "ecommerce-ops-v1",
+        "finance-ops-v1",
+        "outreach-ops-v1",
+        "data-ops-v1",
+    ]
+    assert all(pack["quickstart_steps"] for pack in packs)
 
     support_pack = client.get("/v1/action-packs/support-ops-v1", headers={"X-Project-Id": project_id})
     assert support_pack.status_code == 200
@@ -725,6 +733,252 @@ def test_action_pack_installs_launch_contracts_for_first_customer_flow(client: T
     assert intent.status_code == 201, intent.text
     assert intent.json()["contract_version"] == "customer.refund.transfer/1.0"
     assert intent.json()["action_type"] == "refund"
+    assert intent.json()["status"] == "validated"
+
+
+def test_ecommerce_ops_pack_installs_three_contracts(client: TestClient) -> None:
+    project_id = "proj_ecommerce_pack_install"
+    _seed_project(client, project_id)
+
+    pack = client.get("/v1/action-packs/ecommerce-ops-v1", headers={"X-Project-Id": project_id})
+    assert pack.status_code == 200, pack.text
+    assert pack.json()["id"] == "ecommerce-ops-v1"
+    assert "shopify_admin" in pack.json()["native_tool_families"]
+    assert pack.json()["quickstart_steps"] == [
+        "Install ecommerce-ops-v1 for the tenant.",
+        "Configure Shopify Admin or commerce source-of-record connector.",
+        "Call guard() before order cancel, inventory adjust, or discount issue.",
+        "Verify order/customer/inventory state before marking outcome verified.",
+    ]
+    assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
+        "commerce.order.cancel/1.0",
+        "commerce.inventory.adjust/1.0",
+        "commerce.discount.issue/1.0",
+    ]
+
+    installed = client.post("/v1/action-packs/ecommerce-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert installed.status_code == 201, installed.text
+    body = installed.json()
+    assert body["pack"]["id"] == "ecommerce-ops-v1"
+    assert [item["contract"]["contract_version"] for item in body["installed_contracts"]] == [
+        "commerce.order.cancel/1.0",
+        "commerce.inventory.adjust/1.0",
+        "commerce.discount.issue/1.0",
+    ]
+    assert [item["created"] for item in body["installed_contracts"]] == [True, True, True]
+    assert [item["contract"]["action_type"] for item in body["installed_contracts"]] == [
+        "order_cancel",
+        "inventory_adjust",
+        "discount_issue",
+    ]
+
+    # Reinstall is idempotent — no duplicate contracts.
+    repeated = client.post("/v1/action-packs/ecommerce-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert repeated.status_code == 201
+    assert [item["created"] for item in repeated.json()["installed_contracts"]] == [False, False, False]
+
+    # A discount action intent validates against the installed contract.
+    intent = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "ecom_discount_1"},
+        json={
+            "contract_version": "commerce.discount.issue/1.0",
+            "action_type": "discount_issue",
+            "operation_kind": "TRANSFER",
+            "principal": {"type": "agent", "id": "commerce-agent"},
+            "actor_chain": [{"type": "agent", "id": "commerce-agent"}],
+            "purpose": {"code": "loyalty_discount", "summary": "Issue store credit with proof"},
+            "resource": {"customer_id": "cus_ecom_1", "order_id": "ord_ecom_1"},
+            "parameters": {"amount_minor": 1500, "currency": "USD", "code": "WELCOME15"},
+            "verification_profile": "commerce_platform/v1",
+        },
+    )
+    assert intent.status_code == 201, intent.text
+    assert intent.json()["contract_version"] == "commerce.discount.issue/1.0"
+    assert intent.json()["status"] == "validated"
+
+
+def test_finance_ops_pack_installs_three_contracts(client: TestClient) -> None:
+    project_id = "proj_finance_pack_install"
+    _seed_project(client, project_id)
+
+    pack = client.get("/v1/action-packs/finance-ops-v1", headers={"X-Project-Id": project_id})
+    assert pack.status_code == 200, pack.text
+    assert pack.json()["id"] == "finance-ops-v1"
+    assert "stripe_payment" in pack.json()["native_tool_families"]
+    assert pack.json()["quickstart_steps"] == [
+        "Install finance-ops-v1 for the tenant.",
+        "Configure NetSuite, ledger, or payment source-of-record connector.",
+        "Call guard() before invoice approval, journal entry, or vendor payout.",
+        "Verify finance record state and payment reference before closing evidence.",
+    ]
+    assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
+        "finance.invoice.approve/1.0",
+        "finance.journal.entry/1.0",
+        "finance.vendor.payout/1.0",
+    ]
+
+    installed = client.post("/v1/action-packs/finance-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert installed.status_code == 201, installed.text
+    body = installed.json()
+    assert body["pack"]["id"] == "finance-ops-v1"
+    assert [item["contract"]["contract_version"] for item in body["installed_contracts"]] == [
+        "finance.invoice.approve/1.0",
+        "finance.journal.entry/1.0",
+        "finance.vendor.payout/1.0",
+    ]
+    assert [item["created"] for item in body["installed_contracts"]] == [True, True, True]
+    assert [item["contract"]["action_type"] for item in body["installed_contracts"]] == [
+        "invoice_approve",
+        "journal_entry",
+        "vendor_payout",
+    ]
+
+    # Reinstall is idempotent — no duplicate contracts.
+    repeated = client.post("/v1/action-packs/finance-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert repeated.status_code == 201
+    assert [item["created"] for item in repeated.json()["installed_contracts"]] == [False, False, False]
+
+    # A vendor payout intent validates against the installed contract.
+    intent = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "fin_payout_1"},
+        json={
+            "contract_version": "finance.vendor.payout/1.0",
+            "action_type": "vendor_payout",
+            "operation_kind": "TRANSFER",
+            "principal": {"type": "agent", "id": "finance-agent"},
+            "actor_chain": [{"type": "agent", "id": "finance-agent"}],
+            "purpose": {"code": "vendor_settlement", "summary": "Pay vendor with ledger proof"},
+            "resource": {"vendor_id": "ven_fin_1", "invoice_id": "inv_fin_1"},
+            "parameters": {"amount_minor": 250000, "currency": "USD", "reference": "PO-9931"},
+            "verification_profile": "payments_ledger/v1",
+        },
+    )
+    assert intent.status_code == 201, intent.text
+    assert intent.json()["contract_version"] == "finance.vendor.payout/1.0"
+    assert intent.json()["status"] == "validated"
+
+
+def test_outreach_ops_pack_installs_three_contracts(client: TestClient) -> None:
+    project_id = "proj_outreach_pack_install"
+    _seed_project(client, project_id)
+
+    pack = client.get("/v1/action-packs/outreach-ops-v1", headers={"X-Project-Id": project_id})
+    assert pack.status_code == 200, pack.text
+    assert pack.json()["id"] == "outreach-ops-v1"
+    assert pack.json()["quickstart_steps"] == [
+        "Install outreach-ops-v1 for the tenant.",
+        "Configure email delivery or sales-engagement source-of-record connector.",
+        "Call guard() before email send, sequence enrollment, or campaign launch.",
+        "Verify recipient, campaign, and delivery state before evidence publish.",
+    ]
+    assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
+        "outreach.email.send/1.0",
+        "outreach.sequence.enroll/1.0",
+        "outreach.campaign.launch/1.0",
+    ]
+
+    installed = client.post("/v1/action-packs/outreach-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert installed.status_code == 201, installed.text
+    body = installed.json()
+    assert body["pack"]["id"] == "outreach-ops-v1"
+    assert [item["contract"]["contract_version"] for item in body["installed_contracts"]] == [
+        "outreach.email.send/1.0",
+        "outreach.sequence.enroll/1.0",
+        "outreach.campaign.launch/1.0",
+    ]
+    assert [item["created"] for item in body["installed_contracts"]] == [True, True, True]
+    assert [item["contract"]["action_type"] for item in body["installed_contracts"]] == [
+        "email_send",
+        "sequence_enroll",
+        "campaign_launch",
+    ]
+
+    # Reinstall is idempotent — no duplicate contracts.
+    repeated = client.post("/v1/action-packs/outreach-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert repeated.status_code == 201
+    assert [item["created"] for item in repeated.json()["installed_contracts"]] == [False, False, False]
+
+    # An email send intent validates against the installed contract.
+    intent = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "outreach_email_1"},
+        json={
+            "contract_version": "outreach.email.send/1.0",
+            "action_type": "email_send",
+            "operation_kind": "SEND",
+            "principal": {"type": "agent", "id": "outreach-agent"},
+            "actor_chain": [{"type": "agent", "id": "outreach-agent"}],
+            "purpose": {"code": "customer_outreach", "summary": "Send outreach email with delivery proof"},
+            "resource": {"recipient": "lead@example.com", "contact_id": "cont_out_1"},
+            "parameters": {"subject": "Following up", "body": "Hi there, quick follow-up."},
+            "verification_profile": "email_delivery/v1",
+        },
+    )
+    assert intent.status_code == 201, intent.text
+    assert intent.json()["contract_version"] == "outreach.email.send/1.0"
+    assert intent.json()["status"] == "validated"
+
+
+def test_data_ops_pack_installs_three_contracts(client: TestClient) -> None:
+    project_id = "proj_data_pack_install"
+    _seed_project(client, project_id)
+
+    pack = client.get("/v1/action-packs/data-ops-v1", headers={"X-Project-Id": project_id})
+    assert pack.status_code == 200, pack.text
+    assert pack.json()["id"] == "data-ops-v1"
+    assert pack.json()["quickstart_steps"] == [
+        "Install data-ops-v1 for the tenant.",
+        "Configure warehouse, orchestrator, or read-only Postgres connector.",
+        "Call guard() before pipeline run, record purge, or data export.",
+        "Verify dataset, run status, and destination before evidence publish.",
+    ]
+    assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
+        "data.pipeline.run/1.0",
+        "data.records.purge/1.0",
+        "data.export.transfer/1.0",
+    ]
+
+    installed = client.post("/v1/action-packs/data-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert installed.status_code == 201, installed.text
+    body = installed.json()
+    assert body["pack"]["id"] == "data-ops-v1"
+    assert [item["contract"]["contract_version"] for item in body["installed_contracts"]] == [
+        "data.pipeline.run/1.0",
+        "data.records.purge/1.0",
+        "data.export.transfer/1.0",
+    ]
+    assert [item["created"] for item in body["installed_contracts"]] == [True, True, True]
+    assert [item["contract"]["action_type"] for item in body["installed_contracts"]] == [
+        "pipeline_run",
+        "records_purge",
+        "data_export",
+    ]
+
+    # Reinstall is idempotent — no duplicate contracts.
+    repeated = client.post("/v1/action-packs/data-ops-v1/install", headers={"X-Project-Id": project_id})
+    assert repeated.status_code == 201
+    assert [item["created"] for item in repeated.json()["installed_contracts"]] == [False, False, False]
+
+    # A pipeline run intent validates against the installed contract.
+    intent = client.post(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id, "Idempotency-Key": "data_pipeline_1"},
+        json={
+            "contract_version": "data.pipeline.run/1.0",
+            "action_type": "pipeline_run",
+            "operation_kind": "EXECUTE",
+            "principal": {"type": "agent", "id": "data-agent"},
+            "actor_chain": [{"type": "agent", "id": "data-agent"}],
+            "purpose": {"code": "scheduled_refresh", "summary": "Run analytics pipeline with warehouse proof"},
+            "resource": {"pipeline_id": "pl_daily_revenue", "environment": "prod"},
+            "parameters": {"run_mode": "incremental"},
+            "verification_profile": "warehouse_orchestrator/v1",
+        },
+    )
+    assert intent.status_code == 201, intent.text
+    assert intent.json()["contract_version"] == "data.pipeline.run/1.0"
     assert intent.json()["status"] == "validated"
 
 

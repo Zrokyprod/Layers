@@ -11,6 +11,8 @@ import type {
   PostgresReadConnectorStatusResponse,
   RazorpayRefundConnectorStatusResponse,
   SalesforceCrmConnectorStatusResponse,
+  ShopifyConnectorStatusResponse,
+  StripePaymentConnectorStatusResponse,
   StripeRefundConnectorStatusResponse,
   ToolRegistryResponse,
   ZendeskTicketConnectorStatusResponse,
@@ -30,6 +32,8 @@ const api = vi.hoisted(() => ({
   getPostgresReadConnectorStatus: vi.fn(),
   getRazorpayRefundConnectorStatus: vi.fn(),
   getSalesforceCrmConnectorStatus: vi.fn(),
+  getShopifyConnectorStatus: vi.fn(),
+  getStripePaymentConnectorStatus: vi.fn(),
   getStripeRefundConnectorStatus: vi.fn(),
   getZendeskTicketConnectorStatus: vi.fn(),
   getZohoCrmConnectorStatus: vi.fn(),
@@ -42,6 +46,8 @@ const api = vi.hoisted(() => ({
   saveNetSuiteFinanceConnectorConfig: vi.fn(),
   saveRazorpayRefundConnectorConfig: vi.fn(),
   saveSalesforceCrmConnectorConfig: vi.fn(),
+  saveShopifyConnectorConfig: vi.fn(),
+  saveStripePaymentConnectorConfig: vi.fn(),
   saveStripeRefundConnectorConfig: vi.fn(),
   saveZendeskTicketConnectorConfig: vi.fn(),
   saveZohoCrmConnectorConfig: vi.fn(),
@@ -52,6 +58,8 @@ const api = vi.hoisted(() => ({
   testNetSuiteFinanceConnector: vi.fn(),
   testRazorpayRefundConnector: vi.fn(),
   testSalesforceCrmConnector: vi.fn(),
+  testShopifyConnector: vi.fn(),
+  testStripePaymentConnector: vi.fn(),
   testStripeRefundConnector: vi.fn(),
   testZendeskTicketConnector: vi.fn(),
   testZohoCrmConnector: vi.fn(),
@@ -89,6 +97,8 @@ vi.mock("@/lib/api", async () => {
     getPostgresReadConnectorStatus: api.getPostgresReadConnectorStatus,
     getRazorpayRefundConnectorStatus: api.getRazorpayRefundConnectorStatus,
     getSalesforceCrmConnectorStatus: api.getSalesforceCrmConnectorStatus,
+    getShopifyConnectorStatus: api.getShopifyConnectorStatus,
+    getStripePaymentConnectorStatus: api.getStripePaymentConnectorStatus,
     getStripeRefundConnectorStatus: api.getStripeRefundConnectorStatus,
     getZendeskTicketConnectorStatus: api.getZendeskTicketConnectorStatus,
     getZohoCrmConnectorStatus: api.getZohoCrmConnectorStatus,
@@ -101,6 +111,8 @@ vi.mock("@/lib/api", async () => {
     saveNetSuiteFinanceConnectorConfig: api.saveNetSuiteFinanceConnectorConfig,
     saveRazorpayRefundConnectorConfig: api.saveRazorpayRefundConnectorConfig,
     saveSalesforceCrmConnectorConfig: api.saveSalesforceCrmConnectorConfig,
+    saveShopifyConnectorConfig: api.saveShopifyConnectorConfig,
+    saveStripePaymentConnectorConfig: api.saveStripePaymentConnectorConfig,
     saveStripeRefundConnectorConfig: api.saveStripeRefundConnectorConfig,
     saveZendeskTicketConnectorConfig: api.saveZendeskTicketConnectorConfig,
     saveZohoCrmConnectorConfig: api.saveZohoCrmConnectorConfig,
@@ -111,6 +123,8 @@ vi.mock("@/lib/api", async () => {
     testNetSuiteFinanceConnector: api.testNetSuiteFinanceConnector,
     testRazorpayRefundConnector: api.testRazorpayRefundConnector,
     testSalesforceCrmConnector: api.testSalesforceCrmConnector,
+    testShopifyConnector: api.testShopifyConnector,
+    testStripePaymentConnector: api.testStripePaymentConnector,
     testStripeRefundConnector: api.testStripeRefundConnector,
     testZendeskTicketConnector: api.testZendeskTicketConnector,
     testZohoCrmConnector: api.testZohoCrmConnector,
@@ -316,6 +330,34 @@ function stripeStatus(
   };
 }
 
+function stripePaymentStatus(
+  overrides: Partial<StripePaymentConnectorStatusResponse> = {},
+): StripePaymentConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "stripe_payment",
+    base_url: "https://api.stripe.com",
+    path_template: "/v1/payment_intents/{payment_id}",
+    record_path: null,
+    query: null,
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
 function razorpayStatus(
   overrides: Partial<RazorpayRefundConnectorStatusResponse> = {},
 ): RazorpayRefundConnectorStatusResponse {
@@ -326,6 +368,34 @@ function razorpayStatus(
     path_template: "/v1/refunds/{refund_id}",
     record_path: null,
     query: { key_id: "rzp_test_key" },
+    has_bearer_token: false,
+    bearer_token_last4: null,
+    last_tested_at: null,
+    health_status: "not_configured",
+    last_verdict: null,
+    last_error: null,
+    last_error_code: null,
+    last_http_status: null,
+    last_attempts: null,
+    last_retryable: null,
+    last_checked_at: null,
+    readiness: { status: "not_ready" },
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function shopifyStatus(
+  overrides: Partial<ShopifyConnectorStatusResponse> = {},
+): ShopifyConnectorStatusResponse {
+  return {
+    connected: false,
+    connector_type: "shopify_admin",
+    base_url: "https://example.myshopify.com",
+    path_template: "/admin/api/2025-01/orders/{record_ref}.json",
+    record_path: "order",
+    query: null,
     has_bearer_token: false,
     bearer_token_last4: null,
     last_tested_at: null,
@@ -647,8 +717,10 @@ describe("IntegrationsPage", () => {
     });
     api.getGenericRestConnectorStatus.mockResolvedValue(genericStatus());
     api.getStripeRefundConnectorStatus.mockResolvedValue(stripeStatus());
+    api.getStripePaymentConnectorStatus.mockResolvedValue(stripePaymentStatus());
     api.getRazorpayRefundConnectorStatus.mockResolvedValue(razorpayStatus());
     api.getNetSuiteFinanceConnectorStatus.mockResolvedValue(netsuiteStatus());
+    api.getShopifyConnectorStatus.mockResolvedValue(shopifyStatus());
     api.getHubSpotCrmConnectorStatus.mockResolvedValue(hubspotStatus());
     api.getSalesforceCrmConnectorStatus.mockResolvedValue(salesforceStatus());
     api.getZendeskTicketConnectorStatus.mockResolvedValue(zendeskStatus());
@@ -742,6 +814,45 @@ describe("IntegrationsPage", () => {
         metadata: { connector_kind: "stripe_refund" },
       }),
       connector: stripeStatus({
+        connected: true,
+        has_bearer_token: true,
+        bearer_token_last4: "7890",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
+    api.saveStripePaymentConnectorConfig.mockResolvedValue(stripePaymentStatus({
+      connected: true,
+      has_bearer_token: true,
+      bearer_token_last4: "7890",
+      health_status: "not_verified",
+    }));
+    api.testStripePaymentConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "stripe_payment",
+        system_ref: "stripe:payment_intent:pi_123",
+        action_type: "payment_adjustment",
+        claimed: {
+          payment_id: "pi_123",
+          amount_minor: 4250,
+          amount_major: "42.5",
+          currency: "USD",
+          status: "succeeded",
+        },
+        actual: {
+          payment_id: "pi_123",
+          stripe_payment_intent_id: "pi_123",
+          amount_minor: 4250,
+          amount_major: "42.5",
+          amount_usd: 42.5,
+          currency: "USD",
+          status: "succeeded",
+        },
+        metadata: { connector_kind: "stripe_payment" },
+      }),
+      connector: stripePaymentStatus({
         connected: true,
         has_bearer_token: true,
         bearer_token_last4: "7890",
@@ -985,6 +1096,43 @@ describe("IntegrationsPage", () => {
         readiness: { status: "ready" },
       }),
     });
+    api.saveShopifyConnectorConfig.mockResolvedValue(shopifyStatus({
+      connected: true,
+      has_bearer_token: true,
+      bearer_token_last4: "oken",
+      health_status: "not_verified",
+    }));
+    api.testShopifyConnector.mockResolvedValue({
+      ok: true,
+      check: genericCheck({
+        connector_type: "shopify_admin",
+        system_ref: "shopify:order:1001",
+        action_type: "shopify_record",
+        claimed: {
+          order_id: "1001",
+          amount_major: "42.5",
+          currency: "USD",
+          financial_status: "paid",
+          fulfillment_status: "fulfilled",
+        },
+        actual: {
+          order_id: "1001",
+          amount_major: "42.5",
+          currency: "USD",
+          financial_status: "paid",
+          fulfillment_status: "fulfilled",
+        },
+        metadata: { connector_kind: "shopify_admin" },
+      }),
+      connector: shopifyStatus({
+        connected: true,
+        has_bearer_token: true,
+        bearer_token_last4: "oken",
+        health_status: "healthy",
+        last_verdict: "matched",
+        readiness: { status: "ready" },
+      }),
+    });
   });
 
   it("frames connectors as category-first verifier inventory with coverage and search", async () => {
@@ -1008,6 +1156,7 @@ describe("IntegrationsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Commerce" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Finance & ERP" })).toBeInTheDocument();
@@ -1019,7 +1168,9 @@ describe("IntegrationsPage", () => {
     expect(screen.getAllByText("Zoho CRM verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Zendesk ticket verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Jira / JSM verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Stripe payment verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Razorpay refund verifier").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Shopify Admin verifier").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Refund ledger template").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Customer / CRM record template").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SQL / Postgres read verifier").length).toBeGreaterThan(0);
@@ -1028,6 +1179,7 @@ describe("IntegrationsPage", () => {
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "stripe" } });
     expect(screen.getByRole("button", { name: /Stripe refund verifier/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stripe payment verifier/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /HubSpot CRM verifier/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
@@ -1043,7 +1195,9 @@ describe("IntegrationsPage", () => {
 
     await waitFor(() => expect(api.listOutcomeReconciliations).toHaveBeenCalledWith({ limit: 50 }));
     await waitFor(() => expect(api.getGenericRestConnectorStatus).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getStripePaymentConnectorStatus).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.getRazorpayRefundConnectorStatus).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getShopifyConnectorStatus).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.getHubSpotCrmConnectorStatus).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.getSalesforceCrmConnectorStatus).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(api.getZohoCrmConnectorStatus).toHaveBeenCalledTimes(1));
@@ -1126,6 +1280,61 @@ describe("IntegrationsPage", () => {
     expect(await screen.findByText("REST verifier test recorded matched.")).toBeInTheDocument();
   });
 
+  it("saves and tests the native Stripe payment verifier setup path", async () => {
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /Stripe payment verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect Stripe Payment" }));
+    fireEvent.change(screen.getByLabelText("Stripe secret key"), {
+      target: { value: "sk_live_payment" },
+    });
+    fireEvent.change(screen.getByLabelText("PaymentIntent ID"), {
+      target: { value: "pi_123" },
+    });
+    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            payment_id: "pi_123",
+            amount_minor: 4250,
+            amount_major: "42.5",
+            currency: "USD",
+            status: "succeeded",
+          },
+          null,
+          2,
+        ),
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save Stripe payment verifier/i }));
+
+    await waitFor(() => {
+      expect(api.saveStripePaymentConnectorConfig).toHaveBeenCalledWith({
+        bearer_token: "sk_live_payment",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run Stripe payment preflight/i }));
+
+    await waitFor(() => {
+      expect(api.testStripePaymentConnector).toHaveBeenCalledWith({
+        payment_id: "pi_123",
+        action_type: "payment_adjustment",
+        claimed: {
+          payment_id: "pi_123",
+          amount_minor: 4250,
+          amount_major: "42.5",
+          currency: "USD",
+          status: "succeeded",
+        },
+        match_fields: ["payment_id", "amount_minor", "currency", "status"],
+      });
+    });
+    expect(await screen.findByText("Stripe payment verifier test recorded matched.")).toBeInTheDocument();
+  });
+
   it("saves and tests the native Razorpay refund verifier setup path", async () => {
     render(<IntegrationsPage />);
 
@@ -1183,6 +1392,65 @@ describe("IntegrationsPage", () => {
       });
     });
     expect(await screen.findByText("Razorpay verifier test recorded matched.")).toBeInTheDocument();
+  });
+
+  it("saves and tests the native Shopify Admin verifier setup path", async () => {
+    render(<IntegrationsPage />);
+
+    await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
+    fireEvent.click(screen.getByRole("button", { name: /Shopify Admin verifier/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect Shopify" }));
+    fireEvent.change(screen.getByLabelText("Shop Admin base URL"), {
+      target: { value: "https://example.myshopify.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Admin API access token"), {
+      target: { value: "shopify-read-token" },
+    });
+    fireEvent.change(screen.getByLabelText("Order ID"), {
+      target: { value: "1001" },
+    });
+    fireEvent.change(screen.getByLabelText("Claimed JSON"), {
+      target: {
+        value: JSON.stringify(
+          {
+            order_id: "1001",
+            amount_major: "42.5",
+            currency: "USD",
+            financial_status: "paid",
+            fulfillment_status: "fulfilled",
+          },
+          null,
+          2,
+        ),
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save Shopify verifier/i }));
+
+    await waitFor(() => {
+      expect(api.saveShopifyConnectorConfig).toHaveBeenCalledWith({
+        base_url: "https://example.myshopify.com",
+        bearer_token: "shopify-read-token",
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Run Shopify preflight/i }));
+
+    await waitFor(() => {
+      expect(api.testShopifyConnector).toHaveBeenCalledWith({
+        record_ref: "1001",
+        action_type: "shopify_record",
+        claimed: {
+          order_id: "1001",
+          amount_major: "42.5",
+          currency: "USD",
+          financial_status: "paid",
+          fulfillment_status: "fulfilled",
+        },
+        match_fields: ["order_id", "amount_major", "currency", "financial_status"],
+      });
+    });
+    expect(await screen.findByText("Shopify verifier test recorded matched.")).toBeInTheDocument();
   });
 
   it("saves and tests the native HubSpot verifier setup path", async () => {

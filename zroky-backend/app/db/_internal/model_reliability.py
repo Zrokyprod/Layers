@@ -220,7 +220,7 @@ class SystemOfRecordConnectorConfig(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "connector_type IN ('ledger_refund_api','customer_record_api','generic_rest_api','postgres_read','hubspot_crm','zendesk_ticket','salesforce_crm','zoho_crm','jira_issue','stripe_refund','razorpay_refund','netsuite_finance')",
+            "connector_type IN ('ledger_refund_api','customer_record_api','generic_rest_api','postgres_read','hubspot_crm','zendesk_ticket','salesforce_crm','zoho_crm','jira_issue','stripe_refund','stripe_payment','razorpay_refund','netsuite_finance','shopify_admin')",
             name="ck_sor_connector_type",
         ),
         UniqueConstraint(

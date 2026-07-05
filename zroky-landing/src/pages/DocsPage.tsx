@@ -7,7 +7,6 @@ import {
   Code2,
   DatabaseZap,
   FileCheck2,
-  GitBranch,
   KeyRound,
   LockKeyhole,
   Route,
@@ -52,20 +51,6 @@ const gatewaySnippet = `docker run -d \\
   ghcr.io/zroky-ai/zroky-gateway:latest
 
 export OPENAI_BASE_URL=http://localhost:8090/v1`;
-
-const ciSnippet = `name: Zroky protected action checks
-on: [pull_request]
-
-jobs:
-  zroky:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: zroky/protected-action-ci@v1
-        with:
-          api_key: \${{ secrets.ZROKY_API_KEY }}
-          project_id: \${{ vars.ZROKY_PROJECT_ID }}
-          fail_on_unverified_receipt: true`;
 
 const quickstartSteps = [
   {
@@ -131,15 +116,6 @@ const codePanels = [
     language: 'bash',
     code: gatewaySnippet,
   },
-  {
-    id: 'ci-gates',
-    icon: GitBranch,
-    label: 'CI gate',
-    title: 'Block releases that lose proof.',
-    body: 'Use CI when protected-action behavior has to remain stable before new code reaches production.',
-    language: 'yaml',
-    code: ciSnippet,
-  },
 ];
 
 const providerRules = [
@@ -164,7 +140,7 @@ const troubleshooting = [
   ['Decision stays held', 'Check the policy owner, approval route, and whether the action class requires a human gate.'],
   ['Proof is not verified', 'Confirm the source connector can read the final state and the action id maps to the system record.'],
   ['Receipt is missing', 'Check that runner execution completed and verification reached matched or not_verified state.'],
-  ['CI does not block', 'Confirm the workflow uses the right project id and fail_on_unverified_receipt is enabled.'],
+  ['Gateway traffic is not controlled', 'Confirm the gateway is using the project key and the action path is marked as protected.'],
 ];
 
 function Reveal({
@@ -454,7 +430,7 @@ export default function DocsPage() {
           icon={Terminal}
           eyebrow="Code setup"
           title="Use the path that matches your deployment."
-          copy="Direct SDK integration is best for owned services. Gateway adoption helps when traffic needs to move first. CI gates keep proof requirements from regressing."
+          copy="Direct SDK integration is best for owned services. Gateway adoption helps when traffic needs to move first. Provider keys are optional and only needed for AI-assisted analysis."
         />
         <div className="mt-9 grid gap-5 xl:grid-cols-2">
           {codePanels.map((panel) => (

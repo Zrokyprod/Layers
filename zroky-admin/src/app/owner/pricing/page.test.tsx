@@ -271,8 +271,8 @@ describe("PricingPage", () => {
     expect(screen.getByText("Razorpay Billing Accounts")).toBeInTheDocument();
     expect(screen.getByText("In sync")).toBeInTheDocument();
     expect(screen.getByText("api-contracts/pricing-plans.json")).toBeInTheDocument();
-    expect(screen.getByText("Replay quota")).toBeInTheDocument();
-    expect(screen.getByText("Tenant is near replay entitlement.")).toBeInTheDocument();
+    expect(screen.getByText("Proof quota")).toBeInTheDocument();
+    expect(screen.getByText("Tenant is near proof-check entitlement.")).toBeInTheDocument();
     expect(screen.getByText("Unknown plan")).toBeInTheDocument();
     expect(screen.getByText("No catalog entry matches this billing row.")).toBeInTheDocument();
     expect(screen.getByText("Run reconciliation now")).toBeInTheDocument();
@@ -288,8 +288,8 @@ describe("PricingPage", () => {
     render(<PricingPage />);
 
     expect(screen.getByText("HTTP 500")).toBeInTheDocument();
-    expect(screen.getByText("Money-path unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Product entitlement risk cannot be evaluated.")).toBeInTheDocument();
-    expect(screen.queryByText("Billing and product evidence are aligned.")).toBe(null);
+    expect(screen.getByText("Control data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Protected-action entitlement risk cannot be evaluated.")).toBeInTheDocument();
+    expect(screen.queryByText("Billing and control-plane evidence are aligned.")).toBe(null);
   });
 });

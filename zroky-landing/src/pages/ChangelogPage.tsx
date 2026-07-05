@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Check,
   FileText,
-  GitBranch,
   KeyRound,
   Layers,
   Lock,
@@ -18,36 +17,36 @@ import { SIGN_UP_URL } from '../lib/links';
 
 const releases = [
   {
-    label: 'Replay safety',
+    label: 'Control plane',
     stage: 'Current',
-    icon: KeyRound,
-    title: 'Provider-key gate for verified replay.',
+    icon: ShieldCheck,
+    title: 'Protected actions become the core product surface.',
     summary:
-      'Capture, traces, issues, and basic dashboard review stay usable without provider keys. Zroky asks for a provider key only when verified replay needs real provider execution.',
+      'The product now centers on high-risk actions: policy before execution, controlled runners, source-of-record verification, and signed evidence.',
     shipped: [
-      'Replay Lab prompts for a provider key before real replay modes.',
-      'Issue replay entry points use the same verified replay gate.',
-      'Stub replay remains available and clearly marked sanity-only.',
-      'Pricing copy now explains that keys are requested only for verified replay.',
+      'Home, Actions, Approvals, Outcomes, Evidence, Policies, Connectors, and Settings are the visible dashboard modules.',
+      'Retired research surfaces stay out of the primary information architecture.',
+      'First-run setup leads users toward one protected action instead of a broad product tour.',
+      'Receipts are framed as signed proof artifacts, not logs.',
     ],
-    proof: 'No signup key wall. No silent real replay failure.',
-    href: '/docs#provider-keys',
-    cta: 'Provider key docs',
+    proof: 'Users see the product as a control plane, not an observability or experiment suite.',
+    href: '/docs#control-loop',
+    cta: 'Control-loop docs',
   },
   {
     label: 'Docs',
     stage: 'Current',
     icon: FileText,
-    title: 'Real docs path from capture to CI gates.',
+    title: 'Docs start with one governed action.',
     summary:
-      'The docs overview now leads into dedicated implementation guides for SDK capture, Gateway capture, provider keys, replay, Goldens, CI gates, and troubleshooting.',
+      'The quickstart now explains how to protect one action, define policy, connect a source of record, and produce a receipt.',
     shipped: [
-      'Quickstart explains the full failure-to-release adoption path.',
-      'Python and TypeScript SDK pages include real capture snippets.',
-      'Gateway and GitHub Action guides cover routing and CI setup.',
-      'Troubleshooting separates capture, replay, Golden, and CI failure modes.',
+      'Python and TypeScript examples use protected-action primitives.',
+      'Gateway setup is positioned as routing-level control when SDK changes are slower.',
+      'Provider-key docs clarify that core control is deterministic.',
+      'Troubleshooting focuses on decisions, runners, verification, and receipts.',
     ],
-    proof: 'A new user can follow one ordered path instead of guessing where to start.',
+    proof: 'A new user can test the real control loop without learning retired surfaces first.',
     href: '/docs#quickstart',
     cta: 'Open quickstart',
   },
@@ -55,35 +54,35 @@ const releases = [
     label: 'Pricing',
     stage: 'Current',
     icon: Lock,
-    title: 'Predictable BYOK pricing model.',
+    title: 'Pricing maps to protected action volume.',
     summary:
-      'Pricing now starts with adoption-friendly plans and keeps model spend visible by default. Real replay and CI usage have explicit caps instead of hidden unlimited behavior.',
+      'Plans now explain projects, managed agents, protected actions, signed receipts, verification checks, and evidence retention.',
     shipped: [
-      'Watch, Builder, Startup, and Team plans are framed by reliability stage.',
-      'BYOK is default for real LLM replay.',
-      'Managed replay is optional and explained as provider cost plus platform fee.',
-      'Extra captured calls, replay credits, and CI executions have clear overage rules.',
+      'Free is framed as proving the loop.',
+      'Pro is framed as the main self-serve production control plan.',
+      'Enterprise is framed around private execution, retention, connector scope, and procurement.',
+      'Model spend stays explicit and optional.',
     ],
-    proof: 'Organizations can start cheap and scale only when replay and CI become business-critical.',
+    proof: 'Buyers understand the bill in terms of actions governed and evidence retained.',
     href: '/pricing',
     cta: 'View pricing',
   },
   {
-    label: 'Product OS',
+    label: 'Dashboard',
     stage: 'Recent',
     icon: Workflow,
-    title: 'Reliability loop becomes the core product story.',
+    title: 'Dashboard modules match the real operating loop.',
     summary:
-      'The product now presents Zroky as one operating loop: discover the unknown failure, prove the fix with replay, and guard the release in CI.',
+      'Dashboard navigation now follows how protected actions actually move through the system.',
     shipped: [
-      'Home page uses the Discover, Prove, Guard loop as the main narrative.',
-      'Each pillar maps to an outcome and evidence panel.',
-      'Dashboard visuals focus on failure inbox, issues, replay, Goldens, CI gates, traces, and cost.',
-      'Proof sections now describe decisions, not dashboard tourism.',
+      'Actions shows protected action lifecycle and risk state.',
+      'Approvals shows held decisions and approval trails.',
+      'Outcomes verifies source-of-record reality.',
+      'Evidence preserves receipts, hashes, and exports.',
     ],
-    proof: 'Every major page now points back to capture, proof, memory, and release decision.',
+    proof: 'Every visible module answers what can act, what happened, and what can be proved.',
     href: '/#architecture',
-    cta: 'View product loop',
+    cta: 'View control loop',
   },
   {
     label: 'Onboarding',
@@ -93,10 +92,10 @@ const releases = [
     summary:
       'Login, registration, password recovery, email verification, and reset screens now use the same monochrome black/white Zroky system as the rest of the site.',
     shipped: [
-      'Signup copy confirms capture-first onboarding.',
+      'Signup copy confirms protected-action onboarding.',
       'Auth forms use black inputs, white actions, and restrained accents.',
       'Recovery screens explain workspace access without mixing in provider credentials.',
-      'Verification sends users to the real quickstart path.',
+      'Verification sends users to the quickstart path.',
     ],
     proof: 'Auth no longer feels like a separate older product.',
     href: SIGN_UP_URL,
@@ -108,25 +107,25 @@ const principles = [
   {
     icon: Check,
     title: 'Verified means real proof',
-    body: 'Stub replay can sanity-check structure, but verified proof needs real replay against the incident.',
+    body: 'A receipt is signed only after policy, runner state, and source-of-record verification agree.',
   },
   {
     icon: KeyRound,
     title: 'Keys only when needed',
-    body: 'Signup and capture stay open. Provider keys appear when verified replay, Golden replay, or CI replay needs them.',
+    body: 'Core control does not require an LLM provider key. BYOK is reserved for optional AI assistance.',
   },
   {
-    icon: GitBranch,
-    title: 'CI remembers production',
-    body: 'A passing replay can become a Golden so repeated failures are blocked before release.',
+    icon: ShieldCheck,
+    title: 'High-risk actions fail closed',
+    body: 'Money, access, customer state, and production changes are held until the policy path is satisfied.',
   },
 ];
 
 const focus = [
-  ['Capture first', 'Production evidence enters Zroky through SDK or Gateway.'],
-  ['Replay proof', 'Fixes run against the original incident before trust.'],
-  ['Golden memory', 'Passing proof becomes reusable release protection.'],
-  ['CI verdict', 'Pull requests get pass, warn, or block decisions.'],
+  ['Propose', 'The agent submits intent, actor, parameters, and environment.'],
+  ['Policy', 'Zroky decides allow, hold, or block before mutation.'],
+  ['Verify', 'The source of record confirms what actually changed.'],
+  ['Receipt', 'A signed evidence artifact is retained for review.'],
 ];
 
 const revealEase = [0.16, 1, 0.3, 1] as const;
@@ -175,13 +174,13 @@ export default function ChangelogPage() {
           <div>
             <span className="eyebrow">
               <Layers className="h-3.5 w-3.5" />
-              Product changelog
+              Changelog
             </span>
             <h1 className="mt-6 max-w-5xl text-balance text-4xl font-semibold leading-[1.04] text-primary sm:text-6xl lg:text-7xl">
-              Release notes for the agent reliability loop.
+              Release notes for the agent control loop.
             </h1>
             <p className="mt-6 max-w-3xl text-base leading-8 text-secondary sm:text-lg">
-              Zroky ships changes when they make capture, replay proof, Golden memory, CI gates, pricing, or onboarding clearer for production AI teams.
+              Zroky ships changes when they make policy, execution, verification, receipts, pricing, or onboarding clearer for production AI teams.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link to="/docs#quickstart" className="btn-primary">
@@ -189,7 +188,7 @@ export default function ChangelogPage() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link to="/#architecture" className="btn-ghost">
-                View product loop
+                View control loop
                 <Workflow className="h-4 w-4" />
               </Link>
             </div>
@@ -254,7 +253,7 @@ export default function ChangelogPage() {
               Every note maps to a product decision.
             </h2>
             <p className="mt-4 text-base leading-8 text-secondary sm:text-lg">
-              We keep the changelog focused on changes that alter how teams capture evidence, prove fixes, control spend, or block repeat regressions.
+              We keep the changelog focused on changes that alter how teams govern risky actions, prove outcomes, control spend, or preserve evidence.
             </p>
           </div>
 
@@ -331,10 +330,10 @@ export default function ChangelogPage() {
                 Start from evidence
               </span>
               <h2 className="mt-5 text-balance text-3xl font-semibold leading-tight text-primary sm:text-5xl">
-                Capture one failure, then block it before it ships twice.
+                Protect one risky action, then expand by policy.
               </h2>
               <p className="mt-4 text-base leading-8 text-secondary">
-                The release log is useful only if the product path is clear: capture, replay, Golden, and CI gate.
+                The release log is useful only if the product path is clear: propose, policy, run, verify, receipt.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -342,9 +341,9 @@ export default function ChangelogPage() {
                 Protect an agent
                 <ArrowRight className="h-4 w-4" />
               </a>
-              <Link to="/docs#ci-gates" className="btn-ghost">
-                CI gate docs
-                <GitBranch className="h-4 w-4" />
+              <Link to="/docs#control-loop" className="btn-ghost">
+                Control-loop docs
+                <Workflow className="h-4 w-4" />
               </Link>
             </div>
           </div>

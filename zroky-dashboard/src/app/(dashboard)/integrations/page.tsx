@@ -36,9 +36,11 @@ import {
   getPostgresReadConnectorStatus,
   getRazorpayRefundConnectorStatus,
   getSalesforceCrmConnectorStatus,
+  getShopifyConnectorStatus,
   getZendeskTicketConnectorStatus,
   getZohoCrmConnectorStatus,
   getSlackInstallStatus,
+  getStripePaymentConnectorStatus,
   getStripeRefundConnectorStatus,
   getToolRegistry,
   listOutcomeReconciliations,
@@ -48,6 +50,8 @@ import {
   saveNetSuiteFinanceConnectorConfig,
   saveRazorpayRefundConnectorConfig,
   saveSalesforceCrmConnectorConfig,
+  saveShopifyConnectorConfig,
+  saveStripePaymentConnectorConfig,
   saveStripeRefundConnectorConfig,
   saveZendeskTicketConnectorConfig,
   saveZohoCrmConnectorConfig,
@@ -58,6 +62,8 @@ import {
   testNetSuiteFinanceConnector,
   testRazorpayRefundConnector,
   testSalesforceCrmConnector,
+  testShopifyConnector,
+  testStripePaymentConnector,
   testStripeRefundConnector,
   testZendeskTicketConnector,
   testZohoCrmConnector,
@@ -71,6 +77,8 @@ import {
   type PostgresReadConnectorStatusResponse,
   type RazorpayRefundConnectorStatusResponse,
   type SalesforceCrmConnectorStatusResponse,
+  type ShopifyConnectorStatusResponse,
+  type StripePaymentConnectorStatusResponse,
   type StripeRefundConnectorStatusResponse,
   type ToolRegistryResponse,
   type ZendeskTicketConnectorStatusResponse,
@@ -99,6 +107,7 @@ type ConnectorsOverviewState = {
   slack: SlackInstallStatusResponse | null;
   ledger: LedgerRefundConnectorStatusResponse | null;
   stripe: StripeRefundConnectorStatusResponse | null;
+  stripePayment: StripePaymentConnectorStatusResponse | null;
   razorpay: RazorpayRefundConnectorStatusResponse | null;
   customer: CustomerRecordConnectorStatusResponse | null;
   generic: GenericRestConnectorStatusResponse | null;
@@ -107,6 +116,7 @@ type ConnectorsOverviewState = {
   zendesk: ZendeskTicketConnectorStatusResponse | null;
   jira: JiraIssueConnectorStatusResponse | null;
   netsuite: NetSuiteFinanceConnectorStatusResponse | null;
+  shopify: ShopifyConnectorStatusResponse | null;
   zoho: ZohoCrmConnectorStatusResponse | null;
   postgres: PostgresReadConnectorStatusResponse | null;
   checks: OutcomeReconciliationView[];
@@ -127,6 +137,13 @@ type GenericRestFormState = {
 type StripeRefundFormState = {
   bearerToken: string;
   refundId: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type StripePaymentFormState = {
+  bearerToken: string;
+  paymentId: string;
   claimedJson: string;
   matchFieldsText: string;
 };
@@ -195,11 +212,20 @@ type NetSuiteFormState = {
   matchFieldsText: string;
 };
 
+type ShopifyFormState = {
+  baseUrl: string;
+  bearerToken: string;
+  recordRef: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
 const initialOverview: ConnectorsOverviewState = {
   github: null,
   slack: null,
   ledger: null,
   stripe: null,
+  stripePayment: null,
   razorpay: null,
   customer: null,
   generic: null,
@@ -208,6 +234,7 @@ const initialOverview: ConnectorsOverviewState = {
   zendesk: null,
   jira: null,
   netsuite: null,
+  shopify: null,
   zoho: null,
   postgres: null,
   checks: [],
@@ -247,6 +274,23 @@ const defaultStripeRefundForm: StripeRefundFormState = {
     2,
   ),
   matchFieldsText: "refund_id,amount_minor,currency,status",
+};
+
+const defaultStripePaymentForm: StripePaymentFormState = {
+  bearerToken: "",
+  paymentId: "pi_123",
+  claimedJson: JSON.stringify(
+    {
+      payment_id: "pi_123",
+      amount_minor: 4250,
+      amount_major: "42.5",
+      currency: "USD",
+      status: "succeeded",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "payment_id,amount_minor,currency,status",
 };
 
 const defaultRazorpayRefundForm: RazorpayRefundFormState = {
@@ -372,6 +416,24 @@ const defaultNetSuiteForm: NetSuiteFormState = {
   matchFieldsText: "netsuite_record_id,record_type,tran_id,amount_minor,currency,status",
 };
 
+const defaultShopifyForm: ShopifyFormState = {
+  baseUrl: "https://example.myshopify.com",
+  bearerToken: "",
+  recordRef: "1001",
+  claimedJson: JSON.stringify(
+    {
+      order_id: "1001",
+      amount_major: "42.5",
+      currency: "USD",
+      financial_status: "paid",
+      fulfillment_status: "fulfilled",
+    },
+    null,
+    2,
+  ),
+  matchFieldsText: "order_id,amount_major,currency,financial_status",
+};
+
 const ADVANCED_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "generic_rest",
   "ledger_template",
@@ -382,7 +444,9 @@ const ADVANCED_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
 const SETUP_PANEL_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "generic_rest",
   "stripe_refund",
+  "stripe_payment",
   "razorpay_refund",
+  "shopify_admin",
   "hubspot_crm",
   "salesforce_crm",
   "zoho_crm",
@@ -1089,6 +1153,133 @@ function StripeRefundSetupPanel({
           </label>
           <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
             Run Stripe preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      <div className="connector-fact-grid">
+        <Fact label="Connected" value={status?.connected ? "yes" : "no"} />
+        <Fact label="Secret" value={status?.has_bearer_token ? `saved${status.bearer_token_last4 ? ` (...${status.bearer_token_last4})` : ""}` : "missing"} />
+        <Fact label="Last verdict" value={status?.last_verdict ?? latestCheck?.verdict ?? null} />
+        <Fact label="Health" value={status?.health_status ?? "not configured"} />
+      </div>
+    </section>
+  );
+}
+
+function StripePaymentSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: StripePaymentConnectorStatusResponse) => void;
+  status: StripePaymentConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<StripePaymentFormState>(defaultStripePaymentForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const updateForm = (key: keyof StripePaymentFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveStripePaymentConnectorConfig({
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("Stripe payment verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Stripe payment verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testStripePaymentConnector({
+        payment_id: form.paymentId,
+        claimed,
+        action_type: "payment_adjustment",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Stripe payment verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Stripe payment verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Stripe payment verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Stripe payment verifier</span>
+          <h2>Native Stripe PaymentIntent verification</h2>
+          <p>Read one Stripe PaymentIntent by ID and compare amount, currency, customer, method, and status fields.</p>
+        </div>
+        <StatusPill value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"} kind="proof" />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save Stripe read access</strong>
+            <span>Use a restricted Stripe secret key with read-only PaymentIntent access. Saved keys never render in the browser.</span>
+          </div>
+          <label>
+            <span>Stripe secret key</span>
+            <input
+              autoComplete="off"
+              onChange={(event) => updateForm("bearerToken", event.target.value)}
+              placeholder={status?.has_bearer_token ? "Secret key saved" : "sk_live_..."}
+              type="password"
+              value={form.bearerToken}
+            />
+          </label>
+          <DashboardButton disabled={saving || (!form.bearerToken && !status?.has_bearer_token)} icon={<Save />} loading={saving} type="submit">
+            Save Stripe payment verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run Stripe payment preflight</strong>
+            <span>Fetch one safe existing PaymentIntent and compare normalized amount, currency, and status.</span>
+          </div>
+          <label>
+            <span>PaymentIntent ID</span>
+            <input onChange={(event) => updateForm("paymentId", event.target.value)} required value={form.paymentId} />
+          </label>
+          <label>
+            <span>Claimed JSON</span>
+            <textarea onChange={(event) => updateForm("claimedJson", event.target.value)} rows={5} value={form.claimedJson} />
+          </label>
+          <label>
+            <span>Match fields</span>
+            <input onChange={(event) => updateForm("matchFieldsText", event.target.value)} value={form.matchFieldsText} />
+          </label>
+          <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
+            Run Stripe payment preflight
           </DashboardButton>
         </form>
       </div>
@@ -2344,6 +2535,167 @@ function NetSuiteSetupPanel({
   );
 }
 
+function ShopifySetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: ShopifyConnectorStatusResponse) => void;
+  status: ShopifyConnectorStatusResponse | null;
+}) {
+  const [form, setForm] = useState<ShopifyFormState>(defaultShopifyForm);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status) return;
+    setForm((current) => ({
+      ...current,
+      baseUrl: status.base_url ?? current.baseUrl,
+    }));
+  }, [status]);
+
+  const updateForm = (key: keyof ShopifyFormState, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await saveShopifyConnectorConfig({
+        base_url: form.baseUrl,
+        bearer_token: form.bearerToken || null,
+      });
+      onStatusChange(saved);
+      setMessage("Shopify verifier saved. Run preflight to make it evidence-ready.");
+      setForm((current) => ({ ...current, bearerToken: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Shopify verifier.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTesting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const claimed = parseClaimedJson(form.claimedJson);
+      const result = await testShopifyConnector({
+        record_ref: form.recordRef,
+        claimed,
+        action_type: "shopify_record",
+        match_fields: matchFieldsFromText(form.matchFieldsText),
+      });
+      onStatusChange(result.connector);
+      setMessage(`Shopify verifier test recorded ${result.check.verdict}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run Shopify verifier test.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+
+  return (
+    <section className="connectors-generic-panel" aria-label="Shopify Admin verifier setup">
+      <div className="connectors-section-head">
+        <div>
+          <span className="dashboard-eyebrow">Shopify Admin verifier</span>
+          <h2>Native Shopify order verification</h2>
+          <p>Read one Shopify Admin order by ID and compare total, currency, financial status, fulfillment, and cancellation fields.</p>
+        </div>
+        <StatusPill
+          value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"}
+          kind="proof"
+          tone={connected ? "warning" : "neutral"}
+        />
+      </div>
+
+      <div className="connectors-generic-layout">
+        <form className="connectors-generic-form" onSubmit={saveConfig}>
+          <div className="connectors-generic-form-head">
+            <strong>1. Save Shopify read access</strong>
+            <span>Use a read-scoped Shopify Admin API access token. Saved tokens never render in the browser.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label className="connectors-generic-wide">
+              <span>Shop Admin base URL</span>
+              <input
+                value={form.baseUrl}
+                onChange={(event) => updateForm("baseUrl", event.target.value)}
+                placeholder="https://example.myshopify.com"
+                required
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Admin API access token</span>
+              <input
+                value={form.bearerToken}
+                onChange={(event) => updateForm("bearerToken", event.target.value)}
+                placeholder={status?.has_bearer_token ? "Token saved" : "Read-scoped Shopify Admin token"}
+                type="password"
+              />
+            </label>
+          </div>
+          <DashboardButton icon={<Save />} loading={saving} type="submit" variant="primary">
+            Save Shopify verifier
+          </DashboardButton>
+        </form>
+
+        <form className="connectors-generic-form" onSubmit={runTest}>
+          <div className="connectors-generic-form-head">
+            <strong>2. Run Shopify preflight</strong>
+            <span>Fetch one safe existing order and compare the fields your commerce agent will claim.</span>
+          </div>
+          <div className="connectors-generic-grid">
+            <label>
+              <span>Order ID</span>
+              <input
+                value={form.recordRef}
+                onChange={(event) => updateForm("recordRef", event.target.value)}
+                placeholder="1001"
+                required
+              />
+            </label>
+            <label>
+              <span>Match fields</span>
+              <input
+                value={form.matchFieldsText}
+                onChange={(event) => updateForm("matchFieldsText", event.target.value)}
+                placeholder="order_id,amount_major,currency,financial_status"
+              />
+            </label>
+            <label className="connectors-generic-wide">
+              <span>Claimed JSON</span>
+              <textarea
+                value={form.claimedJson}
+                onChange={(event) => updateForm("claimedJson", event.target.value)}
+                rows={7}
+              />
+            </label>
+          </div>
+          <DashboardButton disabled={!connected} loading={testing} type="submit" variant="soft">
+            Run Shopify preflight
+          </DashboardButton>
+        </form>
+      </div>
+
+      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
+      {message ? <div className="connectors-success-strip">{message}</div> : null}
+    </section>
+  );
+}
+
 function ConnectorInspector({
   genericStatus,
   hubspotStatus,
@@ -2351,6 +2703,8 @@ function ConnectorInspector({
   netsuiteStatus,
   razorpayStatus,
   salesforceStatus,
+  shopifyStatus,
+  stripePaymentStatus,
   stripeStatus,
   zendeskStatus,
   zohoStatus,
@@ -2360,6 +2714,8 @@ function ConnectorInspector({
   onNetSuiteStatusChange,
   onRazorpayStatusChange,
   onSalesforceStatusChange,
+  onShopifyStatusChange,
+  onStripePaymentStatusChange,
   onStripeStatusChange,
   onZendeskStatusChange,
   onZohoStatusChange,
@@ -2371,6 +2727,8 @@ function ConnectorInspector({
   netsuiteStatus: NetSuiteFinanceConnectorStatusResponse | null;
   razorpayStatus: RazorpayRefundConnectorStatusResponse | null;
   salesforceStatus: SalesforceCrmConnectorStatusResponse | null;
+  shopifyStatus: ShopifyConnectorStatusResponse | null;
+  stripePaymentStatus: StripePaymentConnectorStatusResponse | null;
   stripeStatus: StripeRefundConnectorStatusResponse | null;
   zendeskStatus: ZendeskTicketConnectorStatusResponse | null;
   zohoStatus: ZohoCrmConnectorStatusResponse | null;
@@ -2380,6 +2738,8 @@ function ConnectorInspector({
   onNetSuiteStatusChange: (status: NetSuiteFinanceConnectorStatusResponse) => void;
   onRazorpayStatusChange: (status: RazorpayRefundConnectorStatusResponse) => void;
   onSalesforceStatusChange: (status: SalesforceCrmConnectorStatusResponse) => void;
+  onShopifyStatusChange: (status: ShopifyConnectorStatusResponse) => void;
+  onStripePaymentStatusChange: (status: StripePaymentConnectorStatusResponse) => void;
   onStripeStatusChange: (status: StripeRefundConnectorStatusResponse) => void;
   onZendeskStatusChange: (status: ZendeskTicketConnectorStatusResponse) => void;
   onZohoStatusChange: (status: ZohoCrmConnectorStatusResponse) => void;
@@ -2535,6 +2895,13 @@ function ConnectorInspector({
                   status={stripeStatus}
                 />
               ) : null}
+              {row.id === "stripe_payment" ? (
+                <StripePaymentSetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onStripePaymentStatusChange}
+                  status={stripePaymentStatus}
+                />
+              ) : null}
               {row.id === "razorpay_refund" ? (
                 <RazorpayRefundSetupPanel
                   latestCheck={row.latestCheck}
@@ -2584,6 +2951,13 @@ function ConnectorInspector({
                   status={netsuiteStatus}
                 />
               ) : null}
+              {row.id === "shopify_admin" ? (
+                <ShopifySetupPanel
+                  latestCheck={row.latestCheck}
+                  onStatusChange={onShopifyStatusChange}
+                  status={shopifyStatus}
+                />
+              ) : null}
             </div>
           ) : null}
         </details>
@@ -2608,12 +2982,14 @@ export default function IntegrationsPage() {
       customerResult,
       genericResult,
       stripeResult,
+      stripePaymentResult,
       razorpayResult,
       hubspotResult,
       salesforceResult,
       zendeskResult,
       jiraResult,
       netsuiteResult,
+      shopifyResult,
       zohoResult,
       postgresResult,
       checksResult,
@@ -2625,12 +3001,14 @@ export default function IntegrationsPage() {
       getCustomerRecordConnectorStatus(),
       getGenericRestConnectorStatus(),
       getStripeRefundConnectorStatus(),
+      getStripePaymentConnectorStatus(),
       getRazorpayRefundConnectorStatus(),
       getHubSpotCrmConnectorStatus(),
       getSalesforceCrmConnectorStatus(),
       getZendeskTicketConnectorStatus(),
       getJiraIssueConnectorStatus(),
       getNetSuiteFinanceConnectorStatus(),
+      getShopifyConnectorStatus(),
       getZohoCrmConnectorStatus(),
       getPostgresReadConnectorStatus(),
       listOutcomeReconciliations({ limit: 50 }),
@@ -2644,12 +3022,14 @@ export default function IntegrationsPage() {
       customer: customerResult.status === "fulfilled" ? customerResult.value : null,
       generic: genericResult.status === "fulfilled" ? genericResult.value : null,
       stripe: stripeResult.status === "fulfilled" ? stripeResult.value : null,
+      stripePayment: stripePaymentResult.status === "fulfilled" ? stripePaymentResult.value : null,
       razorpay: razorpayResult.status === "fulfilled" ? razorpayResult.value : null,
       hubspot: hubspotResult.status === "fulfilled" ? hubspotResult.value : null,
       salesforce: salesforceResult.status === "fulfilled" ? salesforceResult.value : null,
       zendesk: zendeskResult.status === "fulfilled" ? zendeskResult.value : null,
       jira: jiraResult.status === "fulfilled" ? jiraResult.value : null,
       netsuite: netsuiteResult.status === "fulfilled" ? netsuiteResult.value : null,
+      shopify: shopifyResult.status === "fulfilled" ? shopifyResult.value : null,
       zoho: zohoResult.status === "fulfilled" ? zohoResult.value : null,
       postgres: postgresResult.status === "fulfilled" ? postgresResult.value : null,
       checks: checksResult.status === "fulfilled" ? checksResult.value.items : [],
@@ -2662,12 +3042,14 @@ export default function IntegrationsPage() {
       customerResult,
       genericResult,
       stripeResult,
+      stripePaymentResult,
       razorpayResult,
       hubspotResult,
       salesforceResult,
       zendeskResult,
       jiraResult,
       netsuiteResult,
+      shopifyResult,
       zohoResult,
       postgresResult,
       checksResult,
@@ -2780,6 +3162,8 @@ export default function IntegrationsPage() {
             netsuiteStatus={overview.netsuite}
             razorpayStatus={overview.razorpay}
             salesforceStatus={overview.salesforce}
+            shopifyStatus={overview.shopify}
+            stripePaymentStatus={overview.stripePayment}
             stripeStatus={overview.stripe}
             zendeskStatus={overview.zendesk}
             zohoStatus={overview.zoho}
@@ -2789,6 +3173,8 @@ export default function IntegrationsPage() {
             onNetSuiteStatusChange={(netsuite) => setOverview((current) => ({ ...current, netsuite }))}
             onRazorpayStatusChange={(razorpay) => setOverview((current) => ({ ...current, razorpay }))}
             onSalesforceStatusChange={(salesforce) => setOverview((current) => ({ ...current, salesforce }))}
+            onShopifyStatusChange={(shopify) => setOverview((current) => ({ ...current, shopify }))}
+            onStripePaymentStatusChange={(stripePayment) => setOverview((current) => ({ ...current, stripePayment }))}
             onStripeStatusChange={(stripe) => setOverview((current) => ({ ...current, stripe }))}
             onZendeskStatusChange={(zendesk) => setOverview((current) => ({ ...current, zendesk }))}
             onZohoStatusChange={(zoho) => setOverview((current) => ({ ...current, zoho }))}

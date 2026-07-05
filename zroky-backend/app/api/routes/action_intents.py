@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.authorization import ROLE_RANK
 from app.api.dependencies.tenant import TenantContext, require_tenant_context
 from app.core.limiter import limiter
-from app.db.models import Agent
 from app.db.session import get_db_session
 from app.services.action_kernel import (
     ActionContractConflict,
@@ -36,10 +30,8 @@ from app.services.action_packs import (
 from app.services.action_receipts import (
     ActionReceiptNotFound,
     ActionReceiptSigningError,
-    action_receipt_payload,
     generate_action_receipt,
     get_action_receipt,
-    verify_action_receipt_signature,
 )
 from app.services.action_runner import (
     ActionCredentialReferenceError,
@@ -51,14 +43,9 @@ from app.services.action_runner import (
     ActionRunnerConflict,
     ActionRunnerError,
     ActionRunnerNotFound,
-    action_runner_credential_scope,
-    action_runner_heartbeat_payload,
-    action_runner_supported_operation_kinds,
     claim_next_execution_attempt,
     create_execution_attempt,
     dispatch_execution_attempt,
-    execution_attempt_plan,
-    execution_attempt_result_summary,
     finish_execution_attempt,
     list_action_runners,
     list_execution_adapter_contracts,
@@ -68,13 +55,14 @@ from app.services.action_runner import (
     register_action_runner,
     start_execution_attempt,
 )
-from app.services.action_timeline import action_timeline_event_payload, list_action_timeline
+from app.services.action_timeline import list_action_timeline
 from app.services.protected_action_billing import (
     ProtectedActionMeteringUnavailable,
     ProtectedActionQuotaExceeded,
-    quota_error_detail,
 )
 from app.services.notification_dispatch import dispatch_runtime_policy_approval_slack_request
+from app.api.routes._action_intents_helpers import *  # noqa: F403
+from app.api.routes._action_intents_schemas import *  # noqa: F403
 
 
 router = APIRouter()
@@ -92,465 +80,6 @@ ACTION_EXECUTION_ATTEMPT_STATUSES = {
     "ambiguous",
     "cancelled",
 }
-
-
-class ActionContractRegisterRequest(BaseModel):
-    contract_key: str = Field(min_length=3, max_length=160)
-    version: str = Field(min_length=1, max_length=32)
-    action_type: str = Field(min_length=3, max_length=160)
-    operation_kind: str = Field(min_length=3, max_length=32)
-    domain_family: str = Field(min_length=3, max_length=64)
-    schema_: dict[str, Any] = Field(alias="schema")
-    risk_class: str = Field(default="R2", max_length=8)
-    verification_profile: dict[str, Any] | None = None
-    connector_family: str | None = Field(default=None, max_length=80)
-
-
-class ActionContractResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: str
-    project_id: str
-    contract_key: str
-    version: str
-    contract_version: str
-    action_type: str
-    operation_kind: str
-    domain_family: str
-    schema_digest: str
-    schema_: dict[str, Any] = Field(alias="schema")
-    risk_class: str
-    verification_profile: dict[str, Any]
-    connector_family: str | None
-    status: str
-    created_at: datetime
-
-
-class ActionIntentCreateRequest(BaseModel):
-    agent_id: str | None = Field(default=None, max_length=36)
-    contract_version: str = Field(min_length=5, max_length=200)
-    action_type: str = Field(min_length=3, max_length=160)
-    operation_kind: str = Field(min_length=3, max_length=32)
-    environment: str = Field(default="production", max_length=64)
-    principal: dict[str, Any] = Field(default_factory=dict)
-    actor_chain: list[dict[str, Any]] = Field(default_factory=list)
-    purpose: dict[str, Any] = Field(default_factory=dict)
-    resource: dict[str, Any] = Field(default_factory=dict)
-    parameters: dict[str, Any] = Field(default_factory=dict)
-    execution_request: dict[str, Any] | None = None
-    verification_profile: str | None = Field(default=None, max_length=160)
-    deadline: datetime | None = None
-    trace_context: dict[str, Any] | None = None
-
-
-class ActionIntentAgentProfileResponse(BaseModel):
-    id: str
-    display_name: str
-    slug: str
-    runtime_path: str
-    environment: str | None
-
-
-class ActionIntentResponse(BaseModel):
-    action_id: str
-    project_id: str
-    agent_id: str | None
-    agent_profile: ActionIntentAgentProfileResponse | None
-    contract_version: str
-    action_type: str
-    operation_kind: str
-    environment: str
-    status: str
-    proof_status: str
-    receipt_status: str
-    idempotency_key: str
-    intent_digest: str
-    canonical_intent: dict[str, Any]
-    created_at: datetime
-    decided_at: datetime | None
-    authorized_at: datetime | None
-    runtime_policy_decision_id: str | None
-    deadline: datetime | None
-    status_url: str
-
-
-class ActionIntentDecisionRequest(BaseModel):
-    approval_id: str | None = Field(default=None, max_length=36)
-
-
-class ActionIntentDecisionResponse(ActionIntentResponse):
-    allowed: bool
-    requires_approval: bool
-    reasons: list[str] = Field(default_factory=list)
-
-
-class ActionIntentListResponse(BaseModel):
-    items: list[ActionIntentResponse]
-    total_in_page: int
-    limit: int
-    offset: int
-
-
-class ActionRunnerRegisterRequest(BaseModel):
-    name: str = Field(min_length=3, max_length=160)
-    runner_type: str = Field(default="customer_hosted", max_length=32)
-    environment: str = Field(default="production", max_length=64)
-    supported_operation_kinds: list[str] = Field(default_factory=list)
-    credential_scope: dict[str, Any] = Field(default_factory=dict)
-    capability_version: str | None = Field(default=None, max_length=64)
-
-
-class ActionRunnerHeartbeatRequest(BaseModel):
-    status: str = Field(default="online", max_length=32)
-    heartbeat_payload: dict[str, Any] = Field(default_factory=dict)
-    supported_operation_kinds: list[str] | None = None
-    capability_version: str | None = Field(default=None, max_length=64)
-
-
-class ActionRunnerClaimRequest(BaseModel):
-    runner_metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class ActionRunnerResponse(BaseModel):
-    runner_id: str
-    project_id: str
-    name: str
-    runner_type: str
-    environment: str
-    status: str
-    supported_operation_kinds: list[str]
-    credential_scope: dict[str, Any]
-    heartbeat_payload: dict[str, Any]
-    capability_version: str | None
-    last_heartbeat_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
-
-
-class ActionRunnerListResponse(BaseModel):
-    items: list[ActionRunnerResponse]
-
-
-class ActionExecutionAdapterContractResponse(BaseModel):
-    schema_version: str
-    adapter: str
-    display_name: str
-    operation_kinds: list[str]
-    operations: list[str]
-    required_target_fields: list[str]
-    required_argument_fields: list[str]
-    required_result_fields: list[str]
-    verification_connector: str
-    credential_boundary: str
-    protected_credential_returned: bool
-
-
-class ActionExecutionAdapterListResponse(BaseModel):
-    items: list[ActionExecutionAdapterContractResponse]
-
-
-class ActionExecutionAttemptCreateRequest(BaseModel):
-    runner_id: str = Field(min_length=36, max_length=36)
-    credential_ref: str = Field(min_length=12, max_length=512)
-    execution_plan: dict[str, Any] = Field(default_factory=dict)
-
-
-class ActionExecutionDispatchRequest(BaseModel):
-    dispatch_metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class ActionExecutionStartRequest(BaseModel):
-    runner_metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class ActionExecutionFinishRequest(BaseModel):
-    final_status: str = Field(max_length=32)
-    result_summary: dict[str, Any] = Field(default_factory=dict)
-    error_message: str | None = Field(default=None, max_length=2000)
-
-
-class ActionExecutionAttemptResponse(BaseModel):
-    attempt_id: str
-    project_id: str
-    action_id: str
-    runner_id: str
-    attempt_number: int
-    status: str
-    idempotency_key: str
-    credential_ref: str
-    plan_digest: str
-    execution_plan: dict[str, Any]
-    result_summary: dict[str, Any]
-    error_message: str | None
-    protected_credential_returned: bool
-    requested_by_subject: str | None
-    started_at: datetime | None
-    finished_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
-
-
-class ActionExecutionAttemptListResponse(BaseModel):
-    items: list[ActionExecutionAttemptResponse]
-
-
-class ActionTimelineEventResponse(BaseModel):
-    event_id: str
-    action_id: str
-    project_id: str
-    event_type: str
-    event_digest: str
-    actor: str | None
-    payload: dict[str, Any]
-    created_at: datetime
-
-
-class ActionTimelineResponse(BaseModel):
-    items: list[ActionTimelineEventResponse]
-
-
-class ActionReceiptResponse(BaseModel):
-    receipt_id: str
-    project_id: str
-    action_id: str
-    receipt_digest: str
-    evidence_hash: str | None
-    signature_algorithm: str
-    signature: str
-    signing_key_id: str
-    signature_valid: bool
-    generated_at: datetime
-    receipt: dict[str, Any]
-
-
-class ActionPackContractTemplateResponse(BaseModel):
-    contract_key: str
-    version: str
-    contract_version: str
-    action_type: str
-    operation_kind: str
-    domain_family: str
-    risk_class: str
-    connector_family: str
-    schema_: dict[str, Any] = Field(alias="schema")
-    verification_profile: dict[str, Any]
-
-
-class ActionPackResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: str
-    display_name: str
-    summary: str
-    primary_runtime_path: str
-    recommended_connectors: list[str]
-    native_tool_families: list[str]
-    dashboard_href: str
-    contract_templates: list[ActionPackContractTemplateResponse]
-
-
-class ActionPackListResponse(BaseModel):
-    items: list[ActionPackResponse]
-
-
-class ActionPackInstallResultResponse(BaseModel):
-    contract: ActionContractResponse
-    created: bool
-
-
-class ActionPackInstallResponse(BaseModel):
-    pack: ActionPackResponse
-    installed_contracts: list[ActionPackInstallResultResponse]
-
-
-def _require_role(context: TenantContext, minimum: str) -> None:
-    if ROLE_RANK[context.role] < ROLE_RANK[minimum]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Tenant role '{context.role}' does not allow this action.",
-        )
-
-
-def _loads(value: str | None, fallback: Any) -> Any:
-    if not value:
-        return fallback
-    try:
-        return json.loads(value)
-    except Exception:
-        return fallback
-
-
-def _contract_response(row) -> ActionContractResponse:
-    return ActionContractResponse(
-        id=row.id,
-        project_id=row.project_id,
-        contract_key=row.contract_key,
-        version=row.version,
-        contract_version=f"{row.contract_key}/{row.version}",
-        action_type=row.action_type,
-        operation_kind=row.operation_kind,
-        domain_family=row.domain_family,
-        schema_digest=row.schema_digest,
-        schema=_loads(row.schema_json, {}),
-        risk_class=row.risk_class,
-        verification_profile=_loads(row.verification_profile_json, {}),
-        connector_family=row.connector_family,
-        status=row.status,
-        created_at=row.created_at,
-    )
-
-
-def _intent_agent_profile_response(db: Session, row) -> ActionIntentAgentProfileResponse | None:
-    if not row.agent_id:
-        return None
-    agent = db.get(Agent, row.agent_id)
-    if agent is None or agent.project_id != row.project_id:
-        return None
-    return ActionIntentAgentProfileResponse(
-        id=agent.id,
-        display_name=agent.name,
-        slug=agent.slug,
-        runtime_path=agent.runtime_path,
-        environment=agent.environment,
-    )
-
-
-def _intent_response(db: Session, row) -> ActionIntentResponse:
-    return ActionIntentResponse(
-        action_id=row.id,
-        project_id=row.project_id,
-        agent_id=row.agent_id,
-        agent_profile=_intent_agent_profile_response(db, row),
-        contract_version=f"{row.contract_key}/{row.contract_version}",
-        action_type=row.action_type,
-        operation_kind=row.operation_kind,
-        environment=row.environment,
-        status=row.status,
-        proof_status=row.proof_status,
-        receipt_status=row.receipt_status,
-        idempotency_key=row.idempotency_key,
-        intent_digest=row.intent_digest,
-        canonical_intent=_loads(row.canonical_intent_json, {}),
-        created_at=row.created_at,
-        decided_at=row.decided_at,
-        authorized_at=row.authorized_at,
-        runtime_policy_decision_id=row.runtime_policy_decision_id,
-        deadline=row.deadline_at,
-        status_url=f"/v1/action-intents/{row.id}",
-    )
-
-
-def _runner_response(row) -> ActionRunnerResponse:
-    return ActionRunnerResponse(
-        runner_id=row.id,
-        project_id=row.project_id,
-        name=row.name,
-        runner_type=row.runner_type,
-        environment=row.environment,
-        status=row.status,
-        supported_operation_kinds=action_runner_supported_operation_kinds(row),
-        credential_scope=action_runner_credential_scope(row),
-        heartbeat_payload=action_runner_heartbeat_payload(row),
-        capability_version=row.capability_version,
-        last_heartbeat_at=row.last_heartbeat_at,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
-def _execution_attempt_response(row) -> ActionExecutionAttemptResponse:
-    return ActionExecutionAttemptResponse(
-        attempt_id=row.id,
-        project_id=row.project_id,
-        action_id=row.action_intent_id,
-        runner_id=row.runner_id,
-        attempt_number=row.attempt_number,
-        status=row.status,
-        idempotency_key=row.idempotency_key,
-        credential_ref=row.credential_ref,
-        plan_digest=row.plan_digest,
-        execution_plan=execution_attempt_plan(row),
-        result_summary=execution_attempt_result_summary(row),
-        error_message=row.error_message,
-        protected_credential_returned=row.protected_credential_returned,
-        requested_by_subject=row.requested_by_subject,
-        started_at=row.started_at,
-        finished_at=row.finished_at,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
-def _timeline_event_response(row) -> ActionTimelineEventResponse:
-    return ActionTimelineEventResponse(
-        event_id=row.id,
-        action_id=row.action_intent_id,
-        project_id=row.project_id,
-        event_type=row.event_type,
-        event_digest=row.event_digest,
-        actor=row.actor,
-        payload=action_timeline_event_payload(row),
-        created_at=row.created_at,
-    )
-
-
-def _receipt_response(row) -> ActionReceiptResponse:
-    return ActionReceiptResponse(
-        receipt_id=row.id,
-        project_id=row.project_id,
-        action_id=row.action_intent_id,
-        receipt_digest=row.receipt_digest,
-        evidence_hash=row.evidence_hash,
-        signature_algorithm=row.signature_algorithm,
-        signature=row.signature,
-        signing_key_id=row.signing_key_id,
-        signature_valid=verify_action_receipt_signature(row),
-        generated_at=row.generated_at,
-        receipt=action_receipt_payload(row),
-    )
-
-
-def _pack_response(payload: dict[str, Any]) -> ActionPackResponse:
-    return ActionPackResponse(**payload)
-
-
-def _raise_billing_error(exc: ProtectedActionQuotaExceeded | ProtectedActionMeteringUnavailable) -> None:
-    if isinstance(exc, ProtectedActionQuotaExceeded):
-        detail = quota_error_detail(exc)
-        headers = {}
-        if detail.get("current_plan"):
-            headers["X-Zroky-Plan-Hint"] = str(detail["current_plan"])
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=detail,
-            headers=headers,
-        ) from exc
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=str(exc),
-    ) from exc
-
-
-def _validate_optional_filter(name: str, value: str | None, allowed: set[str]) -> None:
-    if value is not None and value not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid {name} filter.",
-        )
-
-
-def _parse_status_filter(name: str, value: str | None, allowed: set[str]) -> list[str] | None:
-    if value is None:
-        return None
-    parsed = [item.strip() for item in value.split(",") if item.strip()]
-    if not parsed:
-        return None
-    if any(item not in allowed for item in parsed):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid {name} filter.",
-        )
-    return parsed
 
 
 @router.get("/v1/action-execution-adapters", response_model=ActionExecutionAdapterListResponse)

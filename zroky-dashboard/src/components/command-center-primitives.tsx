@@ -8,7 +8,7 @@ import {
   Circle,
   Code2,
   ExternalLink,
-  GitPullRequest,
+  FileCheck2,
   KeyRound,
   LockKeyhole,
   Route,
@@ -194,8 +194,6 @@ export function FirstRunOnboarding({
   capturedCallCount,
   captureStatus,
   replayUnlocked,
-  goldensUnlocked,
-  ciUnlocked,
 }: {
   projectKeyCount: number;
   capturedCallCount: number;
@@ -206,6 +204,7 @@ export function FirstRunOnboarding({
 }) {
   const hasProjectKey = projectKeyCount > 0;
   const hasCapture = capturedCallCount > 0 || captureStatus === "connected" || captureStatus === "stale";
+  const proofPathReady = hasCapture && replayUnlocked;
   const nextAction = !hasProjectKey
     ? {
         href: "/agents/setup",
@@ -255,8 +254,8 @@ export function FirstRunOnboarding({
     },
     {
       label: "First proof path ready",
-      detail: hasCapture && replayUnlocked ? "Ready when risk appears" : replayUnlocked ? "Waiting" : "Upgrade later",
-      state: hasCapture && replayUnlocked ? "current" : "locked",
+      detail: proofPathReady ? "Ready when risk appears" : replayUnlocked ? "Waiting" : "Upgrade later",
+      state: proofPathReady ? "current" : "locked",
     },
   ];
   const healthRows: { label: string; value: string; state: SetupState; icon: ReactNode }[] = [
@@ -274,18 +273,17 @@ export function FirstRunOnboarding({
     },
     {
       label: "Outcome proof",
-      value: hasCapture && replayUnlocked ? "Ready" : replayUnlocked ? "Waiting" : "Locked",
-      state: hasCapture && replayUnlocked ? "current" : replayUnlocked ? "idle" : "locked",
+      value: proofPathReady ? "Ready" : replayUnlocked ? "Waiting" : "Locked",
+      state: proofPathReady ? "current" : replayUnlocked ? "idle" : "locked",
       icon: <ShieldCheck aria-hidden="true" />,
     },
     {
-      label: "CI",
-      value: ciUnlocked ? "Not configured" : "Locked",
-      state: ciUnlocked ? "idle" : "locked",
-      icon: <GitPullRequest aria-hidden="true" />,
+      label: "Receipt",
+      value: proofPathReady ? "Available" : "After verification",
+      state: proofPathReady ? "done" : "idle",
+      icon: <FileCheck2 aria-hidden="true" />,
     },
   ];
-  const canShowReplayNext = replayUnlocked || goldensUnlocked || ciUnlocked;
 
   return (
     <section className="fi-setup-cockpit" aria-label="First capture setup">
@@ -310,7 +308,7 @@ export function FirstRunOnboarding({
             <ArrowRight aria-hidden="true" />
             <span>
               <Send aria-hidden="true" />
-              Trace
+              Intent
             </span>
           </div>
           <div className="fi-setup-actions">
@@ -405,10 +403,10 @@ export function FirstRunOnboarding({
           </div>
           <div>
             <ShieldCheck aria-hidden="true" />
-            <span>{canShowReplayNext ? "Outcome gets verified" : "Outcome proof unlocks later"}</span>
+            <span>{proofPathReady ? "Outcome gets verified" : "Outcome proof unlocks later"}</span>
           </div>
           <div>
-            <GitPullRequest aria-hidden="true" />
+            <FileCheck2 aria-hidden="true" />
             <span>Evidence Pack exports</span>
           </div>
         </div>

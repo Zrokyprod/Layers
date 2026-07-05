@@ -11,6 +11,8 @@ import type {
   PostgresReadConnectorStatusResponse,
   RazorpayRefundConnectorStatusResponse,
   SalesforceCrmConnectorStatusResponse,
+  ShopifyConnectorStatusResponse,
+  StripePaymentConnectorStatusResponse,
   ToolRegistryResponse,
   ZohoCrmConnectorStatusResponse,
 } from "@/lib/api";
@@ -131,6 +133,58 @@ function razorpayStatus(overrides: Partial<RazorpayRefundConnectorStatusResponse
     query: { key_id: "rzp_test_key" },
     has_bearer_token: true,
     bearer_token_last4: "r123",
+    last_tested_at: "2026-06-20T09:00:00Z",
+    health_status: "healthy",
+    last_verdict: "matched",
+    last_error: null,
+    last_error_code: null,
+    last_http_status: 200,
+    last_attempts: 1,
+    last_retryable: false,
+    last_checked_at: "2026-06-20T09:00:00Z",
+    readiness: { status: "ready" },
+    created_at: "2026-06-20T08:00:00Z",
+    updated_at: "2026-06-20T09:00:00Z",
+    ...overrides,
+  };
+}
+
+function stripePaymentStatus(overrides: Partial<StripePaymentConnectorStatusResponse> = {}): StripePaymentConnectorStatusResponse {
+  return {
+    connected: true,
+    connector_type: "stripe_payment",
+    base_url: "https://api.stripe.com",
+    path_template: "/v1/payment_intents/{payment_id}",
+    record_path: null,
+    query: null,
+    has_bearer_token: true,
+    bearer_token_last4: "p123",
+    last_tested_at: "2026-06-20T09:00:00Z",
+    health_status: "healthy",
+    last_verdict: "matched",
+    last_error: null,
+    last_error_code: null,
+    last_http_status: 200,
+    last_attempts: 1,
+    last_retryable: false,
+    last_checked_at: "2026-06-20T09:00:00Z",
+    readiness: { status: "ready" },
+    created_at: "2026-06-20T08:00:00Z",
+    updated_at: "2026-06-20T09:00:00Z",
+    ...overrides,
+  };
+}
+
+function shopifyStatus(overrides: Partial<ShopifyConnectorStatusResponse> = {}): ShopifyConnectorStatusResponse {
+  return {
+    connected: true,
+    connector_type: "shopify_admin",
+    base_url: "https://example.myshopify.com",
+    path_template: "/admin/api/2025-01/orders/{record_ref}.json",
+    record_path: "order",
+    query: null,
+    has_bearer_token: true,
+    bearer_token_last4: "shp1",
     last_tested_at: "2026-06-20T09:00:00Z",
     health_status: "healthy",
     last_verdict: "matched",
@@ -405,6 +459,7 @@ describe("connector-inventory", () => {
     const sql = inventory.transportGroups.find((group) => group.transport === "sql_read");
     const workflow = inventory.transportGroups.find((group) => group.transport === "workflow");
     const payments = inventory.categoryGroups.find((group) => group.category === "payments");
+    const commerce = inventory.categoryGroups.find((group) => group.category === "commerce");
     const crm = inventory.categoryGroups.find((group) => group.category === "crm");
     const supportItsm = inventory.categoryGroups.find((group) => group.category === "support_itsm");
     const financeErp = inventory.categoryGroups.find((group) => group.category === "finance_erp");
@@ -419,8 +474,10 @@ describe("connector-inventory", () => {
       "zendesk_ticket",
       "jira_issue",
       "stripe_refund",
+      "stripe_payment",
       "razorpay_refund",
       "netsuite_finance",
+      "shopify_admin",
       "ledger_template",
       "customer_template",
     ]);
@@ -432,14 +489,22 @@ describe("connector-inventory", () => {
       "zendesk_ticket",
       "jira_issue",
       "stripe_refund",
+      "stripe_payment",
       "razorpay_refund",
       "netsuite_finance",
+      "shopify_admin",
       "refund_ledger",
       "customer_record",
     ]);
     expect(sql?.rows.map((row) => row.id)).toEqual(["postgres_read"]);
     expect(workflow?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
-    expect(payments?.rows.map((row) => row.id)).toEqual(["stripe_refund", "razorpay_refund", "ledger_template"]);
+    expect(payments?.rows.map((row) => row.id)).toEqual([
+      "stripe_refund",
+      "stripe_payment",
+      "razorpay_refund",
+      "ledger_template",
+    ]);
+    expect(commerce?.rows.map((row) => row.id)).toEqual(["shopify_admin"]);
     expect(crm?.rows.map((row) => row.id)).toEqual(["hubspot_crm", "salesforce_crm", "zoho_crm", "customer_template"]);
     expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "jira_issue"]);
     expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance"]);
@@ -460,9 +525,9 @@ describe("connector-inventory", () => {
     });
 
     expect(inventory.counts).toMatchObject({
-      proofTotal: 12,
+      proofTotal: 14,
       healthyVerifiers: 3,
-      notConfigured: 9,
+      notConfigured: 11,
       failingVerifiers: 0,
       notTested: 0,
       supportTotal: 2,
@@ -866,6 +931,88 @@ describe("connector-inventory", () => {
     expect(inventory.coverageRows.find((row) => row.actionType === "razorpay.refund.create")).toMatchObject({
       status: "healthy",
       connectorId: "razorpay_refund",
+      transport: "rest_http",
+    });
+  });
+
+  it("prefers the native Stripe payment verifier for PaymentIntent coverage", () => {
+    const baseRegistry = registry();
+    const inventory = buildConnectorInventory({
+      ledger: null,
+      customer: null,
+      generic: genericStatus(),
+      stripePayment: stripePaymentStatus(),
+      postgres: null,
+      github: null,
+      slack: null,
+      actionTypes: ["stripe.payment_intent.capture"],
+      registry: registry({
+        verification_connectors: [
+          ...baseRegistry.verification_connectors,
+          {
+            id: "stripe_payment",
+            kind: "verification_connector",
+            label: "Stripe payment verifier",
+            description: "Stripe PaymentIntent verifier",
+            category: "system_of_record",
+            phase: "phase1",
+            implementation_status: "available",
+            launch_tier: "p1",
+            supported_action_types: ["stripe.payment_intent.capture", "payment"],
+            recommended_for_action_types: ["payment_adjustment"],
+            requires_customer_credentials: true,
+            dashboard_href: "/integrations",
+            backend_capability: "system_of_record.stripe_payment",
+            availability_notes: null,
+          },
+        ],
+      }),
+    });
+
+    expect(inventory.coverageRows.find((row) => row.actionType === "stripe.payment_intent.capture")).toMatchObject({
+      status: "healthy",
+      connectorId: "stripe_payment",
+      transport: "rest_http",
+    });
+  });
+
+  it("prefers the native Shopify verifier for commerce coverage", () => {
+    const baseRegistry = registry();
+    const inventory = buildConnectorInventory({
+      ledger: null,
+      customer: null,
+      generic: genericStatus(),
+      shopify: shopifyStatus(),
+      postgres: null,
+      github: null,
+      slack: null,
+      actionTypes: ["shopify.order.cancel"],
+      registry: registry({
+        verification_connectors: [
+          ...baseRegistry.verification_connectors,
+          {
+            id: "shopify_admin",
+            kind: "verification_connector",
+            label: "Shopify Admin verifier",
+            description: "Shopify order verifier",
+            category: "system_of_record",
+            phase: "phase1",
+            implementation_status: "available",
+            launch_tier: "p1",
+            supported_action_types: ["shopify.order.cancel", "order"],
+            recommended_for_action_types: ["order_cancel"],
+            requires_customer_credentials: true,
+            dashboard_href: "/integrations",
+            backend_capability: "system_of_record.shopify_admin",
+            availability_notes: null,
+          },
+        ],
+      }),
+    });
+
+    expect(inventory.coverageRows.find((row) => row.actionType === "shopify.order.cancel")).toMatchObject({
+      status: "healthy",
+      connectorId: "shopify_admin",
       transport: "rest_http",
     });
   });

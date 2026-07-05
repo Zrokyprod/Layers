@@ -557,20 +557,58 @@ def test_agent_profile_enforce_registers_customer_hosted_runner_idempotently(cli
 
 def test_agent_profile_action_type_operation_map_stays_aligned_with_setup_catalog() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    setup_page = repo_root / "zroky-dashboard" / "src" / "app" / "(dashboard)" / "agents" / "setup" / "page.tsx"
-    source = setup_page.read_text(encoding="utf-8")
-    catalog_source = source.split("const ACTION_CATALOG: ActionCatalogItem[] = [", 1)[1].split(
-        "const ACTION_VERBS",
+    policy_catalog = repo_root / "zroky-dashboard" / "src" / "lib" / "policy-rules-view.ts"
+    policy_source = policy_catalog.read_text(encoding="utf-8")
+    policy_options = policy_source.split(
+        "export const POLICY_ACTION_OPTIONS: PolicyActionOption[] = [",
         1,
-    )[0]
-    frontend_map = dict(
+    )[1].split("];", 1)[0]
+    policy_map = dict(
         re.findall(
-            r'id:\s*"([^"]+)"[\s\S]*?verb:\s*"([^"]+)"',
-            catalog_source,
+            r'id:\s*"([^"]+)"[\s\S]*?operationKind:\s*"([^"]+)"',
+            policy_options,
         )
     )
 
-    assert ACTION_TYPE_OPERATION_KINDS == {
-        key: frontend_map[key]
-        for key in ACTION_TYPE_OPERATION_KINDS
+    assert policy_map == ACTION_TYPE_OPERATION_KINDS
+
+    setup_catalog = repo_root / "zroky-dashboard" / "src" / "lib" / "protected-agent-setup.ts"
+    setup_source = setup_catalog.read_text(encoding="utf-8")
+    templates_source = setup_source.split(
+        "export const protectedAgentTemplates: ProtectedAgentTemplate[] = [",
+        1,
+    )[1].split("];", 1)[0]
+    template_ids = re.findall(r'\{\s*id:\s*"([^"]+)"', templates_source)
+
+    action_type_block = setup_source.split("function webhookBridgeActionType", 1)[1].split(
+        "function operationKindForTemplate",
+        1,
+    )[0]
+    action_type_by_template = dict(
+        re.findall(r'if \(template\.id === "([^"]+)"\) return "([^"]+)";', action_type_block)
+    )
+
+    operation_kind_block = setup_source.split("function operationKindForTemplate", 1)[1].split(
+        "function pythonString",
+        1,
+    )[0]
+    operation_kind_by_template: dict[str, str] = {}
+    for condition, operation_kind in re.findall(
+        r'if \(([^)]+)\) return "([^"]+)";',
+        operation_kind_block,
+    ):
+        for template_id in re.findall(r'template\.id === "([^"]+)"', condition):
+            operation_kind_by_template[template_id] = operation_kind
+    fallback_operation_kind = re.findall(r'return "([^"]+)";', operation_kind_block)[-1]
+    setup_action_map = {
+        action_type_by_template.get(template_id, "custom"): operation_kind_by_template.get(
+            template_id,
+            fallback_operation_kind,
+        )
+        for template_id in template_ids
+    }
+
+    assert setup_action_map == {
+        action_type: ACTION_TYPE_OPERATION_KINDS[action_type]
+        for action_type in setup_action_map
     }

@@ -104,6 +104,8 @@ def test_tool_registry_exposes_phase1_catalog_with_honest_status(client: TestCli
     assert webhook["implementation_status"] == "available"
     assert webhook["backend_capability"] == "outcome_reconciliation.saved_connector_bridge"
     assert _by_id(body["verification_connectors"], "ledger_refund")["implementation_status"] == "available"
+    assert _by_id(body["verification_connectors"], "stripe_payment")["implementation_status"] == "available"
+    assert _by_id(body["verification_connectors"], "shopify_admin")["implementation_status"] == "available"
     assert _by_id(body["verification_connectors"], "crm_record")["implementation_status"] == "available"
     generic_rest = _by_id(body["verification_connectors"], "generic_rest")
     assert generic_rest["implementation_status"] == "available"
@@ -195,3 +197,18 @@ def test_tool_registry_can_recommend_by_explicit_action_without_agent(client: Te
         "zroky_dashboard_approval",
     ]
     assert "linear" not in body["recommended"]["native_tool_family_ids"]
+
+
+def test_tool_registry_recommends_shopify_for_commerce_actions(client: TestClient) -> None:
+    _seed_project(client, "proj_tool_registry_commerce")
+
+    response = client.get(
+        "/v1/tools/registry?action_type=order_cancel",
+        headers={"X-Project-Id": "proj_tool_registry_commerce"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["recommended"]["action_types"] == ["order_cancel"]
+    assert "shopify_admin" in body["recommended"]["verification_connector_ids"]
+    assert "shopify_admin" in body["recommended"]["native_tool_family_ids"]

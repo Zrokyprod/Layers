@@ -11,8 +11,11 @@ vi.mock("@/lib/owner-api", () => ({
 }));
 
 vi.mock("@/lib/hooks", () => ({
+  useClearRateLimitOverrides: vi.fn(),
   useOwnerProductionReadiness: vi.fn(),
   useOwnerRetention: vi.fn(),
+  useRateLimits: vi.fn(),
+  useSetRateLimitOverrides: vi.fn(),
 }));
 
 const readiness: OwnerProductionReadiness = {
@@ -66,6 +69,26 @@ function setHooks(data: OwnerProductionReadiness | null, error: Error | null = n
     error: null,
     isLoading: false,
   } as ReturnType<typeof hooks.useOwnerRetention>);
+  vi.mocked(hooks.useRateLimits).mockReturnValue({
+    data: {
+      ingest_soft_limit_rpm: 120,
+      ingest_burst_limit_rpm: 240,
+      ingest_rate_limit_window_seconds: 60,
+      ingest_sustained_breach_threshold: 3,
+      ingest_backpressure_ttl_seconds: 30,
+      ingest_enforce_rate_limit: true,
+    },
+    error: null,
+    isLoading: false,
+  } as unknown as ReturnType<typeof hooks.useRateLimits>);
+  vi.mocked(hooks.useSetRateLimitOverrides).mockReturnValue({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  } as unknown as ReturnType<typeof hooks.useSetRateLimitOverrides>);
+  vi.mocked(hooks.useClearRateLimitOverrides).mockReturnValue({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  } as unknown as ReturnType<typeof hooks.useClearRateLimitOverrides>);
 }
 
 describe("OwnerSettingsPage", () => {
@@ -82,8 +105,8 @@ describe("OwnerSettingsPage", () => {
     expect(within(section).getByText("blocked")).toBeInTheDocument();
     expect(within(section).getByText("production")).toBeInTheDocument();
     expect(within(section).getByText("2")).toBeInTheDocument();
-    expect(within(section).getByText("Provider key vault KEK")).toBeInTheDocument();
-    expect(within(section).getByText("Real replay enabled")).toBeInTheDocument();
+    expect(within(section).getAllByText("Connector key vault KEK").length).toBeGreaterThan(0);
+    expect(within(section).getAllByText("Proof worker enabled").length).toBeGreaterThan(0);
     expect(within(section).getByText("Owner routes enabled")).toBeInTheDocument();
     expect(section.textContent).not.toContain("owner-secret-production");
   });

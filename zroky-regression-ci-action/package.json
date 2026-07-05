@@ -13,9 +13,12 @@
   "keywords": ["zroky", "replay", "ci", "regression", "ai-observability"],
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.11.1",
-    "@actions/github": "^6.0.0",
-    "@actions/http-client": "^2.2.3"
+    "@actions/core": "2.0.0",
+    "@actions/github": "8.0.1",
+    "@actions/http-client": "3.0.2"
+  },
+  "overrides": {
+    "undici": "6.27.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

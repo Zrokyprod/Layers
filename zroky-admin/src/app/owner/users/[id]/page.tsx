@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { OwnerPlanGrantModal } from "@/components/owner-plan-grant-modal";
 import {
   useAnonymizeOwnerUser,
   useDeleteOwnerUser,
+  useOwnerBillingAccounts,
   useOwnerUser,
   useSetUserStatus,
   useUserMemberships,
@@ -38,6 +40,12 @@ export default function UserDetailPage() {
   const deleteMutation = useDeleteOwnerUser();
 
   const [actionMsg, setActionMsg] = useState("");
+  const [grantTarget, setGrantTarget] = useState<{ orgId: string; orgLabel: string } | null>(null);
+
+  const billingQuery = useOwnerBillingAccounts({ limit: 200 });
+  const planByOrg = new Map(
+    (billingQuery.data?.items ?? []).map((account) => [account.org_id, account]),
+  );
 
   const user = userQuery.data ?? null;
   const memberships = membershipsQuery.data?.memberships ?? [];
@@ -89,7 +97,7 @@ export default function UserDetailPage() {
   }
   if (!user) return null;
 
-  const provider = user.github_login ? "GitHub" : user.email ? "Email" : "Unknown";
+  const loginMethod = user.github_login ? "GitHub" : user.email ? "Email" : "Unknown";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -139,7 +147,7 @@ export default function UserDetailPage() {
         <InfoRow label="Email" value={user.email ?? "-"} />
         <InfoRow label="GitHub Login" value={user.github_login ?? "-"} />
         <InfoRow label="Display Name" value={user.display_name ?? "-"} />
-        <InfoRow label="Auth Provider" value={provider} />
+        <InfoRow label="Login Method" value={loginMethod} />
         <InfoRow label="Projects" value={user.project_count} />
         <InfoRow
           label="Joined"
@@ -182,7 +190,7 @@ export default function UserDetailPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
             <thead>
               <tr>
-                {["Project", "Role", "Status", "Joined"].map((h) => (
+                {["Project", "Plan", "Role", "Status", "Joined", "Actions"].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -209,6 +217,19 @@ export default function UserDetailPage() {
                       {m.project_name}
                     </Link>
                   </td>
+                  <td style={{ padding: "9px 10px" }}>
+                    {(() => {
+                      const account = planByOrg.get(m.project_id);
+                      if (billingQuery.isLoading) return <span className="owner-cell-muted">…</span>;
+                      if (!account) return <span style={{ color: "var(--text-secondary)" }}>—</span>;
+                      return (
+                        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          <span className="owner-money-badge owner-money-badge-neutral" style={{ textTransform: "capitalize" }}>{account.plan_code}</span>
+                          <span className={`owner-money-badge owner-money-badge-${account.status === "active" ? "ok" : account.status === "past_due" || account.status === "unpaid" ? "danger" : "warn"}`}>{account.status}</span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td style={{ padding: "9px 10px", color: "var(--text-secondary)" }}>{m.role}</td>
                   <td style={{ padding: "9px 10px" }}>
                     <span className={m.is_active ? "pill pill-green" : "pill pill-red"} style={{ fontSize: "0.68rem" }}>
@@ -218,12 +239,34 @@ export default function UserDetailPage() {
                   <td style={{ padding: "9px 10px", color: "var(--text-secondary)" }}>
                     {new Date(m.joined_at).toLocaleDateString()}
                   </td>
+                  <td style={{ padding: "9px 10px" }}>
+                    <button
+                      className="btn btn-soft"
+                      type="button"
+                      onClick={() => setGrantTarget({ orgId: m.project_id, orgLabel: m.project_name })}
+                      style={{ fontSize: "0.78rem", minHeight: 30, padding: "6px 10px" }}
+                    >
+                      Change subscription
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+      {grantTarget && (
+        <OwnerPlanGrantModal
+          orgId={grantTarget.orgId}
+          orgLabel={grantTarget.orgLabel}
+          onClose={() => setGrantTarget(null)}
+          onGranted={(planCode) => {
+            setActionMsg(`Subscription changed for ${grantTarget.orgLabel}: ${planCode}.`);
+            setGrantTarget(null);
+            void billingQuery.refetch();
+          }}
+        />
+      )}
     </div>
   );
 }

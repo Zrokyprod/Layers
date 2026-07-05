@@ -1,668 +1,409 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import {
+  Activity,
   AlertTriangle,
   BadgeDollarSign,
-  CheckCircle2,
-  CircleSlash,
-  Clock3,
-  GitBranch,
-  KeyRound,
-  MessageSquare,
   RefreshCw,
-  Rocket,
-  ShieldAlert,
-  TerminalSquare,
+  ServerCog,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
-import { useOwnerHealth, useOwnerLaunchReadiness, useOwnerMoneyPathHealth, useToggleMaintenance } from "@/lib/hooks";
+import {
+  useOwnerBillingSummary,
+  useOwnerHealth,
+  useOwnerLaunchReadiness,
+  useOwnerMoneyPathHealth,
+} from "@/lib/hooks";
 import type {
+  OwnerBillingSummary,
   OwnerHealth,
-  OwnerLastDeployedSmoke,
   OwnerLaunchReadiness,
   OwnerMoneyPathPlatformSummary,
   OwnerMoneyPathTenantRow,
 } from "@/lib/owner-api";
 
-const STATUS_VAR: Record<string, string> = {
-  ok: "var(--owner-green)",
-  degraded: "var(--owner-amber)",
-  down: "var(--owner-red)",
-  unknown: "var(--owner-muted)",
-};
+type Tone = "ok" | "warn" | "danger" | "neutral";
 
 const ACTION_LABELS: Record<string, string> = {
-  review_blocked_ci: "Review blocked CI",
+  review_blocked_ci: "Review release block",
   restore_capture: "Restore capture",
-  connect_provider_key: "Connect provider key",
-  review_replay_quota: "Review replay quota",
+  connect_provider_key: "Connect analysis key",
+  review_replay_quota: "Review proof quota",
   review_event_quota: "Review event quota",
-  restore_replay_worker: "Restore replay worker",
+  restore_replay_worker: "Restore proof worker",
   fix_metering: "Fix metering",
   refresh_pricing: "Refresh pricing",
   fix_billing: "Fix billing",
   review_support: "Review support",
-  run_replay: "Run replay",
-  promote_golden: "Promote Golden",
-  run_ci_gate: "Run CI gate",
+  run_replay: "Run proof check",
+  promote_golden: "Promote receipt baseline",
+  run_ci_gate: "Run release check",
   continue_triage: "Continue triage",
   monitor: "Monitor",
 };
 
-function fmtCount(value: number): string {
+function fmtCount(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
   return value.toLocaleString();
-}
-
-function fmtDate(value: string | null): string {
-  if (!value) return "No capture";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Invalid date";
-  return parsed.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action.replaceAll("_", " ");
 }
 
-function stateTone(state: string): "ok" | "warn" | "danger" | "neutral" {
-  if (["pass", "passed", "verified", "configured", "ok", "unlimited", "monitor"].includes(state)) return "ok";
-  if (["failed", "down", "error", "exceeded", "blocked", "missing", "risk", "urgent", "failure", "unverified"].includes(state)) return "danger";
-  if (["partial", "running", "near_limit", "disabled", "not_configured", "not_verified", "stale", "fallback", "degraded", "open", "missing_paid"].includes(state)) return "warn";
+function statusTone(value: string | undefined | null): Tone {
+  const state = value ?? "unknown";
+  if (["live", "pass", "passed", "ok", "active", "verified", "configured", "monitor", "unlimited"].includes(state)) return "ok";
+  if (["blocked", "fail", "failed", "down", "error", "missing", "risk", "urgent", "exceeded", "unverified"].includes(state)) return "danger";
+  if (["restricted", "checking", "not_verified", "warn", "degraded", "near_limit", "open", "stale", "fallback", "missing_paid", "partial"].includes(state)) return "warn";
   return "neutral";
 }
 
-function actionTone(action: string): "ok" | "warn" | "danger" | "neutral" {
-  if (["review_blocked_ci", "restore_capture", "restore_replay_worker", "fix_billing", "fix_metering"].includes(action)) return "danger";
-  if (["connect_provider_key", "review_replay_quota", "review_event_quota", "review_support", "refresh_pricing", "run_replay", "promote_golden", "run_ci_gate"].includes(action)) return "warn";
-  if (action === "monitor") return "ok";
-  return "neutral";
+function tenantNeedsAction(tenant: OwnerMoneyPathTenantRow): boolean {
+  return (
+    tenant.next_owner_action !== "monitor" ||
+    tenant.open_issue_count > 0 ||
+    tenant.blocking_ci_failures_7d > 0 ||
+    tenant.provider_key_status.state === "missing" ||
+    ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state) ||
+    ["risk", "missing_paid", "unknown"].includes(tenant.billing_status?.state ?? "")
+  );
 }
 
-function valueLabel(value: string | undefined): string {
-  return (value ?? "unknown").replaceAll("_", " ");
+function fmtRelative(value: string | null | undefined, now: number): string {
+  if (!value) return "No captures";
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return "Unknown";
+  const seconds = Math.max(0, Math.floor((now - parsed) / 1000));
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
-function statusLabel(status: string): string {
-  return status.replaceAll("_", " ");
+function activeSubscriptions(billing: OwnerBillingSummary | null): number | null {
+  if (!billing) return null;
+  return billing.by_status.find((row) => row.status === "active")?.count ?? billing.total_subscriptions - billing.overdue - billing.canceled;
 }
 
-function StatusBadge({ value }: { value: string }) {
-  const tone = stateTone(value);
-  return <span className={`owner-money-badge owner-money-badge-${tone}`}>{value.replaceAll("_", " ")}</span>;
+function paidTrafficStatus({
+  readiness,
+  health,
+  platform,
+  badServices,
+}: {
+  readiness: OwnerLaunchReadiness | null;
+  health: OwnerHealth | null;
+  platform: OwnerMoneyPathPlatformSummary | null;
+  badServices: number;
+}): { value: string; detail: string; tone: Tone } {
+  if (!readiness || !health) {
+    return {
+      value: "Checking",
+      detail: "Waiting for launch, money, and infra checks.",
+      tone: "warn",
+    };
+  }
+
+  const criticalBreaks =
+    readiness.hard_blockers.length +
+    (platform?.gateway_loss_tenants ?? 0) +
+    (platform?.replay_jobs_stale ?? 0) +
+    (platform?.metering_failure_tenants ?? 0) +
+    (platform?.billing_launch_blockers?.length ?? 0);
+  const failingGates = readiness.gates.filter((gate) => gate.status !== "pass").length;
+  const blockerCount = Math.max(criticalBreaks, readiness.hard_blockers.length, failingGates);
+
+  if (!readiness.paid_launch_allowed || criticalBreaks > 0) {
+    return {
+      value: "Blocked",
+      detail: `${blockerCount} critical issue${blockerCount === 1 ? "" : "s"} before paid traffic.`,
+      tone: "danger",
+    };
+  }
+
+  if (health.overall !== "ok" || badServices > 0 || (platform?.issues_open ?? 0) > 0) {
+    return {
+      value: "Restricted",
+      detail: "Paid traffic can run, but owner attention is needed.",
+      tone: "warn",
+    };
+  }
+
+  return {
+    value: "Live",
+    detail: "Payments, quota, proof, capture, and infra checks are clean.",
+    tone: "ok",
+  };
 }
 
-function RiskCard({
+function issueForTenant(tenant: OwnerMoneyPathTenantRow): { issue: string; severity: string; tone: Tone } {
+  if (!tenant.last_capture_at || tenant.captures_24h === 0) return { issue: "No recent protected actions", severity: "High", tone: "danger" };
+  if (tenant.provider_key_status.state === "missing") return { issue: "Connector key missing", severity: "Medium", tone: "warn" };
+  if (tenant.capture_durability_status?.state && tenant.capture_durability_status.state !== "ok") return { issue: "Capture risk", severity: "High", tone: "danger" };
+  if ((tenant.replay_jobs_stale ?? 0) > 0) return { issue: "Proof worker stale", severity: "High", tone: "danger" };
+  if (["risk", "missing_paid", "unknown"].includes(tenant.billing_status?.state ?? "")) return { issue: "Billing risk", severity: "High", tone: "danger" };
+  if (["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)) return { issue: "Proof quota risk", severity: "Medium", tone: "warn" };
+  if (tenant.blocking_ci_failures_7d > 0) return { issue: "Release check blocked", severity: "Medium", tone: "warn" };
+  if (tenant.open_issue_count > 0) return { issue: "Open support/product issue", severity: "Medium", tone: "warn" };
+  return { issue: actionLabel(tenant.next_owner_action), severity: "Low", tone: "neutral" };
+}
+
+function issuePriority(tone: Tone): number {
+  if (tone === "danger") return 0;
+  if (tone === "warn") return 1;
+  return 2;
+}
+
+function StatusBadge({ value, tone }: { value: string; tone?: Tone }) {
+  return <span className={`owner-money-badge owner-money-badge-${tone ?? statusTone(value.toLowerCase())}`}>{value.replaceAll("_", " ")}</span>;
+}
+
+function CommandCard({
   label,
   value,
   detail,
-  icon: Icon,
+  href,
   tone,
+  icon: Icon,
 }: {
   label: string;
-  value: string | number;
+  value: string;
   detail: string;
+  href: string;
+  tone: Tone;
   icon: LucideIcon;
-  tone: "ok" | "warn" | "danger" | "neutral";
 }) {
   return (
-    <div className={`owner-money-risk-card owner-money-risk-${tone}`}>
-      <div className="owner-money-risk-icon">
-        <Icon size={16} aria-hidden="true" />
-      </div>
-      <div>
-        <span className="owner-stat-label">{label}</span>
-        <strong>{value}</strong>
-        <p>{detail}</p>
-      </div>
-    </div>
+    <Link href={href} className={`owner-command-card owner-command-card-${tone}`}>
+      <span className="owner-command-icon" aria-hidden="true">
+        <Icon size={18} />
+      </span>
+      <span className="owner-stat-label">{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </Link>
   );
 }
 
-function HealthBar({
-  health,
-  onToggleMaintenance,
-  isPending,
+function MiniBarChart({
+  title,
+  note,
+  items,
 }: {
-  health: OwnerHealth;
-  onToggleMaintenance: () => void;
-  isPending?: boolean;
+  title: string;
+  note: string;
+  items: Array<{ label: string; value: number; detail: string; tone?: Tone }>;
 }) {
-  const color = STATUS_VAR[health.overall] ?? STATUS_VAR.unknown;
-  return (
-    <div className="owner-health-bar owner-money-health-bar">
-      <span className="owner-health-overall">
-        <span className="owner-health-dot" style={{ background: color }} />
-        <span style={{ color }}>{health.overall}</span>
-      </span>
-
-      <span className="owner-health-sep">|</span>
-
-      {health.services.slice(0, 5).map((svc) => (
-        <span key={svc.name} title={svc.detail ?? svc.name} className="owner-health-svc">
-          <span
-            className="owner-health-dot owner-health-dot-sm"
-            style={{ background: STATUS_VAR[svc.status] ?? STATUS_VAR.unknown }}
-          />
-          <span className="owner-health-svc-name">{svc.name}</span>
-        </span>
-      ))}
-
-      <span className="owner-health-sep">|</span>
-
-      <span className="owner-health-maintenance">
-        <span className="owner-health-svc-name">Maintenance:</span>
-        <button
-          onClick={onToggleMaintenance}
-          disabled={isPending}
-          className={`owner-maint-btn${health.maintenance_mode ? " owner-maint-btn-on" : ""}`}
-        >
-          {health.maintenance_mode ? "ON" : "OFF"}
-        </button>
-      </span>
-
-      <Link href="/owner/infrastructure" className="owner-health-details-link">
-        Details
-      </Link>
-    </div>
-  );
-}
-
-function MoneyPathFunnel({ platform }: { platform: OwnerMoneyPathPlatformSummary }) {
-  const steps = [
-    { label: "Capture", value: platform.captures_24h, sub: "24h" },
-    { label: "Issue", value: platform.issues_open, sub: "open" },
-    { label: "Replay", value: platform.replay_runs_7d, sub: "7d" },
-    { label: "Verified", value: platform.verified_replay_runs_7d, sub: "7d" },
-    { label: "Golden", value: platform.golden_traces_active, sub: "active" },
-    { label: "CI Gate", value: platform.ci_runs_7d, sub: "7d" },
-    { label: "Blocked", value: platform.ci_blocks_7d, sub: "7d" },
-  ];
+  const max = Math.max(1, ...items.map((item) => item.value));
+  const criticalCount = items.filter((item) => item.tone === "danger" && item.value > 0).length;
+  const warningCount = items.filter((item) => item.tone === "warn" && item.value > 0).length;
+  const panelTone: Tone = criticalCount > 0 ? "danger" : warningCount > 0 ? "warn" : "ok";
+  const panelStatus = criticalCount > 0 ? "Needs owner action" : warningCount > 0 ? "Watch" : "Clean";
 
   return (
-    <section className="panel owner-money-funnel">
+    <section className={`panel owner-live-chart owner-snapshot-card owner-snapshot-card-${panelTone}`}>
       <div className="panel-header">
-        <h3>Primary Loop</h3>
-        <span className="panel-header-note">Capture -&gt; Diagnose -&gt; Issue -&gt; Replay -&gt; Golden -&gt; CI Gate</span>
+        <div>
+          <h3>{title}</h3>
+          <span className="panel-header-note">{note}</span>
+        </div>
+        <StatusBadge value={panelStatus} tone={panelTone} />
       </div>
-      <div className="owner-money-funnel-row">
-        {steps.map((step, index) => (
-          <div key={step.label} className="owner-money-funnel-step">
-            <span className="owner-stat-label">{step.label}</span>
-            <strong>{fmtCount(step.value)}</strong>
-            <span>{step.sub}</span>
-            {index < steps.length - 1 ? <i aria-hidden="true">-&gt;</i> : null}
+      <div className="owner-snapshot-list" role="img" aria-label={`${title} chart`}>
+        {items.map((item) => (
+          <div key={item.label} className={`owner-snapshot-row owner-snapshot-row-${item.tone ?? "neutral"}`}>
+            <div className="owner-snapshot-row-main">
+              <span className="owner-snapshot-value">{fmtCount(item.value)}</span>
+              <div>
+                <strong>{item.label}</strong>
+                <p>{item.detail}</p>
+              </div>
+            </div>
+            <div className="owner-snapshot-track" aria-hidden="true">
+              <span className={`owner-snapshot-bar owner-snapshot-bar-${item.tone ?? "neutral"}`} style={{ width: `${Math.round((item.value / max) * 100)}%` }} />
+            </div>
           </div>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function LaunchDecisionPanel({
-  readiness,
-  error,
-  isLoading,
-  onRefresh,
-}: {
-  readiness: OwnerLaunchReadiness | null;
-  error: string;
-  isLoading: boolean;
-  onRefresh: () => void;
-}) {
-  const status = readiness?.overall_status ?? (error ? "not_verified" : "unknown");
-  const tone = readiness?.paid_launch_allowed ? "ok" : error ? "danger" : "warn";
-  const hardBlockers = readiness?.hard_blockers ?? [];
-  const firstCommand = readiness?.verification_commands[0] ?? null;
-
-  return (
-    <section className={`panel owner-signal-launch owner-signal-launch-${tone}`}>
-      <div className="owner-signal-launch-main">
-        <span className="owner-signal-launch-icon" aria-hidden="true">
-          <Rocket size={20} />
-        </span>
-        <div>
-          <span className="owner-section-label">Paid launch decision</span>
-          <h3>
-            {readiness
-              ? readiness.paid_launch_allowed
-                ? "Paid launch allowed"
-                : "Paid launch blocked"
-              : error
-                ? "Launch gate not verified"
-                : "Checking launch gate"}
-          </h3>
-          <p>
-            {readiness
-              ? readiness.product_standard
-              : error
-                ? "Launch readiness evidence could not be loaded, so owner approval must stay blocked."
-                : "Loading launch readiness evidence before showing a decision."}
-          </p>
-        </div>
-      </div>
-      <div className="owner-signal-launch-side">
-        <StatusBadge value={status} />
-        {isLoading ? <span className="hint">Loading launch evidence...</span> : null}
-        {error ? <span className="owner-money-table-danger">{error}</span> : null}
-        {hardBlockers.length > 0 ? (
-          <div className="owner-signal-blockers">
-            {hardBlockers.slice(0, 3).map((blocker) => (
-              <span key={blocker}>{blocker}</span>
-            ))}
-          </div>
-        ) : readiness ? (
-          <span className="hint">No hard blockers reported by the launch gate.</span>
-        ) : null}
-        {firstCommand ? (
-          <div className="owner-signal-command">
-            <TerminalSquare size={14} aria-hidden="true" />
-            <code>{firstCommand}</code>
-          </div>
-        ) : null}
-        <div className="actions">
-          <Link href="/owner/launch-readiness" className="btn btn-soft">
-            Open full launch gate
-          </Link>
-          <button className="btn btn-soft" onClick={onRefresh}>
-            <RefreshCw size={15} aria-hidden="true" />
-            Refresh gate
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function OwnerSignalFlow({
-  platform,
-  readiness,
-}: {
-  platform: OwnerMoneyPathPlatformSummary;
-  readiness: OwnerLaunchReadiness | null;
-}) {
-  const smokeStatus = platform.last_deployed_smoke.status;
-  const launchStatus = readiness?.overall_status ?? "not_verified";
-  const cards = [
-    {
-      label: "Action capture",
-      value: fmtCount(platform.captures_24h),
-      detail: `${fmtCount(platform.tenants_without_recent_capture)} tenant(s) missing recent capture.`,
-      href: "/owner/money-path",
-      status: platform.tenants_without_recent_capture > 0 ? "risk" : "ok",
-    },
-    {
-      label: "Outcome proof",
-      value: fmtCount(platform.verified_fixes_7d ?? platform.verified_replay_runs_7d),
-      detail: `${fmtCount(platform.blocked_regressions_7d ?? platform.ci_blocks_7d)} regression(s) blocked in 7d.`,
-      href: "/owner/projects",
-      status: (platform.verified_fixes_7d ?? platform.verified_replay_runs_7d) > 0 ? "ok" : "not_verified",
-    },
-    {
-      label: "Deploy smoke",
-      value: statusLabel(smokeStatus),
-      detail: platform.last_deployed_smoke.detail ?? "No deployment smoke detail reported.",
-      href: "/owner/infrastructure",
-      status: smokeStatus,
-    },
-    {
-      label: "Launch gate",
-      value: statusLabel(launchStatus),
-      detail: readiness?.paid_launch_allowed
-        ? "All required gates reported pass."
-        : `${fmtCount(readiness?.hard_blockers.length ?? 0)} hard blocker(s) before paid launch.`,
-      href: "/owner/launch-readiness",
-      status: launchStatus,
-    },
-  ];
-
-  return (
-    <section className="panel owner-signal-flow">
-      <div className="panel-header">
-        <h3>End-to-end signal flow</h3>
-        <span className="panel-header-note">Action -&gt; outcome -&gt; deploy -&gt; launch decision</span>
-      </div>
-      <div className="owner-signal-flow-grid">
-        {cards.map((card) => (
-          <Link key={card.label} href={card.href} className={`owner-signal-flow-card owner-signal-flow-${stateTone(card.status)}`}>
-            <span className="owner-stat-label">{card.label}</span>
-            <strong>{card.value}</strong>
-            <p>{card.detail}</p>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function SmokePanel({ smoke }: { smoke: OwnerLastDeployedSmoke }) {
-  return (
-    <section className="panel owner-money-proof-panel">
-      <div className="panel-header">
-        <h3>Deployment Smoke</h3>
-        <StatusBadge value={smoke.status} />
-      </div>
-      <div className="owner-money-proof-body">
-        <p className="hint">{smoke.detail ?? "No deployment smoke detail reported."}</p>
-        <div className="owner-money-proof-grid">
-          <ProofItem label="Project" value={smoke.project_id} />
-          <ProofItem label="Call" value={smoke.call_id} />
-          <ProofItem label="Golden" value={smoke.golden_trace_id} />
-          <ProofItem label="CI run" value={smoke.ci_run_id} />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ProofItem({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="owner-money-proof-item">
-      <span>{label}</span>
-      <code>{value ?? "missing"}</code>
-    </div>
-  );
-}
-
-function TenantQueue({ tenants }: { tenants: OwnerMoneyPathTenantRow[] }) {
-  const rows = tenants.slice(0, 8);
-  return (
-    <section className="owner-section">
-      <div className="owner-money-section-head">
-        <div>
-          <p className="owner-section-label">Tenant Action Queue</p>
-          <p className="hint">Sorted by blocked CI, open issue, provider-key, capture, and quota risk.</p>
-        </div>
-        <Link href="/owner/projects" className="btn btn-soft">
-          View projects
-        </Link>
-      </div>
-      <div className="owner-table-wrap">
-        <table className="owner-table">
-          <thead>
-            <tr>
-              {["Project", "Value", "Breaks", "Capture", "Issues", "Replay / Golden / CI", "Provider", "Metering", "Pricing", "Billing", "Support", "Quota", "Next"].map((header) => (
-                <th key={header} className="owner-th">{header}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={13} className="owner-td owner-td-empty">No active tenants were returned by the backend.</td>
-              </tr>
-            ) : (
-              rows.map((tenant) => (
-                <tr key={tenant.project_id} className="owner-tr">
-                  <td className="owner-td">
-                    <Link href={`/owner/projects/${tenant.project_id}`} className="owner-user-name">
-                      {tenant.project_name}
-                    </Link>
-                    <div className="owner-user-id">{tenant.project_id}</div>
-                  </td>
-                  <td className="owner-td">
-                    <StatusBadge value={valueLabel(tenant.value_status)} />
-                    <div className="owner-user-id">{tenant.plan_code}</div>
-                  </td>
-                  <td className="owner-td owner-money-proof-stack">
-                    {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).slice(0, 3).map((code) => (
-                      <span key={code} className="owner-td-secondary">{code.replaceAll("_", " ")}</span>
-                    ))}
-                    {(tenant.money_path_breaks ?? tenant.launch_blockers ?? []).length === 0 ? <span className="owner-td-secondary">No breaks</span> : null}
-                  </td>
-                  <td className="owner-td">
-                    <div>{fmtCount(tenant.captures_24h)} in 24h</div>
-                    <span className="owner-td-secondary">{fmtDate(tenant.last_capture_at)}</span>
-                  </td>
-                  <td className="owner-td">
-                    <strong>{fmtCount(tenant.open_issue_count)}</strong>
-                  </td>
-                  <td className="owner-td owner-money-proof-stack">
-                    <span>{fmtCount(tenant.replay_run_count_7d)} replay</span>
-                    <span>{fmtCount(tenant.golden_trace_count)} Golden</span>
-                    <span>{fmtCount(tenant.ci_run_count_7d)} CI</span>
-                    {tenant.blocking_ci_failures_7d > 0 ? (
-                      <span className="owner-money-table-danger">{fmtCount(tenant.blocking_ci_failures_7d)} blocked</span>
-                    ) : null}
-                  </td>
-                  <td className="owner-td">
-                    <StatusBadge value={tenant.provider_key_status.state} />
-                  </td>
-                  <td className="owner-td">
-                    <StatusBadge value={tenant.event_metering_status?.state ?? "unknown"} />
-                    <div className="owner-user-id">
-                      {tenant.event_metering_status?.limit == null
-                        ? `${fmtCount(tenant.event_metering_status?.used ?? 0)} used`
-                        : `${fmtCount(tenant.event_metering_status?.used ?? 0)} / ${fmtCount(tenant.event_metering_status.limit)}`}
-                    </div>
-                  </td>
-                  <td className="owner-td">
-                    <StatusBadge value={tenant.pricing_cost_status?.state ?? "unknown"} />
-                    <div className="owner-user-id">{tenant.pricing_cost_status?.pricing_age_days ?? "-"}d age</div>
-                  </td>
-                  <td className="owner-td">
-                    <StatusBadge value={tenant.billing_status?.state ?? "unknown"} />
-                    <div className="owner-user-id">{tenant.billing_status?.subscription_status ?? tenant.billing_status?.plan_code ?? tenant.plan_code}</div>
-                  </td>
-                  <td className="owner-td">
-                    <StatusBadge value={tenant.support_status?.state ?? "none"} />
-                    <div className="owner-user-id">{fmtCount(tenant.support_status?.open_count ?? 0)} open</div>
-                  </td>
-                  <td className="owner-td">
-                    <StatusBadge value={tenant.replay_quota_status.state} />
-                    <div className="owner-user-id">
-                      {tenant.replay_quota_status.limit === -1
-                        ? `${fmtCount(tenant.replay_quota_status.used)} used`
-                        : `${fmtCount(tenant.replay_quota_status.used)} / ${fmtCount(tenant.replay_quota_status.limit)}`}
-                    </div>
-                  </td>
-                  <td className="owner-td">
-                    <span className={`owner-money-action owner-money-badge-${actionTone(tenant.next_owner_action)}`}>
-                      {actionLabel(tenant.next_owner_action)}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
       </div>
     </section>
   );
 }
 
 export default function OwnerOverviewPage() {
+  const [now, setNow] = useState(() => Date.now());
   const moneyPathQuery = useOwnerMoneyPathHealth();
   const readinessQuery = useOwnerLaunchReadiness();
   const healthQuery = useOwnerHealth();
-  const toggleMutation = useToggleMaintenance();
+  const billingQuery = useOwnerBillingSummary();
 
   const moneyPath = moneyPathQuery.data ?? null;
+  const platform = moneyPath?.platform ?? null;
   const readiness = readinessQuery.data ?? null;
   const health = healthQuery.data ?? null;
-  const platform = moneyPath?.platform ?? null;
-  const error = moneyPathQuery.error?.message ?? healthQuery.error?.message ?? "";
-  const readinessError = readinessQuery.error?.message ?? "";
-  const lastRefresh = moneyPathQuery.dataUpdatedAt ? new Date(moneyPathQuery.dataUpdatedAt) : null;
+  const billing = billingQuery.data ?? null;
+  const tenants = moneyPath?.tenants ?? [];
+  const issueRows = tenants
+    .filter(tenantNeedsAction)
+    .map((tenant) => ({ tenant, ...issueForTenant(tenant) }))
+    .sort((a, b) => issuePriority(a.tone) - issuePriority(b.tone));
+  const tenantRiskCount = issueRows.length;
+  const badServices = health?.services.filter((service) => !["ok", "unknown"].includes(service.status)) ?? [];
+  const firstTenantAction = tenants.find(tenantNeedsAction);
+  const paidTraffic = paidTrafficStatus({ readiness, health, platform, badServices: badServices.length });
+  const activeSubCount = activeSubscriptions(billing);
+  const quotaRisk = tenants.filter((tenant) => ["near_limit", "exceeded"].includes(tenant.replay_quota_status.state)).length;
+  const error =
+    moneyPathQuery.error?.message ??
+    readinessQuery.error?.message ??
+    healthQuery.error?.message ??
+    billingQuery.error?.message ??
+    "";
+  const lastRefresh = Math.max(
+    moneyPathQuery.dataUpdatedAt || 0,
+    readinessQuery.dataUpdatedAt || 0,
+    healthQuery.dataUpdatedAt || 0,
+    billingQuery.dataUpdatedAt || 0,
+  );
+  const isStale = lastRefresh > 0 && now - lastRefresh > 60_000;
 
-  const handleRefresh = () => {
+  const refreshAll = useCallback(() => {
+    setNow(Date.now());
     void moneyPathQuery.refetch();
     void readinessQuery.refetch();
     void healthQuery.refetch();
-  };
+    void billingQuery.refetch();
+  }, [billingQuery.refetch, healthQuery.refetch, moneyPathQuery.refetch, readinessQuery.refetch]);
 
-  const handleLaunchRefresh = () => {
-    void readinessQuery.refetch();
-  };
-
-  const handleToggleMaintenance = async () => {
-    if (!health) return;
-    await toggleMutation.mutateAsync({ enabled: !health.maintenance_mode });
-  };
+  useEffect(() => {
+    const interval = window.setInterval(refreshAll, 15_000);
+    return () => window.clearInterval(interval);
+  }, [refreshAll]);
 
   return (
-    <div className="owner-page owner-money-page">
+    <div className="owner-page owner-command-page">
       <div className="owner-page-header">
         <div>
-          <h2 className="owner-page-title">Owner signal command</h2>
-          <p className="hint">Paid-launch control for agent actions, outcome proof, CI guardrails, billing readiness, and tenant blockers.</p>
+          <h2 className="owner-page-title">Owner 360 Home</h2>
+          <p className="hint">Simple live view for paid traffic, customer actions, money, and infrastructure.</p>
         </div>
         <div className="owner-page-header-actions">
-          {lastRefresh ? <span className="hint">Updated {lastRefresh.toLocaleTimeString()} - auto-refresh by query cache</span> : null}
-          <button className="btn btn-soft" onClick={handleRefresh}>
+          {lastRefresh ? (
+            <span className={`hint ${isStale ? "owner-live-stale" : ""}`}>
+              Live check every 15s - updated {new Date(lastRefresh).toLocaleTimeString()}
+              {isStale ? " - stale data" : ""}
+            </span>
+          ) : null}
+          <button className="btn btn-soft" type="button" onClick={refreshAll}>
             <RefreshCw size={15} aria-hidden="true" />
             Refresh
           </button>
         </div>
       </div>
 
-      {health ? (
-        <HealthBar health={health} onToggleMaintenance={handleToggleMaintenance} isPending={toggleMutation.isPending} />
-      ) : null}
-
       {error ? <div className="alert-strip alert-strip-error">{error}</div> : null}
+      {!moneyPath && !error ? <p className="hint">Loading owner command center...</p> : null}
 
-      {!moneyPath && !error ? <p className="hint">Loading owner product health...</p> : null}
+      <div className="owner-command-grid">
+        <CommandCard
+          label="Paid Traffic"
+          value={paidTraffic.value}
+          detail={paidTraffic.detail}
+          href="/owner/money-path"
+          tone={paidTraffic.tone}
+          icon={ShieldCheck}
+        />
+        <CommandCard
+          label="Customers Needing Action"
+          value={fmtCount(tenantRiskCount)}
+          detail={firstTenantAction ? `${firstTenantAction.project_name}: ${actionLabel(firstTenantAction.next_owner_action)}` : "No tenant action queued"}
+          href="/owner/projects"
+          tone={tenantRiskCount > 0 ? "warn" : moneyPath ? "ok" : "neutral"}
+          icon={Activity}
+        />
+        <CommandCard
+          label="Money"
+          value={fmtCount(billing?.total_subscriptions)}
+          detail={`${fmtCount(activeSubCount)} active, ${fmtCount(billing?.overdue)} overdue, ${fmtCount(billing?.canceled)} canceled`}
+          href="/owner/pricing"
+          tone={(billing?.overdue ?? 0) > 0 || (billing?.canceled ?? 0) > 0 ? "danger" : billing ? "ok" : "warn"}
+          icon={BadgeDollarSign}
+        />
+        <CommandCard
+          label="Infrastructure"
+          value={health?.overall ?? "unknown"}
+          detail={badServices.length ? `${badServices.length} degraded/down service(s)` : "Core services healthy"}
+          href="/owner/infrastructure"
+          tone={statusTone(health?.overall)}
+          icon={ServerCog}
+        />
+      </div>
 
-      {platform ? (
-        <>
-          <LaunchDecisionPanel
-            readiness={readiness}
-            error={readinessError}
-            isLoading={readinessQuery.isLoading}
-            onRefresh={handleLaunchRefresh}
-          />
+      <div className="owner-live-charts">
+        <MiniBarChart
+          title="Control Plane Health"
+          note="Protected-action volume and proof quality"
+          items={[
+            { label: "Protected actions", value: platform?.captures_24h ?? 0, detail: "Action intents captured in the last 24h.", tone: (platform?.captures_24h ?? 0) > 0 ? "ok" : "neutral" },
+            { label: "Proof checks", value: platform?.replay_runs_7d ?? 0, detail: "Outcome/proof checks requested in 7 days.", tone: "neutral" },
+            { label: "Verified outcomes", value: platform?.verified_replay_runs_7d ?? 0, detail: "Checks that matched the source of record.", tone: (platform?.verified_replay_runs_7d ?? 0) > 0 ? "ok" : "neutral" },
+            { label: "Receipt baselines", value: platform?.golden_traces_active ?? 0, detail: "Signed evidence artifacts ready for review.", tone: "neutral" },
+          ]}
+        />
+        <MiniBarChart
+          title="Customer Risk"
+          note="Tenants that need owner attention"
+          items={[
+            { label: "Need action", value: tenantRiskCount, detail: "Customers with an owner action queued.", tone: tenantRiskCount > 0 ? "warn" : "ok" },
+            { label: "No recent actions", value: platform?.tenants_without_recent_capture ?? 0, detail: "Tenants with silent protected-action flow.", tone: (platform?.tenants_without_recent_capture ?? 0) > 0 ? "danger" : "ok" },
+            { label: "Connector gaps", value: platform?.tenants_missing_provider_key ?? 0, detail: "Customers missing connector or analysis readiness.", tone: (platform?.tenants_missing_provider_key ?? 0) > 0 ? "warn" : "ok" },
+            { label: "Proof quota", value: quotaRisk, detail: "Tenants near or above proof-check limits.", tone: quotaRisk > 0 ? "warn" : "ok" },
+          ]}
+        />
+        <MiniBarChart
+          title="Money & Infra"
+          note="Revenue health and platform blockers"
+          items={[
+            { label: "Subscriptions", value: billing?.total_subscriptions ?? 0, detail: "Total billing accounts visible to owner.", tone: (billing?.total_subscriptions ?? 0) > 0 ? "ok" : "neutral" },
+            { label: "Overdue", value: billing?.overdue ?? 0, detail: "Accounts needing billing recovery.", tone: (billing?.overdue ?? 0) > 0 ? "danger" : "ok" },
+            { label: "Open issues", value: platform?.issues_open ?? 0, detail: "Open product/support issues from customer signals.", tone: (platform?.issues_open ?? 0) > 0 ? "warn" : "ok" },
+            { label: "Bad services", value: badServices.length, detail: "Services currently degraded or down.", tone: badServices.length > 0 ? "danger" : "ok" },
+          ]}
+        />
+      </div>
 
-          <OwnerSignalFlow platform={platform} readiness={readiness} />
-
-          <div className="owner-money-risk-grid">
-            <RiskCard
-              label="No capture"
-              value={fmtCount(platform.tenants_without_recent_capture)}
-              detail="Tenants without production capture in 24h."
-              icon={ShieldAlert}
-              tone={platform.tenants_without_recent_capture > 0 ? "danger" : "ok"}
-            />
-            <RiskCard
-              label="No Goldens"
-              value={fmtCount(platform.tenants_without_goldens ?? 0)}
-              detail="Tenants missing permanent regression contracts."
-              icon={CircleSlash}
-              tone={(platform.tenants_without_goldens ?? 0) > 0 ? "warn" : "ok"}
-            />
-            <RiskCard
-              label="Failed CI"
-              value={fmtCount(platform.tenants_with_failed_ci ?? platform.ci_blocks_7d)}
-              detail="Tenants with failing blocking CI gates."
-              icon={GitBranch}
-              tone={platform.ci_blocks_7d > 0 ? "danger" : "ok"}
-            />
-            <RiskCard
-              label="Provider-key gaps"
-              value={fmtCount(platform.tenants_missing_provider_key)}
-              detail="Tenants that cannot run provider-backed replay."
-              icon={KeyRound}
-              tone={platform.tenants_missing_provider_key > 0 ? "warn" : "ok"}
-            />
-            <RiskCard
-              label="Stale replay workers"
-              value={fmtCount(platform.tenants_with_stale_replay_workers ?? 0)}
-              detail={`${fmtCount(platform.replay_jobs_stale ?? 0)} stale leased replay job(s).`}
-              icon={Clock3}
-              tone={(platform.tenants_with_stale_replay_workers ?? 0) > 0 ? "danger" : "ok"}
-            />
-            <RiskCard
-              label="Stale pricing"
-              value={fmtCount(platform.tenants_with_stale_pricing ?? 0)}
-              detail="Tenants with stale, fallback, missing, or drifted cost metadata."
-              icon={AlertTriangle}
-              tone={(platform.tenants_with_stale_pricing ?? 0) > 0 ? "warn" : "ok"}
-            />
-            <RiskCard
-              label="Quota risk"
-              value={fmtCount(platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota)}
-              detail="Tenants near, over, or blocked by replay allocation."
-              icon={AlertTriangle}
-              tone={(platform.tenants_with_quota_risk ?? platform.tenants_near_replay_quota) > 0 ? "warn" : "ok"}
-            />
-            <RiskCard
-              label="Billing risk"
-              value={fmtCount(platform.tenants_with_billing_risk ?? 0)}
-              detail="Tenants with unpaid, canceled, incomplete, or mismatched billing."
-              icon={BadgeDollarSign}
-              tone={(platform.tenants_with_billing_risk ?? 0) > 0 ? "danger" : "ok"}
-            />
-            <RiskCard
-              label="Metering failures"
-              value={fmtCount(platform.metering_failure_tenants ?? 0)}
-              detail={`${fmtCount(platform.event_counter_failure_count ?? 0)} event counter failure(s).`}
-              icon={AlertTriangle}
-              tone={(platform.metering_failure_tenants ?? 0) > 0 ? "danger" : "ok"}
-            />
-            <RiskCard
-              label="Billing provider"
-              value={platform.billing_provider_verification?.state ?? "unverified"}
-              detail={platform.billing_provider_verification?.detail ?? "No applied billing provider event recorded."}
-              icon={BadgeDollarSign}
-              tone={platform.billing_provider_verification?.state === "verified" ? "ok" : "danger"}
-            />
-            <RiskCard
-              label="Support tickets"
-              value={fmtCount(platform.support_tickets_open ?? 0)}
-              detail={`${fmtCount(platform.support_tickets_urgent ?? 0)} urgent ticket(s).`}
-              icon={MessageSquare}
-              tone={(platform.support_tickets_urgent ?? 0) > 0 ? "danger" : (platform.support_tickets_open ?? 0) > 0 ? "warn" : "ok"}
-            />
-            <RiskCard
-              label="Blocked regressions"
-              value={fmtCount(platform.blocked_regressions_7d ?? platform.ci_blocks_7d)}
-              detail="Old production failures stopped by CI in 7 days."
-              icon={ShieldAlert}
-              tone={(platform.blocked_regressions_7d ?? platform.ci_blocks_7d) > 0 ? "ok" : "neutral"}
-            />
-            <RiskCard
-              label="Verified fixes"
-              value={fmtCount(platform.verified_fixes_7d ?? platform.verified_replay_runs_7d)}
-              detail={`${fmtCount(platform.replay_runs_7d)} total replay runs in 7 days.`}
-              icon={CheckCircle2}
-              tone={(platform.verified_fixes_7d ?? platform.verified_replay_runs_7d) > 0 ? "ok" : "neutral"}
-            />
+      <section className="panel owner-live-issues">
+        <div className="panel-header">
+          <h3>Customer Action Queue</h3>
+          <span className="panel-header-note">Customers that need owner attention across action intake, connectors, proof, billing, or support.</span>
+        </div>
+        {issueRows.length ? (
+          <div className="owner-live-issue-list">
+            {issueRows.slice(0, 5).map(({ tenant, issue, severity, tone }) => (
+              <Link key={tenant.project_id} href={`/owner/projects/${tenant.project_id}`} className="owner-live-issue-row">
+                <span className={`owner-live-issue-icon owner-live-issue-icon-${tone}`} aria-hidden="true">
+                  <AlertTriangle size={15} />
+                </span>
+                <span>
+                  <strong>{tenant.project_name}</strong>
+                  <small>{issue}</small>
+                </span>
+                <StatusBadge value={severity} tone={tone} />
+                <span className="owner-live-issue-meta">{fmtRelative(tenant.last_capture_at, now)}</span>
+                <span className="owner-live-issue-meta">{actionLabel(tenant.next_owner_action)}</span>
+              </Link>
+            ))}
           </div>
-
-          <MoneyPathFunnel platform={platform} />
-
-          <div className="owner-money-grid">
-            <SmokePanel smoke={platform.last_deployed_smoke} />
-            <section className="panel owner-money-proof-panel">
-              <div className="panel-header">
-                <h3>Release Guardrails</h3>
-                <span className="panel-header-note">DB-backed, no placeholder metrics</span>
-              </div>
-              <div className="owner-money-proof-body owner-money-proof-body-compact">
-                <div className="owner-money-proof-grid">
-                  <ProofItem label="Active Goldens" value={fmtCount(platform.golden_traces_active)} />
-                  <ProofItem label="CI runs 7d" value={fmtCount(platform.ci_runs_7d)} />
-                  <ProofItem label="Captures 24h" value={fmtCount(platform.captures_24h)} />
-                  <ProofItem label="Open issues" value={fmtCount(platform.issues_open)} />
-                </div>
-                <div className="actions">
-                  <Link href="/owner/projects" className="btn btn-soft">Tenant evidence</Link>
-                  <Link href="/owner/pricing" className="btn btn-soft">Entitlements</Link>
-                  <Link href="/owner/infrastructure" className="btn btn-soft">Infra proof</Link>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <TenantQueue tenants={moneyPath?.tenants ?? []} />
-        </>
-      ) : null}
+        ) : (
+          <p className="hint">No customer action signals reported.</p>
+        )}
+      </section>
     </div>
   );
 }

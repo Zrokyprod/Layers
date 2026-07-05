@@ -44,6 +44,24 @@ type Tone = "ok" | "warn" | "danger" | "neutral";
 
 const BILLING_RISK_STATUSES = new Set(["past_due", "unpaid", "canceled", "incomplete"]);
 
+const ACTION_LABELS: Record<string, string> = {
+  review_blocked_ci: "Review release block",
+  restore_capture: "Restore action intake",
+  connect_provider_key: "Connect connector key",
+  review_replay_quota: "Review proof quota",
+  review_event_quota: "Review event quota",
+  restore_replay_worker: "Restore proof worker",
+  fix_metering: "Fix metering",
+  refresh_pricing: "Refresh pricing",
+  fix_billing: "Fix billing",
+  review_support: "Review support",
+  run_replay: "Run proof check",
+  promote_golden: "Promote receipt baseline",
+  run_ci_gate: "Run release check",
+  continue_triage: "Continue triage",
+  monitor: "Monitor",
+};
+
 function fmtCount(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
   if (value === -1) return "Unlimited";
@@ -63,6 +81,10 @@ function fmtDuration(seconds: number | null | undefined): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
+}
+
+function actionLabel(action: string): string {
+  return ACTION_LABELS[action] ?? action.replaceAll("_", " ");
 }
 
 function statusCount(summary: OwnerBillingSummary | null, status: string): number | null {
@@ -110,16 +132,16 @@ function accountRisk({
     return { label: "Billing risk", detail: `Subscription status is ${account.status}.`, tone: "danger" };
   }
   if (!moneyPathReady) {
-    return { label: "Money-path unavailable", detail: "Product entitlement risk cannot be evaluated.", tone: "warn" };
+    return { label: "Control data unavailable", detail: "Protected-action entitlement risk cannot be evaluated.", tone: "warn" };
   }
   if (!tenant) {
-    return { label: "No product row", detail: "Tenant has no money-path health row.", tone: "warn" };
+    return { label: "No control row", detail: "Tenant has no protected-action health row.", tone: "warn" };
   }
   if (tenant.replay_quota_status.state === "exceeded") {
-    return { label: "Replay exceeded", detail: "Tenant is above replay entitlement.", tone: "danger" };
+    return { label: "Proof quota exceeded", detail: "Tenant is above proof-check entitlement.", tone: "danger" };
   }
   if (tenant.replay_quota_status.state === "near_limit") {
-    return { label: "Replay quota", detail: "Tenant is near replay entitlement.", tone: "warn" };
+    return { label: "Proof quota", detail: "Tenant is near proof-check entitlement.", tone: "warn" };
   }
   if (["risk", "missing_paid", "unknown"].includes(tenant.billing_status?.state ?? "")) {
     return { label: "Billing risk", detail: `Money-path billing status is ${tenant.billing_status?.state}.`, tone: "danger" };
@@ -128,12 +150,12 @@ function accountRisk({
     return { label: "Cost metadata", detail: tenant.pricing_cost_status?.detail ?? "Tenant has stale or missing cost metadata.", tone: "warn" };
   }
   if (tenant.provider_key_status.state === "missing" && plan.pricing.replay_credits !== 0) {
-    return { label: "Provider missing", detail: "Replay-capable plan has no provider key.", tone: "warn" };
+    return { label: "Connector missing", detail: "Protected-action plan has no connector key.", tone: "warn" };
   }
   if (plan.pricing.blocking_ci && tenant.golden_trace_count === 0) {
-    return { label: "CI proof missing", detail: "Blocking CI is included but no Golden exists.", tone: "warn" };
+    return { label: "Release proof missing", detail: "Blocking release checks are included but no receipt baseline exists.", tone: "warn" };
   }
-  return { label: "Monitor", detail: "Billing and product evidence are aligned.", tone: "ok" };
+  return { label: "Monitor", detail: "Billing and control-plane evidence are aligned.", tone: "ok" };
 }
 
 function ModelRow({
@@ -192,7 +214,7 @@ function BillingAccountRow({
       <td className="owner-td">
         <div>{tenant ? fmtCount(tenant.replay_quota_status.used) : "-"}</div>
         <span className="owner-td-secondary">
-          {tenant ? `${fmtCount(tenant.golden_trace_count)} Golden` : "No money-path row"}
+          {tenant ? `${fmtCount(tenant.golden_trace_count)} receipt baseline` : "No control row"}
         </span>
       </td>
       <td className="owner-td">
@@ -466,7 +488,7 @@ export default function PricingPage() {
         <div>
           <h2 className="owner-page-title">Revenue & Entitlements</h2>
           <p className="hint">
-            Plan contract, billing accounts, quota risk, and model pricing controls.
+            Plan contract, billing accounts, proof quota risk, and model pricing controls.
           </p>
         </div>
         <div className="owner-page-header-actions">
@@ -501,14 +523,14 @@ export default function PricingPage() {
           <span className="owner-stat-sub">billing rows in sellable state</span>
         </div>
         <div className="owner-stat-card">
-          <span className="owner-stat-label">Replay Quota Risk</span>
+          <span className="owner-stat-label">Proof Quota Risk</span>
           <span className="owner-stat-value">{fmtCount(quotaRisk)}</span>
-          <span className="owner-stat-sub">tenants near or above replay credits</span>
+          <span className="owner-stat-sub">tenants near or above proof-check credits</span>
         </div>
         <div className="owner-stat-card">
-          <span className="owner-stat-label">Provider Gaps</span>
+          <span className="owner-stat-label">Connector Gaps</span>
           <span className="owner-stat-value">{fmtCount(providerGaps)}</span>
-          <span className="owner-stat-sub">tenants blocked from provider-backed replay</span>
+          <span className="owner-stat-sub">tenants blocked from connector-backed protected actions</span>
         </div>
         <div className="owner-stat-card">
           <span className="owner-stat-label">Cost Metadata Risk</span>
@@ -526,9 +548,9 @@ export default function PricingPage() {
           <span className="owner-stat-sub">{fmtCount(moneyPathQuery.data?.platform.event_counter_failure_count ?? null)} counter failure(s)</span>
         </div>
         <div className="owner-stat-card">
-          <span className="owner-stat-label">Provider Verification</span>
+          <span className="owner-stat-label">Payment Verification</span>
           <span className="owner-stat-value">{providerVerification?.state ?? "-"}</span>
-          <span className="owner-stat-sub">{providerVerification?.detail ?? "No billing provider proof reported"}</span>
+          <span className="owner-stat-sub">{providerVerification?.detail ?? "No payment proof reported"}</span>
         </div>
       </section>
 
@@ -566,11 +588,11 @@ export default function PricingPage() {
                     "Price",
                     "Calls/mo",
                     "Retention",
-                    "Replay credits",
-                    "Goldens",
-                    "Non-blocking CI",
-                    "Blocking CI",
-                    "Provider vault",
+                    "Proof credits",
+                    "Receipt baselines",
+                    "Non-blocking release",
+                    "Blocking release",
+                    "Connector vault",
                   ].map((header) => (
                     <th key={header} className="owner-th">{header}</th>
                   ))}
@@ -588,8 +610,8 @@ export default function PricingPage() {
                     <td className="owner-td">{fmtCount(plan.pricing.retention_days)} days</td>
                     <td className="owner-td">{fmtCount(plan.pricing.replay_credits)}</td>
                     <td className="owner-td">
-                      <div>{fmtCount(plan.pricing.golden_traces)} traces</div>
-                      <span className="owner-td-secondary">{fmtCount(plan.pricing.golden_sets)} sets</span>
+                      <div>{fmtCount(plan.pricing.golden_traces)} receipts</div>
+                      <span className="owner-td-secondary">{fmtCount(plan.pricing.golden_sets)} baseline sets</span>
                     </td>
                     <td className="owner-td">{boolBadge(plan.pricing.non_blocking_ci)}</td>
                     <td className="owner-td">{boolBadge(plan.pricing.blocking_ci)}</td>
@@ -606,7 +628,7 @@ export default function PricingPage() {
         <div className="owner-stat-card owner-stat-card-accent">
           <span className="owner-stat-label">Subscriptions</span>
           <span className="owner-stat-value">{summary?.total_subscriptions.toLocaleString() ?? "-"}</span>
-          <span className="owner-stat-sub">legacy tenant subscriptions</span>
+          <span className="owner-stat-sub">tenant subscriptions</span>
         </div>
         <div className="owner-stat-card">
           <span className="owner-stat-label">Overdue</span>
@@ -621,17 +643,17 @@ export default function PricingPage() {
         <div className="owner-stat-card">
           <span className="owner-stat-label">Billing accounts</span>
           <span className="owner-stat-value">{accountsQuery.data?.total.toLocaleString() ?? "-"}</span>
-          <span className="owner-stat-sub">Razorpay and legacy billing rows</span>
+          <span className="owner-stat-sub">payment-backed billing rows</span>
         </div>
       </section>
 
       <section className="panel">
         <div className="panel-header">
           Stale Pricing &amp; Cost Metadata
-          <span className="panel-header-note">From tenant money-path health and latest captured call pricing evidence.</span>
+          <span className="panel-header-note">From protected-action health and latest pricing evidence.</span>
         </div>
         {!moneyPathReady ? (
-          <div className="alert-strip">Money-path health is unavailable, so stale tenant cost evidence cannot be evaluated.</div>
+          <div className="alert-strip">Control-plane health is unavailable, so stale tenant cost evidence cannot be evaluated.</div>
         ) : pricingRiskTenants.length === 0 ? (
           <p className="hint owner-panel-padding">No tenants have stale, fallback, missing, or drifted pricing metadata.</p>
         ) : (
@@ -658,7 +680,7 @@ export default function PricingPage() {
                     <td className="owner-td">{tenant.pricing_cost_status?.pricing_version ?? "-"}</td>
                     <td className="owner-td">{tenant.pricing_cost_status?.pricing_source ?? "-"}</td>
                     <td className="owner-td">{tenant.pricing_cost_status?.pricing_age_days ?? "-"} days</td>
-                    <td className="owner-td">{tenant.next_owner_action.replaceAll("_", " ")}</td>
+                    <td className="owner-td">{actionLabel(tenant.next_owner_action)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -753,7 +775,7 @@ export default function PricingPage() {
       <section className="panel">
         <div className="panel-header">
           Razorpay Billing Accounts
-          <span className="panel-header-note">Shows subscription rows with Razorpay payment references and legacy fallback links.</span>
+          <span className="panel-header-note">Shows subscription rows with payment references and control-plane readiness.</span>
         </div>
         <div className="owner-panel-filter owner-panel-filter-embedded">
           <div className="owner-filter-row">
@@ -784,7 +806,7 @@ export default function PricingPage() {
           <table className="owner-table">
             <thead>
               <tr>
-                {["Account", "Plan", "Status", "SLA", "Money Path", "Risk", "Period End", "Payment Ref", "Links"].map((header) => (
+                {["Account", "Plan", "Status", "SLA", "Control plane", "Risk", "Period End", "Payment Ref", "Links"].map((header) => (
                   <th key={header} className="owner-th">{header}</th>
                 ))}
               </tr>
@@ -820,7 +842,7 @@ export default function PricingPage() {
       </section>
 
       {!loading && config && !config.providers && (
-        <div className="alert-strip">No providers found in pricing config.</div>
+        <div className="alert-strip">No model providers found in pricing config.</div>
       )}
 
       {config?.providers &&

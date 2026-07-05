@@ -109,12 +109,12 @@ function mockBaseQueries(data: OwnerMoneyPathHealth | null, moneyPathError: Erro
     data: project,
     error: null,
     isLoading: false,
-  } as ReturnType<typeof hooks.useOwnerProject>);
+  } as unknown as ReturnType<typeof hooks.useOwnerProject>);
   vi.mocked(hooks.useProjectMembers).mockReturnValue({
     data: { members: [member] },
     error: null,
     isLoading: false,
-  } as ReturnType<typeof hooks.useProjectMembers>);
+  } as unknown as ReturnType<typeof hooks.useProjectMembers>);
   vi.mocked(hooks.useProjectRateLimit).mockReturnValue({
     data: {
       project_id: "proj_demo",
@@ -127,7 +127,7 @@ function mockBaseQueries(data: OwnerMoneyPathHealth | null, moneyPathError: Erro
     },
     error: null,
     isLoading: false,
-  } as ReturnType<typeof hooks.useProjectRateLimit>);
+  } as unknown as ReturnType<typeof hooks.useProjectRateLimit>);
   vi.mocked(hooks.useOwnerMoneyPathHealth).mockReturnValue({
     data,
     error: moneyPathError,
@@ -159,10 +159,15 @@ describe("ProjectDetailPage", () => {
     render(<ProjectDetailPage />);
 
     expect(screen.getAllByText("Demo Tenant").length).toBeGreaterThan(0);
+    expect(screen.getByText("Customer 360")).toBeInTheDocument();
+    expect(screen.getByText("Customer live state")).toBeInTheDocument();
+    expect(screen.getByText("Plan & subscription")).toBeInTheDocument();
+    expect(screen.getByText("Action intake")).toBeInTheDocument();
+    expect(screen.getByText("Connector health")).toBeInTheDocument();
     expect(screen.getByText("Tenant proof ledger")).toBeInTheDocument();
     expect(screen.getByText("Next owner action")).toBeInTheDocument();
-    expect(screen.getAllByText("Connect provider key").length).toBeGreaterThan(0);
-    expect(screen.getByText("provider key missing")).toBeInTheDocument();
+    expect(screen.getAllByText("Connect connector key").length).toBeGreaterThan(0);
+    expect(screen.getByText("connector key missing")).toBeInTheDocument();
     expect(screen.getByText("billing past due")).toBeInTheDocument();
     expect(screen.getByText("Commercial readiness")).toBeInTheDocument();
     expect(screen.getByText("Paid-path signals")).toBeInTheDocument();
@@ -170,9 +175,11 @@ describe("ProjectDetailPage", () => {
     expect(screen.getAllByText("missing paid").length).toBeGreaterThan(0);
     expect(screen.getAllByText("18d age - estimated").length).toBeGreaterThan(0);
     expect(screen.getByText("missing (0)")).toBeInTheDocument();
-    expect(screen.getByText("18 / 100")).toBeInTheDocument();
+    expect(screen.getAllByText("18 / 100").length).toBeGreaterThan(0);
     expect(screen.getByText("2 verified")).toBeInTheDocument();
     expect(screen.getAllByText("near limit").length).toBeGreaterThan(0);
+    expect(screen.getByText("Rate Limit Override")).toBeInTheDocument();
+    expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
     expect(screen.getByDisplayValue("300")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Money path/i }).getAttribute("href")).toBe("/owner/money-path");
   }, 10_000);
@@ -182,8 +189,8 @@ describe("ProjectDetailPage", () => {
 
     render(<ProjectDetailPage />);
 
-    expect(screen.getByText("No regression-firewall health row exists for this tenant.")).toBeInTheDocument();
-    expect(screen.queryByText("Connect provider key")).toBe(null);
+    expect(screen.getByText("No customer health row exists for this tenant.")).toBeInTheDocument();
+    expect(screen.queryByText("Connect connector key")).toBe(null);
     expect(screen.queryByText("No open issue reported by backend.")).toBe(null);
     expect(screen.queryByText("Commercial readiness")).toBe(null);
   });
@@ -195,6 +202,6 @@ describe("ProjectDetailPage", () => {
 
     expect(screen.getByText("HTTP 500")).toBeInTheDocument();
     expect(screen.queryByText("No regression-firewall health row exists for this tenant.")).toBe(null);
-    expect(screen.queryByText("Connect provider key")).toBe(null);
+    expect(screen.queryByText("Connect connector key")).toBe(null);
   });
 });
