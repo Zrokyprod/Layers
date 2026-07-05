@@ -20,6 +20,7 @@ from app.services.detectors._payload import (
 )
 
 TOKEN_OVERFLOW_ESTIMATE_THRESHOLD_RATIO = 0.90
+TOKEN_OVERFLOW_MEASURED_THRESHOLD_RATIO = 0.95
 _RULE_CONFIDENCE_TOKEN_OVERFLOW = 0.98
 
 
@@ -82,7 +83,7 @@ def _detect_token_overflow(payload: Mapping[str, Any]) -> dict[str, Any] | None:
     usage_near_limit = (
         model_limit > 0
         and prompt_tokens > 0
-        and prompt_tokens / max(model_limit, 1) > TOKEN_OVERFLOW_ESTIMATE_THRESHOLD_RATIO
+        and prompt_tokens / max(model_limit, 1) > TOKEN_OVERFLOW_MEASURED_THRESHOLD_RATIO
         and _estimate_detection_allowed(payload)
     )
     detection_signals = _token_overflow_detection_signals(

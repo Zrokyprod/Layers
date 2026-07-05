@@ -17,7 +17,7 @@ from app.services.detectors._payload import (
 
 
 def detect(payload: Mapping[str, Any], now: datetime) -> dict[str, Any] | None:
-    return _detect_loop(payload, now)
+    return _detect_loop(payload, now, relaxed_repeat=False)
 
 
 def detect_entry(payload: Mapping[str, Any], **kwargs: Any) -> dict[str, Any] | None:
@@ -25,10 +25,15 @@ def detect_entry(payload: Mapping[str, Any], **kwargs: Any) -> dict[str, Any] | 
     Accepts optional ``now`` kwarg; defaults to current UTC time."""
     from datetime import timezone
     now = kwargs.get("now") or datetime.now(timezone.utc)
-    return _detect_loop(payload, now)
+    return _detect_loop(payload, now, relaxed_repeat=True)
 
 
-def _detect_loop(payload: Mapping[str, Any], now: datetime) -> dict[str, Any] | None:
+def _detect_loop(
+    payload: Mapping[str, Any],
+    now: datetime,
+    *,
+    relaxed_repeat: bool,
+) -> dict[str, Any] | None:
     agent_name = _as_str(
         _pick(payload, ("agent_name",), ("loop", "agent_name")), fallback="unknown",
     )
@@ -129,6 +134,9 @@ def _detect_loop(payload: Mapping[str, Any], now: datetime) -> dict[str, Any] | 
         repeat_count >= 3
         and repeat_window_seconds > 0
         and repeat_window_seconds <= 300
+        and (relaxed_repeat or no_progress)
+        and not (bool(output_pattern) and output_repeat_count < 3 and not near_repeated_output)
+        and not (bool(tool_cycle) and tool_state_changed)
     )
     simple_tool_cycle = (
         tool_cycle_repeat_count >= 3
