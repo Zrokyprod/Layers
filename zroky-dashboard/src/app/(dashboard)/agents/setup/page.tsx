@@ -40,10 +40,6 @@ const CONTROL_LOOP_STEPS = ["Propose", "Policy", "Approval", "Execution", "Verif
 const DEFAULT_RUNTIME_KEY_NAME = "Protected agent runtime key";
 type SetupStep = "key" | "connect" | "run" | "next";
 
-function configuredApiBaseUrl() {
-  return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
-}
-
 function keyIsActive(key: ApiKeyResponse) {
   return !key.revoked && !key.expired;
 }
@@ -87,6 +83,13 @@ function stepStateLabel(activeStep: SetupStep, step: SetupStep, done: boolean) {
   return "Locked";
 }
 
+function visibleStepState(activeStep: SetupStep, step: SetupStep, done: boolean) {
+  if (step === "key") {
+    return done ? "Ready" : "Not created";
+  }
+  return stepStateLabel(activeStep, step, done);
+}
+
 export default function ProtectedAgentSetupPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -115,7 +118,6 @@ export default function ProtectedAgentSetupPage() {
   const activeRuntimeKeys = (keysQuery.data ?? []).filter(keyIsActive);
   const hasRuntimeKey = Boolean(newRuntimeKey) || activeRuntimeKeys.length > 0;
   const runtimeKeyPrefix = newRuntimeKey?.key_prefix ?? activeRuntimeKeys[0]?.key_prefix;
-  const apiBaseUrl = configuredApiBaseUrl();
 
   const createKeyMutation = useMutation({
     mutationFn: async () => {
@@ -201,19 +203,16 @@ export default function ProtectedAgentSetupPage() {
   const firstAction = firstActionQuery.data?.items[0] ?? null;
   const live = (firstReceiptQuery.data?.items.length ?? 0) > 0;
   const activeStep: SetupStep = !hasRuntimeKey ? "key" : !created ? "connect" : !live ? "run" : "next";
+  const policyChecked = Boolean(firstAction);
+  const maskedRuntimeKey = runtimeKeyPrefix ? `${runtimeKeyPrefix}...` : "zk_live_...";
   const actionStatus = firstAction
     ? firstAction.status.replace(/_/g, " ")
     : firstActionQuery.isFetching
       ? "polling"
       : "waiting";
 
-  const runtimeEnvSnippet = `pip install zroky
-export ZROKY_API_KEY="${newRuntimeKey?.api_key ?? "zk_live_..."}"
-export ZROKY_PROJECT_ID="${projectId || "proj_..."}"
-export ZROKY_INGEST_URL="${apiBaseUrl}"
-
-zroky doctor
-zroky ingest --test`;
+  const keyEnvSnippet = `ZROKY_API_KEY=${maskedRuntimeKey}
+ZROKY_PROJECT_ID=${projectId || "proj_..."}`;
   const firstProtectedActionSnippet = `import zroky
 
 zroky.init()
@@ -299,7 +298,7 @@ print(receipt.status)`;
                 <strong>Project key</strong>
                 <small>Create the runtime key your agent uses to call Zroky.</small>
               </div>
-              <em>{stepStateLabel(activeStep, "key", hasRuntimeKey)}</em>
+              <em>{visibleStepState(activeStep, "key", hasRuntimeKey)}</em>
             </div>
 
             {projectQuery.error ? (
@@ -307,13 +306,13 @@ print(receipt.status)`;
             ) : newRuntimeKey ? (
               <div className="agent-runtime-key-reveal">
                 <div className="agent-runtime-secret">
-                  <span className="mono">{newRuntimeKey.api_key}</span>
+                  <span className="mono">{maskedRuntimeKey}</span>
                   <button type="button" onClick={() => void copyRuntimeKey(newRuntimeKey.api_key)}>
                     <Copy size={13} aria-hidden="true" />
                     {runtimeKeyCopied ? "Copied" : "Copy key"}
                   </button>
                 </div>
-                <CopyableCode label="Runtime environment" value={runtimeEnvSnippet} />
+                <CopyableCode label=".env" value={keyEnvSnippet} />
                 <p className="agent-setup-muted">This secret is shown once. Store it in the agent runtime before closing the page.</p>
               </div>
             ) : hasRuntimeKey ? (
@@ -325,14 +324,11 @@ print(receipt.status)`;
                     {activeRuntimeKeys[0]?.key_prefix ? `${activeRuntimeKeys[0].key_prefix}...` : "Active project key found"}
                   </span>
                 </div>
-                <DashboardButtonLink href="/settings/keys" icon={<KeyRound />} variant="soft">
-                  Manage keys
-                </DashboardButtonLink>
               </div>
             ) : (
               <div className="agent-runtime-create">
                 <p className="agent-setup-muted">
-                  Keys authenticate SDK and verified-action requests. They do not grant model-provider access.
+                  This key only talks to Zroky. It does not access OpenAI, Stripe, Slack, or your systems.
                 </p>
                 <DashboardButton
                   icon={<KeyRound />}
@@ -374,7 +370,7 @@ print(receipt.status)`;
                 <div className="agent-profile-summary">
                   <span>{framework}</span>
                   <span>{environment}</span>
-                  <span>Fail-closed default</span>
+                  <span>SDK snippet ready</span>
                 </div>
               </div>
             ) : (
@@ -446,7 +442,7 @@ print(receipt.status)`;
                   loading={createMutation.isPending}
                   disabled={!hasRuntimeKey || createMutation.isPending}
                 >
-                  {hasRuntimeKey ? "Create & enable protection" : "Create project key first"}
+                  {hasRuntimeKey ? "Create agent profile" : "Create project key first"}
                 </DashboardButton>
               </form>
             )}
@@ -470,8 +466,10 @@ print(receipt.status)`;
             </div>
             {created ? (
               <div className="agent-run-snippets">
-                <CopyableCode label="CLI smoke test" value={runtimeEnvSnippet} />
-                <CopyableCode label="Protected action" value={firstProtectedActionSnippet} />
+                <CopyableCode label="Install command" value="pip install zroky" />
+                <CopyableCode label="Setup check" value="zroky doctor" />
+                <CopyableCode label="Test action" value="zroky ingest --test" />
+                <CopyableCode label="Python protected action" value={firstProtectedActionSnippet} />
               </div>
             ) : (
               <div className="agent-run-locked">
@@ -490,12 +488,24 @@ print(receipt.status)`;
                 <strong>Action received</strong>
                 <span>{created ? actionStatus : "waiting for SDK run"}</span>
               </div>
+              <div data-done={policyChecked ? "true" : "false"}>
+                {policyChecked ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
+                <strong>Policy checked</strong>
+                <span>{policyChecked ? "evaluated" : "waiting for action"}</span>
+              </div>
               <div data-done={live ? "true" : "false"}>
                 {live ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
                 <strong>Signed receipt</strong>
                 <span>{live ? "generated" : firstAction?.receipt_status?.replace(/_/g, " ") ?? "waiting for proof"}</span>
               </div>
             </div>
+            {firstAction ? (
+              <div className="agent-setup-inline-actions">
+                <DashboardButtonLink href="/actions" variant="primary">
+                  View first action
+                </DashboardButtonLink>
+              </div>
+            ) : null}
           </div>
 
           {/* 4 - Live / what's next */}
@@ -520,21 +530,27 @@ print(receipt.status)`;
             </div>
             {!live ? (
               <div className="agent-next-hint">
-                <span>Available after the first receipt</span>
-                <strong>Use real captured actions to tune policy, verifier coverage, and evidence.</strong>
+                <strong>Unlocks after your first receipt.</strong>
               </div>
-            ) : null}
-            <div className="agent-setup-inline-actions agent-next-actions" data-locked={!live ? "true" : "false"}>
-              <DashboardButtonLink href="/policies" variant={live ? "primary" : "soft"} aria-disabled={!live || undefined}>
-                Set a policy
-              </DashboardButtonLink>
-              <DashboardButtonLink href="/integrations" variant="soft" aria-disabled={!live || undefined}>
-                Connect a verifier
-              </DashboardButtonLink>
-              <DashboardButtonLink href="/actions" variant="soft" aria-disabled={!live || undefined}>
-                Actions
-              </DashboardButtonLink>
-            </div>
+            ) : (
+              <>
+                <p className="agent-setup-muted">Now tune Zroky from real captured actions instead of guessing upfront.</p>
+                <div className="agent-setup-inline-actions agent-next-actions">
+                  <DashboardButtonLink href="/policies" variant="primary">
+                    Tune policy
+                  </DashboardButtonLink>
+                  <DashboardButtonLink href="/integrations" variant="soft">
+                    Connect verifier
+                  </DashboardButtonLink>
+                  <DashboardButtonLink href="/actions" variant="soft">
+                    Review action
+                  </DashboardButtonLink>
+                  <DashboardButtonLink href="/evidence" variant="soft">
+                    Open receipt
+                  </DashboardButtonLink>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

@@ -3369,6 +3369,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-readiness-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-toolbox {
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
 }
@@ -3495,7 +3499,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-runtime-ready {
   display: grid !important;
-  grid-template-columns: 30px minmax(0, 1fr) auto !important;
+  grid-template-columns: 30px minmax(0, 1fr) !important;
   gap: 10px !important;
   align-items: center !important;
   min-width: 0 !important;

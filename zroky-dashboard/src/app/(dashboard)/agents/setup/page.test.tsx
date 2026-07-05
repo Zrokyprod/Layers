@@ -119,12 +119,13 @@ describe("Protected agent setup (minimal)", () => {
     expect(await screen.findByText("Runtime key ready")).toBeInTheDocument();
     expect(screen.getByLabelText("Live capture status").textContent).toContain("SDK ready");
     expect(screen.getByLabelText("Live capture status").textContent).toContain("waiting for SDK run");
-    expect(screen.getByText("Available after the first receipt")).toBeInTheDocument();
+    expect(screen.getByText("Unlocks after your first receipt.")).toBeInTheDocument();
     const loop = screen.getByLabelText("Zroky control loop");
     for (const step of ["Propose", "Policy", "Approval", "Execution", "Verification", "Receipt"]) {
       expect(loop.textContent).toContain(step);
     }
-    expect(screen.getByRole("link", { name: "Set a policy" }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByRole("link", { name: "Tune policy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review action" })).not.toBeInTheDocument();
   });
 
   it("creates and enforces an agent from a minimal form", async () => {
@@ -132,7 +133,7 @@ describe("Protected agent setup (minimal)", () => {
     await screen.findByText("Runtime key ready");
 
     fireEvent.change(screen.getByLabelText("Agent name"), { target: { value: "Refund Agent" } });
-    fireEvent.click(screen.getByRole("button", { name: /Create & enable protection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Create agent profile/i }));
 
     await waitFor(() => expect(api.createAgentProfile).toHaveBeenCalledTimes(1));
     expect(api.createAgentProfile.mock.calls[0]?.[0]).toEqual(
@@ -151,10 +152,15 @@ describe("Protected agent setup (minimal)", () => {
     );
     await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
     expect(await screen.findByText(/is protected with the safe default policy/i)).toBeInTheDocument();
-    expect(screen.getByText("CLI smoke test")).toBeInTheDocument();
+    expect(screen.getByText("SDK snippet ready")).toBeInTheDocument();
+    expect(screen.getByText("Install command")).toBeInTheDocument();
+    expect(screen.getByText("Setup check")).toBeInTheDocument();
+    expect(screen.getByText("Test action")).toBeInTheDocument();
+    expect(screen.getByText("Python protected action")).toBeInTheDocument();
     expect(screen.getByText(/zroky doctor/i)).toBeInTheDocument();
     expect(screen.getByText(/zroky ingest --test/i)).toBeInTheDocument();
     expect(screen.getByText(/zroky.protect/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Live capture status").textContent).toContain("Policy checked");
   });
 
   it("creates a runtime project key inline when none exists", async () => {
@@ -170,10 +176,12 @@ describe("Protected agent setup (minimal)", () => {
       expires_in_days: 90,
       scopes: ["project:member"],
     }));
-    expect(await screen.findByText("zk_live_created_secret")).toBeInTheDocument();
-    expect(screen.getByText(/pip install zroky/i)).toBeInTheDocument();
-    expect(screen.getByText(/zroky doctor/i)).toBeInTheDocument();
-    expect(screen.getByText(/zroky ingest --test/i)).toBeInTheDocument();
+    expect(await screen.findByText("zk_live_demo...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copy key/i })).toBeInTheDocument();
+    expect(screen.getByText(".env")).toBeInTheDocument();
+    expect(screen.getByText(/ZROKY_API_KEY=zk_live_demo/i)).toBeInTheDocument();
+    expect(screen.getByText(/ZROKY_PROJECT_ID=proj_1/i)).toBeInTheDocument();
+    expect(screen.queryByText(/pip install zroky/i)).not.toBeInTheDocument();
   });
 
   it("prefills the agent name from the query param", () => {
@@ -185,7 +193,7 @@ describe("Protected agent setup (minimal)", () => {
   it("requires an agent name before creating", async () => {
     renderPage();
     await screen.findByText("Runtime key ready");
-    fireEvent.click(screen.getByRole("button", { name: /Create & enable protection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Create agent profile/i }));
     expect(await screen.findByText(/Give the agent a name/i)).toBeInTheDocument();
     expect(api.createAgentProfile).not.toHaveBeenCalled();
   });
