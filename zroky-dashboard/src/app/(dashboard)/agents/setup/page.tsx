@@ -36,7 +36,6 @@ const FRAMEWORKS = [
 ];
 
 const ENVIRONMENTS = ["production", "staging", "development"];
-const CONTROL_LOOP_STEPS = ["Propose", "Policy", "Approval", "Execution", "Verification", "Receipt"];
 const DEFAULT_RUNTIME_KEY_NAME = "Protected agent runtime key";
 type SetupStep = "key" | "connect" | "run" | "next";
 
@@ -239,20 +238,20 @@ print(receipt.status)`;
     ? {
         tone: "success" as const,
         title: "Agent is live",
-        copy: "Zroky is now controlling and verifying this agent's protected actions. Tune the policy or add a verifier when you want tighter control.",
+        copy: "Your first protected action is captured. Review the receipt, then tune policy from real data.",
         pill: "Live",
       }
     : created
       ? {
           tone: "warning" as const,
-          title: "Waiting for the first protected action",
-          copy: "Run your agent with the snippet below. Zroky captures and verifies the first real action automatically, with no upfront action list to declare.",
+          title: "Run the first action",
+          copy: "Use the commands below. Home unlocks when Zroky receives the first protected action.",
           pill: "Capturing",
         }
       : {
           tone: "neutral" as const,
-          title: "Protect an agent",
-          copy: "Name the agent and install the SDK. Zroky applies a safe default policy and verifies real actions. Configure policies, verifiers, and approvals later from real captured actions.",
+          title: "Protect your first agent",
+          copy: "Create a key, define one agent, then send one protected action.",
           pill: "Setup",
         };
 
@@ -296,7 +295,7 @@ print(receipt.status)`;
               <span>{hasRuntimeKey ? <CheckCircle2 aria-hidden="true" size={16} /> : "01"}</span>
               <div>
                 <strong>Project key</strong>
-                <small>Create the runtime key your agent uses to call Zroky.</small>
+                <small>Authenticate SDK requests.</small>
               </div>
               <em>{visibleStepState(activeStep, "key", hasRuntimeKey)}</em>
             </div>
@@ -313,7 +312,7 @@ print(receipt.status)`;
                   </button>
                 </div>
                 <CopyableCode label=".env" value={keyEnvSnippet} />
-                <p className="agent-setup-muted">This secret is shown once. Store it in the agent runtime before closing the page.</p>
+                <p className="agent-setup-muted">Copy once. Store it in your agent runtime.</p>
               </div>
             ) : hasRuntimeKey ? (
               <div className="agent-runtime-ready">
@@ -328,7 +327,7 @@ print(receipt.status)`;
             ) : (
               <div className="agent-runtime-create">
                 <p className="agent-setup-muted">
-                  This key only talks to Zroky. It does not access OpenAI, Stripe, Slack, or your systems.
+                  Only talks to Zroky. No access to OpenAI, Stripe, Slack, or your systems.
                 </p>
                 <DashboardButton
                   icon={<KeyRound />}
@@ -357,7 +356,7 @@ print(receipt.status)`;
               <span>{created ? <CheckCircle2 aria-hidden="true" size={16} /> : "02"}</span>
               <div>
                 <strong>Connect</strong>
-                <small>Name the agent and add one SDK wrapper. No upfront action or system list.</small>
+                <small>Name one agent runtime.</small>
               </div>
               <em>{stepStateLabel(activeStep, "connect", created)}</em>
             </div>
@@ -432,9 +431,7 @@ print(receipt.status)`;
                     </select>
                   </label>
                 </div>
-                <p className="agent-setup-muted">
-                  Safe default: unknown actions are denied, risky actions are held for approval, everything is recorded.
-                </p>
+                <p className="agent-setup-muted">Safe default is applied automatically.</p>
                 <DashboardButton
                   icon={<ShieldCheck />}
                   type="submit"
@@ -460,7 +457,7 @@ print(receipt.status)`;
               <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "03"}</span>
               <div>
                 <strong>Run</strong>
-                <small>Run the checks, then send one protected action from your agent runtime.</small>
+                <small>Send one protected action.</small>
               </div>
               <em>{stepStateLabel(activeStep, "run", live)}</em>
             </div>
@@ -473,8 +470,8 @@ print(receipt.status)`;
               </div>
             ) : (
               <div className="agent-run-locked">
-                <strong>Create the agent profile first.</strong>
-                <span>The install commands appear here after the runtime key and agent profile are ready.</span>
+                <strong>Create the agent first.</strong>
+                <span>Commands appear here after Step 2.</span>
               </div>
             )}
             <div className="agent-setup-readiness-grid" aria-label="Live capture status">
@@ -522,8 +519,8 @@ print(receipt.status)`;
                 <strong>{live ? "You're live" : "What's next"}</strong>
                 <small>
                   {live
-                    ? "This agent is controlled and verified. Configure tighter control on real data."
-                    : "After the first receipt, tune control on the actions Zroky actually saw."}
+                    ? "Tune from real captured actions."
+                    : "Review the first receipt."}
                 </small>
               </div>
               <em>{stepStateLabel(activeStep, "next", live)}</em>
@@ -534,7 +531,7 @@ print(receipt.status)`;
               </div>
             ) : (
               <>
-                <p className="agent-setup-muted">Now tune Zroky from real captured actions instead of guessing upfront.</p>
+                <p className="agent-setup-muted">Tune policy and evidence from real actions.</p>
                 <div className="agent-setup-inline-actions agent-next-actions">
                   <DashboardButtonLink href="/policies" variant="primary">
                     Tune policy
@@ -552,18 +549,6 @@ print(receipt.status)`;
               </>
             )}
           </div>
-        </div>
-
-        <div className="agent-control-loop-strip" aria-label="Zroky control loop">
-          <div>
-            <span>Control loop after first run</span>
-            <strong>Every protected action moves through the same proof path.</strong>
-          </div>
-          <ol>
-            {CONTROL_LOOP_STEPS.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
         </div>
       </section>
     </div>

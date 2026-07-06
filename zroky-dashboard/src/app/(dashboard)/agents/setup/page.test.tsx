@@ -115,15 +115,12 @@ describe("Protected agent setup (minimal)", () => {
   it("shows the pending capture path and defers advanced next steps", async () => {
     renderPage();
 
-    expect(screen.getByText(/Configure policies, verifiers, and approvals later from real captured actions/i)).toBeInTheDocument();
+    expect(screen.getByText(/Create a key, define one agent, then send one protected action/i)).toBeInTheDocument();
     expect(await screen.findByText("Runtime key ready")).toBeInTheDocument();
     expect(screen.getByLabelText("Live capture status").textContent).toContain("SDK ready");
     expect(screen.getByLabelText("Live capture status").textContent).toContain("waiting for SDK run");
     expect(screen.getByText("Unlocks after your first receipt.")).toBeInTheDocument();
-    const loop = screen.getByLabelText("Zroky control loop");
-    for (const step of ["Propose", "Policy", "Approval", "Execution", "Verification", "Receipt"]) {
-      expect(loop.textContent).toContain(step);
-    }
+    expect(screen.queryByLabelText("Zroky control loop")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tune policy" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Review action" })).not.toBeInTheDocument();
   });
