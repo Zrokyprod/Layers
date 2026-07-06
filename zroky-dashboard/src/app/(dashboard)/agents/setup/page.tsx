@@ -58,14 +58,21 @@ const CONNECTOR_LABELS: Record<string, string> = {
   customer_identity: "Customer identity",
   erp_finance: "ERP finance",
   email_delivery: "Email/messages",
+  generic_finance: "Generic Finance API",
   generic_rest: "Generic REST",
   github_ci: "GitHub CI",
   inventory_system: "Inventory system",
   ledger_refund: "Refund ledger",
+  netsuite_finance: "NetSuite finance",
   order_management: "Order management",
   payments_ledger: "Payments ledger",
+  postgres_read: "Postgres Read",
+  quickbooks_ledger: "QuickBooks template",
+  razorpay_refund: "Razorpay refund",
   slack_approval_alert: "Slack approval",
   subscription_billing: "Subscription billing",
+  stripe_payment: "Stripe payment",
+  stripe_refund: "Stripe refund",
   ticket_status: "Support tickets",
   zendesk_ticket: "Zendesk tickets",
 };
@@ -168,6 +175,65 @@ const SUPPORT_CAPABILITIES = [
 ] as const;
 type SupportCapabilityId = (typeof SUPPORT_CAPABILITIES)[number]["id"];
 const DEFAULT_SUPPORT_CAPABILITIES: SupportCapabilityId[] = ["tickets", "refunds", "crm"];
+
+const FINANCE_SYSTEMS = [
+  {
+    id: "netsuite",
+    label: "NetSuite",
+    summary: "ERP finance records, vendor bills, approvals.",
+    connectors: ["netsuite_finance", "erp_finance"],
+  },
+  {
+    id: "stripe",
+    label: "Stripe Payments",
+    summary: "Payment status and settlement proof.",
+    connectors: ["stripe_payment", "payments_ledger"],
+  },
+  {
+    id: "generic",
+    label: "Generic Finance API",
+    summary: "Internal ERP, ledger, or finance service.",
+    connectors: ["generic_finance", "erp_finance", "accounting_system"],
+  },
+  {
+    id: "postgres",
+    label: "Postgres Read",
+    summary: "Read-only checks against finance tables.",
+    connectors: ["postgres_read", "accounting_system"],
+  },
+  {
+    id: "quickbooks",
+    label: "QuickBooks template",
+    summary: "Use the generic finance path until native setup ships.",
+    connectors: ["quickbooks_ledger", "generic_finance"],
+  },
+] as const;
+const DEFAULT_FINANCE_SYSTEM_ID = "netsuite";
+const FINANCE_CAPABILITIES = [
+  {
+    id: "invoice",
+    label: "Approve invoices",
+    summary: "Confirm invoice, vendor, PO, amount.",
+    contractMarkers: ["finance.invoice", "invoice_approve"],
+    connectors: ["erp_finance", "netsuite_finance", "slack_approval_alert"],
+  },
+  {
+    id: "journal",
+    label: "Create journal entries",
+    summary: "Check account, direction, period, amount.",
+    contractMarkers: ["finance.journal", "journal_entry"],
+    connectors: ["accounting_system", "netsuite_finance", "postgres_read"],
+  },
+  {
+    id: "payout",
+    label: "Send vendor payouts",
+    summary: "Hold transfers until approval and ledger proof.",
+    contractMarkers: ["finance.vendor", "vendor_payout"],
+    connectors: ["payments_ledger", "stripe_payment", "slack_approval_alert"],
+  },
+] as const;
+type FinanceCapabilityId = (typeof FINANCE_CAPABILITIES)[number]["id"];
+const DEFAULT_FINANCE_CAPABILITIES: FinanceCapabilityId[] = ["invoice", "journal", "payout"];
 
 function keyIsActive(key: ApiKeyResponse) {
   return !key.revoked && !key.expired;
@@ -280,6 +346,30 @@ function supportConnectorsFor(engineId: string, capabilityIds: SupportCapability
   ]);
 }
 
+function financeCapabilityById(id: FinanceCapabilityId) {
+  return FINANCE_CAPABILITIES.find((item) => item.id === id) ?? FINANCE_CAPABILITIES[0];
+}
+
+function financeSystemById(id: string) {
+  return FINANCE_SYSTEMS.find((item) => item.id === id) ?? FINANCE_SYSTEMS[0];
+}
+
+function financeContractsFor(pack: ActionPackResponse, capabilityIds: FinanceCapabilityId[]) {
+  const markers = capabilityIds.flatMap((id) => financeCapabilityById(id).contractMarkers);
+  return pack.contract_templates.filter((contract) => {
+    const haystack = `${contract.contract_key} ${contract.action_type}`.toLowerCase();
+    return markers.some((marker) => haystack.includes(marker.toLowerCase()));
+  });
+}
+
+function financeConnectorsFor(systemId: string, capabilityIds: FinanceCapabilityId[]) {
+  return uniqueItems([
+    ...financeSystemById(systemId).connectors,
+    ...capabilityIds.flatMap((id) => financeCapabilityById(id).connectors),
+    "slack_approval_alert",
+  ]);
+}
+
 function packSort(a: ActionPackResponse, b: ActionPackResponse) {
   const ai = PRIMARY_PACK_IDS.indexOf(a.id);
   const bi = PRIMARY_PACK_IDS.indexOf(b.id);
@@ -300,6 +390,8 @@ export default function ProtectedAgentSetupPage() {
   const [selectedPackId, setSelectedPackId] = useState(DEFAULT_PACK_ID);
   const [supportEngineId, setSupportEngineId] = useState(DEFAULT_SUPPORT_ENGINE_ID);
   const [supportCapabilityIds, setSupportCapabilityIds] = useState<SupportCapabilityId[]>(DEFAULT_SUPPORT_CAPABILITIES);
+  const [financeSystemId, setFinanceSystemId] = useState(DEFAULT_FINANCE_SYSTEM_ID);
+  const [financeCapabilityIds, setFinanceCapabilityIds] = useState<FinanceCapabilityId[]>(DEFAULT_FINANCE_CAPABILITIES);
   const [installedPack, setInstalledPack] = useState<ActionPackResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -337,12 +429,18 @@ export default function ProtectedAgentSetupPage() {
     .sort(packSort);
   const selectedPack = packs.find((pack) => pack.id === selectedPackId) ?? packs[0] ?? null;
   const isSupportPack = selectedPack?.id === "support-ops-v1";
-  const selectedSupportEngine = supportEngineById(supportEngineId);
+  const isFinancePack = selectedPack?.id === "finance-ops-v1";
   const selectedSupportContracts = selectedPack && isSupportPack
     ? supportContractsFor(selectedPack, supportCapabilityIds)
     : [];
   const selectedSupportConnectors = selectedPack && isSupportPack
     ? supportConnectorsFor(supportEngineId, supportCapabilityIds)
+    : [];
+  const selectedFinanceContracts = selectedPack && isFinancePack
+    ? financeContractsFor(selectedPack, financeCapabilityIds)
+    : [];
+  const selectedFinanceConnectors = selectedPack && isFinancePack
+    ? financeConnectorsFor(financeSystemId, financeCapabilityIds)
     : [];
   const packInstalled = Boolean(installedPack);
 
@@ -811,6 +909,74 @@ print(receipt["status"])`;
                           </div>
                         </div>
                       </div>
+                    ) : isFinancePack ? (
+                      <div className="support-engine-builder">
+                        <div>
+                          <span className="dashboard-eyebrow">Finance system</span>
+                          <div className="support-engine-options" aria-label="Finance system">
+                            {FINANCE_SYSTEMS.map((system) => (
+                              <button
+                                key={system.id}
+                                type="button"
+                                data-selected={financeSystemId === system.id ? "true" : "false"}
+                                onClick={() => setFinanceSystemId(system.id)}
+                                disabled={packInstalled}
+                              >
+                                <strong>{system.label}</strong>
+                                <span>{system.summary}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="dashboard-eyebrow">What money risk can this agent touch?</span>
+                          <div className="support-capability-grid finance-capability-grid">
+                            {FINANCE_CAPABILITIES.map((capability) => {
+                              const checked = financeCapabilityIds.includes(capability.id);
+                              return (
+                                <label key={capability.id} data-checked={checked ? "true" : "false"}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={packInstalled}
+                                    onChange={() => {
+                                      setFinanceCapabilityIds((current) => {
+                                        if (current.includes(capability.id)) {
+                                          return current.length > 1
+                                            ? current.filter((id) => id !== capability.id)
+                                            : current;
+                                        }
+                                        return [...current, capability.id];
+                                      });
+                                    }}
+                                  />
+                                  <span>
+                                    <strong>{capability.label}</strong>
+                                    <small>{capability.summary}</small>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="support-selection-summary">
+                          <div>
+                            <span className="dashboard-eyebrow">Guardrails Zroky will install</span>
+                            <strong>{selectedFinanceContracts.length} protected actions</strong>
+                            <small>
+                              {financeCapabilityIds.map((id) => financeCapabilityById(id).label).join(", ")}
+                            </small>
+                          </div>
+                          <div>
+                            <span className="dashboard-eyebrow">Suggested proof sources</span>
+                            <div className="agent-pack-chip-row">
+                              {selectedFinanceConnectors.map((connector) => (
+                                <span key={connector}>{connectorLabel(connector)}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       <>
                         <div>
@@ -836,7 +1002,7 @@ print(receipt["status"])`;
                         <CheckCircle2 aria-hidden="true" />
                         <div>
                           <strong>{installedPack?.display_name ?? selectedPack.display_name} installed</strong>
-                          <span>{selectedPack.contract_templates.length} protected actions ready. Add connectors as you test.</span>
+                          <span>{selectedPack.contract_templates.length} protected actions ready. Run a test action next.</span>
                         </div>
                       </div>
                     ) : (

@@ -3705,6 +3705,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   margin-top: 7px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .finance-capability-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .support-capability-grid label {
   display: grid !important;
   grid-template-columns: 16px minmax(0, 1fr) !important;

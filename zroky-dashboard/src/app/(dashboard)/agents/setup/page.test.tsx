@@ -194,6 +194,55 @@ function pack(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function financePack(overrides: Record<string, unknown> = {}) {
+  return pack({
+    id: "finance-ops-v1",
+    display_name: "Finance operations",
+    summary: "Guard invoice approvals, journal entries, and vendor payouts.",
+    recommended_connectors: ["erp_finance", "accounting_system", "payments_ledger", "slack_approval_alert"],
+    native_tool_families: ["netsuite_finance", "stripe_payment", "quickbooks_ledger", "generic_finance"],
+    contract_templates: [
+      {
+        contract_key: "finance.invoice.approve",
+        version: "1.0",
+        contract_version: "finance.invoice.approve/1.0",
+        action_type: "invoice_approve",
+        operation_kind: "UPDATE",
+        domain_family: "finance_operations",
+        risk_class: "R3",
+        connector_family: "erp_finance",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "finance.journal.entry",
+        version: "1.0",
+        contract_version: "finance.journal.entry/1.0",
+        action_type: "journal_entry",
+        operation_kind: "UPDATE",
+        domain_family: "finance_operations",
+        risk_class: "R3",
+        connector_family: "accounting_system",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "finance.vendor.payout",
+        version: "1.0",
+        contract_version: "finance.vendor.payout/1.0",
+        action_type: "vendor_payout",
+        operation_kind: "TRANSFER",
+        domain_family: "finance_operations",
+        risk_class: "R4",
+        connector_family: "payments_ledger",
+        schema: {},
+        verification_profile: {},
+      },
+    ],
+    ...overrides,
+  });
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -215,7 +264,7 @@ describe("Protected agent setup (minimal)", () => {
     api.listActionPacks.mockReset().mockResolvedValue({
       items: [
         pack(),
-        pack({ id: "finance-ops-v1", display_name: "Finance operations", recommended_connectors: ["erp_finance"], contract_templates: [] }),
+        financePack(),
         pack({ id: "devops-release-v1", display_name: "DevOps release control", recommended_connectors: ["github_ci"], contract_templates: [] }),
         pack({ id: "ecommerce-ops-v1", display_name: "Ecommerce operations", recommended_connectors: ["order_management"], contract_templates: [] }),
       ],
@@ -297,6 +346,33 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByText("Install")).toBeInTheDocument();
     expect(screen.getByText("Run scenario")).toBeInTheDocument();
     expect(screen.getByText(/python agent.py access-grant/i)).toBeInTheDocument();
+  });
+
+  it("shows finance as a money-risk workflow instead of connector logos", async () => {
+    api.listAgentProfiles.mockResolvedValue({ items: [profile({ display_name: "Finance QA Agent" })], total: 1 });
+
+    renderPage();
+
+    expect(await screen.findByText("Finance QA Agent")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Finance/i }));
+
+    expect(screen.getByText("Finance system")).toBeInTheDocument();
+    expect(screen.getByText("NetSuite")).toBeInTheDocument();
+    expect(screen.getByText("Stripe Payments")).toBeInTheDocument();
+    expect(screen.getAllByText("Generic Finance API").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Postgres Read").length).toBeGreaterThan(0);
+    expect(screen.getByText("QuickBooks template")).toBeInTheDocument();
+    expect(screen.getByText("What money risk can this agent touch?")).toBeInTheDocument();
+    expect(screen.getByText("Approve invoices")).toBeInTheDocument();
+    expect(screen.getByText("Create journal entries")).toBeInTheDocument();
+    expect(screen.getByText("Send vendor payouts")).toBeInTheDocument();
+    expect(screen.getByText("3 protected actions")).toBeInTheDocument();
+    expect(screen.getByText("Payments ledger")).toBeInTheDocument();
+    expect(screen.getByText("Stripe payment")).toBeInTheDocument();
+    expect(screen.getByText("Slack approval")).toBeInTheDocument();
+    expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
+    expect(screen.queryByText("Advanced: exact installed actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add connectors" })).not.toBeInTheDocument();
   });
 
   it("reuses an existing agent profile instead of blocking on duplicate setup", async () => {
