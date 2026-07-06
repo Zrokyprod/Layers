@@ -27,6 +27,7 @@ export type ProofConnectorId =
   | "zoho_crm"
   | "zendesk_ticket"
   | "intercom"
+  | "freshdesk_ticket"
   | "jira_issue"
   | "stripe_refund"
   | "stripe_payment"
@@ -47,6 +48,7 @@ export type ConnectorTemplateKind =
   | "zoho_crm"
   | "zendesk_ticket"
   | "intercom"
+  | "freshdesk_ticket"
   | "jira_issue"
   | "stripe_refund"
   | "stripe_payment"
@@ -298,6 +300,7 @@ const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCateg
   zoho_crm: "crm",
   zendesk_ticket: "support_itsm",
   intercom: "support_itsm",
+  freshdesk_ticket: "support_itsm",
   jira_issue: "support_itsm",
   stripe_refund: "payments",
   stripe_payment: "payments",
@@ -556,6 +559,7 @@ function registryConnectorIds(item: ToolRegistryResponse["verification_connector
   if (haystack.includes("salesforce")) ids.push("salesforce_crm");
   if (haystack.includes("zoho")) ids.push("zoho_crm");
   if (haystack.includes("intercom")) ids.push("intercom");
+  if (haystack.includes("freshdesk")) ids.push("freshdesk_ticket");
   if (haystack.includes("zendesk") || haystack.includes("ticket")) ids.push("zendesk_ticket");
   if (
     haystack.includes("jira")
@@ -866,6 +870,19 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       ctaLabel: "Configure Intercom",
       connectorTypes: ["intercom", "intercom_conversation", "intercom_ticket", "system_of_record.intercom"],
       supportedActionTypes: ["ticket_close", "support", "ticket", "message", "email_send", "customer_message", "intercom"],
+      status: null,
+    },
+    {
+      id: "freshdesk_ticket",
+      transport: "rest_http",
+      templateKind: "freshdesk_ticket",
+      title: "Freshdesk ticket verifier",
+      category: "Native REST verifier",
+      description: "Freshdesk ticket and workflow proof for support agents. Native credential setup is not enabled yet; use Custom REST until launch.",
+      href: "/integrations?connector=freshdesk_ticket",
+      ctaLabel: "Configure Freshdesk",
+      connectorTypes: ["freshdesk_ticket", "freshdesk", "ticket_status", "system_of_record.freshdesk_ticket"],
+      supportedActionTypes: ["ticket_close", "support", "ticket", "freshdesk", "case", "customer_message"],
       status: null,
     },
     {

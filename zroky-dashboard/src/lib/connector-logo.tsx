@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { Database, Globe, Landmark, Receipt, Users } from "lucide-react";
 import {
+  SiFresh,
   SiGithub,
   SiHubspot,
   SiIntercom,
@@ -36,6 +37,7 @@ const CONNECTOR_LOGOS: Record<ConnectorInventoryId, LogoDef> = {
   zoho_crm: { Icon: SiZoho, color: "#E42527", branded: true },
   zendesk_ticket: { Icon: SiZendesk, color: "#03363D", branded: true },
   intercom: { Icon: SiIntercom, color: "#1F8DED", branded: true },
+  freshdesk_ticket: { Icon: SiFresh, color: "#25C16F", branded: true },
   jira_issue: { Icon: SiJira, color: "#2684FF", branded: true },
   postgres_read: { Icon: SiPostgresql, color: "#4169E1", branded: true },
   github: { Icon: SiGithub, color: "#181717", branded: true },

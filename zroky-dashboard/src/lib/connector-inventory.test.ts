@@ -473,6 +473,7 @@ describe("connector-inventory", () => {
       "zoho_crm",
       "zendesk_ticket",
       "intercom",
+      "freshdesk_ticket",
       "jira_issue",
       "stripe_refund",
       "stripe_payment",
@@ -489,6 +490,7 @@ describe("connector-inventory", () => {
       "zoho_crm",
       "zendesk_ticket",
       "intercom",
+      "freshdesk_ticket",
       "jira_issue",
       "stripe_refund",
       "stripe_payment",
@@ -508,7 +510,7 @@ describe("connector-inventory", () => {
     ]);
     expect(commerce?.rows.map((row) => row.id)).toEqual(["shopify_admin"]);
     expect(crm?.rows.map((row) => row.id)).toEqual(["hubspot_crm", "salesforce_crm", "zoho_crm", "customer_template"]);
-    expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "intercom", "jira_issue"]);
+    expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "intercom", "freshdesk_ticket", "jira_issue"]);
     expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance"]);
     expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["generic_rest", "postgres_read"]);
     expect(workflowCategory?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
@@ -527,9 +529,9 @@ describe("connector-inventory", () => {
     });
 
     expect(inventory.counts).toMatchObject({
-      proofTotal: 15,
+      proofTotal: 16,
       healthyVerifiers: 3,
-      notConfigured: 12,
+      notConfigured: 13,
       failingVerifiers: 0,
       notTested: 0,
       supportTotal: 2,

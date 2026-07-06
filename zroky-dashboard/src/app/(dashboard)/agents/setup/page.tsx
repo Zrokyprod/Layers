@@ -77,6 +77,7 @@ const CONNECTOR_LABELS: Record<string, string> = {
   customer_identity: "Customer identity",
   erp_finance: "ERP finance",
   email_delivery: "Email/messages",
+  freshdesk_ticket: "Freshdesk tickets",
   generic_finance: "Generic Finance API",
   generic_rest: "Generic REST",
   github_ci: "GitHub CI",
@@ -157,7 +158,7 @@ const SUPPORT_ENGINES = [
     id: "freshdesk",
     label: "Freshdesk",
     summary: "Ticket status and support workflow proof.",
-    connectors: ["ticket_status", "generic_rest"],
+    connectors: ["freshdesk_ticket", "ticket_status"],
   },
   {
     id: "hubspot",
