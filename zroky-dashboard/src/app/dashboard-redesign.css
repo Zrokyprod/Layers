@@ -2859,6 +2859,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-left: 4px solid var(--dash-blue) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="pack"] {
+  border-left: 4px solid var(--dash-green) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="run"] {
   border-left: 4px solid var(--dash-amber) !important;
 }
@@ -3376,7 +3380,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-readiness-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-toolbox {
@@ -3552,6 +3556,100 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-python-example[open] {
   gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-picker {
+  display: grid !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options button {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  min-height: 104px !important;
+  padding: 11px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: var(--dash-text-soft) !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options button[data-selected="true"] {
+  border-color: rgba(47, 95, 102, 0.32) !important;
+  background: var(--dash-green-soft) !important;
+  color: var(--dash-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options button:disabled {
+  cursor: default !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options strong {
+  color: var(--dash-text) !important;
+  font-size: 0.82rem !important;
+  font-weight: 860 !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options span {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.72rem !important;
+  line-height: 1.35 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-detail {
+  display: grid !important;
+  gap: 11px !important;
+  min-width: 0 !important;
+  padding: 12px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 8px !important;
+  background: rgba(247, 250, 248, 0.74) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-detail > div {
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-chip-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  margin-top: 7px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-chip-row span {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 26px !important;
+  max-width: 100% !important;
+  padding: 0 9px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.72rem !important;
+  font-weight: 760 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 9px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-run-locked {
@@ -4780,6 +4878,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-primary-action {
     grid-template-columns: 1fr !important;
   }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
 
 @media (max-width: 760px) {
@@ -4828,6 +4930,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card > *:not(.agent-quickstart-card-head) {
     grid-column: 1 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
+    grid-template-columns: 1fr !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .agent-command-row {

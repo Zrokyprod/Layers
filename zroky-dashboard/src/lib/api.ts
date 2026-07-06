@@ -562,6 +562,63 @@ export interface AgentProfileListResponse {
   limit_reached: boolean;
 }
 
+export interface ActionPackContractTemplateResponse {
+  contract_key: string;
+  version: string;
+  contract_version: string;
+  action_type: string;
+  operation_kind: string;
+  domain_family: string;
+  risk_class: string;
+  connector_family: string;
+  schema: Record<string, unknown>;
+  verification_profile: Record<string, unknown>;
+}
+
+export interface ActionPackResponse {
+  id: string;
+  display_name: string;
+  summary: string;
+  primary_runtime_path: string;
+  recommended_connectors: string[];
+  native_tool_families: string[];
+  quickstart_steps: string[];
+  dashboard_href: string;
+  contract_templates: ActionPackContractTemplateResponse[];
+}
+
+export interface ActionPackListResponse {
+  items: ActionPackResponse[];
+}
+
+export interface ActionPackInstallResultResponse {
+  contract: ActionContractResponse;
+  created: boolean;
+}
+
+export interface ActionPackInstallResponse {
+  pack: ActionPackResponse;
+  installed_contracts: ActionPackInstallResultResponse[];
+}
+
+export interface ActionContractResponse {
+  id: string;
+  project_id: string;
+  contract_key: string;
+  version: string;
+  contract_version: string;
+  action_type: string;
+  operation_kind: string;
+  domain_family: string;
+  schema_digest: string;
+  schema: Record<string, unknown>;
+  risk_class: string;
+  verification_profile: Record<string, unknown>;
+  connector_family: string | null;
+  status: string;
+  created_at: string;
+}
+
 export interface AgentProfileCreatePayload {
   display_name: string;
   description?: string | null;
@@ -1209,6 +1266,16 @@ export function updateAgentProfile(
 
 export function enforceAgentProfile(agentId: string): Promise<AgentProfileResponse> {
   return request<AgentProfileResponse>(`/v1/agents/${encodeURIComponent(agentId)}/enforce`, {
+    method: "POST",
+  });
+}
+
+export function listActionPacks(signal?: AbortSignal): Promise<ActionPackListResponse> {
+  return request<ActionPackListResponse>("/v1/action-packs", { signal });
+}
+
+export function installActionPack(packId: string): Promise<ActionPackInstallResponse> {
+  return request<ActionPackInstallResponse>(`/v1/action-packs/${encodeURIComponent(packId)}/install`, {
     method: "POST",
   });
 }

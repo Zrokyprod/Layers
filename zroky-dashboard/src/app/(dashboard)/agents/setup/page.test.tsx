@@ -12,7 +12,9 @@ const api = vi.hoisted(() => ({
   createAgentProfile: vi.fn(),
   enforceAgentProfile: vi.fn(),
   getProjectSettings: vi.fn(),
+  installActionPack: vi.fn(),
   listActionIntents: vi.fn(),
+  listActionPacks: vi.fn(),
   listAgentProfiles: vi.fn(),
   listProjectApiKeys: vi.fn(),
 }));
@@ -47,7 +49,9 @@ vi.mock("@/lib/api", async () => {
     createAgentProfile: api.createAgentProfile,
     enforceAgentProfile: api.enforceAgentProfile,
     getProjectSettings: api.getProjectSettings,
+    installActionPack: api.installActionPack,
     listActionIntents: api.listActionIntents,
+    listActionPacks: api.listActionPacks,
     listAgentProfiles: api.listAgentProfiles,
     listProjectApiKeys: api.listProjectApiKeys,
   };
@@ -94,6 +98,46 @@ function createdApiKey(overrides: Partial<ApiKeyCreateResponse> = {}): ApiKeyCre
   };
 }
 
+function pack(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "support-ops-v1",
+    display_name: "Support operations",
+    summary: "Guard customer refunds and CRM updates.",
+    primary_runtime_path: "sdk",
+    recommended_connectors: ["ledger_refund", "crm_record", "slack_approval_alert"],
+    native_tool_families: ["stripe_refund", "hubspot_customer"],
+    quickstart_steps: [],
+    dashboard_href: "/agents/setup",
+    contract_templates: [
+      {
+        contract_key: "customer.record.update",
+        version: "1.0",
+        contract_version: "customer.record.update/1.0",
+        action_type: "customer_record_update",
+        operation_kind: "UPDATE",
+        domain_family: "customer_operations",
+        risk_class: "R2",
+        connector_family: "crm_record",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "customer.refund.transfer",
+        version: "1.0",
+        contract_version: "customer.refund.transfer/1.0",
+        action_type: "refund",
+        operation_kind: "TRANSFER",
+        domain_family: "customer_operations",
+        risk_class: "R3",
+        connector_family: "ledger_refund",
+        schema: {},
+        verification_profile: {},
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -112,6 +156,18 @@ describe("Protected agent setup (minimal)", () => {
     api.createAgentProfile.mockReset().mockResolvedValue(profile());
     api.enforceAgentProfile.mockReset().mockResolvedValue(profile());
     api.listActionIntents.mockReset().mockResolvedValue({ items: [] });
+    api.listActionPacks.mockReset().mockResolvedValue({
+      items: [
+        pack(),
+        pack({ id: "finance-ops-v1", display_name: "Finance operations", recommended_connectors: ["erp_finance"], contract_templates: [] }),
+        pack({ id: "devops-release-v1", display_name: "DevOps release control", recommended_connectors: ["github_ci"], contract_templates: [] }),
+        pack({ id: "ecommerce-ops-v1", display_name: "Ecommerce operations", recommended_connectors: ["order_management"], contract_templates: [] }),
+      ],
+    });
+    api.installActionPack.mockReset().mockResolvedValue({
+      pack: pack(),
+      installed_contracts: [{ contract: { id: "contract_1", contract_version: "customer.record.update/1.0" }, created: true }],
+    });
     api.listAgentProfiles.mockReset().mockResolvedValue({ items: [], total: 0 });
   });
 
@@ -122,6 +178,7 @@ describe("Protected agent setup (minimal)", () => {
     expect(await screen.findByText("Runtime key ready")).toBeInTheDocument();
     expect(screen.getByLabelText("Live capture status").textContent).toContain("SDK ready");
     expect(screen.getByLabelText("Live capture status").textContent).toContain("waiting for SDK run");
+    expect(screen.getByText("Protected actions")).toBeInTheDocument();
     expect(screen.getByText("Unlocks after your first receipt.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Zroky control loop")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tune policy" })).not.toBeInTheDocument();
@@ -152,15 +209,29 @@ describe("Protected agent setup (minimal)", () => {
     );
     await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
     expect(await screen.findByText("Ops Agent")).toBeInTheDocument();
-    expect(screen.getByText("Ready to run")).toBeInTheDocument();
-    expect(screen.getByText("Install")).toBeInTheDocument();
-    expect(screen.getByText("Check")).toBeInTheDocument();
-    expect(screen.getByText("Send test action")).toBeInTheDocument();
-    expect(screen.getByText("Python example")).toBeInTheDocument();
-    expect(screen.getByText(/zroky doctor/i)).toBeInTheDocument();
-    expect(screen.getByText(/zroky ingest --test/i)).toBeInTheDocument();
-    expect(screen.getByText(/zroky.protect/i)).toBeInTheDocument();
+    expect(screen.getByText("Choose actions next")).toBeInTheDocument();
+    expect(await screen.findByText("Support")).toBeInTheDocument();
+    expect(screen.getByText("Refund")).toBeInTheDocument();
+    expect(screen.getByText("CRM record")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install protected actions" })).toBeInTheDocument();
+    expect(screen.queryByText(/zroky doctor/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Live capture status").textContent).toContain("Policy checked");
+  });
+
+  it("installs a protected action pack before showing run commands", async () => {
+    api.listAgentProfiles.mockResolvedValue({ items: [profile({ display_name: "Manual QA Agent" })], total: 1 });
+
+    renderPage();
+
+    expect(await screen.findByText("Manual QA Agent")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Install protected actions" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Install protected actions" }));
+
+    await waitFor(() => expect(api.installActionPack).toHaveBeenCalledWith("support-ops-v1"));
+    expect(await screen.findByText(/Support operations installed/i)).toBeInTheDocument();
+    expect(screen.getByText("Install")).toBeInTheDocument();
+    expect(screen.getByText("Run scenario")).toBeInTheDocument();
+    expect(screen.getByText(/python agent.py access-grant/i)).toBeInTheDocument();
   });
 
   it("reuses an existing agent profile instead of blocking on duplicate setup", async () => {
@@ -169,9 +240,8 @@ describe("Protected agent setup (minimal)", () => {
     renderPage();
 
     expect(await screen.findByText("Manual QA Agent")).toBeInTheDocument();
-    expect(screen.getByText("Ready to run")).toBeInTheDocument();
-    expect(screen.getByText("Run a test action")).toBeInTheDocument();
-    expect(screen.getByText("Send test action")).toBeInTheDocument();
+    expect(screen.getByText("Choose actions next")).toBeInTheDocument();
+    expect(screen.getByText("Protected actions")).toBeInTheDocument();
     expect(api.createAgentProfile).not.toHaveBeenCalled();
   });
 

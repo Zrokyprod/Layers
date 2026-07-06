@@ -20,9 +20,12 @@ import {
   createAgentProfile,
   enforceAgentProfile,
   getProjectSettings,
+  installActionPack,
   listActionIntents,
+  listActionPacks,
   listAgentProfiles,
   listProjectApiKeys,
+  type ActionPackResponse,
   type AgentProfileResponse,
 } from "@/lib/api";
 import type { ApiKeyCreateResponse, ApiKeyResponse } from "@/lib/types";
@@ -38,7 +41,29 @@ const FRAMEWORKS = [
 
 const ENVIRONMENTS = ["production", "staging", "development"];
 const DEFAULT_RUNTIME_KEY_NAME = "Protected agent runtime key";
-type SetupStep = "key" | "connect" | "run" | "next";
+type SetupStep = "key" | "connect" | "pack" | "run" | "next";
+
+const PRIMARY_PACK_IDS = ["support-ops-v1", "finance-ops-v1", "devops-release-v1", "ecommerce-ops-v1"];
+const DEFAULT_PACK_ID = "support-ops-v1";
+const PACK_SHORT_COPY: Record<string, string> = {
+  "support-ops-v1": "Refunds, CRM updates, access changes, and support messages.",
+  "finance-ops-v1": "Invoice approvals, vendor payouts, journal entries, and finance records.",
+  "devops-release-v1": "Deploys, feature flags, CI gates, runtime changes, and release proof.",
+  "ecommerce-ops-v1": "Order changes, inventory updates, discounts, refunds, and fulfillment state.",
+};
+const CONNECTOR_LABELS: Record<string, string> = {
+  accounting_system: "Accounting system",
+  commerce_platform: "Commerce platform",
+  crm_record: "CRM record",
+  erp_finance: "ERP finance",
+  generic_rest: "Generic REST",
+  github_ci: "GitHub CI",
+  inventory_system: "Inventory system",
+  ledger_refund: "Refund ledger",
+  order_management: "Order management",
+  payments_ledger: "Payments ledger",
+  slack_approval_alert: "Slack approval",
+};
 
 function keyIsActive(key: ApiKeyResponse) {
   return !key.revoked && !key.expired;
@@ -113,6 +138,22 @@ function visibleStepState(activeStep: SetupStep, step: SetupStep, done: boolean)
   return stepStateLabel(activeStep, step, done);
 }
 
+function actionLabel(actionType: string) {
+  return actionType
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function connectorLabel(connector: string) {
+  return CONNECTOR_LABELS[connector] ?? actionLabel(connector);
+}
+
+function packSort(a: ActionPackResponse, b: ActionPackResponse) {
+  const ai = PRIMARY_PACK_IDS.indexOf(a.id);
+  const bi = PRIMARY_PACK_IDS.indexOf(b.id);
+  return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+}
+
 export default function ProtectedAgentSetupPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -124,6 +165,8 @@ export default function ProtectedAgentSetupPage() {
   const [newRuntimeKey, setNewRuntimeKey] = useState<ApiKeyCreateResponse | null>(null);
   const [runtimeKeyCopied, setRuntimeKeyCopied] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<string | null>(null);
+  const [selectedPackId, setSelectedPackId] = useState(DEFAULT_PACK_ID);
+  const [installedPack, setInstalledPack] = useState<ActionPackResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const projectQuery = useQuery({
@@ -149,6 +192,17 @@ export default function ProtectedAgentSetupPage() {
   });
   const existingProfile = profilesQuery.data?.items?.[0] ?? null;
   const connectedProfile = profile ?? existingProfile;
+  const packsQuery = useQuery({
+    queryKey: ["agent-setup", "action-packs"],
+    queryFn: ({ signal }) => listActionPacks(signal),
+    enabled: Boolean(connectedProfile),
+    retry: false,
+  });
+  const packs = (packsQuery.data?.items ?? [])
+    .filter((pack) => PRIMARY_PACK_IDS.includes(pack.id))
+    .sort(packSort);
+  const selectedPack = packs.find((pack) => pack.id === selectedPackId) ?? packs[0] ?? null;
+  const packInstalled = Boolean(installedPack);
 
   const createKeyMutation = useMutation({
     mutationFn: async () => {
@@ -213,6 +267,22 @@ export default function ProtectedAgentSetupPage() {
     },
   });
 
+  const installPackMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedPack) {
+        throw new Error("Protected action templates are still loading.");
+      }
+      return installActionPack(selectedPack.id);
+    },
+    onSuccess: (result) => {
+      setInstalledPack(result.pack);
+      setError(null);
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Could not install protected actions.");
+    },
+  });
+
   const firstActionQuery = useQuery({
     queryKey: ["agent-setup", "first-actions", connectedProfile?.id],
     queryFn: ({ signal }) => listActionIntents({ agent_id: connectedProfile?.id ?? null, limit: 5 }, signal),
@@ -233,7 +303,15 @@ export default function ProtectedAgentSetupPage() {
   const created = Boolean(connectedProfile);
   const firstAction = firstActionQuery.data?.items[0] ?? null;
   const live = (firstReceiptQuery.data?.items.length ?? 0) > 0;
-  const activeStep: SetupStep = !hasRuntimeKey ? "key" : !created ? "connect" : !live ? "run" : "next";
+  const activeStep: SetupStep = !hasRuntimeKey
+    ? "key"
+    : !created
+      ? "connect"
+      : !packInstalled
+        ? "pack"
+        : !live
+          ? "run"
+          : "next";
   const policyChecked = Boolean(firstAction);
   const maskedRuntimeKey = runtimeKeyPrefix ? `${runtimeKeyPrefix}...` : "zk_live_...";
   const connectedAgentName = connectedProfile?.display_name?.trim() || agentName.trim() || "Agent runtime";
@@ -250,9 +328,10 @@ ZROKY_PROJECT_ID=${projectId || "proj_..."}`;
 zroky.init()
 
 receipt = zroky.protect(
-    action="customer.access.grant",
-    params={"customer_id": "cus_123", "role": "viewer"},
-    run=lambda: grant_access("cus_123", "viewer"),
+    action="customer_record_update",
+    contract_version="customer.record.update/1.0",
+    params={"fields": {"tier": "enterprise"}},
+    resource={"customer_id": "cus_123"},
 )
 
 print(receipt.status)`;
@@ -278,7 +357,7 @@ print(receipt.status)`;
       ? {
           tone: "warning" as const,
           title: "Run a test action",
-          copy: "Run one command locally. Zroky will capture it and unlock the dashboard.",
+          copy: "Run one protected action locally. Zroky will capture it and unlock the dashboard.",
           pill: "Capturing",
         }
       : {
@@ -400,7 +479,7 @@ print(receipt.status)`;
                 <div className="agent-profile-summary">
                   <span>{framework}</span>
                   <span>{environment}</span>
-                  <span>Ready to run</span>
+                  <span>{packInstalled ? "Actions ready" : "Choose actions next"}</span>
                 </div>
               </div>
             ) : (
@@ -476,27 +555,120 @@ print(receipt.status)`;
             )}
           </div>
 
-          {/* 3 - Run */}
+          {/* 3 - Protected actions */}
+          <div
+            className="agent-quickstart-card"
+            data-step="pack"
+            data-active={activeStep === "pack" ? "true" : "false"}
+            data-done={packInstalled ? "true" : "false"}
+            aria-disabled={!created || undefined}
+          >
+            <div className="agent-quickstart-card-head">
+              <span>{packInstalled ? <CheckCircle2 aria-hidden="true" size={16} /> : "03"}</span>
+              <div>
+                <strong>Protected actions</strong>
+                <small>Choose the actions and connectors Zroky should govern.</small>
+              </div>
+              <em>{stepStateLabel(activeStep, "pack", packInstalled)}</em>
+            </div>
+            {!created ? (
+              <div className="agent-run-locked">
+                <strong>Create the agent first.</strong>
+                <span>Protected actions appear after Step 2.</span>
+              </div>
+            ) : (
+              <div className="agent-pack-picker">
+                <div className="agent-pack-options" aria-label="Protected action packs">
+                  {packs.length > 0 ? packs.map((pack) => (
+                    <button
+                      key={pack.id}
+                      type="button"
+                      data-selected={selectedPack?.id === pack.id ? "true" : "false"}
+                      onClick={() => setSelectedPackId(pack.id)}
+                      disabled={packInstalled}
+                    >
+                      <strong>{pack.display_name.replace(" operations", "")}</strong>
+                      <span>{PACK_SHORT_COPY[pack.id] ?? pack.summary}</span>
+                    </button>
+                  )) : (
+                    <div className="agent-run-locked">
+                      <strong>Loading protected actions.</strong>
+                      <span>Templates are coming from your Zroky project.</span>
+                    </div>
+                  )}
+                </div>
+
+                {selectedPack ? (
+                  <div className="agent-pack-detail">
+                    <div>
+                      <span className="dashboard-eyebrow">Includes</span>
+                      <div className="agent-pack-chip-row">
+                        {selectedPack.contract_templates.map((contract) => (
+                          <span key={contract.contract_version}>{actionLabel(contract.action_type)}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="dashboard-eyebrow">Suggested connectors</span>
+                      <div className="agent-pack-chip-row">
+                        {selectedPack.recommended_connectors.map((connector) => (
+                          <span key={connector}>{connectorLabel(connector)}</span>
+                        ))}
+                      </div>
+                    </div>
+                    {packInstalled ? (
+                      <div className="agent-runtime-ready">
+                        <CheckCircle2 aria-hidden="true" />
+                        <div>
+                          <strong>{installedPack?.display_name ?? selectedPack.display_name} installed</strong>
+                          <span>{selectedPack.contract_templates.length} protected actions ready. Add connectors as you test.</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="agent-pack-actions">
+                        <DashboardButton
+                          icon={<ShieldCheck />}
+                          type="button"
+                          variant="primary"
+                          loading={installPackMutation.isPending}
+                          disabled={installPackMutation.isPending || !selectedPack}
+                          onClick={() => installPackMutation.mutate()}
+                        >
+                          Install protected actions
+                        </DashboardButton>
+                        <DashboardButtonLink href="/integrations" variant="soft">
+                          Add connectors
+                        </DashboardButtonLink>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          {/* 4 - Run */}
           <div
             className="agent-quickstart-card"
             data-step="run"
             data-active={activeStep === "run" ? "true" : "false"}
             data-done={live ? "true" : "false"}
-            aria-disabled={!created || undefined}
+            aria-disabled={!packInstalled || undefined}
           >
             <div className="agent-quickstart-card-head">
-              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "03"}</span>
+              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "04"}</span>
               <div>
                 <strong>Run</strong>
                 <small>Send one protected action.</small>
               </div>
               <em>{stepStateLabel(activeStep, "run", live)}</em>
             </div>
-            {created ? (
+            {packInstalled ? (
               <div className="agent-run-snippets">
                 <CopyableCommand label="Install" value="pip install zroky" />
                 <CopyableCommand label="Check" value="zroky doctor" />
                 <CopyableCommand label="Send test action" value="zroky ingest --test" />
+                <CopyableCommand label="Run scenario" value="python agent.py access-grant" />
                 <details className="agent-python-example">
                   <summary>Python example</summary>
                   <CopyableCode label="Protected action" value={firstProtectedActionSnippet} />
@@ -504,8 +676,8 @@ print(receipt.status)`;
               </div>
             ) : (
               <div className="agent-run-locked">
-                <strong>Create the agent first.</strong>
-                <span>Commands appear here after Step 2.</span>
+                <strong>Install protected actions first.</strong>
+                <span>Commands appear after Step 3.</span>
               </div>
             )}
             <div className="agent-setup-readiness-grid" aria-label="Live capture status">
@@ -513,6 +685,11 @@ print(receipt.status)`;
                 {created ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
                 <strong>SDK ready</strong>
                 <span>{created ? "install the snippet" : "create agent first"}</span>
+              </div>
+              <div data-done={packInstalled ? "true" : "false"}>
+                {packInstalled ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
+                <strong>Actions installed</strong>
+                <span>{packInstalled ? "contracts ready" : "choose a pack"}</span>
               </div>
               <div data-done={firstAction ? "true" : "false"}>
                 {firstAction ? <CheckCircle2 aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
@@ -539,7 +716,7 @@ print(receipt.status)`;
             ) : null}
           </div>
 
-          {/* 4 - Live / what's next */}
+          {/* 5 - Live / what's next */}
           <div
             className="agent-quickstart-card"
             data-step="live"
@@ -548,7 +725,7 @@ print(receipt.status)`;
             aria-disabled={!live || undefined}
           >
             <div className="agent-quickstart-card-head">
-              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "04"}</span>
+              <span>{live ? <CheckCircle2 aria-hidden="true" size={16} /> : "05"}</span>
               <div>
                 <strong>{live ? "You're live" : "What's next"}</strong>
                 <small>
