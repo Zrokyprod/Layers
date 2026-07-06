@@ -15,7 +15,6 @@ import {
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { DashboardVerdictHero } from "@/components/dashboard-scaffold";
-import { ConnectorLogo } from "@/lib/connector-logo";
 import {
   createProjectApiKey,
   createAgentProfile,
@@ -70,66 +69,42 @@ const CONNECTOR_LABELS: Record<string, string> = {
   ticket_status: "Support tickets",
   zendesk_ticket: "Zendesk tickets",
 };
-const NATIVE_TOOL_LABELS: Record<string, string> = {
-  generic_rest_action: "REST runner",
-  hubspot_customer: "HubSpot",
-  intercom: "Intercom",
-  razorpay_refund: "Razorpay",
-  salesforce_customer: "Salesforce",
-  sendgrid_email: "SendGrid",
-  stripe_refund: "Stripe",
-  zendesk_ticket: "Zendesk",
-};
-const NATIVE_TOOL_LOGOS: Record<string, Parameters<typeof ConnectorLogo>[0]["id"]> = {
-  hubspot_customer: "hubspot_crm",
-  razorpay_refund: "razorpay_refund",
-  salesforce_customer: "salesforce_crm",
-  sendgrid_email: "generic_rest",
-  stripe_refund: "stripe_refund",
-  zendesk_ticket: "zendesk_ticket",
-};
 const SUPPORT_ENGINES = [
   {
     id: "zendesk",
     label: "Zendesk",
     summary: "Tickets, escalations, customer messages.",
     connectors: ["zendesk_ticket"],
-    nativeTools: ["zendesk_ticket"],
   },
   {
     id: "intercom",
     label: "Intercom",
     summary: "Conversations, support handoff, customer messages.",
     connectors: ["ticket_status", "email_delivery"],
-    nativeTools: ["intercom"],
   },
   {
     id: "freshdesk",
     label: "Freshdesk",
     summary: "Ticket status and support workflow proof.",
     connectors: ["ticket_status", "generic_rest"],
-    nativeTools: ["generic_rest_action"],
   },
   {
     id: "hubspot",
     label: "HubSpot Service Hub",
     summary: "Tickets plus CRM/customer record updates.",
     connectors: ["crm_record", "ticket_status"],
-    nativeTools: ["hubspot_customer"],
   },
   {
     id: "salesforce",
     label: "Salesforce Service Cloud",
     summary: "Cases, accounts, contacts, escalation workflows.",
     connectors: ["crm_record", "ticket_status"],
-    nativeTools: ["salesforce_customer"],
   },
   {
     id: "custom",
     label: "Custom support engine",
     summary: "Use Generic REST for internal support tools.",
     connectors: ["generic_rest"],
-    nativeTools: ["generic_rest_action"],
   },
 ] as const;
 const DEFAULT_SUPPORT_ENGINE_ID = "zendesk";
@@ -140,7 +115,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "Close, escalate, or update support tickets.",
     contractMarkers: ["support.ticket"],
     connectors: ["zendesk_ticket", "ticket_status"],
-    nativeTools: ["zendesk_ticket", "intercom"],
   },
   {
     id: "messages",
@@ -148,7 +122,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "External replies, notices, and delivery proof.",
     contractMarkers: ["customer.message"],
     connectors: ["email_delivery"],
-    nativeTools: ["sendgrid_email", "intercom"],
   },
   {
     id: "refunds",
@@ -156,7 +129,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "Refunds, refund cancellation, coupons, credits.",
     contractMarkers: ["customer.refund", "customer.coupon", "customer.credit", "refund"],
     connectors: ["ledger_refund", "subscription_billing"],
-    nativeTools: ["stripe_refund", "razorpay_refund"],
   },
   {
     id: "crm",
@@ -164,7 +136,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "CRM fields, account status, lifecycle state.",
     contractMarkers: ["customer.record", "customer.account", "customer_record_update"],
     connectors: ["crm_record"],
-    nativeTools: ["hubspot_customer", "salesforce_customer"],
   },
   {
     id: "subscriptions",
@@ -172,7 +143,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "Pause, cancel, or reactivate subscriptions.",
     contractMarkers: ["customer.subscription"],
     connectors: ["subscription_billing"],
-    nativeTools: ["stripe_refund", "generic_rest_action"],
   },
   {
     id: "access",
@@ -180,7 +150,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "Roles, account access, support-assisted permissions.",
     contractMarkers: ["customer.access"],
     connectors: ["customer_identity"],
-    nativeTools: ["generic_rest_action"],
   },
   {
     id: "identity",
@@ -188,7 +157,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "Email or phone changes with account-takeover controls.",
     contractMarkers: ["customer.identity"],
     connectors: ["customer_identity"],
-    nativeTools: ["generic_rest_action"],
   },
   {
     id: "privacy",
@@ -196,7 +164,6 @@ const SUPPORT_CAPABILITIES = [
     summary: "Data export and sensitive bulk-read sequence risk.",
     contractMarkers: ["customer.data", "customer.bulk"],
     connectors: ["generic_rest", "crm_record"],
-    nativeTools: ["generic_rest_action"],
   },
 ] as const;
 type SupportCapabilityId = (typeof SUPPORT_CAPABILITIES)[number]["id"];
@@ -285,10 +252,6 @@ function connectorLabel(connector: string) {
   return CONNECTOR_LABELS[connector] ?? actionLabel(connector);
 }
 
-function nativeToolLabel(tool: string) {
-  return NATIVE_TOOL_LABELS[tool] ?? actionLabel(tool);
-}
-
 function uniqueItems(items: string[]) {
   return Array.from(new Set(items.filter(Boolean)));
 }
@@ -314,18 +277,6 @@ function supportConnectorsFor(engineId: string, capabilityIds: SupportCapability
     ...supportEngineById(engineId).connectors,
     ...capabilityIds.flatMap((id) => supportCapabilityById(id).connectors),
     "slack_approval_alert",
-  ]);
-}
-
-function supportNativeToolsFor(engineId: string, capabilityIds: SupportCapabilityId[], pack: ActionPackResponse) {
-  const preferred = uniqueItems([
-    ...supportEngineById(engineId).nativeTools,
-    ...capabilityIds.flatMap((id) => supportCapabilityById(id).nativeTools),
-  ]);
-  const packTools = new Set(pack.native_tool_families);
-  return uniqueItems([
-    ...preferred.filter((tool) => packTools.has(tool)),
-    ...pack.native_tool_families.filter((tool) => !preferred.includes(tool)).slice(0, 2),
   ]);
 }
 
@@ -392,9 +343,6 @@ export default function ProtectedAgentSetupPage() {
     : [];
   const selectedSupportConnectors = selectedPack && isSupportPack
     ? supportConnectorsFor(supportEngineId, supportCapabilityIds)
-    : [];
-  const selectedSupportNativeTools = selectedPack && isSupportPack
-    ? supportNativeToolsFor(supportEngineId, supportCapabilityIds, selectedPack)
     : [];
   const packInstalled = Boolean(installedPack);
 
@@ -862,31 +810,6 @@ print(receipt["status"])`;
                             </div>
                           </div>
                         </div>
-                        <div>
-                          <span className="dashboard-eyebrow">Direct app connectors</span>
-                          <div className="agent-pack-app-row">
-                            {selectedSupportNativeTools.slice(0, 8).map((tool) => {
-                              const logoId = NATIVE_TOOL_LOGOS[tool];
-                              return (
-                                <span key={tool} className="agent-pack-app-badge">
-                                  {logoId ? <ConnectorLogo id={logoId} size={15} /> : <em>{nativeToolLabel(tool).slice(0, 1)}</em>}
-                                  <strong>{nativeToolLabel(tool)}</strong>
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <details className="agent-pack-advanced">
-                          <summary>
-                            <span>Advanced: exact installed actions</span>
-                            <small>{selectedPack.contract_templates.length} contracts in the support pack</small>
-                          </summary>
-                          <div className="agent-pack-chip-row">
-                            {selectedPack.contract_templates.map((contract) => (
-                              <span key={contract.contract_version}>{actionLabel(contract.action_type)}</span>
-                            ))}
-                          </div>
-                        </details>
                       </div>
                     ) : (
                       <>
@@ -904,20 +827,6 @@ print(receipt["status"])`;
                             {selectedPack.recommended_connectors.map((connector) => (
                               <span key={connector}>{connectorLabel(connector)}</span>
                             ))}
-                          </div>
-                        </div>
-                        <div>
-                          <span className="dashboard-eyebrow">Direct app connectors</span>
-                          <div className="agent-pack-app-row">
-                            {selectedPack.native_tool_families.slice(0, 8).map((tool) => {
-                              const logoId = NATIVE_TOOL_LOGOS[tool];
-                              return (
-                                <span key={tool} className="agent-pack-app-badge">
-                                  {logoId ? <ConnectorLogo id={logoId} size={15} /> : <em>{nativeToolLabel(tool).slice(0, 1)}</em>}
-                                  <strong>{nativeToolLabel(tool)}</strong>
-                                </span>
-                              );
-                            })}
                           </div>
                         </div>
                       </>
@@ -942,9 +851,6 @@ print(receipt["status"])`;
                         >
                           Install protected actions
                         </DashboardButton>
-                        <DashboardButtonLink href="/integrations" variant="soft">
-                          Add connectors
-                        </DashboardButtonLink>
                       </div>
                     )}
                   </div>

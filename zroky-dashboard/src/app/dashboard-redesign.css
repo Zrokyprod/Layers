@@ -3691,8 +3691,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .support-engine-options span,
-.app-shell[data-dashboard-system="control-v1"] .support-selection-summary small,
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced summary small {
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary small {
   color: var(--dash-text-soft) !important;
   font-size: 0.71rem !important;
   line-height: 1.35 !important;
@@ -3766,82 +3765,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: grid !important;
   gap: 4px !important;
   min-width: 0 !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced {
-  min-width: 0 !important;
-  border: 1px solid var(--dash-border) !important;
-  border-radius: 8px !important;
-  background: rgba(255, 255, 255, 0.72) !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced summary {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 12px !important;
-  padding: 10px 11px !important;
-  color: var(--dash-text) !important;
-  font-size: 0.76rem !important;
-  font-weight: 820 !important;
-  cursor: pointer !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced summary::-webkit-details-marker {
-  display: none !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced .agent-pack-chip-row {
-  padding: 0 11px 11px !important;
-  margin-top: 0 !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-app-row {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 8px !important;
-  min-width: 0 !important;
-  margin-top: 7px !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-app-badge {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 7px !important;
-  min-height: 30px !important;
-  max-width: 100% !important;
-  padding: 4px 9px 4px 5px !important;
-  border: 1px solid rgba(18, 24, 30, 0.09) !important;
-  border-radius: 999px !important;
-  background: #ffffff !important;
-  box-shadow: 0 8px 18px rgba(20, 28, 34, 0.045) !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-app-badge .connector-logo {
-  width: 22px !important;
-  height: 22px !important;
-  border-radius: 999px !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-app-badge > em {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 22px !important;
-  height: 22px !important;
-  border-radius: 999px !important;
-  background: var(--dash-green-soft) !important;
-  color: var(--dash-green) !important;
-  font-size: 0.7rem !important;
-  font-style: normal !important;
-  font-weight: 860 !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .agent-pack-app-badge strong {
-  color: var(--dash-text) !important;
-  font-size: 0.74rem !important;
-  font-weight: 780 !important;
-  line-height: 1 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-pack-actions {

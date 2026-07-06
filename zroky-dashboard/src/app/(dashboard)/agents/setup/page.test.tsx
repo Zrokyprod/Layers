@@ -275,10 +275,10 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByText("Guardrails Zroky will install")).toBeInTheDocument();
     expect(screen.getByText("CRM record")).toBeInTheDocument();
     expect(screen.getByText("Refund ledger")).toBeInTheDocument();
-    expect(screen.getByText("Stripe")).toBeInTheDocument();
-    expect(screen.getByText("HubSpot")).toBeInTheDocument();
-    expect(screen.getByText("Advanced: exact installed actions")).toBeInTheDocument();
+    expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
+    expect(screen.queryByText("Advanced: exact installed actions")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Install protected actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add connectors" })).not.toBeInTheDocument();
     expect(screen.queryByText(/zroky doctor/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Live capture status").textContent).toContain("Policy checked");
   });
