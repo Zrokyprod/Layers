@@ -552,6 +552,27 @@ describe("Mission Control Home", () => {
     expect(screen.getByLabelText("Decision queue")).toBeInTheDocument();
   });
 
+  it("does not turn a failed approvals feed into a zero pending approval metric", async () => {
+    mockHomeData({
+      apiKeys: [apiKey()],
+      profiles: [profile()],
+      intents: [intent({ status: "authorized", runtime_policy_decision_id: null })],
+    });
+    api.listRuntimePolicyApprovals.mockRejectedValue(new Error("approvals unavailable"));
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
+    const proofMetrics = screen.getByLabelText("Proof metrics");
+    const approvalsCard = within(proofMetrics).getByText("Pending approvals").closest(".mc-proof-card") as HTMLElement;
+    expect(approvalsCard).toBeInTheDocument();
+    expect(approvalsCard.classList.contains("mc-tone-warning")).toBe(true);
+    expect(within(approvalsCard).getByText("— unavailable")).toBeInTheDocument();
+    expect(within(approvalsCard).getByText("Approval feed unavailable")).toBeInTheDocument();
+    expect(within(approvalsCard).queryByText("0")).not.toBeInTheDocument();
+    expect(screen.getByText("1 data source unavailable")).toBeInTheDocument();
+  });
+
   it("surfaces stale runner attempts as a P2 queue item", async () => {
     mockHomeData({
       intents: [

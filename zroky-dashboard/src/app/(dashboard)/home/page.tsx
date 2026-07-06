@@ -54,6 +54,21 @@ type MissionData = {
   billingUsage: BillingUsageResponse | null;
 };
 
+type MissionSource =
+  | "intents"
+  | "approvals"
+  | "outcomes"
+  | "outcomeSummary"
+  | "sourceSummary"
+  | "mutations"
+  | "staleAttempts"
+  | "agentProfiles"
+  | "actionRunners"
+  | "apiKeys"
+  | "billingUsage";
+
+type MissionAvailability = Record<MissionSource, boolean>;
+
 const EMPTY_DATA: MissionData = {
   intents: [],
   approvals: [],
@@ -67,6 +82,34 @@ const EMPTY_DATA: MissionData = {
   actionRunners: [],
   apiKeys: [],
   billingUsage: null,
+};
+
+const NO_SOURCES_AVAILABLE: MissionAvailability = {
+  intents: false,
+  approvals: false,
+  outcomes: false,
+  outcomeSummary: false,
+  sourceSummary: false,
+  mutations: false,
+  staleAttempts: false,
+  agentProfiles: false,
+  actionRunners: false,
+  apiKeys: false,
+  billingUsage: false,
+};
+
+const ALL_SOURCES_AVAILABLE: MissionAvailability = {
+  intents: true,
+  approvals: true,
+  outcomes: true,
+  outcomeSummary: true,
+  sourceSummary: true,
+  mutations: true,
+  staleAttempts: true,
+  agentProfiles: true,
+  actionRunners: true,
+  apiKeys: true,
+  billingUsage: true,
 };
 
 const PREVIEW_TIME = "2026-07-02T16:30:00.000Z";
@@ -301,6 +344,10 @@ function valueOr<T>(result: PromiseSettledResult<T>, fallback: T): T {
   return result.status === "fulfilled" ? result.value : fallback;
 }
 
+function available(result: PromiseSettledResult<unknown>): boolean {
+  return result.status === "fulfilled";
+}
+
 function errorCount(results: PromiseSettledResult<unknown>[]): number {
   return results.filter((result) => result.status === "rejected").length;
 }
@@ -356,45 +403,68 @@ function quotaWarning(usage: BillingUsageResponse | null): string | null {
   return null;
 }
 
-function proofMetrics(data: MissionData): ProofMetric[] {
-  const totalChecks = data.outcomeSummary?.total ?? 0;
-  const matchedChecks = data.outcomeSummary?.matched ?? 0;
+function unavailableProofMetric(id: string, label: string, detail: string, href: string): ProofMetric {
+  return {
+    id,
+    label,
+    value: "— unavailable",
+    detail,
+    href,
+    tone: "warning",
+  };
+}
+
+function proofMetrics(data: MissionData, availability: MissionAvailability): ProofMetric[] {
+  const outcomeSourceAvailable = availability.outcomeSummary || availability.outcomes;
+  const totalChecks = data.outcomeSummary?.total ?? data.outcomes.length;
+  const matchedChecks =
+    data.outcomeSummary?.matched ??
+    data.outcomes.filter((outcome) => outcome.verdict === "matched" || outcome.verification_status === "matched").length;
   const matchedRate = totalChecks > 0 ? (matchedChecks / totalChecks) * 100 : null;
+  const bypassSourceAvailable = availability.sourceSummary || availability.mutations;
   const bypassRisk = data.sourceSummary?.unreceipted ?? data.mutations.length;
 
   return [
-    {
-      id: "controlled-actions",
-      label: "Controlled actions",
-      value: formatCount(data.intents.length),
-      detail: "Action intents in the current window",
-      href: "/actions",
-      tone: "neutral",
-    },
-    {
-      id: "pending-approvals",
-      label: "Pending approvals",
-      value: formatCount(data.approvals.length),
-      detail: "Human decisions waiting",
-      href: "/approvals",
-      tone: data.approvals.length > 0 ? "warning" : "success",
-    },
-    {
-      id: "verified-outcomes",
-      label: "Verified outcomes",
-      value: totalChecks > 0 ? `${formatPercent(matchedRate)} matched` : "No checks",
-      detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks`,
-      href: "/outcomes",
-      tone: totalChecks > 0 && matchedChecks === totalChecks ? "success" : totalChecks > 0 ? "warning" : "neutral",
-    },
-    {
-      id: "bypass-risk",
-      label: "Bypass risk",
-      value: formatCount(bypassRisk),
-      detail: "Unreceipted source mutations",
-      href: "/outcomes",
-      tone: bypassRisk > 0 ? "danger" : "success",
-    },
+    availability.intents
+      ? {
+          id: "controlled-actions",
+          label: "Controlled actions",
+          value: formatCount(data.intents.length),
+          detail: "Action intents in the current window",
+          href: "/actions",
+          tone: "neutral",
+        }
+      : unavailableProofMetric("controlled-actions", "Controlled actions", "Action intent feed unavailable", "/actions"),
+    availability.approvals
+      ? {
+          id: "pending-approvals",
+          label: "Pending approvals",
+          value: formatCount(data.approvals.length),
+          detail: "Human decisions waiting",
+          href: "/approvals",
+          tone: data.approvals.length > 0 ? "warning" : "success",
+        }
+      : unavailableProofMetric("pending-approvals", "Pending approvals", "Approval feed unavailable", "/approvals"),
+    outcomeSourceAvailable
+      ? {
+          id: "verified-outcomes",
+          label: "Verified outcomes",
+          value: totalChecks > 0 ? `${formatPercent(matchedRate)} matched` : "No checks",
+          detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks`,
+          href: "/outcomes",
+          tone: totalChecks > 0 && matchedChecks === totalChecks ? "success" : totalChecks > 0 ? "warning" : "neutral",
+        }
+      : unavailableProofMetric("verified-outcomes", "Verified outcomes", "Outcome proof feed unavailable", "/outcomes"),
+    bypassSourceAvailable
+      ? {
+          id: "bypass-risk",
+          label: "Bypass risk",
+          value: formatCount(bypassRisk),
+          detail: "Unreceipted source mutations",
+          href: "/outcomes",
+          tone: bypassRisk > 0 ? "danger" : "success",
+        }
+      : unavailableProofMetric("bypass-risk", "Bypass risk", "Source mutation feed unavailable", "/outcomes"),
   ];
 }
 
@@ -404,7 +474,7 @@ function hasSequenceRiskSignal(decision: RuntimePolicyDecisionResponse): boolean
   return reasonHit || policyHit;
 }
 
-function controlLoopStats(data: MissionData): ControlLoopStats {
+function controlLoopStats(data: MissionData, availability: MissionAvailability): ControlLoopStats {
   const matchedOutcomes = data.outcomes.filter(
     (outcome) => outcome.verdict === "matched" || outcome.verification_status === "matched",
   ).length;
@@ -413,14 +483,17 @@ function controlLoopStats(data: MissionData): ControlLoopStats {
   const sourceReceipts = data.sourceSummary?.matched_receipt ?? 0;
   const bypassMutations = data.mutations.filter((mutation) => mutation.classification === "policy_bypass").length;
   const sourceBypassCount = data.sourceSummary?.policy_bypass ?? 0;
+  const outcomeSourceAvailable = availability.outcomeSummary || availability.outcomes;
+  const receiptSourceAvailable = availability.intents || availability.sourceSummary;
+  const bypassSourceAvailable = availability.mutations || availability.sourceSummary;
 
   return {
-    actionCount: data.intents.length,
-    approvalCount: data.approvals.length,
-    verifiedCount,
-    receiptCount: Math.max(generatedReceipts, sourceReceipts),
-    bypassCount: Math.max(bypassMutations, sourceBypassCount),
-    sequenceRiskCount: data.approvals.filter(hasSequenceRiskSignal).length,
+    actionCount: availability.intents ? data.intents.length : null,
+    approvalCount: availability.approvals ? data.approvals.length : null,
+    verifiedCount: outcomeSourceAvailable ? verifiedCount : null,
+    receiptCount: receiptSourceAvailable ? Math.max(generatedReceipts, sourceReceipts) : null,
+    bypassCount: bypassSourceAvailable ? Math.max(bypassMutations, sourceBypassCount) : null,
+    sequenceRiskCount: availability.approvals ? data.approvals.filter(hasSequenceRiskSignal).length : null,
   };
 }
 
@@ -428,6 +501,7 @@ export default function HomePage() {
   const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const [data, setData] = useState<MissionData>(EMPTY_DATA);
+  const [availability, setAvailability] = useState<MissionAvailability>(NO_SOURCES_AVAILABLE);
   const [isLoading, setIsLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState(0);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
@@ -494,6 +568,19 @@ export default function HomePage() {
       actionRunners: valueOr(actionRunners, { items: [] }).items,
       apiKeys: valueOr(apiKeys, []),
       billingUsage: valueOr(billingUsage, null),
+    });
+    setAvailability({
+      intents: available(intents),
+      approvals: available(approvals),
+      outcomes: available(outcomes),
+      outcomeSummary: available(outcomeSummary),
+      sourceSummary: available(sourceSummary),
+      mutations: available(mutations),
+      staleAttempts: available(staleAttempts),
+      agentProfiles: available(agentProfiles),
+      actionRunners: available(actionRunners),
+      apiKeys: available(apiKeys),
+      billingUsage: available(billingUsage),
     });
     setLoadErrors(errorCount(results));
     setLastLoadedAt(new Date().toISOString());
@@ -584,10 +671,10 @@ export default function HomePage() {
   const signals = firstRunSignals(data);
   const homeUnlocked = hasProtectedActionSignal(signals);
   const verdict = homeVerdictForQueue(rows, homeUnlocked);
-  const metrics = proofMetrics(data);
-  const previewMetrics = proofMetrics(FIRST_RUN_PREVIEW_DATA);
-  const loopStats = controlLoopStats(data);
-  const previewLoopStats = controlLoopStats(FIRST_RUN_PREVIEW_DATA);
+  const metrics = proofMetrics(data, availability);
+  const previewMetrics = proofMetrics(FIRST_RUN_PREVIEW_DATA, ALL_SOURCES_AVAILABLE);
+  const loopStats = controlLoopStats(data, availability);
+  const previewLoopStats = controlLoopStats(FIRST_RUN_PREVIEW_DATA, ALL_SOURCES_AVAILABLE);
   const selectedRow = rows.find((row) => row.id === selectedRowId) ?? rows[0] ?? null;
   const selectedIntent = selectedRow?.actionId
     ? data.intents.find((intent) => intent.action_id === selectedRow.actionId) ?? null

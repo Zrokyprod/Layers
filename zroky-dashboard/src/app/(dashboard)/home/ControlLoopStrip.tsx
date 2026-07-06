@@ -25,12 +25,12 @@ type LoopStep = {
 };
 
 export type ControlLoopStats = {
-  actionCount: number;
-  approvalCount: number;
-  verifiedCount: number;
-  receiptCount: number;
-  bypassCount: number;
-  sequenceRiskCount: number;
+  actionCount: number | null;
+  approvalCount: number | null;
+  verifiedCount: number | null;
+  receiptCount: number | null;
+  bypassCount: number | null;
+  sequenceRiskCount: number | null;
 };
 
 const LOOP_LINKS = [
@@ -50,14 +50,16 @@ export function ControlLoopStrip({
   bypassCount,
   sequenceRiskCount,
 }: ControlLoopStats) {
-  const sequenceRiskLabel = sequenceRiskCount > 0 ? "Sequence risk caught" : "Sequence risk watch";
+  const metricLabel = (value: number | null, suffix: string) => (value === null ? "Unavailable" : `${formatCount(value)} ${suffix}`);
+  const metricValue = (value: number | null) => (value === null ? "—" : formatCount(value));
+  const sequenceRiskLabel = sequenceRiskCount === null ? "Sequence risk unknown" : sequenceRiskCount > 0 ? "Sequence risk caught" : "Sequence risk watch";
   const steps: LoopStep[] = [
     {
       id: "propose",
       label: "Propose",
       detail: "Agent submits an intent with contract and digest.",
       href: "/actions",
-      stat: `${formatCount(actionCount)} intents`,
+      stat: metricLabel(actionCount, "intents"),
       Icon: Bot,
     },
     {
@@ -73,7 +75,7 @@ export function ControlLoopStrip({
       label: "Approve",
       detail: "Risky calls pause for human or Slack approval.",
       href: "/approvals",
-      stat: `${formatCount(approvalCount)} holds`,
+      stat: metricLabel(approvalCount, "holds"),
       Icon: Route,
     },
     {
@@ -89,7 +91,7 @@ export function ControlLoopStrip({
       label: "Verify",
       detail: "Source-of-record checks compare claim to reality.",
       href: "/outcomes",
-      stat: `${formatCount(verifiedCount)} verified`,
+      stat: metricLabel(verifiedCount, "verified"),
       Icon: FileCheck2,
     },
     {
@@ -97,7 +99,7 @@ export function ControlLoopStrip({
       label: "Receipt",
       detail: "Signed receipts prove what was allowed and why.",
       href: "/actions",
-      stat: `${formatCount(receiptCount)} receipts`,
+      stat: metricLabel(receiptCount, "receipts"),
       Icon: ReceiptText,
     },
     {
@@ -177,11 +179,11 @@ export function ControlLoopStrip({
         </div>
         <div className="mc-risk-stats">
           <Link href="/approvals">
-            <strong>{formatCount(sequenceRiskCount)}</strong>
+            <strong>{metricValue(sequenceRiskCount)}</strong>
             <span>sequence holds</span>
           </Link>
           <Link href="/outcomes">
-            <strong>{formatCount(bypassCount)}</strong>
+            <strong>{metricValue(bypassCount)}</strong>
             <span>bypass signals</span>
           </Link>
         </div>
