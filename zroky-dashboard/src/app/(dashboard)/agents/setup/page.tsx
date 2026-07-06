@@ -88,6 +88,119 @@ const NATIVE_TOOL_LOGOS: Record<string, Parameters<typeof ConnectorLogo>[0]["id"
   stripe_refund: "stripe_refund",
   zendesk_ticket: "zendesk_ticket",
 };
+const SUPPORT_ENGINES = [
+  {
+    id: "zendesk",
+    label: "Zendesk",
+    summary: "Tickets, escalations, customer messages.",
+    connectors: ["zendesk_ticket"],
+    nativeTools: ["zendesk_ticket"],
+  },
+  {
+    id: "intercom",
+    label: "Intercom",
+    summary: "Conversations, support handoff, customer messages.",
+    connectors: ["ticket_status", "email_delivery"],
+    nativeTools: ["intercom"],
+  },
+  {
+    id: "freshdesk",
+    label: "Freshdesk",
+    summary: "Ticket status and support workflow proof.",
+    connectors: ["ticket_status", "generic_rest"],
+    nativeTools: ["generic_rest_action"],
+  },
+  {
+    id: "hubspot",
+    label: "HubSpot Service Hub",
+    summary: "Tickets plus CRM/customer record updates.",
+    connectors: ["crm_record", "ticket_status"],
+    nativeTools: ["hubspot_customer"],
+  },
+  {
+    id: "salesforce",
+    label: "Salesforce Service Cloud",
+    summary: "Cases, accounts, contacts, escalation workflows.",
+    connectors: ["crm_record", "ticket_status"],
+    nativeTools: ["salesforce_customer"],
+  },
+  {
+    id: "custom",
+    label: "Custom support engine",
+    summary: "Use Generic REST for internal support tools.",
+    connectors: ["generic_rest"],
+    nativeTools: ["generic_rest_action"],
+  },
+] as const;
+const DEFAULT_SUPPORT_ENGINE_ID = "zendesk";
+const SUPPORT_CAPABILITIES = [
+  {
+    id: "tickets",
+    label: "Resolve tickets",
+    summary: "Close, escalate, or update support tickets.",
+    contractMarkers: ["support.ticket"],
+    connectors: ["zendesk_ticket", "ticket_status"],
+    nativeTools: ["zendesk_ticket", "intercom"],
+  },
+  {
+    id: "messages",
+    label: "Send customer messages",
+    summary: "External replies, notices, and delivery proof.",
+    contractMarkers: ["customer.message"],
+    connectors: ["email_delivery"],
+    nativeTools: ["sendgrid_email", "intercom"],
+  },
+  {
+    id: "refunds",
+    label: "Issue refunds or credits",
+    summary: "Refunds, refund cancellation, coupons, credits.",
+    contractMarkers: ["customer.refund", "customer.coupon", "customer.credit", "refund"],
+    connectors: ["ledger_refund", "subscription_billing"],
+    nativeTools: ["stripe_refund", "razorpay_refund"],
+  },
+  {
+    id: "crm",
+    label: "Update customer records",
+    summary: "CRM fields, account status, lifecycle state.",
+    contractMarkers: ["customer.record", "customer.account", "customer_record_update"],
+    connectors: ["crm_record"],
+    nativeTools: ["hubspot_customer", "salesforce_customer"],
+  },
+  {
+    id: "subscriptions",
+    label: "Change subscriptions",
+    summary: "Pause, cancel, or reactivate subscriptions.",
+    contractMarkers: ["customer.subscription"],
+    connectors: ["subscription_billing"],
+    nativeTools: ["stripe_refund", "generic_rest_action"],
+  },
+  {
+    id: "access",
+    label: "Grant or revoke access",
+    summary: "Roles, account access, support-assisted permissions.",
+    contractMarkers: ["customer.access"],
+    connectors: ["customer_identity"],
+    nativeTools: ["generic_rest_action"],
+  },
+  {
+    id: "identity",
+    label: "Change identity details",
+    summary: "Email or phone changes with account-takeover controls.",
+    contractMarkers: ["customer.identity"],
+    connectors: ["customer_identity"],
+    nativeTools: ["generic_rest_action"],
+  },
+  {
+    id: "privacy",
+    label: "Export customer data",
+    summary: "Data export and sensitive bulk-read sequence risk.",
+    contractMarkers: ["customer.data", "customer.bulk"],
+    connectors: ["generic_rest", "crm_record"],
+    nativeTools: ["generic_rest_action"],
+  },
+] as const;
+type SupportCapabilityId = (typeof SUPPORT_CAPABILITIES)[number]["id"];
+const DEFAULT_SUPPORT_CAPABILITIES: SupportCapabilityId[] = ["tickets", "refunds", "crm"];
 
 function keyIsActive(key: ApiKeyResponse) {
   return !key.revoked && !key.expired;
@@ -176,6 +289,46 @@ function nativeToolLabel(tool: string) {
   return NATIVE_TOOL_LABELS[tool] ?? actionLabel(tool);
 }
 
+function uniqueItems(items: string[]) {
+  return Array.from(new Set(items.filter(Boolean)));
+}
+
+function supportCapabilityById(id: SupportCapabilityId) {
+  return SUPPORT_CAPABILITIES.find((item) => item.id === id) ?? SUPPORT_CAPABILITIES[0];
+}
+
+function supportEngineById(id: string) {
+  return SUPPORT_ENGINES.find((item) => item.id === id) ?? SUPPORT_ENGINES[0];
+}
+
+function supportContractsFor(pack: ActionPackResponse, capabilityIds: SupportCapabilityId[]) {
+  const markers = capabilityIds.flatMap((id) => supportCapabilityById(id).contractMarkers);
+  return pack.contract_templates.filter((contract) => {
+    const haystack = `${contract.contract_key} ${contract.action_type}`.toLowerCase();
+    return markers.some((marker) => haystack.includes(marker.toLowerCase()));
+  });
+}
+
+function supportConnectorsFor(engineId: string, capabilityIds: SupportCapabilityId[]) {
+  return uniqueItems([
+    ...supportEngineById(engineId).connectors,
+    ...capabilityIds.flatMap((id) => supportCapabilityById(id).connectors),
+    "slack_approval_alert",
+  ]);
+}
+
+function supportNativeToolsFor(engineId: string, capabilityIds: SupportCapabilityId[], pack: ActionPackResponse) {
+  const preferred = uniqueItems([
+    ...supportEngineById(engineId).nativeTools,
+    ...capabilityIds.flatMap((id) => supportCapabilityById(id).nativeTools),
+  ]);
+  const packTools = new Set(pack.native_tool_families);
+  return uniqueItems([
+    ...preferred.filter((tool) => packTools.has(tool)),
+    ...pack.native_tool_families.filter((tool) => !preferred.includes(tool)).slice(0, 2),
+  ]);
+}
+
 function packSort(a: ActionPackResponse, b: ActionPackResponse) {
   const ai = PRIMARY_PACK_IDS.indexOf(a.id);
   const bi = PRIMARY_PACK_IDS.indexOf(b.id);
@@ -194,6 +347,8 @@ export default function ProtectedAgentSetupPage() {
   const [runtimeKeyCopied, setRuntimeKeyCopied] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<string | null>(null);
   const [selectedPackId, setSelectedPackId] = useState(DEFAULT_PACK_ID);
+  const [supportEngineId, setSupportEngineId] = useState(DEFAULT_SUPPORT_ENGINE_ID);
+  const [supportCapabilityIds, setSupportCapabilityIds] = useState<SupportCapabilityId[]>(DEFAULT_SUPPORT_CAPABILITIES);
   const [installedPack, setInstalledPack] = useState<ActionPackResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -230,6 +385,17 @@ export default function ProtectedAgentSetupPage() {
     .filter((pack) => PRIMARY_PACK_IDS.includes(pack.id))
     .sort(packSort);
   const selectedPack = packs.find((pack) => pack.id === selectedPackId) ?? packs[0] ?? null;
+  const isSupportPack = selectedPack?.id === "support-ops-v1";
+  const selectedSupportEngine = supportEngineById(supportEngineId);
+  const selectedSupportContracts = selectedPack && isSupportPack
+    ? supportContractsFor(selectedPack, supportCapabilityIds)
+    : [];
+  const selectedSupportConnectors = selectedPack && isSupportPack
+    ? supportConnectorsFor(supportEngineId, supportCapabilityIds)
+    : [];
+  const selectedSupportNativeTools = selectedPack && isSupportPack
+    ? supportNativeToolsFor(supportEngineId, supportCapabilityIds, selectedPack)
+    : [];
   const packInstalled = Boolean(installedPack);
 
   const createKeyMutation = useMutation({
@@ -629,36 +795,133 @@ print(receipt["status"])`;
 
                 {selectedPack ? (
                   <div className="agent-pack-detail">
-                    <div>
-                      <span className="dashboard-eyebrow">Includes</span>
-                      <div className="agent-pack-chip-row">
-                        {selectedPack.contract_templates.map((contract) => (
-                          <span key={contract.contract_version}>{actionLabel(contract.action_type)}</span>
-                        ))}
+                    {isSupportPack ? (
+                      <div className="support-engine-builder">
+                        <div>
+                          <span className="dashboard-eyebrow">Support engine</span>
+                          <div className="support-engine-options" aria-label="Support engine">
+                            {SUPPORT_ENGINES.map((engine) => (
+                              <button
+                                key={engine.id}
+                                type="button"
+                                data-selected={supportEngineId === engine.id ? "true" : "false"}
+                                onClick={() => setSupportEngineId(engine.id)}
+                                disabled={packInstalled}
+                              >
+                                <strong>{engine.label}</strong>
+                                <span>{engine.summary}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="dashboard-eyebrow">What can this agent do?</span>
+                          <div className="support-capability-grid">
+                            {SUPPORT_CAPABILITIES.map((capability) => {
+                              const checked = supportCapabilityIds.includes(capability.id);
+                              return (
+                                <label key={capability.id} data-checked={checked ? "true" : "false"}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={packInstalled}
+                                    onChange={() => {
+                                      setSupportCapabilityIds((current) => {
+                                        if (current.includes(capability.id)) {
+                                          return current.length > 1
+                                            ? current.filter((id) => id !== capability.id)
+                                            : current;
+                                        }
+                                        return [...current, capability.id];
+                                      });
+                                    }}
+                                  />
+                                  <span>
+                                    <strong>{capability.label}</strong>
+                                    <small>{capability.summary}</small>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="support-selection-summary">
+                          <div>
+                            <span className="dashboard-eyebrow">Guardrails Zroky will install</span>
+                            <strong>{selectedSupportContracts.length} protected actions</strong>
+                            <small>
+                              {supportCapabilityIds.map((id) => supportCapabilityById(id).label).join(", ")}
+                            </small>
+                          </div>
+                          <div>
+                            <span className="dashboard-eyebrow">Suggested proof sources</span>
+                            <div className="agent-pack-chip-row">
+                              {selectedSupportConnectors.map((connector) => (
+                                <span key={connector}>{connectorLabel(connector)}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="dashboard-eyebrow">Direct app connectors</span>
+                          <div className="agent-pack-app-row">
+                            {selectedSupportNativeTools.slice(0, 8).map((tool) => {
+                              const logoId = NATIVE_TOOL_LOGOS[tool];
+                              return (
+                                <span key={tool} className="agent-pack-app-badge">
+                                  {logoId ? <ConnectorLogo id={logoId} size={15} /> : <em>{nativeToolLabel(tool).slice(0, 1)}</em>}
+                                  <strong>{nativeToolLabel(tool)}</strong>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <details className="agent-pack-advanced">
+                          <summary>
+                            <span>Advanced: exact installed actions</span>
+                            <small>{selectedPack.contract_templates.length} contracts in the support pack</small>
+                          </summary>
+                          <div className="agent-pack-chip-row">
+                            {selectedPack.contract_templates.map((contract) => (
+                              <span key={contract.contract_version}>{actionLabel(contract.action_type)}</span>
+                            ))}
+                          </div>
+                        </details>
                       </div>
-                    </div>
-                    <div>
-                      <span className="dashboard-eyebrow">Suggested connectors</span>
-                      <div className="agent-pack-chip-row">
-                        {selectedPack.recommended_connectors.map((connector) => (
-                          <span key={connector}>{connectorLabel(connector)}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="dashboard-eyebrow">Direct app connectors</span>
-                      <div className="agent-pack-app-row">
-                        {selectedPack.native_tool_families.slice(0, 8).map((tool) => {
-                          const logoId = NATIVE_TOOL_LOGOS[tool];
-                          return (
-                            <span key={tool} className="agent-pack-app-badge">
-                              {logoId ? <ConnectorLogo id={logoId} size={15} /> : <em>{nativeToolLabel(tool).slice(0, 1)}</em>}
-                              <strong>{nativeToolLabel(tool)}</strong>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div>
+                          <span className="dashboard-eyebrow">Includes</span>
+                          <div className="agent-pack-chip-row">
+                            {selectedPack.contract_templates.map((contract) => (
+                              <span key={contract.contract_version}>{actionLabel(contract.action_type)}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="dashboard-eyebrow">Suggested connectors</span>
+                          <div className="agent-pack-chip-row">
+                            {selectedPack.recommended_connectors.map((connector) => (
+                              <span key={connector}>{connectorLabel(connector)}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="dashboard-eyebrow">Direct app connectors</span>
+                          <div className="agent-pack-app-row">
+                            {selectedPack.native_tool_families.slice(0, 8).map((tool) => {
+                              const logoId = NATIVE_TOOL_LOGOS[tool];
+                              return (
+                                <span key={tool} className="agent-pack-app-badge">
+                                  {logoId ? <ConnectorLogo id={logoId} size={15} /> : <em>{nativeToolLabel(tool).slice(0, 1)}</em>}
+                                  <strong>{nativeToolLabel(tool)}</strong>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
                     {packInstalled ? (
                       <div className="agent-runtime-ready">
                         <CheckCircle2 aria-hidden="true" />

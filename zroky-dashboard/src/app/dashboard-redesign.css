@@ -3645,6 +3645,157 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   overflow-wrap: anywhere !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .support-engine-builder {
+  display: grid !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  margin-top: 7px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  min-height: 74px !important;
+  padding: 10px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button[data-selected="true"] {
+  border-color: rgba(47, 95, 102, 0.34) !important;
+  background: var(--dash-green-soft) !important;
+  box-shadow: inset 0 0 0 1px rgba(47, 95, 102, 0.08) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button:disabled {
+  cursor: default !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options strong,
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary strong {
+  color: var(--dash-text) !important;
+  font-size: 0.8rem !important;
+  font-weight: 840 !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options span,
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary small,
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced summary small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.71rem !important;
+  line-height: 1.35 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  margin-top: 7px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid label {
+  display: grid !important;
+  grid-template-columns: 16px minmax(0, 1fr) !important;
+  gap: 8px !important;
+  align-items: flex-start !important;
+  min-width: 0 !important;
+  min-height: 82px !important;
+  padding: 10px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid label[data-checked="true"] {
+  border-color: rgba(47, 95, 102, 0.28) !important;
+  background: rgba(247, 250, 248, 0.96) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid input {
+  width: 14px !important;
+  height: 14px !important;
+  margin: 2px 0 0 !important;
+  accent-color: var(--dash-green) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid label > span {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid strong {
+  color: var(--dash-text) !important;
+  font-size: 0.76rem !important;
+  font-weight: 820 !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.69rem !important;
+  line-height: 1.32 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary {
+  display: grid !important;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(0, 1.28fr) !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  padding: 11px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary > div:first-child {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced {
+  min-width: 0 !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced summary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 10px 11px !important;
+  color: var(--dash-text) !important;
+  font-size: 0.76rem !important;
+  font-weight: 820 !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-advanced .agent-pack-chip-row {
+  padding: 0 11px 11px !important;
+  margin-top: 0 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .agent-pack-app-row {
   display: flex !important;
   flex-wrap: wrap !important;
@@ -4930,6 +5081,18 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-engine-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-capability-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-selection-summary {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 @media (max-width: 760px) {
@@ -4981,6 +5144,11 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   }
 
   .app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-engine-options,
+  .app-shell[data-dashboard-system="control-v1"] .support-capability-grid {
     grid-template-columns: 1fr !important;
   }
 
