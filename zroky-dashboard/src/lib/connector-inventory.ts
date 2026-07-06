@@ -33,6 +33,7 @@ export type ProofConnectorId =
   | "stripe_payment"
   | "razorpay_refund"
   | "netsuite_finance"
+  | "quickbooks_ledger"
   | "shopify_admin"
   | "ledger_template"
   | "customer_template"
@@ -54,6 +55,7 @@ export type ConnectorTemplateKind =
   | "stripe_payment"
   | "razorpay_refund"
   | "netsuite_finance"
+  | "quickbooks_ledger"
   | "shopify_admin"
   | "refund_ledger"
   | "customer_record"
@@ -306,6 +308,7 @@ const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCateg
   stripe_payment: "payments",
   razorpay_refund: "payments",
   netsuite_finance: "finance_erp",
+  quickbooks_ledger: "finance_erp",
   shopify_admin: "commerce",
   ledger_template: "payments",
   customer_template: "crm",
@@ -554,6 +557,7 @@ function registryConnectorIds(item: ToolRegistryResponse["verification_connector
   if (haystack.includes("stripe_refund") || (haystack.includes("stripe") && haystack.includes("refund"))) ids.push("stripe_refund");
   if (haystack.includes("shopify")) ids.push("shopify_admin");
   if (haystack.includes("razorpay")) ids.push("razorpay_refund");
+  if (haystack.includes("quickbooks")) ids.push("quickbooks_ledger");
   if (haystack.includes("netsuite") || haystack.includes("procurement") || haystack.includes("finance")) ids.push("netsuite_finance");
   if (haystack.includes("hubspot")) ids.push("hubspot_crm");
   if (haystack.includes("salesforce")) ids.push("salesforce_crm");
@@ -970,6 +974,28 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
         "internal_api_mutation",
       ],
       status: input.netsuite ?? null,
+    },
+    {
+      id: "quickbooks_ledger",
+      transport: "rest_http",
+      templateKind: "quickbooks_ledger",
+      title: "QuickBooks ledger verifier",
+      category: "Native REST verifier",
+      description: "QuickBooks invoice, payment, and ledger proof for finance agents. Native OAuth setup is not enabled yet; use the finance template until launch.",
+      href: "/integrations?connector=quickbooks_ledger",
+      ctaLabel: "Configure QuickBooks",
+      connectorTypes: ["quickbooks_ledger", "quickbooks", "quickbooks_online", "accounting_system", "system_of_record.quickbooks_ledger"],
+      supportedActionTypes: [
+        "invoice_spend_approval",
+        "payment_adjustment",
+        "vendor_payout",
+        "journal_entry",
+        "finance",
+        "invoice",
+        "ledger",
+        "accounting",
+      ],
+      status: null,
     },
     {
       id: "shopify_admin",

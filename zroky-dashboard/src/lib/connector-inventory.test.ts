@@ -479,6 +479,7 @@ describe("connector-inventory", () => {
       "stripe_payment",
       "razorpay_refund",
       "netsuite_finance",
+      "quickbooks_ledger",
       "shopify_admin",
       "ledger_template",
       "customer_template",
@@ -496,6 +497,7 @@ describe("connector-inventory", () => {
       "stripe_payment",
       "razorpay_refund",
       "netsuite_finance",
+      "quickbooks_ledger",
       "shopify_admin",
       "refund_ledger",
       "customer_record",
@@ -511,7 +513,7 @@ describe("connector-inventory", () => {
     expect(commerce?.rows.map((row) => row.id)).toEqual(["shopify_admin"]);
     expect(crm?.rows.map((row) => row.id)).toEqual(["hubspot_crm", "salesforce_crm", "zoho_crm", "customer_template"]);
     expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "intercom", "freshdesk_ticket", "jira_issue"]);
-    expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance"]);
+    expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance", "quickbooks_ledger"]);
     expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["generic_rest", "postgres_read"]);
     expect(workflowCategory?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
     expect(inventory.supportRows.every((row) => row.kind === "support" && row.transport === "workflow")).toBe(true);
@@ -529,9 +531,9 @@ describe("connector-inventory", () => {
     });
 
     expect(inventory.counts).toMatchObject({
-      proofTotal: 16,
+      proofTotal: 17,
       healthyVerifiers: 3,
-      notConfigured: 13,
+      notConfigured: 14,
       failingVerifiers: 0,
       notTested: 0,
       supportTotal: 2,
