@@ -3580,6 +3580,8 @@ export interface SourceMutationSummaryResponse {
   policy_bypass: number;
   unknown_actor: number;
   unreceipted: number;
+  connected_feeds?: number;
+  successful_pollers?: number;
 }
 
 export interface SavedLedgerRefundReconciliationPayload {

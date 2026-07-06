@@ -238,6 +238,49 @@ class SystemOfRecordConnectorConfig(Base):
     )
 
 
+class SourceMutationPollState(Base):
+    """Per-connector cursor for active source-of-record bypass monitoring."""
+
+    __tablename__ = "source_mutation_poll_states"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connector_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(64), nullable=False)
+    cursor_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_polled_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "connector_type",
+            name="ux_source_mutation_poll_project_connector",
+        ),
+        Index(
+            "ix_source_mutation_poll_project_connector",
+            "project_id",
+            "connector_type",
+        ),
+        Index("ix_source_mutation_poll_last_polled", "last_polled_at"),
+    )
+
+
 class AblationJob(Base):
     """Root-cause analysis job for a single failing call.
 

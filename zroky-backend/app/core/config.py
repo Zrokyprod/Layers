@@ -158,6 +158,11 @@ class Settings(BaseSettings):
     ACTION_EXECUTION_ATTEMPT_STALE_SECONDS: int = 600
     ACTION_EXECUTION_ATTEMPT_SWEEP_INTERVAL_SECONDS: int = 60
     ACTION_EXECUTION_ATTEMPT_SWEEP_LIMIT: int = 50
+    SOURCE_MUTATION_POLLER_ENABLED: bool = False
+    SOURCE_MUTATION_POLLER_INTERVAL_SECONDS: int = 60
+    SOURCE_MUTATION_POLLER_PROJECT_LIMIT: int = 100
+    SOURCE_MUTATION_POLLER_PER_CONNECTOR_LIMIT: int = 50
+    SOURCE_MUTATION_POLLER_TIMEOUT_SECONDS: float = 5.0
 
     # â”€â”€ Replay worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Shared secret between the control plane and the customer-hosted replay worker.

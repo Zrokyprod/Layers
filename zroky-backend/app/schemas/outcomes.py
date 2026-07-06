@@ -486,5 +486,7 @@ class SourceMutationSummaryResponse(BaseModel):
     policy_bypass: int
     unknown_actor: int
     unreceipted: int
+    connected_feeds: int = 0
+    successful_pollers: int = 0
 
 

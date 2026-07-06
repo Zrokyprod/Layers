@@ -115,7 +115,7 @@ function heroState({
   if (loading) {
     return {
       title: "Loading protected actions",
-      copy: "Refreshing action intents, policy decisions, runner attempts, outcomes, receipts, and bypass summary.",
+      copy: "Refreshing action intents, policy decisions, runner attempts, outcomes, receipts, and connected bypass feeds.",
       pill: "loading",
       tone: "neutral",
       ctaHref: "/actions",
@@ -125,7 +125,7 @@ function heroState({
   if (bypassRisk > 0) {
     return {
       title: "Bypass risk",
-      copy: `${formatCount(bypassRisk)} source mutation${bypassRisk === 1 ? "" : "s"} need receipt matching or exception review in Outcomes.`,
+      copy: `${formatCount(bypassRisk)} webhook/poller-fed source mutation${bypassRisk === 1 ? "" : "s"} need receipt matching or exception review in Outcomes.`,
       pill: `${formatCount(bypassRisk)} unreceipted`,
       tone: "danger",
       ctaHref: "/outcomes",
@@ -306,6 +306,12 @@ export default function ActionsPage() {
     sourceMutationSummaryQuery.isError ||
     sourceMutationsQuery.isError;
   const bypassRisk = sourceSummary?.unreceipted ?? 0;
+  const connectedBypassFeeds = sourceSummary?.connected_feeds ?? 0;
+  const successfulBypassPollers = sourceSummary?.successful_pollers ?? 0;
+  const bypassFeedLabel =
+    connectedBypassFeeds > 0
+      ? `${formatCount(connectedBypassFeeds)} connected feed${connectedBypassFeeds === 1 ? "" : "s"} / ${formatCount(successfulBypassPollers)} active poller${successfulBypassPollers === 1 ? "" : "s"}`
+      : "Webhook/API feed ready; no poller connected.";
   const matched = outcomeSummary?.matched ?? outcomes.filter((item) => item.verdict === "matched").length;
   const mismatched = counts.mismatched || outcomeSummary?.mismatched || 0;
   const notVerified = counts.notVerified || outcomeSummary?.not_verified || 0;
@@ -394,7 +400,7 @@ export default function ActionsPage() {
         runnerHelper={meterHelper("Runner executions", billing?.runner_executions)}
         receiptHelper={meterHelper("Action receipts", billing?.action_receipts)}
         outcomeHelper={`${formatCount(mismatched)} mismatched / ${formatCount(notVerified)} not verified.`}
-        bypassHelper={`${formatCount(sourceSummary?.policy_bypass ?? 0)} policy bypass / ${formatCount(sourceSummary?.unmanaged_agent_action ?? 0)} unmanaged.`}
+        bypassHelper={`${formatCount(sourceSummary?.policy_bypass ?? 0)} policy bypass / ${formatCount(sourceSummary?.unmanaged_agent_action ?? 0)} unmanaged. ${bypassFeedLabel}`}
         tones={{
           protectedActions: counts.protectedActions > 0 ? "success" : "neutral",
           policyChecks: counts.held > 0 ? "warning" : "neutral",
