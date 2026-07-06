@@ -231,6 +231,7 @@ class ActionReceiptResponse(BaseModel):
     signature: str
     signing_key_id: str
     signature_valid: bool
+    signed_payload: str
     generated_at: datetime
     receipt: dict[str, Any]
 

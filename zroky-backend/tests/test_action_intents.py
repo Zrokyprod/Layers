@@ -28,6 +28,7 @@ from app.db.models import (
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.action_post_execution import process_action_post_execution_jobs, sweep_stale_execution_attempts
+from app.services.action_receipts import verify_receipt_json_with_public_key
 from app.services.entitlements import set_override_entitlement
 from app.services.outcome_reconciliation import SourceRecord
 from app.services.pilot import upsert_policy
@@ -2570,8 +2571,24 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     assert generated.status_code == 201, generated.text
     receipt = generated.json()
     assert receipt["receipt_digest"].startswith("sha256:")
-    assert receipt["signature_algorithm"] == "HMAC-SHA256"
+    assert receipt["signature_algorithm"] == "Ed25519"
     assert receipt["signature_valid"] is True
+    signing_key = client.get("/.well-known/zroky/action-receipt-signing-key")
+    assert signing_key.status_code == 200
+    public_key_payload = signing_key.json()
+    assert public_key_payload["algorithm"] == "Ed25519"
+    assert public_key_payload["key_id"] == receipt["signing_key_id"]
+    assert receipt["receipt"]["signature"]["public_key"] == public_key_payload["public_key"]
+    assert verify_receipt_json_with_public_key(
+        receipt_json=receipt["signed_payload"],
+        signature=receipt["signature"],
+        public_key=public_key_payload["public_key"],
+    ) is True
+    assert verify_receipt_json_with_public_key(
+        receipt_json=receipt["signed_payload"].replace('"planned"', '"tampered"', 1),
+        signature=receipt["signature"],
+        public_key=public_key_payload["public_key"],
+    ) is False
     assert receipt["receipt"]["final_status"] == "planned"
     assert receipt["receipt"]["intent"]["intent_digest"] == intent["intent_digest"]
     assert receipt["receipt"]["intent"]["agent_id"] == agent["id"]
@@ -2586,6 +2603,20 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     )
     assert receipt["receipt"]["evidence"]["evidence_hash"]
     assert receipt["receipt"]["signature"]["value"] == receipt["signature"]
+    with client._session_factory() as signature_session:  # type: ignore[attr-defined]
+        receipt_row = signature_session.get(ActionReceipt, receipt["receipt_id"])
+        assert receipt_row is not None
+        assert receipt_row.receipt_json == receipt["signed_payload"]
+        assert verify_receipt_json_with_public_key(
+            receipt_json=receipt_row.receipt_json,
+            signature=receipt["signature"],
+            public_key=public_key_payload["public_key"],
+        ) is True
+        assert verify_receipt_json_with_public_key(
+            receipt_json=receipt_row.receipt_json.replace('"planned"', '"tampered"', 1),
+            signature=receipt["signature"],
+            public_key=public_key_payload["public_key"],
+        ) is False
 
     fetched = client.get(
         f"/v1/action-intents/{intent['action_id']}/receipt",

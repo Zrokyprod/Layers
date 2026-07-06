@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from typing import Any
 from urllib.parse import urlparse
 
@@ -31,6 +32,18 @@ def _is_placeholder_secret(value: str | None) -> bool:
             "fake",
         )
     )
+
+
+def _looks_like_ed25519_private_key(value: str | None) -> bool:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return False
+    if "BEGIN" in cleaned and "PRIVATE KEY" in cleaned:
+        return True
+    try:
+        return len(base64.b64decode(cleaned, validate=True)) == 32
+    except Exception:
+        return False
 
 
 def validate_runtime_settings(settings: Any) -> None:
@@ -139,10 +152,12 @@ def validate_runtime_settings(settings: Any) -> None:
     )
 
     require_secret(
-        "ACTION_RECEIPT_SIGNING_SECRET",
-        "ACTION_RECEIPT_SIGNING_SECRET must be configured in production for signed action receipts",
+        "ACTION_RECEIPT_ED25519_PRIVATE_KEY",
+        "ACTION_RECEIPT_ED25519_PRIVATE_KEY must be configured in production for independently verifiable signed action receipts",
         min_length=32,
     )
+    if not _looks_like_ed25519_private_key(settings.ACTION_RECEIPT_ED25519_PRIVATE_KEY):
+        failures.append("ACTION_RECEIPT_ED25519_PRIVATE_KEY must be base64 raw Ed25519 seed bytes or PEM")
 
     require_secret(
         "PROVIDER_KEY_VAULT_KEK",

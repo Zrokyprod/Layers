@@ -24,7 +24,7 @@ def _hardened_production_settings(**overrides: object) -> Settings:
         "AUTH_JWT_SECRET": "auth-secret-with-enough-entropy",
         "OAUTH_STATE_SECRET": "oauth-state-secret-with-enough-entropy",
         "GITHUB_WEBHOOK_SECRET": "github-webhook-secret",
-        "ACTION_RECEIPT_SIGNING_SECRET": "action-receipt-signing-secret-with-enough-entropy",
+        "ACTION_RECEIPT_ED25519_PRIVATE_KEY": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=",
         "PROVIDER_KEY_VAULT_KEK": "x" * 32,
         "PII_ENCRYPTION_KEY": "x" * 32,
         "BILLING_PROVIDER": "razorpay",
@@ -70,7 +70,7 @@ def test_production_config_rejects_insecure_defaults() -> None:
     assert "AUTH_JWT_SECRET" in error_text
     assert "OAUTH_STATE_SECRET" in error_text
     assert "GITHUB_WEBHOOK_SECRET" in error_text
-    assert "ACTION_RECEIPT_SIGNING_SECRET" in error_text
+    assert "ACTION_RECEIPT_ED25519_PRIVATE_KEY" in error_text
     assert "PROVIDER_KEY_VAULT_KEK" in error_text
     assert "OPENROUTER_API_KEY or OPENAI_API_KEY" in error_text
     assert "BILLING_ENFORCE_QUOTA" in error_text
@@ -81,6 +81,15 @@ def test_production_config_accepts_hardened_profile() -> None:
     settings = _hardened_production_settings()
 
     validate_runtime_settings(settings)
+
+
+def test_production_config_rejects_malformed_receipt_signing_key() -> None:
+    settings = _hardened_production_settings(ACTION_RECEIPT_ED25519_PRIVATE_KEY="not-a-valid-ed25519-key-with-enough-length")
+
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime_settings(settings)
+
+    assert "base64 raw Ed25519 seed bytes or PEM" in str(exc.value)
 
 
 def test_production_config_rejects_wildcard_cors() -> None:

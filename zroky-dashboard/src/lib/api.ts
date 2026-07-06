@@ -447,6 +447,7 @@ export interface ActionReceiptResponse {
   signature: string;
   signing_key_id: string;
   signature_valid: boolean;
+  signed_payload?: string;
   generated_at: string;
   receipt: Record<string, unknown>;
 }

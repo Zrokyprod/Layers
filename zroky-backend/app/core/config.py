@@ -147,6 +147,10 @@ class Settings(BaseSettings):
     OUTCOME_CONNECTOR_ALLOW_PRIVATE_HOSTS: bool = False
     OUTCOME_CONNECTOR_TIMEOUT_SECONDS: float = 5.0
     OUTCOME_CONNECTOR_MAX_ATTEMPTS: int = 2
+    # New receipts use Ed25519 so customers and auditors can verify signatures
+    # with only the published public key. The old HMAC secret is retained only
+    # for legacy receipt verification.
+    ACTION_RECEIPT_ED25519_PRIVATE_KEY: Optional[str] = None
     ACTION_RECEIPT_SIGNING_SECRET: Optional[str] = None
     ACTION_RECEIPT_SIGNING_KEY_ID: str = "zroky-action-receipt-v1"
     ACTION_POST_EXECUTION_SWEEP_INTERVAL_SECONDS: int = 10
