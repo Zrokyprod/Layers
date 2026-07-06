@@ -78,46 +78,6 @@ type ReverifyNotice = {
   tone: "danger" | "success";
 };
 
-const SAVED_CONNECTOR_ALIASES: Record<string, SavedConnectorReconciliationConnector> = {
-  crm_record: "customer_record_api",
-  customer_record: "customer_record_api",
-  customer_record_api: "customer_record_api",
-  finance_record: "netsuite_finance",
-  generic_rest: "generic_rest_api",
-  generic_rest_api: "generic_rest_api",
-  hubspot: "hubspot_crm",
-  hubspot_crm: "hubspot_crm",
-  hubspot_customer: "hubspot_crm",
-  jira: "jira_issue",
-  jira_issue: "jira_issue",
-  jira_ticket: "jira_issue",
-  jsm: "jira_issue",
-  ledger_api: "ledger_refund_api",
-  ledger_refund: "ledger_refund_api",
-  ledger_refund_api: "ledger_refund_api",
-  netsuite: "netsuite_finance",
-  netsuite_finance: "netsuite_finance",
-  netsuite_record: "netsuite_finance",
-  postgres: "postgres_read",
-  postgres_read: "postgres_read",
-  procurement_record: "netsuite_finance",
-  razorpay: "razorpay_refund",
-  razorpay_refund: "razorpay_refund",
-  razorpay_refunds: "razorpay_refund",
-  salesforce: "salesforce_crm",
-  salesforce_crm: "salesforce_crm",
-  salesforce_customer: "salesforce_crm",
-  stripe: "stripe_refund",
-  stripe_refund: "stripe_refund",
-  stripe_refunds: "stripe_refund",
-  ticket_status: "zendesk_ticket",
-  zendesk: "zendesk_ticket",
-  zendesk_ticket: "zendesk_ticket",
-  zoho: "zoho_crm",
-  zoho_crm: "zoho_crm",
-  zoho_customer: "zoho_crm",
-};
-
 function initialCheckId(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("check_id");
@@ -213,13 +173,14 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function savedConnectorFor(connectorType: string): SavedConnectorReconciliationConnector | null {
-  return SAVED_CONNECTOR_ALIASES[connectorType.trim().toLowerCase()] ?? null;
+function reverifyConnectorFor(check: OutcomeReconciliationView): SavedConnectorReconciliationConnector | null {
+  const connector = check.reverify_connector?.trim();
+  return connector ? (connector as SavedConnectorReconciliationConnector) : null;
 }
 
 function reverifyPayloadFor(row: OutcomeLedgerRow): SavedConnectorReconciliationPayload {
   const check = row.check;
-  const connector = savedConnectorFor(check.connector_type);
+  const connector = reverifyConnectorFor(check);
   if (!connector) {
     throw new Error(`Connector ${check.connector_type} cannot be re-verified from this page yet.`);
   }
@@ -603,7 +564,7 @@ function OutcomeInspector({
 
   const check = row.check;
   const diffRows = buildClaimedActualDiff(check);
-  const canReverify = row.verdict !== "matched" && savedConnectorFor(check.connector_type) != null;
+  const canReverify = row.verdict !== "matched" && reverifyConnectorFor(check) != null;
   const rowNotice = reverifyNotice?.checkId === row.id ? reverifyNotice : null;
 
   return (

@@ -396,6 +396,7 @@ class OutcomeReconciliationView(BaseModel):
     runtime_policy_decision_id: str | None
     action_type: str | None
     connector_type: str
+    reverify_connector: str | None = None
     system_ref: str | None
     verdict: str
     verification_status: str
