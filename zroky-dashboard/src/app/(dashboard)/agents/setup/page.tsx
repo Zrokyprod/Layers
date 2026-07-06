@@ -69,6 +69,7 @@ const CONNECTOR_LABELS: Record<string, string> = {
   postgres_read: "Postgres Read",
   quickbooks_ledger: "QuickBooks template",
   razorpay_refund: "Razorpay refund",
+  shopify_admin: "Shopify Admin",
   slack_approval_alert: "Slack approval",
   subscription_billing: "Subscription billing",
   stripe_payment: "Stripe payment",
@@ -282,6 +283,59 @@ const DEVOPS_CAPABILITIES = [
 type DevopsCapabilityId = (typeof DEVOPS_CAPABILITIES)[number]["id"];
 const DEFAULT_DEVOPS_CAPABILITIES: DevopsCapabilityId[] = ["deploy", "promote", "production"];
 
+const ECOMMERCE_SYSTEMS = [
+  {
+    id: "shopify",
+    label: "Shopify Admin",
+    summary: "Order, customer, discount, and inventory proof.",
+    connectors: ["shopify_admin", "commerce_platform"],
+  },
+  {
+    id: "order",
+    label: "Order management",
+    summary: "Order status and cancellation source of record.",
+    connectors: ["order_management"],
+  },
+  {
+    id: "inventory",
+    label: "Inventory system",
+    summary: "SKU, warehouse, and stock-level verification.",
+    connectors: ["inventory_system"],
+  },
+  {
+    id: "generic",
+    label: "Generic commerce API",
+    summary: "Custom store, OMS, or fulfillment service.",
+    connectors: ["generic_rest", "commerce_platform"],
+  },
+] as const;
+const DEFAULT_ECOMMERCE_SYSTEM_ID = "shopify";
+const ECOMMERCE_CAPABILITIES = [
+  {
+    id: "cancel",
+    label: "Cancel orders",
+    summary: "Verify order state, reason, and restock behavior.",
+    contractMarkers: ["commerce.order", "order_cancel"],
+    connectors: ["order_management", "shopify_admin", "slack_approval_alert"],
+  },
+  {
+    id: "inventory",
+    label: "Adjust inventory",
+    summary: "Check SKU, location, and quantity delta.",
+    contractMarkers: ["commerce.inventory", "inventory_adjust"],
+    connectors: ["inventory_system", "shopify_admin"],
+  },
+  {
+    id: "discount",
+    label: "Issue discounts",
+    summary: "Control customer credits, codes, amount, and currency.",
+    contractMarkers: ["commerce.discount", "discount_issue"],
+    connectors: ["commerce_platform", "shopify_admin", "slack_approval_alert"],
+  },
+] as const;
+type EcommerceCapabilityId = (typeof ECOMMERCE_CAPABILITIES)[number]["id"];
+const DEFAULT_ECOMMERCE_CAPABILITIES: EcommerceCapabilityId[] = ["cancel", "inventory", "discount"];
+
 function keyIsActive(key: ApiKeyResponse) {
   return !key.revoked && !key.expired;
 }
@@ -441,6 +495,30 @@ function devopsConnectorsFor(systemId: string, capabilityIds: DevopsCapabilityId
   ]);
 }
 
+function ecommerceCapabilityById(id: EcommerceCapabilityId) {
+  return ECOMMERCE_CAPABILITIES.find((item) => item.id === id) ?? ECOMMERCE_CAPABILITIES[0];
+}
+
+function ecommerceSystemById(id: string) {
+  return ECOMMERCE_SYSTEMS.find((item) => item.id === id) ?? ECOMMERCE_SYSTEMS[0];
+}
+
+function ecommerceContractsFor(pack: ActionPackResponse, capabilityIds: EcommerceCapabilityId[]) {
+  const markers = capabilityIds.flatMap((id) => ecommerceCapabilityById(id).contractMarkers);
+  return pack.contract_templates.filter((contract) => {
+    const haystack = `${contract.contract_key} ${contract.action_type}`.toLowerCase();
+    return markers.some((marker) => haystack.includes(marker.toLowerCase()));
+  });
+}
+
+function ecommerceConnectorsFor(systemId: string, capabilityIds: EcommerceCapabilityId[]) {
+  return uniqueItems([
+    ...ecommerceSystemById(systemId).connectors,
+    ...capabilityIds.flatMap((id) => ecommerceCapabilityById(id).connectors),
+    "slack_approval_alert",
+  ]);
+}
+
 function packSort(a: ActionPackResponse, b: ActionPackResponse) {
   const ai = PRIMARY_PACK_IDS.indexOf(a.id);
   const bi = PRIMARY_PACK_IDS.indexOf(b.id);
@@ -465,6 +543,9 @@ export default function ProtectedAgentSetupPage() {
   const [financeCapabilityIds, setFinanceCapabilityIds] = useState<FinanceCapabilityId[]>(DEFAULT_FINANCE_CAPABILITIES);
   const [devopsSystemId, setDevopsSystemId] = useState(DEFAULT_DEVOPS_SYSTEM_ID);
   const [devopsCapabilityIds, setDevopsCapabilityIds] = useState<DevopsCapabilityId[]>(DEFAULT_DEVOPS_CAPABILITIES);
+  const [ecommerceSystemId, setEcommerceSystemId] = useState(DEFAULT_ECOMMERCE_SYSTEM_ID);
+  const [ecommerceCapabilityIds, setEcommerceCapabilityIds] =
+    useState<EcommerceCapabilityId[]>(DEFAULT_ECOMMERCE_CAPABILITIES);
   const [installedPack, setInstalledPack] = useState<ActionPackResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -504,6 +585,7 @@ export default function ProtectedAgentSetupPage() {
   const isSupportPack = selectedPack?.id === "support-ops-v1";
   const isFinancePack = selectedPack?.id === "finance-ops-v1";
   const isDevopsPack = selectedPack?.id === "devops-release-v1";
+  const isEcommercePack = selectedPack?.id === "ecommerce-ops-v1";
   const selectedSupportContracts = selectedPack && isSupportPack
     ? supportContractsFor(selectedPack, supportCapabilityIds)
     : [];
@@ -521,6 +603,12 @@ export default function ProtectedAgentSetupPage() {
     : [];
   const selectedDevopsConnectors = selectedPack && isDevopsPack
     ? devopsConnectorsFor(devopsSystemId, devopsCapabilityIds)
+    : [];
+  const selectedEcommerceContracts = selectedPack && isEcommercePack
+    ? ecommerceContractsFor(selectedPack, ecommerceCapabilityIds)
+    : [];
+  const selectedEcommerceConnectors = selectedPack && isEcommercePack
+    ? ecommerceConnectorsFor(ecommerceSystemId, ecommerceCapabilityIds)
     : [];
   const packInstalled = Boolean(installedPack);
 
@@ -1119,6 +1207,74 @@ print(receipt["status"])`;
                             <span className="dashboard-eyebrow">Suggested proof sources</span>
                             <div className="agent-pack-chip-row">
                               {selectedDevopsConnectors.map((connector) => (
+                                <span key={connector}>{connectorLabel(connector)}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : isEcommercePack ? (
+                      <div className="support-engine-builder">
+                        <div>
+                          <span className="dashboard-eyebrow">Commerce system</span>
+                          <div className="support-engine-options" aria-label="Commerce system">
+                            {ECOMMERCE_SYSTEMS.map((system) => (
+                              <button
+                                key={system.id}
+                                type="button"
+                                data-selected={ecommerceSystemId === system.id ? "true" : "false"}
+                                onClick={() => setEcommerceSystemId(system.id)}
+                                disabled={packInstalled}
+                              >
+                                <strong>{system.label}</strong>
+                                <span>{system.summary}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="dashboard-eyebrow">What commerce risk should Zroky govern?</span>
+                          <div className="support-capability-grid finance-capability-grid">
+                            {ECOMMERCE_CAPABILITIES.map((capability) => {
+                              const checked = ecommerceCapabilityIds.includes(capability.id);
+                              return (
+                                <label key={capability.id} data-checked={checked ? "true" : "false"}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={packInstalled}
+                                    onChange={() => {
+                                      setEcommerceCapabilityIds((current) => {
+                                        if (current.includes(capability.id)) {
+                                          return current.length > 1
+                                            ? current.filter((id) => id !== capability.id)
+                                            : current;
+                                        }
+                                        return [...current, capability.id];
+                                      });
+                                    }}
+                                  />
+                                  <span>
+                                    <strong>{capability.label}</strong>
+                                    <small>{capability.summary}</small>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="support-selection-summary">
+                          <div>
+                            <span className="dashboard-eyebrow">Guardrails Zroky will install</span>
+                            <strong>{selectedEcommerceContracts.length} protected actions</strong>
+                            <small>
+                              {ecommerceCapabilityIds.map((id) => ecommerceCapabilityById(id).label).join(", ")}
+                            </small>
+                          </div>
+                          <div>
+                            <span className="dashboard-eyebrow">Suggested proof sources</span>
+                            <div className="agent-pack-chip-row">
+                              {selectedEcommerceConnectors.map((connector) => (
                                 <span key={connector}>{connectorLabel(connector)}</span>
                               ))}
                             </div>

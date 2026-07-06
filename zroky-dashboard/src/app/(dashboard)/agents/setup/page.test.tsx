@@ -268,6 +268,55 @@ function devopsPack(overrides: Record<string, unknown> = {}) {
   });
 }
 
+function ecommercePack(overrides: Record<string, unknown> = {}) {
+  return pack({
+    id: "ecommerce-ops-v1",
+    display_name: "Ecommerce operations",
+    summary: "Guard order cancellations, inventory adjustments, and customer discounts.",
+    recommended_connectors: ["order_management", "inventory_system", "commerce_platform", "slack_approval_alert"],
+    native_tool_families: ["shopify_admin", "woocommerce_store", "generic_commerce"],
+    contract_templates: [
+      {
+        contract_key: "commerce.order.cancel",
+        version: "1.0",
+        contract_version: "commerce.order.cancel/1.0",
+        action_type: "order_cancel",
+        operation_kind: "UPDATE",
+        domain_family: "ecommerce_operations",
+        risk_class: "R3",
+        connector_family: "order_management",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "commerce.inventory.adjust",
+        version: "1.0",
+        contract_version: "commerce.inventory.adjust/1.0",
+        action_type: "inventory_adjust",
+        operation_kind: "UPDATE",
+        domain_family: "ecommerce_operations",
+        risk_class: "R2",
+        connector_family: "inventory_system",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "commerce.discount.issue",
+        version: "1.0",
+        contract_version: "commerce.discount.issue/1.0",
+        action_type: "discount_issue",
+        operation_kind: "TRANSFER",
+        domain_family: "ecommerce_operations",
+        risk_class: "R3",
+        connector_family: "commerce_platform",
+        schema: {},
+        verification_profile: {},
+      },
+    ],
+    ...overrides,
+  });
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -291,7 +340,7 @@ describe("Protected agent setup (minimal)", () => {
         pack(),
         financePack(),
         devopsPack(),
-        pack({ id: "ecommerce-ops-v1", display_name: "Ecommerce operations", recommended_connectors: ["order_management"], contract_templates: [] }),
+        ecommercePack(),
       ],
     });
     api.installActionPack.mockReset().mockResolvedValue({
@@ -419,6 +468,31 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByText("1 protected action")).toBeInTheDocument();
     expect(screen.getByText("GitHub CI")).toBeInTheDocument();
     expect(screen.getByText("Generic REST")).toBeInTheDocument();
+    expect(screen.getByText("Slack approval")).toBeInTheDocument();
+    expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
+    expect(screen.queryByText("Advanced: exact installed actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add connectors" })).not.toBeInTheDocument();
+  });
+
+  it("shows ecommerce as a commerce-risk workflow", async () => {
+    api.listAgentProfiles.mockResolvedValue({ items: [profile({ display_name: "Commerce QA Agent" })], total: 1 });
+
+    renderPage();
+
+    expect(await screen.findByText("Commerce QA Agent")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Ecommerce/i }));
+
+    expect(screen.getByText("Commerce system")).toBeInTheDocument();
+    expect(screen.getAllByText("Shopify Admin").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Order management").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Inventory system").length).toBeGreaterThan(0);
+    expect(screen.getByText("Generic commerce API")).toBeInTheDocument();
+    expect(screen.getByText("What commerce risk should Zroky govern?")).toBeInTheDocument();
+    expect(screen.getByText("Cancel orders")).toBeInTheDocument();
+    expect(screen.getByText("Adjust inventory")).toBeInTheDocument();
+    expect(screen.getByText("Issue discounts")).toBeInTheDocument();
+    expect(screen.getByText("3 protected actions")).toBeInTheDocument();
+    expect(screen.getByText("Commerce platform")).toBeInTheDocument();
     expect(screen.getByText("Slack approval")).toBeInTheDocument();
     expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
     expect(screen.queryByText("Advanced: exact installed actions")).not.toBeInTheDocument();
