@@ -81,6 +81,7 @@ const CONNECTOR_LABELS: Record<string, string> = {
   generic_rest: "Generic REST",
   github_ci: "GitHub CI",
   inventory_system: "Inventory system",
+  intercom: "Intercom",
   ledger_refund: "Refund ledger",
   netsuite_finance: "NetSuite finance",
   order_management: "Order management",
@@ -150,7 +151,7 @@ const SUPPORT_ENGINES = [
     id: "intercom",
     label: "Intercom",
     summary: "Conversations, support handoff, customer messages.",
-    connectors: ["ticket_status", "email_delivery"],
+    connectors: ["intercom", "ticket_status", "email_delivery"],
   },
   {
     id: "freshdesk",

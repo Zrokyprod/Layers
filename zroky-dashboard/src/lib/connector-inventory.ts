@@ -26,6 +26,7 @@ export type ProofConnectorId =
   | "salesforce_crm"
   | "zoho_crm"
   | "zendesk_ticket"
+  | "intercom"
   | "jira_issue"
   | "stripe_refund"
   | "stripe_payment"
@@ -45,6 +46,7 @@ export type ConnectorTemplateKind =
   | "salesforce_crm"
   | "zoho_crm"
   | "zendesk_ticket"
+  | "intercom"
   | "jira_issue"
   | "stripe_refund"
   | "stripe_payment"
@@ -295,6 +297,7 @@ const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCateg
   salesforce_crm: "crm",
   zoho_crm: "crm",
   zendesk_ticket: "support_itsm",
+  intercom: "support_itsm",
   jira_issue: "support_itsm",
   stripe_refund: "payments",
   stripe_payment: "payments",
@@ -552,6 +555,7 @@ function registryConnectorIds(item: ToolRegistryResponse["verification_connector
   if (haystack.includes("hubspot")) ids.push("hubspot_crm");
   if (haystack.includes("salesforce")) ids.push("salesforce_crm");
   if (haystack.includes("zoho")) ids.push("zoho_crm");
+  if (haystack.includes("intercom")) ids.push("intercom");
   if (haystack.includes("zendesk") || haystack.includes("ticket")) ids.push("zendesk_ticket");
   if (
     haystack.includes("jira")
@@ -850,6 +854,19 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       connectorTypes: ["zendesk_ticket", "ticket_status", "system_of_record.zendesk_ticket"],
       supportedActionTypes: ["ticket_close", "support", "ticket", "zendesk", "case"],
       status: input.zendesk ?? null,
+    },
+    {
+      id: "intercom",
+      transport: "rest_http",
+      templateKind: "intercom",
+      title: "Intercom verifier",
+      category: "Native REST verifier",
+      description: "Intercom conversation and customer-message proof for support agents. Native credential setup is not enabled yet; use Custom REST until launch.",
+      href: "/integrations?connector=intercom",
+      ctaLabel: "Configure Intercom",
+      connectorTypes: ["intercom", "intercom_conversation", "intercom_ticket", "system_of_record.intercom"],
+      supportedActionTypes: ["ticket_close", "support", "ticket", "message", "email_send", "customer_message", "intercom"],
+      status: null,
     },
     {
       id: "jira_issue",
