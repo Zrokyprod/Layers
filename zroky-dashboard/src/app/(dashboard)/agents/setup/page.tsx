@@ -186,7 +186,7 @@ const SUPPORT_CAPABILITIES = [
     label: "Resolve tickets",
     summary: "Close, escalate, or update support tickets.",
     contractMarkers: ["support.ticket"],
-    connectors: ["zendesk_ticket", "ticket_status"],
+    connectors: ["ticket_status"],
   },
   {
     id: "messages",
