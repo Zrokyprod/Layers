@@ -2,16 +2,35 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import type { ComponentType } from "react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CheckCircle2,
   Copy,
+  Database,
+  Globe,
   KeyRound,
+  Landmark,
   PlayCircle,
+  Receipt,
   ShieldCheck,
+  Users,
 } from "lucide-react";
+import {
+  SiFresh,
+  SiGithub,
+  SiHubspot,
+  SiIntercom,
+  SiPostgresql,
+  SiQuickbooks,
+  SiSalesforce,
+  SiShopify,
+  SiSlack,
+  SiStripe,
+  SiZendesk,
+} from "react-icons/si";
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { DashboardVerdictHero } from "@/components/dashboard-scaffold";
@@ -77,6 +96,49 @@ const CONNECTOR_LABELS: Record<string, string> = {
   ticket_status: "Support tickets",
   zendesk_ticket: "Zendesk tickets",
 };
+
+type SystemLogoDef = {
+  Icon: ComponentType<{ size?: number; className?: string }>;
+  color: string;
+};
+
+const SYSTEM_LOGOS: Record<string, SystemLogoDef> = {
+  "support:zendesk": { Icon: SiZendesk, color: "#03363D" },
+  "support:intercom": { Icon: SiIntercom, color: "#1F8DED" },
+  "support:freshdesk": { Icon: SiFresh, color: "#25C16F" },
+  "support:hubspot": { Icon: SiHubspot, color: "#FF7A59" },
+  "support:salesforce": { Icon: SiSalesforce, color: "#00A1E0" },
+  "support:custom": { Icon: Globe, color: "#2F5F66" },
+  "finance:netsuite": { Icon: Landmark, color: "#1F6FEB" },
+  "finance:stripe": { Icon: SiStripe, color: "#635BFF" },
+  "finance:generic": { Icon: Receipt, color: "#2F5F66" },
+  "finance:postgres": { Icon: SiPostgresql, color: "#4169E1" },
+  "finance:quickbooks": { Icon: SiQuickbooks, color: "#2CA01C" },
+  "devops:github": { Icon: SiGithub, color: "#181717" },
+  "devops:generic": { Icon: Database, color: "#2F5F66" },
+  "devops:slack": { Icon: SiSlack, color: "#4A154B" },
+  "ecommerce:shopify": { Icon: SiShopify, color: "#95BF47" },
+  "ecommerce:order": { Icon: Receipt, color: "#2F5F66" },
+  "ecommerce:inventory": { Icon: Database, color: "#2F5F66" },
+  "ecommerce:generic": { Icon: Globe, color: "#2F5F66" },
+};
+const FALLBACK_SYSTEM_LOGO: SystemLogoDef = { Icon: Users, color: "#2F5F66" };
+
+function SystemCardTitle({ iconKey, label }: { iconKey: string; label: string }) {
+  const { Icon, color } = SYSTEM_LOGOS[iconKey] ?? FALLBACK_SYSTEM_LOGO;
+  return (
+    <strong className="system-card-title">
+      <span
+        className="system-logo-badge"
+        style={{ ["--system-logo-color" as string]: color }}
+        aria-hidden="true"
+      >
+        <Icon size={15} />
+      </span>
+      <span>{label}</span>
+    </strong>
+  );
+}
 const SUPPORT_ENGINES = [
   {
     id: "zendesk",
@@ -1022,7 +1084,7 @@ print(receipt["status"])`;
                                 onClick={() => setSupportEngineId(engine.id)}
                                 disabled={packInstalled}
                               >
-                                <strong>{engine.label}</strong>
+                                <SystemCardTitle iconKey={`support:${engine.id}`} label={engine.label} />
                                 <span>{engine.summary}</span>
                               </button>
                             ))}
@@ -1090,7 +1152,7 @@ print(receipt["status"])`;
                                 onClick={() => setFinanceSystemId(system.id)}
                                 disabled={packInstalled}
                               >
-                                <strong>{system.label}</strong>
+                                <SystemCardTitle iconKey={`finance:${system.id}`} label={system.label} />
                                 <span>{system.summary}</span>
                               </button>
                             ))}
@@ -1158,7 +1220,7 @@ print(receipt["status"])`;
                                 onClick={() => setDevopsSystemId(system.id)}
                                 disabled={packInstalled}
                               >
-                                <strong>{system.label}</strong>
+                                <SystemCardTitle iconKey={`devops:${system.id}`} label={system.label} />
                                 <span>{system.summary}</span>
                               </button>
                             ))}
@@ -1226,7 +1288,7 @@ print(receipt["status"])`;
                                 onClick={() => setEcommerceSystemId(system.id)}
                                 disabled={packInstalled}
                               >
-                                <strong>{system.label}</strong>
+                                <SystemCardTitle iconKey={`ecommerce:${system.id}`} label={system.label} />
                                 <span>{system.summary}</span>
                               </button>
                             ))}

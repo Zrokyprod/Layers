@@ -3690,6 +3690,38 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   line-height: 1.2 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options .system-card-title {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options .system-card-title > span:last-child {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options .system-logo-badge {
+  width: 25px !important;
+  height: 25px !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 auto !important;
+  border-radius: 7px !important;
+  color: var(--system-logo-color) !important;
+  background: color-mix(in srgb, var(--system-logo-color) 10%, #ffffff) !important;
+  border: 1px solid color-mix(in srgb, var(--system-logo-color) 24%, var(--dash-border)) !important;
+  box-shadow: 0 1px 2px rgba(12, 18, 15, 0.04) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button[data-selected="true"] .system-logo-badge {
+  background: #ffffff !important;
+  border-color: color-mix(in srgb, var(--system-logo-color) 35%, rgba(47, 95, 102, 0.22)) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .support-engine-options span,
 .app-shell[data-dashboard-system="control-v1"] .support-selection-summary small {
   color: var(--dash-text-soft) !important;
