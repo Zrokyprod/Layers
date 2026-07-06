@@ -976,7 +976,7 @@ print(receipt["status"])`;
               <span>{packInstalled ? <CheckCircle2 aria-hidden="true" size={16} /> : "03"}</span>
               <div>
                 <strong>Protected actions</strong>
-                <small>Choose the actions and connectors Zroky should govern.</small>
+                <small>Choose the workflows Zroky should govern.</small>
               </div>
               <em>{stepStateLabel(activeStep, "pack", packInstalled)}</em>
             </div>
@@ -1029,7 +1029,7 @@ print(receipt["status"])`;
                           </div>
                         </div>
                         <div>
-                          <span className="dashboard-eyebrow">What can this agent do?</span>
+                          <span className="dashboard-eyebrow">What support risk should Zroky govern?</span>
                           <div className="support-capability-grid">
                             {SUPPORT_CAPABILITIES.map((capability) => {
                               const checked = supportCapabilityIds.includes(capability.id);

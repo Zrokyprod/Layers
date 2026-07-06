@@ -391,11 +391,12 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByText("Choose actions next")).toBeInTheDocument();
     expect(await screen.findByText("Support")).toBeInTheDocument();
     expect(screen.getByText("Support engine")).toBeInTheDocument();
-    expect(screen.getByText("What can this agent do?")).toBeInTheDocument();
+    expect(screen.getByText("What support risk should Zroky govern?")).toBeInTheDocument();
     expect(screen.getByText("Resolve tickets")).toBeInTheDocument();
     expect(screen.getByText("Issue refunds or credits")).toBeInTheDocument();
     expect(screen.getByText("Update customer records")).toBeInTheDocument();
     expect(screen.getByText("Guardrails Zroky will install")).toBeInTheDocument();
+    expect(screen.getByText("3 protected actions")).toBeInTheDocument();
     expect(screen.getByText("CRM record")).toBeInTheDocument();
     expect(screen.getByText("Refund ledger")).toBeInTheDocument();
     expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
