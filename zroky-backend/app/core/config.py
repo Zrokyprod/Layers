@@ -425,7 +425,8 @@ class Settings(BaseSettings):
     # FEATURE_LEGACY_ONBOARDING, FEATURE_LEGACY_FEATURE_FLAGS:
     # source files deleted in Module 1; flags removed.
     FEATURE_LEGACY_OWNER: bool = True              # Customer production env sets False. Admin-only deployments may enable for zroky-admin.
-    FEATURE_LEGACY_BILLING: bool = False           # M12 disabled. Replacement: Razorpay-only billing routes plus GET /me and GET /usage; legacy /plans and GET/PUT /subscription gated off.
+    # FEATURE_LEGACY_BILLING removed after M12; deprecated /plans and
+    # GET/PUT /subscription routes are deleted.
     FEATURE_LEGACY_INVITATIONS: bool = True        # M8 will reduce. Replacement: /v1/invitations/accept only.
     FEATURE_LEGACY_DIAGNOSIS_ALIAS: bool = True    # M7 will disable. Merges into /v1/diagnoses.
 

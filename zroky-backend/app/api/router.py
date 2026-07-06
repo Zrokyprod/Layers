@@ -39,7 +39,6 @@ from app.api.routes.security import router as security_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.traces import router as traces_router
 from app.api.routes.tool_registry import router as tool_registry_router
-from app.api.routes.anomalies import router as anomalies_router
 from app.api.routes.detectors import router as detectors_router
 from app.api.routes.feature_interest import (
     admin_router as feature_interest_admin_router,
@@ -99,7 +98,6 @@ api_router.include_router(diagnoses_router, tags=["diagnoses"])
 api_router.include_router(digest_router, tags=["digest"])
 api_router.include_router(projects_router, tags=["projects"])
 api_router.include_router(issues_router, tags=["issues"])  # public problem API backed by Anomaly
-api_router.include_router(anomalies_router, tags=["internal"], include_in_schema=False)  # deprecated alias
 api_router.include_router(goldens_router, tags=["goldens"])  # Pilot tier (Module 4.1)
 api_router.include_router(contracts_router, tags=["contracts"])  # Paid P0 canonical regression contracts
 api_router.include_router(replay_router, tags=["replay"])  # legacy single-fix replay jobs
@@ -140,16 +138,10 @@ if _settings.FEATURE_LEGACY_OWNER:
     api_router.include_router(owner_router, tags=["owner"])
 
 # §11.3 billing surface — always mounted (POST /checkout, /portal,
-# /webhook + GET /me). The legacy surface (/plans, GET/PUT
-# /subscription, /usage) lives behind FEATURE_LEGACY_BILLING which
-# defaults to off as of Module 12.
-from app.api.routes.billing import (
-    router as billing_router,
-    legacy_router as billing_legacy_router,
-)
+# /webhook + GET /me and /usage). Deprecated tenant-subscription
+# routes (/plans and GET/PUT /subscription) are removed.
+from app.api.routes.billing import router as billing_router
 api_router.include_router(billing_router, tags=["billing"])
-if _settings.FEATURE_LEGACY_BILLING:
-    api_router.include_router(billing_legacy_router, tags=["billing-legacy"])
 
 if _settings.FEATURE_LEGACY_INVITATIONS:
     from app.api.routes.invitations import router as invitations_router

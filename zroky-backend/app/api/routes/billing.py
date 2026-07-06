@@ -11,17 +11,8 @@ disturbing the §11.3 contract.
     POST /v1/billing/webhook          signed Razorpay webhook receiver
     GET  /v1/billing/me               current org plan + SLA tier + entitlements baseline
 
-  Legacy (Module 12 default-off; gated by FEATURE_LEGACY_BILLING):
-    GET  /v1/billing/plans
-    GET  /v1/billing/subscription
-    PUT  /v1/billing/subscription
-    GET  /v1/billing/usage
-
-The legacy surface reads from the deprecated `tenant_subscriptions`
-table. New code paths read `subscriptions` (org-scoped, provider-neutral)
-via `services.entitlements_resolver`. The legacy file will be deleted
-in a follow-up cleanup once the dashboard migrates off `/plans` and
-`/usage` (tracked separately from Module 12).
+The legacy tenant-subscription routes were removed after the dashboard
+migrated to `/v1/billing/me` and `/v1/billing/usage`.
 """
 import json
 import logging
@@ -89,7 +80,6 @@ from app.services.protected_action_billing import (
 from app.services import entitlements_resolver
 from app.services.entitlements import seed_plan_entitlements
 from app.services.replay_runs import check_replay_monthly_quota
-from app.api.routes.billing_legacy import router as _legacy_router
 from app.api.routes._internal.billing_razorpay import (
     _normalize_razorpay_plan_code,
     _parse_stored_razorpay_request,
@@ -108,12 +98,6 @@ logger = logging.getLogger(__name__)
 
 # §11.3 surface (always mounted by api/router.py).
 router = APIRouter(prefix="/v1/billing")
-
-# Legacy surface (gated by FEATURE_LEGACY_BILLING; default-off as of
-# Module 12). Mounted under the same /v1/billing prefix so existing
-# clients see no path change while the flag is on.
-legacy_router = _legacy_router
-
 
 def _require_razorpay_paid_checkout(
     *,
