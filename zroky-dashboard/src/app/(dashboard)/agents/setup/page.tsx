@@ -15,6 +15,7 @@ import {
 
 import { DashboardButton, DashboardButtonLink } from "@/components/dashboard-button";
 import { DashboardVerdictHero } from "@/components/dashboard-scaffold";
+import { ConnectorLogo } from "@/lib/connector-logo";
 import {
   createProjectApiKey,
   createAgentProfile,
@@ -55,7 +56,9 @@ const CONNECTOR_LABELS: Record<string, string> = {
   accounting_system: "Accounting system",
   commerce_platform: "Commerce platform",
   crm_record: "CRM record",
+  customer_identity: "Customer identity",
   erp_finance: "ERP finance",
+  email_delivery: "Email/messages",
   generic_rest: "Generic REST",
   github_ci: "GitHub CI",
   inventory_system: "Inventory system",
@@ -63,6 +66,27 @@ const CONNECTOR_LABELS: Record<string, string> = {
   order_management: "Order management",
   payments_ledger: "Payments ledger",
   slack_approval_alert: "Slack approval",
+  subscription_billing: "Subscription billing",
+  ticket_status: "Support tickets",
+  zendesk_ticket: "Zendesk tickets",
+};
+const NATIVE_TOOL_LABELS: Record<string, string> = {
+  generic_rest_action: "REST runner",
+  hubspot_customer: "HubSpot",
+  intercom: "Intercom",
+  razorpay_refund: "Razorpay",
+  salesforce_customer: "Salesforce",
+  sendgrid_email: "SendGrid",
+  stripe_refund: "Stripe",
+  zendesk_ticket: "Zendesk",
+};
+const NATIVE_TOOL_LOGOS: Record<string, Parameters<typeof ConnectorLogo>[0]["id"]> = {
+  hubspot_customer: "hubspot_crm",
+  razorpay_refund: "razorpay_refund",
+  salesforce_customer: "salesforce_crm",
+  sendgrid_email: "generic_rest",
+  stripe_refund: "stripe_refund",
+  zendesk_ticket: "zendesk_ticket",
 };
 
 function keyIsActive(key: ApiKeyResponse) {
@@ -140,12 +164,16 @@ function visibleStepState(activeStep: SetupStep, step: SetupStep, done: boolean)
 
 function actionLabel(actionType: string) {
   return actionType
-    .replace(/_/g, " ")
+    .replace(/[_.]/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function connectorLabel(connector: string) {
   return CONNECTOR_LABELS[connector] ?? actionLabel(connector);
+}
+
+function nativeToolLabel(tool: string) {
+  return NATIVE_TOOL_LABELS[tool] ?? actionLabel(tool);
 }
 
 function packSort(a: ActionPackResponse, b: ActionPackResponse) {
@@ -328,13 +356,14 @@ ZROKY_PROJECT_ID=${projectId || "proj_..."}`;
 zroky.init()
 
 receipt = zroky.protect(
-    action="customer_record_update",
-    contract_version="customer.record.update/1.0",
-    params={"fields": {"tier": "enterprise"}},
+    action="customer.access.grant",
+    operation_kind="UPDATE",
+    params={"role": "viewer", "reason": "Support case verified"},
     resource={"customer_id": "cus_123"},
+    raise_on_approval=False,
 )
 
-print(receipt.status)`;
+print(receipt["status"])`;
 
   async function copyRuntimeKey(value: string) {
     try {
@@ -614,6 +643,20 @@ print(receipt.status)`;
                         {selectedPack.recommended_connectors.map((connector) => (
                           <span key={connector}>{connectorLabel(connector)}</span>
                         ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="dashboard-eyebrow">Direct app connectors</span>
+                      <div className="agent-pack-app-row">
+                        {selectedPack.native_tool_families.slice(0, 8).map((tool) => {
+                          const logoId = NATIVE_TOOL_LOGOS[tool];
+                          return (
+                            <span key={tool} className="agent-pack-app-badge">
+                              {logoId ? <ConnectorLogo id={logoId} size={15} /> : <em>{nativeToolLabel(tool).slice(0, 1)}</em>}
+                              <strong>{nativeToolLabel(tool)}</strong>
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                     {packInstalled ? (

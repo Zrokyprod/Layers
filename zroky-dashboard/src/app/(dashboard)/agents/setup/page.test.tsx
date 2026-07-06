@@ -104,11 +104,67 @@ function pack(overrides: Record<string, unknown> = {}) {
     display_name: "Support operations",
     summary: "Guard customer refunds and CRM updates.",
     primary_runtime_path: "sdk",
-    recommended_connectors: ["ledger_refund", "crm_record", "slack_approval_alert"],
-    native_tool_families: ["stripe_refund", "hubspot_customer"],
+    recommended_connectors: [
+      "ledger_refund",
+      "crm_record",
+      "zendesk_ticket",
+      "customer_identity",
+      "subscription_billing",
+      "email_delivery",
+      "slack_approval_alert",
+    ],
+    native_tool_families: ["stripe_refund", "hubspot_customer", "zendesk_ticket", "intercom"],
     quickstart_steps: [],
     dashboard_href: "/agents/setup",
     contract_templates: [
+      {
+        contract_key: "customer.access.grant",
+        version: "1.0",
+        contract_version: "customer.access.grant/1.0",
+        action_type: "customer.access.grant",
+        operation_kind: "UPDATE",
+        domain_family: "customer_operations",
+        risk_class: "R3",
+        connector_family: "customer_identity",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "support.ticket.close",
+        version: "1.0",
+        contract_version: "support.ticket.close/1.0",
+        action_type: "support.ticket.close",
+        operation_kind: "UPDATE",
+        domain_family: "customer_operations",
+        risk_class: "R2",
+        connector_family: "zendesk_ticket",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "customer.message.send",
+        version: "1.0",
+        contract_version: "customer.message.send/1.0",
+        action_type: "customer.message.send",
+        operation_kind: "SEND",
+        domain_family: "customer_operations",
+        risk_class: "R2",
+        connector_family: "email_delivery",
+        schema: {},
+        verification_profile: {},
+      },
+      {
+        contract_key: "customer.data.export",
+        version: "1.0",
+        contract_version: "customer.data.export/1.0",
+        action_type: "customer.data.export",
+        operation_kind: "EXPORT",
+        domain_family: "customer_operations",
+        risk_class: "R4",
+        connector_family: "generic_rest",
+        schema: {},
+        verification_profile: {},
+      },
       {
         contract_key: "customer.record.update",
         version: "1.0",
@@ -211,8 +267,12 @@ describe("Protected agent setup (minimal)", () => {
     expect(await screen.findByText("Ops Agent")).toBeInTheDocument();
     expect(screen.getByText("Choose actions next")).toBeInTheDocument();
     expect(await screen.findByText("Support")).toBeInTheDocument();
-    expect(screen.getByText("Refund")).toBeInTheDocument();
+    expect(screen.getByText("Customer Access Grant")).toBeInTheDocument();
     expect(screen.getByText("CRM record")).toBeInTheDocument();
+    expect(screen.getByText("Customer identity")).toBeInTheDocument();
+    expect(screen.getByText("Subscription billing")).toBeInTheDocument();
+    expect(screen.getByText("Stripe")).toBeInTheDocument();
+    expect(screen.getByText("HubSpot")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Install protected actions" })).toBeInTheDocument();
     expect(screen.queryByText(/zroky doctor/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Live capture status").textContent).toContain("Policy checked");

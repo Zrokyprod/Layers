@@ -697,23 +697,33 @@ def test_action_pack_installs_launch_contracts_for_first_customer_flow(client: T
 
     support_pack = client.get("/v1/action-packs/support-ops-v1", headers={"X-Project-Id": project_id})
     assert support_pack.status_code == 200
-    assert support_pack.json()["contract_templates"][0]["contract_version"] == "customer.refund.transfer/1.0"
+    support_contracts = {
+        item["contract_version"]: item for item in support_pack.json()["contract_templates"]
+    }
+    assert "customer.refund.transfer/1.0" in support_contracts
+    assert "customer.access.grant/1.0" in support_contracts
+    assert "support.ticket.close/1.0" in support_contracts
+    assert "customer.message.send/1.0" in support_contracts
+    assert "customer.data.export/1.0" in support_contracts
 
     installed = client.post("/v1/action-packs/support-ops-v1/install", headers={"X-Project-Id": project_id})
     assert installed.status_code == 201, installed.text
     installed_body = installed.json()
     assert installed_body["pack"]["id"] == "support-ops-v1"
-    assert [item["contract"]["contract_version"] for item in installed_body["installed_contracts"]] == [
-        "customer.refund.transfer/1.0",
-        "customer.record.update/1.0",
-    ]
-    assert [item["created"] for item in installed_body["installed_contracts"]] == [True, True]
+    installed_versions = [item["contract"]["contract_version"] for item in installed_body["installed_contracts"]]
+    assert "customer.refund.transfer/1.0" in installed_versions
+    assert "customer.access.grant/1.0" in installed_versions
+    assert "support.ticket.close/1.0" in installed_versions
+    assert "customer.message.send/1.0" in installed_versions
+    assert "customer.data.export/1.0" in installed_versions
+    assert len(installed_versions) >= 18
+    assert all(item["created"] for item in installed_body["installed_contracts"])
     assert installed_body["installed_contracts"][0]["contract"]["action_type"] == "refund"
     assert installed_body["installed_contracts"][0]["contract"]["connector_family"] == "ledger_refund"
 
     repeated = client.post("/v1/action-packs/support-ops-v1/install", headers={"X-Project-Id": project_id})
     assert repeated.status_code == 201
-    assert [item["created"] for item in repeated.json()["installed_contracts"]] == [False, False]
+    assert all(not item["created"] for item in repeated.json()["installed_contracts"])
 
     intent = client.post(
         "/v1/action-intents",
