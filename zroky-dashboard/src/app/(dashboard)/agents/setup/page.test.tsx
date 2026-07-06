@@ -243,6 +243,31 @@ function financePack(overrides: Record<string, unknown> = {}) {
   });
 }
 
+function devopsPack(overrides: Record<string, unknown> = {}) {
+  return pack({
+    id: "devops-release-v1",
+    display_name: "DevOps release control",
+    summary: "Guard deploy changes with CI verification and approval.",
+    recommended_connectors: ["github_ci", "generic_rest", "slack_approval_alert"],
+    native_tool_families: ["github_pr_ci_deploy"],
+    contract_templates: [
+      {
+        contract_key: "devops.deploy.change",
+        version: "1.0",
+        contract_version: "devops.deploy.change/1.0",
+        action_type: "deploy_change",
+        operation_kind: "DEPLOY",
+        domain_family: "devops",
+        risk_class: "R4",
+        connector_family: "github_ci",
+        schema: {},
+        verification_profile: {},
+      },
+    ],
+    ...overrides,
+  });
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -265,7 +290,7 @@ describe("Protected agent setup (minimal)", () => {
       items: [
         pack(),
         financePack(),
-        pack({ id: "devops-release-v1", display_name: "DevOps release control", recommended_connectors: ["github_ci"], contract_templates: [] }),
+        devopsPack(),
         pack({ id: "ecommerce-ops-v1", display_name: "Ecommerce operations", recommended_connectors: ["order_management"], contract_templates: [] }),
       ],
     });
@@ -369,6 +394,31 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByText("3 protected actions")).toBeInTheDocument();
     expect(screen.getByText("Payments ledger")).toBeInTheDocument();
     expect(screen.getByText("Stripe payment")).toBeInTheDocument();
+    expect(screen.getByText("Slack approval")).toBeInTheDocument();
+    expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
+    expect(screen.queryByText("Advanced: exact installed actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add connectors" })).not.toBeInTheDocument();
+  });
+
+  it("shows DevOps as a narrow release-control workflow", async () => {
+    api.listAgentProfiles.mockResolvedValue({ items: [profile({ display_name: "Release QA Agent" })], total: 1 });
+
+    renderPage();
+
+    expect(await screen.findByText("Release QA Agent")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /DevOps release control/i }));
+
+    expect(screen.getByText("Release system")).toBeInTheDocument();
+    expect(screen.getByText("GitHub CI / deploy")).toBeInTheDocument();
+    expect(screen.getByText("Generic deploy API")).toBeInTheDocument();
+    expect(screen.getByText("Slack approval path")).toBeInTheDocument();
+    expect(screen.getByText("What release risk should Zroky govern?")).toBeInTheDocument();
+    expect(screen.getByText("Deploy a change")).toBeInTheDocument();
+    expect(screen.getByText("Promote a PR or revision")).toBeInTheDocument();
+    expect(screen.getByText("Change production environment")).toBeInTheDocument();
+    expect(screen.getByText("1 protected action")).toBeInTheDocument();
+    expect(screen.getByText("GitHub CI")).toBeInTheDocument();
+    expect(screen.getByText("Generic REST")).toBeInTheDocument();
     expect(screen.getByText("Slack approval")).toBeInTheDocument();
     expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
     expect(screen.queryByText("Advanced: exact installed actions")).not.toBeInTheDocument();

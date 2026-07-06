@@ -48,7 +48,7 @@ const DEFAULT_PACK_ID = "support-ops-v1";
 const PACK_SHORT_COPY: Record<string, string> = {
   "support-ops-v1": "Refunds, CRM updates, access changes, and support messages.",
   "finance-ops-v1": "Invoice approvals, vendor payouts, journal entries, and finance records.",
-  "devops-release-v1": "Deploys, feature flags, CI gates, runtime changes, and release proof.",
+  "devops-release-v1": "Deploy changes, CI gates, approval, and release proof.",
   "ecommerce-ops-v1": "Order changes, inventory updates, discounts, refunds, and fulfillment state.",
 };
 const CONNECTOR_LABELS: Record<string, string> = {
@@ -235,6 +235,53 @@ const FINANCE_CAPABILITIES = [
 type FinanceCapabilityId = (typeof FINANCE_CAPABILITIES)[number]["id"];
 const DEFAULT_FINANCE_CAPABILITIES: FinanceCapabilityId[] = ["invoice", "journal", "payout"];
 
+const DEVOPS_SYSTEMS = [
+  {
+    id: "github",
+    label: "GitHub CI / deploy",
+    summary: "PR, check-run, SHA, and deployment proof.",
+    connectors: ["github_ci"],
+  },
+  {
+    id: "generic",
+    label: "Generic deploy API",
+    summary: "Internal deploy service or release API.",
+    connectors: ["generic_rest"],
+  },
+  {
+    id: "slack",
+    label: "Slack approval path",
+    summary: "Human approval before release execution.",
+    connectors: ["slack_approval_alert"],
+  },
+] as const;
+const DEFAULT_DEVOPS_SYSTEM_ID = "github";
+const DEVOPS_CAPABILITIES = [
+  {
+    id: "deploy",
+    label: "Deploy a change",
+    summary: "Guard a release by repository, environment, and SHA.",
+    contractMarkers: ["devops.deploy", "deploy_change"],
+    connectors: ["github_ci", "slack_approval_alert"],
+  },
+  {
+    id: "promote",
+    label: "Promote a PR or revision",
+    summary: "Move a checked revision toward production.",
+    contractMarkers: ["devops.deploy", "deploy_change"],
+    connectors: ["github_ci"],
+  },
+  {
+    id: "production",
+    label: "Change production environment",
+    summary: "Require approval and environment match before release.",
+    contractMarkers: ["devops.deploy", "deploy_change"],
+    connectors: ["generic_rest", "slack_approval_alert"],
+  },
+] as const;
+type DevopsCapabilityId = (typeof DEVOPS_CAPABILITIES)[number]["id"];
+const DEFAULT_DEVOPS_CAPABILITIES: DevopsCapabilityId[] = ["deploy", "promote", "production"];
+
 function keyIsActive(key: ApiKeyResponse) {
   return !key.revoked && !key.expired;
 }
@@ -370,6 +417,30 @@ function financeConnectorsFor(systemId: string, capabilityIds: FinanceCapability
   ]);
 }
 
+function devopsCapabilityById(id: DevopsCapabilityId) {
+  return DEVOPS_CAPABILITIES.find((item) => item.id === id) ?? DEVOPS_CAPABILITIES[0];
+}
+
+function devopsSystemById(id: string) {
+  return DEVOPS_SYSTEMS.find((item) => item.id === id) ?? DEVOPS_SYSTEMS[0];
+}
+
+function devopsContractsFor(pack: ActionPackResponse, capabilityIds: DevopsCapabilityId[]) {
+  const markers = capabilityIds.flatMap((id) => devopsCapabilityById(id).contractMarkers);
+  return pack.contract_templates.filter((contract) => {
+    const haystack = `${contract.contract_key} ${contract.action_type}`.toLowerCase();
+    return markers.some((marker) => haystack.includes(marker.toLowerCase()));
+  });
+}
+
+function devopsConnectorsFor(systemId: string, capabilityIds: DevopsCapabilityId[]) {
+  return uniqueItems([
+    ...devopsSystemById(systemId).connectors,
+    ...capabilityIds.flatMap((id) => devopsCapabilityById(id).connectors),
+    "slack_approval_alert",
+  ]);
+}
+
 function packSort(a: ActionPackResponse, b: ActionPackResponse) {
   const ai = PRIMARY_PACK_IDS.indexOf(a.id);
   const bi = PRIMARY_PACK_IDS.indexOf(b.id);
@@ -392,6 +463,8 @@ export default function ProtectedAgentSetupPage() {
   const [supportCapabilityIds, setSupportCapabilityIds] = useState<SupportCapabilityId[]>(DEFAULT_SUPPORT_CAPABILITIES);
   const [financeSystemId, setFinanceSystemId] = useState(DEFAULT_FINANCE_SYSTEM_ID);
   const [financeCapabilityIds, setFinanceCapabilityIds] = useState<FinanceCapabilityId[]>(DEFAULT_FINANCE_CAPABILITIES);
+  const [devopsSystemId, setDevopsSystemId] = useState(DEFAULT_DEVOPS_SYSTEM_ID);
+  const [devopsCapabilityIds, setDevopsCapabilityIds] = useState<DevopsCapabilityId[]>(DEFAULT_DEVOPS_CAPABILITIES);
   const [installedPack, setInstalledPack] = useState<ActionPackResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -430,6 +503,7 @@ export default function ProtectedAgentSetupPage() {
   const selectedPack = packs.find((pack) => pack.id === selectedPackId) ?? packs[0] ?? null;
   const isSupportPack = selectedPack?.id === "support-ops-v1";
   const isFinancePack = selectedPack?.id === "finance-ops-v1";
+  const isDevopsPack = selectedPack?.id === "devops-release-v1";
   const selectedSupportContracts = selectedPack && isSupportPack
     ? supportContractsFor(selectedPack, supportCapabilityIds)
     : [];
@@ -441,6 +515,12 @@ export default function ProtectedAgentSetupPage() {
     : [];
   const selectedFinanceConnectors = selectedPack && isFinancePack
     ? financeConnectorsFor(financeSystemId, financeCapabilityIds)
+    : [];
+  const selectedDevopsContracts = selectedPack && isDevopsPack
+    ? devopsContractsFor(selectedPack, devopsCapabilityIds)
+    : [];
+  const selectedDevopsConnectors = selectedPack && isDevopsPack
+    ? devopsConnectorsFor(devopsSystemId, devopsCapabilityIds)
     : [];
   const packInstalled = Boolean(installedPack);
 
@@ -971,6 +1051,74 @@ print(receipt["status"])`;
                             <span className="dashboard-eyebrow">Suggested proof sources</span>
                             <div className="agent-pack-chip-row">
                               {selectedFinanceConnectors.map((connector) => (
+                                <span key={connector}>{connectorLabel(connector)}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : isDevopsPack ? (
+                      <div className="support-engine-builder">
+                        <div>
+                          <span className="dashboard-eyebrow">Release system</span>
+                          <div className="support-engine-options" aria-label="Release system">
+                            {DEVOPS_SYSTEMS.map((system) => (
+                              <button
+                                key={system.id}
+                                type="button"
+                                data-selected={devopsSystemId === system.id ? "true" : "false"}
+                                onClick={() => setDevopsSystemId(system.id)}
+                                disabled={packInstalled}
+                              >
+                                <strong>{system.label}</strong>
+                                <span>{system.summary}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="dashboard-eyebrow">What release risk should Zroky govern?</span>
+                          <div className="support-capability-grid finance-capability-grid">
+                            {DEVOPS_CAPABILITIES.map((capability) => {
+                              const checked = devopsCapabilityIds.includes(capability.id);
+                              return (
+                                <label key={capability.id} data-checked={checked ? "true" : "false"}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={packInstalled}
+                                    onChange={() => {
+                                      setDevopsCapabilityIds((current) => {
+                                        if (current.includes(capability.id)) {
+                                          return current.length > 1
+                                            ? current.filter((id) => id !== capability.id)
+                                            : current;
+                                        }
+                                        return [...current, capability.id];
+                                      });
+                                    }}
+                                  />
+                                  <span>
+                                    <strong>{capability.label}</strong>
+                                    <small>{capability.summary}</small>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="support-selection-summary">
+                          <div>
+                            <span className="dashboard-eyebrow">Guardrails Zroky will install</span>
+                            <strong>{selectedDevopsContracts.length} protected action</strong>
+                            <small>
+                              {devopsCapabilityIds.map((id) => devopsCapabilityById(id).label).join(", ")}
+                            </small>
+                          </div>
+                          <div>
+                            <span className="dashboard-eyebrow">Suggested proof sources</span>
+                            <div className="agent-pack-chip-row">
+                              {selectedDevopsConnectors.map((connector) => (
                                 <span key={connector}>{connectorLabel(connector)}</span>
                               ))}
                             </div>
