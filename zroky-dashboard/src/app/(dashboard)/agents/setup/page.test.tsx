@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   enforceAgentProfile: vi.fn(),
   getProjectSettings: vi.fn(),
   listActionIntents: vi.fn(),
+  listAgentProfiles: vi.fn(),
   listProjectApiKeys: vi.fn(),
 }));
 
@@ -47,6 +48,7 @@ vi.mock("@/lib/api", async () => {
     enforceAgentProfile: api.enforceAgentProfile,
     getProjectSettings: api.getProjectSettings,
     listActionIntents: api.listActionIntents,
+    listAgentProfiles: api.listAgentProfiles,
     listProjectApiKeys: api.listProjectApiKeys,
   };
 });
@@ -110,6 +112,7 @@ describe("Protected agent setup (minimal)", () => {
     api.createAgentProfile.mockReset().mockResolvedValue(profile());
     api.enforceAgentProfile.mockReset().mockResolvedValue(profile());
     api.listActionIntents.mockReset().mockResolvedValue({ items: [] });
+    api.listAgentProfiles.mockReset().mockResolvedValue({ items: [], total: 0 });
   });
 
   it("shows the pending capture path and defers advanced next steps", async () => {
@@ -148,16 +151,28 @@ describe("Protected agent setup (minimal)", () => {
       }),
     );
     await waitFor(() => expect(api.enforceAgentProfile).toHaveBeenCalledWith("agent_1"));
-    expect(await screen.findByText(/is protected with the safe default policy/i)).toBeInTheDocument();
-    expect(screen.getByText("SDK snippet ready")).toBeInTheDocument();
-    expect(screen.getByText("Install command")).toBeInTheDocument();
-    expect(screen.getByText("Setup check")).toBeInTheDocument();
-    expect(screen.getByText("Test action")).toBeInTheDocument();
-    expect(screen.getByText("Python protected action")).toBeInTheDocument();
+    expect(await screen.findByText("Ops Agent")).toBeInTheDocument();
+    expect(screen.getByText("Ready to run")).toBeInTheDocument();
+    expect(screen.getByText("Install")).toBeInTheDocument();
+    expect(screen.getByText("Check")).toBeInTheDocument();
+    expect(screen.getByText("Send test action")).toBeInTheDocument();
+    expect(screen.getByText("Python example")).toBeInTheDocument();
     expect(screen.getByText(/zroky doctor/i)).toBeInTheDocument();
     expect(screen.getByText(/zroky ingest --test/i)).toBeInTheDocument();
     expect(screen.getByText(/zroky.protect/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Live capture status").textContent).toContain("Policy checked");
+  });
+
+  it("reuses an existing agent profile instead of blocking on duplicate setup", async () => {
+    api.listAgentProfiles.mockResolvedValue({ items: [profile({ display_name: "Manual QA Agent" })], total: 1 });
+
+    renderPage();
+
+    expect(await screen.findByText("Manual QA Agent")).toBeInTheDocument();
+    expect(screen.getByText("Ready to run")).toBeInTheDocument();
+    expect(screen.getByText("Run a test action")).toBeInTheDocument();
+    expect(screen.getByText("Send test action")).toBeInTheDocument();
+    expect(api.createAgentProfile).not.toHaveBeenCalled();
   });
 
   it("creates a runtime project key inline when none exists", async () => {

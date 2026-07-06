@@ -21,6 +21,7 @@ import {
   enforceAgentProfile,
   getProjectSettings,
   listActionIntents,
+  listAgentProfiles,
   listProjectApiKeys,
   type AgentProfileResponse,
 } from "@/lib/api";
@@ -76,6 +77,29 @@ function CopyableCode({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CopyableCommand({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be unavailable in restricted browser contexts.
+    }
+  }
+  return (
+    <div className="agent-command-row">
+      <span>{label}</span>
+      <code>{value}</code>
+      <button type="button" onClick={copy} aria-label={`Copy ${label}`}>
+        <Copy size={13} aria-hidden="true" />
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
 function stepStateLabel(activeStep: SetupStep, step: SetupStep, done: boolean) {
   if (done) return "Done";
   if (activeStep === step) return "Now";
@@ -117,6 +141,14 @@ export default function ProtectedAgentSetupPage() {
   const activeRuntimeKeys = (keysQuery.data ?? []).filter(keyIsActive);
   const hasRuntimeKey = Boolean(newRuntimeKey) || activeRuntimeKeys.length > 0;
   const runtimeKeyPrefix = newRuntimeKey?.key_prefix ?? activeRuntimeKeys[0]?.key_prefix;
+  const profilesQuery = useQuery({
+    queryKey: ["agent-setup", "profiles"],
+    queryFn: ({ signal }) => listAgentProfiles({ limit: 50 }, signal),
+    enabled: hasRuntimeKey,
+    retry: false,
+  });
+  const existingProfile = profilesQuery.data?.items?.[0] ?? null;
+  const connectedProfile = profile ?? existingProfile;
 
   const createKeyMutation = useMutation({
     mutationFn: async () => {
@@ -182,28 +214,29 @@ export default function ProtectedAgentSetupPage() {
   });
 
   const firstActionQuery = useQuery({
-    queryKey: ["agent-setup", "first-actions", profile?.id],
-    queryFn: ({ signal }) => listActionIntents({ agent_id: profile?.id ?? null, limit: 5 }, signal),
-    enabled: Boolean(profile?.id),
+    queryKey: ["agent-setup", "first-actions", connectedProfile?.id],
+    queryFn: ({ signal }) => listActionIntents({ agent_id: connectedProfile?.id ?? null, limit: 5 }, signal),
+    enabled: Boolean(connectedProfile?.id),
     refetchInterval: 5_000,
   });
   const firstReceiptQuery = useQuery({
-    queryKey: ["agent-setup", "first-receipt", profile?.id],
+    queryKey: ["agent-setup", "first-receipt", connectedProfile?.id],
     queryFn: ({ signal }) =>
       listActionIntents(
-        { agent_id: profile?.id ?? null, proof_status: "matched", receipt_status: "generated", limit: 1 },
+        { agent_id: connectedProfile?.id ?? null, proof_status: "matched", receipt_status: "generated", limit: 1 },
         signal,
       ),
-    enabled: Boolean(profile?.id),
+    enabled: Boolean(connectedProfile?.id),
     refetchInterval: 15_000,
   });
 
-  const created = Boolean(profile);
+  const created = Boolean(connectedProfile);
   const firstAction = firstActionQuery.data?.items[0] ?? null;
   const live = (firstReceiptQuery.data?.items.length ?? 0) > 0;
   const activeStep: SetupStep = !hasRuntimeKey ? "key" : !created ? "connect" : !live ? "run" : "next";
   const policyChecked = Boolean(firstAction);
   const maskedRuntimeKey = runtimeKeyPrefix ? `${runtimeKeyPrefix}...` : "zk_live_...";
+  const connectedAgentName = connectedProfile?.display_name?.trim() || agentName.trim() || "Agent runtime";
   const actionStatus = firstAction
     ? firstAction.status.replace(/_/g, " ")
     : firstActionQuery.isFetching
@@ -244,8 +277,8 @@ print(receipt.status)`;
     : created
       ? {
           tone: "warning" as const,
-          title: "Run the first action",
-          copy: "Use the commands below. Home unlocks when Zroky receives the first protected action.",
+          title: "Run a test action",
+          copy: "Run one command locally. Zroky will capture it and unlock the dashboard.",
           pill: "Capturing",
         }
       : {
@@ -273,7 +306,7 @@ print(receipt.status)`;
         }
         actions={
           created ? (
-            <DashboardButtonLink href={`/agents/${profile?.id ?? ""}`} variant="soft">
+            <DashboardButtonLink href={`/agents/${connectedProfile?.id ?? ""}`} variant="soft">
               Agent home
             </DashboardButtonLink>
           ) : null
@@ -363,13 +396,11 @@ print(receipt.status)`;
 
             {created ? (
               <div className="agent-quickstart-connected">
-                <p className="agent-setup-muted">
-                  <strong>{profile?.display_name}</strong> is protected with the safe default policy.
-                </p>
+                <strong>{connectedAgentName}</strong>
                 <div className="agent-profile-summary">
                   <span>{framework}</span>
                   <span>{environment}</span>
-                  <span>SDK snippet ready</span>
+                  <span>Ready to run</span>
                 </div>
               </div>
             ) : (
@@ -463,10 +494,13 @@ print(receipt.status)`;
             </div>
             {created ? (
               <div className="agent-run-snippets">
-                <CopyableCode label="Install command" value="pip install zroky" />
-                <CopyableCode label="Setup check" value="zroky doctor" />
-                <CopyableCode label="Test action" value="zroky ingest --test" />
-                <CopyableCode label="Python protected action" value={firstProtectedActionSnippet} />
+                <CopyableCommand label="Install" value="pip install zroky" />
+                <CopyableCommand label="Check" value="zroky doctor" />
+                <CopyableCommand label="Send test action" value="zroky ingest --test" />
+                <details className="agent-python-example">
+                  <summary>Python example</summary>
+                  <CopyableCode label="Protected action" value={firstProtectedActionSnippet} />
+                </details>
               </div>
             ) : (
               <div className="agent-run-locked">

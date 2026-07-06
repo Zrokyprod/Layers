@@ -3459,6 +3459,95 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   min-width: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-connected {
+  display: grid !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+  padding: 11px !important;
+  border: 1px solid rgba(6, 118, 71, 0.2) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, rgba(6, 118, 71, 0.08), rgba(255, 255, 255, 0.86)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-connected > strong {
+  overflow: hidden !important;
+  color: var(--dash-text) !important;
+  font-size: 0.86rem !important;
+  font-weight: 860 !important;
+  line-height: 1.2 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row {
+  display: grid !important;
+  grid-template-columns: 112px minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  padding: 7px 8px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row > span {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.7rem !important;
+  font-weight: 840 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row code {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: var(--dash-text) !important;
+  font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace) !important;
+  font-size: 0.74rem !important;
+  font-weight: 760 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  min-height: 28px !important;
+  padding: 0 8px !important;
+  border: 1px solid rgba(47, 95, 102, 0.2) !important;
+  border-radius: 7px !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-blue) !important;
+  font-size: 0.7rem !important;
+  font-weight: 820 !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-python-example {
+  display: grid !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-python-example summary {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 36px !important;
+  padding: 0 10px !important;
+  border: 1px dashed var(--dash-border-strong) !important;
+  border-radius: 8px !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.74rem !important;
+  font-weight: 820 !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-python-example[open] {
+  gap: 8px !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .agent-run-locked {
   padding: 11px !important;
   border: 1px dashed var(--dash-border-strong) !important;
@@ -4725,6 +4814,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-receipt-grid,
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-code-split {
     grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-command-row {
+    grid-template-columns: 1fr auto !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-command-row > span {
+    grid-column: 1 / -1 !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-preview-grid,
