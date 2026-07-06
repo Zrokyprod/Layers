@@ -138,7 +138,7 @@ function receipt(overrides: Partial<ActionReceiptResponse> = {}): ActionReceiptR
     action_id: "act_1",
     receipt_digest: "sha256:receipt_1",
     evidence_hash: "sha256:evidence_1",
-    signature_algorithm: "hmac-sha256",
+    signature_algorithm: "Ed25519",
     signature: "sig",
     signing_key_id: "receipt-key-1",
     signature_valid: true,
@@ -335,11 +335,13 @@ describe("EvidencePage", () => {
     expect(within(panel).getByText("Action Receipt / Ticket.close")).toBeInTheDocument();
     expect(await screen.findByText("Evidence + Signature")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Audit export tools" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "External hash verification" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Verify externally" }).getAttribute("href")).toContain(
-      "https://verify.zroky.com/?digest=sha256%3Areceipt_1",
+    expect(screen.getByRole("region", { name: "Independent verification material" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open public key" }).getAttribute("href")).toBe(
+      "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
     );
-    expect(screen.getByText("Signature validity is verified by the backend; the browser never receives the signing secret.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Signature validity is server-attested here and independently checkable with the published Ed25519 public key."),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("sha256:receipt_1").length).toBeGreaterThan(0);
     expect(api.getActionIntentReceipt).toHaveBeenCalledTimes(1);
     expect(api.getActionIntentReceipt.mock.calls[0]?.[0]).toBe("act_1");
@@ -387,7 +389,7 @@ describe("EvidencePage", () => {
     expect(exported).toContain('"search": "sha256:intent_1"');
     expect(exported).toContain('"start_date": "2026-06-20"');
     expect(exported).toContain('"digest": "sha256:intent_1"');
-    expect(exported).toContain('"external_verify_url": "https://verify.zroky.com"');
+    expect(exported).toContain('"public_key_url": "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key"');
     expect(await screen.findByText("Audit manifest exported for 1 proof record.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Search action, agent, system ref, digest..."), {

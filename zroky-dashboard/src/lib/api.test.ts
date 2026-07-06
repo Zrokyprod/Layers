@@ -310,7 +310,7 @@ describe("verified action API client", () => {
       action_id: "action_1",
       receipt_digest: "sha256:abc",
       evidence_hash: "sha256:def",
-      signature_algorithm: "HMAC-SHA256",
+      signature_algorithm: "Ed25519",
       signature: "sig",
       signing_key_id: "key",
       signature_valid: true,

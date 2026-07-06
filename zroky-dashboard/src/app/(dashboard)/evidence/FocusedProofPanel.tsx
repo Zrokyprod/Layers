@@ -11,6 +11,7 @@ import type {
   RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
 import type { EvidenceLedgerRow } from "@/lib/evidence-ledger";
+import { actionReceiptPublicKeyUrl } from "@/lib/evidence-verification";
 import { formatDateTime } from "@/lib/format";
 
 type FocusedProofPanelProps = {
@@ -52,8 +53,8 @@ function verificationSummary({
       digest: receipt.receipt_digest,
       fingerprint: hash ?? receipt.receipt_digest,
       label: "Action Receipt",
+      publicKeyHref: actionReceiptPublicKeyUrl(),
       status: receipt.signature_valid ? "Signature valid" : "Signature review required",
-      verifyHref: `https://verify.zroky.com/?digest=${encodeURIComponent(receipt.receipt_digest)}`,
     };
   }
   if (evidencePack) {
@@ -63,7 +64,6 @@ function verificationSummary({
       fingerprint: evidencePack.evidence_hash,
       label: "Evidence Pack",
       status: evidencePack.verification_status === "pass" ? "Evidence hash passed" : "Evidence needs review",
-      verifyHref: `https://verify.zroky.com/?hash=${encodeURIComponent(evidencePack.evidence_hash)}`,
     };
   }
   if (row?.digest) {
@@ -73,7 +73,6 @@ function verificationSummary({
       fingerprint: row.digest,
       label: row.sourceLabel,
       status: "Digest available",
-      verifyHref: `https://verify.zroky.com/?digest=${encodeURIComponent(row.digest)}`,
     };
   }
   return null;
@@ -144,11 +143,11 @@ export function FocusedProofPanel({
           </DashboardButton>
         </div>
         {verification ? (
-          <section className="ev-external-verify" aria-label="External hash verification">
+          <section className="ev-external-verify" aria-label="Independent verification material">
             <div>
               <ShieldCheck size={16} aria-hidden="true" />
               <span>
-                <strong>External verification</strong>
+                <strong>Independent verification</strong>
                 <small>{verification.label} / {verification.status} / {verification.algorithm}</small>
               </span>
             </div>
@@ -157,9 +156,17 @@ export function FocusedProofPanel({
               <DashboardButton icon={<Copy size={14} />} onClick={() => void copyFingerprint()} size="sm" variant="soft">
                 {copyState || "Copy fingerprint"}
               </DashboardButton>
-              <DashboardButtonLink href={verification.verifyHref} icon={<ExternalLink size={14} />} size="sm" target="_blank" variant="ghost">
-                Verify externally
-              </DashboardButtonLink>
+              {"publicKeyHref" in verification && verification.publicKeyHref ? (
+                <DashboardButtonLink
+                  href={verification.publicKeyHref}
+                  icon={<ExternalLink size={14} />}
+                  size="sm"
+                  target="_blank"
+                  variant="ghost"
+                >
+                  Open public key
+                </DashboardButtonLink>
+              ) : null}
             </div>
           </section>
         ) : null}

@@ -13,7 +13,7 @@ function receipt(): ActionReceiptResponse {
     action_id: "act_123",
     receipt_digest: "sha256:receipt",
     evidence_hash: "sha256:evidence",
-    signature_algorithm: "hmac-sha256",
+    signature_algorithm: "Ed25519",
     signature: "sig",
     signing_key_id: "local",
     signature_valid: true,

@@ -516,7 +516,7 @@ function ProofSeal({
       <div>
         <span className="eyebrow">Proof seal</span>
         <h4>Tamper-evident receipt</h4>
-        <p>Signature and hashes are verified server-side; the browser never receives the signing secret.</p>
+        <p>Receipts are signed with Ed25519 so auditors can verify them with the published Zroky public key.</p>
       </div>
       <dl>
         <div>
@@ -758,7 +758,7 @@ function ActionReceiptView({
           <FactGrid facts={signatureFacts} mode={mode} />
           {mode === "full" ? (
             <p className="evidence-pack-muted">
-              Signature validity is verified by the backend; the browser never receives the signing secret.
+              Signature validity is server-attested here and independently checkable with the published Ed25519 public key.
             </p>
           ) : null}
         </>

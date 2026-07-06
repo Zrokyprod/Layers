@@ -24,6 +24,7 @@ import {
   type EvidenceLedgerRow,
 } from "@/lib/evidence-ledger";
 import { buildEvidenceArtifact } from "@/lib/evidence-artifact";
+import { actionReceiptPublicKeyUrl } from "@/lib/evidence-verification";
 import { formatDateTime } from "@/lib/format";
 import { EvidenceLedger } from "./EvidenceLedger";
 import { EvidenceProofStrip, type EvidenceProofMetric } from "./EvidenceProofStrip";
@@ -59,7 +60,7 @@ type EvidenceAuditManifest = {
     non_exportable_records: number;
   };
   verification: {
-    external_verify_url: string;
+    public_key_url: string;
     instructions: string[];
   };
   records: Array<{
@@ -157,11 +158,12 @@ function buildEvidenceManifest({
       total_records: rows.length,
     },
     verification: {
-      external_verify_url: "https://verify.zroky.com",
+      public_key_url: actionReceiptPublicKeyUrl(),
       instructions: [
         "Use this manifest as an index, not as a signed evidence bundle.",
-        "Export each referenced Action Receipt or Evidence Pack JSON for cryptographic verification.",
-        "Compare the receipt_digest or evidence_hash in the exported proof with the value shown in Zroky.",
+        "Export each referenced Action Receipt or Evidence Pack JSON before audit review.",
+        "For Action Receipts, verify the Ed25519 signature over signed_payload using the published public key.",
+        "For Evidence Packs, compare the evidence_hash in the exported proof with the value shown in Zroky.",
       ],
     },
   };
