@@ -1,9 +1,13 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import ProjectMembership, User
 
 VALID_PROJECT_ROLES = {"owner", "admin", "member", "viewer"}
+
+
+class LastProjectOwnerError(ValueError):
+    """Raised when an update would leave a project without an active owner."""
 
 
 def normalize_project_role(role: str) -> str:
@@ -73,6 +77,23 @@ def upsert_project_membership(
         db.add(membership)
         db.flush()
         return membership
+
+    if (
+        membership.role == "owner"
+        and membership.is_active
+        and not (normalized_role == "owner" and is_active)
+    ):
+        active_owner_count = db.execute(
+            select(func.count())
+            .select_from(ProjectMembership)
+            .where(
+                ProjectMembership.project_id == project_id,
+                ProjectMembership.role == "owner",
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one()
+        if active_owner_count <= 1:
+            raise LastProjectOwnerError("Project must keep at least one active owner")
 
     membership.role = normalized_role
     membership.is_active = is_active
