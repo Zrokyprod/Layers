@@ -480,6 +480,7 @@ describe("connector-inventory", () => {
       "razorpay_refund",
       "netsuite_finance",
       "quickbooks_ledger",
+      "generic_finance",
       "shopify_admin",
       "ledger_template",
       "customer_template",
@@ -498,6 +499,7 @@ describe("connector-inventory", () => {
       "razorpay_refund",
       "netsuite_finance",
       "quickbooks_ledger",
+      "generic_finance",
       "shopify_admin",
       "refund_ledger",
       "customer_record",
@@ -513,7 +515,7 @@ describe("connector-inventory", () => {
     expect(commerce?.rows.map((row) => row.id)).toEqual(["shopify_admin"]);
     expect(crm?.rows.map((row) => row.id)).toEqual(["hubspot_crm", "salesforce_crm", "zoho_crm", "customer_template"]);
     expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "intercom", "freshdesk_ticket", "jira_issue"]);
-    expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance", "quickbooks_ledger"]);
+    expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance", "quickbooks_ledger", "generic_finance"]);
     expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["generic_rest", "postgres_read"]);
     expect(workflowCategory?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
     expect(inventory.supportRows.every((row) => row.kind === "support" && row.transport === "workflow")).toBe(true);
@@ -531,8 +533,8 @@ describe("connector-inventory", () => {
     });
 
     expect(inventory.counts).toMatchObject({
-      proofTotal: 17,
-      healthyVerifiers: 3,
+      proofTotal: 18,
+      healthyVerifiers: 4,
       notConfigured: 14,
       failingVerifiers: 0,
       notTested: 0,
@@ -1112,7 +1114,7 @@ describe("connector-inventory", () => {
       actionTypes: ["crm.deal.update", "database.record.update", "deploy.change", "finance.invoice.approve"],
     });
 
-    expect(inventory.counts.healthyVerifiers).toBe(4);
+    expect(inventory.counts.healthyVerifiers).toBe(5);
     expect(inventory.counts.coveragePercent).toBe(100);
     expect(inventory.verdict).toMatchObject({
       tone: "success",

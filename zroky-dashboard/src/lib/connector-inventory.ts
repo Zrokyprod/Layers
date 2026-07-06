@@ -34,6 +34,7 @@ export type ProofConnectorId =
   | "razorpay_refund"
   | "netsuite_finance"
   | "quickbooks_ledger"
+  | "generic_finance"
   | "shopify_admin"
   | "ledger_template"
   | "customer_template"
@@ -56,6 +57,7 @@ export type ConnectorTemplateKind =
   | "razorpay_refund"
   | "netsuite_finance"
   | "quickbooks_ledger"
+  | "generic_finance"
   | "shopify_admin"
   | "refund_ledger"
   | "customer_record"
@@ -309,6 +311,7 @@ const CATEGORY_BY_CONNECTOR: Record<ConnectorInventoryId, ConnectorBusinessCateg
   razorpay_refund: "payments",
   netsuite_finance: "finance_erp",
   quickbooks_ledger: "finance_erp",
+  generic_finance: "finance_erp",
   shopify_admin: "commerce",
   ledger_template: "payments",
   customer_template: "crm",
@@ -558,6 +561,7 @@ function registryConnectorIds(item: ToolRegistryResponse["verification_connector
   if (haystack.includes("shopify")) ids.push("shopify_admin");
   if (haystack.includes("razorpay")) ids.push("razorpay_refund");
   if (haystack.includes("quickbooks")) ids.push("quickbooks_ledger");
+  if (haystack.includes("generic_finance") || haystack.includes("finance_api") || haystack.includes("accounting_system")) ids.push("generic_finance");
   if (haystack.includes("netsuite") || haystack.includes("procurement") || haystack.includes("finance")) ids.push("netsuite_finance");
   if (haystack.includes("hubspot")) ids.push("hubspot_crm");
   if (haystack.includes("salesforce")) ids.push("salesforce_crm");
@@ -998,6 +1002,31 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       status: null,
     },
     {
+      id: "generic_finance",
+      transport: "rest_http",
+      templateKind: "generic_finance",
+      title: "Generic Finance API verifier",
+      category: "Finance REST verifier",
+      description: "Internal ERP, ledger, accounting, and finance-service proof through a read-only REST API.",
+      href: "/integrations?connector=generic_finance",
+      ctaLabel: "Configure Finance API",
+      connectorTypes: ["generic_finance", "finance_api", "erp_finance", "accounting_system", "system_of_record.generic_finance"],
+      supportedActionTypes: [
+        "invoice_spend_approval",
+        "payment_adjustment",
+        "vendor_payout",
+        "journal_entry",
+        "finance",
+        "procurement",
+        "vendor_bill",
+        "purchase_order",
+        "invoice",
+        "ledger",
+        "accounting",
+      ],
+      status: input.generic,
+    },
+    {
       id: "shopify_admin",
       transport: "rest_http",
       templateKind: "shopify_admin",
@@ -1046,7 +1075,17 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
       href: "/integrations#postgres-read-connector",
       ctaLabel: "Configure SQL verifier",
       connectorTypes: ["postgres_read", "postgres_read_model"],
-      supportedActionTypes: ["database", "sql", "record", "internal_api"],
+      supportedActionTypes: [
+        "database",
+        "sql",
+        "record",
+        "internal_api",
+        "finance",
+        "journal_entry",
+        "invoice_spend_approval",
+        "ledger",
+        "accounting",
+      ],
       status: input.postgres,
     },
   ];

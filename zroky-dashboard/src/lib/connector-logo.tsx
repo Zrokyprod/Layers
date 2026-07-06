@@ -45,6 +45,7 @@ const CONNECTOR_LOGOS: Record<ConnectorInventoryId, LogoDef> = {
   slack: { Icon: SiSlack, color: "#4A154B", branded: true },
   netsuite_finance: { Icon: Landmark, color: "#1F6FEB", branded: false },
   quickbooks_ledger: { Icon: SiQuickbooks, color: "#2CA01C", branded: true },
+  generic_finance: { Icon: Receipt, color: "#2F5F66", branded: false },
   generic_rest: { Icon: Globe, color: "#635BFF", branded: false },
   ledger_template: { Icon: Receipt, color: "#635BFF", branded: false },
   customer_template: { Icon: Users, color: "#635BFF", branded: false },
