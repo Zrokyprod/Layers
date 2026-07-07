@@ -70,6 +70,9 @@ vi.mock("@/lib/api", async () => {
 describe("AccountPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hooks.me.has_password = true;
+    hooks.me.github_login = "sanket";
+    hooks.me.google_id = null;
     hooks.updateMeMutateAsync.mockResolvedValue(hooks.me);
     hooks.changePasswordMutateAsync.mockResolvedValue({ detail: "Password changed successfully." });
     api.getSecurityStatus.mockResolvedValue({
@@ -153,6 +156,24 @@ describe("AccountPage", () => {
 
     await waitFor(() => expect(hooks.updateMeMutateAsync).toHaveBeenCalledWith({ displayName: "Sanket Team" }));
     expect(await screen.findByText("Profile updated.")).toBeInTheDocument();
+  });
+
+  it("treats OAuth-only login as controlled when sessions are manageable", async () => {
+    hooks.me.has_password = false;
+    api.getSecurityStatus.mockResolvedValue({
+      two_factor_enabled: false,
+      password_login_enabled: false,
+      github_connected: true,
+      google_connected: false,
+      current_session_expires_at: "2026-05-30T10:00:00.000Z",
+      global_logout_available: true,
+    });
+
+    render(<AccountPage />);
+
+    expect(await screen.findByText("Controlled")).toBeInTheDocument();
+    expect(screen.queryByText("Limited login")).not.toBeInTheDocument();
+    expect(await screen.findByText("OAuth only")).toBeInTheDocument();
   });
 
   it("starts authenticator MFA setup from backend enrollment", async () => {

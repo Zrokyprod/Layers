@@ -1,13 +1,17 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ProjectMembership, User
+from app.db.models import Project, ProjectMembership, User
 
 VALID_PROJECT_ROLES = {"owner", "admin", "member", "viewer"}
 
 
 class LastProjectOwnerError(ValueError):
     """Raised when an update would leave a project without an active owner."""
+
+
+class LastUserProjectOwnerError(ValueError):
+    """Raised when account removal would orphan one or more projects."""
 
 
 def normalize_project_role(role: str) -> str:
@@ -48,6 +52,52 @@ def get_membership(db: Session, project_id: str, subject: str) -> ProjectMembers
         )
     )
     return db.execute(query).scalar_one_or_none()
+
+
+def projects_where_user_is_last_active_owner(db: Session, *, user_id: str) -> list[Project]:
+    owned_projects = (
+        db.execute(
+            select(Project)
+            .join(ProjectMembership, ProjectMembership.project_id == Project.id)
+            .where(
+                ProjectMembership.user_id == user_id,
+                ProjectMembership.role == "owner",
+                ProjectMembership.is_active.is_(True),
+                Project.is_active.is_(True),
+            )
+            .order_by(Project.name.asc(), Project.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+    blockers: list[Project] = []
+    for project in owned_projects:
+        active_owner_count = db.execute(
+            select(func.count())
+            .select_from(ProjectMembership)
+            .where(
+                ProjectMembership.project_id == project.id,
+                ProjectMembership.role == "owner",
+                ProjectMembership.is_active.is_(True),
+            )
+        ).scalar_one()
+        if active_owner_count <= 1:
+            blockers.append(project)
+    return blockers
+
+
+def assert_user_can_delete_account(db: Session, *, user_id: str) -> None:
+    blockers = projects_where_user_is_last_active_owner(db, user_id=user_id)
+    if not blockers:
+        return
+
+    names = ", ".join(project.name for project in blockers[:3])
+    suffix = "" if len(blockers) <= 3 else f", and {len(blockers) - 3} more"
+    raise LastUserProjectOwnerError(
+        "Transfer ownership before deleting this account. "
+        f"You are the last active owner of {len(blockers)} project(s): {names}{suffix}."
+    )
 
 
 def upsert_project_membership(

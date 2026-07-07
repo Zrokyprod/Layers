@@ -51,7 +51,8 @@ function sessionExpiryLabel(value: string | null | undefined): string {
 
 function accountPostureLabel(me: ReturnType<typeof useMe>["data"] | null, security: SecurityStatusResponse | null): string {
   if (!me || !security) return "Checking";
-  if (me.email_verified && security.password_login_enabled && security.global_logout_available) return "Controlled";
+  const hasLoginMethod = security.password_login_enabled || security.github_connected || security.google_connected;
+  if (me.email_verified && hasLoginMethod && security.global_logout_available) return "Controlled";
   if (!me.email_verified) return "Review email";
   if (!security.global_logout_available) return "Session review";
   return "Limited login";
@@ -669,7 +670,10 @@ export default function AccountPage() {
         <header className="account-panel-header">
           <div>
             <h3 className="profile-danger-title">Danger zone</h3>
-            <p>Permanently delete your account and all associated data. This cannot be undone.</p>
+            <p>
+              Permanently delete your account and all associated data. Transfer ownership of any workspace you own
+              before deleting.
+            </p>
           </div>
         </header>
 

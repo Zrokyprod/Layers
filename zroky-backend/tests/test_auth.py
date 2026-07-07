@@ -750,6 +750,31 @@ def test_me_security_and_logout_all_flow(client):
 # GitHub OAuth — configuration guard
 # ---------------------------------------------------------------------------
 
+def test_delete_account_rejects_last_workspace_owner(client):
+    reg = client.post("/v1/auth/register", json={
+        "email": "delete-owner@example.com",
+        "password": "deleteowner123",
+        "confirm_password": "deleteowner123",
+    })
+    assert reg.status_code == 201
+    access_token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    delete_response = client.request(
+        "DELETE",
+        "/v1/auth/me",
+        headers=headers,
+        json={"confirm_email": "delete-owner@example.com"},
+    )
+
+    assert delete_response.status_code == 409
+    assert "Transfer ownership before deleting this account" in delete_response.json()["detail"]
+
+    me = client.get("/v1/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["email"] == "delete-owner@example.com"
+
+
 def test_github_start_returns_503_when_not_configured(client):
     resp = client.get("/v1/auth/github/start", follow_redirects=False)
     assert resp.status_code == 503

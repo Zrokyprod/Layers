@@ -70,6 +70,7 @@ from app.db.models import Project, ProjectMembership, User, compute_email_hash
 from app.db.session import get_db_session as get_db
 from app.services import entitlements_resolver, token_store
 from app.services.email_sender import send_email
+from app.services.membership import LastUserProjectOwnerError, assert_user_can_delete_account
 from app.services.mfa import build_totp_uri, generate_totp_secret, verify_totp_code
 from app.services.security import (
     decode_session_token,
@@ -1091,6 +1092,11 @@ def delete_account(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Confirmation email does not match your account email.",
         )
+
+    try:
+        assert_user_can_delete_account(db, user_id=user.id)
+    except LastUserProjectOwnerError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     # Soft-delete: deactivate the user and scrub PII
     user.is_active = False
