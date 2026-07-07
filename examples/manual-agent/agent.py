@@ -44,17 +44,17 @@ def load_env_file(path: Path) -> None:
 
 
 def normalize_env() -> None:
-    project_alias = os.environ.get("ZROKY_PROJECT_ID")
-    if project_alias and not os.environ.get("ZROKY_PROJECT"):
-        os.environ["ZROKY_PROJECT"] = project_alias
+    legacy_project = os.environ.get("ZROKY_PROJECT")
+    if legacy_project and not os.environ.get("ZROKY_PROJECT_ID"):
+        os.environ["ZROKY_PROJECT_ID"] = legacy_project
 
-    api_base_alias = os.environ.get("ZROKY_API_BASE")
-    if api_base_alias and not os.environ.get("ZROKY_INGEST_URL"):
-        os.environ["ZROKY_INGEST_URL"] = api_base_alias
+    legacy_api_base = os.environ.get("ZROKY_INGEST_URL") or os.environ.get("ZROKY_API_BASE")
+    if legacy_api_base and not os.environ.get("ZROKY_API_URL"):
+        os.environ["ZROKY_API_URL"] = legacy_api_base
 
 
 def require_env() -> None:
-    missing = [name for name in ("ZROKY_API_KEY", "ZROKY_PROJECT") if not os.environ.get(name)]
+    missing = [name for name in ("ZROKY_API_KEY", "ZROKY_PROJECT_ID") if not os.environ.get(name)]
     if missing:
         print(
             "Missing required env: "
@@ -74,8 +74,8 @@ def init_zroky() -> None:
 
     zroky.init(
         api_key=os.environ.get("ZROKY_API_KEY"),
-        project=os.environ.get("ZROKY_PROJECT"),
-        ingest_url=os.environ.get("ZROKY_INGEST_URL"),
+        project=os.environ.get("ZROKY_PROJECT_ID"),
+        ingest_url=os.environ.get("ZROKY_API_URL"),
         agent_id=os.environ.get("ZROKY_AGENT_ID") or None,
         agent_framework=os.environ.get("ZROKY_AGENT_FRAMEWORK") or "Custom Python",
         environment=os.environ.get("ZROKY_ENVIRONMENT") or "development",
@@ -84,7 +84,7 @@ def init_zroky() -> None:
 
 
 def api_base() -> str:
-    raw = os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.com").strip().rstrip("/")
+    raw = os.environ.get("ZROKY_API_URL", "https://api.zroky.com").strip().rstrip("/")
     parsed = urlsplit(raw)
     path = parsed.path.rstrip("/")
     for suffix in ("/api/v1/ingest", "/v1/ingest", "/ingest"):
@@ -101,7 +101,7 @@ def auth_headers() -> dict[str, str]:
         "Authorization": f"Bearer {os.environ['ZROKY_API_KEY']}",
         "Content-Type": "application/json",
         "x-api-key": os.environ["ZROKY_API_KEY"],
-        "x-project-id": os.environ["ZROKY_PROJECT"],
+        "x-project-id": os.environ["ZROKY_PROJECT_ID"],
     }
 
 
@@ -158,7 +158,7 @@ def unique_contract_intents() -> list[ActionIntent]:
 def bootstrap_contracts() -> int:
     require_env()
     base = api_base()
-    print(f"Registering Manual QA action contracts in {os.environ['ZROKY_PROJECT']}...")
+    print(f"Registering Manual QA action contracts in {os.environ['ZROKY_PROJECT_ID']}...")
     created = 0
     reused = 0
     for intent in unique_contract_intents():

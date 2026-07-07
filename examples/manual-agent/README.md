@@ -22,13 +22,13 @@ Paste your values:
 
 ```env
 ZROKY_API_KEY=zk_live_...
-ZROKY_PROJECT=proj_...
-ZROKY_INGEST_URL=https://api.zroky.com
+ZROKY_PROJECT_ID=proj_...
+ZROKY_API_URL=https://api.zroky.com
 ZROKY_AGENT_NAME=Manual QA Agent
 ZROKY_ENVIRONMENT=development
 ```
 
-If the dashboard gives `ZROKY_PROJECT_ID`, either paste that into `ZROKY_PROJECT` or leave both values in `.env`. `agent.py` maps `ZROKY_PROJECT_ID` to `ZROKY_PROJECT` automatically.
+Legacy `.env` files that still use `ZROKY_PROJECT` or `ZROKY_INGEST_URL` continue to work, but new setups should use the canonical names above.
 
 ## 3. Install
 
