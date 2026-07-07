@@ -1043,22 +1043,83 @@ function GenericRestSetupPanel({
   );
 }
 
-function StripeRefundSetupPanel({
+type BearerVerifierStatus = {
+  connected?: boolean;
+  has_bearer_token?: boolean;
+  bearer_token_last4?: string | null;
+  last_verdict?: string | null;
+  health_status?: string | null;
+};
+
+type BearerVerifierFormState = {
+  bearerToken: string;
+  recordRef: string;
+  claimedJson: string;
+  matchFieldsText: string;
+};
+
+type BearerVerifierTestResult<TStatus extends BearerVerifierStatus> = {
+  connector: TStatus;
+  check: Pick<OutcomeReconciliationView, "verdict">;
+};
+
+function BearerVerifierSetupPanel<TStatus extends BearerVerifierStatus>({
+  actionType,
+  ariaLabel,
+  claimedFieldsCopy,
+  description,
+  eyebrow,
+  initialForm,
   latestCheck,
-  onStatusChange,
+  preflightTitle,
+  recordLabel,
+  saveButtonLabel,
+  onSaveConfig,
+  saveError,
+  saveMessage,
+  saveTitle,
+  secretSavedPlaceholder,
   status,
+  testConfig,
+  testError,
+  testMessagePrefix,
+  title,
+  onStatusChange,
 }: {
+  actionType: string;
+  ariaLabel: string;
+  claimedFieldsCopy: string;
+  description: string;
+  eyebrow: string;
+  initialForm: BearerVerifierFormState;
   latestCheck: OutcomeReconciliationView | null;
-  onStatusChange: (status: StripeRefundConnectorStatusResponse) => void;
-  status: StripeRefundConnectorStatusResponse | null;
+  preflightTitle: string;
+  recordLabel: string;
+  saveButtonLabel: string;
+  onSaveConfig: (bearerToken: string | null) => Promise<TStatus>;
+  saveError: string;
+  saveMessage: string;
+  saveTitle: string;
+  secretSavedPlaceholder: string;
+  status: TStatus | null;
+  testConfig: (payload: {
+    action_type: string;
+    claimed: Record<string, unknown>;
+    match_fields: string[];
+    record_ref: string;
+  }) => Promise<BearerVerifierTestResult<TStatus>>;
+  testError: string;
+  testMessagePrefix: string;
+  title: string;
+  onStatusChange: (status: TStatus) => void;
 }) {
-  const [form, setForm] = useState<StripeRefundFormState>(defaultStripeRefundForm);
+  const [form, setForm] = useState<BearerVerifierFormState>(initialForm);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const updateForm = (key: keyof StripeRefundFormState, value: string) => {
+  const updateForm = (key: keyof BearerVerifierFormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
@@ -1068,14 +1129,12 @@ function StripeRefundSetupPanel({
     setError(null);
     setMessage(null);
     try {
-      const saved = await saveStripeRefundConnectorConfig({
-        bearer_token: form.bearerToken || null,
-      });
+      const saved = await onSaveConfig(form.bearerToken || null);
       onStatusChange(saved);
-      setMessage("Stripe verifier saved. Run preflight to make it evidence-ready.");
+      setMessage(saveMessage);
       setForm((current) => ({ ...current, bearerToken: "" }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save Stripe verifier.");
+      setError(err instanceof Error ? err.message : saveError);
     } finally {
       setSaving(false);
     }
@@ -1088,28 +1147,28 @@ function StripeRefundSetupPanel({
     setMessage(null);
     try {
       const claimed = parseClaimedJson(form.claimedJson);
-      const result = await testStripeRefundConnector({
-        refund_id: form.refundId,
+      const result = await testConfig({
+        record_ref: form.recordRef,
         claimed,
-        action_type: "refund",
+        action_type: actionType,
         match_fields: matchFieldsFromText(form.matchFieldsText),
       });
       onStatusChange(result.connector);
-      setMessage(`Stripe verifier test recorded ${result.check.verdict}.`);
+      setMessage(`${testMessagePrefix} test recorded ${result.check.verdict}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to run Stripe verifier test.");
+      setError(err instanceof Error ? err.message : testError);
     } finally {
       setTesting(false);
     }
   };
 
   return (
-    <section className="connectors-generic-panel" aria-label="Stripe refund verifier setup">
+    <section className="connectors-generic-panel" aria-label={ariaLabel}>
       <div className="connectors-section-head">
         <div>
-          <span className="dashboard-eyebrow">Stripe refund verifier</span>
-          <h2>Native Stripe refund verification</h2>
-          <p>Read one Stripe refund by ID and compare the fields your refund or payment agent claims.</p>
+          <span className="dashboard-eyebrow">{eyebrow}</span>
+          <h2>{title}</h2>
+          <p>{description}</p>
         </div>
         <StatusPill value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"} kind="proof" />
       </div>
@@ -1117,32 +1176,32 @@ function StripeRefundSetupPanel({
       <div className="connectors-generic-layout">
         <form className="connectors-generic-form" onSubmit={saveConfig}>
           <div className="connectors-generic-form-head">
-            <strong>1. Save Stripe read access</strong>
-            <span>Use a restricted Stripe secret key with read-only refund access. Saved keys never render in the browser.</span>
+            <strong>{saveTitle}</strong>
+            <span>Use a restricted secret key with read-only access. Saved keys never render in the browser.</span>
           </div>
           <label>
             <span>Stripe secret key</span>
             <input
               autoComplete="off"
               onChange={(event) => updateForm("bearerToken", event.target.value)}
-              placeholder={status?.has_bearer_token ? "Secret key saved" : "sk_live_..."}
+              placeholder={status?.has_bearer_token ? secretSavedPlaceholder : "sk_live_..."}
               type="password"
               value={form.bearerToken}
             />
           </label>
           <DashboardButton disabled={saving || (!form.bearerToken && !status?.has_bearer_token)} icon={<Save />} loading={saving} type="submit">
-            Save Stripe verifier
+            {saveButtonLabel}
           </DashboardButton>
         </form>
 
         <form className="connectors-generic-form" onSubmit={runTest}>
           <div className="connectors-generic-form-head">
-            <strong>2. Run Stripe preflight</strong>
-            <span>Fetch one safe existing Stripe refund and compare normalized amount, currency, and status.</span>
+            <strong>{preflightTitle}</strong>
+            <span>{claimedFieldsCopy}</span>
           </div>
           <label>
-            <span>Refund ID</span>
-            <input onChange={(event) => updateForm("refundId", event.target.value)} required value={form.refundId} />
+            <span>{recordLabel}</span>
+            <input onChange={(event) => updateForm("recordRef", event.target.value)} required value={form.recordRef} />
           </label>
           <label>
             <span>Claimed JSON</span>
@@ -1153,7 +1212,7 @@ function StripeRefundSetupPanel({
             <input onChange={(event) => updateForm("matchFieldsText", event.target.value)} value={form.matchFieldsText} />
           </label>
           <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
-            Run Stripe preflight
+            {preflightTitle.replace(/^2\.\s*/, "")}
           </DashboardButton>
         </form>
       </div>
@@ -1170,6 +1229,54 @@ function StripeRefundSetupPanel({
   );
 }
 
+function StripeRefundSetupPanel({
+  latestCheck,
+  onStatusChange,
+  status,
+}: {
+  latestCheck: OutcomeReconciliationView | null;
+  onStatusChange: (status: StripeRefundConnectorStatusResponse) => void;
+  status: StripeRefundConnectorStatusResponse | null;
+}) {
+  return (
+    <BearerVerifierSetupPanel
+      actionType="refund"
+      ariaLabel="Stripe refund verifier setup"
+      claimedFieldsCopy="Fetch one safe existing Stripe refund and compare normalized amount, currency, and status."
+      description="Read one Stripe refund by ID and compare the fields your refund or payment agent claims."
+      eyebrow="Stripe refund verifier"
+      initialForm={{
+        bearerToken: defaultStripeRefundForm.bearerToken,
+        recordRef: defaultStripeRefundForm.refundId,
+        claimedJson: defaultStripeRefundForm.claimedJson,
+        matchFieldsText: defaultStripeRefundForm.matchFieldsText,
+      }}
+      latestCheck={latestCheck}
+      preflightTitle="2. Run Stripe preflight"
+      recordLabel="Refund ID"
+      saveButtonLabel="Save Stripe verifier"
+      onSaveConfig={(bearerToken) => saveStripeRefundConnectorConfig({ bearer_token: bearerToken })}
+      saveError="Failed to save Stripe verifier."
+      saveMessage="Stripe verifier saved. Run preflight to make it evidence-ready."
+      saveTitle="1. Save Stripe read access"
+      secretSavedPlaceholder="Secret key saved"
+      status={status}
+      testConfig={(payload) =>
+        testStripeRefundConnector({
+          refund_id: payload.record_ref,
+          action_type: payload.action_type,
+          claimed: payload.claimed,
+          match_fields: payload.match_fields,
+        })
+      }
+      testError="Failed to run Stripe verifier test."
+      testMessagePrefix="Stripe verifier"
+      title="Native Stripe refund verification"
+      onStatusChange={onStatusChange}
+    />
+  );
+}
+
 function StripePaymentSetupPanel({
   latestCheck,
   onStatusChange,
@@ -1179,121 +1286,42 @@ function StripePaymentSetupPanel({
   onStatusChange: (status: StripePaymentConnectorStatusResponse) => void;
   status: StripePaymentConnectorStatusResponse | null;
 }) {
-  const [form, setForm] = useState<StripePaymentFormState>(defaultStripePaymentForm);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const updateForm = (key: keyof StripePaymentFormState, value: string) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const saved = await saveStripePaymentConnectorConfig({
-        bearer_token: form.bearerToken || null,
-      });
-      onStatusChange(saved);
-      setMessage("Stripe payment verifier saved. Run preflight to make it evidence-ready.");
-      setForm((current) => ({ ...current, bearerToken: "" }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save Stripe payment verifier.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const runTest = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setTesting(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const claimed = parseClaimedJson(form.claimedJson);
-      const result = await testStripePaymentConnector({
-        payment_id: form.paymentId,
-        claimed,
-        action_type: "payment_adjustment",
-        match_fields: matchFieldsFromText(form.matchFieldsText),
-      });
-      onStatusChange(result.connector);
-      setMessage(`Stripe payment verifier test recorded ${result.check.verdict}.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to run Stripe payment verifier test.");
-    } finally {
-      setTesting(false);
-    }
-  };
-
   return (
-    <section className="connectors-generic-panel" aria-label="Stripe payment verifier setup">
-      <div className="connectors-section-head">
-        <div>
-          <span className="dashboard-eyebrow">Stripe payment verifier</span>
-          <h2>Native Stripe PaymentIntent verification</h2>
-          <p>Read one Stripe PaymentIntent by ID and compare amount, currency, customer, method, and status fields.</p>
-        </div>
-        <StatusPill value={status?.last_verdict ?? latestCheck?.verdict ?? "not_configured"} kind="proof" />
-      </div>
-
-      <div className="connectors-generic-layout">
-        <form className="connectors-generic-form" onSubmit={saveConfig}>
-          <div className="connectors-generic-form-head">
-            <strong>1. Save Stripe read access</strong>
-            <span>Use a restricted Stripe secret key with read-only PaymentIntent access. Saved keys never render in the browser.</span>
-          </div>
-          <label>
-            <span>Stripe secret key</span>
-            <input
-              autoComplete="off"
-              onChange={(event) => updateForm("bearerToken", event.target.value)}
-              placeholder={status?.has_bearer_token ? "Secret key saved" : "sk_live_..."}
-              type="password"
-              value={form.bearerToken}
-            />
-          </label>
-          <DashboardButton disabled={saving || (!form.bearerToken && !status?.has_bearer_token)} icon={<Save />} loading={saving} type="submit">
-            Save Stripe payment verifier
-          </DashboardButton>
-        </form>
-
-        <form className="connectors-generic-form" onSubmit={runTest}>
-          <div className="connectors-generic-form-head">
-            <strong>2. Run Stripe payment preflight</strong>
-            <span>Fetch one safe existing PaymentIntent and compare normalized amount, currency, and status.</span>
-          </div>
-          <label>
-            <span>PaymentIntent ID</span>
-            <input onChange={(event) => updateForm("paymentId", event.target.value)} required value={form.paymentId} />
-          </label>
-          <label>
-            <span>Claimed JSON</span>
-            <textarea onChange={(event) => updateForm("claimedJson", event.target.value)} rows={5} value={form.claimedJson} />
-          </label>
-          <label>
-            <span>Match fields</span>
-            <input onChange={(event) => updateForm("matchFieldsText", event.target.value)} value={form.matchFieldsText} />
-          </label>
-          <DashboardButton disabled={testing || !status?.connected} icon={<ClipboardCheck />} loading={testing} type="submit">
-            Run Stripe payment preflight
-          </DashboardButton>
-        </form>
-      </div>
-
-      {message ? <div className="connectors-success-strip">{message}</div> : null}
-      {error ? <div className="alert-strip connectors-alert">{error}</div> : null}
-      <div className="connector-fact-grid">
-        <Fact label="Connected" value={status?.connected ? "yes" : "no"} />
-        <Fact label="Secret" value={status?.has_bearer_token ? `saved${status.bearer_token_last4 ? ` (...${status.bearer_token_last4})` : ""}` : "missing"} />
-        <Fact label="Last verdict" value={status?.last_verdict ?? latestCheck?.verdict ?? null} />
-        <Fact label="Health" value={status?.health_status ?? "not configured"} />
-      </div>
-    </section>
+    <BearerVerifierSetupPanel
+      actionType="payment_adjustment"
+      ariaLabel="Stripe payment verifier setup"
+      claimedFieldsCopy="Fetch one safe existing PaymentIntent and compare normalized amount, currency, and status."
+      description="Read one Stripe PaymentIntent by ID and compare amount, currency, customer, method, and status fields."
+      eyebrow="Stripe payment verifier"
+      initialForm={{
+        bearerToken: defaultStripePaymentForm.bearerToken,
+        recordRef: defaultStripePaymentForm.paymentId,
+        claimedJson: defaultStripePaymentForm.claimedJson,
+        matchFieldsText: defaultStripePaymentForm.matchFieldsText,
+      }}
+      latestCheck={latestCheck}
+      preflightTitle="2. Run Stripe payment preflight"
+      recordLabel="PaymentIntent ID"
+      saveButtonLabel="Save Stripe payment verifier"
+      onSaveConfig={(bearerToken) => saveStripePaymentConnectorConfig({ bearer_token: bearerToken })}
+      saveError="Failed to save Stripe payment verifier."
+      saveMessage="Stripe payment verifier saved. Run preflight to make it evidence-ready."
+      saveTitle="1. Save Stripe read access"
+      secretSavedPlaceholder="Secret key saved"
+      status={status}
+      testConfig={(payload) =>
+        testStripePaymentConnector({
+          payment_id: payload.record_ref,
+          action_type: payload.action_type,
+          claimed: payload.claimed,
+          match_fields: payload.match_fields,
+        })
+      }
+      testError="Failed to run Stripe payment verifier test."
+      testMessagePrefix="Stripe payment verifier"
+      title="Native Stripe PaymentIntent verification"
+      onStatusChange={onStatusChange}
+    />
   );
 }
 
