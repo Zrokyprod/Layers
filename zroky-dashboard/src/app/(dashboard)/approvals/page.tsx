@@ -146,8 +146,8 @@ export default function RuntimeApprovalsPage() {
     [],
   );
 
-  const approvalsQuery = useRuntimePolicyApprovals("all");
-  const actionIntentsQuery = useActionIntents({ status: "all", limit: 100 });
+  const approvalsQuery = useRuntimePolicyApprovals("all", { refetchInterval: 15_000 });
+  const actionIntentsQuery = useActionIntents({ status: "all", limit: 100 }, { refetchInterval: 15_000 });
   const approveMutation = useApproveRuntimePolicyDecision();
   const rejectMutation = useRejectRuntimePolicyDecision();
   const killSwitchMutation = useSetRuntimePolicyKillSwitch();
@@ -166,7 +166,11 @@ export default function RuntimeApprovalsPage() {
     null;
   const evidencePackQuery = useRuntimePolicyEvidencePack(selectedRow?.decisionId ?? null);
   const loading = approvalsQuery.isLoading || actionIntentsQuery.isLoading;
-  const error = approvalsQuery.isError || actionIntentsQuery.isError;
+  const degradedFeeds = [
+    approvalsQuery.isError ? "approval gate" : null,
+    actionIntentsQuery.isError ? "action intent context" : null,
+  ].filter((feed): feed is string => Boolean(feed));
+  const error = degradedFeeds.length > 0;
   const hero = heroState({
     damageStopped: counts.damageStopped,
     error,
@@ -263,8 +267,8 @@ export default function RuntimeApprovalsPage() {
         <section className="approval-v2-alert approval-v2-tone-danger" role="status">
           <div>
             <span className="approval-v2-eyebrow">Refresh status</span>
-            <strong>One or more approval feeds failed</strong>
-            <p>Keep approval decisions conservative until the runtime gate refreshes cleanly.</p>
+            <strong>{degradedFeeds.join(", ")} unavailable</strong>
+            <p>Showing the last usable approval state. Keep decisions conservative until the feed refreshes cleanly.</p>
           </div>
         </section>
       ) : null}
