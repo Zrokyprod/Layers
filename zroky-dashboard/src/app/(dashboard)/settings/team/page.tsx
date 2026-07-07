@@ -1,6 +1,7 @@
 "use client";
 
-import { type CSSProperties, type FormEvent, useCallback, useEffect, useState } from "react";
+import { type CSSProperties, type FormEvent, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock3,
@@ -17,12 +18,11 @@ import { DashboardButton } from "@/components/dashboard-button";
 import { SettingsHero, SettingsMetricStrip, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import { useDashboardStore } from "@/lib/store";
-import { useMyProjects, useProjectSettings } from "@/lib/hooks";
+import { useMyProjects, useProjectSettings, useTeamMembers } from "@/lib/hooks";
 import {
   createProjectInvitation,
   getBillingMe,
   listProjectInvitations,
-  listProjectMembers,
   revokeProjectInvitation,
 } from "@/lib/api";
 import { upsertProjectMember } from "@/lib/api";
@@ -80,16 +80,24 @@ export default function TeamPage() {
     : null;
   const canManageAccess = canManageTeamAccess(currentMembership?.role);
   const readOnlyAccessCopy = "Only owners and admins can manage workspace access.";
+  const queryClient = useQueryClient();
 
-  const [members, setMembers] = useState<ProjectMembershipResponse[]>([]);
-  const [invitations, setInvitations] = useState<ProjectInvitationItem[]>([]);
-  const [billing, setBilling] = useState<BillingMeResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const membersQuery = useTeamMembers(projectId ?? "");
+  const invitationsQuery = useQuery<ProjectInvitationItem[], Error>({
+    queryKey: ["project-invitations", projectId],
+    queryFn: () => listProjectInvitations(projectId as string),
+    enabled: Boolean(projectId),
+  });
+  const billingQuery = useQuery<BillingMeResponse | null, Error>({
+    queryKey: ["billing-me"],
+    queryFn: () => getBillingMe().catch(() => null),
+    staleTime: 60_000,
+  });
+
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
-  const [inviteBusy, setInviteBusy] = useState(false);
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [roleChangeTarget, setRoleChangeTarget] = useState<{
     member: ProjectMembershipResponse;
     role: string;
@@ -99,73 +107,93 @@ export default function TeamPage() {
     active: boolean;
   } | null>(null);
 
-  const loadData = useCallback(async () => {
-    if (!projectId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [m, i, billingState] = await Promise.all([
-        listProjectMembers(projectId),
-        listProjectInvitations(projectId),
-        getBillingMe().catch(() => null),
-      ]);
-      setMembers(m);
-      setInvitations(i ?? []);
-      setBilling(billingState);
-    } catch (e: unknown) {
-      const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
-      setError(msg || "Failed to load team data.");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const refreshTeamData = async () => {
+    setLocalError(null);
+    await Promise.all([
+      membersQuery.refetch(),
+      invitationsQuery.refetch(),
+      billingQuery.refetch(),
+    ]);
+  };
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const inviteMutation = useMutation({
+    mutationFn: ({ email, role }: { email: string; role: string }) =>
+      createProjectInvitation(projectId as string, { email, role }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["project-invitations", projectId] }),
+        queryClient.invalidateQueries({ queryKey: ["project-members", projectId] }),
+      ]);
+    },
+  });
+
+  const revokeInvitationMutation = useMutation({
+    mutationFn: (invitationId: string) => revokeProjectInvitation(projectId as string, invitationId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["project-invitations", projectId] });
+    },
+  });
+
+  const updateMemberMutation = useMutation({
+    mutationFn: ({
+      member,
+      active,
+      role,
+    }: {
+      member: ProjectMembershipResponse;
+      active?: boolean;
+      role: string;
+    }) => upsertProjectMember(projectId as string, { subject: member.subject, role, is_active: active }),
+    onSuccess: async (updated) => {
+      queryClient.setQueryData<ProjectMembershipResponse[]>(["project-members", projectId], (current) =>
+        (current ?? []).map((member) => (member.membership_id === updated.membership_id ? updated : member)),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["project-members", projectId] });
+    },
+  });
+
+  const members = membersQuery.data ?? [];
+  const invitations = invitationsQuery.data ?? [];
+  const billing = billingQuery.data ?? null;
+  const loading = membersQuery.isLoading || invitationsQuery.isLoading;
+  const queryError = membersQuery.error?.message ?? invitationsQuery.error?.message ?? null;
+  const error = localError ?? queryError;
+  const inviteBusy = inviteMutation.isPending;
 
   async function onInvite(e: FormEvent) {
     e.preventDefault();
     if (!projectId || !inviteEmail.trim()) return;
     if (!canManageAccess) {
-      setError(readOnlyAccessCopy);
+      setLocalError(readOnlyAccessCopy);
       return;
     }
-    setInviteBusy(true);
-    setError(null);
+    setLocalError(null);
     const email = inviteEmail.trim();
     try {
-      const created = await createProjectInvitation(projectId, {
+      await inviteMutation.mutateAsync({
         email,
         role: inviteRole,
       });
-      setInvitations((prev) => [
-        created,
-        ...prev.filter((invitation) => invitation.invitation_id !== created.invitation_id),
-      ]);
       setInviteEmail("");
       setInviteRole("member");
-      await loadData();
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
-      setError(`Failed to send invitation to ${email}: ${msg || "Unknown error."}`);
-    } finally {
-      setInviteBusy(false);
+      setLocalError(`Failed to send invitation to ${email}: ${msg || "Unknown error."}`);
     }
   }
 
   async function onRevoke(invitationId: string) {
     if (!projectId) return;
     if (!canManageAccess) {
-      setError(readOnlyAccessCopy);
+      setLocalError(readOnlyAccessCopy);
       return;
     }
     try {
-      await revokeProjectInvitation(projectId, invitationId);
-      setInvitations((prev) => prev.filter((i) => i.invitation_id !== invitationId));
+      setLocalError(null);
+      await revokeInvitationMutation.mutateAsync(invitationId);
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
-      setError(msg || "Failed to revoke invitation.");
+      setLocalError(msg || "Failed to revoke invitation.");
     }
   }
 
@@ -176,11 +204,11 @@ export default function TeamPage() {
   function requestRoleChange(member: ProjectMembershipResponse, newRole: string) {
     if (member.role === newRole) return;
     if (!canManageAccess) {
-      setError(readOnlyAccessCopy);
+      setLocalError(readOnlyAccessCopy);
       return;
     }
     if (isLastActiveOwner(member) && newRole !== "owner") {
-      setError("You cannot demote the last active owner on the project.");
+      setLocalError("You cannot demote the last active owner on the project.");
       return;
     }
     if (member.role === "owner" || newRole === "owner" || newRole === "admin") {
@@ -193,18 +221,17 @@ export default function TeamPage() {
   async function changeMemberRole(member: ProjectMembershipResponse, newRole: string) {
     if (!projectId) return;
     if (!canManageAccess) {
-      setError(readOnlyAccessCopy);
+      setLocalError(readOnlyAccessCopy);
       setRoleChangeTarget(null);
       return;
     }
     setBusyMemberId(member.membership_id);
-    setError(null);
+    setLocalError(null);
     try {
-      const updated = await upsertProjectMember(projectId, { subject: member.subject, role: newRole });
-      setMembers((prev) => prev.map((m) => (m.membership_id === updated.membership_id ? updated : m)));
+      await updateMemberMutation.mutateAsync({ member, role: newRole });
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
-      setError(msg || "Failed to update member role.");
+      setLocalError(msg || "Failed to update member role.");
     } finally {
       setBusyMemberId(null);
       setRoleChangeTarget(null);
@@ -213,11 +240,11 @@ export default function TeamPage() {
 
   function requestMemberActive(member: ProjectMembershipResponse, active: boolean) {
     if (!canManageAccess) {
-      setError(readOnlyAccessCopy);
+      setLocalError(readOnlyAccessCopy);
       return;
     }
     if (!active && isLastActiveOwner(member)) {
-      setError("You cannot remove the last active owner on the project.");
+      setLocalError("You cannot remove the last active owner on the project.");
       return;
     }
     setActiveChangeTarget({ member, active });
@@ -226,19 +253,18 @@ export default function TeamPage() {
   async function setMemberActive() {
     if (!projectId || !activeChangeTarget) return;
     if (!canManageAccess) {
-      setError(readOnlyAccessCopy);
+      setLocalError(readOnlyAccessCopy);
       setActiveChangeTarget(null);
       return;
     }
     const { member, active } = activeChangeTarget;
     setBusyMemberId(member.membership_id);
-    setError(null);
+    setLocalError(null);
     try {
-      const updated = await upsertProjectMember(projectId, { subject: member.subject, role: member.role, is_active: active });
-      setMembers((prev) => prev.map((m) => (m.membership_id === updated.membership_id ? updated : m)));
+      await updateMemberMutation.mutateAsync({ member, role: member.role, active });
     } catch (e: unknown) {
       const msg = typeof e === "object" && e && "message" in e ? (e as { message?: string }).message : undefined;
-      setError(msg || (active ? "Failed to reactivate member." : "Failed to remove member."));
+      setLocalError(msg || (active ? "Failed to reactivate member." : "Failed to remove member."));
     } finally {
       setBusyMemberId(null);
       setActiveChangeTarget(null);
@@ -268,7 +294,7 @@ export default function TeamPage() {
         pill={projectId ? `${activeMembers.length} active` : "Project missing"}
         updatedLabel={loading ? "Refreshing" : "Settings live"}
         actions={
-          <DashboardButton icon={<RefreshCw />} onClick={() => void loadData()} disabled={loading || !projectId} variant="soft">
+          <DashboardButton icon={<RefreshCw />} onClick={() => void refreshTeamData()} disabled={loading || !projectId} variant="soft">
             Refresh
           </DashboardButton>
         }

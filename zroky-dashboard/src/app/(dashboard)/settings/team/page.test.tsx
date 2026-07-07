@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import TeamPage from "./page";
@@ -22,28 +23,32 @@ vi.mock("@/lib/store", () => ({
   }),
 }));
 
-vi.mock("@/lib/hooks", () => ({
-  useMyProjects: () => ({
-    data: [
-      {
-        membership_id: "mem_current",
-        project_id: "proj_1",
-        project_name: "My Project",
-        role: membershipState.role,
-        is_active: true,
-        created_at: "2026-05-29T10:00:00.000Z",
-        updated_at: "2026-05-29T10:00:00.000Z",
-      },
-    ],
-    isLoading: false,
-    error: null,
-  }),
-  useProjectSettings: () => ({
-    data: { project_id: "proj_1" },
-    isLoading: false,
-    error: null,
-  }),
-}));
+vi.mock("@/lib/hooks", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/hooks")>("@/lib/hooks");
+  return {
+    ...actual,
+    useMyProjects: () => ({
+      data: [
+        {
+          membership_id: "mem_current",
+          project_id: "proj_1",
+          project_name: "My Project",
+          role: membershipState.role,
+          is_active: true,
+          created_at: "2026-05-29T10:00:00.000Z",
+          updated_at: "2026-05-29T10:00:00.000Z",
+        },
+      ],
+      isLoading: false,
+      error: null,
+    }),
+    useProjectSettings: () => ({
+      data: { project_id: "proj_1" },
+      isLoading: false,
+      error: null,
+    }),
+  };
+});
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -54,6 +59,21 @@ vi.mock("@/lib/api", async () => {
 });
 
 const now = "2026-05-29T10:00:00.000Z";
+
+function renderTeamPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <TeamPage />
+    </QueryClientProvider>,
+  );
+}
 
 describe("TeamPage", () => {
   beforeEach(() => {
@@ -90,7 +110,7 @@ describe("TeamPage", () => {
   });
 
   it("renders backend array membership responses directly", async () => {
-    render(<TeamPage />);
+    renderTeamPage();
 
     expect(await screen.findByText("owner@example.com")).toBeInTheDocument();
     expect(screen.getByLabelText("Workspace access command center")).toBeInTheDocument();
@@ -137,7 +157,7 @@ describe("TeamPage", () => {
       updated_at: now,
     });
 
-    render(<TeamPage />);
+    renderTeamPage();
 
     expect(await screen.findByText("member@example.com")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: "Change role for member@example.com" }), {
@@ -180,7 +200,7 @@ describe("TeamPage", () => {
       },
     ]);
 
-    render(<TeamPage />);
+    renderTeamPage();
 
     expect(await screen.findByText("member@example.com")).toBeInTheDocument();
     expect(screen.getByText("Your role is Viewer. Member access is read-only for this account.")).toBeInTheDocument();
