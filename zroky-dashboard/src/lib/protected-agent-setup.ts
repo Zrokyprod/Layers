@@ -288,7 +288,7 @@ zroky.init(
     api_key=os.environ["ZROKY_API_KEY"],
     project=${pythonString(projectId)},
     agent_id=${pythonString(agentId)},
-    ingest_url=os.environ.get("ZROKY_API_URL") or os.environ.get("ZROKY_INGEST_URL", ${pythonString(apiBaseUrl)}),
+    ingest_url=os.environ.get("ZROKY_API_URL", ${pythonString(apiBaseUrl)}),
 )
 
 result = zroky.protect(

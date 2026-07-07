@@ -73,7 +73,7 @@ describe("protected-agent-setup", () => {
     expect(snippet).toContain('print(result["proof_status"], result["receipt_status"])');
     expect(snippet).not.toContain("zroky.verified_action(");
     expect(snippet).not.toContain("zroky.await_action_proof");
-    expect(snippet).toContain('ingest_url=os.environ.get("ZROKY_API_URL") or os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.test")');
+    expect(snippet).toContain('ingest_url=os.environ.get("ZROKY_API_URL", "https://api.zroky.test")');
     expect(snippet).not.toContain("amount_usd");
     expect(snippet).not.toContain("captureToolCall");
     expect(snippet).not.toContain("traceRun");
