@@ -291,14 +291,14 @@ zroky.init(
     ingest_url=os.environ.get("ZROKY_API_URL") or os.environ.get("ZROKY_INGEST_URL", ${pythonString(apiBaseUrl)}),
 )
 
-decision = zroky.verified_action(
+result = zroky.protect(
     contract_version="zroky.agent_action.v1",
-    action_type=${pythonString(actionType)},
+    action=${pythonString(actionType)},
     operation_kind=${pythonString(operationKind)},
     environment="production",
     purpose={"summary": ${pythonString(template.mandate)}},
     resource=${resource},
-    parameters=${parameters},
+    params=${parameters},
     execution_request={
         "capability": ${pythonString(operationKind)},
         "execution_plan": {
@@ -311,10 +311,10 @@ decision = zroky.verified_action(
         "workflow_id": ${pythonString(template.workflowId)},
     },
     raise_on_approval=False,
+    wait_for_receipt=True,
 )
 
-proof = zroky.await_action_proof(decision["action_id"])
-print(proof["proof_status"], proof["receipt_status"])`;
+print(result["proof_status"], result["receipt_status"])`;
 }
 
 function webhookBridgeClaim(template: ProtectedAgentTemplate): Record<string, unknown> {

@@ -53,7 +53,7 @@ describe("protected-agent-setup", () => {
     ]);
   });
 
-  it("builds control-first verified action snippets with agent identity and proof polling", () => {
+  it("builds control-first protected action snippets with agent identity and proof polling", () => {
     const refund = protectedAgentTemplates.find((template) => template.id === "refund");
     expect(refund).toBeDefined();
 
@@ -62,14 +62,17 @@ describe("protected-agent-setup", () => {
       apiBaseUrl: "https://api.zroky.test",
     });
 
-    expect(snippet).toContain("zroky.verified_action(");
+    expect(snippet).toContain("zroky.protect(");
     expect(snippet).toContain('agent_id="agent_refund"');
     expect(snippet).toContain('project="proj_live"');
-    expect(snippet).toContain('action_type="refund"');
+    expect(snippet).toContain('action="refund"');
     expect(snippet).toContain('operation_kind="TRANSFER"');
     expect(snippet).toContain('"amount_minor": 25000');
     expect(snippet).toContain('"currency": "USD"');
-    expect(snippet).toContain("zroky.await_action_proof");
+    expect(snippet).toContain("wait_for_receipt=True");
+    expect(snippet).toContain('print(result["proof_status"], result["receipt_status"])');
+    expect(snippet).not.toContain("zroky.verified_action(");
+    expect(snippet).not.toContain("zroky.await_action_proof");
     expect(snippet).toContain('ingest_url=os.environ.get("ZROKY_API_URL") or os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.test")');
     expect(snippet).not.toContain("amount_usd");
     expect(snippet).not.toContain("captureToolCall");

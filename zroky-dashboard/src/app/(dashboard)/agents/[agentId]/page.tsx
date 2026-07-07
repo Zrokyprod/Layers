@@ -246,7 +246,7 @@ function ProofPanel({ detail }: { detail: AgentDetailView }) {
       ) : (
         <div className="agents-empty-filter">
           <strong>No protected action yet</strong>
-          <span>Run this agent through verified_action() or the Action Intent API to populate proof and runner context.</span>
+          <span>Run this agent through zroky.protect() or the Action Intent API to populate proof and runner context.</span>
         </div>
       )}
     </aside>
