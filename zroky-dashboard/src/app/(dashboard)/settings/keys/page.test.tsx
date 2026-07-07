@@ -213,7 +213,7 @@ describe("ApiKeysPage", () => {
 
   it("keeps the revoke confirmation flow working", async () => {
     hooks.useListProjectApiKeys.mockReturnValue({
-      data: [apiKey()],
+      data: [apiKey({ name: "failed-key-name" })],
       isLoading: false,
       error: null,
     });
@@ -226,5 +226,8 @@ describe("ApiKeysPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Yes, revoke key" }));
 
     await waitFor(() => expect(revokeMutateAsync).toHaveBeenCalledWith({ projectId: "proj_1", keyId: "key_1" }));
+    const status = await screen.findByText('Key "failed-key-name" revoked.');
+    expect(status.className).toContain("field-success");
+    expect(status.className).not.toContain("field-error");
   });
 });

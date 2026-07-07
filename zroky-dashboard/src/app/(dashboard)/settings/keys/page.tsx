@@ -93,6 +93,7 @@ function ApiKeysContent() {
   const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+  const [statusTone, setStatusTone] = useState<"success" | "danger" | null>(null);
   const [expiresInDays, setExpiresInDays] = useState("90");
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyResponse | null>(null);
   const [rotateTarget, setRotateTarget] = useState<ApiKeyResponse | null>(null);
@@ -110,6 +111,7 @@ function ApiKeysContent() {
   const onCreate = handleSubmit(async (data) => {
     if (!projectId) return;
     setStatusMsg("");
+    setStatusTone(null);
     setNewKey(null);
     try {
       const expiryValue = expiresInDays.trim();
@@ -118,6 +120,7 @@ function ApiKeysContent() {
         const numericExpiry = Number(expiryValue);
         if (!Number.isInteger(numericExpiry) || numericExpiry < 1 || numericExpiry > 3650) {
           setStatusMsg("Failed to create key: expiry must be blank or a whole number between 1 and 3650 days.");
+          setStatusTone("danger");
           return;
         }
         parsedExpiry = numericExpiry;
@@ -132,6 +135,7 @@ function ApiKeysContent() {
       reset({ name: defaultKeyName });
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Failed to create key.");
+      setStatusTone("danger");
     }
   });
 
@@ -140,8 +144,10 @@ function ApiKeysContent() {
     try {
       await revokeMutation.mutateAsync({ projectId, keyId: revokeTarget.key_id });
       setStatusMsg(`Key "${revokeTarget.name}" revoked.`);
+      setStatusTone("success");
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Revoke failed.");
+      setStatusTone("danger");
     } finally {
       setRevokeTarget(null);
     }
@@ -153,8 +159,10 @@ function ApiKeysContent() {
       const rotated = await rotateMutation.mutateAsync({ projectId, keyId: rotateTarget.key_id });
       setNewKey(rotated);
       setStatusMsg(`Key "${rotateTarget.name}" rotated. Copy the replacement key now.`);
+      setStatusTone("success");
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Rotation failed.");
+      setStatusTone("danger");
     } finally {
       setRotateTarget(null);
     }
@@ -167,6 +175,7 @@ function ApiKeysContent() {
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       setStatusMsg("Copy failed. Select the key and copy it manually.");
+      setStatusTone("danger");
     }
   }
 
@@ -395,7 +404,7 @@ export ZROKY_API_URL="${apiBaseUrl}"`;
       )}
 
       {statusMsg && (
-        <p className={statusMsg.toLowerCase().includes("failed") ? "field-error keys-status-msg" : "field-success keys-status-msg"}>
+        <p className={`${statusTone === "danger" ? "field-error" : "field-success"} keys-status-msg`}>
           {statusMsg}
         </p>
       )}
