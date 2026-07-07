@@ -53,7 +53,14 @@ import {
 } from "@/lib/policy-rules-view";
 
 const DASH = "-";
-const ACTIVE_GUARDRAIL_COUNT = 5;
+const GUARDRAIL_FIELDS: Array<keyof PilotPolicyPayload> = [
+  "runtime_sensitive_actions_require_approval",
+  "runtime_block_pii_leak",
+  "runtime_block_prompt_injected_external_action",
+  "runtime_production_deploys_require_approval",
+  "runtime_changed_recipient_deny",
+  "runtime_sequence_risk_enabled",
+];
 const ENVIRONMENT_OPTIONS = ["production", "staging", "development"];
 
 type PolicyRuleForm = {
@@ -147,7 +154,14 @@ function ruleFormFromRule(rule: RuntimePolicyRuleResponse | null): PolicyRuleFor
   };
 }
 
-function patchFromRuleForm(form: PolicyRuleForm): Partial<PilotPolicyPayload> {
+function hasPolicyField(policy: Partial<PilotPolicyPayload> | null | undefined, key: keyof PilotPolicyPayload): boolean {
+  return Object.prototype.hasOwnProperty.call(policy ?? {}, key);
+}
+
+function patchFromRuleForm(
+  form: PolicyRuleForm,
+  existingPatch: Partial<PilotPolicyPayload> | null = null,
+): Partial<PilotPolicyPayload> {
   const patch: Partial<PilotPolicyPayload> = {};
   const runtimeEnabled = triStateBoolean(form.runtimeEnabled);
   const sensitiveApproval = triStateBoolean(form.sensitiveApproval);
@@ -164,13 +178,20 @@ function patchFromRuleForm(form: PolicyRuleForm): Partial<PilotPolicyPayload> {
   if (denyThreshold != null) patch.runtime_amount_deny_threshold_usd = denyThreshold;
   if (maxCost != null) patch.runtime_max_cost_usd = maxCost;
   if (approvalTtl != null) patch.runtime_approval_ttl_minutes = approvalTtl;
-  if (allowedTools.length > 0) patch.runtime_allowed_tools = allowedTools;
-  if (sensitiveTools.length > 0) patch.runtime_sensitive_tools = sensitiveTools;
+  if (allowedTools.length > 0 || hasPolicyField(existingPatch, "runtime_allowed_tools")) {
+    patch.runtime_allowed_tools = allowedTools;
+  }
+  if (sensitiveTools.length > 0 || hasPolicyField(existingPatch, "runtime_sensitive_tools")) {
+    patch.runtime_sensitive_tools = sensitiveTools;
+  }
 
   return patch;
 }
 
-function rulePayloadFromForm(form: PolicyRuleForm): RuntimePolicyRulePayload {
+function rulePayloadFromForm(
+  form: PolicyRuleForm,
+  existingPatch: Partial<PilotPolicyPayload> | null = null,
+): RuntimePolicyRulePayload {
   return {
     name: form.name.trim(),
     description: form.description.trim() || null,
@@ -179,7 +200,7 @@ function rulePayloadFromForm(form: PolicyRuleForm): RuntimePolicyRulePayload {
     environment: form.environment || null,
     priority: Number(form.priority || 0),
     is_enabled: form.isEnabled,
-    policy_patch: patchFromRuleForm(form),
+    policy_patch: patchFromRuleForm(form, existingPatch),
   };
 }
 
@@ -315,7 +336,7 @@ function policyVerdict({
       tone: "warning",
     };
   }
-  if (activeGuardrails < ACTIVE_GUARDRAIL_COUNT) {
+  if (activeGuardrails < GUARDRAIL_FIELDS.length) {
     return {
       badge: "Incomplete",
       copy: "The runtime gate is active, but one or more high-stakes blockers are not enforcing the boundary.",
@@ -580,13 +601,7 @@ export default function PoliciesPage() {
   const pendingApprovals = approvals.filter((item) => item.status === "pending_approval").length;
   const blockedActions = approvals.filter((item) => item.status === "blocked" || item.status === "rejected").length;
   const activeGuardrails = policy
-    ? [
-        policy.runtime_sensitive_actions_require_approval,
-        policy.runtime_block_pii_leak,
-        policy.runtime_block_prompt_injected_external_action,
-        policy.runtime_production_deploys_require_approval,
-        policy.runtime_changed_recipient_deny,
-      ].filter(Boolean).length
+    ? GUARDRAIL_FIELDS.filter((field) => Boolean(policy[field])).length
     : 0;
   const latestDecisions = approvals.slice(0, 5);
   const rulesView = useMemo(
@@ -595,7 +610,10 @@ export default function PoliciesPage() {
   );
   const selectedAgent = agents.find((agent) => agent.id === previewAgentId) ?? null;
   const selectedRule = rules.find((rule) => rule.id === selectedRuleId) ?? null;
-  const rulePatch = useMemo(() => patchFromRuleForm(ruleForm), [ruleForm]);
+  const rulePatch = useMemo(
+    () => patchFromRuleForm(ruleForm, selectedRule?.policy_patch ?? null),
+    [ruleForm, selectedRule?.policy_patch],
+  );
   const ruleConditions = useMemo(() => describePolicyPatch(rulePatch), [rulePatch]);
   const heroVerdict = policyVerdict({
     activeGuardrails,
@@ -661,7 +679,7 @@ export default function PoliciesPage() {
   }
 
   function saveRule() {
-    const payload = rulePayloadFromForm(ruleForm);
+    const payload = rulePayloadFromForm(ruleForm, selectedRule?.policy_patch ?? null);
     if (!payload.name) {
       setMessage("Rule name is required.");
       return;

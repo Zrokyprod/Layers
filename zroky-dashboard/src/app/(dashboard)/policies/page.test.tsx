@@ -80,7 +80,7 @@ function policy(overrides: Partial<PilotPolicyPayload> = {}): PilotPolicyPayload
     runtime_amount_deny_threshold_usd: 5000,
     runtime_production_deploys_require_approval: true,
     runtime_changed_recipient_deny: true,
-    runtime_sequence_risk_enabled: false,
+    runtime_sequence_risk_enabled: true,
     ...overrides,
   };
 }
@@ -211,9 +211,11 @@ function mockPolicies({
       requires_approval: false,
     }),
   ],
+  rules = [scopedRule()],
 }: {
   payload?: PilotPolicyPayload;
   decisions?: RuntimePolicyDecisionResponse[];
+  rules?: RuntimePolicyRuleResponse[];
 } = {}) {
   const response = policyResponse(payload);
   seededPolicyResponse = response;
@@ -227,7 +229,7 @@ function mockPolicies({
     max_active_agents: 3,
     limit_reached: false,
   };
-  seededRulesResponse = { items: [scopedRule()], total_in_page: 1 };
+  seededRulesResponse = { items: rules, total_in_page: rules.length };
   seededPreviewResponse = {
     project_id: "proj_1",
     policy: {
@@ -356,9 +358,10 @@ describe("PoliciesPage mandate control", () => {
   });
 
   it("enables sequence-risk holds through the mandate toggle", async () => {
+    mockPolicies({ payload: policy({ runtime_sequence_risk_enabled: false }) });
     renderPoliciesPage();
 
-    await screen.findByRole("heading", { name: "Human review waiting" });
+    await screen.findByRole("heading", { name: "Guardrails incomplete" });
     fireEvent.click(screen.getByLabelText(/Sequence risk holds/i));
     fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
 
@@ -419,6 +422,36 @@ describe("PoliciesPage mandate control", () => {
         action_type: "deploy_change",
         policy_patch: {
           runtime_amount_approval_threshold_usd: 10,
+        },
+      }),
+    );
+  });
+
+  it("keeps explicit empty list overrides when editing a scoped rule", async () => {
+    mockPolicies({
+      rules: [
+        scopedRule({
+          policy_patch: {
+            runtime_allowed_tools: ["ledger.lookup"],
+          },
+        }),
+      ],
+    });
+    renderPoliciesPage();
+
+    await screen.findByRole("heading", { name: "Scoped policy rules" });
+    fireEvent.click(screen.getByRole("button", { name: /Refund Agent strict threshold/ }));
+    const editor = screen.getByLabelText("Scoped rule editor");
+    fireEvent.change(within(editor).getByLabelText("Allowed tools override"), {
+      target: { value: "" },
+    });
+    fireEvent.click(within(editor).getByRole("button", { name: "Save rule" }));
+
+    await waitFor(() => expect(api.updateRuntimePolicyRule).toHaveBeenCalledTimes(1));
+    expect(api.updateRuntimePolicyRule.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        policy_patch: {
+          runtime_allowed_tools: [],
         },
       }),
     );
