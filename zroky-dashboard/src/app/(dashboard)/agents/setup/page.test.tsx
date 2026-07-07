@@ -407,6 +407,24 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByLabelText("Live capture status").textContent).toContain("Policy checked");
   });
 
+  it("keeps a created profile when safe-default enforcement fails", async () => {
+    api.enforceAgentProfile.mockRejectedValueOnce(new Error("policy service unavailable"));
+
+    renderPage();
+    await screen.findByText("Runtime key ready");
+
+    fireEvent.change(screen.getByLabelText("Agent name"), { target: { value: "Refund Agent" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create agent profile/i }));
+
+    await waitFor(() => expect(api.createAgentProfile).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Agent profile was created, but safe defaults were not enforced/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retry from this profile before running production actions/i)).toBeInTheDocument();
+    expect(await screen.findByText("Ops Agent")).toBeInTheDocument();
+    expect(screen.getByText("Choose actions next")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Install protected actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create agent profile/i })).not.toBeInTheDocument();
+  });
+
   it("installs a protected action pack before showing run commands", async () => {
     api.listAgentProfiles.mockResolvedValue({ items: [profile({ display_name: "Manual QA Agent" })], total: 1 });
 

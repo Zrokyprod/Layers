@@ -413,6 +413,16 @@ function runtimeCredentialRef(keyPrefix: string | undefined) {
   return `customer-runner-secret://zroky/project-key/${normalized || "project-runtime-key"}`;
 }
 
+class AgentSetupEnforcementError extends Error {
+  profile: AgentProfileResponse;
+
+  constructor(profile: AgentProfileResponse, message: string) {
+    super(message);
+    this.name = "AgentSetupEnforcementError";
+    this.profile = profile;
+  }
+}
+
 function CopyableCode({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -715,6 +725,9 @@ export default function ProtectedAgentSetupPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (connectedProfile) {
+        return enforceAgentProfile(connectedProfile.id);
+      }
       const created = await createAgentProfile({
         display_name: agentName.trim(),
         description: "",
@@ -742,14 +755,30 @@ export default function ProtectedAgentSetupPage() {
       });
       // Enforcing with no declared action map applies the safe fail-closed
       // default: unknown actions deny, sensitive actions hold for approval.
-      return enforceAgentProfile(created.id);
+      try {
+        return await enforceAgentProfile(created.id);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "Safe defaults could not be enforced.";
+        throw new AgentSetupEnforcementError(
+          created,
+          `Agent profile was created, but safe defaults were not enforced. Retry from this profile before running production actions. ${detail}`,
+        );
+      }
     },
     onSuccess: (created) => {
       setProfile(created);
       setError(null);
       void queryClient.invalidateQueries({ queryKey: ["agents", "profiles"] });
+      void queryClient.invalidateQueries({ queryKey: ["agent-setup", "profiles"] });
     },
     onError: (err) => {
+      if (err instanceof AgentSetupEnforcementError) {
+        setProfile(err.profile);
+        setError(err.message);
+        void queryClient.invalidateQueries({ queryKey: ["agents", "profiles"] });
+        void queryClient.invalidateQueries({ queryKey: ["agent-setup", "profiles"] });
+        return;
+      }
       setError(err instanceof Error ? err.message : "Could not create the agent.");
     },
   });
