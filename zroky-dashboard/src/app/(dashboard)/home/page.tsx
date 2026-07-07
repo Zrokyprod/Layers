@@ -439,7 +439,14 @@ function unavailableProofMetric(id: string, label: string, detail: string, href:
 
 function proofMetrics(data: MissionData, availability: MissionAvailability): ProofMetric[] {
   const summary = data.homeSummary;
-  const summaryAvailable = Boolean(availability.homeSummary && summary);
+  if (!availability.homeSummary || !summary) {
+    return [
+      unavailableProofMetric("controlled-actions", "Controlled actions", "Home summary unavailable", "/actions"),
+      unavailableProofMetric("pending-approvals", "Pending approvals", "Home summary unavailable", "/approvals"),
+      unavailableProofMetric("verified-outcomes", "Verified outcomes", "Home summary unavailable", "/outcomes"),
+      unavailableProofMetric("bypass-risk", "Bypass risk", "Home summary unavailable", "/outcomes"),
+    ];
+  }
   const totalChecks = summary?.metrics.outcome_checks ?? 0;
   const matchedChecks = summary?.metrics.verified_outcomes ?? 0;
   const matchedRate = totalChecks > 0 ? (matchedChecks / totalChecks) * 100 : null;
@@ -447,60 +454,61 @@ function proofMetrics(data: MissionData, availability: MissionAvailability): Pro
   const windowLabel = summary ? `Last ${summary.window_days} days` : "Summary unavailable";
 
   return [
-    summaryAvailable
-      ? {
-          id: "controlled-actions",
-          label: "Controlled actions",
-          value: formatCount(summary.metrics.controlled_actions),
-          detail: windowLabel,
-          href: "/actions",
-          tone: "neutral",
-        }
-      : unavailableProofMetric("controlled-actions", "Controlled actions", "Home summary unavailable", "/actions"),
-    summaryAvailable
-      ? {
-          id: "pending-approvals",
-          label: "Pending approvals",
-          value: formatCount(summary.metrics.pending_approvals),
-          detail: "Open approval queue",
-          href: "/approvals",
-          tone: summary.metrics.pending_approvals > 0 ? "warning" : "success",
-        }
-      : unavailableProofMetric("pending-approvals", "Pending approvals", "Home summary unavailable", "/approvals"),
-    summaryAvailable
-      ? {
-          id: "verified-outcomes",
-          label: "Verified outcomes",
-          value: totalChecks > 0 ? `${formatPercent(matchedRate)} matched` : "No checks",
-          detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks, ${windowLabel.toLowerCase()}`,
-          href: "/outcomes",
-          tone: totalChecks > 0 && matchedChecks === totalChecks ? "success" : totalChecks > 0 ? "warning" : "neutral",
-        }
-      : unavailableProofMetric("verified-outcomes", "Verified outcomes", "Home summary unavailable", "/outcomes"),
-    summaryAvailable
-      ? {
-          id: "bypass-risk",
-          label: "Bypass risk",
-          value: formatCount(bypassRisk),
-          detail: `Unreceipted mutations, ${windowLabel.toLowerCase()}`,
-          href: "/outcomes",
-          tone: bypassRisk > 0 ? "danger" : "success",
-        }
-      : unavailableProofMetric("bypass-risk", "Bypass risk", "Home summary unavailable", "/outcomes"),
+    {
+      id: "controlled-actions",
+      label: "Controlled actions",
+      value: formatCount(summary.metrics.controlled_actions),
+      detail: windowLabel,
+      href: "/actions",
+      tone: "neutral",
+    },
+    {
+      id: "pending-approvals",
+      label: "Pending approvals",
+      value: formatCount(summary.metrics.pending_approvals),
+      detail: "Open approval queue",
+      href: "/approvals",
+      tone: summary.metrics.pending_approvals > 0 ? "warning" : "success",
+    },
+    {
+      id: "verified-outcomes",
+      label: "Verified outcomes",
+      value: totalChecks > 0 ? `${formatPercent(matchedRate)} matched` : "No checks",
+      detail: `${formatCount(matchedChecks)} matched / ${formatCount(totalChecks)} checks, ${windowLabel.toLowerCase()}`,
+      href: "/outcomes",
+      tone: totalChecks > 0 && matchedChecks === totalChecks ? "success" : totalChecks > 0 ? "warning" : "neutral",
+    },
+    {
+      id: "bypass-risk",
+      label: "Bypass risk",
+      value: formatCount(bypassRisk),
+      detail: `Unreceipted mutations, ${windowLabel.toLowerCase()}`,
+      href: "/outcomes",
+      tone: bypassRisk > 0 ? "danger" : "success",
+    },
   ];
 }
 
 function controlLoopStats(data: MissionData, availability: MissionAvailability): ControlLoopStats {
   const summary = data.homeSummary;
-  const summaryAvailable = Boolean(availability.homeSummary && summary);
+  if (!availability.homeSummary || !summary) {
+    return {
+      actionCount: null,
+      approvalCount: null,
+      verifiedCount: null,
+      receiptCount: null,
+      bypassCount: null,
+      sequenceRiskCount: null,
+    };
+  }
 
   return {
-    actionCount: summaryAvailable ? summary.metrics.controlled_actions : null,
-    approvalCount: summaryAvailable ? summary.metrics.pending_approvals : null,
-    verifiedCount: summaryAvailable ? summary.metrics.verified_outcomes : null,
-    receiptCount: summaryAvailable ? summary.metrics.receipts_generated : null,
-    bypassCount: summaryAvailable ? summary.metrics.bypass_mutations : null,
-    sequenceRiskCount: summaryAvailable ? summary.metrics.sequence_risks : null,
+    actionCount: summary.metrics.controlled_actions,
+    approvalCount: summary.metrics.pending_approvals,
+    verifiedCount: summary.metrics.verified_outcomes,
+    receiptCount: summary.metrics.receipts_generated,
+    bypassCount: summary.metrics.bypass_mutations,
+    sequenceRiskCount: summary.metrics.sequence_risks,
   };
 }
 

@@ -190,7 +190,6 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
     kind: "profile",
     agentName: profile.display_name,
     profile,
-    score: null,
     telemetryNames: [],
     aliases: [profile.id, profile.slug, profile.display_name],
     status: "profile_ready",

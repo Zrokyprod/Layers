@@ -3543,7 +3543,7 @@ export interface OutcomeReconciliationView {
   runtime_policy_decision_id: string | null;
   action_type: string | null;
   connector_type: string;
-  reverify_connector: string | null;
+  reverify_connector?: string | null;
   system_ref: string | null;
   verdict: OutcomeReconciliationVerdict;
   verification_status?: OutcomeVerificationStatus;
