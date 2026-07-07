@@ -38,6 +38,11 @@ from app.api.routes._internal.auth_schemas import (
     DeleteAccountRequest,
     ForgotPasswordRequest,
     LoginRequest,
+    MfaLoginChallengeResponse,
+    MfaLoginVerifyRequest,
+    MfaTotpConfirmRequest,
+    MfaTotpDisableRequest,
+    MfaTotpStartResponse,
     MeResponse,
     OAuthHandoffRequest,
     RefreshTokenRequest,
@@ -65,6 +70,7 @@ from app.db.models import Project, ProjectMembership, User, compute_email_hash
 from app.db.session import get_db_session as get_db
 from app.services import entitlements_resolver, token_store
 from app.services.email_sender import send_email
+from app.services.mfa import build_totp_uri, generate_totp_secret, verify_totp_code
 from app.services.security import (
     decode_session_token,
     generate_oauth_state,
@@ -79,6 +85,26 @@ router = APIRouter(prefix="/v1/auth")
 
 _GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+_MFA_CHALLENGE_PREFIX = "mfa_login:"
+_MFA_CHALLENGE_TTL_SECONDS = 5 * 60
+_MFA_PENDING_TOTP_PREFIX = "mfa_pending_totp:"
+_MFA_PENDING_TOTP_TTL_SECONDS = 10 * 60
+
+
+def _issue_mfa_challenge(user: User) -> MfaLoginChallengeResponse:
+    challenge_token = secrets.token_urlsafe(32)
+    token_store.set_with_ttl(
+        f"{_MFA_CHALLENGE_PREFIX}{challenge_token}",
+        user.id,
+        _MFA_CHALLENGE_TTL_SECONDS,
+    )
+    return MfaLoginChallengeResponse(
+        challenge_token=challenge_token,
+        expires_in_seconds=_MFA_CHALLENGE_TTL_SECONDS,
+        user_id=user.id,
+        email=user.email,
+        email_verified=user.email_verified_at is not None,
+    )
 
 
 def _ensure_default_project_membership(db: Session, user: User) -> bool:
@@ -297,9 +323,13 @@ def resend_verification(
 # Login
 # ---------------------------------------------------------------------------
 
-@router.post("/login", response_model=AuthTokenResponse)
+@router.post("/login", response_model=AuthTokenResponse | MfaLoginChallengeResponse)
 @limiter.limit("5/minute")
-def login(request: Request, body: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTokenResponse:
+def login(
+    request: Request,
+    body: LoginRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthTokenResponse | MfaLoginChallengeResponse:
     normalized_email = body.email.strip().lower()
     user = db.execute(
         select(User).where(User.email_hash == compute_email_hash(normalized_email))
@@ -321,12 +351,51 @@ def login(request: Request, body: LoginRequest, db: Annotated[Session, Depends(g
         user.password_hash = hash_password(body.password)
         should_commit = True
 
+    if user.totp_enabled_at is not None and user.totp_secret:
+        if should_commit:
+            db.commit()
+        return _issue_mfa_challenge(user)
+
     if _ensure_default_project_membership(db, user):
         should_commit = True
 
     if should_commit:
         db.commit()
 
+    return _issue_token(user)
+
+
+@router.post("/mfa/login/verify", response_model=AuthTokenResponse)
+@limiter.limit("10/minute")
+def verify_mfa_login(
+    request: Request,
+    body: MfaLoginVerifyRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthTokenResponse:
+    key = f"{_MFA_CHALLENGE_PREFIX}{body.challenge_token}"
+    user_id = token_store.get(key)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    if user is None or not user.is_active or not user.totp_enabled_at:
+        token_store.delete(key)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge.",
+        )
+    if not verify_totp_code(secret=user.totp_secret, code=body.code):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid MFA code.",
+        )
+
+    token_store.delete(key)
+    if _ensure_default_project_membership(db, user):
+        db.commit()
     return _issue_token(user)
 
 
@@ -364,7 +433,7 @@ def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token user is no longer active.",
         )
-    if token_store.get(f"jwt_blacklisted_user:{user.id}"):
+    if token_store.is_user_token_revoked(user.id, claims.get("iat")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="All sessions for this user have been revoked.",
@@ -878,6 +947,106 @@ def change_password(
     return {"detail": "Password changed successfully."}
 
 
+@router.post("/me/mfa/totp/start", response_model=MfaTotpStartResponse)
+@limiter.limit("5/hour")
+def start_totp_mfa_enrollment(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> MfaTotpStartResponse:
+    user = _get_current_user(authorization=authorization, db=db)
+    if not user.password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Set a password before enabling authenticator MFA.",
+        )
+
+    secret = generate_totp_secret()
+    token_store.set_with_ttl(
+        f"{_MFA_PENDING_TOTP_PREFIX}{user.id}",
+        secret,
+        _MFA_PENDING_TOTP_TTL_SECONDS,
+    )
+    return MfaTotpStartResponse(
+        secret=secret,
+        otpauth_uri=build_totp_uri(
+            secret=secret,
+            account_name=user.email or user.subject,
+        ),
+        expires_in_seconds=_MFA_PENDING_TOTP_TTL_SECONDS,
+    )
+
+
+@router.post("/me/mfa/totp/confirm", status_code=status.HTTP_200_OK)
+@limiter.limit("10/hour")
+def confirm_totp_mfa_enrollment(
+    request: Request,
+    body: MfaTotpConfirmRequest,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict[str, str]:
+    user = _get_current_user(authorization=authorization, db=db)
+    if not user.password_hash or not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+
+    pending_key = f"{_MFA_PENDING_TOTP_PREFIX}{user.id}"
+    secret = token_store.get(pending_key)
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MFA enrollment expired. Start again.",
+        )
+    if not verify_totp_code(secret=secret, code=body.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid MFA code.",
+        )
+
+    user.totp_secret = secret
+    user.totp_enabled_at = datetime.now(UTC)
+    db.add(user)
+    db.commit()
+    token_store.delete(pending_key)
+    token_store.revoke_all_user_tokens(user.id)
+    return {"detail": "Authenticator MFA enabled. Sign in again to continue."}
+
+
+@router.delete("/me/mfa/totp", status_code=status.HTTP_200_OK)
+@limiter.limit("5/hour")
+def disable_totp_mfa(
+    request: Request,
+    body: MfaTotpDisableRequest,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict[str, str]:
+    user = _get_current_user(authorization=authorization, db=db)
+    if not user.totp_enabled_at or not user.totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authenticator MFA is not enabled.",
+        )
+    if not user.password_hash or not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+    if not verify_totp_code(secret=user.totp_secret, code=body.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid MFA code.",
+        )
+
+    user.totp_secret = None
+    user.totp_enabled_at = None
+    db.add(user)
+    db.commit()
+    token_store.revoke_all_user_tokens(user.id)
+    return {"detail": "Authenticator MFA disabled. Sign in again to continue."}
+
+
 @router.get("/me/security", response_model=SecurityStatusResponse)
 def get_security_status(
     authorization: Annotated[str | None, Header()] = None,
@@ -885,7 +1054,7 @@ def get_security_status(
 ) -> SecurityStatusResponse:
     user = _get_current_user(authorization=authorization, db=db)
     return SecurityStatusResponse(
-        two_factor_enabled=False,
+        two_factor_enabled=bool(user.totp_enabled_at and user.totp_secret),
         password_login_enabled=bool(user.password_hash),
         github_connected=bool(user.github_id or user.github_login),
         google_connected=bool(user.google_id),
@@ -931,6 +1100,8 @@ def delete_account(
     user.github_login = None
     user.github_id = None
     user.google_id = None
+    user.totp_secret = None
+    user.totp_enabled_at = None
     user.display_name = None
 
     # Revoke all active tokens for this user

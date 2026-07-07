@@ -5,6 +5,7 @@
   AlertListResponse,
   ActivityFeedResponse,
   AnalyticsSummaryResponse,
+  AuthLoginResponse,
   AuthTokenResponse,
   ApiKeyCreateResponse,
   ApiKeyResponse,
@@ -72,6 +73,7 @@
   EvaluationSettingsResponse,
   ChangePasswordResponse,
   SecurityStatusResponse,
+  MfaTotpStartResponse,
   ProjectInvitationItem,
   AcceptInvitationResponse,
   NotificationListResponse,
@@ -1014,13 +1016,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return (await response.json()) as T;
 }
 
-export function loginWithPassword(email: string, password: string): Promise<AuthTokenResponse> {
-  return request<AuthTokenResponse>("/v1/auth/login", {
+export function loginWithPassword(email: string, password: string): Promise<AuthLoginResponse> {
+  return request<AuthLoginResponse>("/v1/auth/login", {
     method: "POST",
     body: {
       email,
       password,
     },
+  });
+}
+
+export function verifyMfaLogin(challengeToken: string, code: string): Promise<AuthTokenResponse> {
+  return request<AuthTokenResponse>("/v1/auth/mfa/login/verify", {
+    method: "POST",
+    body: { challenge_token: challengeToken, code },
   });
 }
 
@@ -2992,6 +3001,26 @@ export function changePassword(
 
 export function getSecurityStatus(signal?: AbortSignal): Promise<SecurityStatusResponse> {
   return request<SecurityStatusResponse>("/v1/auth/me/security", { signal });
+}
+
+export function startTotpMfa(): Promise<MfaTotpStartResponse> {
+  return request<MfaTotpStartResponse>("/v1/auth/me/mfa/totp/start", {
+    method: "POST",
+  });
+}
+
+export function confirmTotpMfa(currentPassword: string, code: string): Promise<{ detail: string }> {
+  return request<{ detail: string }>("/v1/auth/me/mfa/totp/confirm", {
+    method: "POST",
+    body: { current_password: currentPassword, code },
+  });
+}
+
+export function disableTotpMfa(currentPassword: string, code: string): Promise<{ detail: string }> {
+  return request<{ detail: string }>("/v1/auth/me/mfa/totp", {
+    method: "DELETE",
+    body: { current_password: currentPassword, code },
+  });
 }
 
 export function logoutAllSessions(): Promise<{ detail: string }> {

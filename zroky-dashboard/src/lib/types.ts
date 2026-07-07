@@ -11,6 +11,18 @@ export interface AuthTokenResponse {
   email_verified: boolean;
 }
 
+export interface MfaLoginChallengeResponse {
+  mfa_required: true;
+  challenge_token: string;
+  expires_in_seconds: number;
+  token_type: "mfa_challenge";
+  user_id: string;
+  email: string | null;
+  email_verified: boolean;
+}
+
+export type AuthLoginResponse = AuthTokenResponse | MfaLoginChallengeResponse;
+
 export interface MeResponse {
   user_id: string;
   email: string | null;
@@ -1035,6 +1047,12 @@ export interface SecurityStatusResponse {
   google_connected: boolean;
   current_session_expires_at: string | null;
   global_logout_available: boolean;
+}
+
+export interface MfaTotpStartResponse {
+  secret: string;
+  otpauth_uri: string;
+  expires_in_seconds: number;
 }
 
 // ── Invitations ──────────────────────────────────────────────────────────────

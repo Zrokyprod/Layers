@@ -7,7 +7,7 @@ import LoginPage from "../login/page";
 import SignupPage from "../signup/page";
 import ResetPasswordPage from "../reset-password/page";
 import VerifyEmailPage from "../verify-email/page";
-import { loginWithPassword, registerWithPassword, verifyEmail } from "@/lib/api";
+import { loginWithPassword, registerWithPassword, verifyEmail, verifyMfaLogin } from "@/lib/api";
 import { storeAuthSession } from "@/lib/auth";
 
 const navigation = vi.hoisted(() => ({
@@ -66,6 +66,7 @@ vi.mock("@/lib/api", () => ({
   resetPassword: vi.fn(),
   resendVerification: vi.fn(),
   verifyEmail: vi.fn(),
+  verifyMfaLogin: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -79,6 +80,7 @@ describe("auth pages", () => {
     navigation.replace.mockReset();
     navigation.refresh.mockReset();
     vi.mocked(loginWithPassword).mockReset();
+    vi.mocked(verifyMfaLogin).mockReset();
     vi.mocked(registerWithPassword).mockReset();
     vi.mocked(verifyEmail).mockReset();
     vi.mocked(storeAuthSession).mockReset();
@@ -124,6 +126,46 @@ describe("auth pages", () => {
     await waitFor(() => {
       expect(storeAuthSession).toHaveBeenCalled();
       expect(navigation.push).toHaveBeenCalledWith("/verify-email?email=new%40example.com");
+    });
+  });
+
+  it("completes password login MFA challenge before storing session", async () => {
+    vi.mocked(loginWithPassword).mockResolvedValue({
+      mfa_required: true,
+      challenge_token: "challenge-token",
+      expires_in_seconds: 300,
+      token_type: "mfa_challenge",
+      user_id: "user_1",
+      email: "owner@example.com",
+      email_verified: true,
+    });
+    vi.mocked(verifyMfaLogin).mockResolvedValue({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      access_expires_in_seconds: 3600,
+      refresh_expires_in_seconds: 86400,
+      token_type: "bearer",
+      user_id: "user_1",
+      email: "owner@example.com",
+      email_verified: true,
+    });
+
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "owner@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByLabelText("Authenticator code")).toBeInTheDocument();
+    expect(storeAuthSession).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Authenticator code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+
+    await waitFor(() => {
+      expect(verifyMfaLogin).toHaveBeenCalledWith("challenge-token", "123456");
+      expect(storeAuthSession).toHaveBeenCalled();
+      expect(navigation.push).toHaveBeenCalledWith("/home");
     });
   });
 

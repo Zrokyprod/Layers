@@ -35,6 +35,37 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class MfaLoginChallengeResponse(BaseModel):
+    mfa_required: bool = True
+    challenge_token: str
+    expires_in_seconds: int
+    token_type: str = "mfa_challenge"
+    user_id: str
+    email: str | None
+    email_verified: bool = True
+
+
+class MfaLoginVerifyRequest(BaseModel):
+    challenge_token: str
+    code: str
+
+    @field_validator("challenge_token")
+    @classmethod
+    def validate_challenge_token(cls, value: str) -> str:
+        token = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{20,180}", token):
+            raise ValueError("Invalid MFA challenge token.")
+        return token
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = re.sub(r"\s+", "", value.strip())
+        if not re.fullmatch(r"\d{6}", code):
+            raise ValueError("MFA code must be 6 digits.")
+        return code
+
+
 class AuthTokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -158,6 +189,38 @@ class CurrentUserProjectCreateRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class MfaTotpStartResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+    expires_in_seconds: int
+
+
+class MfaTotpConfirmRequest(BaseModel):
+    current_password: str
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = re.sub(r"\s+", "", value.strip())
+        if not re.fullmatch(r"\d{6}", code):
+            raise ValueError("MFA code must be 6 digits.")
+        return code
+
+
+class MfaTotpDisableRequest(BaseModel):
+    current_password: str
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        code = re.sub(r"\s+", "", value.strip())
+        if not re.fullmatch(r"\d{6}", code):
+            raise ValueError("MFA code must be 6 digits.")
+        return code
 
 
 class UpdateMeRequest(BaseModel):

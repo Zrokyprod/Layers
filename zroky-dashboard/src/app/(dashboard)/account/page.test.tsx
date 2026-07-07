@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AccountPage from "./page";
 
 const api = vi.hoisted(() => ({
+  confirmTotpMfa: vi.fn(),
   deleteAccount: vi.fn(),
+  disableTotpMfa: vi.fn(),
   getBillingMe: vi.fn(),
   getBillingUsage: vi.fn(),
   getSecurityStatus: vi.fn(),
   logoutAllSessions: vi.fn(),
+  startTotpMfa: vi.fn(),
 }));
 
 const hooks = vi.hoisted(() => ({
@@ -77,6 +80,13 @@ describe("AccountPage", () => {
       current_session_expires_at: "2026-05-30T10:00:00.000Z",
       global_logout_available: true,
     });
+    api.startTotpMfa.mockResolvedValue({
+      secret: "JBSWY3DPEHPK3PXP",
+      otpauth_uri: "otpauth://totp/Zroky:owner@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Zroky",
+      expires_in_seconds: 600,
+    });
+    api.confirmTotpMfa.mockResolvedValue({ detail: "Authenticator MFA enabled. Sign in again to continue." });
+    api.disableTotpMfa.mockResolvedValue({ detail: "Authenticator MFA disabled. Sign in again to continue." });
     api.getBillingMe.mockResolvedValue({
       org_id: "org_1",
       plan_code: "pro",
@@ -145,11 +155,15 @@ describe("AccountPage", () => {
     expect(await screen.findByText("Profile updated.")).toBeInTheDocument();
   });
 
-  it("does not expose fake two-factor controls without backend enrollment", async () => {
+  it("starts authenticator MFA setup from backend enrollment", async () => {
     render(<AccountPage />);
 
     expect(await screen.findByText("Account security")).toBeInTheDocument();
-    expect(screen.queryByText(/two-factor/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Set up authenticator" }));
+
+    await waitFor(() => expect(api.startTotpMfa).toHaveBeenCalled());
+    expect(await screen.findByDisplayValue("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enable authenticator" })).toBeInTheDocument();
   });
 
   it("disables global session logout when backend does not allow it", async () => {

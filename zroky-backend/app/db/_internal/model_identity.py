@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.db.encrypted_types import EncryptedString
 from app.db._internal.model_shared import *
 
 
@@ -74,6 +75,8 @@ class User(Base):
     github_token_scopes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     github_token_connected_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     github_token_updated_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    totp_secret: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     email_verification_token: Mapped[str | None] = mapped_column(String(128), nullable=True)

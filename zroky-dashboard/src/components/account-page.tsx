@@ -18,7 +18,16 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { deleteAccount, getBillingMe, getBillingUsage, getSecurityStatus, logoutAllSessions } from "@/lib/api";
+import {
+  confirmTotpMfa,
+  deleteAccount,
+  disableTotpMfa,
+  getBillingMe,
+  getBillingUsage,
+  getSecurityStatus,
+  logoutAllSessions,
+  startTotpMfa,
+} from "@/lib/api";
 import { clearAccessToken } from "@/lib/auth";
 import { useChangePassword, useMe, useUpdateMe } from "@/lib/hooks";
 import { passwordChangeSchema, type PasswordChangeFormData } from "@/lib/schemas";
@@ -74,6 +83,12 @@ export default function AccountPage() {
   const [billingLoading, setBillingLoading] = useState(true);
   const [billingMessage, setBillingMessage] = useState("");
   const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
+  const [mfaPassword, setMfaPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaMessage, setMfaMessage] = useState("");
+  const [mfaError, setMfaError] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -174,6 +189,13 @@ export default function AccountPage() {
       tone: connectedLogin !== "None" && connectedLogin !== "Loading" && connectedLogin !== "Unavailable" ? "ready" : "neutral",
     },
     {
+      icon: <Fingerprint aria-hidden="true" />,
+      label: "Authenticator",
+      value: securityLoading ? "Loading" : security?.two_factor_enabled ? "Enabled" : "Not enabled",
+      detail: "Required after password sign-in.",
+      tone: security?.two_factor_enabled ? "ready" : "warn",
+    },
+    {
       icon: <MonitorX aria-hidden="true" />,
       label: "Sessions",
       value: sessionStatus,
@@ -262,6 +284,60 @@ export default function AccountPage() {
       setSecurityMessage(err instanceof Error ? err.message : "Failed to revoke sessions.");
     } finally {
       setLogoutAllLoading(false);
+    }
+  }
+
+  async function onStartMfa() {
+    setMfaLoading(true);
+    setMfaMessage("");
+    setMfaError("");
+    try {
+      const res = await startTotpMfa();
+      setMfaSetup({ secret: res.secret, otpauthUri: res.otpauth_uri });
+      setMfaMessage("Scan the authenticator URI or enter the setup key, then confirm with a 6-digit code.");
+    } catch (err) {
+      setMfaError(err instanceof Error ? err.message : "Failed to start authenticator setup.");
+    } finally {
+      setMfaLoading(false);
+    }
+  }
+
+  async function onConfirmMfa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMfaLoading(true);
+    setMfaMessage("");
+    setMfaError("");
+    try {
+      const res = await confirmTotpMfa(mfaPassword, mfaCode);
+      setMfaMessage(res.detail);
+      setMfaSetup(null);
+      setMfaPassword("");
+      setMfaCode("");
+      await clearAccessToken();
+      router.push("/login");
+    } catch (err) {
+      setMfaError(err instanceof Error ? err.message : "Failed to enable authenticator MFA.");
+    } finally {
+      setMfaLoading(false);
+    }
+  }
+
+  async function onDisableMfa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMfaLoading(true);
+    setMfaMessage("");
+    setMfaError("");
+    try {
+      const res = await disableTotpMfa(mfaPassword, mfaCode);
+      setMfaMessage(res.detail);
+      setMfaPassword("");
+      setMfaCode("");
+      await clearAccessToken();
+      router.push("/login");
+    } catch (err) {
+      setMfaError(err instanceof Error ? err.message : "Failed to disable authenticator MFA.");
+    } finally {
+      setMfaLoading(false);
     }
   }
 
@@ -358,6 +434,95 @@ export default function AccountPage() {
               <span className="account-status-value">{item.value}</span>
             </article>
           ))}
+        </div>
+
+        <div className="profile-form-narrow profile-edit-form">
+          <h4 className="account-security-subtitle">Authenticator app</h4>
+          <p className="panel-sub">
+            Protect approvals with a 6-digit code after password sign-in.
+          </p>
+          {mfaError ? <p className="account-message is-error">{mfaError}</p> : null}
+          {mfaMessage ? <p className="account-message is-success">{mfaMessage}</p> : null}
+
+          {!security?.two_factor_enabled && !mfaSetup ? (
+            <DashboardButton
+              type="button"
+              variant="primary"
+              loading={mfaLoading}
+              onClick={() => void onStartMfa()}
+              disabled={mfaLoading || !security?.password_login_enabled}
+            >
+              Set up authenticator
+            </DashboardButton>
+          ) : null}
+
+          {mfaSetup ? (
+            <form onSubmit={onConfirmMfa} className="profile-edit-form">
+              <div className="field profile-field-gap-md">
+                <label className="field-label" htmlFor="mfa-secret">Setup key</label>
+                <input id="mfa-secret" className="input" value={mfaSetup.secret} readOnly />
+              </div>
+              <div className="field profile-field-gap-md">
+                <label className="field-label" htmlFor="mfa-uri">Authenticator URI</label>
+                <input id="mfa-uri" className="input" value={mfaSetup.otpauthUri} readOnly />
+              </div>
+              <div className="field profile-field-gap-md">
+                <label className="field-label" htmlFor="mfa-password">Current password</label>
+                <input
+                  id="mfa-password"
+                  className="input"
+                  type="password"
+                  value={mfaPassword}
+                  onChange={(event) => setMfaPassword(event.target.value)}
+                  autoComplete="current-password"
+                />
+              </div>
+              <div className="field profile-field-gap-md">
+                <label className="field-label" htmlFor="mfa-code">Authenticator code</label>
+                <input
+                  id="mfa-code"
+                  className="input"
+                  inputMode="numeric"
+                  value={mfaCode}
+                  onChange={(event) => setMfaCode(event.target.value)}
+                  autoComplete="one-time-code"
+                />
+              </div>
+              <DashboardButton type="submit" variant="primary" loading={mfaLoading}>
+                Enable authenticator
+              </DashboardButton>
+            </form>
+          ) : null}
+
+          {security?.two_factor_enabled ? (
+            <form onSubmit={onDisableMfa} className="profile-edit-form">
+              <div className="field profile-field-gap-md">
+                <label className="field-label" htmlFor="disable-mfa-password">Current password</label>
+                <input
+                  id="disable-mfa-password"
+                  className="input"
+                  type="password"
+                  value={mfaPassword}
+                  onChange={(event) => setMfaPassword(event.target.value)}
+                  autoComplete="current-password"
+                />
+              </div>
+              <div className="field profile-field-gap-md">
+                <label className="field-label" htmlFor="disable-mfa-code">Authenticator code</label>
+                <input
+                  id="disable-mfa-code"
+                  className="input"
+                  inputMode="numeric"
+                  value={mfaCode}
+                  onChange={(event) => setMfaCode(event.target.value)}
+                  autoComplete="one-time-code"
+                />
+              </div>
+              <DashboardButton type="submit" variant="danger" loading={mfaLoading}>
+                Disable authenticator
+              </DashboardButton>
+            </form>
+          ) : null}
         </div>
 
         <div className="account-security-actions">

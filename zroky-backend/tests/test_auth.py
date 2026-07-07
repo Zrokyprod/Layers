@@ -1,6 +1,7 @@
 """Tests for auth routes — register, login, JWT issuance."""
 import os
 import re
+import time
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
@@ -19,6 +20,7 @@ from app.db.session import SessionLocal, engine
 from app.core.config import get_settings
 from app.main import app
 from app.api.routes.auth import AuthTokenResponse, _store_email_verification_token, _store_oauth_handoff
+from app.services.mfa import TOTP_PERIOD_SECONDS, _totp_at
 from app.services.security import hash_password
 
 
@@ -578,6 +580,90 @@ def test_change_password_revokes_existing_sessions(client):
         "password": "newpassword1",
     })
     assert new_login.status_code == 200
+
+
+def test_totp_mfa_enrollment_login_and_disable_flow(client):
+    register = client.post("/v1/auth/register", json={
+        "email": "mfa-owner@example.com",
+        "password": "mfaoldpw123",
+        "confirm_password": "mfaoldpw123",
+    })
+    assert register.status_code == 201
+    original_token = register.json()["access_token"]
+    headers = {"Authorization": f"Bearer {original_token}"}
+
+    security_before = client.get("/v1/auth/me/security", headers=headers)
+    assert security_before.status_code == 200
+    assert security_before.json()["two_factor_enabled"] is False
+
+    start = client.post("/v1/auth/me/mfa/totp/start", headers=headers)
+    assert start.status_code == 200
+    started = start.json()
+    assert started["secret"]
+    assert started["otpauth_uri"].startswith("otpauth://totp/")
+    code = _totp_at(
+        started["secret"],
+        counter=int(time.time() // TOTP_PERIOD_SECONDS),
+    )
+
+    confirm = client.post(
+        "/v1/auth/me/mfa/totp/confirm",
+        headers=headers,
+        json={"current_password": "mfaoldpw123", "code": code},
+    )
+    assert confirm.status_code == 200
+
+    old_me = client.get("/v1/auth/me", headers=headers)
+    assert old_me.status_code == 401
+
+    login = client.post("/v1/auth/login", json={
+        "email": "mfa-owner@example.com",
+        "password": "mfaoldpw123",
+    })
+    assert login.status_code == 200
+    challenge = login.json()
+    assert challenge["mfa_required"] is True
+    assert "access_token" not in challenge
+
+    bad_verify = client.post("/v1/auth/mfa/login/verify", json={
+        "challenge_token": challenge["challenge_token"],
+        "code": "000000",
+    })
+    assert bad_verify.status_code == 401
+
+    verify = client.post("/v1/auth/mfa/login/verify", json={
+        "challenge_token": challenge["challenge_token"],
+        "code": _totp_at(started["secret"], counter=int(time.time() // TOTP_PERIOD_SECONDS)),
+    })
+    assert verify.status_code == 200
+    verified_token = verify.json()["access_token"]
+    verified_headers = {"Authorization": f"Bearer {verified_token}"}
+
+    security_after = client.get("/v1/auth/me/security", headers=verified_headers)
+    assert security_after.status_code == 200
+    assert security_after.json()["two_factor_enabled"] is True
+
+    disable = client.request(
+        "DELETE",
+        "/v1/auth/me/mfa/totp",
+        headers=verified_headers,
+        json={
+            "current_password": "mfaoldpw123",
+            "code": _totp_at(started["secret"], counter=int(time.time() // TOTP_PERIOD_SECONDS)),
+        },
+    )
+    assert disable.status_code == 200
+
+    revoked_after_disable = client.get("/v1/auth/me", headers=verified_headers)
+    assert revoked_after_disable.status_code == 401
+
+    login_without_mfa = client.post("/v1/auth/login", json={
+        "email": "mfa-owner@example.com",
+        "password": "mfaoldpw123",
+    })
+    assert login_without_mfa.status_code == 200
+    assert "access_token" in login_without_mfa.json()
+    assert "challenge_token" not in login_without_mfa.json()
 
 
 # ---------------------------------------------------------------------------

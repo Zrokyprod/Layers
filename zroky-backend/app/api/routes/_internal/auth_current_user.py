@@ -33,7 +33,7 @@ def _get_current_user(authorization: str | None = None, db: Session | None = Non
     user = db.scalars(stmt).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-    if token_store.get(f"jwt_blacklisted_user:{user.id}"):
+    if token_store.is_user_token_revoked(user.id, payload.get("iat")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="All sessions for this user have been revoked.")
     return user
 
@@ -64,5 +64,4 @@ def _me_response(user: User) -> MeResponse:
         email_verified=user.email_verified_at is not None,
         created_at=user.created_at.isoformat() if hasattr(user, "created_at") and user.created_at else "",
     )
-
 
