@@ -425,19 +425,19 @@ class Settings(BaseSettings):
     # ships in a later module. When `False` the route is NOT registered with
     # the API router, so OpenAPI no longer advertises it.
     #
-    # Default policy:
-    #   - False: UI is being removed in the same module; route can go now.
-    #   - True : kept-enabled until the named replacement module ships, then
-    #            the default flips to False and the file is deleted.
-    # FEATURE_LEGACY_ASSISTANT, FEATURE_LEGACY_AI_INTEGRATION,
-    # FEATURE_LEGACY_NOTIFICATIONS, FEATURE_LEGACY_SUPPORT,
-    # FEATURE_LEGACY_ONBOARDING, FEATURE_LEGACY_FEATURE_FLAGS:
-    # source files deleted in Module 1; flags removed.
+    # Launch policy: old observability/replay/issue APIs are default-off so the
+    # customer product surface stays focused on protected actions, outcomes, and
+    # evidence. Internal dependencies that still feed the control plane
+    # (calls/traces and alerts/notifications) remain mounted separately.
     FEATURE_LEGACY_OWNER: bool = True              # Customer production env sets False. Admin-only deployments may enable for zroky-admin.
+    FEATURE_LEGACY_OBSERVABILITY_API: bool = False
+    FEATURE_LEGACY_REPLAY_API: bool = False
+    FEATURE_LEGACY_DIAGNOSIS_API: bool = False
+    FEATURE_LEGACY_ISSUES_API: bool = False
     # FEATURE_LEGACY_BILLING removed after M12; deprecated /plans and
     # GET/PUT /subscription routes are deleted.
     FEATURE_LEGACY_INVITATIONS: bool = True        # M8 will reduce. Replacement: /v1/invitations/accept only.
-    FEATURE_LEGACY_DIAGNOSIS_ALIAS: bool = True    # M7 will disable. Merges into /v1/diagnoses.
+    FEATURE_LEGACY_DIAGNOSIS_ALIAS: bool = False
 
     # â”€â”€ Calibrated Judge (Wedge 3 â€” judge calibration + auto-downgrade) â”€â”€â”€â”€â”€
     # Master switch for the daily golden-set calibration runner.

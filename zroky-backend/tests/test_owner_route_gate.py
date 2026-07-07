@@ -9,6 +9,21 @@ from app.core.config import get_settings
 from app.main import app
 
 
+def _reload_api_router(monkeypatch, **env: str):
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    sys.modules.pop("app.api.router", None)
+    return importlib.import_module("app.api.router")
+
+
+def _router_tags(router_module) -> set[str]:
+    tags: set[str] = set()
+    for route in router_module.api_router.routes:
+        tags.update(getattr(route, "tags", []) or [])
+    return tags
+
+
 def _owner_headers(monkeypatch, token: str = "owner-secret") -> dict[str, str]:
     monkeypatch.setenv("REQUIRE_PROVISIONING_TOKEN", "false")
     monkeypatch.setenv("PROVISIONING_TOKEN", token)
@@ -17,17 +32,54 @@ def _owner_headers(monkeypatch, token: str = "owner-secret") -> dict[str, str]:
 
 
 def test_owner_router_not_mounted_when_legacy_owner_disabled(monkeypatch) -> None:
-    monkeypatch.setenv("FEATURE_LEGACY_OWNER", "false")
-
-    from app.core.config import get_settings
-
-    get_settings.cache_clear()
-    sys.modules.pop("app.api.router", None)
-
-    router_module = importlib.import_module("app.api.router")
+    router_module = _reload_api_router(monkeypatch, FEATURE_LEGACY_OWNER="false")
     paths = sorted({getattr(route, "path", "") for route in router_module.api_router.routes})
 
     assert not any(path.startswith("/v1/owner") for path in paths)
+
+    sys.modules.pop("app.api.router", None)
+    get_settings.cache_clear()
+
+
+def test_launch_legacy_surfaces_are_hidden_but_control_dependencies_stay_mounted(monkeypatch) -> None:
+    router_module = _reload_api_router(
+        monkeypatch,
+        FEATURE_LEGACY_OBSERVABILITY_API="false",
+        FEATURE_LEGACY_REPLAY_API="false",
+        FEATURE_LEGACY_DIAGNOSIS_API="false",
+        FEATURE_LEGACY_ISSUES_API="false",
+        FEATURE_LEGACY_DIAGNOSIS_ALIAS="false",
+    )
+    tags = _router_tags(router_module)
+
+    hidden_tags = {
+        "ablation",
+        "analytics",
+        "ask",
+        "contracts",
+        "detectors",
+        "diagnoses",
+        "diagnosis",
+        "digest",
+        "fix-events",
+        "goldens",
+        "intel",
+        "issues",
+        "judge-calibration",
+        "judge-health",
+        "live",
+        "provider-drift",
+        "recommendations",
+        "regression-ci",
+        "reliability",
+        "replay",
+        "replay-dispatch",
+        "replay-runs",
+    }
+    assert tags.isdisjoint(hidden_tags)
+
+    assert {"calls", "traces", "alerts", "notifications"}.issubset(tags)
+    assert {"home", "outcomes", "verified-actions", "integrations"}.issubset(tags)
 
     sys.modules.pop("app.api.router", None)
     get_settings.cache_clear()
