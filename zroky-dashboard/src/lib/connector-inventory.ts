@@ -50,6 +50,35 @@ export const LAUNCH_VISIBLE_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
   "slack",
 ]);
 
+export const CONNECTOR_DISPLAY_LABELS: Record<string, string> = {
+  accounting_system: "Accounting system",
+  commerce_platform: "Commerce platform",
+  crm_record: "CRM record",
+  customer_identity: "Customer identity",
+  erp_finance: "ERP finance",
+  email_delivery: "Email/messages",
+  freshdesk_ticket: "Freshdesk tickets",
+  generic_finance: "Generic Finance API",
+  generic_rest: "Generic REST",
+  github_ci: "GitHub CI",
+  inventory_system: "Inventory system",
+  intercom: "Intercom",
+  ledger_refund: "Refund ledger",
+  netsuite_finance: "NetSuite finance",
+  order_management: "Order management",
+  payments_ledger: "Payments ledger",
+  postgres_read: "Postgres Read",
+  quickbooks_ledger: "QuickBooks template",
+  razorpay_refund: "Razorpay refund",
+  shopify_admin: "Shopify Admin",
+  slack_approval_alert: "Slack approval",
+  subscription_billing: "Subscription billing",
+  stripe_payment: "Stripe payment",
+  stripe_refund: "Stripe refund",
+  ticket_status: "Support tickets",
+  zendesk_ticket: "Zendesk tickets",
+};
+
 export type ConnectorTransport = "rest_http" | "sql_read" | "webhook_bridge" | "workflow";
 export type ConnectorTemplateKind =
   | "custom"

@@ -1,4 +1,5 @@
 import type { ActionPackResponse } from "@/lib/api";
+import { CONNECTOR_DISPLAY_LABELS } from "@/lib/connector-inventory";
 
 export const PRIMARY_PACK_IDS = ["support-ops-v1", "finance-ops-v1", "devops-release-v1", "ecommerce-ops-v1"];
 export const LAUNCH_READY_PACK_IDS = new Set(["support-ops-v1", "devops-release-v1"]);
@@ -11,34 +12,7 @@ export const PACK_SHORT_COPY: Record<string, string> = {
   "ecommerce-ops-v1": "Order changes, inventory updates, discounts, refunds, and fulfillment state.",
 };
 
-export const CONNECTOR_LABELS: Record<string, string> = {
-  accounting_system: "Accounting system",
-  commerce_platform: "Commerce platform",
-  crm_record: "CRM record",
-  customer_identity: "Customer identity",
-  erp_finance: "ERP finance",
-  email_delivery: "Email/messages",
-  freshdesk_ticket: "Freshdesk tickets",
-  generic_finance: "Generic Finance API",
-  generic_rest: "Generic REST",
-  github_ci: "GitHub CI",
-  inventory_system: "Inventory system",
-  intercom: "Intercom",
-  ledger_refund: "Refund ledger",
-  netsuite_finance: "NetSuite finance",
-  order_management: "Order management",
-  payments_ledger: "Payments ledger",
-  postgres_read: "Postgres Read",
-  quickbooks_ledger: "QuickBooks template",
-  razorpay_refund: "Razorpay refund",
-  shopify_admin: "Shopify Admin",
-  slack_approval_alert: "Slack approval",
-  subscription_billing: "Subscription billing",
-  stripe_payment: "Stripe payment",
-  stripe_refund: "Stripe refund",
-  ticket_status: "Support tickets",
-  zendesk_ticket: "Zendesk tickets",
-};
+export const CONNECTOR_LABELS: Record<string, string> = CONNECTOR_DISPLAY_LABELS;
 
 export const SUPPORT_ENGINES = [
   {
