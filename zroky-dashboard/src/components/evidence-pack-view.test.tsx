@@ -237,7 +237,7 @@ describe("EvidencePackView", () => {
     expect(screen.getByRole("button", { name: /Verification: Matched/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Receipt: signed/i })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Proof seal" })).toBeInTheDocument();
-    expect(screen.getAllByText("Signature valid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Server-attested signature valid").length).toBeGreaterThan(0);
     expect(screen.getByText("receipt_123")).toBeInTheDocument();
     expect(screen.getAllByText("Matched").length).toBeGreaterThan(0);
   });

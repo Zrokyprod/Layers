@@ -590,7 +590,7 @@ function PrintedReceiptArtifact() {
           </div>
 
           <div className="mt-4 border-t border-dashed border-[#bfb9aa] pt-3 text-center">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-[#8a867a]">Signature valid</p>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[#8a867a]">Ed25519 signed</p>
             <p className="mt-1 text-[10.5px] uppercase tracking-[0.16em] text-[#2f5f66]">Independently verifiable</p>
           </div>
         </div>

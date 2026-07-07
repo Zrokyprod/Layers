@@ -620,7 +620,7 @@ function ActionReceiptView({
       label: "Receipt",
       status: receipt.signature_valid ? "signed" : "invalid",
       tone: receiptStepTone,
-      detail: receipt.signature_valid ? "Receipt signature is valid." : "Receipt signature is invalid.",
+      detail: receipt.signature_valid ? "Receipt signature is server-attested valid." : "Receipt signature is invalid.",
     },
   ];
   const facts: EvidenceFact[] = [
@@ -668,7 +668,7 @@ function ActionReceiptView({
     { label: "Hash algorithm", value: field(valueFrom(evidence, "hash_algorithm"), "sha256"), mono: true },
   ];
   const signatureFacts: EvidenceFact[] = [
-    { label: "Signature valid", value: receipt.signature_valid ? "true" : "false", compact: true },
+    { label: "Server-attested signature", value: receipt.signature_valid ? "valid" : "invalid", compact: true },
     { label: "Signing key", value: receipt.signing_key_id, compact: true, mono: true },
     { label: "Signature algorithm", value: receipt.signature_algorithm, compact: true },
     { label: "Signature", value: receipt.signature, mono: true, className: "evidence-pack-hash-cell" },
@@ -749,7 +749,7 @@ function ActionReceiptView({
     {
       id: "evidence-signature",
       title: "Evidence + Signature",
-      meta: receipt.signature_valid ? "Signature valid" : "Signature invalid",
+      meta: receipt.signature_valid ? "Server-attested signature valid" : "Signature invalid",
       compact: true,
       defaultOpen: sectionShouldOpen(receiptStepTone),
       tone: receiptStepTone,
@@ -819,7 +819,7 @@ function ActionReceiptView({
         </div>
         <StatusPill
           value={receipt.signature_valid ? "signature_valid" : "signature_invalid"}
-          label={receipt.signature_valid ? "Signature valid" : "Signature invalid"}
+          label={receipt.signature_valid ? "Server-attested signature valid" : "Signature invalid"}
           tone={receipt.signature_valid ? "success" : "danger"}
         />
       </header>
