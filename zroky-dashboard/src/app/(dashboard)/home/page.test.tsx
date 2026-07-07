@@ -8,6 +8,7 @@ import type {
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
+  HomeSummaryResponse,
   OutcomeReconciliationSummaryResponse,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
@@ -18,6 +19,7 @@ import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/
 
 const api = vi.hoisted(() => ({
   getBillingUsage: vi.fn(),
+  getHomeSummary: vi.fn(),
   getOutcomeReconciliationSummary: vi.fn(),
   getSourceMutationSummary: vi.fn(),
   listActionRunners: vi.fn(),
@@ -338,6 +340,26 @@ function apiKey(overrides: Partial<ApiKeyResponse> = {}): ApiKeyResponse {
   };
 }
 
+function homeSummary(overrides: Partial<HomeSummaryResponse["metrics"]> = {}): HomeSummaryResponse {
+  return {
+    project_id: "proj_1",
+    window_days: 30,
+    window_start: "2026-04-29T10:00:00.000Z",
+    generated_at: now,
+    metrics: {
+      controlled_actions: 0,
+      pending_approvals: 0,
+      verified_outcomes: 0,
+      outcome_checks: 0,
+      receipts_generated: 0,
+      bypass_mutations: 0,
+      unreceipted_mutations: 0,
+      sequence_risks: 0,
+      ...overrides,
+    },
+  };
+}
+
 function mockHomeData(overrides: {
   intents?: ActionIntentResponse[];
   approvals?: RuntimePolicyDecisionResponse[];
@@ -353,7 +375,21 @@ function mockHomeData(overrides: {
   runners?: ActionRunnerResponse[];
   apiKeys?: ApiKeyResponse[];
   billing?: BillingUsageResponse;
+  homeSummary?: HomeSummaryResponse;
 } = {}) {
+  api.getHomeSummary.mockResolvedValue(
+    overrides.homeSummary ??
+      homeSummary({
+        controlled_actions: overrides.intents?.length ?? 0,
+        pending_approvals: overrides.approvals?.length ?? 0,
+        verified_outcomes: overrides.outcomeSummary?.matched ?? overrides.outcomes?.filter((item) => item.verdict === "matched").length ?? 0,
+        outcome_checks: overrides.outcomeSummary?.total ?? overrides.outcomes?.length ?? 0,
+        receipts_generated: overrides.intents?.filter((item) => item.receipt_status === "generated").length ?? 0,
+        bypass_mutations: overrides.sourceSummary?.policy_bypass ?? overrides.mutations?.filter((item) => item.classification === "policy_bypass").length ?? 0,
+        unreceipted_mutations: overrides.sourceSummary?.unreceipted ?? overrides.mutations?.length ?? 0,
+        sequence_risks: overrides.approvals?.filter((item) => JSON.stringify(item.policy_hit).includes("sequence_risk")).length ?? 0,
+      }),
+  );
   api.listActionIntents.mockResolvedValue({
     items: overrides.intents ?? [],
     total_in_page: overrides.intents?.length ?? 0,
@@ -552,13 +588,13 @@ describe("Mission Control Home", () => {
     expect(screen.getByLabelText("Decision queue")).toBeInTheDocument();
   });
 
-  it("does not turn a failed approvals feed into a zero pending approval metric", async () => {
+  it("does not turn a failed home summary into zero KPI metrics", async () => {
     mockHomeData({
       apiKeys: [apiKey()],
       profiles: [profile()],
       intents: [intent({ status: "authorized", runtime_policy_decision_id: null })],
     });
-    api.listRuntimePolicyApprovals.mockRejectedValue(new Error("approvals unavailable"));
+    api.getHomeSummary.mockRejectedValue(new Error("home summary unavailable"));
 
     render(<HomePage />);
 
@@ -568,7 +604,7 @@ describe("Mission Control Home", () => {
     expect(approvalsCard).toBeInTheDocument();
     expect(approvalsCard.classList.contains("mc-tone-warning")).toBe(true);
     expect(within(approvalsCard).getByText("— unavailable")).toBeInTheDocument();
-    expect(within(approvalsCard).getByText("Approval feed unavailable")).toBeInTheDocument();
+    expect(within(approvalsCard).getByText("Home summary unavailable")).toBeInTheDocument();
     expect(within(approvalsCard).queryByText("0")).not.toBeInTheDocument();
     expect(screen.getByText("1 data source unavailable")).toBeInTheDocument();
   });

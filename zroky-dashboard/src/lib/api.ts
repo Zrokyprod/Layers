@@ -3585,6 +3585,23 @@ export interface SourceMutationSummaryResponse {
   successful_pollers?: number;
 }
 
+export interface HomeSummaryResponse {
+  project_id: string;
+  window_days: number;
+  window_start: string;
+  generated_at: string;
+  metrics: {
+    controlled_actions: number;
+    pending_approvals: number;
+    verified_outcomes: number;
+    outcome_checks: number;
+    receipts_generated: number;
+    bypass_mutations: number;
+    unreceipted_mutations: number;
+    sequence_risks: number;
+  };
+}
+
 export interface SavedLedgerRefundReconciliationPayload {
   call_id?: string | null;
   trace_id?: string | null;
@@ -3726,6 +3743,13 @@ export function getOutcomeReconciliationSummary(
   signal?: AbortSignal,
 ): Promise<OutcomeReconciliationSummaryResponse> {
   return request<OutcomeReconciliationSummaryResponse>("/v1/outcomes/reconciliation/summary", {
+    query: { days: String(days) },
+    signal,
+  });
+}
+
+export function getHomeSummary(days = 30, signal?: AbortSignal): Promise<HomeSummaryResponse> {
+  return request<HomeSummaryResponse>("/v1/home/summary", {
     query: { days: String(days) },
     signal,
   });

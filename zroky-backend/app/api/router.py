@@ -23,6 +23,7 @@ from app.api.routes.digest import router as digest_router
 from app.api.routes.export import router as export_router
 from app.api.routes.fix_events import router as fix_events_router
 from app.api.routes.health import router as health_router
+from app.api.routes.home import router as home_router
 from app.api.routes.github_webhooks import router as github_webhooks_router
 from app.api.routes.ingest import router as ingest_router
 from app.api.routes.internal import router as internal_router
@@ -71,6 +72,7 @@ api_router = APIRouter()
 
 # ── Always-on routes (Watch + Pilot core surface) ─────────────────────
 api_router.include_router(health_router, tags=["health"])
+api_router.include_router(home_router, tags=["home"])
 api_router.include_router(internal_router, tags=["internal"])
 api_router.include_router(auth_router, tags=["auth"])
 api_router.include_router(security_router, tags=["security"])
