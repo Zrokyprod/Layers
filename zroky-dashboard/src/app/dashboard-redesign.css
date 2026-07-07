@@ -6767,6 +6767,29 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   min-width: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .keys-expiry-warning {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  margin: 2px 0 0 !important;
+  gap: 6px !important;
+  border: 1px solid rgba(191, 122, 31, 0.26) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 248, 230, 0.78) !important;
+  color: #8a520d !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  padding: 5px 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-expiry-warning svg {
+  width: 13px !important;
+  height: 13px !important;
+  flex: 0 0 auto !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .keys-card-facts {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;

@@ -197,6 +197,20 @@ describe("ApiKeysPage", () => {
     expect(await screen.findByText("zk_live_rotated_secret")).toBeInTheDocument();
   });
 
+  it("warns before an active runtime key expires", () => {
+    const expiresSoon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    hooks.useListProjectApiKeys.mockReturnValue({
+      data: [apiKey({ expires_at: expiresSoon })],
+      isLoading: false,
+      error: null,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByText("Expiring soon")).toBeInTheDocument();
+    expect(screen.getByText("Expires in 7 days. Rotate before production agents lose auth.")).toBeInTheDocument();
+  });
+
   it("keeps the revoke confirmation flow working", async () => {
     hooks.useListProjectApiKeys.mockReturnValue({
       data: [apiKey()],

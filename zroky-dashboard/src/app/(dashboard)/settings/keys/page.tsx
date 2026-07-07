@@ -38,6 +38,8 @@ import { SDK } from "@/lib/sdk";
 const defaultKeyName = "Production verified-action key";
 const jsSdkInstall = SDK.install;
 const pythonSdkInstall = "pip install zroky";
+const keyExpiryWarningDays = 14;
+const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 function configuredApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
@@ -61,6 +63,22 @@ function keyStatusLabel(key: ApiKeyResponse): string {
   if (status === "active") return "Active";
   if (status === "expired") return "Expired";
   return "Revoked";
+}
+
+function daysUntilExpiry(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const expires = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expires)) return null;
+  return Math.ceil((expires - Date.now()) / millisecondsPerDay);
+}
+
+function expiryWarningLabel(key: ApiKeyResponse): string | null {
+  if (key.revoked || key.expired) return null;
+  const days = daysUntilExpiry(key.expires_at);
+  if (days === null || days > keyExpiryWarningDays) return null;
+  if (days <= 0) return "Expires today. Rotate before the next agent run.";
+  if (days === 1) return "Expires in 1 day. Rotate before production agents lose auth.";
+  return `Expires in ${days} days. Rotate before production agents lose auth.`;
 }
 
 function ApiKeysContent() {
@@ -158,6 +176,7 @@ function ApiKeysContent() {
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
   const revokedKeys = keys.filter((key) => key.revoked);
   const expiredKeys = keys.filter((key) => key.expired);
+  const expiringSoonKeys = activeKeys.filter((key) => expiryWarningLabel(key));
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const snippetProjectId = projectId || "proj_...";
   const apiBaseUrl = configuredApiBaseUrl();
@@ -205,6 +224,12 @@ export ZROKY_API_URL="${apiBaseUrl}"`;
                   <span>{key.scopes?.join(", ") || "project:member"}</span>
                   <span>Created {formatDateTime(key.created_at)}</span>
                 </div>
+                {expiryWarningLabel(key) ? (
+                  <p className="keys-expiry-warning">
+                    <AlertTriangle aria-hidden="true" />
+                    {expiryWarningLabel(key)}
+                  </p>
+                ) : null}
               </div>
 
               <div className="keys-card-facts" aria-label={`${key.name} timing`}>
@@ -301,15 +326,15 @@ export ZROKY_API_URL="${apiBaseUrl}"`;
             <div>
               <Clock3 aria-hidden="true" />
               <span>
-                <small>Expired keys</small>
-                <strong>{expiredKeys.length}</strong>
+                <small>Expiring soon</small>
+                <strong>{expiringSoonKeys.length}</strong>
               </span>
             </div>
             <div>
               <AlertTriangle aria-hidden="true" />
               <span>
-                <small>Revoked keys</small>
-                <strong>{revokedKeys.length}</strong>
+                <small>Expired/revoked</small>
+                <strong>{expiredKeys.length + revokedKeys.length}</strong>
               </span>
             </div>
           </div>
