@@ -119,7 +119,19 @@ const ALL_SOURCES_AVAILABLE: MissionAvailability = {
   billingUsage: true,
 };
 
-const PREVIEW_TIME = "2026-07-02T16:30:00.000Z";
+const PREVIEW_NOW_MS = Date.now();
+const PREVIEW_MINUTE_MS = 60_000;
+const PREVIEW_DAY_MS = 24 * 60 * PREVIEW_MINUTE_MS;
+
+function previewIso(minutesAgo: number): string {
+  return new Date(PREVIEW_NOW_MS - minutesAgo * PREVIEW_MINUTE_MS).toISOString();
+}
+
+function previewDate(daysAgo = 0): string {
+  return new Date(PREVIEW_NOW_MS - daysAgo * PREVIEW_DAY_MS).toISOString().slice(0, 10);
+}
+
+const PREVIEW_TIME = previewIso(0);
 
 const FIRST_RUN_PREVIEW_DATA: MissionData = {
   intents: [
@@ -175,9 +187,9 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
         resource: { id: "customer_42", type: "crm_customer" },
         trace_context: { agent_name: "crm-agent", trace_id: "trace_preview_customer" },
       },
-      created_at: "2026-07-02T16:12:00.000Z",
-      decided_at: "2026-07-02T16:12:03.000Z",
-      authorized_at: "2026-07-02T16:12:03.000Z",
+      created_at: previewIso(18),
+      decided_at: previewIso(17.95),
+      authorized_at: previewIso(17.95),
       runtime_policy_decision_id: "decision_preview_customer",
       deadline: null,
       status_url: "/v1/action-intents/act_preview_customer",
@@ -206,7 +218,7 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
       business_impact: { amount_usd: 1280, risk: "high" },
       audit_log: [],
       created_at: PREVIEW_TIME,
-      expires_at: "2026-07-02T17:30:00.000Z",
+      expires_at: previewIso(-60),
       resolved_at: null,
       resolved_by: null,
       resolution_reason: null,
@@ -237,8 +249,8 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
       comparison: {},
       idempotency_key: "preview_customer_1",
       metadata: {},
-      checked_at: "2026-07-02T16:12:12.000Z",
-      created_at: "2026-07-02T16:12:12.000Z",
+      checked_at: previewIso(17.8),
+      created_at: previewIso(17.8),
     },
   ],
   outcomeSummary: {
@@ -275,8 +287,8 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
       idempotency_key: null,
       classification: "policy_bypass",
       metadata: {},
-      occurred_at: "2026-07-02T16:03:00.000Z",
-      created_at: "2026-07-02T16:03:00.000Z",
+      occurred_at: previewIso(27),
+      created_at: previewIso(27),
     },
   ],
   staleAttempts: [],
@@ -301,7 +313,7 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
       verification_connectors: ["ledger_refund", "generic_rest"],
       metadata: { agent_name: "refund-agent" },
       is_active: true,
-      created_at: "2026-07-02T15:40:00.000Z",
+      created_at: previewIso(50),
       updated_at: PREVIEW_TIME,
     },
   ],
@@ -321,9 +333,9 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
       supported_operation_kinds: ["UPDATE", "TRANSFER"],
       credential_scope: {},
       heartbeat_payload: {},
-      capability_version: "2026-07-02",
+      capability_version: previewDate(),
       last_heartbeat_at: PREVIEW_TIME,
-      created_at: "2026-07-02T15:40:00.000Z",
+      created_at: previewIso(50),
       updated_at: PREVIEW_TIME,
     },
   ],
@@ -339,14 +351,14 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
       expires_at: null,
       rotated_from_key_id: null,
       last_used_at: PREVIEW_TIME,
-      created_at: "2026-07-02T15:30:00.000Z",
+      created_at: previewIso(60),
     },
   ],
   billingUsage: null,
   homeSummary: {
     project_id: "proj_preview",
     window_days: 30,
-    window_start: "2026-06-02T16:30:00.000Z",
+    window_start: previewIso(30 * 24 * 60),
     generated_at: PREVIEW_TIME,
     metrics: {
       controlled_actions: 2,
