@@ -304,6 +304,23 @@ describe("RuntimeApprovalsPage evidence pack", () => {
     expect(hookState.evidenceDecisionId).toBe("decision_1");
   });
 
+  it("keeps the runtime kill switch visible when the approval queue is empty", async () => {
+    hookState.decisions = [];
+    hookState.intents = [];
+
+    render(<RuntimeApprovalsPage />);
+
+    expect(screen.getByRole("heading", { name: "Approval gate clear" })).toBeInTheDocument();
+    expect(screen.getByText("No held actions in this view")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Runtime kill switch" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch confirmation" }));
+    expect(hookState.killSwitch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
+    await waitFor(() => expect(hookState.killSwitch).toHaveBeenCalledWith(true));
+  });
+
   it("opens a blocked-only approval set on the visible blocked queue", async () => {
     hookState.decisions = [
       {

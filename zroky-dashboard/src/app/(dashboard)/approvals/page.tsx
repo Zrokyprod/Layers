@@ -180,6 +180,23 @@ export default function RuntimeApprovalsPage() {
     total: counts.total,
   });
   const busy = approveMutation.isPending || rejectMutation.isPending;
+  const killSwitchPanel = (
+    <KillSwitchPanel
+      armed={killSwitchArmed}
+      setArmed={setKillSwitchArmed}
+      isPending={killSwitchMutation.isPending}
+      onConfirm={async () => {
+        setMessage(null);
+        try {
+          await killSwitchMutation.mutateAsync(true);
+          setKillSwitchArmed(false);
+          setMessage("Kill switch enabled.");
+        } catch (caught) {
+          setMessage(caught instanceof Error ? caught.message : "Kill switch update failed.");
+        }
+      }}
+    />
+  );
 
   useEffect(() => {
     if (rows.length === 0) {
@@ -273,6 +290,8 @@ export default function RuntimeApprovalsPage() {
         </section>
       ) : null}
 
+      {killSwitchPanel}
+
       {loading ? (
         <section className="approval-v2-empty-state">
           <h2>Loading runtime approvals</h2>
@@ -312,21 +331,6 @@ export default function RuntimeApprovalsPage() {
                 }}
               />
             )}
-          />
-          <KillSwitchPanel
-            armed={killSwitchArmed}
-            setArmed={setKillSwitchArmed}
-            isPending={killSwitchMutation.isPending}
-            onConfirm={async () => {
-              setMessage(null);
-              try {
-                await killSwitchMutation.mutateAsync(true);
-                setKillSwitchArmed(false);
-                setMessage("Kill switch enabled.");
-              } catch (caught) {
-                setMessage(caught instanceof Error ? caught.message : "Kill switch update failed.");
-              }
-            }}
           />
         </>
       )}
