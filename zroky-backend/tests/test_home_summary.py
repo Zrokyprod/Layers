@@ -188,3 +188,10 @@ def test_home_summary_uses_exact_window_counts_not_list_caps(client: TestClient)
     assert body["metrics"]["bypass_mutations"] == 1
     assert body["metrics"]["unreceipted_mutations"] == 1
     assert body["metrics"]["sequence_risks"] == 1
+    assert len(body["data"]["intents"]) == 75
+    assert len(body["data"]["approvals"]) == 2
+    assert len(body["data"]["outcomes"]) == 2
+    assert len(body["data"]["mutations"]) == 1
+    assert body["data"]["outcome_summary"]["total"] == 2
+    assert body["data"]["source_summary"]["unreceipted"] == 1
+    assert body["sources"]["intents"] is True

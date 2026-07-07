@@ -340,7 +340,10 @@ function apiKey(overrides: Partial<ApiKeyResponse> = {}): ApiKeyResponse {
   };
 }
 
-function homeSummary(overrides: Partial<HomeSummaryResponse["metrics"]> = {}): HomeSummaryResponse {
+function homeSummary(
+  overrides: Partial<HomeSummaryResponse["metrics"]> = {},
+  data: HomeSummaryResponse["data"] = {},
+): HomeSummaryResponse {
   return {
     project_id: "proj_1",
     window_days: 30,
@@ -357,6 +360,21 @@ function homeSummary(overrides: Partial<HomeSummaryResponse["metrics"]> = {}): H
       sequence_risks: 0,
       ...overrides,
     },
+    sources: {
+      home_summary: true,
+      intents: true,
+      approvals: true,
+      outcomes: true,
+      outcome_summary: true,
+      source_summary: true,
+      mutations: true,
+      stale_attempts: true,
+      agent_profiles: true,
+      action_runners: true,
+      api_keys: true,
+      billing_usage: true,
+    },
+    data,
   };
 }
 
@@ -377,6 +395,26 @@ function mockHomeData(overrides: {
   billing?: BillingUsageResponse;
   homeSummary?: HomeSummaryResponse;
 } = {}) {
+  const profiles = overrides.profiles ?? [];
+  const agentProfileMeta = {
+    active_count: overrides.activeAgentCount ?? profiles.filter((item) => item.is_active).length,
+    max_active_agents: overrides.maxActiveAgents ?? -1,
+    limit_reached: overrides.limitReached ?? false,
+  };
+  const summaryData: HomeSummaryResponse["data"] = {
+    intents: overrides.intents ?? [],
+    approvals: overrides.approvals ?? [],
+    outcomes: overrides.outcomes ?? [],
+    outcome_summary: overrides.outcomeSummary ?? outcomeSummary(),
+    source_summary: overrides.sourceSummary ?? sourceSummary(),
+    mutations: overrides.mutations ?? [],
+    stale_attempts: overrides.staleAttempts ?? [],
+    agent_profiles: profiles,
+    agent_profile_meta: agentProfileMeta,
+    action_runners: overrides.runners ?? [],
+    api_keys: overrides.apiKeys ?? [apiKey()],
+    billing_usage: overrides.billing ?? billingUsage(),
+  };
   api.getHomeSummary.mockResolvedValue(
     overrides.homeSummary ??
       homeSummary({
@@ -388,7 +426,7 @@ function mockHomeData(overrides: {
         bypass_mutations: overrides.sourceSummary?.policy_bypass ?? overrides.mutations?.filter((item) => item.classification === "policy_bypass").length ?? 0,
         unreceipted_mutations: overrides.sourceSummary?.unreceipted ?? overrides.mutations?.length ?? 0,
         sequence_risks: overrides.approvals?.filter((item) => JSON.stringify(item.policy_hit).includes("sequence_risk")).length ?? 0,
-      }),
+      }, summaryData),
   );
   api.listActionIntents.mockResolvedValue({
     items: overrides.intents ?? [],
@@ -413,15 +451,12 @@ function mockHomeData(overrides: {
   api.listProjectActionExecutionAttempts.mockResolvedValue({
     items: overrides.staleAttempts ?? [],
   });
-  const profiles = overrides.profiles ?? [];
   api.listAgentProfiles.mockResolvedValue({
     items: profiles,
     total: profiles.length,
     limit: 200,
     offset: 0,
-    active_count: overrides.activeAgentCount ?? profiles.filter((item) => item.is_active).length,
-    max_active_agents: overrides.maxActiveAgents ?? -1,
-    limit_reached: overrides.limitReached ?? false,
+    ...agentProfileMeta,
   });
   api.listActionRunners.mockResolvedValue({
     items: overrides.runners ?? [],
@@ -589,16 +624,37 @@ describe("Mission Control Home", () => {
   });
 
   it("does not turn a failed home summary into zero KPI metrics", async () => {
-    mockHomeData({
-      apiKeys: [apiKey()],
-      profiles: [profile()],
-      intents: [intent({ status: "authorized", runtime_policy_decision_id: null })],
-    });
-    api.getHomeSummary.mockRejectedValue(new Error("home summary unavailable"));
+    const authorizedIntent = intent({ status: "authorized", runtime_policy_decision_id: null });
+    const degradedSummary = homeSummary(
+      { controlled_actions: 1 },
+      {
+        intents: [authorizedIntent],
+        approvals: [],
+        outcomes: [],
+        outcome_summary: outcomeSummary(),
+        source_summary: sourceSummary(),
+        mutations: [],
+        stale_attempts: [],
+        agent_profiles: [profile()],
+        agent_profile_meta: {
+          active_count: 1,
+          max_active_agents: -1,
+          limit_reached: false,
+        },
+        action_runners: [],
+        api_keys: [apiKey()],
+        billing_usage: billingUsage(),
+      },
+    );
+    degradedSummary.sources = {
+      ...degradedSummary.sources!,
+      home_summary: false,
+    };
+    mockHomeData({ homeSummary: degradedSummary });
 
     render(<HomePage />);
 
-    expect(await screen.findByRole("heading", { name: "Protected" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
     const proofMetrics = screen.getByLabelText("Proof metrics");
     const approvalsCard = within(proofMetrics).getByText("Pending approvals").closest(".mc-proof-card") as HTMLElement;
     expect(approvalsCard).toBeInTheDocument();
@@ -628,15 +684,8 @@ describe("Mission Control Home", () => {
     expect((await screen.findAllByText(/No runner claimed execution/)).length).toBeGreaterThan(0);
     expect(screen.getByText(/Attempt 1 planned/i)).toBeInTheDocument();
     await waitFor(() => {
-      expect(api.listProjectActionExecutionAttempts).toHaveBeenCalledWith(
-        {
-          status: ["planned", "running"],
-          stale: true,
-          stale_after_seconds: 600,
-          limit: 75,
-        },
-        expect.any(AbortSignal),
-      );
+      expect(api.getHomeSummary).toHaveBeenCalledWith(30, expect.any(AbortSignal));
+      expect(api.listProjectActionExecutionAttempts).not.toHaveBeenCalled();
     });
   });
 });

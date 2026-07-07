@@ -3642,6 +3642,34 @@ export interface HomeSummaryResponse {
     unreceipted_mutations: number;
     sequence_risks: number;
   };
+  sources?: {
+    home_summary: boolean;
+    intents: boolean;
+    approvals: boolean;
+    outcomes: boolean;
+    outcome_summary: boolean;
+    source_summary: boolean;
+    mutations: boolean;
+    stale_attempts: boolean;
+    agent_profiles: boolean;
+    action_runners: boolean;
+    api_keys: boolean;
+    billing_usage: boolean;
+  };
+  data?: {
+    intents: ActionIntentResponse[];
+    approvals: RuntimePolicyDecisionResponse[];
+    outcomes: OutcomeReconciliationView[];
+    outcome_summary: OutcomeReconciliationSummaryResponse | null;
+    source_summary: SourceMutationSummaryResponse | null;
+    mutations: SourceMutationView[];
+    stale_attempts: ActionExecutionAttemptResponse[];
+    agent_profiles: AgentProfileResponse[];
+    agent_profile_meta: Pick<AgentProfileListResponse, "active_count" | "max_active_agents" | "limit_reached"> | null;
+    action_runners: ActionRunnerResponse[];
+    api_keys: ApiKeyResponse[];
+    billing_usage: BillingUsageResponse | null;
+  };
 }
 
 export interface SavedLedgerRefundReconciliationPayload {

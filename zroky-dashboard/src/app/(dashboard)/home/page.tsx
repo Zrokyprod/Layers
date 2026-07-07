@@ -3,18 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  getBillingUsage,
   getHomeSummary,
-  getOutcomeReconciliationSummary,
-  getSourceMutationSummary,
-  listActionRunners,
-  listActionIntents,
-  listAgentProfiles,
-  listOutcomeReconciliations,
-  listProjectActionExecutionAttempts,
-  listProjectApiKeys,
-  listRuntimePolicyApprovals,
-  listUnreceiptedSourceMutations,
   type ActionExecutionAttemptResponse,
   type ActionIntentResponse,
   type ActionRunnerResponse,
@@ -373,20 +362,6 @@ const FIRST_RUN_PREVIEW_DATA: MissionData = {
   },
 };
 
-const STALE_ATTEMPT_SECONDS = 600;
-
-function valueOr<T>(result: PromiseSettledResult<T>, fallback: T): T {
-  return result.status === "fulfilled" ? result.value : fallback;
-}
-
-function available(result: PromiseSettledResult<unknown>): boolean {
-  return result.status === "fulfilled";
-}
-
-function errorCount(results: PromiseSettledResult<unknown>[]): number {
-  return results.filter((result) => result.status === "rejected").length;
-}
-
 function firstRunSignals(data: MissionData): FirstRunSignals {
   const hasProjectKey = data.apiKeys.some((key) => !key.revoked && !key.expired);
   const hasActiveAgent = data.agentProfiles.some((profile) => profile.is_active) || (data.agentProfileMeta?.active_count ?? 0) > 0;
@@ -524,8 +499,51 @@ function controlLoopStats(data: MissionData, availability: MissionAvailability):
   };
 }
 
+function missionDataFromSummary(summary: HomeSummaryResponse): MissionData {
+  const details = summary.data;
+  return {
+    intents: details?.intents ?? [],
+    approvals: details?.approvals ?? [],
+    outcomes: details?.outcomes ?? [],
+    outcomeSummary: details?.outcome_summary ?? null,
+    sourceSummary: details?.source_summary ?? null,
+    mutations: details?.mutations ?? [],
+    staleAttempts: details?.stale_attempts ?? [],
+    agentProfiles: details?.agent_profiles ?? [],
+    agentProfileMeta: details?.agent_profile_meta ?? null,
+    actionRunners: details?.action_runners ?? [],
+    apiKeys: details?.api_keys ?? [],
+    billingUsage: details?.billing_usage ?? null,
+    homeSummary: summary,
+  };
+}
+
+function availabilityFromSummary(summary: HomeSummaryResponse): MissionAvailability {
+  const sources = summary.sources;
+  if (!sources) {
+    return ALL_SOURCES_AVAILABLE;
+  }
+  return {
+    homeSummary: sources.home_summary,
+    intents: sources.intents,
+    approvals: sources.approvals,
+    outcomes: sources.outcomes,
+    outcomeSummary: sources.outcome_summary,
+    sourceSummary: sources.source_summary,
+    mutations: sources.mutations,
+    staleAttempts: sources.stale_attempts,
+    agentProfiles: sources.agent_profiles,
+    actionRunners: sources.action_runners,
+    apiKeys: sources.api_keys,
+    billingUsage: sources.billing_usage,
+  };
+}
+
+function unavailableSourceCount(availability: MissionAvailability): number {
+  return Object.values(availability).filter((value) => !value).length;
+}
+
 export default function HomePage() {
-  const selectedProject = useDashboardStore((state) => state.selectedProject);
   const realTimeEnabled = useDashboardStore((state) => state.realTimeEnabled);
   const [data, setData] = useState<MissionData>(EMPTY_DATA);
   const [availability, setAvailability] = useState<MissionAvailability>(NO_SOURCES_AVAILABLE);
@@ -537,86 +555,30 @@ export default function HomePage() {
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
-    const results = await Promise.allSettled([
-      getHomeSummary(30, signal),
-      listActionIntents({ limit: 75 }, signal),
-      listRuntimePolicyApprovals("pending_approval", signal),
-      listOutcomeReconciliations({ verdict: "all", limit: 75 }, signal),
-      getOutcomeReconciliationSummary(30, signal),
-      getSourceMutationSummary(signal),
-      listUnreceiptedSourceMutations(75, signal),
-      listProjectActionExecutionAttempts(
-        { status: ["planned", "running"], stale: true, stale_after_seconds: STALE_ATTEMPT_SECONDS, limit: 75 },
-        signal,
-      ),
-      listAgentProfiles({ limit: 200 }, signal),
-      listActionRunners(signal),
-      selectedProject ? listProjectApiKeys(selectedProject, signal) : Promise.resolve([]),
-      getBillingUsage(signal),
-    ]);
-
-    if (signal?.aborted) {
-      return;
+    try {
+      const summary = await getHomeSummary(30, signal);
+      if (signal?.aborted) {
+        return;
+      }
+      const nextAvailability = availabilityFromSummary(summary);
+      setData(missionDataFromSummary(summary));
+      setAvailability(nextAvailability);
+      setLoadErrors(unavailableSourceCount(nextAvailability));
+      setLastLoadedAt(new Date().toISOString());
+    } catch {
+      if (signal?.aborted) {
+        return;
+      }
+      setData(EMPTY_DATA);
+      setAvailability(NO_SOURCES_AVAILABLE);
+      setLoadErrors(1);
+      setLastLoadedAt(null);
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
-
-    const [
-      homeSummary,
-      intents,
-      approvals,
-      outcomes,
-      outcomeSummary,
-      sourceSummary,
-      mutations,
-      staleAttempts,
-      agentProfiles,
-      actionRunners,
-      apiKeys,
-      billingUsage,
-    ] = results;
-
-    const agentProfileResult = valueOr(agentProfiles, {
-      items: [],
-      total: 0,
-      limit: 200,
-      offset: 0,
-      active_count: 0,
-      max_active_agents: -1,
-      limit_reached: false,
-    });
-
-    setData({
-      intents: valueOr(intents, { items: [], total_in_page: 0, limit: 75, offset: 0 }).items,
-      approvals: valueOr(approvals, { items: [], total_in_page: 0 }).items,
-      outcomes: valueOr(outcomes, { items: [], total_in_page: 0 }).items,
-      outcomeSummary: valueOr(outcomeSummary, null),
-      sourceSummary: valueOr(sourceSummary, null),
-      mutations: valueOr(mutations, { items: [], total_in_page: 0 }).items,
-      staleAttempts: valueOr(staleAttempts, { items: [] }).items,
-      agentProfiles: agentProfileResult.items,
-      agentProfileMeta: agentProfileResult,
-      actionRunners: valueOr(actionRunners, { items: [] }).items,
-      apiKeys: valueOr(apiKeys, []),
-      billingUsage: valueOr(billingUsage, null),
-      homeSummary: valueOr(homeSummary, null),
-    });
-    setAvailability({
-      homeSummary: available(homeSummary),
-      intents: available(intents),
-      approvals: available(approvals),
-      outcomes: available(outcomes),
-      outcomeSummary: available(outcomeSummary),
-      sourceSummary: available(sourceSummary),
-      mutations: available(mutations),
-      staleAttempts: available(staleAttempts),
-      agentProfiles: available(agentProfiles),
-      actionRunners: available(actionRunners),
-      apiKeys: available(apiKeys),
-      billingUsage: available(billingUsage),
-    });
-    setLoadErrors(errorCount(results));
-    setLastLoadedAt(new Date().toISOString());
-    setIsLoading(false);
-  }, [selectedProject]);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
