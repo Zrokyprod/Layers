@@ -544,6 +544,42 @@ def test_reset_password_revokes_existing_sessions(client, monkeypatch):
     assert new_login.status_code == 200
 
 
+def test_change_password_revokes_existing_sessions(client):
+    register = client.post("/v1/auth/register", json={
+        "email": "change-revoke@example.com",
+        "password": "oldpassword1",
+        "confirm_password": "oldpassword1",
+    })
+    assert register.status_code == 201
+    token_bundle = register.json()
+    headers = {"Authorization": f"Bearer {token_bundle['access_token']}"}
+
+    changed = client.patch(
+        "/v1/auth/me/password",
+        headers=headers,
+        json={
+            "current_password": "oldpassword1",
+            "new_password": "newpassword1",
+        },
+    )
+    assert changed.status_code == 200
+
+    old_me = client.get("/v1/auth/me", headers=headers)
+    assert old_me.status_code == 401
+
+    old_refresh = client.post(
+        "/v1/auth/refresh",
+        json={"refresh_token": token_bundle["refresh_token"]},
+    )
+    assert old_refresh.status_code == 401
+
+    new_login = client.post("/v1/auth/login", json={
+        "email": "change-revoke@example.com",
+        "password": "newpassword1",
+    })
+    assert new_login.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # Logout
 # ---------------------------------------------------------------------------
