@@ -12,6 +12,13 @@ type IndependentVerification = {
   instructions: string[];
 };
 
+type EvidencePrivacyStance = {
+  payload_handling: "full_audit_payload";
+  redaction_applied: false;
+  sensitive_fields_may_include: string[];
+  instructions: string[];
+};
+
 export type ActionReceiptArtifact = {
   artifact: "zroky.action_receipt";
   schema_version: string;
@@ -24,6 +31,7 @@ export type ActionReceiptArtifact = {
   signature_valid: boolean;
   signed_payload?: string;
   verification: IndependentVerification;
+  privacy: EvidencePrivacyStance;
 };
 
 export type RuntimePolicyEvidencePackArtifact = {
@@ -64,6 +72,16 @@ export function buildEvidenceArtifact(
           "Fetch the published Ed25519 public key from public_key_url.",
           "Verify signature over the exact signed_payload string.",
           "Treat signature_valid as Zroky's server-side attestation; independent audit should verify the signature again.",
+        ],
+      },
+      privacy: {
+        payload_handling: "full_audit_payload",
+        redaction_applied: false,
+        sensitive_fields_may_include: ["customer identifiers", "email or phone fields", "amounts", "account IDs", "source-system record fields"],
+        instructions: [
+          "This receipt export preserves the full audit payload so the signature and system-of-record comparison remain independently reviewable.",
+          "Treat exported receipts as sensitive compliance artifacts and share them only with authorized reviewers.",
+          "Use a future redacted export for broad sharing; this file is the full proof record.",
         ],
       },
     };

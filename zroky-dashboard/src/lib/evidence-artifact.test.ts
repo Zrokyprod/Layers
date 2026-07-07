@@ -94,6 +94,12 @@ describe("buildEvidenceArtifact", () => {
       signature_field: "signature",
     });
     expect(artifact.verification.instructions.join(" ")).toContain("independent audit");
+    expect(artifact.privacy).toMatchObject({
+      payload_handling: "full_audit_payload",
+      redaction_applied: false,
+    });
+    expect(artifact.privacy.sensitive_fields_may_include).toContain("customer identifiers");
+    expect(artifact.privacy.instructions.join(" ")).toContain("sensitive compliance artifacts");
   });
 
   it("wraps the runtime policy Evidence Pack without mutating the pack", () => {
