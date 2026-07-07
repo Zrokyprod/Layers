@@ -57,8 +57,10 @@ from app.services.protected_action_billing import (
     METER_RUNNER_EXECUTIONS,
     METER_SOURCE_MUTATIONS,
     METER_VERIFICATION_CHECKS,
+    ProtectedActionQuotaExceeded,
     current_usage_count,
     increment_usage_meter,
+    reserve_usage_meter,
 )
 from app.services.razorpay_reconciliation import reconcile_pending_razorpay_orders
 
@@ -630,6 +632,121 @@ class TestBillingQuota:
         assert usage_body["plan_code"] == "team"
         assert usage_body["calls"]["used"] == 5_001
         assert usage_body["calls"]["limit"] == 250_000
+
+    def test_paid_ingest_quota_records_overage_without_blocking(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _MockTaskResult:
+            id = "task-billing-paid-overage-test"
+
+        monkeypatch.setenv("BILLING_ENFORCE_QUOTA", "true")
+        monkeypatch.setattr(
+            "app.api.routes.ingest.process_diagnosis.delay",
+            lambda *_args, **_kwargs: _MockTaskResult(),
+        )
+        get_settings.cache_clear()
+        entitlements_resolver.invalidate_all()
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            session.add(
+                Subscription(
+                    org_id="org-alpha",
+                    payment_provider="razorpay",
+                    plan_code="team",
+                    status="active",
+                    seats=3,
+                )
+            )
+            session.add(
+                EventCount(
+                    tenant_id="org-alpha",
+                    month=current_month(),
+                    event_count=250_000,
+                    last_event_at=datetime.now(timezone.utc),
+                )
+            )
+            session.commit()
+            entitlements_resolver.invalidate("org-alpha")
+
+        accepted = client.post(
+            "/api/v1/ingest",
+            json={"events": [_ingest_event("billing-paid-overage")]},
+        )
+        assert accepted.status_code == 202
+        assert accepted.json()["accepted"] == 1
+
+        usage = client.get("/v1/billing/usage")
+        assert usage.status_code == 200
+        usage_body = usage.json()
+        assert usage_body["plan_code"] == "team"
+        assert usage_body["calls"]["used"] == 250_001
+        assert usage_body["calls"]["limit"] == 250_000
+        assert usage_body["calls"]["overage"] == 1
+        assert usage_body["calls"]["state"] == "exceeded"
+
+    def test_free_protected_action_quota_still_blocks_when_enforced(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BILLING_ENFORCE_QUOTA", "true")
+        get_settings.cache_clear()
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            assert increment_usage_meter(
+                session,
+                "org-alpha",
+                METER_PROTECTED_ACTIONS,
+                amount=500,
+            ) is True
+            session.commit()
+
+            with pytest.raises(ProtectedActionQuotaExceeded) as exc_info:
+                reserve_usage_meter(session, "org-alpha", METER_PROTECTED_ACTIONS)
+
+            decision = exc_info.value.decision
+            assert decision.allowed is False
+            assert decision.reason == "monthly_quota_exceeded"
+            assert decision.plan_code == "free"
+            assert decision.overage == 1
+
+    def test_paid_protected_action_quota_records_overage_without_blocking(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BILLING_ENFORCE_QUOTA", "true")
+        get_settings.cache_clear()
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            session.add(
+                Subscription(
+                    org_id="org-alpha",
+                    payment_provider="razorpay",
+                    plan_code="team",
+                    status="active",
+                    seats=3,
+                )
+            )
+            session.commit()
+            entitlements_resolver.invalidate("org-alpha")
+            assert increment_usage_meter(
+                session,
+                "org-alpha",
+                METER_PROTECTED_ACTIONS,
+                amount=10_000,
+            ) is True
+
+            decision = reserve_usage_meter(session, "org-alpha", METER_PROTECTED_ACTIONS)
+            session.commit()
+
+            assert decision.allowed is True
+            assert decision.reason == "monthly_quota_overage"
+            assert decision.plan_code == "team"
+            assert decision.overage == 1
+            assert (
+                current_usage_count(session, "org-alpha", METER_PROTECTED_ACTIONS)
+                == 10_001
+            )
 
     def test_strict_quota_check_failure_denies_and_alerts(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
