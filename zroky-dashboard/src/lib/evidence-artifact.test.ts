@@ -87,6 +87,8 @@ describe("buildEvidenceArtifact", () => {
     expect(artifact.signature).toBe("sig");
     expect(artifact.evidence_hash).toBe("sha256:evidence");
     expect(artifact.schema_version).toBe("zroky.action_receipt.v1");
+    expect(artifact.signature_valid).toBe(true);
+    expect(artifact.server_attested_signature_valid).toBe(true);
     expect(artifact.verification).toMatchObject({
       method: "ed25519-public-key",
       public_key_url: "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",

@@ -29,6 +29,7 @@ export type ActionReceiptArtifact = {
   signing_key_id: string;
   evidence_hash: string | null;
   signature_valid: boolean;
+  server_attested_signature_valid: boolean;
   signed_payload?: string;
   verification: IndependentVerification;
   privacy: EvidencePrivacyStance;
@@ -62,6 +63,7 @@ export function buildEvidenceArtifact(
       signing_key_id: input.receipt.signing_key_id,
       evidence_hash: input.receipt.evidence_hash,
       signature_valid: input.receipt.signature_valid,
+      server_attested_signature_valid: input.receipt.signature_valid,
       signed_payload: input.receipt.signed_payload,
       verification: {
         method: "ed25519-public-key",
