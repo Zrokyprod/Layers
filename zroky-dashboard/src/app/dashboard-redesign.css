@@ -7252,6 +7252,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   text-transform: uppercase !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .outcomes-panel-note {
+  margin: 8px 0 0 !important;
+  color: var(--mc-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .outcomes-toolbar {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 300px) !important;

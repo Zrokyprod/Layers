@@ -49,6 +49,7 @@ const FILTERS: Array<{ id: OutcomeLedgerFilter; label: string }> = [
   { id: "not_verified", label: "Not verified" },
   { id: "matched", label: "Matched" },
 ];
+const RECONCILIATION_CHECK_LIMIT = 100;
 
 type VerificationTrendPoint = {
   key: string;
@@ -321,18 +322,29 @@ function metricsFor(ledger: OutcomeLedger): DashboardMetric[] {
   ];
 }
 
-function VerificationTrendPanel({ points, verifiedRate }: { points: VerificationTrendPoint[]; verifiedRate: number }) {
+function VerificationTrendPanel({
+  points,
+  sampleCapped,
+  sampleSize,
+  verifiedRate,
+}: {
+  points: VerificationTrendPoint[];
+  sampleCapped: boolean;
+  sampleSize: number;
+  verifiedRate: number;
+}) {
   const latest = points[points.length - 1] ?? null;
   const previous = points[points.length - 2] ?? null;
   const delta = latest && previous ? latest.rate - previous.rate : null;
   const maxTotal = Math.max(1, ...points.map((point) => point.total));
+  const loadedCount = points.reduce((sum, point) => sum + point.total, 0);
 
   return (
     <section className="outcomes-trend-panel" aria-label="Verified rate trend">
       <div className="outcomes-panel-head">
         <div>
           <span className="dashboard-eyebrow">Trend</span>
-          <h2>Verified rate trend</h2>
+          <h2>Recent verification trend</h2>
         </div>
         <span className="outcomes-live-chip">{verifiedRate}% now</span>
       </div>
@@ -345,10 +357,16 @@ function VerificationTrendPanel({ points, verifiedRate }: { points: Verification
             </strong>
             <span>
               {delta == null
-                ? `${formatCount(points.reduce((sum, point) => sum + point.total, 0))} loaded checks`
+                ? `${formatCount(loadedCount)} loaded checks`
                 : `${delta >= 0 ? "+" : ""}${delta} pts vs previous check day`}
             </span>
           </div>
+          {sampleCapped ? (
+            <p className="outcomes-panel-note">
+              Trend is drawn from the newest {formatCount(sampleSize)} loaded checks. KPI totals above use the backend
+              summary window.
+            </p>
+          ) : null}
           <div className="outcomes-trend-bars" aria-label="Daily verified rate bars">
             {points.map((point) => (
               <div key={point.key} className="outcomes-trend-bar" title={`${point.label}: ${point.rate}% verified`}>
@@ -409,16 +427,25 @@ function ConnectorHealthPanel({ connectors }: { connectors: ConnectorHealthRow[]
 
 function OutcomeOpsPanel({
   connectors,
+  sampleCapped,
+  sampleSize,
   trend,
   verifiedRate,
 }: {
   connectors: ConnectorHealthRow[];
+  sampleCapped: boolean;
+  sampleSize: number;
   trend: VerificationTrendPoint[];
   verifiedRate: number;
 }) {
   return (
     <div className="outcomes-ops-grid">
-      <VerificationTrendPanel points={trend} verifiedRate={verifiedRate} />
+      <VerificationTrendPanel
+        points={trend}
+        sampleCapped={sampleCapped}
+        sampleSize={sampleSize}
+        verifiedRate={verifiedRate}
+      />
       <ConnectorHealthPanel connectors={connectors} />
     </div>
   );
@@ -779,7 +806,7 @@ export default function OutcomesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(() => initialCheckId());
 
   const summaryQuery = useOutcomeReconciliationSummary(30);
-  const checksQuery = useOutcomeReconciliations("all", 100);
+  const checksQuery = useOutcomeReconciliations("all", RECONCILIATION_CHECK_LIMIT);
   const sourceMutationSummaryQuery = useSourceMutationSummary();
   const unreceiptedMutationsQuery = useUnreceiptedSourceMutations(50);
 
@@ -798,6 +825,7 @@ export default function OutcomesPage() {
     [checks, filter, search, unreceiptedMutations],
   );
   const trend = useMemo(() => buildVerificationTrend(checks), [checks]);
+  const trendSampleCapped = (checksQuery.data?.total_in_page ?? 0) >= RECONCILIATION_CHECK_LIMIT;
   const connectorHealth = useMemo(() => buildConnectorHealth(checks), [checks]);
   const selectedRow = useMemo(
     () => ledger.rows.find((row) => row.id === selectedId) ?? ledger.rows[0] ?? null,
@@ -935,7 +963,13 @@ export default function OutcomesPage() {
         </div>
       ) : null}
 
-      <OutcomeOpsPanel connectors={connectorHealth} trend={trend} verifiedRate={verifiedRate} />
+      <OutcomeOpsPanel
+        connectors={connectorHealth}
+        sampleCapped={trendSampleCapped}
+        sampleSize={RECONCILIATION_CHECK_LIMIT}
+        trend={trend}
+        verifiedRate={verifiedRate}
+      />
 
       <BypassStrip
         ledger={{ ...ledger, counts: { ...ledger.counts, bypass: bypassCount } }}
