@@ -312,8 +312,8 @@ export default function ActionsPage() {
       ? `${formatCount(connectedBypassFeeds)} connected feed${connectedBypassFeeds === 1 ? "" : "s"} / ${formatCount(successfulBypassPollers)} active poller${successfulBypassPollers === 1 ? "" : "s"}`
       : "Webhook/API feed ready; no poller connected.";
   const matched = outcomeSummary?.matched ?? outcomes.filter((item) => item.verdict === "matched").length;
-  const mismatched = counts.mismatched || outcomeSummary?.mismatched || 0;
-  const notVerified = counts.notVerified || outcomeSummary?.not_verified || 0;
+  const mismatched = outcomeSummary?.mismatched ?? counts.mismatched;
+  const notVerified = outcomeSummary?.not_verified ?? counts.notVerified;
   const hero = heroState({
     bypassRisk,
     error: hasError,

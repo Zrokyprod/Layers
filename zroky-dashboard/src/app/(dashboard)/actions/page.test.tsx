@@ -470,6 +470,33 @@ describe("ActionsPage", () => {
     expect(screen.queryByText("One or more lifecycle feeds failed")).not.toBeInTheDocument();
   });
 
+  it("does not replace canonical zero outcome counts with lifecycle fallback counts", async () => {
+    queryState.outcomeSummary = {
+      window_days: 30,
+      total: 1,
+      matched: 1,
+      mismatched: 0,
+      not_verified: 0,
+      verified: 1,
+      pending: 0,
+      unverifiable: 0,
+      cancelled: 0,
+    };
+    queryState.outcomes = [
+      outcome({
+        verdict: "mismatched",
+        verification_status: "failed",
+        reason: "ledger amount drifted",
+      }),
+    ];
+
+    renderActionsPage();
+
+    expect(await screen.findByRole("heading", { name: "Bypass risk" })).toBeInTheDocument();
+    const metrics = screen.getByRole("region", { name: "Action lifecycle metrics" });
+    expect(within(metrics).getByText("0 mismatched / 0 not verified.")).toBeInTheDocument();
+  });
+
   it("shows action-intent lifecycle details with receipt, timeline, and execution attempts", async () => {
     queryState.intents = [actionIntent()];
     queryState.decisions = [];
