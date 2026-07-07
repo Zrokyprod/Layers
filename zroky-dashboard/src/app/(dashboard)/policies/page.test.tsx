@@ -350,6 +350,7 @@ describe("PoliciesPage mandate control", () => {
       expect.objectContaining({
         runtime_allowed_tools: ["ledger.lookup", "crm.update"],
         runtime_sensitive_tools: ["ledger.refund", "email.send", "crm.delete"],
+        expected_updated_at: now,
       }),
     );
   });

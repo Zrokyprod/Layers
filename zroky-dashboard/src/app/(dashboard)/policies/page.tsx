@@ -656,6 +656,7 @@ export default function PoliciesPage() {
       ...policy,
       runtime_allowed_tools: textToList(allowedTools),
       runtime_sensitive_tools: textToList(sensitiveTools),
+      expected_updated_at: policyQuery.data?.updated_at ?? null,
     });
   }
 

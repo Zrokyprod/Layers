@@ -770,6 +770,10 @@ export interface PilotPolicyResponse {
   updated_at: string;
 }
 
+export type PilotPolicyUpdatePayload = PilotPolicyPayload & {
+  expected_updated_at?: string | null;
+};
+
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(`/api/zroky${path}`, "http://local.zroky");
   if (query) {
@@ -4705,7 +4709,7 @@ export function getPilotPolicy(signal?: AbortSignal): Promise<PilotPolicyRespons
   return request<PilotPolicyResponse>("/v1/pilot/policy", { signal });
 }
 
-export function updatePilotPolicy(policy: PilotPolicyPayload): Promise<PilotPolicyResponse> {
+export function updatePilotPolicy(policy: PilotPolicyUpdatePayload): Promise<PilotPolicyResponse> {
   return request<PilotPolicyResponse>("/v1/pilot/policy", {
     method: "PUT",
     body: policy,
