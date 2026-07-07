@@ -445,6 +445,8 @@ describe("Protected agent setup (minimal)", () => {
     expect(screen.getByText("Payments ledger")).toBeInTheDocument();
     expect(screen.getByText("Stripe payment")).toBeInTheDocument();
     expect(screen.getByText("Slack approval")).toBeInTheDocument();
+    expect(screen.getByText(/Request access for Finance/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install protected actions" })).not.toBeInTheDocument();
     expect(screen.queryByText("Direct app connectors")).not.toBeInTheDocument();
     expect(screen.queryByText("Advanced: exact installed actions")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Add connectors" })).not.toBeInTheDocument();
@@ -536,6 +538,20 @@ describe("Protected agent setup (minimal)", () => {
     navigation.query = "agentName=Shadow%20Agent";
     renderPage();
     expect((screen.getByLabelText("Agent name") as HTMLInputElement).value).toBe("Shadow Agent");
+  });
+
+  it("does not auto-connect the first unrelated profile for an agentName deep link", async () => {
+    navigation.query = "agentName=Shadow%20Agent";
+    api.listAgentProfiles.mockResolvedValue({
+      items: [profile({ display_name: "Existing Agent", slug: "existing-agent" })],
+      total: 1,
+    });
+
+    renderPage();
+
+    expect((screen.getByLabelText("Agent name") as HTMLInputElement).value).toBe("Shadow Agent");
+    expect(await screen.findByText("Create the agent first.")).toBeInTheDocument();
+    expect(screen.queryByText("Existing Agent")).not.toBeInTheDocument();
   });
 
   it("requires an agent name before creating", async () => {

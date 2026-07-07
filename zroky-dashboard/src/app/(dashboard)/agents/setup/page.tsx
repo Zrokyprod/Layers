@@ -63,6 +63,7 @@ const DEFAULT_RUNTIME_KEY_NAME = "Protected agent runtime key";
 type SetupStep = "key" | "connect" | "pack" | "run" | "next";
 
 const PRIMARY_PACK_IDS = ["support-ops-v1", "finance-ops-v1", "devops-release-v1", "ecommerce-ops-v1"];
+const LAUNCH_READY_PACK_IDS = new Set(["support-ops-v1", "devops-release-v1"]);
 const DEFAULT_PACK_ID = "support-ops-v1";
 const PACK_SHORT_COPY: Record<string, string> = {
   "support-ops-v1": "Refunds, CRM updates, access changes, and support messages.",
@@ -589,10 +590,20 @@ function packSort(a: ActionPackResponse, b: ActionPackResponse) {
   return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
 }
 
+function agentProfileMatchesSetupRequest(profile: AgentProfileResponse, agentId: string, agentName: string) {
+  const id = agentId.trim();
+  if (id) return profile.id === id;
+
+  const name = agentName.trim().toLowerCase();
+  if (!name) return true;
+  return profile.display_name.trim().toLowerCase() === name || profile.slug.trim().toLowerCase() === name;
+}
+
 export default function ProtectedAgentSetupPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
+  const requestedAgentId = (searchParams.get("agentId") ?? "").trim();
   const [agentName, setAgentName] = useState(() => (searchParams.get("agentName") ?? "").trim());
   const [framework, setFramework] = useState(FRAMEWORKS[0]);
   const [environment, setEnvironment] = useState(ENVIRONMENTS[0]);
@@ -634,7 +645,9 @@ export default function ProtectedAgentSetupPage() {
     enabled: hasRuntimeKey,
     retry: false,
   });
-  const existingProfile = profilesQuery.data?.items?.[0] ?? null;
+  const existingProfile = profilesQuery.data?.items?.find((item) => (
+    agentProfileMatchesSetupRequest(item, requestedAgentId, agentName)
+  )) ?? null;
   const connectedProfile = profile ?? existingProfile;
   const packsQuery = useQuery({
     queryKey: ["agent-setup", "action-packs"],
@@ -646,6 +659,8 @@ export default function ProtectedAgentSetupPage() {
     .filter((pack) => PRIMARY_PACK_IDS.includes(pack.id))
     .sort(packSort);
   const selectedPack = packs.find((pack) => pack.id === selectedPackId) ?? packs[0] ?? null;
+  const selectedPackLaunchReady = Boolean(selectedPack && LAUNCH_READY_PACK_IDS.has(selectedPack.id));
+  const selectedPackRequestAccess = Boolean(selectedPack && !selectedPackLaunchReady);
   const isSupportPack = selectedPack?.id === "support-ops-v1";
   const isFinancePack = selectedPack?.id === "finance-ops-v1";
   const isDevopsPack = selectedPack?.id === "devops-release-v1";
@@ -743,6 +758,9 @@ export default function ProtectedAgentSetupPage() {
     mutationFn: async () => {
       if (!selectedPack) {
         throw new Error("Protected action templates are still loading.");
+      }
+      if (!selectedPackLaunchReady) {
+        throw new Error("This action pack is available by request during launch.");
       }
       return installActionPack(selectedPack.id);
     },
@@ -1062,6 +1080,7 @@ print(receipt["status"])`;
                     >
                       <strong>{pack.display_name.replace(" operations", "")}</strong>
                       <span>{PACK_SHORT_COPY[pack.id] ?? pack.summary}</span>
+                      {!LAUNCH_READY_PACK_IDS.has(pack.id) ? <em>Request access</em> : null}
                     </button>
                   )) : (
                     <div className="agent-run-locked">
@@ -1373,6 +1392,14 @@ print(receipt["status"])`;
                           <span>{selectedPack.contract_templates.length} protected actions ready. Run a test action next.</span>
                         </div>
                       </div>
+                    ) : selectedPackRequestAccess ? (
+                      <div className="agent-runtime-ready">
+                        <Users aria-hidden="true" />
+                        <div>
+                          <strong>Request access for {selectedPack.display_name.replace(" operations", "")}</strong>
+                          <span>We keep this pack available, but launch installs are reviewed before production use.</span>
+                        </div>
+                      </div>
                     ) : (
                       <div className="agent-pack-actions">
                         <DashboardButton
@@ -1380,7 +1407,7 @@ print(receipt["status"])`;
                           type="button"
                           variant="primary"
                           loading={installPackMutation.isPending}
-                          disabled={installPackMutation.isPending || !selectedPack}
+                          disabled={installPackMutation.isPending || !selectedPack || !selectedPackLaunchReady}
                           onClick={() => installPackMutation.mutate()}
                         >
                           Install protected actions
