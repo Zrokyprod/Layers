@@ -194,7 +194,7 @@ function ReceiptReport({ receipt, row }: { receipt: ActionReceiptResponse; row: 
         algorithm={hashAlgorithm}
         evidenceHash={evidenceHash}
         receiptDigest={receipt.receipt_digest}
-        signature={receipt.signature_valid ? "VALID" : "INVALID"}
+        signature={receipt.signature_valid ? "SERVER-ATTESTED VALID" : "INVALID"}
         signingKey={receipt.signing_key_id}
       />
 

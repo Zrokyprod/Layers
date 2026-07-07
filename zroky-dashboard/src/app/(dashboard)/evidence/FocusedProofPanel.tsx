@@ -54,7 +54,7 @@ function verificationSummary({
       fingerprint: hash ?? receipt.receipt_digest,
       label: "Action Receipt",
       publicKeyHref: actionReceiptPublicKeyUrl(),
-      status: receipt.signature_valid ? "Signature valid" : "Signature review required",
+      status: receipt.signature_valid ? "Server-attested signature valid" : "Signature review required",
     };
   }
   if (evidencePack) {

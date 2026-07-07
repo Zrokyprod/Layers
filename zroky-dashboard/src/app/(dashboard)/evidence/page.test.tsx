@@ -508,7 +508,8 @@ describe("EvidencePage", () => {
     expect(screen.getAllByText("Proof seal").length).toBeGreaterThan(0);
     expect(screen.getByText("Confidential evidence artifact")).toBeInTheDocument();
     expect(screen.getAllByText("Tamper-evident").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Signature valid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Server-attested signature valid/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SERVER-ATTESTED VALID").length).toBeGreaterThan(0);
     const panel = screen.getByLabelText("Focused proof panel");
     fireEvent.click(within(panel).getByRole("button", { name: "Print" }));
     expect(window.print).toHaveBeenCalled();
