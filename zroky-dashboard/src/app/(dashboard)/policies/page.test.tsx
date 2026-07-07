@@ -423,17 +423,34 @@ describe("PoliciesPage mandate control", () => {
     );
   });
 
-  it("shows kill switch as a frozen mandate boundary", async () => {
+  it("requires confirmation before enabling the runtime kill switch", async () => {
+    renderPoliciesPage();
+
+    await screen.findByRole("heading", { name: "Human review waiting" });
+    fireEvent.click(screen.getByRole("button", { name: "Arm kill switch" }));
+    expect(api.setRuntimePolicyKillSwitch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm kill switch" }));
+
+    await waitFor(() => expect(api.setRuntimePolicyKillSwitch.mock.calls[0]?.[0]).toBe(true));
+  });
+
+  it("shows kill switch as a frozen mandate boundary with a resume action", async () => {
     mockPolicies({
       payload: policy({ kill_switch: true }),
       decisions: [],
     });
+    api.setRuntimePolicyKillSwitch.mockResolvedValue({ project_id: "proj_1", enabled: false, policy: { kill_switch: false } });
 
     renderPoliciesPage();
 
     expect(await screen.findByRole("heading", { name: "Autonomy stopped" })).toBeInTheDocument();
     const mandate = screen.getByLabelText("Runtime action control mandate");
     expect(within(mandate).getByText("Kill switch on")).toBeInTheDocument();
-    expect((screen.getByRole("button", { name: "Kill switch" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Resume autonomy" }));
+    expect(api.setRuntimePolicyKillSwitch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm resume" }));
+    await waitFor(() => expect(api.setRuntimePolicyKillSwitch.mock.calls[0]?.[0]).toBe(false));
   });
 });

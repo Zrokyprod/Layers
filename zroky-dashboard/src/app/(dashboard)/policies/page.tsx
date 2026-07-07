@@ -436,6 +436,7 @@ export default function PoliciesPage() {
   const [previewEnvironment, setPreviewEnvironment] = useState("production");
   const [dryRunAmount, setDryRunAmount] = useState("600");
   const [dryRunResult, setDryRunResult] = useState<RuntimePolicyDryRunResponse | null>(null);
+  const [killSwitchTarget, setKillSwitchTarget] = useState<boolean | null>(null);
 
   const policyQuery = useQuery({
     queryKey: ["pilot-policy"],
@@ -498,8 +499,10 @@ export default function PoliciesPage() {
 
   const killSwitchMutation = useMutation({
     mutationFn: setRuntimePolicyKillSwitch,
-    onSuccess: () => {
-      setMessage("Kill switch enabled.");
+    onSuccess: (response, enabled) => {
+      setPolicy((current) => (current ? { ...current, kill_switch: response.enabled } : current));
+      setKillSwitchTarget(null);
+      setMessage(enabled ? "Kill switch enabled." : "Autonomy resumed.");
       void queryClient.invalidateQueries({ queryKey: ["pilot-policy"] });
       void queryClient.invalidateQueries({ queryKey: ["runtime-policy", "approvals"] });
     },
@@ -572,13 +575,10 @@ export default function PoliciesPage() {
 
   const readiness = useMemo(() => policyReadiness(policy), [policy]);
   const approvals = approvalsQuery.data?.items ?? [];
-  const agents = agentsQuery.data?.items ?? [];
-  const rules = rulesQuery.data?.items ?? [];
+  const agents = useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data?.items]);
+  const rules = useMemo(() => rulesQuery.data?.items ?? [], [rulesQuery.data?.items]);
   const pendingApprovals = approvals.filter((item) => item.status === "pending_approval").length;
   const blockedActions = approvals.filter((item) => item.status === "blocked" || item.status === "rejected").length;
-  const approvedOrAllowedActions = approvals.filter((item) => item.status === "approved" || item.status === "allowed").length;
-  const sensitiveToolCount = policy?.runtime_sensitive_tools.length ?? 0;
-  const allowedToolCount = policy?.runtime_allowed_tools.length ?? 0;
   const activeGuardrails = policy
     ? [
         policy.runtime_sensitive_actions_require_approval,
@@ -691,6 +691,36 @@ export default function PoliciesPage() {
     });
   }
 
+  function requestKillSwitchChange(enabled: boolean) {
+    setMessage(null);
+    if (killSwitchTarget === enabled) {
+      killSwitchMutation.mutate(enabled);
+      return;
+    }
+    setKillSwitchTarget(enabled);
+  }
+
+  const killSwitchActive = policy?.kill_switch === true;
+  const killSwitchConfirmationActive = killSwitchTarget !== null;
+  const killSwitchActionLabel =
+    killSwitchTarget === true
+      ? "Confirm kill switch"
+      : killSwitchTarget === false
+        ? "Confirm resume"
+        : killSwitchActive
+          ? "Resume autonomy"
+          : "Arm kill switch";
+  const killSwitchActionIcon =
+    killSwitchTarget === false || (killSwitchTarget === null && killSwitchActive)
+      ? <PlayCircle size={16} />
+      : <ShieldAlert size={16} />;
+  const killSwitchActionVariant =
+    killSwitchTarget === false || (killSwitchTarget === null && killSwitchActive)
+      ? "primary"
+      : killSwitchTarget === true
+        ? "danger"
+        : "soft";
+
   const heroActions = (
     <>
       <DashboardButton
@@ -704,14 +734,23 @@ export default function PoliciesPage() {
       >
         Refresh
       </DashboardButton>
+      {killSwitchConfirmationActive && (
+        <DashboardButton
+          onClick={() => setKillSwitchTarget(null)}
+          disabled={killSwitchMutation.isPending}
+          variant="soft"
+        >
+          Cancel
+        </DashboardButton>
+      )}
       <DashboardButton
-        icon={<ShieldAlert size={16} />}
-        disabled={killSwitchMutation.isPending || policy?.kill_switch === true}
+        icon={killSwitchActionIcon}
+        disabled={killSwitchMutation.isPending || !policy}
         loading={killSwitchMutation.isPending}
-        onClick={() => killSwitchMutation.mutate(true)}
-        variant="danger"
+        onClick={() => requestKillSwitchChange(killSwitchActive ? false : true)}
+        variant={killSwitchActionVariant}
       >
-        Kill switch
+        {killSwitchActionLabel}
       </DashboardButton>
       <DashboardButton
         icon={<Save size={16} />}
