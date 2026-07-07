@@ -5,15 +5,29 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowUpRight,
+  Bot,
   Check,
   Copy,
   DatabaseZap,
   DollarSign,
+  FileDiff,
+  GitBranch,
+  Github,
   Loader2,
   LockKeyhole,
+  PlugZap,
+  ReceiptText,
+  RefreshCw,
   Send,
+  Server,
+  ShieldAlert,
   ShieldCheck,
+  Slack,
+  Webhook,
+  type LucideIcon,
 } from 'lucide-react';
+import type { IconType } from 'react-icons';
+import { SiGithub, SiPostgresql, SiShopify, SiStripe, SiZendesk } from 'react-icons/si';
 import Hero from '../components/hero/Hero';
 import { ControlLoopDemo } from '../components/hero/ControlLoopDemo';
 import { DEMO_URL, SIGN_UP_URL } from '../lib/links';
@@ -37,7 +51,7 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
 
 function Section({ children, id, className = '' }: { children: ReactNode; id?: string; className?: string }) {
   return (
-    <section id={id} className={`w-full scroll-mt-28 overflow-hidden px-4 py-14 text-[#171a15] sm:py-16 md:py-20 ${className}`}>
+    <section id={id} className={`w-full scroll-mt-0 overflow-hidden px-4 py-14 text-[#171a15] sm:py-16 md:py-20 ${className}`}>
       <div className="mx-auto min-w-0 max-w-[1260px]">{children}</div>
     </section>
   );
@@ -58,7 +72,7 @@ function SectionHeader({
     <Reveal>
       <div className={align === 'center' ? 'mx-auto min-w-0 max-w-3xl text-center' : 'min-w-0 max-w-3xl'}>
         <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">{eyebrow}</p>
-        <h2 className="mt-3 text-balance text-[1.9rem] font-semibold leading-[1.08] tracking-[-0.025em] text-[#151713] min-[380px]:text-[2.08rem] md:text-[3.15rem] md:leading-[1.05] md:tracking-[-0.03em]">
+        <h2 className="mt-3 text-balance text-[1.9rem] font-semibold leading-[1.08] tracking-[-0.025em] text-[#151713] min-[380px]:text-[2.08rem] md:text-[2.65rem] md:leading-[1.06] md:tracking-[-0.026em]">
           {title}
         </h2>
         {copy ? <p className="mt-4 text-[0.98rem] leading-[1.62] text-[#5b615a] md:text-[1.04rem] md:leading-[1.65]">{copy}</p> : null}
@@ -88,6 +102,8 @@ function ButtonRow({ centered = false }: { centered?: boolean }) {
 
 type TraceStage = 0 | 1 | 2 | 3;
 type SequenceStage = 0 | 1 | 2 | 3 | 4;
+type OutcomeStage = 0 | 1 | 2 | 3;
+type BypassStage = 0 | 1 | 2;
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
@@ -390,6 +406,519 @@ function SequenceRiskTraceCard() {
   );
 }
 
+function ConnectorWall() {
+  const connectors: Array<{
+    name: string;
+    status: 'Live' | 'Beta' | 'On request';
+    description: string;
+    icon: IconType | LucideIcon;
+    color: string;
+  }> = [
+    {
+      name: 'Stripe',
+      status: 'Live',
+      description: 'Payouts, refunds, and balance events',
+      icon: SiStripe,
+      color: '#635bff',
+    },
+    {
+      name: 'PostgreSQL',
+      status: 'Live',
+      description: 'Read-only proof against internal tables',
+      icon: SiPostgresql,
+      color: '#4169e1',
+    },
+    {
+      name: 'REST APIs',
+      status: 'Live',
+      description: 'HTTPS JSON records and business systems',
+      icon: Webhook,
+      color: '#2f5f66',
+    },
+    {
+      name: 'GitHub',
+      status: 'Live',
+      description: 'Repos, deploy checks, and workflow state',
+      icon: SiGithub,
+      color: '#181717',
+    },
+    {
+      name: 'Slack',
+      status: 'Live',
+      description: 'Approval signals and incident channels',
+      icon: Slack,
+      color: '#4a154b',
+    },
+    {
+      name: 'Zendesk',
+      status: 'Beta',
+      description: 'Ticket state and customer support records',
+      icon: SiZendesk,
+      color: '#03363d',
+    },
+    {
+      name: 'Shopify',
+      status: 'Beta',
+      description: 'Commerce orders, refunds, and inventory',
+      icon: SiShopify,
+      color: '#7ab55c',
+    },
+    {
+      name: 'NetSuite',
+      status: 'On request',
+      description: 'Ledger and ERP reconciliation',
+      icon: Server,
+      color: '#2f5f66',
+    },
+  ];
+
+  return (
+    <Section id="connectors" className="bg-[#fbfcfa] py-12 md:py-16">
+      <SectionHeader
+        eyebrow="Systems of record"
+        title="Verified against the systems your business already trusts."
+        copy="Zroky turns production systems into proof sources after an agent acts. Live connectors are shown plainly; beta and on-request connectors are labelled."
+        align="center"
+      />
+
+      <Reveal delay={0.08} className="mx-auto mt-9 max-w-6xl">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {connectors.map((connector) => {
+            const Icon = connector.icon;
+            const live = connector.status === 'Live';
+            return (
+              <div
+                key={connector.name}
+                className={`min-w-0 rounded-[14px] border bg-[#fffdfa] p-4 shadow-[0_1px_2px_rgba(28,31,26,0.04)] ${
+                  live ? 'border-[#d9d6ca]' : 'border-[#e1d7bd] opacity-90'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span
+                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-[10px] border ${
+                      live ? 'border-[#cfe0dd] bg-[#fffdfa]' : 'border-[#dfc899] bg-[#fff8ea]'
+                    }`}
+                    style={{ color: connector.color }}
+                  >
+                    <Icon size={18} />
+                  </span>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                      live ? 'border-[#c2e4cf] bg-[#e7f5ec] text-[#256b45]' : 'border-[#dfc899] bg-[#fff8ea] text-[#8a5a16]'
+                    }`}
+                  >
+                    {connector.status}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-[1rem] font-semibold text-[#171a15]">{connector.name}</h3>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-[#5b615a]">{connector.description}</p>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-5 text-center text-[12.5px] leading-relaxed text-[#777266]">
+          Proof connectors run with scoped read access. Agent-held credentials are not treated as source-of-record proof.
+        </p>
+      </Reveal>
+    </Section>
+  );
+}
+
+function AgentFleetBoard() {
+  const rows = [
+    {
+      name: 'Refund agent',
+      detail: 'approval > $500 / deny > $5,000',
+      state: 'managed',
+      tone: 'ok' as const,
+    },
+    {
+      name: 'Release agent',
+      detail: 'production deploys hold for approval',
+      state: 'managed',
+      tone: 'ok' as const,
+    },
+    {
+      name: 'legacy-export-agent',
+      detail: 'observed in telemetry / not yet managed',
+      state: 'unmanaged',
+      tone: 'warn' as const,
+    },
+  ];
+
+  const reduce = useReducedMotion();
+
+  return (
+    <div className="mx-auto w-full max-w-[640px] overflow-hidden rounded-[18px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_38px_82px_-56px_rgba(28,31,26,0.48)]">
+      <div className="border-b border-[#dedacf] bg-[#f8f7f2] px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">Agent fleet</p>
+            <h3 className="mt-1 text-xl font-semibold text-[#151713]">Every agent, managed. Every action, gated.</h3>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-[9px] border border-[#cfe0dd] bg-[#eaf1ef] px-3 py-1.5 text-[12px] font-semibold text-[#2f5f66]">
+            <Bot size={14} />
+            fleet view
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        <div className="grid gap-2.5">
+          {rows.map((row, index) => {
+            const unmanaged = row.tone === 'warn';
+            return (
+              <motion.div
+                key={row.name}
+                className={`group grid min-w-0 gap-3 rounded-[12px] border px-3.5 py-3 transition sm:grid-cols-[1fr_auto] sm:items-center ${
+                  unmanaged
+                    ? 'border-[#dfab3f] bg-[#fff2cc]'
+                    : 'border-[#e1ddd3] bg-[#fbfaf5]'
+                }`}
+                initial={reduce ? false : { opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-80px' }}
+                animate={
+                  unmanaged && !reduce
+                    ? {
+                        boxShadow: [
+                          '0 0 0 0 rgba(223,171,63,0)',
+                          '0 0 0 6px rgba(223,171,63,0.12)',
+                          '0 0 0 0 rgba(223,171,63,0)',
+                        ],
+                      }
+                    : undefined
+                }
+                transition={{ duration: 0.42, ease, delay: 0.08 + index * 0.05, repeat: unmanaged && !reduce ? Infinity : 0, repeatDelay: 2.8 }}
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[9px] border ${
+                      unmanaged ? 'border-[#dfab3f] bg-[#fff8ea] text-[#8a5a16]' : 'border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]'
+                    }`}
+                  >
+                    {unmanaged ? <ShieldAlert size={16} /> : <Bot size={16} />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[#171a15]">{row.name}</p>
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#777266]">{row.detail}</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                      unmanaged ? 'border-[#dfab3f] bg-[#fffdfa] text-[#8a5a16]' : 'border-[#c2e4cf] bg-[#e7f5ec] text-[#256b45]'
+                    }`}
+                  >
+                    {row.state}
+                  </span>
+                  {unmanaged ? (
+                    <span className="hidden rounded-[8px] border border-[#d9d6ca] bg-[#fffdfa] px-3 py-1.5 text-[11px] font-semibold text-[#34362f] opacity-0 transition group-hover:opacity-100 sm:inline-flex">
+                      Promote to managed
+                    </span>
+                  ) : null}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          {[
+            ['18', 'observed agents'],
+            ['94%', 'managed coverage'],
+            ['1', 'unmanaged identity'],
+          ].map(([value, label]) => (
+            <div key={label} className="rounded-[11px] border border-[#e1ddd3] bg-[#f7f6f1] px-4 py-3">
+              <p className="text-2xl font-semibold leading-none text-[#171a15]">{value}</p>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a867a]">{label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentFleetSection() {
+  return (
+    <Section id="agents" className="bg-[#f3f4ee]">
+      <div className="grid min-w-0 gap-9 sm:gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <SectionHeader
+          eyebrow="Agent fleet"
+          title="Manage known agents and catch the ones acting outside the line."
+          copy="The landing now shows the fleet concept directly: managed profiles, policy coverage, and telemetry-only identities that need promotion before they can be trusted with high-risk work."
+        />
+        <Reveal delay={0.08}>
+          <AgentFleetBoard />
+        </Reveal>
+      </div>
+    </Section>
+  );
+}
+
+function OutcomeDiffCard() {
+  const reduce = useReducedMotion();
+  const [stage, setStage] = useState<OutcomeStage>(reduce ? 3 : 0);
+
+  useEffect(() => {
+    if (reduce) return undefined;
+    let cancelled = false;
+    async function loop() {
+      while (!cancelled) {
+        setStage(0);
+        await wait(700);
+        if (cancelled) return;
+        setStage(1);
+        await wait(1200);
+        if (cancelled) return;
+        setStage(2);
+        await wait(950);
+        if (cancelled) return;
+        setStage(3);
+        await wait(3400);
+      }
+    }
+    void loop();
+    return () => {
+      cancelled = true;
+    };
+  }, [reduce]);
+
+  const rows = [
+    { field: 'refund_id', claimed: 'rf_8841', actual: 'rf_8841', verdict: 'matched' },
+    { field: 'currency', claimed: 'USD', actual: 'USD', verdict: 'matched' },
+    { field: 'amount', claimed: '$500', actual: '$5,000', verdict: stage >= 3 ? 'mismatched' : 'checking' },
+  ];
+
+  return (
+    <div className="mx-auto w-full max-w-[620px] overflow-hidden rounded-[18px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_38px_82px_-56px_rgba(28,31,26,0.48)]">
+      <div className="border-b border-[#dedacf] bg-[#f8f7f2] px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">Outcomes / field diff</p>
+            <h3 className="mt-1 text-xl font-semibold text-[#151713]">Agent claim vs source-of-record reality</h3>
+          </div>
+          <span
+            className={`inline-flex items-center gap-2 rounded-[9px] border px-3 py-1.5 text-[12px] font-semibold ${
+              stage >= 3 ? 'border-[#f0c6bf] bg-[#fbebe9] text-[#b3402f]' : 'border-[#dfc899] bg-[#fff8ea] text-[#8a5a16]'
+            }`}
+          >
+            {stage >= 3 ? <AlertTriangle size={14} /> : <Loader2 size={14} className="animate-spin" />}
+            {stage >= 3 ? 'mismatched' : 'checking'}
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        <div className="rounded-[12px] border border-[#e1ddd3] bg-[#f7f6f1] p-3.5">
+          <div className="grid grid-cols-[1fr_auto] gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a867a]">Action claim</p>
+              <p className="mt-1 font-mono text-[12px] text-[#34362f]">refund.payment / customer acct_1028</p>
+            </div>
+            <span className="h-fit rounded-full border border-[#dcd8ce] bg-[#fffdfa] px-3 py-1 text-[11px] font-semibold text-[#34362f]">
+              200 OK
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-[12px] border border-[#dedacf]">
+          <div className="grid grid-cols-[0.8fr_1fr_1fr_0.85fr] bg-[#f4f2eb] px-3 py-2.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-[#8a867a]">
+            <span>Field</span>
+            <span>Claimed</span>
+            <span>Actual</span>
+            <span className="text-right">Verdict</span>
+          </div>
+          <div className="divide-y divide-[#e4e0d6] bg-[#fffdfa]">
+            {rows.map((row, index) => {
+              const mismatch = row.verdict === 'mismatched';
+              const pending = row.verdict === 'checking';
+              return (
+                <motion.div
+                  key={row.field}
+                  className={`grid grid-cols-[0.8fr_1fr_1fr_0.85fr] gap-2 px-3 py-3 text-[12px] font-semibold ${
+                    mismatch ? 'bg-[#fbebe9] text-[#4e2019]' : 'text-[#34362f]'
+                  }`}
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: stage >= index + 1 ? 1 : 0.38, y: stage >= index + 1 ? 0 : 8 }}
+                  transition={{ duration: 0.3, ease }}
+                >
+                  <span className="min-w-0 truncate">{row.field}</span>
+                  <span className="min-w-0 truncate font-mono">{row.claimed}</span>
+                  <span className="min-w-0 truncate font-mono">{stage >= index + 1 ? row.actual : '...'}</span>
+                  <span className={`text-right font-mono ${mismatch ? 'text-[#b3402f]' : pending ? 'text-[#8a5a16]' : 'text-[#256b45]'}`}>
+                    {row.verdict}
+                  </span>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div
+          className={`mt-4 rounded-[12px] border p-3.5 ${
+            stage >= 3 ? 'border-[#f0c6bf] bg-[#fbebe9]' : 'border-[#dfc899] bg-[#fff8ea]'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[9px] text-white ${stage >= 3 ? 'bg-[#b3402f]' : 'bg-[#8a5a16]'}`}>
+              {stage >= 3 ? <FileDiff size={16} /> : <Loader2 size={16} className="animate-spin" />}
+            </span>
+            <div>
+              <p className={`text-[11px] font-semibold uppercase tracking-[0.1em] ${stage >= 3 ? 'text-[#b3402f]' : 'text-[#8a5a16]'}`}>
+                {stage >= 3 ? 'Zroky verdict' : 'Source comparison'}
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-relaxed text-[#171a15]">
+                {stage >= 3
+                  ? 'The tool succeeded, but the system of record proves the outcome is different.'
+                  : 'Waiting for the system of record before a receipt can be trusted.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClaimVsRealitySection() {
+  return (
+    <Section id="claim-vs-reality" className="bg-[#fbfcfa]">
+      <div className="grid min-w-0 gap-9 sm:gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <Reveal delay={0.08} className="lg:order-1">
+          <OutcomeDiffCard />
+        </Reveal>
+        <div className="lg:order-2">
+          <SectionHeader
+            eyebrow="Claim vs reality"
+            title="Do not trust a successful call until the real record agrees."
+            copy="The Outcomes view compares exact fields from the agent's claim with the source-of-record record. A mismatch becomes visible proof, not a buried log line."
+          />
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function BypassDetectionCard() {
+  const reduce = useReducedMotion();
+  const [stage, setStage] = useState<BypassStage>(reduce ? 2 : 0);
+
+  useEffect(() => {
+    if (reduce) return undefined;
+    let cancelled = false;
+    async function loop() {
+      while (!cancelled) {
+        setStage(0);
+        await wait(900);
+        if (cancelled) return;
+        setStage(1);
+        await wait(1100);
+        if (cancelled) return;
+        setStage(2);
+        await wait(3600);
+      }
+    }
+    void loop();
+    return () => {
+      cancelled = true;
+    };
+  }, [reduce]);
+
+  const timeline = [
+    ['Telemetry', 'legacy-export-agent touched customer export'],
+    ['Receipt lookup', 'No Zroky receipt found for mutation window'],
+    ['Classification', 'Unreceipted mutation / bypass risk'],
+  ];
+
+  return (
+    <div className="mx-auto w-full max-w-[590px] overflow-hidden rounded-[18px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_38px_82px_-56px_rgba(28,31,26,0.48)]">
+      <div className="border-b border-[#dedacf] bg-[#f8f7f2] px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">Bypass detection</p>
+            <h3 className="mt-1 text-xl font-semibold text-[#151713]">What if the agent skipped Zroky?</h3>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-[9px] border border-[#dfc899] bg-[#fff8ea] px-3 py-1.5 text-[12px] font-semibold text-[#8a5a16]">
+            <ShieldAlert size={14} />
+            watchlist
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        <div className="rounded-[14px] border border-[#dfc899] bg-[#fff8ea] p-4">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-[#8a5a16] text-white">
+              <PlugZap size={17} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a5a16]">Unreceipted mutation</p>
+              <p className="mt-1 text-sm font-semibold leading-relaxed text-[#171a15]">customer_export.created outside protected-action path</p>
+              <p className="mt-1 font-mono text-[11px] text-[#777266]">source: telemetry / actor: legacy-export-agent</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2.5">
+          {timeline.map(([label, value], index) => {
+            const active = stage >= index;
+            const final = index === 2 && active;
+            return (
+              <motion.div
+                key={label}
+                className={`grid gap-2 rounded-[11px] border px-3.5 py-3 sm:grid-cols-[8rem_1fr_auto] sm:items-center ${
+                  final ? 'border-[#f0c6bf] bg-[#fbebe9]' : 'border-[#e1ddd3] bg-[#fbfaf5]'
+                }`}
+                initial={false}
+                animate={{ opacity: active ? 1 : 0.42 }}
+                transition={{ duration: 0.25, ease }}
+              >
+                <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8a867a]">{label}</span>
+                <span className="min-w-0 text-[13px] font-semibold text-[#34362f]">{value}</span>
+                <span
+                  className={`w-fit rounded-full border px-2.5 py-1 text-[10.5px] font-semibold ${
+                    final ? 'border-[#f0c6bf] bg-[#fffdfa] text-[#b3402f]' : 'border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]'
+                  }`}
+                >
+                  {active ? (final ? 'bypass' : 'seen') : 'waiting'}
+                </span>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {['Observed mutation', 'No receipt', 'Owner alert', 'Promote or block'].map((step, index) => (
+            <div key={step} className="flex items-center gap-2">
+              <span className="rounded-full border border-[#dcd8ce] bg-[#f8f7f2] px-3 py-1.5 text-[11px] font-semibold text-[#34362f]">{step}</span>
+              {index < 3 ? <ArrowRight size={13} className="text-[#a29c8f]" /> : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BypassDetectionSection() {
+  return (
+    <Section id="bypass-detection" className="bg-[#f3f4ee]">
+      <div className="grid min-w-0 gap-9 sm:gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <SectionHeader
+          eyebrow="Bypass detection"
+          title="If an agent mutates state outside Zroky, the gap should be visible."
+          copy="Zroky should not pretend every action is protected. The landing now handles the skeptical buyer question directly: unreceipted mutations become classified telemetry, not invisible exceptions."
+        />
+        <Reveal delay={0.08}>
+          <BypassDetectionCard />
+        </Reveal>
+      </div>
+    </Section>
+  );
+}
+
 function StakesSection() {
   const consequences = [
     { icon: DollarSign, text: 'Money can move to the wrong account.' },
@@ -569,8 +1098,8 @@ function PrintedReceiptArtifact() {
 
           <div className="grid grid-cols-[1fr_3.75rem] gap-3">
             <div>
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#777266]">Independent verification</p>
-              <p className="mt-1 break-words text-[11px] font-semibold leading-relaxed text-[#171a15]">Ed25519 signed with a published Zroky public key</p>
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#777266]">Evidence seal</p>
+              <p className="mt-1 break-words text-[11px] font-semibold leading-relaxed text-[#171a15]">Evidence hash sealed with policy, runner, and verifier context</p>
               <div
                 className="mt-3 h-7 w-full opacity-80"
                 style={{
@@ -590,8 +1119,8 @@ function PrintedReceiptArtifact() {
           </div>
 
           <div className="mt-4 border-t border-dashed border-[#bfb9aa] pt-3 text-center">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-[#8a867a]">Ed25519 signed</p>
-            <p className="mt-1 text-[10.5px] uppercase tracking-[0.16em] text-[#2f5f66]">Independently verifiable</p>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[#8a867a]">Evidence sealed</p>
+            <p className="mt-1 text-[10.5px] uppercase tracking-[0.16em] text-[#2f5f66]">Tamper-evident</p>
           </div>
         </div>
       </motion.div>
@@ -618,7 +1147,7 @@ function ProofStandard() {
                     <ShieldCheck size={17} />
                   </span>
                   <p className="text-sm font-semibold leading-relaxed text-[#2f5f66]">
-                    Every hash is independently verifiable - not just visible in your dashboard.
+                    Every receipt binds the policy decision, runner event, source comparison, and evidence hash.
                   </p>
                 </div>
               </div>
@@ -630,134 +1159,147 @@ function ProofStandard() {
   );
 }
 
-function EnterpriseReadiness() {
-  const actionClasses = [
-    ['Money movement', 'payouts, credits, reversals'],
-    ['Access changes', 'roles, permissions, seats'],
-    ['Production changes', 'deploys, config, data jobs'],
-    ['Customer contact', 'messages, tickets, notifications'],
-  ];
+const FAQ_ITEMS = [
+  {
+    question: 'What happens when a policy check fails?',
+    answer: 'Zroky fails closed. If policy, approval, runner, verifier, or receipt state is missing for a high-risk action, the action is held or blocked instead of silently executing.',
+  },
+  {
+    question: 'Can agents bypass Zroky?',
+    answer: 'Agents can still mutate systems through paths you have not protected. Zroky treats that as a product surface: telemetry can classify unreceipted mutations so owners can promote the agent to managed coverage or block the path.',
+  },
+  {
+    question: 'What counts as proof?',
+    answer: 'A successful tool response is not proof. Zroky compares the claimed outcome with a source-of-record connector and keeps the policy, runner, verifier, and receipt context together.',
+  },
+  {
+    question: 'Do we need to rewrite our agent framework?',
+    answer: 'No. Start by wrapping one high-risk operation with zroky.protect(), attach policy and a source-of-record check, then expand coverage by action class.',
+  },
+  {
+    question: 'Which systems can Zroky verify against?',
+    answer: 'Live connector paths cover Stripe, PostgreSQL, generic REST APIs, GitHub, and Slack. Zendesk, Shopify, and NetSuite-style ERP flows are labelled beta or on request until they are verified end to end.',
+  },
+  {
+    question: 'How are receipts different from logs?',
+    answer: 'Logs show what an app said happened. A Zroky receipt packages the decision, approval state, scoped runner event, source comparison, and evidence hash for later review.',
+  },
+];
 
-  const readinessRows = [
+function TrustAndFAQ() {
+  const trustFacts = [
     {
       icon: LockKeyhole,
-      label: 'Identity mapped',
-      detail: 'Agent, owner, role, environment, and expiry are attached before execution.',
-      signal: 'owner + role',
+      title: 'Fail closed',
+      body: 'Policy missing means the action is held or blocked.',
     },
     {
-      icon: ShieldCheck,
-      label: 'Policy gates',
-      detail: 'High-risk action classes fail closed when approval, runner, or verifier state is missing.',
-      signal: 'fail closed',
+      icon: Bot,
+      title: 'Unlimited approvers',
+      body: 'Safety reviewers should not become a pricing bottleneck.',
     },
     {
-      icon: DatabaseZap,
-      label: 'Source systems',
-      detail: 'Outcomes are checked against the systems your business already treats as truth.',
-      signal: 'matched',
-    },
-    {
-      icon: Check,
-      label: 'Evidence export',
-      detail: 'Receipt hashes, policy context, and approval trails stay ready for review.',
-      signal: 'signed',
+      icon: ReceiptText,
+      title: 'Tamper-evident receipts',
+      body: 'Receipts bind policy, runner, source comparison, and evidence hash.',
     },
   ];
 
+  const openLinks = [
+    { icon: Github, label: 'GitHub', href: 'https://github.com/zroky-ai' },
+    { icon: GitBranch, label: 'Changelog', href: '/changelog' },
+    { icon: RefreshCw, label: 'Docs', href: '/docs' },
+  ];
+
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQ_ITEMS.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
+  };
+
   return (
-    <Section id="trust" className="bg-[#fbfcfa] py-14 md:py-20">
-      <div className="grid min-w-0 gap-10 sm:gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-        <div>
-          <SectionHeader
-            eyebrow="Enterprise readiness"
-            title="Scale agents through policy, not blind trust."
-            copy="Zroky fits around your agents, runners, approval owners, and source-of-record systems so high-risk autonomy can move faster without becoming invisible."
-          />
-          <Reveal delay={0.08}>
-            <div className="mt-7 grid gap-2 sm:grid-cols-2">
-              {actionClasses.map(([label, value]) => (
-                <div key={label} className="rounded-[10px] border border-[#dedacf] bg-[#f7f6f1] px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#2f5f66]">{label}</p>
-                  <p className="mt-1 text-sm font-semibold text-[#34362f]">{value}</p>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </div>
+    <Section id="trust" className="bg-[#fbfcfa]">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
 
-        <Reveal delay={0.08}>
-          <div className="min-w-0 overflow-hidden rounded-[18px] border border-[#d5d2c7] bg-[#fffdfa] shadow-[0_1px_2px_rgba(28,31,26,0.05),0_34px_70px_-52px_rgba(28,31,26,0.42)] sm:rounded-[20px] sm:shadow-[0_1px_2px_rgba(28,31,26,0.05),0_42px_90px_-54px_rgba(28,31,26,0.48)]">
-            <div className="border-b border-[#dedacf] bg-[#f8f7f2] px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">Production readiness board</p>
-                  <h3 className="mt-1 text-xl font-semibold text-[#151713]">Controls ready before scale-up</h3>
-                </div>
-                <span className="inline-flex items-center gap-2 rounded-[9px] border border-[#cfe0dd] bg-[#eaf1ef] px-3 py-1.5 text-[12px] font-semibold text-[#2f5f66]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#2f5f66]" />
-                  live posture
+      <SectionHeader
+        eyebrow="Trust posture"
+        title="Simple rules for production autonomy."
+        copy="No fake customer counts. No unlabeled beta surface. Just the controls a buyer needs to see before letting agents touch money, access, customer state, or production."
+        align="center"
+      />
+
+      <Reveal delay={0.08} className="mx-auto mt-9 max-w-6xl">
+        <div className="grid gap-3 md:grid-cols-3">
+          {trustFacts.map((fact) => {
+            const Icon = fact.icon;
+            return (
+              <div key={fact.title} className="rounded-[14px] border border-[#d9d6ca] bg-[#fffdfa] p-5 shadow-[0_1px_2px_rgba(28,31,26,0.04)]">
+                <span className="grid h-10 w-10 place-items-center rounded-[10px] border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
+                  <Icon size={18} />
                 </span>
+                <h3 className="mt-4 text-[1.05rem] font-semibold text-[#171a15]">{fact.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#5b615a]">{fact.body}</p>
               </div>
-            </div>
+            );
+          })}
+        </div>
+      </Reveal>
 
-            <div className="px-5 py-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  ['6', 'control checks'],
-                  ['4', 'risk surfaces'],
-                  ['0', 'blind writes'],
-                ].map(([value, label]) => (
-                  <div key={label} className="rounded-[11px] border border-[#e1ddd3] bg-[#f7f6f1] px-4 py-3">
-                    <p className="text-2xl font-semibold leading-none text-[#171a15]">{value}</p>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8a867a]">{label}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 divide-y divide-[#e4e0d6] border-y border-[#e4e0d6]">
-                {readinessRows.map((row, index) => {
-                  const Icon = row.icon;
-                  return (
-                    <motion.div
-                      key={row.label}
-                      className="grid gap-3 py-4 sm:grid-cols-[2.5rem_1fr_auto] sm:items-center"
-                      initial={{ opacity: 0, x: 12 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true, margin: '-80px' }}
-                      transition={{ duration: 0.42, ease, delay: 0.12 + index * 0.05 }}
-                    >
-                      <span className="grid h-10 w-10 place-items-center rounded-[10px] border border-[#cfe0dd] bg-[#eaf1ef] text-[#2f5f66]">
-                        <Icon size={17} />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-[#171a15]">{row.label}</p>
-                        <p className="mt-1 max-w-[33rem] text-[13px] leading-relaxed text-[#5b615a]">{row.detail}</p>
-                      </div>
-                      <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[#cfe0dd] bg-[#eef6f3] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#2f5f66]">
-                        <Check size={12} />
-                        {row.signal}
-                      </span>
-                    </motion.div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5">
-                <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#8a867a]">Deployment path</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {['Agent intent', 'Policy gate', 'Scoped runner', 'System proof', 'Signed receipt'].map((step, index) => (
-                    <div key={step} className="flex items-center gap-2">
-                      <span className="rounded-full border border-[#dcd8ce] bg-[#f8f7f2] px-3 py-1.5 text-[11px] font-semibold text-[#34362f]">{step}</span>
-                      {index < 4 ? <ArrowRight size={13} className="text-[#a29c8f]" /> : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+      <Reveal delay={0.12} className="mx-auto mt-6 max-w-6xl">
+        <div className="flex flex-col gap-4 rounded-[16px] border border-[#d9d6ca] bg-[#f8f7f2] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div>
+            <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2f5f66]">Built in the open</p>
+            <p className="mt-1 text-sm font-semibold text-[#34362f]">Follow product progress through code, release notes, and implementation docs.</p>
           </div>
-        </Reveal>
-      </div>
+          <div className="flex flex-wrap gap-2">
+            {openLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#d4d0c4] bg-[#fffdfa] px-3.5 text-sm font-semibold text-[#34362f] transition hover:border-[#c4bfb2]"
+                >
+                  <Icon size={15} />
+                  {link.label}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      </Reveal>
+
+      <Reveal delay={0.14} className="mx-auto mt-12 max-w-5xl">
+        <div id="faq" className="scroll-mt-6">
+          <div className="text-center">
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2f5f66]">FAQ</p>
+            <h3 className="mt-3 text-balance text-[1.85rem] font-semibold leading-[1.08] tracking-[-0.025em] text-[#151713] md:text-[2.45rem]">
+              Questions buyers ask before agents get authority.
+            </h3>
+          </div>
+
+          <div className="mt-7 divide-y divide-[#e4e0d6] overflow-hidden rounded-[16px] border border-[#d9d6ca] bg-[#fffdfa]">
+            {FAQ_ITEMS.map((item) => (
+              <details key={item.question} className="group px-4 py-4 open:bg-[#fbfaf5] sm:px-5">
+                <summary className="flex cursor-pointer list-none items-start justify-between gap-4 text-left text-sm font-semibold text-[#171a15]">
+                  <span>{item.question}</span>
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[#d9d6ca] bg-[#f8f7f2] text-[#2f5f66] transition group-open:rotate-45">
+                    +
+                  </span>
+                </summary>
+                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[#5b615a]">{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </Reveal>
     </Section>
   );
 }
@@ -918,12 +1460,16 @@ export default function HomePage() {
   return (
     <div className="w-full bg-[#fbfcfa]">
       <Hero />
+      <ConnectorWall />
       <StakesSection />
       <ArchitectureDiagram />
+      <AgentFleetSection />
       <SequenceRiskMoment />
       <ProofStandard />
-      <EnterpriseReadiness />
+      <ClaimVsRealitySection />
+      <BypassDetectionSection />
       <Quickstart />
+      <TrustAndFAQ />
       <FinalCTA />
     </div>
   );

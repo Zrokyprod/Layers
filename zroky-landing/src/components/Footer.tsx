@@ -5,8 +5,9 @@ const COLS = [
   {
     title: 'Control plane',
     links: [
+      { label: 'Connectors', href: '/#connectors' },
+      { label: 'Agent fleet', href: '/#agents' },
       { label: 'Control loop', href: '/#architecture' },
-      { label: 'Sequence risk', href: '/#sequence-risk' },
       { label: 'Receipts', href: '/#receipts' },
       { label: 'Pricing', href: '/pricing' },
     ],
@@ -16,6 +17,8 @@ const COLS = [
     links: [
       { label: 'Docs', href: '/docs' },
       { label: 'Quickstart', href: '/#quickstart' },
+      { label: 'Claim diff', href: '/#claim-vs-reality' },
+      { label: 'Bypass detection', href: '/#bypass-detection' },
       { label: 'Agent setup', href: '/docs' },
       { label: 'Changelog', href: '/changelog' },
     ],
@@ -23,7 +26,8 @@ const COLS = [
   {
     title: 'Company',
     links: [
-      { label: 'Enterprise readiness', href: '/#trust' },
+      { label: 'Trust posture', href: '/#trust' },
+      { label: 'FAQ', href: '/#faq' },
       { label: 'Privacy', href: '/privacy' },
       { label: 'Terms', href: '/terms' },
       { label: 'Contact', href: 'mailto:hello@zroky.com' },
