@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { getJudgeHealth } from "@/lib/api";
+import { legacyProductSurfaceEnabled } from "@/lib/legacy-product-surfaces";
 import type {
   DimensionDriftView,
   JudgeHealthResponse,
@@ -85,7 +86,13 @@ function DimensionRow({ row }: { row: DimensionDriftView }) {
   );
 }
 
-export function JudgeHealthPanel({ pollMs = 30000 }: JudgeHealthPanelProps) {
+export function JudgeHealthPanel(props: JudgeHealthPanelProps) {
+  if (!legacyProductSurfaceEnabled) return null;
+
+  return <JudgeHealthPanelInner {...props} />;
+}
+
+function JudgeHealthPanelInner({ pollMs = 30000 }: JudgeHealthPanelProps) {
   const [data, setData] = useState<JudgeHealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

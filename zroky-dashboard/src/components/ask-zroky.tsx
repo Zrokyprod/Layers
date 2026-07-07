@@ -33,6 +33,7 @@ import {
   type ReplayRunTraceItem,
 } from "@/lib/api";
 import { useCreateReplayRunFromCall, useCreateReplayRunFromIssue } from "@/lib/hooks";
+import { legacyProductSurfaceEnabled } from "@/lib/legacy-product-surfaces";
 import { DEFAULT_VERIFICATION_REPLAY_MODE, replayVerifiedFix } from "@/lib/replay-mode";
 import type { AskContext, AskEvidence, AskFeedbackRequest, AskResponse } from "@/lib/types";
 
@@ -177,6 +178,12 @@ function promotionCriteria(run: ReplayRunDetailItem, trace: ReplayRunTraceItem):
 }
 
 export function AskZroky() {
+  if (!legacyProductSurfaceEnabled) return null;
+
+  return <AskZrokyInner />;
+}
+
+function AskZrokyInner() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
