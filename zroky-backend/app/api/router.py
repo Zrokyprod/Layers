@@ -20,6 +20,7 @@ from app.api.routes.capture import router as capture_router
 from app.api.routes.contracts import router as contracts_router
 from app.api.routes.diagnoses import router as diagnoses_router
 from app.api.routes.digest import router as digest_router
+from app.api.routes.evidence import router as evidence_router
 from app.api.routes.export import router as export_router
 from app.api.routes.fix_events import router as fix_events_router
 from app.api.routes.health import router as health_router
@@ -84,6 +85,7 @@ api_router.include_router(traces_router, tags=["traces"])
 api_router.include_router(live_router, tags=["live"])
 api_router.include_router(analytics_router, tags=["analytics"])
 api_router.include_router(action_intents_router, tags=["verified-actions"])
+api_router.include_router(evidence_router, tags=["evidence"])
 api_router.include_router(agents_router, tags=["agents"])  # Agent tool-control profiles
 api_router.include_router(tool_registry_router, tags=["tool-registry"])  # Agent runtime and verifier catalog
 api_router.include_router(ask_router, tags=["ask"])  # Ask Zroky — natural-language Q&A

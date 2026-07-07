@@ -14,6 +14,7 @@ import type {
 
 const api = vi.hoisted(() => ({
   getActionIntentReceipt: vi.fn(),
+  getEvidenceManifest: vi.fn(),
   getRuntimePolicyEvidencePack: vi.fn(),
   listActionIntents: vi.fn(),
   listOutcomeReconciliations: vi.fn(),
@@ -309,6 +310,43 @@ describe("EvidencePage", () => {
     api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 1, items: [runtimeDecision()] });
     api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 1, items: [outcome()] });
     api.getActionIntentReceipt.mockResolvedValue(receipt());
+    api.getEvidenceManifest.mockResolvedValue({
+      artifact: "zroky.evidence_manifest",
+      schema_version: "zroky.evidence_manifest.v1",
+      generated_at: "2026-06-20T09:05:00Z",
+      project_id: "proj_1",
+      scope: {
+        filter: "all",
+        search: "sha256:intent_1",
+        start_date: "2026-06-20",
+        end_date: "2026-06-20",
+        total_records: 1,
+        exportable_records: 1,
+        non_exportable_records: 0,
+      },
+      verification: {
+        public_key_url: "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
+        instructions: ["Verify receipts with the published Ed25519 public key."],
+      },
+      records: [
+        {
+          action_id: "act_1",
+          checked_at: "2026-06-20T09:03:00Z",
+          decision_id: "decision_1",
+          digest: "sha256:intent_1",
+          export_kind: "receipt",
+          exportable: true,
+          href: "http://localhost:3000/evidence?action_id=act_1",
+          id: "action:act_1",
+          kind: "action_receipt",
+          source_label: "Action Receipt",
+          status: "matched",
+          system_ref: "ticket:T-1001",
+          title: "Close ticket T-1001",
+          trace_id: "trace_1",
+        },
+      ],
+    });
     api.getRuntimePolicyEvidencePack.mockResolvedValue(evidencePack());
   });
 
@@ -382,6 +420,15 @@ describe("EvidencePage", () => {
     fireEvent.change(screen.getByLabelText("End"), { target: { value: "2026-06-20" } });
     fireEvent.click(screen.getByRole("button", { name: "Export audit manifest" }));
 
+    await waitFor(() => expect(api.getEvidenceManifest).toHaveBeenCalledWith(
+      {
+        dashboard_origin: "http://localhost:3000",
+        end_date: "2026-06-20",
+        filter: "all",
+        search: "sha256:intent_1",
+        start_date: "2026-06-20",
+      },
+    ));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
     const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0] as Blob;
     const exported = await blob.text();

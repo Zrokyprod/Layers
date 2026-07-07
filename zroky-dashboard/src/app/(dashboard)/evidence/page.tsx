@@ -8,6 +8,7 @@ import { DashboardButton } from "@/components/dashboard-button";
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
   getActionIntentReceipt,
+  getEvidenceManifest,
   getRuntimePolicyEvidencePack,
   listActionIntents,
   listOutcomeReconciliations,
@@ -24,7 +25,6 @@ import {
   type EvidenceLedgerRow,
 } from "@/lib/evidence-ledger";
 import { buildEvidenceArtifact } from "@/lib/evidence-artifact";
-import { actionReceiptPublicKeyUrl } from "@/lib/evidence-verification";
 import { formatDateTime } from "@/lib/format";
 import { EvidenceLedger } from "./EvidenceLedger";
 import { EvidenceProofStrip, type EvidenceProofMetric } from "./EvidenceProofStrip";
@@ -44,41 +44,6 @@ type EvidenceVerdict = {
   ctaLabel: string;
   title: string;
   tone: "danger" | "neutral" | "success" | "warning";
-};
-
-type EvidenceAuditManifest = {
-  artifact: "zroky.evidence_manifest";
-  schema_version: "zroky.evidence_manifest.v1";
-  generated_at: string;
-  scope: {
-    filter: EvidenceLedgerFilter;
-    search: string | null;
-    start_date: string | null;
-    end_date: string | null;
-    total_records: number;
-    exportable_records: number;
-    non_exportable_records: number;
-  };
-  verification: {
-    public_key_url: string;
-    instructions: string[];
-  };
-  records: Array<{
-    action_id: string | null;
-    checked_at: string | null;
-    decision_id: string | null;
-    digest: string | null;
-    export_kind: EvidenceLedgerRow["exportKind"];
-    exportable: boolean;
-    href: string;
-    id: string;
-    kind: EvidenceLedgerRow["kind"];
-    source_label: string;
-    status: string;
-    system_ref: string | null;
-    title: string;
-    trace_id: string | null;
-  }>;
 };
 
 function safeFilePart(value: string) {
@@ -113,60 +78,6 @@ function rowsInDateRange(rows: EvidenceLedgerRow[], startDate: string, endDate: 
     if (endDate && checkedDay > endDate) return false;
     return true;
   });
-}
-
-function buildEvidenceManifest({
-  endDate,
-  filter,
-  rows,
-  search,
-  startDate,
-}: {
-  endDate: string;
-  filter: EvidenceLedgerFilter;
-  rows: EvidenceLedgerRow[];
-  search: string;
-  startDate: string;
-}): EvidenceAuditManifest {
-  return {
-    artifact: "zroky.evidence_manifest",
-    generated_at: new Date().toISOString(),
-    records: rows.map((row) => ({
-      action_id: row.actionId,
-      checked_at: row.checkedAt,
-      decision_id: row.decisionId,
-      digest: row.digest,
-      export_kind: row.exportKind,
-      exportable: row.exportable,
-      href: row.href,
-      id: row.id,
-      kind: row.kind,
-      source_label: row.sourceLabel,
-      status: row.status,
-      system_ref: row.systemRef,
-      title: row.title,
-      trace_id: row.traceId,
-    })),
-    schema_version: "zroky.evidence_manifest.v1",
-    scope: {
-      end_date: endDate || null,
-      exportable_records: rows.filter((row) => row.exportable).length,
-      filter,
-      non_exportable_records: rows.filter((row) => !row.exportable).length,
-      search: search.trim() || null,
-      start_date: startDate || null,
-      total_records: rows.length,
-    },
-    verification: {
-      public_key_url: actionReceiptPublicKeyUrl(),
-      instructions: [
-        "Use this manifest as an index, not as a signed evidence bundle.",
-        "Export each referenced Action Receipt or Evidence Pack JSON before audit review.",
-        "For Action Receipts, verify the Ed25519 signature over signed_payload using the published public key.",
-        "For Evidence Packs, compare the evidence_hash in the exported proof with the value shown in Zroky.",
-      ],
-    },
-  };
 }
 
 function readSearchParams(): { deepLink: DeepLinkState; filter: EvidenceLedgerFilter } {
@@ -389,7 +300,7 @@ function EvidenceAuditTools({
       <div>
         <span className="ev-eyebrow">Audit export</span>
         <h2>Filtered proof manifest</h2>
-        <p>Export a date-scoped index of visible proof records. Individual receipts and Evidence Packs remain separately signed.</p>
+        <p>Export an exact server-side index for this filter and date range. Individual receipts and Evidence Packs remain separately signed.</p>
       </div>
       <div className="ev-audit-controls">
         <label>
@@ -405,8 +316,8 @@ function EvidenceAuditTools({
         </DashboardButton>
       </div>
       <div className="ev-audit-scope" aria-label="Manifest scope">
-        <strong>{rows.length} in scope</strong>
-        <span>{exportableCount} exportable</span>
+        <strong>{rows.length} visible preview</strong>
+        <span>{exportableCount} exportable here</span>
         <span>{rows.length - exportableCount} visible but not exportable</span>
         <span>{filter.replace("_", " ")}{search.trim() ? ` / ${search.trim()}` : ""}</span>
       </div>
@@ -541,22 +452,31 @@ export default function EvidencePage() {
     }
   }
 
-  function exportAuditManifest() {
-    const manifest = buildEvidenceManifest({
-      endDate: auditEndDate,
-      filter,
-      rows: auditRows,
-      search,
-      startDate: auditStartDate,
-    });
-    const scope = [
-      filter,
-      search.trim() ? safeFilePart(search.trim()) : "all",
-      auditStartDate || "start",
-      auditEndDate || "end",
-    ].join("-");
-    downloadJsonFile(manifest, `zroky-evidence-manifest-${safeFilePart(scope)}.json`);
-    setMessage(`Audit manifest exported for ${auditRows.length} proof record${auditRows.length === 1 ? "" : "s"}.`);
+  async function exportAuditManifest() {
+    setMessage("");
+    setExporting(true);
+    try {
+      const manifest = await getEvidenceManifest({
+        dashboard_origin: typeof window === "undefined" ? undefined : window.location.origin,
+        end_date: auditEndDate,
+        filter,
+        search,
+        start_date: auditStartDate,
+      });
+      const scope = [
+        filter,
+        search.trim() ? safeFilePart(search.trim()) : "all",
+        auditStartDate || "start",
+        auditEndDate || "end",
+      ].join("-");
+      downloadJsonFile(manifest, `zroky-evidence-manifest-${safeFilePart(scope)}.json`);
+      const count = manifest.scope.total_records;
+      setMessage(`Audit manifest exported for ${count} proof record${count === 1 ? "" : "s"}.`);
+    } catch (downloadError) {
+      setMessage(downloadError instanceof Error ? downloadError.message : "Evidence manifest export failed.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   const verdict = buildVerdict({ counts, error, loading });

@@ -359,6 +359,44 @@ export interface RuntimePolicyEvidencePackResponse {
   hash_payload_excludes: string[];
 }
 
+export type EvidenceManifestFilter = "all" | "matched" | "needs_verification" | "exceptions";
+
+export interface EvidenceManifestResponse {
+  artifact: "zroky.evidence_manifest";
+  schema_version: "zroky.evidence_manifest.v1";
+  generated_at: string;
+  project_id: string;
+  scope: {
+    filter: EvidenceManifestFilter;
+    search: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    total_records: number;
+    exportable_records: number;
+    non_exportable_records: number;
+  };
+  verification: {
+    public_key_url: string;
+    instructions: string[];
+  };
+  records: Array<{
+    action_id: string | null;
+    checked_at: string | null;
+    decision_id: string | null;
+    digest: string | null;
+    export_kind: "receipt" | "evidence_pack" | null;
+    exportable: boolean;
+    href: string;
+    id: string;
+    kind: "action_receipt" | "orphan_decision" | "unlinked_outcome";
+    source_label: string;
+    status: string;
+    system_ref: string | null;
+    title: string;
+    trace_id: string | null;
+  }>;
+}
+
 export type ActionIntentStatus =
   | "validated"
   | "deciding"
@@ -4837,6 +4875,22 @@ export function getRuntimePolicyEvidencePack(
     `/v1/runtime-policy/decisions/${encodeURIComponent(decisionId)}/evidence`,
     { signal },
   );
+}
+
+export function getEvidenceManifest(
+  query: {
+    filter?: EvidenceManifestFilter;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+    dashboard_origin?: string;
+  } = {},
+  signal?: AbortSignal,
+): Promise<EvidenceManifestResponse> {
+  return request<EvidenceManifestResponse>("/v1/evidence/manifest", {
+    query,
+    signal,
+  });
 }
 
 export function approveRuntimePolicyDecision(
