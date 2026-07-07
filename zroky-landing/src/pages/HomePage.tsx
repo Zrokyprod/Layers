@@ -762,20 +762,20 @@ function EnterpriseReadiness() {
   );
 }
 
-const SNIPPET = `decision = zroky.verified_action(
+const SNIPPET = `receipt = zroky.protect(
+    action="customer.access.grant",
+    params={"role": "admin", "target_user": "user_881"},
     agent_id="ops_agent",
-    action_type="access.grant",
-    parameters={"role": "admin", "target_user": "user_881"},
+    wait_for_receipt=True,
 )
 
-proof = zroky.await_action_proof(decision["action_id"])
-assert proof["proof_status"] == "matched"`;
+assert receipt["proof_status"] == "matched"`;
 
 function Quickstart() {
   const [copied, setCopied] = useState(false);
   const flow = [
     ['Before', 'agent tool call', 'A direct mutation reaches the system before governance is visible.'],
-    ['Wrap', 'zroky.verified_action()', 'The risky operation enters policy, approval, runner, and verifier control.'],
+    ['Wrap', 'zroky.protect()', 'The risky operation enters policy, approval, runner, and verifier control.'],
     ['After', 'signed receipt', 'Teams see what ran, what changed, and how the outcome was proven.'],
   ];
   const results = [
