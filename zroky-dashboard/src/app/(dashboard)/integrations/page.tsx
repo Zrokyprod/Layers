@@ -88,6 +88,7 @@ import {
   buildConnectorInventory,
   connectorStateLabel,
   connectorUpdatedLabel,
+  LAUNCH_VISIBLE_CONNECTOR_IDS,
   type ConnectorCategoryGroup,
   type ConnectorCoverageRow,
   type ConnectorInventory,
@@ -3066,57 +3067,61 @@ export default function IntegrationsPage() {
     () => buildConnectorInventory({ ...overview, partialFailure }),
     [overview, partialFailure],
   );
+  const visibleInventory = useMemo(
+    () => buildConnectorInventory({ ...overview, partialFailure, visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS }),
+    [overview, partialFailure],
+  );
 
   useEffect(() => {
     if (selectedId && inventory.rows.some((row) => row.id === selectedId)) return;
-    setSelectedId(firstSelectedId(inventory));
-  }, [inventory, selectedId]);
+    setSelectedId(firstSelectedId(visibleInventory));
+  }, [inventory, selectedId, visibleInventory]);
 
   const selectedRow = inventory.rows.find((row) => row.id === selectedId) ?? null;
   const filteredCategoryGroups = useMemo(
-    () => filterCategoryGroups(inventory.categoryGroups, connectorSearch),
-    [connectorSearch, inventory.categoryGroups],
+    () => filterCategoryGroups(visibleInventory.categoryGroups, connectorSearch),
+    [connectorSearch, visibleInventory.categoryGroups],
   );
 
   const metrics = [
     {
       id: "healthy",
       label: "Healthy verifiers",
-      value: formatCount(inventory.counts.healthyVerifiers),
+      value: formatCount(visibleInventory.counts.healthyVerifiers),
       helper: "Read-only systems with matched preflight.",
-      tone: inventory.counts.healthyVerifiers > 0 ? "success" as const : "neutral" as const,
+      tone: visibleInventory.counts.healthyVerifiers > 0 ? "success" as const : "neutral" as const,
       icon: <ShieldCheck />,
     },
     {
       id: "failing",
       label: "Failing",
-      value: formatCount(inventory.counts.failingVerifiers),
+      value: formatCount(visibleInventory.counts.failingVerifiers),
       helper: "Mismatched or blocked verification paths.",
-      tone: inventory.counts.failingVerifiers > 0 ? "danger" as const : "neutral" as const,
+      tone: visibleInventory.counts.failingVerifiers > 0 ? "danger" as const : "neutral" as const,
       icon: <AlertTriangle />,
     },
     {
       id: "not-configured",
       label: "Not configured",
-      value: formatCount(inventory.counts.notConfigured),
+      value: formatCount(visibleInventory.counts.notConfigured),
       helper: "Verifier transports without saved credentials.",
-      tone: inventory.counts.notConfigured > 0 ? "warning" as const : "success" as const,
+      tone: visibleInventory.counts.notConfigured > 0 ? "warning" as const : "success" as const,
       icon: <Plug />,
     },
     {
       id: "coverage",
       label: "Coverage",
-      value: formatPercent(inventory.counts.coveragePercent),
+      value: formatPercent(visibleInventory.counts.coveragePercent),
       helper: "Observed action types with a verifier path.",
-      tone: inventory.counts.coveragePercent >= 100 ? "success" as const : "warning" as const,
+      tone: visibleInventory.counts.coveragePercent >= 100 ? "success" as const : "warning" as const,
       icon: <ClipboardCheck />,
     },
     {
       id: "unverifiable",
       label: "Unverifiable actions",
-      value: formatCount(inventory.counts.unverifiableActionTypes),
+      value: formatCount(visibleInventory.counts.unverifiableActionTypes),
       helper: "Would resolve not_verified until covered.",
-      tone: inventory.counts.unverifiableActionTypes > 0 ? "danger" as const : "success" as const,
+      tone: visibleInventory.counts.unverifiableActionTypes > 0 ? "danger" as const : "success" as const,
       icon: <RadioTower />,
     },
   ];
@@ -3129,17 +3134,17 @@ export default function IntegrationsPage() {
             <DashboardButton icon={<RefreshCw />} loading={loading} onClick={() => void loadOverview()} variant="soft">
               Refresh
             </DashboardButton>
-            <DashboardButtonLink href={inventory.verdict.ctaHref} variant="primary">
-              {inventory.verdict.ctaLabel}
+            <DashboardButtonLink href={visibleInventory.verdict.ctaHref} variant="primary">
+              {visibleInventory.verdict.ctaLabel}
             </DashboardButtonLink>
           </>
         }
-        copy={inventory.verdict.copy}
+        copy={visibleInventory.verdict.copy}
         eyebrow="Connectors"
         icon={<Database />}
-        pill={inventory.verdict.pill}
-        tone={inventory.verdict.tone}
-        title={inventory.verdict.title}
+        pill={visibleInventory.verdict.pill}
+        tone={visibleInventory.verdict.tone}
+        title={visibleInventory.verdict.title}
         updatedLabel={loading ? "Refreshing" : "Updated live"}
       />
 
@@ -3221,7 +3226,7 @@ export default function IntegrationsPage() {
               <strong>Connector readiness metrics</strong>
             </span>
             <small>
-              {formatCount(inventory.counts.notConfigured)} not configured · {formatCount(inventory.counts.unverifiableActionTypes)} uncovered actions
+              {formatCount(visibleInventory.counts.notConfigured)} not configured · {formatCount(visibleInventory.counts.unverifiableActionTypes)} uncovered actions
             </small>
           </summary>
           <div className="connectors-readiness-body">

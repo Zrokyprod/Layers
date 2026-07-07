@@ -17,7 +17,12 @@ import type {
   ZohoCrmConnectorStatusResponse,
 } from "@/lib/api";
 import type { GithubConnectionStatusResponse, SlackInstallStatusResponse } from "@/lib/types";
-import { buildConnectorInventory, connectorStateLabel, connectorUpdatedLabel } from "./connector-inventory";
+import {
+  buildConnectorInventory,
+  connectorStateLabel,
+  connectorUpdatedLabel,
+  LAUNCH_VISIBLE_CONNECTOR_IDS,
+} from "./connector-inventory";
 
 function check(overrides: Partial<OutcomeReconciliationView> = {}): OutcomeReconciliationView {
   return {
@@ -519,6 +524,32 @@ describe("connector-inventory", () => {
     expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["generic_rest", "postgres_read"]);
     expect(workflowCategory?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
     expect(inventory.supportRows.every((row) => row.kind === "support" && row.transport === "workflow")).toBe(true);
+  });
+
+  it("can limit the launch surface without deleting advanced connector definitions", () => {
+    const inventory = buildConnectorInventory({
+      ledger: ledgerStatus(),
+      customer: customerStatus(),
+      generic: genericStatus(),
+      postgres: postgresStatus(),
+      github: githubStatus(),
+      slack: slackStatus(),
+      visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS,
+    });
+
+    expect(inventory.rows.map((row) => row.id)).toEqual([
+      "generic_rest",
+      "stripe_refund",
+      "postgres_read",
+      "github",
+      "slack",
+    ]);
+    expect(inventory.categoryGroups.map((group) => group.category)).toEqual([
+      "payments",
+      "workflow",
+      "database_custom",
+    ]);
+    expect(inventory.rows.some((row) => row.id === "hubspot_crm" || row.id === "stripe_payment")).toBe(false);
   });
 
   it("focuses counts on verifier health, not vertical connector names", () => {

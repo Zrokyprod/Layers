@@ -640,9 +640,15 @@ function genericCheck(overrides: Partial<OutcomeReconciliationView> = {}): Outco
   };
 }
 
+function renderWithConnector(connector: string) {
+  window.history.pushState({}, "", `/integrations?connector=${connector}`);
+  render(<IntegrationsPage />);
+}
+
 describe("IntegrationsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, "", "/integrations");
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: clipboardWrite },
@@ -1156,30 +1162,30 @@ describe("IntegrationsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Connect Stripe" }));
     expect(screen.getByRole("region", { name: "Stripe refund verifier setup" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Payments" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Commerce" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "CRM" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Support & ITSM" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Finance & ERP" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Workflow" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Developer / Custom APIs" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Commerce" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "CRM" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Support & ITSM" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Finance & ERP" })).not.toBeInTheDocument();
     expect(screen.getAllByText("REST / HTTP JSON verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("HubSpot CRM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Salesforce CRM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Zoho CRM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Zendesk ticket verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Jira / JSM verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Stripe payment verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Razorpay refund verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Shopify Admin verifier").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Refund ledger template").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Customer / CRM record template").length).toBeGreaterThan(0);
+    expect(screen.queryByText("HubSpot CRM verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Salesforce CRM verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Zoho CRM verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Zendesk ticket verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jira / JSM verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Stripe payment verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Razorpay refund verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Shopify Admin verifier")).not.toBeInTheDocument();
+    expect(screen.queryByText("Refund ledger template")).not.toBeInTheDocument();
+    expect(screen.queryByText("Customer / CRM record template")).not.toBeInTheDocument();
     expect(screen.getAllByText("SQL / Postgres read verifier").length).toBeGreaterThan(0);
     expect(screen.getByText("Slack")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "stripe" } });
     expect(screen.getByRole("button", { name: /Stripe refund verifier/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Stripe payment verifier/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Stripe payment verifier/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /HubSpot CRM verifier/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search connectors"), { target: { value: "no matching connector" } });
@@ -1281,10 +1287,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Stripe payment verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("stripe_payment");
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Stripe payment verifier/i }));
     fireEvent.click(screen.getByRole("button", { name: "Connect Stripe Payment" }));
     fireEvent.change(screen.getByLabelText("Stripe secret key"), {
       target: { value: "sk_live_payment" },
@@ -1336,10 +1341,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Razorpay refund verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("razorpay_refund");
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Razorpay refund verifier/i }));
     fireEvent.click(screen.getByRole("button", { name: "Connect Razorpay" }));
     fireEvent.change(screen.getByLabelText("Razorpay key id"), {
       target: { value: "rzp_test_key" },
@@ -1395,10 +1399,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Shopify Admin verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("shopify_admin");
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Shopify Admin verifier/i }));
     fireEvent.click(screen.getByRole("button", { name: "Connect Shopify" }));
     fireEvent.change(screen.getByLabelText("Shop Admin base URL"), {
       target: { value: "https://example.myshopify.com" },
@@ -1454,10 +1457,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native HubSpot verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("hubspot_crm");
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /HubSpot CRM verifier/i }));
     fireEvent.click(screen.getByRole("button", { name: "Connect HubSpot" }));
     fireEvent.change(screen.getByLabelText("Private app token"), {
       target: { value: "hubspot-private-app-token" },
@@ -1507,10 +1509,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Zoho CRM verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("zoho_crm");
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
     fireEvent.click(screen.getByRole("button", { name: "Connect Zoho" }));
     fireEvent.change(screen.getByLabelText("Manual bearer token"), {
       target: { value: "zoho-oauth-access-token" },
@@ -1564,10 +1565,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native Jira issue verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("jira_issue");
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /Jira \/ JSM verifier/i }));
     fireEvent.click(screen.getByRole("button", { name: "Connect Jira" }));
     fireEvent.change(screen.getByLabelText("Atlassian email"), {
       target: { value: "agent@example.com" },
@@ -1618,10 +1618,9 @@ describe("IntegrationsPage", () => {
   });
 
   it("saves and tests the native NetSuite finance verifier setup path", async () => {
-    render(<IntegrationsPage />);
+    renderWithConnector("netsuite_finance");
 
     await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-    fireEvent.click(screen.getByRole("button", { name: /NetSuite finance verifier/i }));
     fireEvent.click(screen.getByRole("button", { name: "Connect NetSuite" }));
     fireEvent.change(screen.getByLabelText("Bearer token"), {
       target: { value: "netsuite-token" },
@@ -1684,10 +1683,9 @@ describe("IntegrationsPage", () => {
   it("starts the Zoho CRM OAuth connection flow", async () => {
     const assignSpy = vi.spyOn(externalNavigator, "assign").mockImplementation(() => undefined);
     try {
-      render(<IntegrationsPage />);
+      renderWithConnector("zoho_crm");
 
       await screen.findByRole("heading", { name: "Some agent actions are unverifiable" });
-      fireEvent.click(screen.getByRole("button", { name: /Zoho CRM verifier/i }));
       fireEvent.click(screen.getByRole("button", { name: "Connect Zoho" }));
       fireEvent.click(await screen.findByRole("button", { name: /Connect Zoho CRM/i }));
 

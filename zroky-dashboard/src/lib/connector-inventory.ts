@@ -42,6 +42,14 @@ export type ProofConnectorId =
 export type SupportConnectorId = "github" | "slack";
 export type ConnectorInventoryId = ProofConnectorId | SupportConnectorId;
 
+export const LAUNCH_VISIBLE_CONNECTOR_IDS = new Set<ConnectorInventoryId>([
+  "generic_rest",
+  "stripe_refund",
+  "postgres_read",
+  "github",
+  "slack",
+]);
+
 export type ConnectorTransport = "rest_http" | "sql_read" | "webhook_bridge" | "workflow";
 export type ConnectorTemplateKind =
   | "custom"
@@ -217,6 +225,7 @@ export type BuildConnectorInventoryInput = {
   registry?: ToolRegistryResponse | null;
   actionTypes?: string[];
   partialFailure?: boolean;
+  visibleConnectorIds?: ReadonlySet<ConnectorInventoryId>;
 };
 
 type ProofConnectorDefinition = {
@@ -1090,11 +1099,15 @@ export function buildConnectorInventory(input: BuildConnectorInventoryInput): Co
     },
   ];
 
-  const proofRows = proofDefinitions.map((definition) => proofRow(definition, checks));
+  const visibleConnectorIds = input.visibleConnectorIds ?? null;
+  const visibleProofDefinitions = visibleConnectorIds
+    ? proofDefinitions.filter((definition) => visibleConnectorIds.has(definition.id))
+    : proofDefinitions;
+  const proofRows = visibleProofDefinitions.map((definition) => proofRow(definition, checks));
   const supportRows = [
     supportRow("github", input.github),
     supportRow("slack", input.slack),
-  ];
+  ].filter((row) => !visibleConnectorIds || visibleConnectorIds.has(row.id));
   const actionTypes = actionTypesForCoverage(input);
   const coverageRows = buildCoverageRows(actionTypes, proofRows, registryConnectorHints(input.registry));
   const counts: ConnectorInventoryCounts = {
