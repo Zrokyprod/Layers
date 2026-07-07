@@ -47,14 +47,23 @@ vi.mock("@tanstack/react-query", () => ({
     const key = queryKey.join(":");
     queryState.queryKeys.push(key);
     const isError = queryState.isError || queryState.errorKeys.has(key);
-    if (key === "actions:lifecycle-summary:30:100") {
+    if (key === "actions:lifecycle-summary:30:200") {
       return {
         data: queryState.makeFeed ? queryState.makeFeed() : {
           project_id: "proj_1",
           window_days: 30,
           window_start: "2026-06-01T00:00:00Z",
           generated_at: "2026-06-20T09:15:00Z",
-          row_limit: 100,
+          row_limit: 200,
+          source_totals: {
+            intents: queryState.intents.length,
+            approvals: queryState.decisions.length,
+            outcomes: Number(queryState.outcomeSummary?.total ?? queryState.outcomes.length),
+            mutations: Number(queryState.sourceMutationSummary?.unreceipted ?? queryState.unreceiptedMutations.length),
+            stale_attempts: queryState.staleAttempts.length,
+          },
+          truncated: false,
+          truncated_sources: [],
           metrics: {
             controlled_actions: queryState.intents.length,
             held_actions: queryState.decisions.filter((item) => item.status === "pending_approval").length,
@@ -300,7 +309,16 @@ function renderActionsPage() {
         window_days: 30,
         window_start: "2026-06-01T00:00:00Z",
         generated_at: "2026-06-20T09:15:00Z",
-        row_limit: 100,
+        row_limit: 200,
+        source_totals: {
+          intents: queryState.intents.length,
+          approvals: queryState.decisions.length,
+          outcomes: Number(queryState.outcomeSummary?.total ?? queryState.outcomes.length),
+          mutations: Number(queryState.sourceMutationSummary?.unreceipted ?? queryState.unreceiptedMutations.length),
+          stale_attempts: queryState.staleAttempts.length,
+        },
+        truncated: false,
+        truncated_sources: [],
         metrics: {
           controlled_actions: queryState.intents.length,
           held_actions: queryState.decisions.filter((item) => item.status === "pending_approval").length,
@@ -399,7 +417,7 @@ describe("ActionsPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Bypass risk" }),
     ).toBeInTheDocument();
-    expect(queryState.queryKeys).toContain("actions:lifecycle-summary:30:100");
+    expect(queryState.queryKeys).toContain("actions:lifecycle-summary:30:200");
     expect(queryState.queryKeys).not.toContain("action-intents:actions:all");
     expect(queryState.queryKeys).not.toContain("runtime-policy:actions:all");
     expect(queryState.queryKeys).not.toContain("outcomes:actions:reconciliation");

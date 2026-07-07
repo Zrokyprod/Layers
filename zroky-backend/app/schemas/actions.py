@@ -27,6 +27,14 @@ class ActionsLifecycleMetrics(BaseModel):
     bypass_risk: int = Field(ge=0)
 
 
+class ActionsLifecycleSourceTotals(BaseModel):
+    intents: int = Field(ge=0)
+    approvals: int = Field(ge=0)
+    outcomes: int = Field(ge=0)
+    mutations: int = Field(ge=0)
+    stale_attempts: int = Field(ge=0)
+
+
 class ActionsLifecycleData(BaseModel):
     intents: list[dict[str, Any]] = Field(default_factory=list)
     approvals: list[dict[str, Any]] = Field(default_factory=list)
@@ -44,6 +52,9 @@ class ActionsLifecycleSummaryResponse(BaseModel):
     window_start: datetime
     generated_at: datetime
     row_limit: int
+    source_totals: ActionsLifecycleSourceTotals
+    truncated: bool = False
+    truncated_sources: list[str] = Field(default_factory=list)
     metrics: ActionsLifecycleMetrics
     sources: ActionsLifecycleSources = Field(default_factory=ActionsLifecycleSources)
     data: ActionsLifecycleData = Field(default_factory=ActionsLifecycleData)

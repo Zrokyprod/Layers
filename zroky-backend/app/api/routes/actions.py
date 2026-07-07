@@ -13,11 +13,12 @@ from app.api.routes.billing import get_billing_usage
 from app.api.routes.outcome_serializers import _serialize_reconciliation, _serialize_source_mutation
 from app.api.routes.runtime_policy import _decision_to_response
 from app.core.limiter import limiter
-from app.db.models import ActionIntent, RuntimePolicyDecision
+from app.db.models import ActionExecutionAttempt, ActionIntent, RuntimePolicyDecision
 from app.db.session import get_db_session
 from app.schemas.actions import (
     ActionsLifecycleData,
     ActionsLifecycleMetrics,
+    ActionsLifecycleSourceTotals,
     ActionsLifecycleSources,
     ActionsLifecycleSummaryResponse,
 )
@@ -43,7 +44,7 @@ def _dump(value: Any) -> dict[str, Any]:
 def get_actions_lifecycle_summary(
     request: Request,
     days: int = Query(default=30, ge=1, le=90),
-    limit: int = Query(default=100, ge=25, le=100),
+    limit: int = Query(default=200, ge=25, le=500),
     db: Session = Depends(get_db_session),
     context: TenantContext = Depends(require_tenant_context),
 ) -> ActionsLifecycleSummaryResponse:
@@ -52,7 +53,7 @@ def get_actions_lifecycle_summary(
     since = now - timedelta(days=days)
     sources = ActionsLifecycleSources()
 
-    intents = list_action_intents(db, project_id=tenant_id, limit=limit, offset=0)
+    intents = list_action_intents(db, project_id=tenant_id, limit=limit, offset=0, max_limit=500)
     approvals = list(
         db.execute(
             select(RuntimePolicyDecision)
@@ -73,6 +74,7 @@ def get_actions_lifecycle_summary(
         stale_after_seconds=600,
         limit=limit,
         offset=0,
+        max_limit=500,
     )
 
     try:
@@ -99,6 +101,45 @@ def get_actions_lifecycle_summary(
         ).scalar_one()
         or 0
     )
+    approvals_total = int(
+        db.execute(
+            select(func.count(RuntimePolicyDecision.id)).where(
+                RuntimePolicyDecision.project_id == tenant_id,
+            )
+        ).scalar_one()
+        or 0
+    )
+    stale_cutoff = now - timedelta(seconds=600)
+    stale_attempts_total = int(
+        db.execute(
+            select(func.count(ActionExecutionAttempt.id)).where(
+                ActionExecutionAttempt.project_id == tenant_id,
+                ActionExecutionAttempt.status.in_(["planned", "dispatched", "running"]),
+                ActionExecutionAttempt.updated_at <= stale_cutoff,
+            )
+        ).scalar_one()
+        or 0
+    )
+    source_totals = ActionsLifecycleSourceTotals(
+        intents=controlled_actions,
+        approvals=approvals_total,
+        outcomes=outcome_summary.total,
+        mutations=int(source_summary.get("unreceipted", 0) or 0),
+        stale_attempts=stale_attempts_total,
+    )
+    returned_by_source = {
+        "intents": len(intents),
+        "approvals": len(approvals),
+        "outcomes": len(outcomes),
+        "mutations": len(mutations),
+        "stale_attempts": len(stale_attempts),
+    }
+    total_by_source = source_totals.model_dump()
+    truncated_sources = [
+        source
+        for source, returned in returned_by_source.items()
+        if total_by_source.get(source, 0) > returned and returned >= limit
+    ]
 
     data = ActionsLifecycleData(
         intents=[_dump(_intent_response(db, row)) for row in intents],
@@ -129,6 +170,9 @@ def get_actions_lifecycle_summary(
         window_start=since,
         generated_at=now,
         row_limit=limit,
+        source_totals=source_totals,
+        truncated=bool(truncated_sources),
+        truncated_sources=truncated_sources,
         metrics=ActionsLifecycleMetrics(
             controlled_actions=controlled_actions,
             held_actions=held_actions,

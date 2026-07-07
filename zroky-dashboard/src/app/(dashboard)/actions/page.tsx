@@ -185,8 +185,8 @@ export default function ActionsPage() {
   );
 
   const lifecycleQuery = useQuery({
-    queryKey: ["actions", "lifecycle-summary", 30, 100],
-    queryFn: ({ signal }) => loadActionsLifecycleFeed({ days: 30, limit: 100 }, signal),
+    queryKey: ["actions", "lifecycle-summary", 30, 200],
+    queryFn: ({ signal }) => loadActionsLifecycleFeed({ days: 30, limit: 200 }, signal),
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
@@ -345,6 +345,19 @@ export default function ActionsPage() {
             <span className="al-eyebrow">Billing meter</span>
             <strong>Quota usage unavailable</strong>
             <p>Action lifecycle data is still live. Refresh billing before making plan or quota decisions.</p>
+          </div>
+        </section>
+      ) : null}
+
+      {lifecycleSummary?.truncated ? (
+        <section className="al-alert al-tone-warning" role="status">
+          <div>
+            <span className="al-eyebrow">Row preview</span>
+            <strong>Showing the newest {formatCount(lifecycleSummary.row_limit)} lifecycle rows</strong>
+            <p>
+              Metrics use exact backend totals. Detail rows are capped for{" "}
+              {lifecycleSummary.truncated_sources.join(", ")}.
+            </p>
           </div>
         </section>
       ) : null}

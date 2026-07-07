@@ -3678,6 +3678,15 @@ export interface ActionsLifecycleSummaryResponse {
   window_start: string;
   generated_at: string;
   row_limit: number;
+  source_totals: {
+    intents: number;
+    approvals: number;
+    outcomes: number;
+    mutations: number;
+    stale_attempts: number;
+  };
+  truncated: boolean;
+  truncated_sources: string[];
   metrics: {
     controlled_actions: number;
     held_actions: number;
@@ -3869,7 +3878,7 @@ export function getActionsLifecycleSummary(
   return request<ActionsLifecycleSummaryResponse>("/v1/actions/lifecycle-summary", {
     query: {
       days: String(params.days ?? 30),
-      limit: String(params.limit ?? 100),
+      limit: String(params.limit ?? 200),
     },
     signal,
   });

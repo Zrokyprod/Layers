@@ -156,6 +156,12 @@ def test_actions_lifecycle_summary_collapses_action_page_sources(client: TestCli
     assert body["project_id"] == project_id
     assert body["window_days"] == 30
     assert body["row_limit"] == 100
+    assert body["source_totals"]["intents"] == 105
+    assert body["source_totals"]["approvals"] == 1
+    assert body["source_totals"]["outcomes"] == 2
+    assert body["source_totals"]["mutations"] == 1
+    assert body["truncated"] is True
+    assert body["truncated_sources"] == ["intents"]
     assert body["metrics"]["controlled_actions"] == 105
     assert body["metrics"]["held_actions"] == 1
     assert body["metrics"]["matched_outcomes"] == 1

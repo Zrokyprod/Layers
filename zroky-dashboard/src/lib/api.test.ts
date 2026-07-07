@@ -312,7 +312,16 @@ describe("verified action API client", () => {
           window_days: 30,
           window_start: "2026-06-01T00:00:00Z",
           generated_at: "2026-06-20T09:15:00Z",
-          row_limit: 100,
+          row_limit: 200,
+          source_totals: {
+            intents: 2,
+            approvals: 1,
+            outcomes: 2,
+            mutations: 1,
+            stale_attempts: 0,
+          },
+          truncated: false,
+          truncated_sources: [],
           metrics: {
             controlled_actions: 2,
             held_actions: 1,
@@ -348,13 +357,14 @@ describe("verified action API client", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getActionsLifecycleSummary({ days: 30, limit: 100 })).resolves.toMatchObject({
+    await expect(getActionsLifecycleSummary({ days: 30, limit: 200 })).resolves.toMatchObject({
       metrics: { controlled_actions: 2, bypass_risk: 1 },
+      source_totals: { intents: 2, approvals: 1 },
       data: { intents: [] },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/zroky/v1/actions/lifecycle-summary?days=30&limit=100",
+      "/api/zroky/v1/actions/lifecycle-summary?days=30&limit=200",
       expect.objectContaining({ method: "GET" }),
     );
   });
