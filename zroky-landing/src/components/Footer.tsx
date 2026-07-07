@@ -5,6 +5,7 @@ const COLS = [
   {
     title: 'Control plane',
     links: [
+      { label: 'Product', href: '/product' },
       { label: 'Connectors', href: '/#connectors' },
       { label: 'Agent fleet', href: '/#agents' },
       { label: 'Control loop', href: '/#architecture' },

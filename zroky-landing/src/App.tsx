@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import Nav from './components/Nav';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
+import ProductPage from './pages/ProductPage';
 import PricingPage from './pages/PricingPage';
 import ChangelogPage from './pages/ChangelogPage';
 import DocsPage from './pages/DocsPage';
@@ -74,6 +75,7 @@ function App() {
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<PageFade><HomePage /></PageFade>} />
+            <Route path="/product" element={<PageFade><ProductPage /></PageFade>} />
             <Route path="/pricing" element={<PageFade><PricingPage /></PageFade>} />
             <Route path="/changelog" element={<PageFade><ChangelogPage /></PageFade>} />
             <Route path="/docs" element={<PageFade><DocsPage /></PageFade>} />
