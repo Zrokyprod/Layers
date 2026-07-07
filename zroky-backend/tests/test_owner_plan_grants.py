@@ -86,9 +86,9 @@ def test_challenge_and_commit_flips_plan_and_writes_audit(client, monkeypatch: p
     headers = _owner_headers(monkeypatch)
     _seed_free_org(session_factory)
 
-    ch = _challenge(test_client, headers, "org_grant_1", "pro")
+    ch = _challenge(test_client, headers, "org_grant_1", "team")
     assert ch["current_plan_code"] == "free"
-    assert ch["target_plan_code"] == "pro"
+    assert ch["target_plan_code"] == "team"
     assert ch["delivery"] == "response"
     assert ch["dev_code"] and len(ch["dev_code"]) == 6
 
@@ -100,7 +100,7 @@ def test_challenge_and_commit_flips_plan_and_writes_audit(client, monkeypatch: p
             "code": ch["dev_code"],
             "typed_confirmation": "org_grant_1",
             "org_id": "org_grant_1",
-            "target_plan_code": "pro",
+            "target_plan_code": "team",
             "reason": "Design partner comp upgrade",
             "duration_kind": "permanent",
         },
@@ -109,12 +109,12 @@ def test_challenge_and_commit_flips_plan_and_writes_audit(client, monkeypatch: p
     body = commit.json()
     assert body["ok"] is True
     assert body["previous_plan_code"] == "free"
-    assert body["plan_code"] == "pro"
+    assert body["plan_code"] == "team"
 
     with session_factory() as db:
         sub = db.scalar(select(Subscription).where(Subscription.org_id == "org_grant_1"))
-        assert sub is not None and sub.plan_code == "pro" and sub.status == "active"
-        # Entitlements were re-seeded to the pro template.
+        assert sub is not None and sub.plan_code == "team" and sub.status == "active"
+        # Entitlements were re-seeded to the team template.
         plan_rows = db.execute(
             select(Entitlement).where(
                 Entitlement.org_id == "org_grant_1", Entitlement.source == "plan"
@@ -128,14 +128,14 @@ def test_challenge_and_commit_flips_plan_and_writes_audit(client, monkeypatch: p
         assert audit is not None
         meta = json.loads(audit.metadata_json)
         assert meta["previous_plan_code"] == "free"
-        assert meta["plan_code"] == "pro"
+        assert meta["plan_code"] == "team"
 
     # History endpoint surfaces the grant.
     audit_res = test_client.get("/v1/owner/plan-grants/audit?org_id=org_grant_1", headers=headers)
     assert audit_res.status_code == 200
     items = audit_res.json()["items"]
     assert len(items) == 1
-    assert items[0]["plan_code"] == "pro"
+    assert items[0]["plan_code"] == "team"
 
 
 def test_commit_is_single_use_and_rejects_replay(client, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -143,13 +143,13 @@ def test_commit_is_single_use_and_rejects_replay(client, monkeypatch: pytest.Mon
     headers = _owner_headers(monkeypatch)
     _seed_free_org(session_factory)
 
-    ch = _challenge(test_client, headers, "org_grant_1", "pro")
+    ch = _challenge(test_client, headers, "org_grant_1", "team")
     payload = {
         "challenge_id": ch["challenge_id"],
         "code": ch["dev_code"],
         "typed_confirmation": "org_grant_1",
         "org_id": "org_grant_1",
-        "target_plan_code": "pro",
+        "target_plan_code": "team",
         "reason": "first",
         "duration_kind": "permanent",
     }
@@ -164,7 +164,7 @@ def test_commit_rejects_wrong_code(client, monkeypatch: pytest.MonkeyPatch) -> N
     headers = _owner_headers(monkeypatch)
     _seed_free_org(session_factory)
 
-    ch = _challenge(test_client, headers, "org_grant_1", "pro")
+    ch = _challenge(test_client, headers, "org_grant_1", "team")
     res = test_client.post(
         "/v1/owner/plan-grants",
         headers=headers,
@@ -173,7 +173,7 @@ def test_commit_rejects_wrong_code(client, monkeypatch: pytest.MonkeyPatch) -> N
             "code": "000000" if ch["dev_code"] != "000000" else "111111",
             "typed_confirmation": "org_grant_1",
             "org_id": "org_grant_1",
-            "target_plan_code": "pro",
+            "target_plan_code": "team",
             "reason": "x",
             "duration_kind": "permanent",
         },
@@ -186,7 +186,7 @@ def test_commit_rejects_typed_confirmation_mismatch(client, monkeypatch: pytest.
     headers = _owner_headers(monkeypatch)
     _seed_free_org(session_factory)
 
-    ch = _challenge(test_client, headers, "org_grant_1", "pro")
+    ch = _challenge(test_client, headers, "org_grant_1", "team")
     res = test_client.post(
         "/v1/owner/plan-grants",
         headers=headers,
@@ -195,7 +195,7 @@ def test_commit_rejects_typed_confirmation_mismatch(client, monkeypatch: pytest.
             "code": ch["dev_code"],
             "typed_confirmation": "wrong-org",
             "org_id": "org_grant_1",
-            "target_plan_code": "pro",
+            "target_plan_code": "team",
             "reason": "x",
             "duration_kind": "permanent",
         },
@@ -204,12 +204,12 @@ def test_commit_rejects_typed_confirmation_mismatch(client, monkeypatch: pytest.
 
 
 def test_commit_rejects_target_swap(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A challenge minted for pro cannot be redeemed to grant a different plan."""
+    """A challenge minted for team cannot be redeemed to grant a different plan."""
     test_client, session_factory = client
     headers = _owner_headers(monkeypatch)
     _seed_free_org(session_factory)
 
-    ch = _challenge(test_client, headers, "org_grant_1", "pro")
+    ch = _challenge(test_client, headers, "org_grant_1", "team")
     res = test_client.post(
         "/v1/owner/plan-grants",
         headers=headers,

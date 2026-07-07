@@ -28,7 +28,7 @@ from app.services.entitlements import seed_plan_entitlements
 
 _CHALLENGE_TTL_SECONDS = 300
 _CHALLENGE_KEY_PREFIX = "zroky:owner:plan_grant_challenge:"
-_GRANTABLE_PLAN_CODES: tuple[str, ...] = ("free", "starter", "pro")
+_GRANTABLE_PLAN_CODES: tuple[str, ...] = ("free", "starter", "team", "scale")
 _DURATION_KINDS: tuple[str, ...] = ("permanent", "comp_30d", "comp_90d")
 _AUDIT_ACTION = "owner.plan.override"
 
