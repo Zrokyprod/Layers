@@ -8,7 +8,6 @@ import type {
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
-  AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
   SourceMutationView,
@@ -16,7 +15,6 @@ import type {
 import AgentsPage from "./page";
 
 const api = vi.hoisted(() => ({
-  getReliabilityLeaderboard: vi.fn(),
   listActionIntents: vi.fn(),
   listActionRunners: vi.fn(),
   listAgentProfiles: vi.fn(),
@@ -130,27 +128,6 @@ function setupPolicyProfile(overrides: Partial<AgentProfileResponse> = {}): Agen
     },
     ...overrides,
   });
-}
-
-function score(overrides: Partial<AgentScoreView> = {}): AgentScoreView {
-  return {
-    agent_name: "inventory-agent",
-    score_date: "2026-06-28",
-    health_score: 92,
-    fail_rate: 0.02,
-    fail_rate_score: 98,
-    cost_efficiency_score: 90,
-    determinism_score: 88,
-    regression_trend_score: 86,
-    call_count: 10,
-    avg_cost_usd: 0.04,
-    p95_latency_ms: 640,
-    prev_week_fail_rate: 0.03,
-    determinism_breakdown: null,
-    top_failure_axis: null,
-    computed_at: now,
-    ...overrides,
-  };
 }
 
 function decision(overrides: Partial<RuntimePolicyDecisionResponse> = {}): RuntimePolicyDecisionResponse {
@@ -315,7 +292,6 @@ function mockAgents({
   activeCount = profiles.filter((item) => item.is_active).length,
   cap = 3,
   limitReached = false,
-  scores = [score()],
   intents = [intent()],
   decisions = [decision()],
   outcomes = [outcome()],
@@ -328,7 +304,6 @@ function mockAgents({
   activeCount?: number;
   cap?: number;
   limitReached?: boolean;
-  scores?: AgentScoreView[];
   intents?: ActionIntentResponse[];
   decisions?: RuntimePolicyDecisionResponse[];
   outcomes?: OutcomeReconciliationView[];
@@ -346,7 +321,6 @@ function mockAgents({
     max_active_agents: cap,
     limit_reached: limitReached,
   });
-  api.getReliabilityLeaderboard.mockResolvedValue(scores);
   api.listActionIntents.mockResolvedValue({
     items: intents,
     total_in_page: intents.length,
@@ -437,7 +411,6 @@ describe("AgentsPage", () => {
       profiles: [],
       activeCount: 0,
       cap: -1,
-      scores: [],
       intents: [],
       decisions: [],
       outcomes: [],
@@ -529,7 +502,6 @@ describe("AgentsPage", () => {
       outcomes: [],
       runners: [],
       attempts: [],
-      scores: [],
     });
 
     renderAgentsPage();
@@ -562,7 +534,6 @@ describe("AgentsPage", () => {
       outcomes: [],
       runners: [],
       attempts: [],
-      scores: [],
     });
 
     renderAgentsPage();
@@ -605,7 +576,6 @@ describe("AgentsPage", () => {
       outcomes: [],
       runners: [],
       attempts: [],
-      scores: [],
     });
 
     renderAgentsPage();

@@ -4,7 +4,6 @@ import type {
   ActionRunnerResponse,
   AgentProfileListResponse,
   AgentProfileResponse,
-  AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
   SourceMutationView,
@@ -98,7 +97,6 @@ export type AgentFleetRow = {
   kind: AgentFleetRowKind;
   agentName: string;
   profile: AgentProfileResponse | null;
-  score: AgentScoreView | null;
   telemetryNames: string[];
   aliases: string[];
   status: AgentFleetRowStatus;
@@ -112,7 +110,6 @@ export type AgentFleetRow = {
   runners: ActionRunnerResponse[];
   attemptSummary: AgentFleetAttemptSummary;
   latestActivityAt: string | null;
-  healthScore: number | null;
   actionRows: ActionLifecycleRow[];
   href: string;
 };
@@ -144,7 +141,6 @@ export type BuildAgentFleetInput = {
     AgentProfileListResponse,
     "active_count" | "max_active_agents" | "limit_reached"
   > | null;
-  scores?: AgentScoreView[];
   intents?: ActionIntentResponse[];
   decisions?: RuntimePolicyDecisionResponse[];
   outcomes?: OutcomeReconciliationView[];
@@ -167,7 +163,6 @@ type MutableFleetRow = Omit<
   | "runners"
   | "attemptSummary"
   | "latestActivityAt"
-  | "healthScore"
   | "href"
 > & {
   aliasSet: Set<string>;
@@ -236,23 +231,6 @@ function rowTime(row: ActionLifecycleRow): number {
 
 function sortActionRows(rows: ActionLifecycleRow[]): ActionLifecycleRow[] {
   return [...rows].sort((a, b) => rowTime(b) - rowTime(a));
-}
-
-function latestByDate<T>(
-  items: T[],
-  dateOf: (item: T) => string | null | undefined,
-): T | null {
-  let latest: T | null = null;
-  let latestMs = -1;
-  for (const item of items) {
-    const raw = dateOf(item);
-    const ms = raw ? new Date(raw).getTime() : 0;
-    if (Number.isFinite(ms) && ms > latestMs) {
-      latest = item;
-      latestMs = ms;
-    }
-  }
-  return latest;
 }
 
 function runnerStatusSummary(runners: ActionRunnerResponse[]): AgentFleetRunnerSummary {
@@ -474,21 +452,6 @@ function profileForTelemetry(
   return null;
 }
 
-export function matchAgentToScore(
-  profile: AgentProfileResponse,
-  scores: AgentScoreView[],
-): AgentScoreView | null {
-  const aliases = profileAliases(profile);
-  const matches = scores.filter((score) => hasAliasIntersection(aliases, nameAliases(score.agent_name)));
-  return latestByDate(matches, (score) => score.computed_at ?? score.score_date);
-}
-
-function scoreForTelemetry(agentName: string, scores: AgentScoreView[]): AgentScoreView | null {
-  const aliases = nameAliases(agentName);
-  const matches = scores.filter((score) => hasAliasIntersection(aliases, nameAliases(score.agent_name)));
-  return latestByDate(matches, (score) => score.computed_at ?? score.score_date);
-}
-
 function operationKinds(rows: ActionLifecycleRow[]): Set<string> {
   const kinds = new Set<string>();
   for (const row of rows) {
@@ -543,7 +506,6 @@ function finalizeRow(
     kind: row.kind,
     agentName: row.agentName,
     profile: row.profile,
-    score: row.score,
     telemetryNames: [...row.telemetrySet].sort(),
     aliases: [...row.aliasSet].sort(),
     ...status,
@@ -556,10 +518,8 @@ function finalizeRow(
     attemptSummary: attemptSummary(linkedAttempts, staleAttemptIds),
     latestActivityAt: latestTime([
       row.profile?.updated_at,
-      row.score?.computed_at,
       ...actionRows.map((actionRow) => actionRow.updatedAt ?? actionRow.createdAt),
     ]),
-    healthScore: row.score?.health_score ?? null,
     actionRows,
     href: rowHref(row),
   };
@@ -583,7 +543,6 @@ function sortFleetRows(rows: AgentFleetRow[]): AgentFleetRow[] {
 export function buildFleetView({
   profiles,
   profileMeta,
-  scores = [],
   intents = [],
   decisions = [],
   outcomes = [],
@@ -613,7 +572,6 @@ export function buildFleetView({
       kind: "profile",
       agentName: profile.display_name,
       profile,
-      score: matchAgentToScore(profile, scores),
       telemetryNames: [],
       telemetrySet: new Set(),
       aliases: [],
@@ -637,7 +595,6 @@ export function buildFleetView({
         kind: "telemetry",
         agentName: actionRow.agentName,
         profile: null,
-        score: scoreForTelemetry(actionRow.agentName, scores),
         telemetryNames: [],
         telemetrySet: new Set(),
         aliases: [],
@@ -650,29 +607,6 @@ export function buildFleetView({
     row.telemetrySet.add(actionRow.agentName);
     addAlias(row.aliasSet, actionRow.agentName);
     addAlias(row.aliasSet, matchAgentName);
-  }
-
-  for (const score of scores) {
-    const matchedProfile = profileForTelemetry(score.agent_name, activeProfiles, aliasesByProfile);
-    const scoreAliases = nameAliases(score.agent_name);
-    const alreadyRepresented = [...rowsById.values()].some((row) => (
-      row.score === score ||
-      (matchedProfile && row.profile?.id === matchedProfile.id) ||
-      hasAliasIntersection(row.aliasSet, scoreAliases)
-    ));
-    if (alreadyRepresented) continue;
-    rowsById.set(`telemetry:${slugAgentToken(score.agent_name) || score.agent_name}`, {
-      id: `telemetry:${slugAgentToken(score.agent_name) || score.agent_name}`,
-      kind: "telemetry",
-      agentName: score.agent_name,
-      profile: null,
-      score,
-      telemetryNames: [score.agent_name],
-      telemetrySet: new Set([score.agent_name]),
-      aliases: [],
-      aliasSet: scoreAliases,
-      actionRows: [],
-    });
   }
 
   const rows = sortFleetRows(

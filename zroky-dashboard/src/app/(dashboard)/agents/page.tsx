@@ -12,7 +12,6 @@ import {
   useActionRunners,
   useOutcomeReconciliations,
   useProjectActionExecutionAttempts,
-  useReliabilityLeaderboard,
   useRuntimePolicyApprovals,
 } from "@/lib/hooks";
 import { buildFleetView } from "@/lib/agent-fleet";
@@ -135,7 +134,6 @@ export default function AgentsPage() {
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
-  const leaderboardQuery = useReliabilityLeaderboard(100);
   const intentsQuery = useActionIntents({ limit: 200 });
   const approvalsQuery = useRuntimePolicyApprovals("all");
   const outcomesQuery = useOutcomeReconciliations("all", 200);
@@ -167,7 +165,6 @@ export default function AgentsPage() {
   const fleet = useMemo(() => buildFleetView({
     profiles,
     profileMeta: profilesQuery.data ?? null,
-    scores: leaderboardQuery.data ?? [],
     intents: intentsQuery.data?.items ?? [],
     decisions: approvalsQuery.data?.items ?? [],
     outcomes: outcomesQuery.data?.items ?? [],
@@ -178,7 +175,6 @@ export default function AgentsPage() {
   }), [
     profiles,
     profilesQuery.data,
-    leaderboardQuery.data,
     intentsQuery.data?.items,
     approvalsQuery.data?.items,
     outcomesQuery.data?.items,
@@ -191,7 +187,7 @@ export default function AgentsPage() {
   const loading = profilesQuery.isLoading;
   const error = Boolean(profilesQuery.error);
   const degradedFeeds = [
-    (outcomesQuery.error || leaderboardQuery.error) && "Proof feed",
+    outcomesQuery.error && "Proof feed",
     runnersQuery.error && "Runner feed",
     attemptsQuery.error && "Attempt feed",
     sourceMutationsQuery.error && "Bypass feed",
@@ -203,7 +199,6 @@ export default function AgentsPage() {
 
   function refresh() {
     profilesQuery.refetch();
-    leaderboardQuery.refetch();
     intentsQuery.refetch();
     approvalsQuery.refetch();
     outcomesQuery.refetch();
