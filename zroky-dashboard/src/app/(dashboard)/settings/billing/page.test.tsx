@@ -81,10 +81,10 @@ describe("BillingPage", () => {
         "replay.monthly_runs": 0,
         "agents.max": 1,
         "connectors.system_of_record.max": 1,
-        "actions.protected.monthly_quota": 25,
-        "actions.receipts.monthly_quota": 25,
-        "actions.verifications.monthly_quota": 50,
-        "retention.days": 30,
+        "actions.protected.monthly_quota": 500,
+        "actions.receipts.monthly_quota": 500,
+        "actions.verifications.monthly_quota": 1000,
+        "retention.days": 7,
         "seats.included": 2,
       },
     });
@@ -101,12 +101,12 @@ describe("BillingPage", () => {
       replay: usageMeter(0, 0, "blocked"),
       goldens: { ...usageMeter(0, 0, "blocked"), resets_at: null },
       golden_sets: { ...usageMeter(0, 0, "blocked"), resets_at: null },
-      protected_actions: usageMeter(7, 25),
-      policy_checks: usageMeter(18, 100),
-      runner_executions: usageMeter(4, 25),
-      action_receipts: usageMeter(4, 25),
-      verification_checks: usageMeter(9, 50),
-      source_mutations: usageMeter(11, 100),
+      protected_actions: usageMeter(7, 500),
+      policy_checks: usageMeter(18, 1000),
+      runner_executions: usageMeter(4, 500),
+      action_receipts: usageMeter(4, 500),
+      verification_checks: usageMeter(9, 1000),
+      source_mutations: usageMeter(11, 1000),
       active_connectors: usageMeter(1, 1, "near_limit"),
       metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
@@ -128,7 +128,7 @@ describe("BillingPage", () => {
     expect(screen.queryByText("Capture events")).not.toBeInTheDocument();
     expect(screen.queryByText("Replay runs")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
-    expect(screen.getAllByText("7 / 25").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("7 / 500").length).toBeGreaterThan(0);
     expect(screen.getByText("Policy checks")).toBeInTheDocument();
     expect(screen.getByText("Runner executions")).toBeInTheDocument();
     expect(screen.getAllByText("Source mutations").length).toBeGreaterThan(0);
@@ -138,21 +138,21 @@ describe("BillingPage", () => {
     expect(screen.getByRole("link", { name: "Open bypass risk" }).getAttribute("href")).toBe("/outcomes");
   });
 
-  it("renders the launch self-serve plan catalog without Starter", async () => {
+  it("renders the launch self-serve plan catalog", async () => {
     render(<BillingPage />);
 
-    expect(await screen.findByText("Pro")).toBeInTheDocument();
-    expect(screen.queryByText("Starter")).not.toBeInTheDocument();
-    expect(screen.getByText("Pro")).toBeInTheDocument();
-    expect(screen.getByText("$399.00")).toBeInTheDocument();
-    const proCard = screen.getByRole("article", { name: "Pro plan" });
-    expect(within(proCard).getByText(/25K protected actions\/mo/)).toBeInTheDocument();
-    expect(within(proCard).getByText(/100K policy checks\/mo/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pay with Razorpay for Pro" })).toBeInTheDocument();
+    expect(await screen.findByText("Starter")).toBeInTheDocument();
+    expect(screen.getByText("Team")).toBeInTheDocument();
+    expect(screen.getByText("Scale")).toBeInTheDocument();
+    expect(screen.getByText("$199.00")).toBeInTheDocument();
+    const teamCard = screen.getByRole("article", { name: "Team plan" });
+    expect(within(teamCard).getByText(/10K protected actions\/mo/)).toBeInTheDocument();
+    expect(within(teamCard).getByText(/50K policy checks\/mo/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay with Razorpay for Team" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });
 
-  it("maps legacy Plus subscriptions to the Pro catalog card", async () => {
+  it("maps legacy Plus subscriptions to the Scale catalog card", async () => {
     api.getBillingMe.mockResolvedValue({
       org_id: "org_1",
       plan_code: "plus",
@@ -177,34 +177,34 @@ describe("BillingPage", () => {
       period_month: "2026-06",
       period_start: "2026-06-01T00:00:00Z",
       period_end: "2026-07-01T00:00:00Z",
-      plan_code: "pro",
-      plan_name: "Pro",
+      plan_code: "scale",
+      plan_name: "Scale",
       subscription_status: "active",
       calls: usageMeter(1000, 250000),
       replay: usageMeter(10, 500),
       goldens: { ...usageMeter(20, 2500), resets_at: null },
       golden_sets: { ...usageMeter(2, 25), resets_at: null },
-      protected_actions: usageMeter(250, 25000),
-      policy_checks: usageMeter(1800, 100000),
-      runner_executions: usageMeter(220, 25000),
-      action_receipts: usageMeter(200, 25000),
-      verification_checks: usageMeter(700, 50000),
-      source_mutations: usageMeter(900, 100000),
-      active_connectors: usageMeter(4, 10),
+      protected_actions: usageMeter(250, 50000),
+      policy_checks: usageMeter(1800, 250000),
+      runner_executions: usageMeter(220, 50000),
+      action_receipts: usageMeter(200, 50000),
+      verification_checks: usageMeter(700, 125000),
+      source_mutations: usageMeter(900, 250000),
+      active_connectors: usageMeter(4, null),
       metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
 
     render(<BillingPage />);
 
     expect(await screen.findByText("PLUS")).toBeInTheDocument();
-    expect(screen.getByText("Legacy Plus maps to Pro entitlements.")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Plus maps to Scale entitlements.")).toBeInTheDocument();
 
-    const proCard = screen.getByRole("article", { name: "Pro plan" });
-    expect(proCard?.className).toContain("billing-plan-current");
-    expect(within(proCard as HTMLElement).getByText("Current")).toBeInTheDocument();
+    const scaleCard = screen.getByRole("article", { name: "Scale plan" });
+    expect(scaleCard?.className).toContain("billing-plan-current");
+    expect(within(scaleCard as HTMLElement).getByText("Current")).toBeInTheDocument();
   });
 
-  it("keeps legacy Pilot subscriptions as grandfathered without showing Starter", async () => {
+  it("keeps legacy Pilot subscriptions mapped to Starter", async () => {
     api.getBillingMe.mockResolvedValue({
       org_id: "org_1",
       plan_code: "pilot",
@@ -227,9 +227,9 @@ describe("BillingPage", () => {
     render(<BillingPage />);
 
     expect(await screen.findByText("PILOT")).toBeInTheDocument();
-    expect(screen.getByText("Legacy Pilot maps to grandfathered Starter entitlements. Pro is the current self-serve upgrade.")).toBeInTheDocument();
-    expect(screen.queryByText("Starter")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pay with Razorpay for Pro" })).toBeInTheDocument();
+    expect(screen.getByText("Legacy Pilot maps to grandfathered Starter entitlements. Team is the featured self-serve upgrade.")).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Starter plan" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay with Razorpay for Team" })).toBeInTheDocument();
   });
 
   it("polls billing while a Razorpay payment request is pending", async () => {

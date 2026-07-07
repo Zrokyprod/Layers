@@ -91,7 +91,7 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     name: "Free",
     monthlyCostUsd: 0,
     features: [
-      "25 protected actions/mo",
+      "500 protected actions/mo",
       "1 managed agent",
       "1 system-of-record connector",
       "Signed receipts and bypass watch",
@@ -101,27 +101,63 @@ const PLAN_CATALOG: PlanCatalogItem[] = [
     selfServe: false,
   },
   {
-    code: "pro",
-    name: "Pro",
-    monthlyCostUsd: 399,
+    code: "starter",
+    name: "Starter",
+    monthlyCostUsd: 49,
     features: [
-      "25K protected actions/mo",
-      "100K policy checks/mo",
-      "5 managed agents",
-      "10 system-of-record connectors",
-      "25K runner executions and receipts/mo",
-      "50K verification checks/mo",
-      "Dashboard and Slack approvals",
-      "Exportable Evidence Packs",
+      "2K protected actions/mo",
+      "10K policy checks/mo",
+      "3 managed agents",
+      "3 system-of-record connectors",
+      "2K runner executions and receipts/mo",
+      "5K verification checks/mo",
+      "Scoped policy rules and dry-run",
+      "30-day evidence retention",
     ],
-    fit: "For production teams scaling protected actions across live agents.",
+    fit: "For the first production workflow without starving the agent during evaluation.",
+    proof: "Raises the first control-plane quota while keeping human approvals and receipt proof active.",
+    selfServe: true,
+  },
+  {
+    code: "team",
+    name: "Team",
+    monthlyCostUsd: 199,
+    features: [
+      "10K protected actions/mo",
+      "50K policy checks/mo",
+      "10 managed agents",
+      "6 system-of-record connectors",
+      "10K runner executions and receipts/mo",
+      "25K verification checks/mo",
+      "Dashboard and Slack approvals",
+      "Audit manifest export",
+    ],
+    fit: "For teams scaling agents that touch money, access, customer state, or production systems.",
     proof: "Raises the control-plane quota while keeping receipt and verifier limits visible.",
+    selfServe: true,
+  },
+  {
+    code: "scale",
+    name: "Scale",
+    monthlyCostUsd: 499,
+    features: [
+      "50K protected actions/mo",
+      "250K policy checks/mo",
+      "Unlimited managed agents",
+      "All standard connectors",
+      "50K runner executions and receipts/mo",
+      "125K verification checks/mo",
+      "Bypass detection and audit exports",
+      "180-day evidence retention",
+    ],
+    fit: "For organizations running high-volume autonomous workflows across many systems of record.",
+    proof: "Expands standard connector and retention capacity without moving to a custom contract.",
     selfServe: true,
   },
   {
     code: "enterprise",
     name: "Enterprise",
-    monthlyCostUsd: null,
+    monthlyCostUsd: 2000,
     features: [
       "Custom protected action volume",
       "Contracted policy, runner, receipt, and verification meters",
@@ -180,14 +216,16 @@ function catalogPlanCode(planCode: string | null | undefined): string {
     return "free";
   }
   if (normalized === "pilot") return "starter";
-  if (normalized === "plus") return "pro";
+  if (normalized === "pro") return "team";
+  if (normalized === "plus") return "scale";
   return normalized;
 }
 
 function planRank(planCode: string | null | undefined): number {
   const code = catalogPlanCode(planCode);
-  if (code === "enterprise") return 3;
-  if (code === "pro") return 2;
+  if (code === "enterprise") return 4;
+  if (code === "scale") return 3;
+  if (code === "team") return 2;
   if (code === "starter") return 1;
   return 0;
 }
@@ -433,11 +471,13 @@ function BillingSettingsContent() {
   const currentPlanAlias = currentPlanCode.trim().toLowerCase();
   const legacyPlanAliasNote =
     currentPlanAlias === "plus"
-      ? "Legacy Plus maps to Pro entitlements."
+      ? "Legacy Plus maps to Scale entitlements."
+      : currentPlanAlias === "pro"
+        ? "Legacy Pro maps to Team entitlements."
       : currentPlanAlias === "pilot"
-        ? "Legacy Pilot maps to grandfathered Starter entitlements. Pro is the current self-serve upgrade."
+        ? "Legacy Pilot maps to grandfathered Starter entitlements. Team is the featured self-serve upgrade."
         : currentPlanAlias === "starter"
-          ? "Starter is grandfathered. Pro is the current self-serve upgrade."
+          ? "Starter is the first paid launch plan. Team is the featured self-serve upgrade."
           : null;
   const template = billingMe?.plan_template ?? {};
   const upgradeHint = upgradeHintMessage(searchParams.get("upgrade_hint"));
@@ -527,7 +567,6 @@ function BillingSettingsContent() {
   ];
   const visiblePlans = PLAN_CATALOG.filter((plan) => {
     if (plan.code === "free") return false;
-    if (plan.code === "pro") return planRank(currentCatalogCode) <= planRank("pro");
     return planRank(plan.code) >= planRank(currentCatalogCode);
   });
   const heroTitle = billingMe ? `${displayPlanCode(currentPlanCode)} plan` : "Plan & Billing";

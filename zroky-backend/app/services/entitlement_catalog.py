@@ -14,8 +14,14 @@ from typing import Any, Mapping
 
 UNLIMITED = -1
 DEFAULT_PLAN_CODE = "free"
-CANONICAL_PLAN_CODES: tuple[str, ...] = ("free", "starter", "pro", "enterprise")
-PLAN_ALIASES: dict[str, str] = {"pilot": "starter", "plus": "pro"}
+CANONICAL_PLAN_CODES: tuple[str, ...] = (
+    "free",
+    "starter",
+    "team",
+    "scale",
+    "enterprise",
+)
+PLAN_ALIASES: dict[str, str] = {"pilot": "starter", "pro": "team", "plus": "scale"}
 VALID_PLAN_CODES: frozenset[str] = frozenset(
     {*CANONICAL_PLAN_CODES, *PLAN_ALIASES.keys()}
 )

@@ -20,7 +20,7 @@ import {
 import pricingContract from '../data/pricing-plans.json';
 import { buildSignUpUrl, DEMO_URL } from '../lib/links';
 
-type PlanCode = 'free' | 'starter' | 'pro' | 'enterprise';
+type PlanCode = 'free' | 'starter' | 'team' | 'scale' | 'enterprise';
 
 type PricingPlan = {
   code: PlanCode;
@@ -61,11 +61,12 @@ const revealEase = [0.16, 1, 0.3, 1] as const;
 const planIcons: Record<PlanCode, LucideIcon> = {
   free: Activity,
   starter: ShieldCheck,
-  pro: GitBranch,
+  team: GitBranch,
+  scale: Layers3,
   enterprise: Server,
 };
 
-const planOrder: PlanCode[] = ['free', 'starter', 'pro', 'enterprise'];
+const planOrder: PlanCode[] = ['free', 'starter', 'team', 'scale', 'enterprise'];
 
 const plans = (pricingContract.plans as PricingPlan[]).sort(
   (a, b) => planOrder.indexOf(a.code) - planOrder.indexOf(b.code),
@@ -152,8 +153,8 @@ const operatingRules = [
   },
   {
     icon: Scale,
-    title: 'Choose Pro when production risk is real.',
-    body: 'Pro is the self-serve plan for teams gating actions that touch money, access, customer state, or production systems.',
+    title: 'Choose Team when production risk is real.',
+    body: 'Team is the self-serve plan for groups gating actions that touch money, access, customer state, or production systems.',
   },
   {
     icon: Server,
@@ -271,7 +272,7 @@ function PricingHeroVisual() {
             {[
               ['Action value', '$250K/mo', 'money, access, production'],
               ['One incident', '$8K+', 'loss, rework, audit noise'],
-              ['Pro plan', '$399/mo', 'governed execution'],
+              ['Team plan', '$199/mo', 'governed execution'],
             ].map(([label, value, body]) => (
               <div key={label} className="rounded-[14px] border border-[#dedacf] bg-[#fffdfa] p-4">
                 <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-[#8a867a]">{label}</p>
@@ -306,7 +307,7 @@ function PricingHeroVisual() {
 
 function PlanCard({ plan, index }: { plan: PricingPlan; index: number }) {
   const Icon = planIcons[plan.code];
-  const featured = plan.code === 'pro';
+  const featured = plan.code === 'team';
   const enterprise = plan.code === 'enterprise';
   const href = signUpHref(plan);
 
@@ -399,7 +400,7 @@ function PricingPage() {
                 Price the control plane against the risk it removes.
               </h1>
               <p className="mt-6 max-w-2xl text-[1.06rem] leading-[1.7] text-[#555b53] md:text-[1.16rem]">
-                Start with one protected action. Move production agents to Pro when money, access, customer state, or production changes need policy, verification, and receipts.
+                Start with one protected action. Move production agents to Team when money, access, customer state, or production changes need policy, verification, and receipts.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <PrimaryButton href={buildSignUpUrl({ intent: 'protect-agent', plan: 'free', source: 'pricing-hero' })}>
@@ -431,7 +432,7 @@ function PricingPage() {
           </Reveal>
         </div>
 
-        <div className="mt-10 grid gap-4 lg:grid-cols-4">
+        <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {plans.map((plan, index) => (
             <PlanCard key={plan.code} plan={plan} index={index} />
           ))}

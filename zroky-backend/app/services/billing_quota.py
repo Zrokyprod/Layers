@@ -172,8 +172,10 @@ def _plan_meta(db: Session, tenant_id: str) -> tuple[str | None, str | None]:
         "free": "Free",
         "pilot": "Starter",
         "starter": "Starter",
-        "pro": "Pro",
-        "plus": "Plus",
+        "pro": "Team",
+        "team": "Team",
+        "plus": "Scale",
+        "scale": "Scale",
         "enterprise": "Enterprise",
     }
     return plan_code, names.get(plan_code, plan_code.title())

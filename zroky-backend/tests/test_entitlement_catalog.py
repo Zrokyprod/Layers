@@ -43,19 +43,30 @@ EXPECTED_LIMITS = {
         "max_real_replay_runs_per_month": 0,
         "max_mocked_tool_replay_runs_per_month": 50,
         "max_live_sandbox_replay_runs_per_month": 0,
-        "max_golden_traces": 250,
+        "max_golden_traces": 500,
         "retention_days": 30,
     },
-    "pro": {
+    "team": {
         "max_projects": 10,
         "max_members": -1,
         "max_calls_per_month": 250_000,
         "max_diagnosis_jobs_per_month": 1_000,
         "max_real_replay_runs_per_month": 500,
         "max_mocked_tool_replay_runs_per_month": 500,
-        "max_live_sandbox_replay_runs_per_month": 100,
+        "max_live_sandbox_replay_runs_per_month": 500,
         "max_golden_traces": 2_500,
         "retention_days": 90,
+    },
+    "scale": {
+        "max_projects": -1,
+        "max_members": -1,
+        "max_calls_per_month": 1_000_000,
+        "max_diagnosis_jobs_per_month": -1,
+        "max_real_replay_runs_per_month": 2_000,
+        "max_mocked_tool_replay_runs_per_month": 2_000,
+        "max_live_sandbox_replay_runs_per_month": 2_000,
+        "max_golden_traces": 10_000,
+        "retention_days": 180,
     },
     "enterprise": {
         "max_projects": -1,
@@ -121,7 +132,9 @@ def test_default_limits(plan_code: str) -> None:
 def test_agent_profile_limits_by_tier() -> None:
     assert resolve_plan_template("free")["agents.max"] == 1
     assert resolve_plan_template("starter")["agents.max"] == 3
-    assert resolve_plan_template("pro")["agents.max"] == 5
+    assert resolve_plan_template("team")["agents.max"] == 10
+    assert resolve_plan_template("pro")["agents.max"] == 10
+    assert resolve_plan_template("scale")["agents.max"] == -1
     assert resolve_plan_template("enterprise")["agents.max"] == -1
 
 
@@ -168,7 +181,8 @@ def test_packaged_pricing_contract_matches_shared_source() -> None:
 def test_default_boolean_entitlements_by_tier() -> None:
     free = resolve_plan_entitlements("free")
     starter = resolve_plan_entitlements("starter")
-    pro = resolve_plan_entitlements("pro")
+    team = resolve_plan_entitlements("team")
+    scale = resolve_plan_entitlements("scale")
     enterprise = resolve_plan_entitlements("enterprise")
 
     assert free["watch.cloud_capture"] is True
@@ -183,13 +197,17 @@ def test_default_boolean_entitlements_by_tier() -> None:
     assert starter["pro.ci_gate_nonblocking"] is True
     assert starter["pro.ci_gate_blocking"] is False
 
-    assert pro["pilot.replay_real_llm"] is True
-    assert pro["pro.ci_gate_nonblocking"] is True
-    assert pro["pro.ci_gate_blocking"] is True
-    assert pro["enterprise.sso"] is False
+    assert team["pilot.replay_real_llm"] is True
+    assert team["pro.ci_gate_nonblocking"] is True
+    assert team["pro.ci_gate_blocking"] is True
+    assert team["enterprise.sso"] is False
 
-    assert enterprise["enterprise.sso"] is False
-    assert all(enterprise[key] is True for key in ENTITLEMENT_KEYS if key != "enterprise.sso")
+    assert scale["enterprise.audit_logs"] is True
+    assert scale["enterprise.custom_retention"] is True
+    assert scale["enterprise.sso"] is False
+
+    assert enterprise["enterprise.sso"] is True
+    assert all(enterprise[key] is True for key in ENTITLEMENT_KEYS)
 
 
 def test_legacy_aliases_resolve_to_launch_plans() -> None:
@@ -197,10 +215,14 @@ def test_legacy_aliases_resolve_to_launch_plans() -> None:
     assert get_catalog_entry("pilot").plan_code == "starter"
     assert PLAN_ENTITLEMENTS["pilot"] == PLAN_ENTITLEMENTS["starter"]
     assert resolve_plan_template("pilot") == resolve_plan_template("starter")
-    assert canonical_plan_code("plus") == "pro"
-    assert get_catalog_entry("plus").plan_code == "pro"
-    assert PLAN_ENTITLEMENTS["plus"] == PLAN_ENTITLEMENTS["pro"]
-    assert resolve_plan_template("plus") == resolve_plan_template("pro")
+    assert canonical_plan_code("pro") == "team"
+    assert get_catalog_entry("pro").plan_code == "team"
+    assert PLAN_ENTITLEMENTS["pro"] == PLAN_ENTITLEMENTS["team"]
+    assert resolve_plan_template("pro") == resolve_plan_template("team")
+    assert canonical_plan_code("plus") == "scale"
+    assert get_catalog_entry("plus").plan_code == "scale"
+    assert PLAN_ENTITLEMENTS["plus"] == PLAN_ENTITLEMENTS["scale"]
+    assert resolve_plan_template("plus") == resolve_plan_template("scale")
 
 
 def test_invalid_plan_code_raises() -> None:
