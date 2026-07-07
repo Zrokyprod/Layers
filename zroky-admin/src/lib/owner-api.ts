@@ -412,14 +412,17 @@ export interface OwnerPricingPlanPrice {
 }
 
 export interface OwnerPricingPlanPublicLimits {
-  calls_per_month: number;
-  retention_days: number;
-  replay_credits: number;
-  golden_traces: number;
-  golden_sets: number;
-  non_blocking_ci: boolean;
-  blocking_ci: boolean;
-  provider_key_vault: boolean;
+  protected_actions_per_month: number;
+  managed_agents: number;
+  connectors: number;
+  approver_seats: number;
+  evidence_retention_days: number;
+  slack_approvals: boolean;
+  scoped_policy_rules_dry_run: boolean;
+  bypass_detection: "none" | "basic" | "full" | "custom";
+  audit_manifest_export: boolean;
+  overage_per_action_usd: number | null;
+  overage_policy: "hard_cap" | "overage" | "custom";
 }
 
 export interface OwnerPricingPlan {

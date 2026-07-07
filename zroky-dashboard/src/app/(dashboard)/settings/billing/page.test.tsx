@@ -147,7 +147,9 @@ describe("BillingPage", () => {
     expect(screen.getByText("$199.00")).toBeInTheDocument();
     const teamCard = screen.getByRole("article", { name: "Team plan" });
     expect(within(teamCard).getByText(/10K protected actions\/mo/)).toBeInTheDocument();
-    expect(within(teamCard).getByText(/50K policy checks\/mo/)).toBeInTheDocument();
+    expect(within(teamCard).getByText(/6 connectors/)).toBeInTheDocument();
+    expect(within(teamCard).getByText(/Bypass detection/)).toBeInTheDocument();
+    expect(within(teamCard).getByText(/\$0.025\/action overage/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pay with Razorpay for Team" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });

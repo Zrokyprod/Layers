@@ -153,18 +153,35 @@ def test_pricing_contract_matches_backend_enforcement() -> None:
         assert enforcement["limits"] == entry.limits
         assert enforcement["entitlements"] == entry.entitlements
         assert enforcement["compatibility"] == entry.compatibility
-        assert pricing["calls_per_month"] == entry.limits["max_calls_per_month"]
-        assert pricing["retention_days"] == entry.limits["retention_days"]
-        assert pricing["replay_credits"] == entry.compatibility["replay.monthly_runs"]
-        assert pricing["golden_traces"] == entry.limits["max_golden_traces"]
-        assert pricing["golden_sets"] == entry.compatibility["goldens.max_sets"]
-        assert pricing["non_blocking_ci"] == entry.entitlements[
+        assert pricing["protected_actions_per_month"] == entry.compatibility[
+            "actions.protected.monthly_quota"
+        ]
+        assert pricing["managed_agents"] == entry.compatibility["agents.max"]
+        assert pricing["connectors"] == entry.compatibility[
+            "connectors.system_of_record.max"
+        ]
+        assert pricing["approver_seats"] == entry.compatibility["seats.included"]
+        assert pricing["evidence_retention_days"] == entry.compatibility[
+            "retention.days"
+        ]
+        assert pricing["slack_approvals"] is True
+        assert pricing["scoped_policy_rules_dry_run"] == entry.entitlements[
             "pro.ci_gate_nonblocking"
         ]
-        assert pricing["blocking_ci"] == entry.entitlements["pro.ci_gate_blocking"]
-        assert pricing["provider_key_vault"] == entry.entitlements[
-            "enterprise.provider_key_vault"
+        assert pricing["audit_manifest_export"] == entry.compatibility[
+            "compliance.export_enabled"
         ]
+
+    assert plans["free"]["pricing"]["bypass_detection"] == "none"
+    assert plans["starter"]["pricing"]["bypass_detection"] == "basic"
+    assert plans["team"]["pricing"]["bypass_detection"] == "full"
+    assert plans["scale"]["pricing"]["bypass_detection"] == "full"
+    assert plans["enterprise"]["pricing"]["bypass_detection"] == "custom"
+    assert plans["free"]["pricing"]["overage_policy"] == "hard_cap"
+    assert plans["starter"]["pricing"]["overage_per_action_usd"] == 0.03
+    assert plans["team"]["pricing"]["overage_per_action_usd"] == 0.025
+    assert plans["scale"]["pricing"]["overage_per_action_usd"] == 0.015
+    assert plans["enterprise"]["pricing"]["overage_policy"] == "custom"
 
 
 def test_packaged_pricing_contract_matches_shared_source() -> None:

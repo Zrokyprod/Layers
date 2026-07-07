@@ -454,8 +454,12 @@ def test_owner_pricing_plans_exposes_backend_entitlement_contract(client, monkey
     assert payload["drift"] == []
 
     plans = {plan["code"]: plan for plan in payload["plans"]}
-    assert plans["free"]["pricing"]["replay_credits"] == 0
-    assert plans["starter"]["pricing"]["golden_sets"] == 5
-    assert plans["team"]["pricing"]["blocking_ci"] is True
-    assert plans["scale"]["pricing"]["blocking_ci"] is True
-    assert plans["enterprise"]["pricing"]["provider_key_vault"] is True
+    assert plans["free"]["pricing"]["protected_actions_per_month"] == 500
+    assert plans["free"]["pricing"]["overage_policy"] == "hard_cap"
+    assert plans["starter"]["pricing"]["protected_actions_per_month"] == 2000
+    assert plans["starter"]["pricing"]["bypass_detection"] == "basic"
+    assert plans["team"]["pricing"]["managed_agents"] == 10
+    assert plans["team"]["pricing"]["audit_manifest_export"] is True
+    assert plans["scale"]["pricing"]["connectors"] == -1
+    assert plans["scale"]["pricing"]["overage_per_action_usd"] == 0.015
+    assert plans["enterprise"]["pricing"]["overage_policy"] == "custom"

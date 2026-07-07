@@ -38,7 +38,17 @@ type PricingPlan = {
   featured: boolean;
   note: string;
   pricing: {
-    retention_days: number;
+    protected_actions_per_month: number;
+    managed_agents: number;
+    connectors: number;
+    approver_seats: number;
+    evidence_retention_days: number;
+    slack_approvals: boolean;
+    scoped_policy_rules_dry_run: boolean;
+    bypass_detection: 'none' | 'basic' | 'full' | 'custom';
+    audit_manifest_export: boolean;
+    overage_per_action_usd: number | null;
+    overage_policy: 'hard_cap' | 'overage' | 'custom';
   };
   enforcement: {
     limits: {
@@ -94,33 +104,33 @@ function formatCompact(value: number) {
   return compactFormatter.format(value);
 }
 
-function formatSeatLine(plan: PricingPlan) {
-  const projects = plan.enforcement.limits.max_projects;
-  const seats = plan.enforcement.limits.max_members;
-
-  if (projects === UNLIMITED && seats === UNLIMITED) {
-    return 'Unlimited projects and seats';
-  }
-
-  const projectText = projects === UNLIMITED ? 'Unlimited projects' : `${projects} project${projects === 1 ? '' : 's'}`;
-  const seatText = seats === UNLIMITED ? 'unlimited seats' : `${seats} seat${seats === 1 ? '' : 's'}`;
-  return `${projectText}, ${seatText}`;
-}
-
-function compatibilityNumber(plan: PricingPlan, key: string) {
-  const value = plan.enforcement.compatibility[key];
-  return typeof value === 'number' ? value : 0;
-}
-
 function planBullets(plan: PricingPlan) {
-  const retention = compatibilityNumber(plan, 'retention.days') || plan.pricing.retention_days;
+  const retention = plan.pricing.evidence_retention_days;
+  const overage =
+    plan.pricing.overage_policy === 'hard_cap'
+      ? 'Hard cap on Free'
+      : plan.pricing.overage_policy === 'custom'
+        ? 'Custom usage terms'
+        : `$${plan.pricing.overage_per_action_usd?.toFixed(3)}/action overage`;
+  const bypass =
+    plan.pricing.bypass_detection === 'none'
+      ? null
+      : plan.pricing.bypass_detection === 'basic'
+        ? 'Basic bypass detection'
+        : plan.pricing.bypass_detection === 'custom'
+          ? 'Custom bypass detection'
+          : 'Bypass detection';
   return [
-    formatSeatLine(plan),
-    `${formatCompact(compatibilityNumber(plan, 'agents.max'))} managed agents`,
-    `${formatNumber(compatibilityNumber(plan, 'actions.protected.monthly_quota'))} protected actions/mo`,
-    `${formatNumber(compatibilityNumber(plan, 'actions.receipts.monthly_quota'))} signed receipts/mo`,
-    `${formatNumber(compatibilityNumber(plan, 'actions.verifications.monthly_quota'))} verification checks/mo`,
+    `${formatNumber(plan.pricing.protected_actions_per_month)} protected actions/mo`,
+    `${formatCompact(plan.pricing.managed_agents)} managed agents`,
+    `${formatCompact(plan.pricing.connectors)} connectors`,
+    `${formatCompact(plan.pricing.approver_seats)} approver seats`,
     retention === UNLIMITED ? 'Custom evidence retention' : `${retention}-day evidence retention`,
+    'Slack approvals included',
+    ...(plan.pricing.scoped_policy_rules_dry_run ? ['Scoped policy rules + dry-run'] : []),
+    ...(bypass ? [bypass] : []),
+    ...(plan.pricing.audit_manifest_export ? ['Audit manifest export'] : []),
+    overage,
   ];
 }
 

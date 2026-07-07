@@ -32,14 +32,17 @@
       "featured": false,
       "note": "Hard-capped sandbox for one managed agent, one connector, and the first signed receipts.",
       "pricing": {
-        "calls_per_month": 5000,
-        "retention_days": 7,
-        "replay_credits": 0,
-        "golden_traces": 0,
-        "golden_sets": 0,
-        "non_blocking_ci": false,
-        "blocking_ci": false,
-        "provider_key_vault": false
+        "protected_actions_per_month": 500,
+        "managed_agents": 1,
+        "connectors": 1,
+        "approver_seats": 2,
+        "evidence_retention_days": 7,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": false,
+        "bypass_detection": "none",
+        "audit_manifest_export": false,
+        "overage_per_action_usd": null,
+        "overage_policy": "hard_cap"
       },
       "enforcement": {
         "limits": {
@@ -120,14 +123,17 @@
       "featured": false,
       "note": "Enough volume for a first production workflow without starving the agent during evaluation.",
       "pricing": {
-        "calls_per_month": 50000,
-        "retention_days": 30,
-        "replay_credits": 50,
-        "golden_traces": 500,
-        "golden_sets": 5,
-        "non_blocking_ci": true,
-        "blocking_ci": false,
-        "provider_key_vault": false
+        "protected_actions_per_month": 2000,
+        "managed_agents": 3,
+        "connectors": 3,
+        "approver_seats": -1,
+        "evidence_retention_days": 30,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "basic",
+        "audit_manifest_export": false,
+        "overage_per_action_usd": 0.03,
+        "overage_policy": "overage"
       },
       "enforcement": {
         "limits": {
@@ -208,14 +214,17 @@
       "featured": true,
       "note": "Featured launch plan for real controlled execution, bypass detection, audit exports, and team rollout.",
       "pricing": {
-        "calls_per_month": 250000,
-        "retention_days": 90,
-        "replay_credits": 500,
-        "golden_traces": 2500,
-        "golden_sets": 25,
-        "non_blocking_ci": true,
-        "blocking_ci": true,
-        "provider_key_vault": true
+        "protected_actions_per_month": 10000,
+        "managed_agents": 10,
+        "connectors": 6,
+        "approver_seats": -1,
+        "evidence_retention_days": 90,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "full",
+        "audit_manifest_export": true,
+        "overage_per_action_usd": 0.025,
+        "overage_policy": "overage"
       },
       "enforcement": {
         "limits": {
@@ -296,14 +305,17 @@
       "featured": false,
       "note": "Higher action volume, unlimited agents, all standard connectors, longer retention, and lower overage basis.",
       "pricing": {
-        "calls_per_month": 1000000,
-        "retention_days": 180,
-        "replay_credits": 2000,
-        "golden_traces": 10000,
-        "golden_sets": 100,
-        "non_blocking_ci": true,
-        "blocking_ci": true,
-        "provider_key_vault": true
+        "protected_actions_per_month": 50000,
+        "managed_agents": -1,
+        "connectors": -1,
+        "approver_seats": -1,
+        "evidence_retention_days": 180,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "full",
+        "audit_manifest_export": true,
+        "overage_per_action_usd": 0.015,
+        "overage_policy": "overage"
       },
       "enforcement": {
         "limits": {
@@ -384,14 +396,17 @@
       "featured": false,
       "note": "Custom contract with volume pricing, DPA, private execution, and customer-specific connector scope.",
       "pricing": {
-        "calls_per_month": -1,
-        "retention_days": -1,
-        "replay_credits": -1,
-        "golden_traces": -1,
-        "golden_sets": -1,
-        "non_blocking_ci": true,
-        "blocking_ci": true,
-        "provider_key_vault": true
+        "protected_actions_per_month": -1,
+        "managed_agents": -1,
+        "connectors": -1,
+        "approver_seats": -1,
+        "evidence_retention_days": -1,
+        "slack_approvals": true,
+        "scoped_policy_rules_dry_run": true,
+        "bypass_detection": "custom",
+        "audit_manifest_export": true,
+        "overage_per_action_usd": null,
+        "overage_policy": "custom"
       },
       "enforcement": {
         "limits": {
