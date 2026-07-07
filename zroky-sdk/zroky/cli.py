@@ -105,6 +105,32 @@ def _print_json(obj: object) -> None:
     print(json.dumps(obj, indent=2, default=str))
 
 
+def _unquote_env_value(value: str) -> str:
+    stripped = value.strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
+        return stripped[1:-1]
+    return stripped
+
+
+def _load_local_env_file(path: Path | None = None) -> bool:
+    env_path = path or (Path.cwd() / ".env")
+    if not env_path.exists() or not env_path.is_file():
+        return False
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        key, sep, value = line.partition("=")
+        key = key.strip()
+        if not sep or not key or key in os.environ:
+            continue
+        os.environ[key] = _unquote_env_value(value)
+    return True
+
+
 def _auth_headers(config: object, *, json_content: bool = False) -> dict[str, str]:
     headers: dict[str, str] = {"Content-Type": "application/json"} if json_content else {}
     api_key = getattr(config, "api_key", None)
@@ -627,6 +653,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _load_local_env_file()
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
