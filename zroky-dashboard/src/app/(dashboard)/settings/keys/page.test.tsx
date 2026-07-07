@@ -154,8 +154,12 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("zk_live_created_secret")).toBeInTheDocument();
     expect(screen.getByText("proj_1")).toBeInTheDocument();
     expect(screen.getAllByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"')).length).toBe(2);
+    expect(screen.getAllByText((content) => content.includes('export ZROKY_PROJECT_ID="proj_1"')).length).toBe(2);
+    expect(screen.getAllByText((content) => content.includes('export ZROKY_API_URL="https://api.zroky.com"')).length).toBe(2);
     expect(screen.getAllByText((content) => content.includes("npm install @zroky-ai/sdk")).length).toBeGreaterThan(0);
     expect(screen.getAllByText((content) => content.includes("pip install zroky")).length).toBeGreaterThan(0);
+    expect(screen.queryByText((content) => content.includes("ZROKY_ENDPOINT"))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("ZROKY_INGEST_URL"))).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy key" }));

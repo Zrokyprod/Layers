@@ -52,7 +52,9 @@ _ENV_EXAMPLE = """# Zroky SDK
 ZROKY_API_KEY=zk_live_your_key_here
 
 # Optional if your API key is already scoped to one project.
-ZROKY_PROJECT=your_project_id
+ZROKY_PROJECT_ID=your_project_id
+
+ZROKY_API_URL=https://api.zroky.com
 
 ZROKY_ENVIRONMENT=production
 """
@@ -74,7 +76,7 @@ import zroky
 
 zroky.init(
     api_key=os.environ.get("ZROKY_API_KEY"),
-    project=os.environ.get("ZROKY_PROJECT"),
+    project=os.environ.get("ZROKY_PROJECT_ID") or os.environ.get("ZROKY_PROJECT"),
 )
 
 result = zroky.protect(
@@ -171,9 +173,9 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
             "name": "project",
             "ok": True,
             "message": (
-                f"ZROKY_PROJECT={config.project}"
+                f"ZROKY_PROJECT_ID={config.project}"
                 if config.project
-                else "ZROKY_PROJECT is optional when the API key carries project context"
+                else "ZROKY_PROJECT_ID is optional when the API key carries project context"
             ),
         }
     )

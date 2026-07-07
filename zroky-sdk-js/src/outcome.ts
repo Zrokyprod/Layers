@@ -53,10 +53,10 @@ export function outcome(callId: string, opts: OutcomeOptions): void {
 
   const env = nodeEnv();
   const apiKey = _config.apiKey ?? env?.["ZROKY_API_KEY"];
-  const projectId = _config.projectId ?? env?.["ZROKY_PROJECT_ID"];
+  const projectId = _config.projectId ?? env?.["ZROKY_PROJECT_ID"] ?? env?.["ZROKY_PROJECT"];
   if (!apiKey || !projectId) return;
 
-  const endpoint = resolveApiBase(_config.endpoint);
+  const endpoint = resolveApiBase(_config.endpoint ?? env?.["ZROKY_API_URL"] ?? env?.["ZROKY_ENDPOINT"]);
   const url = `${endpoint}/v1/outcomes`;
 
   const key = opts.idempotencyKey ?? `${callId}:${opts.type}`;

@@ -70,7 +70,7 @@ describe("protected-agent-setup", () => {
     expect(snippet).toContain('"amount_minor": 25000');
     expect(snippet).toContain('"currency": "USD"');
     expect(snippet).toContain("zroky.await_action_proof");
-    expect(snippet).toContain('ingest_url=os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.test")');
+    expect(snippet).toContain('ingest_url=os.environ.get("ZROKY_API_URL") or os.environ.get("ZROKY_INGEST_URL", "https://api.zroky.test")');
     expect(snippet).not.toContain("amount_usd");
     expect(snippet).not.toContain("captureToolCall");
     expect(snippet).not.toContain("traceRun");

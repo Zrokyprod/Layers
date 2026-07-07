@@ -31,7 +31,13 @@ function env(): Record<string, string | undefined> | undefined {
 }
 
 function resolveEndpoint(config: ZrokyConfig, nodeEnv: Record<string, string | undefined> | undefined): string {
-  return config.endpoint ?? nodeEnv?.["ZROKY_ENDPOINT"] ?? DEFAULT_ENDPOINT;
+  const configured = config.endpoint ?? nodeEnv?.["ZROKY_API_URL"] ?? nodeEnv?.["ZROKY_ENDPOINT"];
+  if (!configured) return DEFAULT_ENDPOINT;
+  const normalized = configured.replace(/\/+$/, "");
+  if (normalized.endsWith("/v1/ingest") || normalized.endsWith("/api/v1/ingest") || normalized.endsWith("/ingest")) {
+    return normalized;
+  }
+  return `${normalized}/api/v1/ingest`;
 }
 
 function isDisabled(config: ZrokyConfig, nodeEnv: Record<string, string | undefined> | undefined): boolean {
@@ -62,7 +68,7 @@ function toBackendEvent(payload: CapturePayload): CapturePayload {
 function resolveEmitterConfig(config: ZrokyConfig): ResolvedEmitterConfig | undefined {
   const nodeEnv = env();
   if (isDisabled(config, nodeEnv)) return;
-  const projectId = config.projectId ?? nodeEnv?.["ZROKY_PROJECT_ID"];
+  const projectId = config.projectId ?? nodeEnv?.["ZROKY_PROJECT_ID"] ?? nodeEnv?.["ZROKY_PROJECT"];
   const apiKey = config.apiKey ?? nodeEnv?.["ZROKY_API_KEY"];
   if (!projectId || !apiKey) return;
   return {

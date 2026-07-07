@@ -126,6 +126,43 @@ describe("capture contract", () => {
     assert.equal("project_id" in body.events[0], false);
   });
 
+  it("uses canonical env vars and normalizes API base URL for capture", async () => {
+    const previousKey = process.env.ZROKY_API_KEY;
+    const previousProject = process.env.ZROKY_PROJECT_ID;
+    const previousApiUrl = process.env.ZROKY_API_URL;
+    try {
+      process.env.ZROKY_API_KEY = "zk_env";
+      process.env.ZROKY_PROJECT_ID = "proj_env";
+      process.env.ZROKY_API_URL = "https://capture.example";
+      const calls = recordFetches();
+
+      await emit(
+        {
+          call_id: "call_env",
+          provider: "openai",
+          model: "gpt-4o-mini",
+          call_type: "chat",
+          latency_ms: 1,
+          status: "success",
+        },
+        {},
+      );
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].input, "https://capture.example/api/v1/ingest");
+      const headers = calls[0].init?.headers as Record<string, string>;
+      assert.equal(headers["x-api-key"], "zk_env");
+      assert.equal(headers["x-project-id"], "proj_env");
+    } finally {
+      if (previousKey === undefined) delete process.env.ZROKY_API_KEY;
+      else process.env.ZROKY_API_KEY = previousKey;
+      if (previousProject === undefined) delete process.env.ZROKY_PROJECT_ID;
+      else process.env.ZROKY_PROJECT_ID = previousProject;
+      if (previousApiUrl === undefined) delete process.env.ZROKY_API_URL;
+      else process.env.ZROKY_API_URL = previousApiUrl;
+    }
+  });
+
   it("preserves system IDs while masking phone-like content", async () => {
     const calls = recordFetches();
     const phoneLikeCallId = "16081e8b-1b21-4cb9-ac8c-610877734263";

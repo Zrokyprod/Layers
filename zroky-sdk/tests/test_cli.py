@@ -46,7 +46,10 @@ def test_init_writes_protected_action_starter_files(
     quickstart = tmp_path / "zroky_quickstart.py"
     assert env_file.exists()
     assert quickstart.exists()
-    assert "ZROKY_API_KEY" in env_file.read_text(encoding="utf-8")
+    env_text = env_file.read_text(encoding="utf-8")
+    assert "ZROKY_API_KEY" in env_text
+    assert "ZROKY_PROJECT_ID" in env_text
+    assert "ZROKY_API_URL" in env_text
     assert "zroky.protect(" in quickstart.read_text(encoding="utf-8")
 
 

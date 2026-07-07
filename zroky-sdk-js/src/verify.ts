@@ -133,14 +133,14 @@ export async function verifyOutcome(
 
   const env = nodeEnv();
   const apiKey = resolved.apiKey ?? env?.["ZROKY_API_KEY"];
-  const projectId = resolved.projectId ?? env?.["ZROKY_PROJECT_ID"];
+  const projectId = resolved.projectId ?? env?.["ZROKY_PROJECT_ID"] ?? env?.["ZROKY_PROJECT"];
   if (!apiKey || !projectId) {
     throw new ZrokyOutcomeVerificationError(
       "[ZROKY] Outcome verification requires apiKey and projectId.",
     );
   }
 
-  const endpoint = resolveApiBase(resolved.endpoint ?? env?.["ZROKY_ENDPOINT"]);
+  const endpoint = resolveApiBase(resolved.endpoint ?? env?.["ZROKY_API_URL"] ?? env?.["ZROKY_ENDPOINT"]);
   const url = `${endpoint}${endpointPath(options.connector)}`;
 
   let response: Response;

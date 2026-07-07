@@ -164,11 +164,11 @@ function ApiKeysContent() {
   const jsSetupSnippet = `${jsSdkInstall}
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_ENDPOINT="${apiBaseUrl}"`;
+export ZROKY_API_URL="${apiBaseUrl}"`;
   const pythonSetupSnippet = `${pythonSdkInstall}
-export ZROKY_PROJECT="${snippetProjectId}"
+export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_INGEST_URL="${apiBaseUrl}"`;
+export ZROKY_API_URL="${apiBaseUrl}"`;
   const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
   const runtimePosture = error ? "Needs refresh" : hasActiveKey ? "Runtime ready" : "Setup required";
 
