@@ -74,6 +74,14 @@ function intent(overrides: Partial<ActionIntentResponse> = {}): ActionIntentResp
   return {
     action_id: "act_inventory",
     project_id: "proj_123",
+    agent_id: "agent_profile_inventory",
+    agent_profile: {
+      id: "agent_profile_inventory",
+      display_name: "Inventory Agent",
+      slug: "inventory-agent",
+      runtime_path: "sdk",
+      environment: "production",
+    },
     contract_version: "inventory.item.delete/1.0",
     action_type: "inventory.item.delete",
     operation_kind: "DELETE",
@@ -249,6 +257,34 @@ describe("agent fleet foundation", () => {
     expect(view.totals).toMatchObject({ mismatched: 1, receiptReady: 2 });
   });
 
+  it("does not attach name-matched telemetry to managed profiles without an agent id", () => {
+    const view = buildFleetView({
+      profiles: [profile()],
+      intents: [
+        intent({
+          action_id: "act_unmanaged_name_match",
+          agent_id: null,
+          agent_profile: null,
+          canonical_intent: {
+            principal: { id: "inventory-agent" },
+            purpose: { summary: "Legacy inventory update" },
+            resource: { id: "item_legacy" },
+            trace_context: { agent_name: "inventory-agent" },
+          },
+        }),
+      ],
+    });
+
+    const managed = view.rows.find((row) => row.id === "profile:agent_profile_inventory");
+    const telemetry = view.rows.find((row) => row.kind === "telemetry");
+    expect(managed?.actionRollup.total).toBe(0);
+    expect(telemetry).toMatchObject({
+      kind: "telemetry",
+      agentName: "inventory-agent",
+      actionRollup: { total: 1 },
+    });
+  });
+
   it("sorts each agent's action rows by newest activity first", () => {
     const olderIntent = intent({
       action_id: "act_older",
@@ -287,6 +323,8 @@ describe("agent fleet foundation", () => {
       intents: [
         intent({
           action_id: "act_unprofiled",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_unprofiled",
           canonical_intent: {
             principal: { id: "shadow-agent" },

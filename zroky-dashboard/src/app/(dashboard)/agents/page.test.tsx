@@ -167,6 +167,14 @@ function intent(overrides: Partial<ActionIntentResponse> = {}): ActionIntentResp
   return {
     action_id: "act_inventory",
     project_id: "proj_1",
+    agent_id: "agent_profile_inventory",
+    agent_profile: {
+      id: "agent_profile_inventory",
+      display_name: "Inventory Agent",
+      slug: "inventory-agent",
+      runtime_path: "sdk",
+      environment: "production",
+    },
     contract_version: "inventory.item.delete/1.0",
     action_type: "inventory.item.delete",
     operation_kind: "DELETE",
@@ -429,6 +437,8 @@ describe("AgentsPage", () => {
       intents: [
         intent({
           action_id: "act_shadow",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_shadow",
           canonical_intent: {
             principal: { id: "shadow-agent" },
@@ -472,9 +482,10 @@ describe("AgentsPage", () => {
 
     const table = screen.getByLabelText("Agent fleet table");
     expect(within(table).getByText("Control bypass")).toBeInTheDocument();
-    expect(within(table).getByText("50% covered")).toBeInTheDocument();
-    expect(within(table).getByText("2 signals")).toBeInTheDocument();
-    expect(within(table).getByText("1 bypass / 1 sequence")).toBeInTheDocument();
+    expect(within(table).getByText("0% covered")).toBeInTheDocument();
+    expect(within(table).getAllByText("1 signal").length).toBeGreaterThan(0);
+    expect(within(table).getByText("1 bypass / 0 sequence")).toBeInTheDocument();
+    expect(within(table).getByText("0 bypass / 1 sequence")).toBeInTheDocument();
 
     const inspector = screen.getByLabelText("Selected agent control");
     expect(within(inspector).getByText("Bypass")).toBeInTheDocument();
@@ -489,6 +500,8 @@ describe("AgentsPage", () => {
       intents: [
         intent({
           action_id: "act_shadow",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_shadow",
           canonical_intent: {
             principal: { id: "shadow-agent" },
@@ -521,6 +534,8 @@ describe("AgentsPage", () => {
       intents: [
         intent({
           action_id: "act_shadow",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_shadow",
           canonical_intent: {
             principal: { id: "shadow-agent" },

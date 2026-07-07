@@ -204,17 +204,18 @@ function profileAliases(profile: AgentProfileResponse): Set<string> {
   return aliases;
 }
 
+function profileForActionIntent(
+  intent: ActionIntentResponse | null,
+  profilesById: Map<string, AgentProfileResponse>,
+): AgentProfileResponse | null {
+  const id = intent?.agent_id ?? intent?.agent_profile?.id ?? null;
+  return id ? profilesById.get(id) ?? null : null;
+}
+
 function nameAliases(agentName: string | null | undefined): Set<string> {
   const aliases = new Set<string>();
   addAlias(aliases, agentName);
   return aliases;
-}
-
-function hasAliasIntersection(a: Set<string>, b: Set<string>): boolean {
-  for (const value of a) {
-    if (b.has(value)) return true;
-  }
-  return false;
 }
 
 function latestTime(values: Array<string | null | undefined>): string | null {
@@ -438,20 +439,6 @@ function mandateSummary(profile: AgentProfileResponse | null): AgentMandateSumma
   };
 }
 
-function profileForTelemetry(
-  agentName: string,
-  profiles: AgentProfileResponse[],
-  aliasesByProfile: Map<string, Set<string>>,
-): AgentProfileResponse | null {
-  const aliases = nameAliases(agentName);
-  for (const profile of profiles) {
-    if (hasAliasIntersection(aliasesByProfile.get(profile.id) ?? new Set(), aliases)) {
-      return profile;
-    }
-  }
-  return null;
-}
-
 function operationKinds(rows: ActionLifecycleRow[]): Set<string> {
   const kinds = new Set<string>();
   for (const row of rows) {
@@ -555,6 +542,7 @@ export function buildFleetView({
   const activeCount = profileMeta?.active_count ?? activeProfiles.length;
   const maxActiveAgents = profileMeta?.max_active_agents ?? -1;
   const staleIds = new Set(staleAttemptIds);
+  const profilesById = new Map(activeProfiles.map((profile) => [profile.id, profile]));
   const aliasesByProfile = new Map(activeProfiles.map((profile) => [profile.id, profileAliases(profile)]));
   const rowsById = new Map<string, MutableFleetRow>();
   const lifecycleRows = buildActionLifecycle({
@@ -581,11 +569,8 @@ export function buildFleetView({
   }
 
   for (const actionRow of lifecycleRows) {
-    const boundAgentId = actionRow.intent?.agent_id;
     const matchAgentName = actionRow.mutation?.actor_id ?? actionRow.agentName;
-    const profile = boundAgentId
-      ? activeProfiles.find((item) => item.id === boundAgentId) ?? null
-      : profileForTelemetry(matchAgentName, activeProfiles, aliasesByProfile);
+    const profile = profileForActionIntent(actionRow.intent, profilesById);
     const id = profile ? `profile:${profile.id}` : `telemetry:${slugAgentToken(actionRow.agentName) || actionRow.agentName}`;
     let row = rowsById.get(id);
     if (!row) {
