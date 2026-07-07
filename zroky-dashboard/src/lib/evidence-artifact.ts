@@ -2,6 +2,15 @@ import type {
   ActionReceiptResponse,
   RuntimePolicyEvidencePackResponse,
 } from "@/lib/api";
+import { actionReceiptPublicKeyUrl } from "@/lib/evidence-verification";
+
+type IndependentVerification = {
+  method: "ed25519-public-key";
+  public_key_url: string;
+  signed_payload_field: "signed_payload";
+  signature_field: "signature";
+  instructions: string[];
+};
 
 export type ActionReceiptArtifact = {
   artifact: "zroky.action_receipt";
@@ -14,6 +23,7 @@ export type ActionReceiptArtifact = {
   evidence_hash: string | null;
   signature_valid: boolean;
   signed_payload?: string;
+  verification: IndependentVerification;
 };
 
 export type RuntimePolicyEvidencePackArtifact = {
@@ -45,6 +55,17 @@ export function buildEvidenceArtifact(
       evidence_hash: input.receipt.evidence_hash,
       signature_valid: input.receipt.signature_valid,
       signed_payload: input.receipt.signed_payload,
+      verification: {
+        method: "ed25519-public-key",
+        public_key_url: actionReceiptPublicKeyUrl(),
+        signed_payload_field: "signed_payload",
+        signature_field: "signature",
+        instructions: [
+          "Fetch the published Ed25519 public key from public_key_url.",
+          "Verify signature over the exact signed_payload string.",
+          "Treat signature_valid as Zroky's server-side attestation; independent audit should verify the signature again.",
+        ],
+      },
     };
   }
   return {

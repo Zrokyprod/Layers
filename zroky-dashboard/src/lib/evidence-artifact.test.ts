@@ -87,6 +87,13 @@ describe("buildEvidenceArtifact", () => {
     expect(artifact.signature).toBe("sig");
     expect(artifact.evidence_hash).toBe("sha256:evidence");
     expect(artifact.schema_version).toBe("zroky.action_receipt.v1");
+    expect(artifact.verification).toMatchObject({
+      method: "ed25519-public-key",
+      public_key_url: "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
+      signed_payload_field: "signed_payload",
+      signature_field: "signature",
+    });
+    expect(artifact.verification.instructions.join(" ")).toContain("independent audit");
   });
 
   it("wraps the runtime policy Evidence Pack without mutating the pack", () => {
