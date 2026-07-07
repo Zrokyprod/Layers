@@ -3672,6 +3672,43 @@ export interface HomeSummaryResponse {
   };
 }
 
+export interface ActionsLifecycleSummaryResponse {
+  project_id: string;
+  window_days: number;
+  window_start: string;
+  generated_at: string;
+  row_limit: number;
+  metrics: {
+    controlled_actions: number;
+    held_actions: number;
+    matched_outcomes: number;
+    mismatched_outcomes: number;
+    not_verified_outcomes: number;
+    bypass_risk: number;
+  };
+  sources: {
+    lifecycle_summary: boolean;
+    intents: boolean;
+    approvals: boolean;
+    outcomes: boolean;
+    outcome_summary: boolean;
+    source_summary: boolean;
+    mutations: boolean;
+    stale_attempts: boolean;
+    billing_usage: boolean;
+  };
+  data: {
+    intents: ActionIntentResponse[];
+    approvals: RuntimePolicyDecisionResponse[];
+    outcomes: OutcomeReconciliationView[];
+    outcome_summary: OutcomeReconciliationSummaryResponse | null;
+    source_summary: SourceMutationSummaryResponse | null;
+    mutations: SourceMutationView[];
+    stale_attempts: ActionExecutionAttemptResponse[];
+    billing_usage: BillingUsageResponse | null;
+  };
+}
+
 export interface SavedLedgerRefundReconciliationPayload {
   call_id?: string | null;
   trace_id?: string | null;
@@ -3821,6 +3858,19 @@ export function getOutcomeReconciliationSummary(
 export function getHomeSummary(days = 30, signal?: AbortSignal): Promise<HomeSummaryResponse> {
   return request<HomeSummaryResponse>("/v1/home/summary", {
     query: { days: String(days) },
+    signal,
+  });
+}
+
+export function getActionsLifecycleSummary(
+  params: { days?: number; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<ActionsLifecycleSummaryResponse> {
+  return request<ActionsLifecycleSummaryResponse>("/v1/actions/lifecycle-summary", {
+    query: {
+      days: String(params.days ?? 30),
+      limit: String(params.limit ?? 100),
+    },
     signal,
   });
 }

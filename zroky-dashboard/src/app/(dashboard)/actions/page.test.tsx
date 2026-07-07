@@ -2,19 +2,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { actionLifecycleCounts, buildActionLifecycle } from "@/lib/action-lifecycle";
 import ActionsPage from "./page";
 
 const api = vi.hoisted(() => ({
+  getActionsLifecycleSummary: vi.fn(),
   getActionIntentTimeline: vi.fn(),
-  getBillingUsage: vi.fn(),
-  getOutcomeReconciliationSummary: vi.fn(),
-  getSourceMutationSummary: vi.fn(),
   listActionExecutionAttempts: vi.fn(),
-  listActionIntents: vi.fn(),
-  listOutcomeReconciliations: vi.fn(),
-  listProjectActionExecutionAttempts: vi.fn(),
-  listRuntimePolicyApprovals: vi.fn(),
-  listUnreceiptedSourceMutations: vi.fn(),
 }));
 
 const queryState = vi.hoisted(() => ({
@@ -33,34 +27,57 @@ const queryState = vi.hoisted(() => ({
   isError: false,
   errorKeys: new Set<string>(),
   refetch: vi.fn(),
+  queryKeys: [] as string[],
+  makeFeed: null as null | (() => Record<string, unknown>),
+  sources: {
+    lifecycle_summary: true,
+    intents: true,
+    approvals: true,
+    outcomes: true,
+    outcome_summary: true,
+    source_summary: true,
+    mutations: true,
+    stale_attempts: true,
+    billing_usage: true,
+  },
 }));
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(({ queryKey }: { queryKey: unknown[] }) => {
     const key = queryKey.join(":");
+    queryState.queryKeys.push(key);
     const isError = queryState.isError || queryState.errorKeys.has(key);
-    if (key === "billing:usage:protected-action-dashboard") {
+    if (key === "actions:lifecycle-summary:30:100") {
       return {
-        data: queryState.billingUsage,
+        data: queryState.makeFeed ? queryState.makeFeed() : {
+          project_id: "proj_1",
+          window_days: 30,
+          window_start: "2026-06-01T00:00:00Z",
+          generated_at: "2026-06-20T09:15:00Z",
+          row_limit: 100,
+          metrics: {
+            controlled_actions: queryState.intents.length,
+            held_actions: queryState.decisions.filter((item) => item.status === "pending_approval").length,
+            matched_outcomes: Number(queryState.outcomeSummary?.matched ?? 0),
+            mismatched_outcomes: Number(queryState.outcomeSummary?.mismatched ?? 0),
+            not_verified_outcomes: Number(queryState.outcomeSummary?.not_verified ?? 0),
+            bypass_risk: Number(queryState.sourceMutationSummary?.unreceipted ?? 0),
+          },
+          sources: queryState.sources,
+          data: {
+            intents: queryState.intents,
+            approvals: queryState.decisions,
+            outcomes: queryState.outcomes,
+            outcome_summary: queryState.outcomeSummary,
+            source_summary: queryState.sourceMutationSummary,
+            mutations: queryState.unreceiptedMutations,
+            stale_attempts: queryState.staleAttempts,
+            billing_usage: queryState.billingUsage,
+          },
+        },
         isLoading: queryState.isLoading,
         isError,
         dataUpdatedAt: queryState.dataUpdatedAt,
-        refetch: queryState.refetch,
-      };
-    }
-    if (key === "runtime-policy:actions:all") {
-      return {
-        data: { total_in_page: queryState.decisions.length, items: queryState.decisions },
-        isLoading: queryState.isLoading,
-        isError,
-        refetch: queryState.refetch,
-      };
-    }
-    if (key === "action-intents:actions:all") {
-      return {
-        data: { total_in_page: queryState.intents.length, items: queryState.intents },
-        isLoading: queryState.isLoading,
-        isError,
         refetch: queryState.refetch,
       };
     }
@@ -75,46 +92,6 @@ vi.mock("@tanstack/react-query", () => ({
     if (key === "action-intent:act_1:execution-attempts:actions-page") {
       return {
         data: { items: queryState.attempts },
-        isLoading: queryState.isLoading,
-        isError,
-        refetch: queryState.refetch,
-      };
-    }
-    if (key === "action-execution-attempts:actions:stale") {
-      return {
-        data: { items: queryState.staleAttempts },
-        isLoading: queryState.isLoading,
-        isError,
-        refetch: queryState.refetch,
-      };
-    }
-    if (key === "outcomes:actions:summary:30") {
-      return {
-        data: queryState.outcomeSummary,
-        isLoading: queryState.isLoading,
-        isError,
-        refetch: queryState.refetch,
-      };
-    }
-    if (key === "outcomes:actions:reconciliation") {
-      return {
-        data: { total_in_page: queryState.outcomes.length, items: queryState.outcomes },
-        isLoading: queryState.isLoading,
-        isError,
-        refetch: queryState.refetch,
-      };
-    }
-    if (key === "outcomes:actions:source-mutations:summary") {
-      return {
-        data: queryState.sourceMutationSummary,
-        isLoading: queryState.isLoading,
-        isError,
-        refetch: queryState.refetch,
-      };
-    }
-    if (key === "outcomes:actions:source-mutations:unreceipted") {
-      return {
-        data: { total_in_page: queryState.unreceiptedMutations.length, items: queryState.unreceiptedMutations },
         isLoading: queryState.isLoading,
         isError,
         refetch: queryState.refetch,
@@ -308,6 +285,46 @@ function sourceMutation(overrides: Record<string, unknown> = {}) {
 }
 
 function renderActionsPage() {
+  queryState.makeFeed = () => {
+    const rows = buildActionLifecycle({
+      intents: queryState.intents as never[],
+      decisions: queryState.decisions as never[],
+      outcomes: queryState.outcomes as never[],
+      attempts: queryState.staleAttempts as never[],
+      staleAttemptIds: queryState.staleAttempts.map((attempt) => String(attempt.attempt_id)),
+      mutations: queryState.unreceiptedMutations as never[],
+    });
+    return {
+      summary: {
+        project_id: "proj_1",
+        window_days: 30,
+        window_start: "2026-06-01T00:00:00Z",
+        generated_at: "2026-06-20T09:15:00Z",
+        row_limit: 100,
+        metrics: {
+          controlled_actions: queryState.intents.length,
+          held_actions: queryState.decisions.filter((item) => item.status === "pending_approval").length,
+          matched_outcomes: Number(queryState.outcomeSummary?.matched ?? 0),
+          mismatched_outcomes: Number(queryState.outcomeSummary?.mismatched ?? 0),
+          not_verified_outcomes: Number(queryState.outcomeSummary?.not_verified ?? 0),
+          bypass_risk: Number(queryState.sourceMutationSummary?.unreceipted ?? 0),
+        },
+        sources: queryState.sources,
+        data: {
+          intents: queryState.intents,
+          approvals: queryState.decisions,
+          outcomes: queryState.outcomes,
+          outcome_summary: queryState.outcomeSummary,
+          source_summary: queryState.sourceMutationSummary,
+          mutations: queryState.unreceiptedMutations,
+          stale_attempts: queryState.staleAttempts,
+          billing_usage: queryState.billingUsage,
+        },
+      },
+      rows,
+      counts: actionLifecycleCounts(rows),
+    };
+  };
   return render(<ActionsPage />);
 }
 
@@ -318,6 +335,19 @@ describe("ActionsPage", () => {
     queryState.isError = false;
     queryState.errorKeys.clear();
     queryState.refetch.mockClear();
+    queryState.queryKeys = [];
+    queryState.makeFeed = null;
+    queryState.sources = {
+      lifecycle_summary: true,
+      intents: true,
+      approvals: true,
+      outcomes: true,
+      outcome_summary: true,
+      source_summary: true,
+      mutations: true,
+      stale_attempts: true,
+      billing_usage: true,
+    };
     queryState.dataUpdatedAt = Date.now();
     queryState.attempts = [];
     queryState.billingUsage = billingUsage();
@@ -359,55 +389,8 @@ describe("ActionsPage", () => {
     queryState.staleAttempts = [];
     queryState.timeline = [];
     queryState.unreceiptedMutations = [sourceMutation()];
-    api.listActionIntents.mockResolvedValue({ total_in_page: 0, items: [], limit: 50, offset: 0 });
     api.getActionIntentTimeline.mockResolvedValue({ items: [] });
     api.listActionExecutionAttempts.mockResolvedValue({ items: [] });
-    api.listProjectActionExecutionAttempts.mockResolvedValue({ items: [] });
-    api.getBillingUsage.mockResolvedValue(billingUsage());
-    api.listRuntimePolicyApprovals.mockResolvedValue({
-      total_in_page: 2,
-      items: [
-        decision(),
-        decision({
-          id: "decision_2",
-          agent_name: "Deploy agent",
-          action_type: "deploy",
-          tool_name: "ci.deploy",
-          status: "pending_approval",
-          intended_action: { summary: "Deploy production release" },
-          created_at: "2026-06-20T09:07:00Z",
-        }),
-      ],
-    });
-    api.getOutcomeReconciliationSummary.mockResolvedValue({
-      window_days: 30,
-      total: 2,
-      matched: 1,
-      mismatched: 0,
-      not_verified: 1,
-      verified: 1,
-      pending: 0,
-      unverifiable: 1,
-      cancelled: 0,
-    });
-    api.listOutcomeReconciliations.mockResolvedValue({
-      total_in_page: 1,
-      items: [outcome()],
-    });
-    api.getSourceMutationSummary.mockResolvedValue({
-      total: 3,
-      matched_receipt: 1,
-      authorized_external: 1,
-      legacy_path: 0,
-      unmanaged_agent_action: 0,
-      policy_bypass: 1,
-      unknown_actor: 0,
-      unreceipted: 1,
-    });
-    api.listUnreceiptedSourceMutations.mockResolvedValue({
-      total_in_page: 1,
-      items: [sourceMutation()],
-    });
   });
 
   it("shows lifecycle metrics, quota, intent rows, and bypass as a first-class queue filter", async () => {
@@ -416,6 +399,14 @@ describe("ActionsPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Bypass risk" }),
     ).toBeInTheDocument();
+    expect(queryState.queryKeys).toContain("actions:lifecycle-summary:30:100");
+    expect(queryState.queryKeys).not.toContain("action-intents:actions:all");
+    expect(queryState.queryKeys).not.toContain("runtime-policy:actions:all");
+    expect(queryState.queryKeys).not.toContain("outcomes:actions:reconciliation");
+    expect(queryState.queryKeys).not.toContain("action-execution-attempts:actions:stale");
+    expect(queryState.queryKeys).not.toContain("outcomes:actions:summary:30");
+    expect(queryState.queryKeys).not.toContain("outcomes:actions:source-mutations:summary");
+    expect(queryState.queryKeys).not.toContain("outcomes:actions:source-mutations:unreceipted");
     expect(screen.getByText(/Updated just now/i)).toBeInTheDocument();
     expect(screen.queryByText("Updated live")).not.toBeInTheDocument();
 
@@ -459,7 +450,7 @@ describe("ActionsPage", () => {
 
   it("keeps action visibility live when only billing meters fail", async () => {
     queryState.billingUsage = null;
-    queryState.errorKeys.add("billing:usage:protected-action-dashboard");
+    queryState.sources = { ...queryState.sources, billing_usage: false };
 
     renderActionsPage();
 
@@ -635,40 +626,6 @@ describe("ActionsPage", () => {
       unreceipted: 0,
     };
     queryState.unreceiptedMutations = [];
-    api.getBillingUsage.mockResolvedValue(
-      billingUsage({
-        protected_actions: usageMeter(0, 25),
-        policy_checks: usageMeter(0, 100),
-        runner_executions: usageMeter(0, 25),
-        action_receipts: usageMeter(0, 25),
-        verification_checks: usageMeter(0, 50),
-        source_mutations: usageMeter(0, 100),
-      }),
-    );
-    api.listRuntimePolicyApprovals.mockResolvedValue({ total_in_page: 0, items: [] });
-    api.getOutcomeReconciliationSummary.mockResolvedValue({
-      window_days: 30,
-      total: 0,
-      matched: 0,
-      mismatched: 0,
-      not_verified: 0,
-      verified: 0,
-      pending: 0,
-      unverifiable: 0,
-      cancelled: 0,
-    });
-    api.listOutcomeReconciliations.mockResolvedValue({ total_in_page: 0, items: [] });
-    api.getSourceMutationSummary.mockResolvedValue({
-      total: 0,
-      matched_receipt: 0,
-      authorized_external: 0,
-      legacy_path: 0,
-      unmanaged_agent_action: 0,
-      policy_bypass: 0,
-      unknown_actor: 0,
-      unreceipted: 0,
-    });
-    api.listUnreceiptedSourceMutations.mockResolvedValue({ total_in_page: 0, items: [] });
 
     renderActionsPage();
 

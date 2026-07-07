@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.action_intents import router as action_intents_router
+from app.api.routes.actions import router as actions_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.calls import router as calls_router
@@ -60,6 +61,7 @@ api_router.include_router(capture_router, tags=["capture"])
 api_router.include_router(calls_router, tags=["calls"])
 api_router.include_router(traces_router, tags=["traces"])
 api_router.include_router(action_intents_router, tags=["verified-actions"])
+api_router.include_router(actions_router, tags=["actions"])
 api_router.include_router(evidence_router, tags=["evidence"])
 api_router.include_router(agents_router, tags=["agents"])  # Agent tool-control profiles
 api_router.include_router(tool_registry_router, tags=["tool-registry"])  # Agent runtime and verifier catalog

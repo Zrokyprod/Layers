@@ -10,24 +10,15 @@ import { ActionsVerdictHero } from "./ActionsVerdictHero";
 import { DashboardWorkspace } from "@/components/dashboard-scaffold";
 import {
   getActionIntentTimeline,
-  getBillingUsage,
-  getOutcomeReconciliationSummary,
-  getSourceMutationSummary,
   listActionExecutionAttempts,
-  listActionIntents,
-  listOutcomeReconciliations,
-  listProjectActionExecutionAttempts,
-  listRuntimePolicyApprovals,
-  listUnreceiptedSourceMutations,
 } from "@/lib/api";
 import {
-  actionLifecycleCounts,
-  buildActionLifecycle,
   filterActionLifecycle,
   type ActionLifecycleFilter,
   type ActionLifecycleRow,
 } from "@/lib/action-lifecycle";
 import type { StatusTone } from "@/lib/action-status";
+import { loadActionsLifecycleFeed } from "@/lib/actions-lifecycle-feed";
 import { formatCount, timeSince } from "@/lib/format";
 import type { BillingUsageMeter } from "@/lib/types";
 
@@ -193,79 +184,31 @@ export default function ActionsPage() {
     [],
   );
 
-  const billingQuery = useQuery({
-    queryKey: ["billing", "usage", "protected-action-dashboard"],
-    queryFn: ({ signal }) => getBillingUsage(signal),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  });
-  const actionIntentsQuery = useQuery({
-    queryKey: ["action-intents", "actions", "all"],
-    queryFn: ({ signal }) => listActionIntents({ status: "all", limit: 100 }, signal),
-    staleTime: 10_000,
-    refetchInterval: 15_000,
-  });
-  const decisionsQuery = useQuery({
-    queryKey: ["runtime-policy", "actions", "all"],
-    queryFn: ({ signal }) => listRuntimePolicyApprovals("all", signal),
-    staleTime: 10_000,
-    refetchInterval: 15_000,
-  });
-  const outcomesQuery = useQuery({
-    queryKey: ["outcomes", "actions", "reconciliation"],
-    queryFn: ({ signal }) => listOutcomeReconciliations({ verdict: "all", limit: 100 }, signal),
+  const lifecycleQuery = useQuery({
+    queryKey: ["actions", "lifecycle-summary", 30, 100],
+    queryFn: ({ signal }) => loadActionsLifecycleFeed({ days: 30, limit: 100 }, signal),
     staleTime: 15_000,
-    refetchInterval: 30_000,
-  });
-  const staleAttemptsQuery = useQuery({
-    queryKey: ["action-execution-attempts", "actions", "stale"],
-    queryFn: ({ signal }) => listProjectActionExecutionAttempts(
-      { status: ["planned", "dispatched", "running"], stale: true, limit: 100 },
-      signal,
-    ),
-    staleTime: 15_000,
-    refetchInterval: 30_000,
-  });
-  const outcomeSummaryQuery = useQuery({
-    queryKey: ["outcomes", "actions", "summary", 30],
-    queryFn: ({ signal }) => getOutcomeReconciliationSummary(30, signal),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  });
-  const sourceMutationSummaryQuery = useQuery({
-    queryKey: ["outcomes", "actions", "source-mutations", "summary"],
-    queryFn: ({ signal }) => getSourceMutationSummary(signal),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  });
-  const sourceMutationsQuery = useQuery({
-    queryKey: ["outcomes", "actions", "source-mutations", "unreceipted"],
-    queryFn: ({ signal }) => listUnreceiptedSourceMutations(100, signal),
-    staleTime: 30_000,
     refetchInterval: 30_000,
   });
 
-  const billing = billingQuery.data;
-  const sourceSummary = sourceMutationSummaryQuery.data;
-  const outcomeSummary = outcomeSummaryQuery.data;
-  const intents = useMemo(() => actionIntentsQuery.data?.items ?? [], [actionIntentsQuery.data?.items]);
-  const decisions = useMemo(() => decisionsQuery.data?.items ?? [], [decisionsQuery.data?.items]);
-  const outcomes = useMemo(() => outcomesQuery.data?.items ?? [], [outcomesQuery.data?.items]);
-  const staleAttempts = useMemo(() => staleAttemptsQuery.data?.items ?? [], [staleAttemptsQuery.data?.items]);
-  const sourceMutations = useMemo(() => sourceMutationsQuery.data?.items ?? [], [sourceMutationsQuery.data?.items]);
-  const rows = useMemo(
-    () => buildActionLifecycle({
-      intents,
-      decisions,
-      outcomes,
-      attempts: staleAttempts,
-      staleAttemptIds: staleAttempts.map((attempt) => attempt.attempt_id),
-      mutations: sourceMutations,
-    }),
-    [decisions, intents, outcomes, sourceMutations, staleAttempts],
-  );
+  const lifecycleSummary = lifecycleQuery.data?.summary;
+  const billing = lifecycleSummary?.data.billing_usage ?? null;
+  const sourceSummary = lifecycleSummary?.data.source_summary ?? null;
+  const outcomeSummary = lifecycleSummary?.data.outcome_summary ?? null;
+  const rows = lifecycleQuery.data?.rows ?? [];
   const filteredRows = useMemo(() => filterActionLifecycle(rows, filter), [filter, rows]);
-  const counts = useMemo(() => actionLifecycleCounts(rows), [rows]);
+  const counts = lifecycleQuery.data?.counts ?? {
+    total: 0,
+    protectedActions: 0,
+    guardOnly: 0,
+    held: 0,
+    executing: 0,
+    stalled: 0,
+    matched: 0,
+    mismatched: 0,
+    notVerified: 0,
+    bypassed: 0,
+  };
   const selectedRow = rows.find((row) => row.id === selectedId)
     ?? filteredRows[0]
     ?? rows[0]
@@ -287,23 +230,21 @@ export default function ActionsPage() {
     retry: false,
   });
 
-  const loading =
-    actionIntentsQuery.isLoading ||
-    decisionsQuery.isLoading ||
-    outcomesQuery.isLoading ||
-    staleAttemptsQuery.isLoading ||
-    outcomeSummaryQuery.isLoading ||
-    sourceMutationSummaryQuery.isLoading ||
-    sourceMutationsQuery.isLoading;
-  const hasError =
-    actionIntentsQuery.isError ||
-    decisionsQuery.isError ||
-    outcomesQuery.isError ||
-    staleAttemptsQuery.isError ||
-    outcomeSummaryQuery.isError ||
-    sourceMutationSummaryQuery.isError ||
-    sourceMutationsQuery.isError;
-  const billingUnavailable = billingQuery.isError;
+  const loading = lifecycleQuery.isLoading;
+  const lifecycleSources = lifecycleSummary?.sources;
+  const degradedFeeds = lifecycleSources
+    ? [
+        lifecycleSources.intents ? null : "action intents",
+        lifecycleSources.approvals ? null : "policy decisions",
+        lifecycleSources.outcomes ? null : "outcome checks",
+        lifecycleSources.outcome_summary ? null : "outcome summary",
+        lifecycleSources.source_summary ? null : "bypass summary",
+        lifecycleSources.mutations ? null : "bypass mutations",
+        lifecycleSources.stale_attempts ? null : "runner attempts",
+      ].filter((feed): feed is string => Boolean(feed))
+    : [];
+  const hasError = lifecycleQuery.isError || degradedFeeds.length > 0;
+  const billingUnavailable = Boolean(lifecycleQuery.data && lifecycleSources?.billing_usage === false);
   const bypassRisk = sourceSummary?.unreceipted ?? 0;
   const connectedBypassFeeds = sourceSummary?.connected_feeds ?? 0;
   const successfulBypassPollers = sourceSummary?.successful_pollers ?? 0;
@@ -323,14 +264,7 @@ export default function ActionsPage() {
     protectedActions: counts.protectedActions,
   });
   const lastUpdatedMs = Math.max(
-    billingQuery.dataUpdatedAt ?? 0,
-    actionIntentsQuery.dataUpdatedAt ?? 0,
-    decisionsQuery.dataUpdatedAt ?? 0,
-    outcomesQuery.dataUpdatedAt ?? 0,
-    staleAttemptsQuery.dataUpdatedAt ?? 0,
-    outcomeSummaryQuery.dataUpdatedAt ?? 0,
-    sourceMutationSummaryQuery.dataUpdatedAt ?? 0,
-    sourceMutationsQuery.dataUpdatedAt ?? 0,
+    lifecycleQuery.dataUpdatedAt ?? 0,
   );
   const updatedLabel = lastUpdatedMs > 0
     ? `Updated ${timeSince(new Date(lastUpdatedMs).toISOString(), nowMs)}`
@@ -362,14 +296,7 @@ export default function ActionsPage() {
 
   function refreshAll() {
     void Promise.all([
-      billingQuery.refetch(),
-      actionIntentsQuery.refetch(),
-      decisionsQuery.refetch(),
-      outcomesQuery.refetch(),
-      staleAttemptsQuery.refetch(),
-      outcomeSummaryQuery.refetch(),
-      sourceMutationSummaryQuery.refetch(),
-      sourceMutationsQuery.refetch(),
+      lifecycleQuery.refetch(),
       actionTimelineQuery.refetch(),
       actionAttemptsQuery.refetch(),
     ]);

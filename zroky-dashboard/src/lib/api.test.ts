@@ -4,6 +4,7 @@ import {
   decideActionIntent,
   approveRuntimePolicyDecision,
   enforceAgentProfile,
+  getActionsLifecycleSummary,
   getBillingMe,
   getActionIntentReceipt,
   getActionIntentTimeline,
@@ -299,6 +300,61 @@ describe("verified action API client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/zroky/v1/action-intents?limit=50",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("loads the aggregate actions lifecycle summary", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          project_id: "proj_1",
+          window_days: 30,
+          window_start: "2026-06-01T00:00:00Z",
+          generated_at: "2026-06-20T09:15:00Z",
+          row_limit: 100,
+          metrics: {
+            controlled_actions: 2,
+            held_actions: 1,
+            matched_outcomes: 1,
+            mismatched_outcomes: 0,
+            not_verified_outcomes: 1,
+            bypass_risk: 1,
+          },
+          sources: {
+            lifecycle_summary: true,
+            intents: true,
+            approvals: true,
+            outcomes: true,
+            outcome_summary: true,
+            source_summary: true,
+            mutations: true,
+            stale_attempts: true,
+            billing_usage: true,
+          },
+          data: {
+            intents: [],
+            approvals: [],
+            outcomes: [],
+            outcome_summary: null,
+            source_summary: null,
+            mutations: [],
+            stale_attempts: [],
+            billing_usage: null,
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getActionsLifecycleSummary({ days: 30, limit: 100 })).resolves.toMatchObject({
+      metrics: { controlled_actions: 2, bypass_risk: 1 },
+      data: { intents: [] },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/zroky/v1/actions/lifecycle-summary?days=30&limit=100",
       expect.objectContaining({ method: "GET" }),
     );
   });
