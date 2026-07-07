@@ -31,17 +31,19 @@ const queryState = vi.hoisted(() => ({
   dataUpdatedAt: 0,
   isLoading: false,
   isError: false,
+  errorKeys: new Set<string>(),
   refetch: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: vi.fn(({ queryKey }: { queryKey: unknown[] }) => {
     const key = queryKey.join(":");
+    const isError = queryState.isError || queryState.errorKeys.has(key);
     if (key === "billing:usage:protected-action-dashboard") {
       return {
         data: queryState.billingUsage,
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         dataUpdatedAt: queryState.dataUpdatedAt,
         refetch: queryState.refetch,
       };
@@ -50,7 +52,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: { total_in_page: queryState.decisions.length, items: queryState.decisions },
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -58,7 +60,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: { total_in_page: queryState.intents.length, items: queryState.intents },
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -66,7 +68,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: { items: queryState.timeline },
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -74,7 +76,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: { items: queryState.attempts },
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -82,7 +84,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: { items: queryState.staleAttempts },
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -90,7 +92,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: queryState.outcomeSummary,
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -98,7 +100,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: { total_in_page: queryState.outcomes.length, items: queryState.outcomes },
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -106,7 +108,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: queryState.sourceMutationSummary,
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -114,7 +116,7 @@ vi.mock("@tanstack/react-query", () => ({
       return {
         data: { total_in_page: queryState.unreceiptedMutations.length, items: queryState.unreceiptedMutations },
         isLoading: queryState.isLoading,
-        isError: queryState.isError,
+        isError,
         refetch: queryState.refetch,
       };
     }
@@ -314,6 +316,7 @@ describe("ActionsPage", () => {
     vi.clearAllMocks();
     queryState.isLoading = false;
     queryState.isError = false;
+    queryState.errorKeys.clear();
     queryState.refetch.mockClear();
     queryState.dataUpdatedAt = Date.now();
     queryState.attempts = [];
@@ -452,6 +455,19 @@ describe("ActionsPage", () => {
     const bypass = screen.getByRole("region", { name: "Bypass risk detail" });
     expect(within(bypass).getByText("Control bypass detected")).toBeInTheDocument();
     expect(within(bypass).getByText("ai_agent:refund-agent")).toBeInTheDocument();
+  });
+
+  it("keeps action visibility live when only billing meters fail", async () => {
+    queryState.billingUsage = null;
+    queryState.errorKeys.add("billing:usage:protected-action-dashboard");
+
+    renderActionsPage();
+
+    expect(await screen.findByRole("heading", { name: "Bypass risk" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Action visibility unavailable" })).not.toBeInTheDocument();
+    expect(screen.getByText("Quota usage unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Action lifecycle data is still live. Refresh billing before making plan or quota decisions.")).toBeInTheDocument();
+    expect(screen.queryByText("One or more lifecycle feeds failed")).not.toBeInTheDocument();
   });
 
   it("shows action-intent lifecycle details with receipt, timeline, and execution attempts", async () => {

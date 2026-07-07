@@ -288,7 +288,6 @@ export default function ActionsPage() {
   });
 
   const loading =
-    billingQuery.isLoading ||
     actionIntentsQuery.isLoading ||
     decisionsQuery.isLoading ||
     outcomesQuery.isLoading ||
@@ -297,7 +296,6 @@ export default function ActionsPage() {
     sourceMutationSummaryQuery.isLoading ||
     sourceMutationsQuery.isLoading;
   const hasError =
-    billingQuery.isError ||
     actionIntentsQuery.isError ||
     decisionsQuery.isError ||
     outcomesQuery.isError ||
@@ -305,6 +303,7 @@ export default function ActionsPage() {
     outcomeSummaryQuery.isError ||
     sourceMutationSummaryQuery.isError ||
     sourceMutationsQuery.isError;
+  const billingUnavailable = billingQuery.isError;
   const bypassRisk = sourceSummary?.unreceipted ?? 0;
   const connectedBypassFeeds = sourceSummary?.connected_feeds ?? 0;
   const successfulBypassPollers = sourceSummary?.successful_pollers ?? 0;
@@ -412,6 +411,16 @@ export default function ActionsPage() {
       />
 
       <ProtectedActionQuota meter={billing?.protected_actions} />
+
+      {billingUnavailable ? (
+        <section className="al-alert al-tone-warning" role="status">
+          <div>
+            <span className="al-eyebrow">Billing meter</span>
+            <strong>Quota usage unavailable</strong>
+            <p>Action lifecycle data is still live. Refresh billing before making plan or quota decisions.</p>
+          </div>
+        </section>
+      ) : null}
 
       <DashboardWorkspace
         left={(
