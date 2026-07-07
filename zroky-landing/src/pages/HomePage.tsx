@@ -570,7 +570,7 @@ function PrintedReceiptArtifact() {
           <div className="grid grid-cols-[1fr_3.75rem] gap-3">
             <div>
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#777266]">Independent verification</p>
-              <p className="mt-1 break-all text-[11px] font-semibold leading-relaxed text-[#171a15]">verify.zroky.com/receipt/zrk_rc_9f2c41</p>
+              <p className="mt-1 break-words text-[11px] font-semibold leading-relaxed text-[#171a15]">Ed25519 signed with a published Zroky public key</p>
               <div
                 className="mt-3 h-7 w-full opacity-80"
                 style={{
