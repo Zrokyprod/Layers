@@ -758,7 +758,7 @@ def test_ecommerce_ops_pack_installs_three_contracts(client: TestClient) -> None
     assert pack.json()["quickstart_steps"] == [
         "Install ecommerce-ops-v1 for the tenant.",
         "Configure Shopify Admin or commerce source-of-record connector.",
-        "Call guard() before order cancel, inventory adjust, or discount issue.",
+        "Call protect() before order cancel, inventory adjust, or discount issue.",
         "Verify order/customer/inventory state before marking outcome verified.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
@@ -820,7 +820,7 @@ def test_finance_ops_pack_installs_three_contracts(client: TestClient) -> None:
     assert pack.json()["quickstart_steps"] == [
         "Install finance-ops-v1 for the tenant.",
         "Configure NetSuite, ledger, or payment source-of-record connector.",
-        "Call guard() before invoice approval, journal entry, or vendor payout.",
+        "Call protect() before invoice approval, journal entry, or vendor payout.",
         "Verify finance record state and payment reference before closing evidence.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
@@ -881,7 +881,7 @@ def test_outreach_ops_pack_installs_three_contracts(client: TestClient) -> None:
     assert pack.json()["quickstart_steps"] == [
         "Install outreach-ops-v1 for the tenant.",
         "Configure email delivery or sales-engagement source-of-record connector.",
-        "Call guard() before email send, sequence enrollment, or campaign launch.",
+        "Call protect() before email send, sequence enrollment, or campaign launch.",
         "Verify recipient, campaign, and delivery state before evidence publish.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
@@ -942,7 +942,7 @@ def test_data_ops_pack_installs_three_contracts(client: TestClient) -> None:
     assert pack.json()["quickstart_steps"] == [
         "Install data-ops-v1 for the tenant.",
         "Configure warehouse, orchestrator, or read-only Postgres connector.",
-        "Call guard() before pipeline run, record purge, or data export.",
+        "Call protect() before pipeline run, record purge, or data export.",
         "Verify dataset, run status, and destination before evidence publish.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [

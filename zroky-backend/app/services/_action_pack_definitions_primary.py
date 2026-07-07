@@ -443,7 +443,7 @@ DEVOPS_PACK = ActionPackDefinition(
     quickstart_steps=(
         "Install devops-release-v1 for the tenant.",
         "Connect CI/deploy source of record.",
-        "Call guard() before deploy or infra change.",
+        "Call protect() before deploy or infra change.",
         "Require CI proof and owner approval before release.",
     ),
     contract_templates=(
@@ -510,7 +510,7 @@ ECOMMERCE_OPS_PACK = ActionPackDefinition(
     quickstart_steps=(
         "Install ecommerce-ops-v1 for the tenant.",
         "Configure Shopify Admin or commerce source-of-record connector.",
-        "Call guard() before order cancel, inventory adjust, or discount issue.",
+        "Call protect() before order cancel, inventory adjust, or discount issue.",
         "Verify order/customer/inventory state before marking outcome verified.",
     ),
     contract_templates=(
