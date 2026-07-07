@@ -72,7 +72,7 @@ class _FakeRazorpayClient:
         self.amount = 1_592_000
         self.payment_status = "captured"
         self.order_status = "paid"
-        self.notes = {"org_id": "org_razorpay", "plan_code": "pro"}
+        self.notes = {"org_id": "org_razorpay", "plan_code": "team"}
         self.payment = _FakeRazorpayPaymentClient(self)
         self.order = _FakeRazorpayOrderClient(self)
 
@@ -190,7 +190,7 @@ def test_owner_billing_accounts_include_razorpay_dashboard(client, monkeypatch: 
                 payment_customer_ref="billing@example.com",
                 payment_subscription_ref="pay_123",
                 payment_request_ref="order_123",
-                plan_code="pro",
+                plan_code="team",
                 status="active",
                 sla_tier="team",
                 seats=5,
@@ -245,7 +245,7 @@ def test_owner_billing_payment_recovery_reports_pending_and_reconciled_events(
                     {
                         "payment_id": "rzp_pay_recovered",
                         "order_id": "rzp_order_recovered",
-                        "plan_code": "pro",
+                        "plan_code": "team",
                     }
                 ),
             )
@@ -271,8 +271,8 @@ def test_owner_can_run_razorpay_reconciliation(client, monkeypatch: pytest.Monke
     monkeypatch.setenv("ZROKY_EXCHANGE_RATE_USD_TO_INR", "80")
     get_settings.cache_clear()
     fake_razorpay = _FakeRazorpayClient()
-    fake_razorpay.notes = {"org_id": "org_razorpay", "plan_code": "pro"}
-    fake_razorpay.amount, _ = _razorpay_amount_for_plan("pro")
+    fake_razorpay.notes = {"org_id": "org_razorpay", "plan_code": "team"}
+    fake_razorpay.amount, _ = _razorpay_amount_for_plan("team")
     monkeypatch.setattr(
         "app.services.razorpay_reconciliation._razorpay_client",
         lambda: fake_razorpay,
@@ -284,7 +284,7 @@ def test_owner_can_run_razorpay_reconciliation(client, monkeypatch: pytest.Monke
                 plan_code="free",
                 status="active",
                 payment_provider="razorpay",
-                payment_request_ref="rzp_order_123:pro",
+                payment_request_ref="rzp_order_123:team",
             )
         )
         db.commit()
@@ -298,7 +298,7 @@ def test_owner_can_run_razorpay_reconciliation(client, monkeypatch: pytest.Monke
     with session_factory() as db:
         sub = db.scalar(select(Subscription).where(Subscription.org_id == "org_razorpay"))
         assert sub is not None
-        assert sub.plan_code == "pro"
+        assert sub.plan_code == "team"
         assert sub.payment_subscription_ref == "rzp_pay_123"
         rows = db.execute(
             select(Entitlement).where(
@@ -324,7 +324,7 @@ def test_owner_confirms_razorpay_payment_and_seeds_entitlements(client, monkeypa
         headers=owner_headers,
         json={
             "org_id": "org_razorpay",
-            "plan_code": "pro",
+            "plan_code": "team",
             "payment_ref": "rzp_pay_123",
             "customer_ref": "billing@example.com",
             "payment_request_ref": "rzp_order_123",
@@ -337,7 +337,7 @@ def test_owner_confirms_razorpay_payment_and_seeds_entitlements(client, monkeypa
     payload = res.json()
     assert payload["ok"] is True
     assert payload["org_id"] == "org_razorpay"
-    assert payload["plan_code"] == "pro"
+    assert payload["plan_code"] == "team"
     assert payload["payment_provider"] == "razorpay"
     assert payload["payment_subscription_ref"] == "rzp_pay_123"
     assert payload["provider_verified"] is True
@@ -449,12 +449,13 @@ def test_owner_pricing_plans_exposes_backend_entitlement_contract(client, monkey
     assert res.status_code == 200
     payload = res.json()
     assert payload["source_of_truth"] == "api-contracts/pricing-plans.json"
-    assert payload["canonical_plan_order"] == ["free", "starter", "pro", "enterprise"]
-    assert payload["aliases"] == {"pilot": "starter", "plus": "pro"}
+    assert payload["canonical_plan_order"] == ["free", "starter", "team", "scale", "enterprise"]
+    assert payload["aliases"] == {"pilot": "starter", "pro": "team", "plus": "scale"}
     assert payload["drift"] == []
 
     plans = {plan["code"]: plan for plan in payload["plans"]}
     assert plans["free"]["pricing"]["replay_credits"] == 0
     assert plans["starter"]["pricing"]["golden_sets"] == 5
-    assert plans["pro"]["pricing"]["blocking_ci"] is True
+    assert plans["team"]["pricing"]["blocking_ci"] is True
+    assert plans["scale"]["pricing"]["blocking_ci"] is True
     assert plans["enterprise"]["pricing"]["provider_key_vault"] is True
