@@ -12,6 +12,10 @@ const api = vi.hoisted(() => ({
   upsertProjectMember: vi.fn(),
 }));
 
+const membershipState = vi.hoisted(() => ({
+  role: "owner",
+}));
+
 vi.mock("@/lib/store", () => ({
   useDashboardStore: () => ({
     selectedProject: "proj_1",
@@ -19,6 +23,21 @@ vi.mock("@/lib/store", () => ({
 }));
 
 vi.mock("@/lib/hooks", () => ({
+  useMyProjects: () => ({
+    data: [
+      {
+        membership_id: "mem_current",
+        project_id: "proj_1",
+        project_name: "My Project",
+        role: membershipState.role,
+        is_active: true,
+        created_at: "2026-05-29T10:00:00.000Z",
+        updated_at: "2026-05-29T10:00:00.000Z",
+      },
+    ],
+    isLoading: false,
+    error: null,
+  }),
   useProjectSettings: () => ({
     data: { project_id: "proj_1" },
     isLoading: false,
@@ -39,6 +58,7 @@ const now = "2026-05-29T10:00:00.000Z";
 describe("TeamPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    membershipState.role = "owner";
     api.listProjectMembers.mockResolvedValue([
       {
         membership_id: "m_1",
@@ -131,5 +151,43 @@ describe("TeamPage", () => {
         role: "admin",
       }),
     );
+  });
+
+  it("renders member management read-only for non-admin roles", async () => {
+    membershipState.role = "viewer";
+    api.listProjectMembers.mockResolvedValue([
+      {
+        membership_id: "m_1",
+        project_id: "proj_1",
+        user_id: "u_1",
+        subject: "user:owner@example.com",
+        email: "owner@example.com",
+        role: "owner",
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      },
+      {
+        membership_id: "m_2",
+        project_id: "proj_1",
+        user_id: "u_2",
+        subject: "user:member@example.com",
+        email: "member@example.com",
+        role: "member",
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      },
+    ]);
+
+    render(<TeamPage />);
+
+    expect(await screen.findByText("member@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Your role is Viewer. Member access is read-only for this account.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Send invite" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("combobox", { name: "Change role for member@example.com" })).toHaveProperty("disabled", true);
+    expect(screen.getAllByRole("button", { name: "Remove" })[0]).toHaveProperty("disabled", true);
+    expect(api.upsertProjectMember).not.toHaveBeenCalled();
   });
 });

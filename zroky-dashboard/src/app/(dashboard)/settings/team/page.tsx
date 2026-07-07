@@ -17,7 +17,7 @@ import { DashboardButton } from "@/components/dashboard-button";
 import { SettingsHero, SettingsMetricStrip, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import { useDashboardStore } from "@/lib/store";
-import { useProjectSettings } from "@/lib/hooks";
+import { useMyProjects, useProjectSettings } from "@/lib/hooks";
 import {
   createProjectInvitation,
   getBillingMe,
@@ -47,6 +47,11 @@ function roleDescription(role: string | null | undefined): string {
   return "Can operate assigned project workflows without ownership controls.";
 }
 
+function canManageTeamAccess(role: string | null | undefined): boolean {
+  const normalized = role?.trim().toLowerCase();
+  return normalized === "owner" || normalized === "admin";
+}
+
 function principalLabel(member: ProjectMembershipResponse): string {
   return member.email ?? member.subject;
 }
@@ -68,7 +73,13 @@ function invitationStatus(invitation: ProjectInvitationItem): "accepted" | "revo
 export default function TeamPage() {
   const { selectedProject } = useDashboardStore();
   const projectQuery = useProjectSettings();
+  const myProjectsQuery = useMyProjects();
   const projectId = projectQuery.data?.project_id ?? selectedProject;
+  const currentMembership = projectId
+    ? myProjectsQuery.data?.find((project) => project.project_id === projectId) ?? null
+    : null;
+  const canManageAccess = canManageTeamAccess(currentMembership?.role);
+  const readOnlyAccessCopy = "Only owners and admins can manage workspace access.";
 
   const [members, setMembers] = useState<ProjectMembershipResponse[]>([]);
   const [invitations, setInvitations] = useState<ProjectInvitationItem[]>([]);
@@ -116,6 +127,10 @@ export default function TeamPage() {
   async function onInvite(e: FormEvent) {
     e.preventDefault();
     if (!projectId || !inviteEmail.trim()) return;
+    if (!canManageAccess) {
+      setError(readOnlyAccessCopy);
+      return;
+    }
     setInviteBusy(true);
     setError(null);
     const email = inviteEmail.trim();
@@ -141,6 +156,10 @@ export default function TeamPage() {
 
   async function onRevoke(invitationId: string) {
     if (!projectId) return;
+    if (!canManageAccess) {
+      setError(readOnlyAccessCopy);
+      return;
+    }
     try {
       await revokeProjectInvitation(projectId, invitationId);
       setInvitations((prev) => prev.filter((i) => i.invitation_id !== invitationId));
@@ -156,6 +175,10 @@ export default function TeamPage() {
 
   function requestRoleChange(member: ProjectMembershipResponse, newRole: string) {
     if (member.role === newRole) return;
+    if (!canManageAccess) {
+      setError(readOnlyAccessCopy);
+      return;
+    }
     if (isLastActiveOwner(member) && newRole !== "owner") {
       setError("You cannot demote the last active owner on the project.");
       return;
@@ -169,6 +192,11 @@ export default function TeamPage() {
 
   async function changeMemberRole(member: ProjectMembershipResponse, newRole: string) {
     if (!projectId) return;
+    if (!canManageAccess) {
+      setError(readOnlyAccessCopy);
+      setRoleChangeTarget(null);
+      return;
+    }
     setBusyMemberId(member.membership_id);
     setError(null);
     try {
@@ -184,6 +212,10 @@ export default function TeamPage() {
   }
 
   function requestMemberActive(member: ProjectMembershipResponse, active: boolean) {
+    if (!canManageAccess) {
+      setError(readOnlyAccessCopy);
+      return;
+    }
     if (!active && isLastActiveOwner(member)) {
       setError("You cannot remove the last active owner on the project.");
       return;
@@ -193,6 +225,11 @@ export default function TeamPage() {
 
   async function setMemberActive() {
     if (!projectId || !activeChangeTarget) return;
+    if (!canManageAccess) {
+      setError(readOnlyAccessCopy);
+      setActiveChangeTarget(null);
+      return;
+    }
     const { member, active } = activeChangeTarget;
     setBusyMemberId(member.membership_id);
     setError(null);
@@ -326,6 +363,11 @@ export default function TeamPage() {
       >
 
         {!projectId ? <p className="notif-error team-error">Project context is missing. Reload the dashboard before changing members.</p> : null}
+        {projectId && !canManageAccess ? (
+          <p className="notice team-error">
+            Your role is {roleLabel(currentMembership?.role)}. Member access is read-only for this account.
+          </p>
+        ) : null}
         {error && <p className="notif-error team-error">{error}</p>}
 
         <form onSubmit={onInvite} className="team-invite-form">
@@ -350,6 +392,7 @@ export default function TeamPage() {
                 className="input"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
+                disabled={!canManageAccess}
               />
             </div>
             <div className="field team-field-role">
@@ -359,6 +402,7 @@ export default function TeamPage() {
                 className="input"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value)}
+                disabled={!canManageAccess}
               >
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role} value={role}>{roleLabel(role)}</option>
@@ -369,7 +413,7 @@ export default function TeamPage() {
               type="submit"
               variant="primary"
               loading={inviteBusy}
-              disabled={inviteBusy || !inviteEmail.trim()}
+              disabled={inviteBusy || !inviteEmail.trim() || !canManageAccess}
             >
               {inviteBusy ? "Sending..." : "Send invite"}
             </DashboardButton>
@@ -419,7 +463,7 @@ export default function TeamPage() {
                     aria-label={`Change role for ${m.email ?? m.subject}`}
                     value={m.role}
                     onChange={(e) => requestRoleChange(m, e.target.value)}
-                    disabled={busyMemberId === m.membership_id}
+                    disabled={!canManageAccess || busyMemberId === m.membership_id}
                   >
                     {ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>{roleLabel(role)}</option>
@@ -431,7 +475,7 @@ export default function TeamPage() {
                       type="button"
                       variant="soft"
                       onClick={() => requestMemberActive(m, false)}
-                      disabled={busyMemberId === m.membership_id}
+                      disabled={!canManageAccess || busyMemberId === m.membership_id}
                       title="Remove member"
                     >
                       Remove
@@ -441,7 +485,7 @@ export default function TeamPage() {
                       type="button"
                       variant="primary"
                       onClick={() => requestMemberActive(m, true)}
-                      disabled={busyMemberId === m.membership_id}
+                      disabled={!canManageAccess || busyMemberId === m.membership_id}
                     >
                       Reactivate
                     </DashboardButton>
@@ -490,6 +534,7 @@ export default function TeamPage() {
                     variant="danger"
                     title="Revoke invitation"
                     onClick={() => void onRevoke(inv.invitation_id)}
+                    disabled={!canManageAccess}
                   >
                     Revoke
                   </DashboardButton>
