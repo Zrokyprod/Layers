@@ -695,8 +695,15 @@ export function fetchOwnerProductionReadiness(signal?: AbortSignal): Promise<Own
   return ownerRequest<OwnerProductionReadiness>("/v1/owner/production-readiness", { signal });
 }
 
-export function fetchOwnerUsers(limit = 100, offset = 0): Promise<OwnerUsersResponse> {
-  return ownerRequest<OwnerUsersResponse>(`/v1/owner/users?limit=${limit}&offset=${offset}`);
+export function fetchOwnerUsers(
+  opts: { limit?: number; offset?: number; search?: string } = {},
+): Promise<OwnerUsersResponse> {
+  const params = new URLSearchParams();
+  params.set("limit", String(opts.limit ?? 100));
+  params.set("offset", String(opts.offset ?? 0));
+  const search = opts.search?.trim();
+  if (search) params.set("search", search);
+  return ownerRequest<OwnerUsersResponse>(`/v1/owner/users?${params.toString()}`);
 }
 
 export function fetchOwnerProjects(limit = 100, offset = 0): Promise<OwnerProjectsResponse> {
