@@ -8,7 +8,6 @@ import type {
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
-  AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
   ToolRegistryResponse,
@@ -17,7 +16,6 @@ import AgentDetailPage from "./page";
 
 const api = vi.hoisted(() => ({
   getAgentProfile: vi.fn(),
-  getReliabilityLeaderboard: vi.fn(),
   getToolRegistry: vi.fn(),
   listActionIntents: vi.fn(),
   listActionRunners: vi.fn(),
@@ -94,27 +92,6 @@ function profile(overrides: Partial<AgentProfileResponse> = {}): AgentProfileRes
     is_active: true,
     created_at: now,
     updated_at: now,
-    ...overrides,
-  };
-}
-
-function score(overrides: Partial<AgentScoreView> = {}): AgentScoreView {
-  return {
-    agent_name: "inventory-agent",
-    score_date: "2026-06-28",
-    health_score: 92,
-    fail_rate: 0.02,
-    fail_rate_score: 98,
-    cost_efficiency_score: 90,
-    determinism_score: 88,
-    regression_trend_score: 86,
-    call_count: 10,
-    avg_cost_usd: 0.04,
-    p95_latency_ms: 640,
-    prev_week_fail_rate: 0.03,
-    determinism_breakdown: null,
-    top_failure_axis: null,
-    computed_at: now,
     ...overrides,
   };
 }
@@ -309,7 +286,6 @@ function registry(overrides: Partial<ToolRegistryResponse> = {}): ToolRegistryRe
 
 function mockDetail() {
   api.getAgentProfile.mockResolvedValue(profile());
-  api.getReliabilityLeaderboard.mockResolvedValue([score()]);
   api.listActionIntents.mockResolvedValue({
     items: [intent()],
     total_in_page: 1,

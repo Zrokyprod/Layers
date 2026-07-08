@@ -8,7 +8,7 @@ from typing import Any, Mapping
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ActionIntent, ActionReceipt, SourceMutationRecord
+from app.db.models import ActionIntent, ActionReceipt, SourceMutationPollState, SourceMutationRecord, SystemOfRecordConnectorConfig
 from app.services.protected_action_billing import (
     METER_SOURCE_MUTATIONS,
     reserve_usage_meter,
@@ -229,6 +229,22 @@ def source_mutation_summary(
         select(SourceMutationRecord.classification).where(SourceMutationRecord.project_id == project_id)
     ).scalars().all()
     counts = Counter(rows)
+    connected_feeds = len(
+        db.execute(
+            select(SystemOfRecordConnectorConfig.id).where(
+                SystemOfRecordConnectorConfig.project_id == project_id,
+                SystemOfRecordConnectorConfig.is_active.is_(True),
+            )
+        ).all()
+    )
+    successful_pollers = len(
+        db.execute(
+            select(SourceMutationPollState.id).where(
+                SourceMutationPollState.project_id == project_id,
+                SourceMutationPollState.last_success_at.is_not(None),
+            )
+        ).all()
+    )
     return {
         "total": len(rows),
         "matched_receipt": counts[CLASS_MATCHED_RECEIPT],
@@ -238,6 +254,8 @@ def source_mutation_summary(
         "policy_bypass": counts[CLASS_POLICY_BYPASS],
         "unknown_actor": counts[CLASS_UNKNOWN_ACTOR],
         "unreceipted": sum(counts[item] for item in BYPASS_CLASSIFICATIONS),
+        "connected_feeds": connected_feeds,
+        "successful_pollers": successful_pollers,
     }
 
 

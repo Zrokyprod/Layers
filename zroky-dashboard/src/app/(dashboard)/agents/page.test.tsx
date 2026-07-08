@@ -8,7 +8,6 @@ import type {
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
-  AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
   SourceMutationView,
@@ -16,7 +15,6 @@ import type {
 import AgentsPage from "./page";
 
 const api = vi.hoisted(() => ({
-  getReliabilityLeaderboard: vi.fn(),
   listActionIntents: vi.fn(),
   listActionRunners: vi.fn(),
   listAgentProfiles: vi.fn(),
@@ -132,27 +130,6 @@ function setupPolicyProfile(overrides: Partial<AgentProfileResponse> = {}): Agen
   });
 }
 
-function score(overrides: Partial<AgentScoreView> = {}): AgentScoreView {
-  return {
-    agent_name: "inventory-agent",
-    score_date: "2026-06-28",
-    health_score: 92,
-    fail_rate: 0.02,
-    fail_rate_score: 98,
-    cost_efficiency_score: 90,
-    determinism_score: 88,
-    regression_trend_score: 86,
-    call_count: 10,
-    avg_cost_usd: 0.04,
-    p95_latency_ms: 640,
-    prev_week_fail_rate: 0.03,
-    determinism_breakdown: null,
-    top_failure_axis: null,
-    computed_at: now,
-    ...overrides,
-  };
-}
-
 function decision(overrides: Partial<RuntimePolicyDecisionResponse> = {}): RuntimePolicyDecisionResponse {
   return {
     id: "decision_inventory",
@@ -190,6 +167,14 @@ function intent(overrides: Partial<ActionIntentResponse> = {}): ActionIntentResp
   return {
     action_id: "act_inventory",
     project_id: "proj_1",
+    agent_id: "agent_profile_inventory",
+    agent_profile: {
+      id: "agent_profile_inventory",
+      display_name: "Inventory Agent",
+      slug: "inventory-agent",
+      runtime_path: "sdk",
+      environment: "production",
+    },
     contract_version: "inventory.item.delete/1.0",
     action_type: "inventory.item.delete",
     operation_kind: "DELETE",
@@ -315,7 +300,6 @@ function mockAgents({
   activeCount = profiles.filter((item) => item.is_active).length,
   cap = 3,
   limitReached = false,
-  scores = [score()],
   intents = [intent()],
   decisions = [decision()],
   outcomes = [outcome()],
@@ -328,7 +312,6 @@ function mockAgents({
   activeCount?: number;
   cap?: number;
   limitReached?: boolean;
-  scores?: AgentScoreView[];
   intents?: ActionIntentResponse[];
   decisions?: RuntimePolicyDecisionResponse[];
   outcomes?: OutcomeReconciliationView[];
@@ -346,7 +329,6 @@ function mockAgents({
     max_active_agents: cap,
     limit_reached: limitReached,
   });
-  api.getReliabilityLeaderboard.mockResolvedValue(scores);
   api.listActionIntents.mockResolvedValue({
     items: intents,
     total_in_page: intents.length,
@@ -437,7 +419,6 @@ describe("AgentsPage", () => {
       profiles: [],
       activeCount: 0,
       cap: -1,
-      scores: [],
       intents: [],
       decisions: [],
       outcomes: [],
@@ -456,6 +437,8 @@ describe("AgentsPage", () => {
       intents: [
         intent({
           action_id: "act_shadow",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_shadow",
           canonical_intent: {
             principal: { id: "shadow-agent" },
@@ -499,9 +482,10 @@ describe("AgentsPage", () => {
 
     const table = screen.getByLabelText("Agent fleet table");
     expect(within(table).getByText("Control bypass")).toBeInTheDocument();
-    expect(within(table).getByText("50% covered")).toBeInTheDocument();
-    expect(within(table).getByText("2 signals")).toBeInTheDocument();
-    expect(within(table).getByText("1 bypass / 1 sequence")).toBeInTheDocument();
+    expect(within(table).getByText("0% covered")).toBeInTheDocument();
+    expect(within(table).getAllByText("1 signal").length).toBeGreaterThan(0);
+    expect(within(table).getByText("1 bypass / 0 sequence")).toBeInTheDocument();
+    expect(within(table).getByText("0 bypass / 1 sequence")).toBeInTheDocument();
 
     const inspector = screen.getByLabelText("Selected agent control");
     expect(within(inspector).getByText("Bypass")).toBeInTheDocument();
@@ -516,6 +500,8 @@ describe("AgentsPage", () => {
       intents: [
         intent({
           action_id: "act_shadow",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_shadow",
           canonical_intent: {
             principal: { id: "shadow-agent" },
@@ -529,7 +515,6 @@ describe("AgentsPage", () => {
       outcomes: [],
       runners: [],
       attempts: [],
-      scores: [],
     });
 
     renderAgentsPage();
@@ -549,6 +534,8 @@ describe("AgentsPage", () => {
       intents: [
         intent({
           action_id: "act_shadow",
+          agent_id: null,
+          agent_profile: null,
           runtime_policy_decision_id: "decision_shadow",
           canonical_intent: {
             principal: { id: "shadow-agent" },
@@ -562,7 +549,6 @@ describe("AgentsPage", () => {
       outcomes: [],
       runners: [],
       attempts: [],
-      scores: [],
     });
 
     renderAgentsPage();
@@ -605,7 +591,6 @@ describe("AgentsPage", () => {
       outcomes: [],
       runners: [],
       attempts: [],
-      scores: [],
     });
 
     renderAgentsPage();

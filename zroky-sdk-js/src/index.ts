@@ -17,6 +17,7 @@ export {
   ZrokyVerifiedActionBlocked,
   ZrokyVerifiedActionError,
 } from "./verified-action";
+export { protect } from "./protect";
 export { verifyOutcome, ZrokyOutcomeVerificationError } from "./verify";
 export { outcome } from "./outcome";
 export { promptFingerprint } from "./fingerprint";
@@ -36,6 +37,7 @@ export type {
   VerifiedActionDecision,
   VerifiedActionOptions,
 } from "./verified-action";
+export type { ProtectOptions, ProtectResult } from "./protect";
 export type {
   OutcomeReconciliationView,
   OutcomeVerificationVerdict,

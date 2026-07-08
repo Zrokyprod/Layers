@@ -390,7 +390,7 @@ export function ApprovalInspector({
                   <strong>{row.kind === "guard_only_hold" ? "Guard-only runtime decision" : field(row.intentStatus, "Intent held")}</strong>
                   <p>
                     {row.kind === "guard_only_hold"
-                      ? "This guard() decision did not create a kernel action intent, so execution and receipt are partial."
+                      ? "This lower-level guard decision did not create a kernel action intent, so execution and receipt are partial."
                       : `${row.actionType} / ${row.operationKind ?? "operation"} / ${row.environment ?? "environment"}`}
                   </p>
                 </div>

@@ -197,8 +197,8 @@ function AgentInspector({
               <strong>{formatCount(row.riskSignals.sequenceRisk)}</strong>
             </div>
             <div>
-              <span>Health</span>
-              <strong>{row.healthScore == null ? "Not scored yet" : Math.round(row.healthScore)}</strong>
+              <span>Receipts</span>
+              <strong>{formatCount(row.actionRollup.receiptsGenerated)}</strong>
             </div>
           </div>
 

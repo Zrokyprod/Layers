@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AccountPage from "./page";
 
 const api = vi.hoisted(() => ({
+  confirmTotpMfa: vi.fn(),
   deleteAccount: vi.fn(),
+  disableTotpMfa: vi.fn(),
   getBillingMe: vi.fn(),
   getBillingUsage: vi.fn(),
   getSecurityStatus: vi.fn(),
   logoutAllSessions: vi.fn(),
+  startTotpMfa: vi.fn(),
 }));
 
 const hooks = vi.hoisted(() => ({
@@ -67,6 +70,9 @@ vi.mock("@/lib/api", async () => {
 describe("AccountPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hooks.me.has_password = true;
+    hooks.me.github_login = "sanket";
+    hooks.me.google_id = null;
     hooks.updateMeMutateAsync.mockResolvedValue(hooks.me);
     hooks.changePasswordMutateAsync.mockResolvedValue({ detail: "Password changed successfully." });
     api.getSecurityStatus.mockResolvedValue({
@@ -77,6 +83,13 @@ describe("AccountPage", () => {
       current_session_expires_at: "2026-05-30T10:00:00.000Z",
       global_logout_available: true,
     });
+    api.startTotpMfa.mockResolvedValue({
+      secret: "JBSWY3DPEHPK3PXP",
+      otpauth_uri: "otpauth://totp/Zroky:owner@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Zroky",
+      expires_in_seconds: 600,
+    });
+    api.confirmTotpMfa.mockResolvedValue({ detail: "Authenticator MFA enabled. Sign in again to continue." });
+    api.disableTotpMfa.mockResolvedValue({ detail: "Authenticator MFA disabled. Sign in again to continue." });
     api.getBillingMe.mockResolvedValue({
       org_id: "org_1",
       plan_code: "pro",
@@ -98,19 +111,19 @@ describe("AccountPage", () => {
       period_start: "2026-06-01T00:00:00Z",
       period_end: "2026-07-01T00:00:00Z",
       plan_code: "pro",
-      plan_name: "Pro",
+      plan_name: "Team",
       subscription_status: "active",
       calls: { used: 0, limit: null, unlimited: true, overage: null, state: "ok", resets_at: null },
       replay: { used: 0, limit: null, unlimited: true, overage: null, state: "ok", resets_at: null },
       goldens: { used: 0, limit: null, unlimited: true, overage: null, state: "ok", resets_at: null },
       golden_sets: { used: 0, limit: null, unlimited: true, overage: null, state: "ok", resets_at: null },
-      protected_actions: { used: 7, limit: 25000, unlimited: false, overage: null, state: "ok", resets_at: null },
-      policy_checks: { used: 18, limit: 100000, unlimited: false, overage: null, state: "ok", resets_at: null },
-      runner_executions: { used: 4, limit: 25000, unlimited: false, overage: null, state: "ok", resets_at: null },
-      action_receipts: { used: 4, limit: 25000, unlimited: false, overage: null, state: "ok", resets_at: null },
-      verification_checks: { used: 9, limit: 50000, unlimited: false, overage: null, state: "ok", resets_at: null },
-      source_mutations: { used: 11, limit: 100000, unlimited: false, overage: null, state: "ok", resets_at: null },
-      active_connectors: { used: 1, limit: 10, unlimited: false, overage: null, state: "ok", resets_at: null },
+      protected_actions: { used: 7, limit: 10000, unlimited: false, overage: null, state: "ok", resets_at: null },
+      policy_checks: { used: 18, limit: 50000, unlimited: false, overage: null, state: "ok", resets_at: null },
+      runner_executions: { used: 4, limit: 10000, unlimited: false, overage: null, state: "ok", resets_at: null },
+      action_receipts: { used: 4, limit: 10000, unlimited: false, overage: null, state: "ok", resets_at: null },
+      verification_checks: { used: 9, limit: 25000, unlimited: false, overage: null, state: "ok", resets_at: null },
+      source_mutations: { used: 11, limit: 50000, unlimited: false, overage: null, state: "ok", resets_at: null },
+      active_connectors: { used: 1, limit: 6, unlimited: false, overage: null, state: "ok", resets_at: null },
       metering_health: { state: "ok", failure_count: 0, last_failure_at: null, last_failure_type: null, failure_policy: "strict", detail: "Event metering is healthy." },
     });
   });
@@ -123,8 +136,8 @@ describe("AccountPage", () => {
     expect(await screen.findByText("Controlled")).toBeInTheDocument();
     expect(screen.getByLabelText("Account security")).toBeInTheDocument();
     expect(await screen.findByLabelText("Account plan")).toBeInTheDocument();
-    expect(screen.getByText("Pro Plan")).toBeInTheDocument();
-    expect(screen.getByText("7 / 25,000")).toBeInTheDocument();
+    expect(screen.getByText("Team Plan")).toBeInTheDocument();
+    expect(screen.getByText("7 / 10,000")).toBeInTheDocument();
     expect(screen.getByText("Recovery and workspace invites.")).toBeInTheDocument();
     expect(screen.queryByText("u_1")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Account control flow" })).not.toBeInTheDocument();
@@ -145,11 +158,33 @@ describe("AccountPage", () => {
     expect(await screen.findByText("Profile updated.")).toBeInTheDocument();
   });
 
-  it("does not expose fake two-factor controls without backend enrollment", async () => {
+  it("treats OAuth-only login as controlled when sessions are manageable", async () => {
+    hooks.me.has_password = false;
+    api.getSecurityStatus.mockResolvedValue({
+      two_factor_enabled: false,
+      password_login_enabled: false,
+      github_connected: true,
+      google_connected: false,
+      current_session_expires_at: "2026-05-30T10:00:00.000Z",
+      global_logout_available: true,
+    });
+
+    render(<AccountPage />);
+
+    expect(await screen.findByText("Controlled")).toBeInTheDocument();
+    expect(screen.queryByText("Limited login")).not.toBeInTheDocument();
+    expect(await screen.findByText("OAuth only")).toBeInTheDocument();
+  });
+
+  it("starts authenticator MFA setup from backend enrollment", async () => {
     render(<AccountPage />);
 
     expect(await screen.findByText("Account security")).toBeInTheDocument();
-    expect(screen.queryByText(/two-factor/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Set up authenticator" }));
+
+    await waitFor(() => expect(api.startTotpMfa).toHaveBeenCalled());
+    expect(await screen.findByDisplayValue("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enable authenticator" })).toBeInTheDocument();
   });
 
   it("disables global session logout when backend does not allow it", async () => {

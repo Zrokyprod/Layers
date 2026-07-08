@@ -44,7 +44,7 @@ def _resolve_internal_identity(token: str) -> RequestIdentity | None:
             from app.services import token_store
             if token_store.get(f"jwt_blacklisted:{jti}"):
                 return None
-            if user_id and token_store.get(f"jwt_blacklisted_user:{user_id}"):
+            if user_id and token_store.is_user_token_revoked(user_id, claims.get("iat")):
                 return None
         except Exception:  # noqa: BLE001
             pass

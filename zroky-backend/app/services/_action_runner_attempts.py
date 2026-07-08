@@ -415,6 +415,7 @@ def list_project_execution_attempts(
     limit: int = 50,
     offset: int = 0,
     now: datetime | None = None,
+    max_limit: int = 100,
 ) -> list[ActionExecutionAttempt]:
     query = select(ActionExecutionAttempt).where(ActionExecutionAttempt.project_id == project_id)
     if statuses:
@@ -426,7 +427,7 @@ def list_project_execution_attempts(
         db.execute(
             query.order_by(ActionExecutionAttempt.updated_at.asc(), ActionExecutionAttempt.created_at.asc())
             .offset(max(0, int(offset)))
-            .limit(max(1, min(100, int(limit))))
+            .limit(max(1, min(max(1, int(max_limit)), int(limit))))
         ).scalars()
     )
 

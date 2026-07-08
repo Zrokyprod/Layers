@@ -360,69 +360,43 @@ Approval view must show:
 
 SDK contract:
 
-- `guard()` runs immediately before the irreversible tool call
-- `allowed=true` means the action may execute
-- `ZrokyRuntimePolicyApprovalRequired` means the action is held and must not execute yet
-- the exception exposes Python `approval_id` / TypeScript `approvalId`
-- after a human approves, retry the same guarded action with that approval id
+- `protect()` is the golden-path primitive for irreversible agent actions
+- the SDK creates a protected action intent before the tool touches a system of record
+- allowed actions continue through runner execution, verification, and receipt generation
+- held actions must not execute until approval clears
+- lower-level `guard()` / `verified_action()` APIs stay available for custom runtimes
 - rejected, expired, mismatched, or already-consumed approvals fail closed
 
 Python:
 
 ```python
-try:
-    zroky.guard(
-        action_type="refund",
-        tool_name="refund_payment",
-        tool_args={"order_id": "ord_123", "amount": 42.5},
-        external_action=True,
-    )
-except zroky.ZrokyRuntimePolicyApprovalRequired as hold:
-    approval_id = hold.approval_id
-    # Store approval_id and stop. Do not call refund_payment until approved.
-    raise
-
-# After approval in Zroky:
-zroky.guard(
-    action_type="refund",
-    tool_name="refund_payment",
-    tool_args={"order_id": "ord_123", "amount": 42.5},
-    external_action=True,
-    approval_id=approval_id,
+receipt = zroky.protect(
+    action="refund.payment",
+    operation_kind="TRANSFER",
+    params={"order_id": "ord_123", "amount_minor": 4250, "currency": "USD"},
+    purpose={"summary": "Issue approved refund for order ord_123."},
+    resource={"type": "payment", "id": "ord_123"},
+    wait_for_receipt=True,
 )
+
+print(receipt["proof_status"], receipt["receipt_status"])
 ```
 
 TypeScript:
 
 ```ts
-import { guard, ZrokyRuntimePolicyApprovalRequired } from "@zroky-ai/sdk";
+import { protect } from "@zroky-ai/sdk";
 
-let approvalId: string | undefined;
-
-try {
-  await guard({
-    actionType: "refund",
-    toolName: "refund_payment",
-    toolArgs: { order_id: "ord_123", amount: 42.5 },
-    externalAction: true,
-  });
-} catch (error) {
-  if (error instanceof ZrokyRuntimePolicyApprovalRequired) {
-    approvalId = error.approvalId;
-    // Store approvalId and stop. Do not call refund_payment until approved.
-    throw error;
-  }
-  throw error;
-}
-
-// After approval in Zroky:
-await guard({
-  actionType: "refund",
-  toolName: "refund_payment",
-  toolArgs: { order_id: "ord_123", amount: 42.5 },
-  externalAction: true,
-  approvalId,
+const receipt = await protect({
+  action: "refund.payment",
+  operationKind: "TRANSFER",
+  params: { order_id: "ord_123", amount_minor: 4250, currency: "USD" },
+  purpose: { summary: "Issue approved refund for order ord_123." },
+  resource: { type: "payment", id: "ord_123" },
+  waitForReceipt: true,
 });
+
+console.log(receipt.proofStatus, receipt.receiptStatus);
 ```
 
 ### Phase 8: Owner Evidence

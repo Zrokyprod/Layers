@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -15,10 +15,11 @@ import {
   AuthProviderButton,
   AuthShell,
 } from "@/components/auth-shell";
-import { loginWithPassword } from "@/lib/api";
+import { loginWithPassword, verifyMfaLogin } from "@/lib/api";
 import { setPendingPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
 import { buildSignupHref, buildVerifyEmailHref, safeAppPath } from "@/lib/onboarding-intent";
 import { loginSchema, type LoginFormData } from "@/lib/schemas";
+import type { AuthLoginResponse, MfaLoginChallengeResponse } from "@/lib/types";
 
 function authErrorMessage(code: string | null): string {
   switch (code) {
@@ -33,8 +34,15 @@ function authErrorMessage(code: string | null): string {
   }
 }
 
+function isMfaLoginChallenge(res: AuthLoginResponse): res is MfaLoginChallengeResponse {
+  return "mfa_required" in res && res.mfa_required;
+}
+
 function LoginForm() {
   const [error, setError] = useState("");
+  const [mfaChallenge, setMfaChallenge] = useState<{ token: string; email: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaLoading, setMfaLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const visibleError = error || authErrorMessage(searchParams.get("error"));
@@ -52,6 +60,11 @@ function LoginForm() {
     setError("");
     try {
       const res = await loginWithPassword(data.email, data.password);
+      if (isMfaLoginChallenge(res)) {
+        setMfaChallenge({ token: res.challenge_token, email: data.email });
+        setMfaCode("");
+        return;
+      }
       await storeAuthSession(res);
       if (!res.email_verified) {
         router.push(buildVerifyEmailHref(data.email, nextPath));
@@ -62,6 +75,26 @@ function LoginForm() {
       setError(err instanceof Error ? err.message : "Invalid email or password");
     }
   });
+
+  async function onVerifyMfa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!mfaChallenge) return;
+    setError("");
+    setMfaLoading(true);
+    try {
+      const res = await verifyMfaLogin(mfaChallenge.token, mfaCode);
+      await storeAuthSession(res);
+      if (!res.email_verified) {
+        router.push(buildVerifyEmailHref(mfaChallenge.email, nextPath));
+        return;
+      }
+      router.push(nextPath);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Invalid authenticator code");
+    } finally {
+      setMfaLoading(false);
+    }
+  }
 
   const handleOAuthLogin = (provider: "github" | "google") => {
     setPendingPostAuthRedirectPath(nextPath);
@@ -76,34 +109,56 @@ function LoginForm() {
       footer={<Link href={buildSignupHref(nextPath)} className="auth-link">Don&apos;t have an account? Sign up</Link>}
     >
       {visibleError && <div className="auth-banner auth-banner-error">{visibleError}</div>}
-      <div className="auth-oauth-stack">
-        <AuthProviderButton provider="google" onClick={() => handleOAuthLogin("google")} />
-        <AuthProviderButton provider="github" onClick={() => handleOAuthLogin("github")} />
-      </div>
-      <AuthDivider />
-      <form method="post" onSubmit={onSubmit} className="auth-form">
-        <AuthInput
-          label="Email address"
-          type="email"
-          autoComplete="email"
-          placeholder="admin@zroky.com"
-          error={errors.email?.message}
-          {...register("email")}
-        />
-        <AuthInput
-          id="login-password"
-          label="Password"
-          type="password"
-          autoComplete="current-password"
-          placeholder="Your password"
-          error={errors.password?.message}
-          labelAction={<Link href="/forgot-password" className="auth-link">Forgot password?</Link>}
-          {...register("password")}
-        />
-        <AuthButton type="submit" loading={isSubmitting} loadingLabel="Signing in...">
-          Sign in
-        </AuthButton>
-      </form>
+      {mfaChallenge ? (
+        <form method="post" onSubmit={onVerifyMfa} className="auth-form">
+          <AuthInput
+            id="mfa-code"
+            label="Authenticator code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            value={mfaCode}
+            onChange={(event) => setMfaCode(event.target.value)}
+          />
+          <AuthButton type="submit" loading={mfaLoading} loadingLabel="Verifying...">
+            Verify and continue
+          </AuthButton>
+          <button type="button" className="auth-link" onClick={() => setMfaChallenge(null)}>
+            Use a different account
+          </button>
+        </form>
+      ) : (
+        <>
+          <div className="auth-oauth-stack">
+            <AuthProviderButton provider="google" onClick={() => handleOAuthLogin("google")} />
+            <AuthProviderButton provider="github" onClick={() => handleOAuthLogin("github")} />
+          </div>
+          <AuthDivider />
+          <form method="post" onSubmit={onSubmit} className="auth-form">
+            <AuthInput
+              label="Email address"
+              type="email"
+              autoComplete="email"
+              placeholder="admin@zroky.com"
+              error={errors.email?.message}
+              {...register("email")}
+            />
+            <AuthInput
+              id="login-password"
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Your password"
+              error={errors.password?.message}
+              labelAction={<Link href="/forgot-password" className="auth-link">Forgot password?</Link>}
+              {...register("password")}
+            />
+            <AuthButton type="submit" loading={isSubmitting} loadingLabel="Signing in...">
+              Sign in
+            </AuthButton>
+          </form>
+        </>
+      )}
       <AuthAssuranceList
         items={[
           "OAuth and password supported",

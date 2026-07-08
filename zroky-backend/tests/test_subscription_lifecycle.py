@@ -1,18 +1,18 @@
-"""Tests for Module 12 — subscription lifecycle automation (plan §11.4).
+﻿"""Tests for Module 12 â€” subscription lifecycle automation (plan Â§11.4).
 
 Coverage:
   - services.subscription_lifecycle
       * sweep_expired_trials
-          - happy path → state transitions to (free, active)
+          - happy path â†’ state transitions to (free, active)
           - eligibility filter: payment_subscription_ref IS NULL (paid trials skipped)
           - eligibility filter: trial_end in future (skipped)
           - audit row written with before/after snapshots
           - sla_tier preserved across auto-downgrade
           - trial expiry sweep does NOT clear payment_subscription_ref
             (that's past-due-only; here it's already NULL)
-          - idempotent — second run finds no eligible rows
+          - idempotent â€” second run finds no eligible rows
       * sweep_expired_past_due_grace
-          - happy path → state transitions to (free, active),
+          - happy path â†’ state transitions to (free, active),
             payment_subscription_ref cleared
           - eligibility: current_period_end < now - grace_days
           - eligibility: rows still inside grace are skipped
@@ -22,7 +22,7 @@ Coverage:
       * BILLING_LIFECYCLE_SWEEP_ENABLED=false short-circuits
   - routes/billing.py
       * /v1/billing/me surfaces sla_tier
-      * legacy_router is structurally separate from router
+      * retired legacy billing paths stay out of router
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ from app.services.subscription_lifecycle import (
 )
 
 
-# ── fixtures ─────────────────────────────────────────────────────────────────
+# â”€â”€ fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @pytest.fixture()
@@ -127,14 +127,14 @@ def _count_audit(db, *, org_id: str, action: str) -> int:
             AuditLogAdmin.action == action,
         )
     ).scalars().all()
-    # Filter by target_id → the subscription belonging to org_id.
+    # Filter by target_id â†’ the subscription belonging to org_id.
     sub_id = db.execute(
         select(Subscription.id).where(Subscription.org_id == org_id)
     ).scalar_one()
     return sum(1 for r in rows if r.target_id == sub_id)
 
 
-# ── trial expiry ────────────────────────────────────────────────────────────
+# â”€â”€ trial expiry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestSweepExpiredTrials:
@@ -175,7 +175,7 @@ class TestSweepExpiredTrials:
 
     def test_skips_paid_trial_with_payment_subscription_ref(self, db_session) -> None:
         """Customers with a provider subscription must be left to the
-        webhook (`customer.subscription.updated`) — sweeping them would
+        webhook (`customer.subscription.updated`) â€” sweeping them would
         race the event AND `_is_stale_event` would block legitimate
         post-trial upgrades."""
         now = datetime.now(timezone.utc)
@@ -260,7 +260,7 @@ class TestSweepExpiredTrials:
         assert after["status"] == "active"
 
     def test_idempotent(self, db_session) -> None:
-        """Second run finds no eligible rows — first run already
+        """Second run finds no eligible rows â€” first run already
         transitioned the subscription out of `trialing`."""
         now = datetime.now(timezone.utc)
         _make_subscription(
@@ -350,7 +350,7 @@ class TestSweepExpiredTrials:
             sweep_expired_trials(db_session, limit=0)
 
 
-# ── past-due grace expiry ───────────────────────────────────────────────────
+# â”€â”€ past-due grace expiry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestSweepExpiredPastDueGrace:
@@ -403,9 +403,9 @@ class TestSweepExpiredPastDueGrace:
             payment_subscription_ref="sub_custom",
         )
 
-        # Default 7d → still in grace
+        # Default 7d â†’ still in grace
         assert sweep_expired_past_due_grace(db_session).examined == 0
-        # 3d grace → eligible
+        # 3d grace â†’ eligible
         assert sweep_expired_past_due_grace(
             db_session, grace_days=3
         ).transitioned == 1
@@ -497,7 +497,7 @@ class TestSweepExpiredPastDueGrace:
             sweep_expired_past_due_grace(db_session, grace_days=-1)
 
 
-# ── kill-switch on the Celery wrappers ─────────────────────────────────────
+# â”€â”€ kill-switch on the Celery wrappers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestKillSwitch:
@@ -529,42 +529,34 @@ class TestKillSwitch:
             get_settings.cache_clear()
 
 
-# ── route surface (sla_tier in /me + router separation) ─────────────────────
+# â”€â”€ route surface (sla_tier in /me + router separation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestRouterSeparation:
-    """Structural assertions so accidental re-merging of legacy paths
-    into `router` is caught at test time."""
+    """Structural assertions for the modern hosted billing router."""
 
     def test_v113_paths_in_main_router_only(self) -> None:
-        from app.api.routes.billing import legacy_router, router
+        from app.api.routes.billing import router
 
         main_paths = {r.path for r in router.routes}
-        legacy_paths = {r.path for r in legacy_router.routes}
-
-        # §11.3 paths live exclusively on `router`.
         for path in (
             "/v1/billing/checkout",
             "/v1/billing/portal",
             "/v1/billing/webhook",
             "/v1/billing/me",
+            "/v1/billing/usage",
         ):
-            assert path in main_paths, f"missing §11.3 path: {path}"
-            assert path not in legacy_paths
+            assert path in main_paths, f"missing hosted billing path: {path}"
 
-    def test_legacy_paths_in_legacy_router_only(self) -> None:
-        from app.api.routes.billing import legacy_router, router
+    def test_legacy_paths_are_removed(self) -> None:
+        from app.api.routes.billing import router
 
         main_paths = {r.path for r in router.routes}
-        legacy_paths = {r.path for r in legacy_router.routes}
-
         for path in (
             "/v1/billing/plans",
             "/v1/billing/subscription",
         ):
-            assert path in legacy_paths, f"legacy path missing: {path}"
             assert path not in main_paths
-        assert "/v1/billing/usage" in main_paths
 
 
 class TestBillingMeSlaTier:

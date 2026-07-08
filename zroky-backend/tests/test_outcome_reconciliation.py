@@ -683,10 +683,12 @@ def test_reconciliation_api_creates_mismatch_and_lists_by_call(tmp_path: Path) -
             assert body["verdict"] == "mismatched"
             assert body["reason"] == "field_mismatch"
             assert body["comparison"]["mismatches"][0]["field"] == "amount_usd"
+            assert body["reverify_connector"] is None
 
             by_call = client.get("/v1/outcomes/reconciliation/by-call/call_refund_api")
             assert by_call.status_code == 200
             assert by_call.json()["items"][0]["id"] == body["id"]
+            assert by_call.json()["items"][0]["reverify_connector"] is None
 
             summary = client.get("/v1/outcomes/reconciliation/summary")
             assert summary.status_code == 200
@@ -1350,6 +1352,7 @@ def test_saved_ledger_refund_reconciliation_uses_stored_connector_for_member_run
             body = created.json()
             assert body["verdict"] == "matched"
             assert body["connector_type"] == "ledger_refund_api"
+            assert body["reverify_connector"] == "ledger_refund_api"
             assert body["system_ref"] == "ledger:rf_saved"
             assert body["runtime_policy_decision_id"] == "decision_saved_refund"
             assert body["idempotency_key"] == (
@@ -1675,6 +1678,7 @@ def test_saved_connector_bridge_reconciles_generic_rest_runtime(
             body = created.json()
             assert body["verdict"] == "matched"
             assert body["connector_type"] == "generic_rest_api"
+            assert body["reverify_connector"] == "generic_rest_api"
             assert body["system_ref"] == "generic:ord_bridge"
             assert body["idempotency_key"] == (
                 "saved_generic_rest:decision_bridge_generic:ord_bridge"

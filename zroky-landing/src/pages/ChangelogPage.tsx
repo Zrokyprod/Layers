@@ -81,8 +81,8 @@ const releases = [
       'Evidence preserves receipts, hashes, and exports.',
     ],
     proof: 'Every visible module answers what can act, what happened, and what can be proved.',
-    href: '/#architecture',
-    cta: 'View control loop',
+    href: '/#implementation',
+    cta: 'View implementation path',
   },
   {
     label: 'Onboarding',
@@ -187,8 +187,8 @@ export default function ChangelogPage() {
                 Start with docs
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link to="/#architecture" className="btn-ghost">
-                View control loop
+              <Link to="/#implementation" className="btn-ghost">
+                View implementation path
                 <Workflow className="h-4 w-4" />
               </Link>
             </div>

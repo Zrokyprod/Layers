@@ -204,11 +204,11 @@ function validateExecutionRequest(value: JsonObject | undefined): JsonObject | u
 function credentials(config: ZrokyConfig): { apiKey: string; projectId: string; endpoint?: string } {
   const env = nodeEnv();
   const apiKey = config.apiKey ?? env?.["ZROKY_API_KEY"];
-  const projectId = config.projectId ?? env?.["ZROKY_PROJECT_ID"];
+  const projectId = config.projectId ?? env?.["ZROKY_PROJECT_ID"] ?? env?.["ZROKY_PROJECT"];
   if (!apiKey || !projectId) {
     throw new ZrokyVerifiedActionError("[ZROKY] verifiedAction requires apiKey and projectId.");
   }
-  return { apiKey, projectId, endpoint: config.endpoint ?? env?.["ZROKY_ENDPOINT"] };
+  return { apiKey, projectId, endpoint: config.endpoint ?? env?.["ZROKY_API_URL"] ?? env?.["ZROKY_ENDPOINT"] };
 }
 
 async function requestJson(

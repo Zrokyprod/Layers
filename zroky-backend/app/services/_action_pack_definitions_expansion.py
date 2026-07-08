@@ -16,7 +16,7 @@ FINANCE_OPS_PACK = ActionPackDefinition(
     quickstart_steps=(
         "Install finance-ops-v1 for the tenant.",
         "Configure NetSuite, ledger, or payment source-of-record connector.",
-        "Call guard() before invoice approval, journal entry, or vendor payout.",
+        "Call protect() before invoice approval, journal entry, or vendor payout.",
         "Verify finance record state and payment reference before closing evidence.",
     ),
     contract_templates=(
@@ -179,7 +179,7 @@ OUTREACH_OPS_PACK = ActionPackDefinition(
     quickstart_steps=(
         "Install outreach-ops-v1 for the tenant.",
         "Configure email delivery or sales-engagement source-of-record connector.",
-        "Call guard() before email send, sequence enrollment, or campaign launch.",
+        "Call protect() before email send, sequence enrollment, or campaign launch.",
         "Verify recipient, campaign, and delivery state before evidence publish.",
     ),
     contract_templates=(
@@ -334,7 +334,7 @@ DATA_OPS_PACK = ActionPackDefinition(
     quickstart_steps=(
         "Install data-ops-v1 for the tenant.",
         "Configure warehouse, orchestrator, or read-only Postgres connector.",
-        "Call guard() before pipeline run, record purge, or data export.",
+        "Call protect() before pipeline run, record purge, or data export.",
         "Verify dataset, run status, and destination before evidence publish.",
     ),
     contract_templates=(

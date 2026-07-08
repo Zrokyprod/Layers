@@ -18,9 +18,9 @@ Schema notes (ZROKY-TECHNICAL-PLAN-V2 §5.2 + §6.1 + §6.3):
         AUTH_FAILURE, TOKEN_OVERFLOW, RATE_LIMIT, PROVIDER_ERROR, UNKNOWN
     The mapping helper `map_failure_code_to_detector()` returns None for
     these so callers can skip the upsert cleanly.
-  - The public `/v1/issues` API is backed by these internal rows and should
-    remain the primary customer-facing route. `/v1/anomalies` is retained
-    only as a deprecated compatibility/internal surface.
+  - The public `/v1/issues` API is backed by these internal rows and remains
+    the primary customer-facing route. The deprecated `/v1/anomalies` route
+    alias has been removed.
   - This module never queries the legacy `issues` table.
 """
 from __future__ import annotations

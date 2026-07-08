@@ -537,11 +537,11 @@ describe("DashboardShell primary navigation", () => {
     navState.planCode = "free";
     navState.planTemplate = {
       ...navState.planTemplate,
-      "actions.protected.monthly_quota": 25,
+      "actions.protected.monthly_quota": 500,
     };
     navState.protectedActionsUsage = {
       used: 7,
-      limit: 25,
+      limit: 500,
       unlimited: false,
       overage: null,
       state: "ok",
@@ -552,7 +552,7 @@ describe("DashboardShell primary navigation", () => {
 
     expect(screen.getByText("Free Plan")).toBeInTheDocument();
     expect(screen.getByText("Protected actions")).toBeInTheDocument();
-    expect(screen.getByText("7 / 25")).toBeInTheDocument();
+    expect(screen.getByText("7 / 500")).toBeInTheDocument();
     expect(screen.getByText("used this month")).toBeInTheDocument();
     expect(container.querySelector(".plan-usage-track")).toBeInTheDocument();
   });
@@ -561,7 +561,7 @@ describe("DashboardShell primary navigation", () => {
     navState.planCode = "free";
     navState.planTemplate = {
       ...navState.planTemplate,
-      "actions.protected.monthly_quota": 25,
+      "actions.protected.monthly_quota": 500,
     };
     navState.billingUsageLoading = true;
     navState.billingUsageDataAvailable = false;
@@ -569,7 +569,7 @@ describe("DashboardShell primary navigation", () => {
     render(<DashboardShell>content</DashboardShell>);
 
     expect(screen.getByText("Free Plan")).toBeInTheDocument();
-    expect(screen.getByText("0 / 25")).toBeInTheDocument();
+    expect(screen.getByText("0 / 500")).toBeInTheDocument();
     expect(screen.getByText("syncing usage")).toBeInTheDocument();
   });
 
@@ -597,13 +597,13 @@ describe("DashboardShell primary navigation", () => {
     expect(container.querySelector(".plan-usage-track")).toBeNull();
   });
 
-  it("does not show Pro Plan when billing data is unavailable", () => {
+  it("does not show Team Plan when billing data is unavailable", () => {
     navState.billingDataAvailable = false;
 
     render(<DashboardShell>content</DashboardShell>);
 
     expect(screen.getByText("Plan unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("Pro Plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Team Plan")).not.toBeInTheDocument();
   });
 
   it("keeps Replay available as a deep route without promoting it to primary nav", () => {

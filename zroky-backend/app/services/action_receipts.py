@@ -3,10 +3,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session
 
@@ -36,8 +40,11 @@ from app.services.protected_action_billing import (
 
 
 SCHEMA_VERSION = "zroky.action_receipt.v1"
-SIGNATURE_ALGORITHM = "HMAC-SHA256"
+SIGNATURE_ALGORITHM = "Ed25519"
+RECEIPT_STATUS_GENERATED = "generated"
+LEGACY_HMAC_SIGNATURE_ALGORITHM = "HMAC-SHA256"
 DEV_SIGNING_SECRET = "dev-action-receipt-signing-secret-minimum-32-bytes"
+DEV_ED25519_PRIVATE_KEY_BYTES = hashlib.sha256(b"zroky:dev-action-receipt-ed25519:v1").digest()
 
 
 class ActionReceiptError(ValueError):
@@ -87,18 +94,99 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat()
 
 
-def _signing_secret() -> tuple[str, str]:
+def _signing_key_id() -> str:
+    return get_settings().ACTION_RECEIPT_SIGNING_KEY_ID
+
+
+def _decode_ed25519_private_key(value: str) -> bytes:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ActionReceiptSigningError("ACTION_RECEIPT_ED25519_PRIVATE_KEY is required to sign receipts.")
+    if "BEGIN" in cleaned:
+        private_key = serialization.load_pem_private_key(cleaned.encode("utf-8"), password=None)
+        if not isinstance(private_key, Ed25519PrivateKey):
+            raise ActionReceiptSigningError("ACTION_RECEIPT_ED25519_PRIVATE_KEY must be an Ed25519 private key.")
+        return private_key.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    try:
+        raw = base64.b64decode(cleaned, validate=True)
+    except Exception as exc:
+        raise ActionReceiptSigningError(
+            "ACTION_RECEIPT_ED25519_PRIVATE_KEY must be base64 raw Ed25519 seed bytes or PEM."
+        ) from exc
+    if len(raw) != 32:
+        raise ActionReceiptSigningError("ACTION_RECEIPT_ED25519_PRIVATE_KEY must decode to 32 bytes.")
+    return raw
+
+
+def _ed25519_private_key() -> tuple[Ed25519PrivateKey, str]:
     settings = get_settings()
-    secret = (settings.ACTION_RECEIPT_SIGNING_SECRET or "").strip()
-    if not secret:
+    private_key_value = (settings.ACTION_RECEIPT_ED25519_PRIVATE_KEY or "").strip()
+    if private_key_value:
+        raw_private_key = _decode_ed25519_private_key(private_key_value)
+    else:
         if settings.APP_ENV.strip().lower() == "production":
-            raise ActionReceiptSigningError("ACTION_RECEIPT_SIGNING_SECRET is required to sign receipts.")
-        secret = DEV_SIGNING_SECRET
-    return secret, settings.ACTION_RECEIPT_SIGNING_KEY_ID
+            raise ActionReceiptSigningError(
+                "ACTION_RECEIPT_ED25519_PRIVATE_KEY is required to sign independently verifiable receipts."
+            )
+        raw_private_key = DEV_ED25519_PRIVATE_KEY_BYTES
+    return Ed25519PrivateKey.from_private_bytes(raw_private_key), settings.ACTION_RECEIPT_SIGNING_KEY_ID
 
 
 def _hmac_signature(canonical_payload: str, secret: str) -> str:
     return hmac.new(secret.encode("utf-8"), canonical_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _legacy_signing_secret() -> str:
+    settings = get_settings()
+    secret = (settings.ACTION_RECEIPT_SIGNING_SECRET or "").strip()
+    if not secret and settings.APP_ENV.strip().lower() != "production":
+        secret = DEV_SIGNING_SECRET
+    return secret
+
+
+def _ed25519_signature(canonical_payload: str, private_key: Ed25519PrivateKey) -> str:
+    signature = private_key.sign(canonical_payload.encode("utf-8"))
+    return base64.b64encode(signature).decode("ascii")
+
+
+def _ed25519_public_key_b64(private_key: Ed25519PrivateKey) -> str:
+    public_bytes = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return base64.b64encode(public_bytes).decode("ascii")
+
+
+def action_receipt_public_key_payload() -> dict[str, Any]:
+    private_key, key_id = _ed25519_private_key()
+    return {
+        "key_id": key_id,
+        "algorithm": SIGNATURE_ALGORITHM,
+        "public_key": _ed25519_public_key_b64(private_key),
+        "public_key_encoding": "base64-raw-ed25519",
+        "canonicalization": "json-sort-keys-separators-comma-colon",
+        "signed_payload": "receipt_json",
+    }
+
+
+def verify_receipt_json_with_public_key(
+    *,
+    receipt_json: str,
+    signature: str,
+    public_key: str,
+) -> bool:
+    try:
+        public_key_bytes = base64.b64decode(public_key.strip(), validate=True)
+        signature_bytes = base64.b64decode(signature.strip(), validate=True)
+        verifier = Ed25519PublicKey.from_public_bytes(public_key_bytes)
+        verifier.verify(signature_bytes, receipt_json.encode("utf-8"))
+        return True
+    except (AttributeError, TypeError, ValueError, InvalidSignature):
+        return False
 
 
 def _contract_to_receipt(row: ActionContractVersion | None) -> dict[str, Any] | None:
@@ -340,14 +428,15 @@ def generate_action_receipt(
     except ActionReceiptNotFound:
         existing = None
     if existing is not None:
+        _mark_intent_receipt_generated(db, project_id=project_id, action_id=action_id)
         return GeneratedActionReceipt(existing, created=False)
 
     generated_at = _now()
     core = _build_receipt_core(db, project_id=project_id, action_id=action_id, generated_at=generated_at)
     canonical = _canonical_json(core)
     receipt_digest = _sha256_digest(canonical)
-    secret, key_id = _signing_secret()
-    signature = _hmac_signature(canonical, secret)
+    private_key, key_id = _ed25519_private_key()
+    signature = _ed25519_signature(canonical, private_key)
     reserve_usage_meter(db, project_id, METER_ACTION_RECEIPTS)
     row = ActionReceipt(
         project_id=project_id,
@@ -375,13 +464,30 @@ def generate_action_receipt(
         },
         actor=actor,
     )
+    _mark_intent_receipt_generated(db, project_id=project_id, action_id=action_id)
     return GeneratedActionReceipt(row, created=True)
+
+
+def _mark_intent_receipt_generated(db: Session, *, project_id: str, action_id: str) -> None:
+    intent = db.execute(
+        select(ActionIntent).where(
+            ActionIntent.project_id == project_id,
+            ActionIntent.id == action_id,
+        )
+    ).scalar_one_or_none()
+    if intent is None or intent.receipt_status == RECEIPT_STATUS_GENERATED:
+        return
+    intent.receipt_status = RECEIPT_STATUS_GENERATED
+    db.add(intent)
 
 
 def action_receipt_payload(row: ActionReceipt) -> dict[str, Any]:
     payload = _json_loads(row.receipt_json, {})
     if not isinstance(payload, dict):
         payload = {}
+    public_key_payload = None
+    if row.signature_algorithm == SIGNATURE_ALGORITHM:
+        public_key_payload = action_receipt_public_key_payload()
     return {
         **payload,
         "receipt_id": row.id,
@@ -390,11 +496,24 @@ def action_receipt_payload(row: ActionReceipt) -> dict[str, Any]:
             "algorithm": row.signature_algorithm,
             "value": row.signature,
             "key_id": row.signing_key_id,
+            "public_key": public_key_payload["public_key"] if public_key_payload else None,
+            "public_key_encoding": public_key_payload["public_key_encoding"] if public_key_payload else None,
         },
     }
 
 
 def verify_action_receipt_signature(row: ActionReceipt) -> bool:
-    secret, _ = _signing_secret()
-    expected = _hmac_signature(row.receipt_json, secret)
-    return hmac.compare_digest(expected, row.signature)
+    if row.signature_algorithm == SIGNATURE_ALGORITHM:
+        public_key = action_receipt_public_key_payload()["public_key"]
+        return verify_receipt_json_with_public_key(
+            receipt_json=row.receipt_json,
+            signature=row.signature,
+            public_key=public_key,
+        )
+    if row.signature_algorithm == LEGACY_HMAC_SIGNATURE_ALGORITHM:
+        secret = _legacy_signing_secret()
+        if not secret:
+            return False
+        expected = _hmac_signature(row.receipt_json, secret)
+        return hmac.compare_digest(expected, row.signature)
+    return False

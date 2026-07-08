@@ -5,6 +5,7 @@
   AlertListResponse,
   ActivityFeedResponse,
   AnalyticsSummaryResponse,
+  AuthLoginResponse,
   AuthTokenResponse,
   ApiKeyCreateResponse,
   ApiKeyResponse,
@@ -72,6 +73,7 @@
   EvaluationSettingsResponse,
   ChangePasswordResponse,
   SecurityStatusResponse,
+  MfaTotpStartResponse,
   ProjectInvitationItem,
   AcceptInvitationResponse,
   NotificationListResponse,
@@ -359,6 +361,44 @@ export interface RuntimePolicyEvidencePackResponse {
   hash_payload_excludes: string[];
 }
 
+export type EvidenceManifestFilter = "all" | "matched" | "needs_verification" | "exceptions";
+
+export interface EvidenceManifestResponse {
+  artifact: "zroky.evidence_manifest";
+  schema_version: "zroky.evidence_manifest.v1";
+  generated_at: string;
+  project_id: string;
+  scope: {
+    filter: EvidenceManifestFilter;
+    search: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    total_records: number;
+    exportable_records: number;
+    non_exportable_records: number;
+  };
+  verification: {
+    public_key_url: string;
+    instructions: string[];
+  };
+  records: Array<{
+    action_id: string | null;
+    checked_at: string | null;
+    decision_id: string | null;
+    digest: string | null;
+    export_kind: "receipt" | "evidence_pack" | null;
+    exportable: boolean;
+    href: string;
+    id: string;
+    kind: "action_receipt" | "orphan_decision" | "unlinked_outcome";
+    source_label: string;
+    status: string;
+    system_ref: string | null;
+    title: string;
+    trace_id: string | null;
+  }>;
+}
+
 export type ActionIntentStatus =
   | "validated"
   | "deciding"
@@ -447,6 +487,7 @@ export interface ActionReceiptResponse {
   signature: string;
   signing_key_id: string;
   signature_valid: boolean;
+  signed_payload?: string;
   generated_at: string;
   receipt: Record<string, unknown>;
 }
@@ -562,6 +603,63 @@ export interface AgentProfileListResponse {
   limit_reached: boolean;
 }
 
+export interface ActionPackContractTemplateResponse {
+  contract_key: string;
+  version: string;
+  contract_version: string;
+  action_type: string;
+  operation_kind: string;
+  domain_family: string;
+  risk_class: string;
+  connector_family: string;
+  schema: Record<string, unknown>;
+  verification_profile: Record<string, unknown>;
+}
+
+export interface ActionPackResponse {
+  id: string;
+  display_name: string;
+  summary: string;
+  primary_runtime_path: string;
+  recommended_connectors: string[];
+  native_tool_families: string[];
+  quickstart_steps: string[];
+  dashboard_href: string;
+  contract_templates: ActionPackContractTemplateResponse[];
+}
+
+export interface ActionPackListResponse {
+  items: ActionPackResponse[];
+}
+
+export interface ActionPackInstallResultResponse {
+  contract: ActionContractResponse;
+  created: boolean;
+}
+
+export interface ActionPackInstallResponse {
+  pack: ActionPackResponse;
+  installed_contracts: ActionPackInstallResultResponse[];
+}
+
+export interface ActionContractResponse {
+  id: string;
+  project_id: string;
+  contract_key: string;
+  version: string;
+  contract_version: string;
+  action_type: string;
+  operation_kind: string;
+  domain_family: string;
+  schema_digest: string;
+  schema: Record<string, unknown>;
+  risk_class: string;
+  verification_profile: Record<string, unknown>;
+  connector_family: string | null;
+  status: string;
+  created_at: string;
+}
+
 export interface AgentProfileCreatePayload {
   display_name: string;
   description?: string | null;
@@ -673,6 +771,10 @@ export interface PilotPolicyResponse {
   created_at: string;
   updated_at: string;
 }
+
+export type PilotPolicyUpdatePayload = PilotPolicyPayload & {
+  expected_updated_at?: string | null;
+};
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(`/api/zroky${path}`, "http://local.zroky");
@@ -914,13 +1016,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return (await response.json()) as T;
 }
 
-export function loginWithPassword(email: string, password: string): Promise<AuthTokenResponse> {
-  return request<AuthTokenResponse>("/v1/auth/login", {
+export function loginWithPassword(email: string, password: string): Promise<AuthLoginResponse> {
+  return request<AuthLoginResponse>("/v1/auth/login", {
     method: "POST",
     body: {
       email,
       password,
     },
+  });
+}
+
+export function verifyMfaLogin(challengeToken: string, code: string): Promise<AuthTokenResponse> {
+  return request<AuthTokenResponse>("/v1/auth/mfa/login/verify", {
+    method: "POST",
+    body: { challenge_token: challengeToken, code },
   });
 }
 
@@ -1209,6 +1318,16 @@ export function updateAgentProfile(
 
 export function enforceAgentProfile(agentId: string): Promise<AgentProfileResponse> {
   return request<AgentProfileResponse>(`/v1/agents/${encodeURIComponent(agentId)}/enforce`, {
+    method: "POST",
+  });
+}
+
+export function listActionPacks(signal?: AbortSignal): Promise<ActionPackListResponse> {
+  return request<ActionPackListResponse>("/v1/action-packs", { signal });
+}
+
+export function installActionPack(packId: string): Promise<ActionPackInstallResponse> {
+  return request<ActionPackInstallResponse>(`/v1/action-packs/${encodeURIComponent(packId)}/install`, {
     method: "POST",
   });
 }
@@ -2884,6 +3003,26 @@ export function getSecurityStatus(signal?: AbortSignal): Promise<SecurityStatusR
   return request<SecurityStatusResponse>("/v1/auth/me/security", { signal });
 }
 
+export function startTotpMfa(): Promise<MfaTotpStartResponse> {
+  return request<MfaTotpStartResponse>("/v1/auth/me/mfa/totp/start", {
+    method: "POST",
+  });
+}
+
+export function confirmTotpMfa(currentPassword: string, code: string): Promise<{ detail: string }> {
+  return request<{ detail: string }>("/v1/auth/me/mfa/totp/confirm", {
+    method: "POST",
+    body: { current_password: currentPassword, code },
+  });
+}
+
+export function disableTotpMfa(currentPassword: string, code: string): Promise<{ detail: string }> {
+  return request<{ detail: string }>("/v1/auth/me/mfa/totp", {
+    method: "DELETE",
+    body: { current_password: currentPassword, code },
+  });
+}
+
 export function logoutAllSessions(): Promise<{ detail: string }> {
   return request<{ detail: string }>("/v1/auth/me/logout-all", {
     method: "POST",
@@ -3437,6 +3576,7 @@ export interface OutcomeReconciliationView {
   runtime_policy_decision_id: string | null;
   action_type: string | null;
   connector_type: string;
+  reverify_connector?: string | null;
   system_ref: string | null;
   verdict: OutcomeReconciliationVerdict;
   verification_status?: OutcomeVerificationStatus;
@@ -3512,6 +3652,99 @@ export interface SourceMutationSummaryResponse {
   policy_bypass: number;
   unknown_actor: number;
   unreceipted: number;
+  connected_feeds?: number;
+  successful_pollers?: number;
+}
+
+export interface HomeSummaryResponse {
+  project_id: string;
+  window_days: number;
+  window_start: string;
+  generated_at: string;
+  metrics: {
+    controlled_actions: number;
+    pending_approvals: number;
+    verified_outcomes: number;
+    outcome_checks: number;
+    receipts_generated: number;
+    bypass_mutations: number;
+    unreceipted_mutations: number;
+    sequence_risks: number;
+  };
+  sources?: {
+    home_summary: boolean;
+    intents: boolean;
+    approvals: boolean;
+    outcomes: boolean;
+    outcome_summary: boolean;
+    source_summary: boolean;
+    mutations: boolean;
+    stale_attempts: boolean;
+    agent_profiles: boolean;
+    action_runners: boolean;
+    api_keys: boolean;
+    billing_usage: boolean;
+  };
+  data?: {
+    intents: ActionIntentResponse[];
+    approvals: RuntimePolicyDecisionResponse[];
+    outcomes: OutcomeReconciliationView[];
+    outcome_summary: OutcomeReconciliationSummaryResponse | null;
+    source_summary: SourceMutationSummaryResponse | null;
+    mutations: SourceMutationView[];
+    stale_attempts: ActionExecutionAttemptResponse[];
+    agent_profiles: AgentProfileResponse[];
+    agent_profile_meta: Pick<AgentProfileListResponse, "active_count" | "max_active_agents" | "limit_reached"> | null;
+    action_runners: ActionRunnerResponse[];
+    api_keys: ApiKeyResponse[];
+    billing_usage: BillingUsageResponse | null;
+  };
+}
+
+export interface ActionsLifecycleSummaryResponse {
+  project_id: string;
+  window_days: number;
+  window_start: string;
+  generated_at: string;
+  row_limit: number;
+  source_totals: {
+    intents: number;
+    approvals: number;
+    outcomes: number;
+    mutations: number;
+    stale_attempts: number;
+  };
+  truncated: boolean;
+  truncated_sources: string[];
+  metrics: {
+    controlled_actions: number;
+    held_actions: number;
+    matched_outcomes: number;
+    mismatched_outcomes: number;
+    not_verified_outcomes: number;
+    bypass_risk: number;
+  };
+  sources: {
+    lifecycle_summary: boolean;
+    intents: boolean;
+    approvals: boolean;
+    outcomes: boolean;
+    outcome_summary: boolean;
+    source_summary: boolean;
+    mutations: boolean;
+    stale_attempts: boolean;
+    billing_usage: boolean;
+  };
+  data: {
+    intents: ActionIntentResponse[];
+    approvals: RuntimePolicyDecisionResponse[];
+    outcomes: OutcomeReconciliationView[];
+    outcome_summary: OutcomeReconciliationSummaryResponse | null;
+    source_summary: SourceMutationSummaryResponse | null;
+    mutations: SourceMutationView[];
+    stale_attempts: ActionExecutionAttemptResponse[];
+    billing_usage: BillingUsageResponse | null;
+  };
 }
 
 export interface SavedLedgerRefundReconciliationPayload {
@@ -3656,6 +3889,26 @@ export function getOutcomeReconciliationSummary(
 ): Promise<OutcomeReconciliationSummaryResponse> {
   return request<OutcomeReconciliationSummaryResponse>("/v1/outcomes/reconciliation/summary", {
     query: { days: String(days) },
+    signal,
+  });
+}
+
+export function getHomeSummary(days = 30, signal?: AbortSignal): Promise<HomeSummaryResponse> {
+  return request<HomeSummaryResponse>("/v1/home/summary", {
+    query: { days: String(days) },
+    signal,
+  });
+}
+
+export function getActionsLifecycleSummary(
+  params: { days?: number; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<ActionsLifecycleSummaryResponse> {
+  return request<ActionsLifecycleSummaryResponse>("/v1/actions/lifecycle-summary", {
+    query: {
+      days: String(params.days ?? 30),
+      limit: String(params.limit ?? 200),
+    },
     signal,
   });
 }
@@ -4572,7 +4825,7 @@ export function getPilotPolicy(signal?: AbortSignal): Promise<PilotPolicyRespons
   return request<PilotPolicyResponse>("/v1/pilot/policy", { signal });
 }
 
-export function updatePilotPolicy(policy: PilotPolicyPayload): Promise<PilotPolicyResponse> {
+export function updatePilotPolicy(policy: PilotPolicyUpdatePayload): Promise<PilotPolicyResponse> {
   return request<PilotPolicyResponse>("/v1/pilot/policy", {
     method: "PUT",
     body: policy,
@@ -4742,6 +4995,22 @@ export function getRuntimePolicyEvidencePack(
     `/v1/runtime-policy/decisions/${encodeURIComponent(decisionId)}/evidence`,
     { signal },
   );
+}
+
+export function getEvidenceManifest(
+  query: {
+    filter?: EvidenceManifestFilter;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+    dashboard_origin?: string;
+  } = {},
+  signal?: AbortSignal,
+): Promise<EvidenceManifestResponse> {
+  return request<EvidenceManifestResponse>("/v1/evidence/manifest", {
+    query,
+    signal,
+  });
 }
 
 export function approveRuntimePolicyDecision(

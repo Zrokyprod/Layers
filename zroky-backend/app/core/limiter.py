@@ -37,7 +37,19 @@ def _build_limiter() -> Limiter:
         )
     except Exception:
         storage_uri = "memory://"
-    return Limiter(key_func=get_remote_address, storage_uri=storage_uri)
+    storage_options: dict[str, float] = {}
+    if storage_uri.startswith(("redis://", "rediss://", "redis+unix://")):
+        storage_options = {
+            "socket_connect_timeout": 0.25,
+            "socket_timeout": 1.0,
+        }
+    return Limiter(
+        key_func=get_remote_address,
+        storage_uri=storage_uri,
+        storage_options=storage_options,
+        swallow_errors=True,
+        in_memory_fallback_enabled=True,
+    )
 
 
 limiter: Limiter = _build_limiter()

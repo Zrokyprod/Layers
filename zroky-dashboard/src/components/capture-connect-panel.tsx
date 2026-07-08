@@ -124,7 +124,7 @@ export function CaptureConnectPanel({
 
   const snippets = useMemo(() => {
     const apiBaseUrl = process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL || "https://api.zroky.com";
-    const ingestUrl = `${apiBaseUrl.replace(/\/$/, "")}/v1/ingest`;
+    const apiUrl = apiBaseUrl.replace(/\/$/, "");
     const sdkInstall = "npm install @zroky-ai/sdk";
     const sdkCode = `import OpenAI from "openai";
 import { init, wrap } from "@zroky-ai/sdk";
@@ -132,7 +132,7 @@ import { init, wrap } from "@zroky-ai/sdk";
 init({
   apiKey: "zk_your_key",
   projectId: "${projectId}",
-  endpoint: "${ingestUrl}",
+  endpoint: "${apiUrl}",
   agentName: "support-agent",
   workflowName: "support-resolution",
   promptVersion: "support-v42",
@@ -144,8 +144,8 @@ const response = await openai.chat.completions.create({
   messages: [{ role: "user", content: prompt }],
 });`;
     const gatewayEnv = `$env:ZROKY_EMIT_MODE="http"
-$env:ZROKY_INGEST_URL="${ingestUrl}"
-$env:ZROKY_GATEWAY_HEARTBEAT_URL="${apiBaseUrl.replace(/\/$/, "")}/api/v1/capture/gateway-heartbeat"
+$env:ZROKY_API_URL="${apiUrl}"
+$env:ZROKY_GATEWAY_HEARTBEAT_URL="${apiUrl}/api/v1/capture/gateway-heartbeat"
 $env:ZROKY_CAPTURE_DURABILITY_MODE="fail_closed"
 $env:ZROKY_GATEWAY_API_KEY="zk_your_key"
 go run ./cmd/gateway`;

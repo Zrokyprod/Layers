@@ -57,6 +57,13 @@ beat_schedule["stale-action-execution-attempt-sweep"] = {
     "options": {"queue": "diagnosis_fast"},
 }
 
+if settings.SOURCE_MUTATION_POLLER_ENABLED:
+    beat_schedule["source-mutation-poller"] = {
+        "task": "app.worker.tasks.poll_source_mutations",
+        "schedule": max(30, int(settings.SOURCE_MUTATION_POLLER_INTERVAL_SECONDS)),
+        "options": {"queue": "diagnosis_fast"},
+    }
+
 # Module 12 subscription lifecycle sweeps.
 if settings.BILLING_LIFECYCLE_SWEEP_ENABLED:
     _lifecycle_minute = min(max(int(settings.BILLING_LIFECYCLE_SWEEP_MINUTE), 0), 59)

@@ -3,7 +3,6 @@ import type {
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
-  AgentScoreView,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
   ToolImplementationStatus,
@@ -64,7 +63,6 @@ export type AgentProfileConfig = {
 export type AgentDetailView = {
   profile: AgentProfileResponse;
   row: AgentFleetRow;
-  score: AgentScoreView | null;
   config: AgentProfileConfig;
   latestAction: ActionLifecycleRow | null;
   proofChain: ProofChainStep[];
@@ -83,7 +81,6 @@ export type AgentDetailView = {
 
 export type BuildAgentDetailInput = {
   profile: AgentProfileResponse;
-  scores?: AgentScoreView[];
   intents?: ActionIntentResponse[];
   decisions?: RuntimePolicyDecisionResponse[];
   outcomes?: OutcomeReconciliationView[];
@@ -193,7 +190,6 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
     kind: "profile",
     agentName: profile.display_name,
     profile,
-    score: null,
     telemetryNames: [],
     aliases: [profile.id, profile.slug, profile.display_name],
     status: "profile_ready",
@@ -245,7 +241,6 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
     runners: [],
     attemptSummary: emptyAttemptSummary(),
     latestActivityAt: profile.updated_at,
-    healthScore: null,
     actionRows: [],
     href: `/agents/${encodeURIComponent(profile.id)}`,
   };
@@ -253,7 +248,6 @@ function fallbackRow(profile: AgentProfileResponse): AgentFleetRow {
 
 export function buildAgentDetail({
   profile,
-  scores = [],
   intents = [],
   decisions = [],
   outcomes = [],
@@ -264,7 +258,6 @@ export function buildAgentDetail({
 }: BuildAgentDetailInput): AgentDetailView {
   const fleet = buildFleetView({
     profiles: [profile],
-    scores,
     intents,
     decisions,
     outcomes,
@@ -281,7 +274,6 @@ export function buildAgentDetail({
   return {
     profile,
     row,
-    score: row.score,
     config: profileConfig(profile),
     latestAction,
     proofChain: latestAction?.proofChain ?? [],

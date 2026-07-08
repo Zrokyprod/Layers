@@ -412,14 +412,17 @@ export interface OwnerPricingPlanPrice {
 }
 
 export interface OwnerPricingPlanPublicLimits {
-  calls_per_month: number;
-  retention_days: number;
-  replay_credits: number;
-  golden_traces: number;
-  golden_sets: number;
-  non_blocking_ci: boolean;
-  blocking_ci: boolean;
-  provider_key_vault: boolean;
+  protected_actions_per_month: number;
+  managed_agents: number;
+  connectors: number;
+  approver_seats: number;
+  evidence_retention_days: number;
+  slack_approvals: boolean;
+  scoped_policy_rules_dry_run: boolean;
+  bypass_detection: "none" | "basic" | "full" | "custom";
+  audit_manifest_export: boolean;
+  overage_per_action_usd: number | null;
+  overage_policy: "hard_cap" | "overage" | "custom";
 }
 
 export interface OwnerPricingPlan {
@@ -692,8 +695,15 @@ export function fetchOwnerProductionReadiness(signal?: AbortSignal): Promise<Own
   return ownerRequest<OwnerProductionReadiness>("/v1/owner/production-readiness", { signal });
 }
 
-export function fetchOwnerUsers(limit = 100, offset = 0): Promise<OwnerUsersResponse> {
-  return ownerRequest<OwnerUsersResponse>(`/v1/owner/users?limit=${limit}&offset=${offset}`);
+export function fetchOwnerUsers(
+  opts: { limit?: number; offset?: number; search?: string } = {},
+): Promise<OwnerUsersResponse> {
+  const params = new URLSearchParams();
+  params.set("limit", String(opts.limit ?? 100));
+  params.set("offset", String(opts.offset ?? 0));
+  const search = opts.search?.trim();
+  if (search) params.set("search", search);
+  return ownerRequest<OwnerUsersResponse>(`/v1/owner/users?${params.toString()}`);
 }
 
 export function fetchOwnerProjects(limit = 100, offset = 0): Promise<OwnerProjectsResponse> {

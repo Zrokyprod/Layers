@@ -77,11 +77,20 @@ def check_quota(db: Session, tenant_id: str) -> QuotaDecision:
             )
 
         if current >= limit:
+            overage = current - limit
+            if _plan_allows_overage(db, tenant_id):
+                return QuotaDecision(
+                    allowed=True,
+                    current_count=current,
+                    plan_limit=limit,
+                    overage=overage,
+                    reason="monthly_quota_overage",
+                )
             return QuotaDecision(
                 allowed=False,
                 current_count=current,
                 plan_limit=limit,
-                overage=current - limit,
+                overage=overage,
                 reason="monthly_quota_exceeded",
             )
 
@@ -172,8 +181,17 @@ def _plan_meta(db: Session, tenant_id: str) -> tuple[str | None, str | None]:
         "free": "Free",
         "pilot": "Starter",
         "starter": "Starter",
-        "pro": "Pro",
-        "plus": "Plus",
+        "pro": "Team",
+        "team": "Team",
+        "plus": "Scale",
+        "scale": "Scale",
         "enterprise": "Enterprise",
     }
     return plan_code, names.get(plan_code, plan_code.title())
+
+
+def _plan_allows_overage(db: Session, tenant_id: str) -> bool:
+    plan_code = (
+        entitlements_resolver.get_plan_code(db, tenant_id) or ""
+    ).strip().lower()
+    return bool(plan_code and plan_code != "free")

@@ -171,6 +171,7 @@ def _receipt_response(row) -> ActionReceiptResponse:
         signature=row.signature,
         signing_key_id=row.signing_key_id,
         signature_valid=verify_action_receipt_signature(row),
+        signed_payload=row.receipt_json,
         generated_at=row.generated_at,
         receipt=action_receipt_payload(row),
     )

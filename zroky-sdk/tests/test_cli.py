@@ -18,8 +18,10 @@ from zroky import cli
 def _clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Isolate each test from the user's actual SDK config & buffer."""
     monkeypatch.setenv("ZROKY_INGEST_URL", "http://localhost:8000")
+    monkeypatch.setenv("ZROKY_API_URL", "http://localhost:8000")
     monkeypatch.setenv("ZROKY_API_KEY", "test-key")
     monkeypatch.setenv("ZROKY_PROJECT", "test-project")
+    monkeypatch.setenv("ZROKY_PROJECT_ID", "test-project")
     monkeypatch.setenv("ZROKY_OFFLINE_BUFFER", str(tmp_path / "buf.ndjson"))
 
 
@@ -46,7 +48,10 @@ def test_init_writes_protected_action_starter_files(
     quickstart = tmp_path / "zroky_quickstart.py"
     assert env_file.exists()
     assert quickstart.exists()
-    assert "ZROKY_API_KEY" in env_file.read_text(encoding="utf-8")
+    env_text = env_file.read_text(encoding="utf-8")
+    assert "ZROKY_API_KEY" in env_text
+    assert "ZROKY_PROJECT_ID" in env_text
+    assert "ZROKY_API_URL" in env_text
     assert "zroky.protect(" in quickstart.read_text(encoding="utf-8")
 
 
@@ -128,6 +133,52 @@ def test_doctor_reports_healthy_setup(
     assert captured_get["url"] == "http://localhost:8000/health/live"
     assert captured_get["headers"]["x-api-key"] == "test-key"  # type: ignore[index]
     assert captured_get["headers"]["x-project-id"] == "test-project"  # type: ignore[index]
+
+
+def test_doctor_loads_local_env_file(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ZROKY_API_KEY")
+    monkeypatch.delenv("ZROKY_PROJECT")
+    monkeypatch.delenv("ZROKY_PROJECT_ID", raising=False)
+    monkeypatch.delenv("ZROKY_INGEST_URL")
+    monkeypatch.delenv("ZROKY_API_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            [
+                "# local manual test config",
+                'ZROKY_API_KEY="env-file-key"',
+                "ZROKY_PROJECT_ID=proj_env_file",
+                "ZROKY_API_URL=https://api.env-file.test",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    captured_get: dict[str, object] = {}
+
+    class _FakeResponse:
+        status_code = 200
+        text = '{"status":"ok"}'
+
+    def _fake_get(url: str, headers: dict, timeout: float):  # noqa: ANN001
+        captured_get["url"] = url
+        captured_get["headers"] = headers
+        captured_get["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(cli.httpx, "get", _fake_get)
+
+    rc = cli.main(["doctor"])
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert out["ok"] is True
+    assert captured_get["url"] == "https://api.env-file.test/health/live"
+    assert captured_get["headers"]["x-api-key"] == "env-file-key"  # type: ignore[index]
+    assert captured_get["headers"]["x-project-id"] == "proj_env_file"  # type: ignore[index]
 
 
 def test_ingest_test_requires_api_key(

@@ -70,6 +70,7 @@ def _patch_owner_redis(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
     fake = _FakeRedis()
     for module_name in (
         "app.api.routes._internal.owner_health",
+        "app.api.routes._internal.owner_operations",
         "app.api.routes._internal.owner_pricing_audit",
         "app.api.routes._internal.owner_rate_audit_llm",
     ):
@@ -157,3 +158,81 @@ def test_owner_redis_mutations_write_audit_events(client, monkeypatch: pytest.Mo
 
     rate_metadata = json.loads(rows[2].metadata_json)
     assert rate_metadata["override_keys"] == ["ingest_enforce_rate_limit", "ingest_soft_limit_rpm"]
+
+
+def test_owner_queue_purge_requires_typed_confirmation_and_audits_reason(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    fake = _patch_owner_redis(monkeypatch)
+    fake.store["celery"] = "pending"
+
+    rejected = test_client.request(
+        "DELETE",
+        "/v1/owner/queues/celery/purge",
+        headers=owner_headers,
+        json={"confirm": "PURGE", "reason": "bad click"},
+    )
+
+    assert rejected.status_code == 400
+    assert fake.store["celery"] == "pending"
+    assert _audit_rows(session_factory) == []
+
+    accepted = test_client.request(
+        "DELETE",
+        "/v1/owner/queues/celery/purge",
+        headers=owner_headers,
+        json={"confirm": "PURGE celery", "reason": "clear stuck launch task"},
+    )
+
+    assert accepted.status_code == 200
+    assert accepted.json()["deleted_keys"] == 1
+    rows = _audit_rows(session_factory)
+    assert [row.action for row in rows] == ["owner.queue.purge"]
+    metadata = json.loads(rows[0].metadata_json)
+    assert metadata["target_id"] == "celery"
+    assert metadata["reason"] == "clear stuck launch task"
+
+
+def test_owner_task_revoke_requires_typed_confirmation_and_audits_reason(
+    client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_client, session_factory = client
+    owner_headers = _set_owner_auth(monkeypatch)
+    revoked: list[tuple[str, bool, str | None]] = []
+
+    def fake_revoke(task_id: str, terminate: bool = False, signal: str | None = None) -> None:
+        revoked.append((task_id, terminate, signal))
+
+    monkeypatch.setattr(
+        "app.api.routes._internal.owner_operations.celery_app.control.revoke",
+        fake_revoke,
+    )
+
+    rejected = test_client.post(
+        "/v1/owner/tasks/task-123/revoke",
+        headers=owner_headers,
+        json={"confirm": "REVOKE", "terminate": True, "reason": "bad click"},
+    )
+
+    assert rejected.status_code == 400
+    assert revoked == []
+    assert _audit_rows(session_factory) == []
+
+    accepted = test_client.post(
+        "/v1/owner/tasks/task-123/revoke",
+        headers=owner_headers,
+        json={"confirm": "REVOKE task-123", "terminate": True, "reason": "stuck worker"},
+    )
+
+    assert accepted.status_code == 200
+    assert revoked == [("task-123", True, "SIGKILL")]
+    rows = _audit_rows(session_factory)
+    assert [row.action for row in rows] == ["owner.task.revoke"]
+    metadata = json.loads(rows[0].metadata_json)
+    assert metadata["target_id"] == "task-123"
+    assert metadata["terminate"] is True
+    assert metadata["reason"] == "stuck worker"

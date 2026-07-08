@@ -17,7 +17,12 @@ import type {
   ZohoCrmConnectorStatusResponse,
 } from "@/lib/api";
 import type { GithubConnectionStatusResponse, SlackInstallStatusResponse } from "@/lib/types";
-import { buildConnectorInventory, connectorStateLabel, connectorUpdatedLabel } from "./connector-inventory";
+import {
+  buildConnectorInventory,
+  connectorStateLabel,
+  connectorUpdatedLabel,
+  LAUNCH_VISIBLE_CONNECTOR_IDS,
+} from "./connector-inventory";
 
 function check(overrides: Partial<OutcomeReconciliationView> = {}): OutcomeReconciliationView {
   return {
@@ -472,11 +477,15 @@ describe("connector-inventory", () => {
       "salesforce_crm",
       "zoho_crm",
       "zendesk_ticket",
+      "intercom",
+      "freshdesk_ticket",
       "jira_issue",
       "stripe_refund",
       "stripe_payment",
       "razorpay_refund",
       "netsuite_finance",
+      "quickbooks_ledger",
+      "generic_finance",
       "shopify_admin",
       "ledger_template",
       "customer_template",
@@ -487,11 +496,15 @@ describe("connector-inventory", () => {
       "salesforce_crm",
       "zoho_crm",
       "zendesk_ticket",
+      "intercom",
+      "freshdesk_ticket",
       "jira_issue",
       "stripe_refund",
       "stripe_payment",
       "razorpay_refund",
       "netsuite_finance",
+      "quickbooks_ledger",
+      "generic_finance",
       "shopify_admin",
       "refund_ledger",
       "customer_record",
@@ -506,11 +519,37 @@ describe("connector-inventory", () => {
     ]);
     expect(commerce?.rows.map((row) => row.id)).toEqual(["shopify_admin"]);
     expect(crm?.rows.map((row) => row.id)).toEqual(["hubspot_crm", "salesforce_crm", "zoho_crm", "customer_template"]);
-    expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "jira_issue"]);
-    expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance"]);
+    expect(supportItsm?.rows.map((row) => row.id)).toEqual(["zendesk_ticket", "intercom", "freshdesk_ticket", "jira_issue"]);
+    expect(financeErp?.rows.map((row) => row.id)).toEqual(["netsuite_finance", "quickbooks_ledger", "generic_finance"]);
     expect(databaseCustom?.rows.map((row) => row.id)).toEqual(["generic_rest", "postgres_read"]);
     expect(workflowCategory?.rows.map((row) => row.id)).toEqual(["github", "slack"]);
     expect(inventory.supportRows.every((row) => row.kind === "support" && row.transport === "workflow")).toBe(true);
+  });
+
+  it("can limit the launch surface without deleting advanced connector definitions", () => {
+    const inventory = buildConnectorInventory({
+      ledger: ledgerStatus(),
+      customer: customerStatus(),
+      generic: genericStatus(),
+      postgres: postgresStatus(),
+      github: githubStatus(),
+      slack: slackStatus(),
+      visibleConnectorIds: LAUNCH_VISIBLE_CONNECTOR_IDS,
+    });
+
+    expect(inventory.rows.map((row) => row.id)).toEqual([
+      "generic_rest",
+      "stripe_refund",
+      "postgres_read",
+      "github",
+      "slack",
+    ]);
+    expect(inventory.categoryGroups.map((group) => group.category)).toEqual([
+      "payments",
+      "workflow",
+      "database_custom",
+    ]);
+    expect(inventory.rows.some((row) => row.id === "hubspot_crm" || row.id === "stripe_payment")).toBe(false);
   });
 
   it("focuses counts on verifier health, not vertical connector names", () => {
@@ -525,9 +564,9 @@ describe("connector-inventory", () => {
     });
 
     expect(inventory.counts).toMatchObject({
-      proofTotal: 14,
-      healthyVerifiers: 3,
-      notConfigured: 11,
+      proofTotal: 18,
+      healthyVerifiers: 4,
+      notConfigured: 14,
       failingVerifiers: 0,
       notTested: 0,
       supportTotal: 2,
@@ -1106,7 +1145,7 @@ describe("connector-inventory", () => {
       actionTypes: ["crm.deal.update", "database.record.update", "deploy.change", "finance.invoice.approve"],
     });
 
-    expect(inventory.counts.healthyVerifiers).toBe(4);
+    expect(inventory.counts.healthyVerifiers).toBe(5);
     expect(inventory.counts.coveragePercent).toBe(100);
     expect(inventory.verdict).toMatchObject({
       tone: "success",

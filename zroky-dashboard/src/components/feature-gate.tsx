@@ -21,14 +21,16 @@ export function formatPlanLabel(planCode: string | null | undefined): string {
   if (code === "watch") return "Watch Plan";
   if (code === "pilot") return "Starter Plan";
   if (code === "starter") return "Starter Plan";
-  if (code === "pro") return "Pro Plan";
-  if (code === "plus") return "Plus Plan";
+  if (code === "pro") return "Team Plan";
+  if (code === "team") return "Team Plan";
+  if (code === "plus") return "Scale Plan";
+  if (code === "scale") return "Scale Plan";
   if (code === "enterprise") return "Enterprise Plan";
   return `${code.charAt(0).toUpperCase()}${code.slice(1)} Plan`;
 }
 
 export function isPaidGoldensPlan(planCode: string | null | undefined): boolean {
-  return ["pilot", "starter", "pro", "plus", "enterprise"].includes(normalizePlanCode(planCode));
+  return ["pilot", "starter", "pro", "team", "plus", "scale", "enterprise"].includes(normalizePlanCode(planCode));
 }
 
 export function hasGoldensAccess(
@@ -47,7 +49,9 @@ export function hasCiBlockingAccess(
     hasPlanEntitlement(planTemplate, "pro.ci_gate_blocking") ||
     hasPlanEntitlement(planTemplate, "enterprise.private_replay_worker") ||
     code === "pro" ||
+    code === "team" ||
     code === "plus" ||
+    code === "scale" ||
     code === "enterprise"
   );
 }

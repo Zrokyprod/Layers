@@ -28,6 +28,7 @@ from app.db.models import (
 from app.db.session import get_db_session, get_db_session_read
 from app.main import app
 from app.services.action_post_execution import process_action_post_execution_jobs, sweep_stale_execution_attempts
+from app.services.action_receipts import verify_receipt_json_with_public_key
 from app.services.entitlements import set_override_entitlement
 from app.services.outcome_reconciliation import SourceRecord
 from app.services.pilot import upsert_policy
@@ -181,6 +182,28 @@ def test_verified_action_public_routes_are_rate_limited() -> None:
 def test_planned_verifier_labels_alias_to_generic_rest_connector() -> None:
     for label in ["ticket_status", "email_delivery", "github_ci", "webhook_callback"]:
         assert action_post_execution_service._connector_alias(label) == "generic_rest_api"
+
+
+def test_action_contract_rejects_invalid_operation_kind_before_db(client: TestClient) -> None:
+    project_id = "proj_invalid_operation_kind"
+    _seed_project(client, project_id)
+
+    response = client.post(
+        "/v1/action-contracts",
+        headers={"X-Project-Id": project_id},
+        json={
+            "contract_key": "bad.operation.kind",
+            "version": "1.0",
+            "action_type": "bad.operation.kind",
+            "operation_kind": "WIRE_MONEY",
+            "domain_family": "payments",
+            "risk_class": "R2",
+            "schema": {"type": "object"},
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "operation_kind" in response.text
 
 
 @pytest.fixture()
@@ -697,23 +720,33 @@ def test_action_pack_installs_launch_contracts_for_first_customer_flow(client: T
 
     support_pack = client.get("/v1/action-packs/support-ops-v1", headers={"X-Project-Id": project_id})
     assert support_pack.status_code == 200
-    assert support_pack.json()["contract_templates"][0]["contract_version"] == "customer.refund.transfer/1.0"
+    support_contracts = {
+        item["contract_version"]: item for item in support_pack.json()["contract_templates"]
+    }
+    assert "customer.refund.transfer/1.0" in support_contracts
+    assert "customer.access.grant/1.0" in support_contracts
+    assert "support.ticket.close/1.0" in support_contracts
+    assert "customer.message.send/1.0" in support_contracts
+    assert "customer.data.export/1.0" in support_contracts
 
     installed = client.post("/v1/action-packs/support-ops-v1/install", headers={"X-Project-Id": project_id})
     assert installed.status_code == 201, installed.text
     installed_body = installed.json()
     assert installed_body["pack"]["id"] == "support-ops-v1"
-    assert [item["contract"]["contract_version"] for item in installed_body["installed_contracts"]] == [
-        "customer.refund.transfer/1.0",
-        "customer.record.update/1.0",
-    ]
-    assert [item["created"] for item in installed_body["installed_contracts"]] == [True, True]
+    installed_versions = [item["contract"]["contract_version"] for item in installed_body["installed_contracts"]]
+    assert "customer.refund.transfer/1.0" in installed_versions
+    assert "customer.access.grant/1.0" in installed_versions
+    assert "support.ticket.close/1.0" in installed_versions
+    assert "customer.message.send/1.0" in installed_versions
+    assert "customer.data.export/1.0" in installed_versions
+    assert len(installed_versions) >= 18
+    assert all(item["created"] for item in installed_body["installed_contracts"])
     assert installed_body["installed_contracts"][0]["contract"]["action_type"] == "refund"
     assert installed_body["installed_contracts"][0]["contract"]["connector_family"] == "ledger_refund"
 
     repeated = client.post("/v1/action-packs/support-ops-v1/install", headers={"X-Project-Id": project_id})
     assert repeated.status_code == 201
-    assert [item["created"] for item in repeated.json()["installed_contracts"]] == [False, False]
+    assert all(not item["created"] for item in repeated.json()["installed_contracts"])
 
     intent = client.post(
         "/v1/action-intents",
@@ -747,7 +780,7 @@ def test_ecommerce_ops_pack_installs_three_contracts(client: TestClient) -> None
     assert pack.json()["quickstart_steps"] == [
         "Install ecommerce-ops-v1 for the tenant.",
         "Configure Shopify Admin or commerce source-of-record connector.",
-        "Call guard() before order cancel, inventory adjust, or discount issue.",
+        "Call protect() before order cancel, inventory adjust, or discount issue.",
         "Verify order/customer/inventory state before marking outcome verified.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
@@ -809,7 +842,7 @@ def test_finance_ops_pack_installs_three_contracts(client: TestClient) -> None:
     assert pack.json()["quickstart_steps"] == [
         "Install finance-ops-v1 for the tenant.",
         "Configure NetSuite, ledger, or payment source-of-record connector.",
-        "Call guard() before invoice approval, journal entry, or vendor payout.",
+        "Call protect() before invoice approval, journal entry, or vendor payout.",
         "Verify finance record state and payment reference before closing evidence.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
@@ -870,7 +903,7 @@ def test_outreach_ops_pack_installs_three_contracts(client: TestClient) -> None:
     assert pack.json()["quickstart_steps"] == [
         "Install outreach-ops-v1 for the tenant.",
         "Configure email delivery or sales-engagement source-of-record connector.",
-        "Call guard() before email send, sequence enrollment, or campaign launch.",
+        "Call protect() before email send, sequence enrollment, or campaign launch.",
         "Verify recipient, campaign, and delivery state before evidence publish.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
@@ -931,7 +964,7 @@ def test_data_ops_pack_installs_three_contracts(client: TestClient) -> None:
     assert pack.json()["quickstart_steps"] == [
         "Install data-ops-v1 for the tenant.",
         "Configure warehouse, orchestrator, or read-only Postgres connector.",
-        "Call guard() before pipeline run, record purge, or data export.",
+        "Call protect() before pipeline run, record purge, or data export.",
         "Verify dataset, run status, and destination before evidence publish.",
     ]
     assert [tpl["contract_version"] for tpl in pack.json()["contract_templates"]] == [
@@ -2560,8 +2593,24 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     assert generated.status_code == 201, generated.text
     receipt = generated.json()
     assert receipt["receipt_digest"].startswith("sha256:")
-    assert receipt["signature_algorithm"] == "HMAC-SHA256"
+    assert receipt["signature_algorithm"] == "Ed25519"
     assert receipt["signature_valid"] is True
+    signing_key = client.get("/.well-known/zroky/action-receipt-signing-key")
+    assert signing_key.status_code == 200
+    public_key_payload = signing_key.json()
+    assert public_key_payload["algorithm"] == "Ed25519"
+    assert public_key_payload["key_id"] == receipt["signing_key_id"]
+    assert receipt["receipt"]["signature"]["public_key"] == public_key_payload["public_key"]
+    assert verify_receipt_json_with_public_key(
+        receipt_json=receipt["signed_payload"],
+        signature=receipt["signature"],
+        public_key=public_key_payload["public_key"],
+    ) is True
+    assert verify_receipt_json_with_public_key(
+        receipt_json=receipt["signed_payload"].replace('"planned"', '"tampered"', 1),
+        signature=receipt["signature"],
+        public_key=public_key_payload["public_key"],
+    ) is False
     assert receipt["receipt"]["final_status"] == "planned"
     assert receipt["receipt"]["intent"]["intent_digest"] == intent["intent_digest"]
     assert receipt["receipt"]["intent"]["agent_id"] == agent["id"]
@@ -2576,6 +2625,20 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     )
     assert receipt["receipt"]["evidence"]["evidence_hash"]
     assert receipt["receipt"]["signature"]["value"] == receipt["signature"]
+    with client._session_factory() as signature_session:  # type: ignore[attr-defined]
+        receipt_row = signature_session.get(ActionReceipt, receipt["receipt_id"])
+        assert receipt_row is not None
+        assert receipt_row.receipt_json == receipt["signed_payload"]
+        assert verify_receipt_json_with_public_key(
+            receipt_json=receipt_row.receipt_json,
+            signature=receipt["signature"],
+            public_key=public_key_payload["public_key"],
+        ) is True
+        assert verify_receipt_json_with_public_key(
+            receipt_json=receipt_row.receipt_json.replace('"planned"', '"tampered"', 1),
+            signature=receipt["signature"],
+            public_key=public_key_payload["public_key"],
+        ) is False
 
     fetched = client.get(
         f"/v1/action-intents/{intent['action_id']}/receipt",
@@ -2584,6 +2647,14 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     assert fetched.status_code == 200
     assert fetched.json()["receipt_digest"] == receipt["receipt_digest"]
     assert fetched.json()["signature_valid"] is True
+    intent_after_receipt = client.get(
+        "/v1/action-intents",
+        headers={"X-Project-Id": project_id},
+        params={"receipt_status": "generated"},
+    )
+    assert intent_after_receipt.status_code == 200
+    assert intent_after_receipt.json()["items"][0]["action_id"] == intent["action_id"]
+    assert intent_after_receipt.json()["items"][0]["receipt_status"] == "generated"
 
     timeline_after_receipt = client.get(
         f"/v1/action-intents/{intent['action_id']}/timeline",
@@ -2595,6 +2666,8 @@ def test_action_timeline_and_signed_receipt_bind_kernel_policy_runner_and_eviden
     with client._session_factory() as session:  # type: ignore[attr-defined]
         receipt_row = session.get(ActionReceipt, receipt["receipt_id"])
         assert receipt_row.receipt_digest == receipt["receipt_digest"]
+        action_row = session.get(ActionIntent, intent["action_id"])
+        assert action_row.receipt_status == "generated"
         timeline_rows = (
             session.query(ActionTimelineEvent)
             .filter(ActionTimelineEvent.project_id == project_id)

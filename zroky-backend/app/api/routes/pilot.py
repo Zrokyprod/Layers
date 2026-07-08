@@ -18,7 +18,7 @@ so every endpoint here is gated uniformly per plan §10.x.
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
@@ -181,6 +181,10 @@ class PilotPolicyPayload(BaseModel):
     )
 
 
+class PilotPolicyUpdatePayload(PilotPolicyPayload):
+    expected_updated_at: datetime | None = Field(default=None)
+
+
 class PilotPolicyResponse(BaseModel):
     id: str
     project_id: str
@@ -218,6 +222,12 @@ def _to_policy_response(policy) -> PilotPolicyResponse:
         created_at=policy.created_at,
         updated_at=policy.updated_at,
     )
+
+
+def _normalized_timestamp(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 # ── routes: actions ──────────────────────────────────────────────────────────
@@ -490,7 +500,7 @@ def get_policy(
 @limiter.limit("12/minute")
 def put_policy(
     request: Request,
-    body: PilotPolicyPayload = Body(...),
+    body: PilotPolicyUpdatePayload = Body(...),
     context=Depends(require_tenant_context),
     db: Session = Depends(get_db_session),
 ) -> PilotPolicyResponse:
@@ -498,11 +508,26 @@ def put_policy(
     type + range constraints (booleans, ge=0, ≤1, etc.); the service
     layer merges with the stored policy, re-validates, and trims string
     entries before persisting."""
+    current_policy = get_or_create_policy(db, project_id=context.tenant_id)
+    if body.expected_updated_at is not None and _normalized_timestamp(
+        current_policy.updated_at
+    ) != _normalized_timestamp(body.expected_updated_at):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Policy was updated by another administrator. "
+                "Refresh before saving."
+            ),
+        )
+
     try:
         policy = upsert_policy(
             db,
             project_id=context.tenant_id,
-            payload=body.model_dump(exclude_unset=True),
+            payload=body.model_dump(
+                exclude={"expected_updated_at"},
+                exclude_unset=True,
+            ),
             updated_by=context.subject,
         )
     except PolicyValidationError as exc:

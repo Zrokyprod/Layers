@@ -154,8 +154,12 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("zk_live_created_secret")).toBeInTheDocument();
     expect(screen.getByText("proj_1")).toBeInTheDocument();
     expect(screen.getAllByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"')).length).toBe(2);
+    expect(screen.getAllByText((content) => content.includes('export ZROKY_PROJECT_ID="proj_1"')).length).toBe(2);
+    expect(screen.getAllByText((content) => content.includes('export ZROKY_API_URL="https://api.zroky.com"')).length).toBe(2);
     expect(screen.getAllByText((content) => content.includes("npm install @zroky-ai/sdk")).length).toBeGreaterThan(0);
     expect(screen.getAllByText((content) => content.includes("pip install zroky")).length).toBeGreaterThan(0);
+    expect(screen.queryByText((content) => content.includes("ZROKY_ENDPOINT"))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("ZROKY_INGEST_URL"))).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy key" }));
@@ -193,9 +197,23 @@ describe("ApiKeysPage", () => {
     expect(await screen.findByText("zk_live_rotated_secret")).toBeInTheDocument();
   });
 
+  it("warns before an active runtime key expires", () => {
+    const expiresSoon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    hooks.useListProjectApiKeys.mockReturnValue({
+      data: [apiKey({ expires_at: expiresSoon })],
+      isLoading: false,
+      error: null,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByText("Expiring soon")).toBeInTheDocument();
+    expect(screen.getByText("Expires in 7 days. Rotate before production agents lose auth.")).toBeInTheDocument();
+  });
+
   it("keeps the revoke confirmation flow working", async () => {
     hooks.useListProjectApiKeys.mockReturnValue({
-      data: [apiKey()],
+      data: [apiKey({ name: "failed-key-name" })],
       isLoading: false,
       error: null,
     });
@@ -208,5 +226,8 @@ describe("ApiKeysPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Yes, revoke key" }));
 
     await waitFor(() => expect(revokeMutateAsync).toHaveBeenCalledWith({ projectId: "proj_1", keyId: "key_1" }));
+    const status = await screen.findByText('Key "failed-key-name" revoked.');
+    expect(status.className).toContain("field-success");
+    expect(status.className).not.toContain("field-error");
   });
 });

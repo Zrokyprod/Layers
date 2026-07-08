@@ -11,7 +11,7 @@ def get_redis_client() -> redis.Redis:
     return redis.Redis.from_url(
         settings.REDIS_URL,
         decode_responses=True,
-        socket_connect_timeout=1,
+        socket_connect_timeout=0.25,
         socket_timeout=1,
     )
 

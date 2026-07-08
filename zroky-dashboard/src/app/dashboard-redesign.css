@@ -2810,8 +2810,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-main {
   display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 14px !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
   align-items: start !important;
   min-width: 0 !important;
 }
@@ -2828,9 +2828,27 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card {
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) !important;
+  align-items: start !important;
   align-content: start !important;
-  min-height: 100% !important;
-  padding: 14px !important;
+  min-height: 0 !important;
+  padding: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-active="true"] {
+  border-color: rgba(47, 95, 102, 0.34) !important;
+  background:
+    linear-gradient(180deg, rgba(47, 95, 102, 0.07), rgba(47, 95, 102, 0.018)),
+    #ffffff !important;
+  box-shadow: 0 10px 28px rgba(47, 95, 102, 0.1) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[aria-disabled="true"] {
+  background: rgba(247, 248, 245, 0.78) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[aria-disabled="true"] > *:not(.agent-quickstart-card-head) {
+  opacity: 0.72 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="key"] {
@@ -2839,6 +2857,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="connect"] {
   border-left: 4px solid var(--dash-blue) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="pack"] {
+  border-left: 4px solid var(--dash-green) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-step="run"] {
@@ -2852,10 +2874,14 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head {
   display: grid !important;
-  grid-template-columns: 34px minmax(0, 1fr) !important;
+  grid-template-columns: 34px minmax(0, 1fr) auto !important;
   gap: 10px !important;
   align-items: start !important;
   min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card > *:not(.agent-quickstart-card-head) {
+  grid-column: 2 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head > span {
@@ -2887,6 +2913,34 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--dash-text-soft) !important;
   font-size: 0.78rem !important;
   line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card-head em {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 48px !important;
+  min-height: 24px !important;
+  padding: 0 8px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  color: var(--dash-text-muted) !important;
+  font-size: 0.68rem !important;
+  font-style: normal !important;
+  font-weight: 840 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-active="true"] .agent-quickstart-card-head em {
+  border-color: rgba(47, 95, 102, 0.26) !important;
+  background: var(--dash-green-soft) !important;
+  color: var(--dash-green) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card[data-done="true"] .agent-quickstart-card-head em {
+  border-color: rgba(6, 118, 71, 0.24) !important;
+  background: var(--dash-green-soft) !important;
+  color: var(--dash-green) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-policy,
@@ -3285,6 +3339,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   min-height: 40px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-field input:disabled,
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-field select:disabled {
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-text-muted) !important;
+  cursor: not-allowed !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-field textarea {
   resize: vertical !important;
 }
@@ -3316,6 +3377,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-runtime-grid,
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-readiness-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-setup-readiness-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .agent-setup-toolbox {
@@ -3397,9 +3462,395 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   min-width: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .agent-run-snippets,
+.app-shell[data-dashboard-system="control-v1"] .agent-run-locked {
+  display: grid !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-connected {
+  display: grid !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+  padding: 11px !important;
+  border: 1px solid rgba(6, 118, 71, 0.2) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, rgba(6, 118, 71, 0.08), rgba(255, 255, 255, 0.86)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-quickstart-connected > strong {
+  overflow: hidden !important;
+  color: var(--dash-text) !important;
+  font-size: 0.86rem !important;
+  font-weight: 860 !important;
+  line-height: 1.2 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row {
+  display: grid !important;
+  grid-template-columns: 112px minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  padding: 7px 8px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row > span {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.7rem !important;
+  font-weight: 840 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row code {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: var(--dash-text) !important;
+  font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace) !important;
+  font-size: 0.74rem !important;
+  font-weight: 760 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-command-row button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  min-height: 28px !important;
+  padding: 0 8px !important;
+  border: 1px solid rgba(47, 95, 102, 0.2) !important;
+  border-radius: 7px !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-blue) !important;
+  font-size: 0.7rem !important;
+  font-weight: 820 !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-python-example {
+  display: grid !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-python-example summary {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 36px !important;
+  padding: 0 10px !important;
+  border: 1px dashed var(--dash-border-strong) !important;
+  border-radius: 8px !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.74rem !important;
+  font-weight: 820 !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-python-example[open] {
+  gap: 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-picker {
+  display: grid !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options button {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  min-height: 104px !important;
+  padding: 11px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: var(--dash-text-soft) !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options button[data-selected="true"] {
+  border-color: rgba(47, 95, 102, 0.32) !important;
+  background: var(--dash-green-soft) !important;
+  color: var(--dash-text) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options button:disabled {
+  cursor: default !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options strong {
+  color: var(--dash-text) !important;
+  font-size: 0.82rem !important;
+  font-weight: 860 !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-options span {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.72rem !important;
+  line-height: 1.35 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-detail {
+  display: grid !important;
+  gap: 11px !important;
+  min-width: 0 !important;
+  padding: 12px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 8px !important;
+  background: rgba(247, 250, 248, 0.74) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-detail > div {
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-chip-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  margin-top: 7px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-chip-row span {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 26px !important;
+  max-width: 100% !important;
+  padding: 0 9px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.72rem !important;
+  font-weight: 760 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-builder {
+  display: grid !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  margin-top: 7px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  min-height: 74px !important;
+  padding: 10px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button[data-selected="true"] {
+  border-color: rgba(47, 95, 102, 0.34) !important;
+  background: var(--dash-green-soft) !important;
+  box-shadow: inset 0 0 0 1px rgba(47, 95, 102, 0.08) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button:disabled {
+  cursor: default !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options strong,
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary strong {
+  color: var(--dash-text) !important;
+  font-size: 0.8rem !important;
+  font-weight: 840 !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options .system-card-title {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options .system-card-title > span:last-child {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options .system-logo-badge {
+  width: 25px !important;
+  height: 25px !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 auto !important;
+  border-radius: 7px !important;
+  color: var(--system-logo-color) !important;
+  background: color-mix(in srgb, var(--system-logo-color) 10%, #ffffff) !important;
+  border: 1px solid color-mix(in srgb, var(--system-logo-color) 24%, var(--dash-border)) !important;
+  box-shadow: 0 1px 2px rgba(12, 18, 15, 0.04) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options button[data-selected="true"] .system-logo-badge {
+  background: #ffffff !important;
+  border-color: color-mix(in srgb, var(--system-logo-color) 35%, rgba(47, 95, 102, 0.22)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-engine-options span,
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.71rem !important;
+  line-height: 1.35 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  margin-top: 7px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .finance-capability-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid label {
+  display: grid !important;
+  grid-template-columns: 16px minmax(0, 1fr) !important;
+  gap: 8px !important;
+  align-items: flex-start !important;
+  min-width: 0 !important;
+  min-height: 82px !important;
+  padding: 10px !important;
+  border: 1px solid var(--dash-border) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  cursor: pointer !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid label[data-checked="true"] {
+  border-color: rgba(47, 95, 102, 0.28) !important;
+  background: rgba(247, 250, 248, 0.96) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid input {
+  width: 14px !important;
+  height: 14px !important;
+  margin: 2px 0 0 !important;
+  accent-color: var(--dash-green) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid label > span {
+  display: grid !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid strong {
+  color: var(--dash-text) !important;
+  font-size: 0.76rem !important;
+  font-weight: 820 !important;
+  line-height: 1.2 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-capability-grid small {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.69rem !important;
+  line-height: 1.32 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary {
+  display: grid !important;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(0, 1.28fr) !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  padding: 11px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .support-selection-summary > div:first-child {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-pack-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 9px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-run-locked {
+  padding: 11px !important;
+  border: 1px dashed var(--dash-border-strong) !important;
+  border-radius: 8px !important;
+  background: var(--dash-surface-subtle) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-run-locked strong {
+  color: var(--dash-text) !important;
+  font-size: 0.82rem !important;
+  font-weight: 840 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-run-locked span {
+  color: var(--dash-text-soft) !important;
+  font-size: 0.74rem !important;
+  line-height: 1.38 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-profile-summary {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .agent-profile-summary span {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 26px !important;
+  padding: 0 8px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 999px !important;
+  background: var(--dash-surface-subtle) !important;
+  color: var(--dash-text-soft) !important;
+  font-size: 0.72rem !important;
+  font-weight: 760 !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .agent-runtime-ready {
   display: grid !important;
-  grid-template-columns: 30px minmax(0, 1fr) auto !important;
+  grid-template-columns: 30px minmax(0, 1fr) !important;
   gap: 10px !important;
   align-items: center !important;
   min-width: 0 !important;
@@ -4585,6 +5036,22 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-primary-action {
     grid-template-columns: 1fr !important;
   }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-engine-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-capability-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-selection-summary {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 @media (max-width: 760px) {
@@ -4625,6 +5092,31 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-receipt-grid,
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-code-split {
     grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-quickstart-card > *:not(.agent-quickstart-card-head) {
+    grid-column: 1 !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-pack-options {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .support-engine-options,
+  .app-shell[data-dashboard-system="control-v1"] .support-capability-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-command-row {
+    grid-template-columns: 1fr auto !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .agent-command-row > span {
+    grid-column: 1 / -1 !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .agent-setup-preview-grid,
@@ -6275,6 +6767,29 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   min-width: 0 !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .keys-expiry-warning {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  margin: 2px 0 0 !important;
+  gap: 6px !important;
+  border: 1px solid rgba(191, 122, 31, 0.26) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 248, 230, 0.78) !important;
+  color: #8a520d !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  padding: 5px 8px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-expiry-warning svg {
+  width: 13px !important;
+  height: 13px !important;
+  flex: 0 0 auto !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .keys-card-facts {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -6735,6 +7250,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   font-size: 11px !important;
   font-weight: 600 !important;
   text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .outcomes-panel-note {
+  margin: 8px 0 0 !important;
+  color: var(--mc-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .outcomes-toolbar {
@@ -19687,66 +20209,59 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
+  gap: 12px;
   margin: 0;
   padding: 0;
-  overflow: hidden;
-  border: 1px solid rgba(47, 95, 102, 0.14);
-  border-radius: 10px;
-  background: #f7f8f5;
+  border: 0;
+  background: transparent;
   list-style: none;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps li {
   min-width: 0;
-  border-right: 1px solid rgba(47, 95, 102, 0.12);
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-steps li:last-child {
-  border-right: 0;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  grid-template-areas:
-    "index icon copy"
-    "index icon state";
-  align-items: center;
-  gap: 9px 10px;
-  min-height: 94px;
+  align-content: start;
+  gap: 12px;
+  min-height: 172px;
   height: 100%;
-  padding: 14px 14px 13px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 14px;
+  border: 1px solid rgba(47, 95, 102, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
   color: inherit;
-  text-decoration: none;
+  box-shadow: 0 10px 28px rgba(24, 35, 31, 0.06);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="done"] {
-  background: rgba(22, 163, 74, 0.05);
+  border-color: rgba(22, 163, 74, 0.2);
+  background: rgba(247, 252, 247, 0.92);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] {
+  border-color: rgba(47, 95, 102, 0.34);
   background:
-    linear-gradient(180deg, rgba(47, 95, 102, 0.1), rgba(47, 95, 102, 0.045)),
-    #f6fbfa;
-  box-shadow: inset 0 3px 0 var(--mc-accent);
+    linear-gradient(180deg, rgba(47, 95, 102, 0.1), rgba(47, 95, 102, 0.035)),
+    #fbfdfc;
+  box-shadow: 0 18px 42px rgba(47, 95, 102, 0.14);
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="locked"] {
+  border-color: rgba(47, 95, 102, 0.1);
+  background: rgba(247, 248, 245, 0.68);
   color: var(--mc-text-tertiary);
 }
 
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card:hover,
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card:focus-visible {
-  background: var(--mc-accent-soft);
-  outline: none;
+.app-shell[data-dashboard-system="control-v1"] .mc-step-head {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-index {
-  grid-area: index;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -19771,7 +20286,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-icon {
-  grid-area: icon;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -19784,9 +20298,8 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-copy {
-  grid-area: copy;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -19796,7 +20309,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-copy span {
-  max-width: 220px;
   font-size: 0.76rem;
   line-height: 1.35;
 }
@@ -19806,8 +20318,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-step-state {
-  grid-area: state;
-  justify-self: start;
+  justify-self: end;
   min-width: 46px;
   padding: 3px 8px;
   border: 1px solid var(--mc-border);
@@ -19831,6 +20342,37 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-accent);
 }
 
+.app-shell[data-dashboard-system="control-v1"] .mc-step-foot {
+  display: grid;
+  gap: 8px;
+  align-self: end;
+  margin-top: auto;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-step-hint {
+  min-height: 28px;
+  color: var(--mc-text-tertiary);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-step-card[data-state="current"] .mc-step-hint {
+  color: var(--mc-text-secondary);
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-step-text-link {
+  width: fit-content;
+  color: var(--mc-accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-step-text-link:hover,
+.app-shell[data-dashboard-system="control-v1"] .mc-step-text-link:focus-visible {
+  text-decoration: underline;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-footer {
   display: flex;
   flex-wrap: wrap;
@@ -19838,6 +20380,13 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   justify-content: space-between;
   gap: 14px;
   padding-top: 1px;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .mc-first-run-help {
+  margin: 0;
+  color: var(--mc-text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-first-run-progress {
@@ -19871,13 +20420,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   border-color: rgba(22, 163, 74, 0.3);
   background: rgba(22, 163, 74, 0.1);
   color: #15803d;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .mc-first-run-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .mc-loop-panel {
@@ -20286,16 +20828,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .mc-first-run-footer {
     align-items: stretch;
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .mc-first-run-actions {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .app-shell[data-dashboard-system="control-v1"] .mc-first-run-actions .dashboard-button {
-    width: 100%;
-    flex: 1 1 100%;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .mc-hero-buttons,
@@ -21732,6 +22264,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-text) !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .connectors-workspace {
+  grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .dashboard-verdict-hero,
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .dashboard-metric-card,
 .app-shell[data-dashboard-system="control-v1"] .connectors-page .panel {
@@ -21767,7 +22303,6 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-panel,
 .app-shell[data-dashboard-system="control-v1"] .connectors-inventory-panel,
 .app-shell[data-dashboard-system="control-v1"] .connector-inspector-panel,
-.app-shell[data-dashboard-system="control-v1"] .connectors-support-panel,
 .app-shell[data-dashboard-system="control-v1"] .connectors-detail-section,
 .app-shell[data-dashboard-system="control-v1"] .connectors-generic-panel {
   display: grid !important;
@@ -21824,16 +22359,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   padding: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-panel {
-  padding: 0 !important;
-}
-
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details {
   min-width: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary {
   display: flex !important;
   align-items: center !important;
@@ -21844,32 +22373,27 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   list-style: none !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary::-webkit-details-marker,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary::-webkit-details-marker {
   display: none !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary > span,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary > span {
   display: grid !important;
   gap: 4px !important;
   min-width: 0 !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary strong,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary strong {
   color: var(--mc-text) !important;
   font-size: 0.94rem !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-details > summary small,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-details > summary small {
   color: var(--mc-text-secondary) !important;
   font-size: 0.78rem !important;
   white-space: nowrap !important;
 }
 
-.app-shell[data-dashboard-system="control-v1"] .connectors-readiness-body,
 .app-shell[data-dashboard-system="control-v1"] .connectors-coverage-body {
   display: grid !important;
   gap: 16px !important;
@@ -21936,19 +22460,22 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-list,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-list {
-  gap: 18px !important;
+  gap: 12px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-group,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-group {
   display: grid !important;
-  gap: 10px !important;
+  gap: 8px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-head,
 .app-shell[data-dashboard-system="control-v1"] .connector-transport-head {
-  display: grid !important;
-  gap: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding: 0 2px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-category-head strong,
@@ -21965,22 +22492,21 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-list {
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
-  gap: 12px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
   display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr) !important;
-  align-items: flex-start !important;
-  gap: 13px !important;
+  grid-template-columns: 30px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 8px 10px !important;
   width: 100% !important;
-  min-height: 170px !important;
+  min-height: 86px !important;
   border: 1px solid var(--mc-border) !important;
-  border-left: 0 !important;
   border-radius: var(--mc-radius-control) !important;
   background: #fff !important;
-  padding: 16px !important;
+  padding: 10px !important;
   color: inherit !important;
   text-align: left !important;
   cursor: pointer !important;
@@ -21990,9 +22516,9 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 40px !important;
-  height: 40px !important;
-  border-radius: 10px !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 8px !important;
   flex-shrink: 0 !important;
   color: var(--connector-brand, #635BFF) !important;
   background: color-mix(in srgb, var(--connector-brand, #635BFF) 10%, #fff) !important;
@@ -22024,45 +22550,49 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="success"] {
-  border-top: 3px solid var(--mc-success) !important;
+  border-left: 3px solid var(--mc-success) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="warning"] {
-  border-top: 3px solid var(--mc-warning) !important;
+  border-left: 3px solid var(--mc-warning) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row[data-tone="danger"] {
-  border-top: 3px solid var(--mc-danger) !important;
+  border-left: 3px solid var(--mc-danger) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main {
+  display: grid !important;
   gap: 4px !important;
   min-width: 0 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main strong {
   color: var(--mc-text) !important;
-  font-size: 0.92rem !important;
+  overflow: hidden !important;
+  font-size: 0.82rem !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main small,
 .app-shell[data-dashboard-system="control-v1"] .connector-row-main span,
 .app-shell[data-dashboard-system="control-v1"] .connector-row-status small {
   color: var(--mc-text-secondary) !important;
-  font-size: 0.76rem !important;
+  font-size: 0.72rem !important;
   line-height: 1.4 !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
   display: flex !important;
-  grid-column: 1 / -1 !important;
+  grid-column: 2 !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  gap: 10px !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
   min-width: 0 !important;
-  margin-top: auto !important;
-  border-top: 1px solid var(--mc-border) !important;
-  padding-top: 12px !important;
+  border-top: 0 !important;
+  padding-top: 0 !important;
+  text-align: left !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-inspector-head {
@@ -22115,6 +22645,53 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   color: var(--mc-text-secondary) !important;
   font-size: 0.82rem !important;
   line-height: 1.45 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-left: 3px solid var(--mc-border-strong) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: var(--mc-soft) !important;
+  padding: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status[data-tone="success"] {
+  border-left-color: var(--mc-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status[data-tone="warning"] {
+  border-left-color: var(--mc-warning) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status[data-tone="danger"] {
+  border-left-color: var(--mc-danger) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status > div:first-child,
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-meta {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status strong {
+  color: var(--mc-text) !important;
+  font-size: 0.88rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-status span {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.76rem !important;
+  line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-simple-meta {
+  justify-items: end !important;
+  white-space: nowrap !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-readonly-banner {
@@ -22318,10 +22895,12 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details {
-  border: 1px dashed var(--mc-border-strong) !important;
+  overflow: hidden !important;
+  border: 1px solid var(--mc-border) !important;
   border-radius: var(--mc-radius-control) !important;
-  background: var(--mc-soft) !important;
+  background: #fff !important;
   padding: 0 !important;
+  box-shadow: var(--mc-shadow-rest) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary {
@@ -22329,9 +22908,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   align-items: center !important;
   justify-content: space-between !important;
   gap: 12px !important;
-  padding: 14px !important;
+  padding: 12px 14px !important;
+  background: #fff !important;
   cursor: pointer !important;
   list-style: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details[open] > summary {
+  border-bottom: 1px solid var(--mc-border) !important;
+  background: var(--mc-soft) !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary::-webkit-details-marker {
@@ -22346,21 +22931,106 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-details > summary small {
   max-width: 420px !important;
-  color: var(--mc-text-secondary) !important;
-  font-size: 0.76rem !important;
-  line-height: 1.4 !important;
+  border: 1px solid color-mix(in srgb, var(--mc-success) 26%, var(--mc-border)) !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--mc-success) 8%, #fff) !important;
+  color: var(--mc-success) !important;
+  padding: 4px 8px !important;
+  font-size: 0.7rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
   text-align: right !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-body {
   display: grid !important;
-  gap: 14px !important;
-  border-top: 1px solid var(--mc-border) !important;
+  gap: 12px !important;
+  border-top: 0 !important;
+  background: #fff !important;
   padding: 14px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-section-head,
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-section-head p,
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form-head span,
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connector-fact-grid {
+  display: none !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-setup-body > .connectors-generic-panel {
   margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-layout {
+  align-items: start !important;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-grid {
+  grid-template-columns: 1fr !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-wide {
+  grid-column: auto !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form {
+  align-content: start !important;
+  gap: 10px !important;
+  border: 1px solid var(--mc-border) !important;
+  border-left: 3px solid var(--mc-accent) !important;
+  border-radius: var(--mc-radius-control) !important;
+  background: #fff !important;
+  padding: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form:first-child {
+  border-left-color: var(--mc-success) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form:first-child label {
+  margin-top: 6px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form-head {
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid var(--mc-border) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form-head strong {
+  color: var(--mc-text) !important;
+  font-size: 0.86rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form label span {
+  color: var(--mc-text-secondary) !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form :where(input, textarea) {
+  border-color: var(--mc-border) !important;
+  border-radius: 8px !important;
+  font-size: 0.82rem !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form input {
+  min-height: 38px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-form textarea {
+  max-height: 118px !important;
+  min-height: 88px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .connector-setup-details .dashboard-button {
+  width: 100% !important;
 }
 
 .app-shell[data-dashboard-system="control-v1"] .connector-details-json {
@@ -22625,17 +23295,35 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 }
 
 @media (max-width: 1180px) {
+  .app-shell[data-dashboard-system="control-v1"] .connectors-workspace {
+    grid-template-columns: 1fr !important;
+  }
+
   .app-shell[data-dashboard-system="control-v1"] .connector-fact-grid,
   .app-shell[data-dashboard-system="control-v1"] .connector-launch-grid {
     grid-template-columns: 1fr !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-inventory-row {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 30px minmax(0, 1fr) !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-row-status {
-    align-items: flex-start !important;
+    grid-column: 2 !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    border-top: 0 !important;
+    padding-top: 0 !important;
+    text-align: left !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connector-simple-status {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connector-simple-meta {
+    justify-items: start !important;
+    white-space: normal !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .connector-preflight-main,
@@ -22661,5 +23349,15 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .connectors-rest-actions .dashboard-button {
     width: 100% !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell[data-dashboard-system="control-v1"] .connector-row-list {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-layout {
+    grid-template-columns: 1fr !important;
   }
 }

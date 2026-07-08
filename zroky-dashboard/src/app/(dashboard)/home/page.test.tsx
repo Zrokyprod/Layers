@@ -8,6 +8,7 @@ import type {
   ActionIntentResponse,
   ActionRunnerResponse,
   AgentProfileResponse,
+  HomeSummaryResponse,
   OutcomeReconciliationSummaryResponse,
   OutcomeReconciliationView,
   RuntimePolicyDecisionResponse,
@@ -18,6 +19,7 @@ import type { ApiKeyResponse, BillingUsageMeter, BillingUsageResponse } from "@/
 
 const api = vi.hoisted(() => ({
   getBillingUsage: vi.fn(),
+  getHomeSummary: vi.fn(),
   getOutcomeReconciliationSummary: vi.fn(),
   getSourceMutationSummary: vi.fn(),
   listActionRunners: vi.fn(),
@@ -338,6 +340,44 @@ function apiKey(overrides: Partial<ApiKeyResponse> = {}): ApiKeyResponse {
   };
 }
 
+function homeSummary(
+  overrides: Partial<HomeSummaryResponse["metrics"]> = {},
+  data: HomeSummaryResponse["data"] = {},
+): HomeSummaryResponse {
+  return {
+    project_id: "proj_1",
+    window_days: 30,
+    window_start: "2026-04-29T10:00:00.000Z",
+    generated_at: now,
+    metrics: {
+      controlled_actions: 0,
+      pending_approvals: 0,
+      verified_outcomes: 0,
+      outcome_checks: 0,
+      receipts_generated: 0,
+      bypass_mutations: 0,
+      unreceipted_mutations: 0,
+      sequence_risks: 0,
+      ...overrides,
+    },
+    sources: {
+      home_summary: true,
+      intents: true,
+      approvals: true,
+      outcomes: true,
+      outcome_summary: true,
+      source_summary: true,
+      mutations: true,
+      stale_attempts: true,
+      agent_profiles: true,
+      action_runners: true,
+      api_keys: true,
+      billing_usage: true,
+    },
+    data,
+  };
+}
+
 function mockHomeData(overrides: {
   intents?: ActionIntentResponse[];
   approvals?: RuntimePolicyDecisionResponse[];
@@ -353,7 +393,41 @@ function mockHomeData(overrides: {
   runners?: ActionRunnerResponse[];
   apiKeys?: ApiKeyResponse[];
   billing?: BillingUsageResponse;
+  homeSummary?: HomeSummaryResponse;
 } = {}) {
+  const profiles = overrides.profiles ?? [];
+  const agentProfileMeta = {
+    active_count: overrides.activeAgentCount ?? profiles.filter((item) => item.is_active).length,
+    max_active_agents: overrides.maxActiveAgents ?? -1,
+    limit_reached: overrides.limitReached ?? false,
+  };
+  const summaryData: HomeSummaryResponse["data"] = {
+    intents: overrides.intents ?? [],
+    approvals: overrides.approvals ?? [],
+    outcomes: overrides.outcomes ?? [],
+    outcome_summary: overrides.outcomeSummary ?? outcomeSummary(),
+    source_summary: overrides.sourceSummary ?? sourceSummary(),
+    mutations: overrides.mutations ?? [],
+    stale_attempts: overrides.staleAttempts ?? [],
+    agent_profiles: profiles,
+    agent_profile_meta: agentProfileMeta,
+    action_runners: overrides.runners ?? [],
+    api_keys: overrides.apiKeys ?? [apiKey()],
+    billing_usage: overrides.billing ?? billingUsage(),
+  };
+  api.getHomeSummary.mockResolvedValue(
+    overrides.homeSummary ??
+      homeSummary({
+        controlled_actions: overrides.intents?.length ?? 0,
+        pending_approvals: overrides.approvals?.length ?? 0,
+        verified_outcomes: overrides.outcomeSummary?.matched ?? overrides.outcomes?.filter((item) => item.verdict === "matched").length ?? 0,
+        outcome_checks: overrides.outcomeSummary?.total ?? overrides.outcomes?.length ?? 0,
+        receipts_generated: overrides.intents?.filter((item) => item.receipt_status === "generated").length ?? 0,
+        bypass_mutations: overrides.sourceSummary?.policy_bypass ?? overrides.mutations?.filter((item) => item.classification === "policy_bypass").length ?? 0,
+        unreceipted_mutations: overrides.sourceSummary?.unreceipted ?? overrides.mutations?.length ?? 0,
+        sequence_risks: overrides.approvals?.filter((item) => JSON.stringify(item.policy_hit).includes("sequence_risk")).length ?? 0,
+      }, summaryData),
+  );
   api.listActionIntents.mockResolvedValue({
     items: overrides.intents ?? [],
     total_in_page: overrides.intents?.length ?? 0,
@@ -377,15 +451,12 @@ function mockHomeData(overrides: {
   api.listProjectActionExecutionAttempts.mockResolvedValue({
     items: overrides.staleAttempts ?? [],
   });
-  const profiles = overrides.profiles ?? [];
   api.listAgentProfiles.mockResolvedValue({
     items: profiles,
     total: profiles.length,
     limit: 200,
     offset: 0,
-    active_count: overrides.activeAgentCount ?? profiles.filter((item) => item.is_active).length,
-    max_active_agents: overrides.maxActiveAgents ?? -1,
-    limit_reached: overrides.limitReached ?? false,
+    ...agentProfileMeta,
   });
   api.listActionRunners.mockResolvedValue({
     items: overrides.runners ?? [],
@@ -505,14 +576,18 @@ describe("Mission Control Home", () => {
     expect(lockedPreview?.textContent).toContain("Policy bypass mutation");
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
     expect(screen.getByText("Home unlocks after the first protected action signal")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("href")).toBe(
-      "/agents/setup?intent=protect-agent&source=home",
-    );
-    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("data-state")).toBe("current");
+    const installCard = screen.getByText("Install SDK").closest(".mc-first-run-step-card");
+    const submitCard = screen.getByText("Submit action").closest(".mc-first-run-step-card");
+    const proofCard = screen.getByText("Approve and prove").closest(".mc-first-run-step-card");
+    expect(installCard?.getAttribute("data-state")).toBe("current");
+    expect(submitCard?.getAttribute("data-state")).toBe("locked");
+    expect(proofCard?.getAttribute("data-state")).toBe("locked");
     expect(screen.queryByRole("link", { name: "Setup agent" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Start agent setup/i }).getAttribute("href")).toBe(
       "/agents/setup?intent=protect-agent&source=home",
     );
+    expect(screen.getByRole("link", { name: /Project keys/i }).getAttribute("href")).toBe("/settings/keys");
+    expect(screen.queryByRole("link", { name: /^Actions$/i })).not.toBeInTheDocument();
   });
 
   it("tracks key and active-agent progress before the first action signal", async () => {
@@ -527,9 +602,10 @@ describe("Mission Control Home", () => {
 
     expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Protect your first agent action" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Install SDK/i }).getAttribute("data-state")).toBe("done");
-    expect(screen.getByRole("link", { name: /Submit action/i }).getAttribute("data-state")).toBe("current");
+    expect(screen.getByText("Install SDK").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("done");
+    expect(screen.getByText("Submit action").closest(".mc-first-run-step-card")?.getAttribute("data-state")).toBe("current");
     expect(screen.getByText("Agent profile is active. Send the first verified action.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Send first action/i }).getAttribute("href")).toBe("/agents/setup");
   });
 
   it("opens the mission dashboard after the first protected action signal", async () => {
@@ -545,6 +621,48 @@ describe("Mission Control Home", () => {
     expect(screen.queryByRole("heading", { name: "Protect your first agent action" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Proof metrics")).toBeInTheDocument();
     expect(screen.getByLabelText("Decision queue")).toBeInTheDocument();
+  });
+
+  it("does not turn a failed home summary into zero KPI metrics", async () => {
+    const authorizedIntent = intent({ status: "authorized", runtime_policy_decision_id: null });
+    const degradedSummary = homeSummary(
+      { controlled_actions: 1 },
+      {
+        intents: [authorizedIntent],
+        approvals: [],
+        outcomes: [],
+        outcome_summary: outcomeSummary(),
+        source_summary: sourceSummary(),
+        mutations: [],
+        stale_attempts: [],
+        agent_profiles: [profile()],
+        agent_profile_meta: {
+          active_count: 1,
+          max_active_agents: -1,
+          limit_reached: false,
+        },
+        action_runners: [],
+        api_keys: [apiKey()],
+        billing_usage: billingUsage(),
+      },
+    );
+    degradedSummary.sources = {
+      ...degradedSummary.sources!,
+      home_summary: false,
+    };
+    mockHomeData({ homeSummary: degradedSummary });
+
+    render(<HomePage />);
+
+    expect(await screen.findByRole("heading", { name: "Setup required" })).toBeInTheDocument();
+    const proofMetrics = screen.getByLabelText("Proof metrics");
+    const approvalsCard = within(proofMetrics).getByText("Pending approvals").closest(".mc-proof-card") as HTMLElement;
+    expect(approvalsCard).toBeInTheDocument();
+    expect(approvalsCard.classList.contains("mc-tone-warning")).toBe(true);
+    expect(within(approvalsCard).getByText("— unavailable")).toBeInTheDocument();
+    expect(within(approvalsCard).getByText("Home summary unavailable")).toBeInTheDocument();
+    expect(within(approvalsCard).queryByText("0")).not.toBeInTheDocument();
+    expect(screen.getByText("1 data source unavailable")).toBeInTheDocument();
   });
 
   it("surfaces stale runner attempts as a P2 queue item", async () => {
@@ -566,15 +684,8 @@ describe("Mission Control Home", () => {
     expect((await screen.findAllByText(/No runner claimed execution/)).length).toBeGreaterThan(0);
     expect(screen.getByText(/Attempt 1 planned/i)).toBeInTheDocument();
     await waitFor(() => {
-      expect(api.listProjectActionExecutionAttempts).toHaveBeenCalledWith(
-        {
-          status: ["planned", "running"],
-          stale: true,
-          stale_after_seconds: 600,
-          limit: 75,
-        },
-        expect.any(AbortSignal),
-      );
+      expect(api.getHomeSummary).toHaveBeenCalledWith(30, expect.any(AbortSignal));
+      expect(api.listProjectActionExecutionAttempts).not.toHaveBeenCalled();
     });
   });
 });

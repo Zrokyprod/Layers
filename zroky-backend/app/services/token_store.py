@@ -8,6 +8,7 @@ In tests (TESTING=true) or when Redis is unreachable, falls back to an
 in-process dict so the test suite never needs a live Redis server.
 """
 import time
+from datetime import UTC, datetime
 from typing import Optional
 
 from app.services.cache_service import CacheService
@@ -64,4 +65,23 @@ def delete(key: str) -> None:
 
 def revoke_all_user_tokens(user_id: str) -> None:
     """Blacklist marker for a user — downstream token validation checks this key."""
-    _cache.set(f"jwt_blacklisted_user:{user_id}", "1", ttl_seconds=86400 * 30)
+    _cache.set(f"jwt_blacklisted_user:{user_id}", str(int(time.time())), ttl_seconds=86400 * 30)
+
+
+def is_user_token_revoked(user_id: str, issued_at: object) -> bool:
+    revoked_at_raw = _cache.get(f"jwt_blacklisted_user:{user_id}")
+    if not revoked_at_raw:
+        return False
+    try:
+        revoked_at = float(revoked_at_raw)
+    except (TypeError, ValueError):
+        return True
+
+    if isinstance(issued_at, datetime):
+        token_iat = issued_at.astimezone(UTC).timestamp()
+    else:
+        try:
+            token_iat = float(issued_at)
+        except (TypeError, ValueError):
+            return True
+    return token_iat <= revoked_at

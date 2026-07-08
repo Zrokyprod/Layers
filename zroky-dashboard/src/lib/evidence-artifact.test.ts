@@ -13,7 +13,7 @@ function receipt(): ActionReceiptResponse {
     action_id: "act_123",
     receipt_digest: "sha256:receipt",
     evidence_hash: "sha256:evidence",
-    signature_algorithm: "hmac-sha256",
+    signature_algorithm: "Ed25519",
     signature: "sig",
     signing_key_id: "local",
     signature_valid: true,
@@ -87,6 +87,21 @@ describe("buildEvidenceArtifact", () => {
     expect(artifact.signature).toBe("sig");
     expect(artifact.evidence_hash).toBe("sha256:evidence");
     expect(artifact.schema_version).toBe("zroky.action_receipt.v1");
+    expect(artifact.signature_valid).toBe(true);
+    expect(artifact.server_attested_signature_valid).toBe(true);
+    expect(artifact.verification).toMatchObject({
+      method: "ed25519-public-key",
+      public_key_url: "https://api.zroky.com/.well-known/zroky/action-receipt-signing-key",
+      signed_payload_field: "signed_payload",
+      signature_field: "signature",
+    });
+    expect(artifact.verification.instructions.join(" ")).toContain("independent audit");
+    expect(artifact.privacy).toMatchObject({
+      payload_handling: "full_audit_payload",
+      redaction_applied: false,
+    });
+    expect(artifact.privacy.sensitive_fields_may_include).toContain("customer identifiers");
+    expect(artifact.privacy.instructions.join(" ")).toContain("sensitive compliance artifacts");
   });
 
   it("wraps the runtime policy Evidence Pack without mutating the pack", () => {

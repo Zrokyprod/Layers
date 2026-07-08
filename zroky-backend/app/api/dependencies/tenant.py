@@ -103,7 +103,7 @@ def _resolve_project_from_bearer(
     if not user_id:
         return None
     jti = str(claims.get("jti") or "").strip()
-    if (jti and token_store.get(f"jwt_blacklisted:{jti}")) or token_store.get(f"jwt_blacklisted_user:{user_id}"):
+    if (jti and token_store.get(f"jwt_blacklisted:{jti}")) or token_store.is_user_token_revoked(user_id, claims.get("iat")):
         return None
 
     membership_query = (

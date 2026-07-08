@@ -157,6 +157,7 @@ def check_usage_meter_quota(
             )
         projected = current + amount
         if projected > limit:
+            allow_overage = _plan_allows_meter_overage(db, tenant_id)
             return _decision(
                 db,
                 tenant_id,
@@ -164,8 +165,12 @@ def check_usage_meter_quota(
                 current=current,
                 amount=amount,
                 limit=limit,
-                allowed=False,
-                reason="monthly_quota_exceeded",
+                allowed=allow_overage,
+                reason=(
+                    "monthly_quota_overage"
+                    if allow_overage
+                    else "monthly_quota_exceeded"
+                ),
             )
         return _decision(
             db,
@@ -479,6 +484,11 @@ def _plan_code(db: Session, tenant_id: str) -> str | None:
         return entitlements_resolver.get_plan_code(db, tenant_id)
     except Exception:
         return None
+
+
+def _plan_allows_meter_overage(db: Session, tenant_id: str) -> bool:
+    plan_code = (_plan_code(db, tenant_id) or "").strip().lower()
+    return bool(plan_code and plan_code != "free")
 
 
 def _month_reset_date() -> str:

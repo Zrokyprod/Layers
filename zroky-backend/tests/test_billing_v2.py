@@ -57,8 +57,10 @@ from app.services.protected_action_billing import (
     METER_RUNNER_EXECUTIONS,
     METER_SOURCE_MUTATIONS,
     METER_VERIFICATION_CHECKS,
+    ProtectedActionQuotaExceeded,
     current_usage_count,
     increment_usage_meter,
+    reserve_usage_meter,
 )
 from app.services.razorpay_reconciliation import reconcile_pending_razorpay_orders
 
@@ -281,8 +283,8 @@ def _post_signed_webhook(client: TestClient, event: dict, *, secret: str = _TEST
 
 class TestBillingPlans:
     def test_normalize_plan_code(self) -> None:
-        assert normalize_plan_code("PRO") == "pro"
-        assert normalize_plan_code("  Pro ") == "pro"
+        assert normalize_plan_code("PRO") == "team"
+        assert normalize_plan_code("  Pro ") == "team"
 
     def test_normalize_invalid(self) -> None:
         with pytest.raises(InvalidPlanCodeError):
@@ -291,11 +293,12 @@ class TestBillingPlans:
             normalize_plan_code(None)
 
     def test_assert_self_serve_rules(self) -> None:
-        assert assert_self_serve_plan("pro") == "pro"
-        with pytest.raises(PlanNotSelfServeError):
-            assert_self_serve_plan("pilot")
-        with pytest.raises(PlanNotSelfServeError):
-            assert_self_serve_plan("starter")
+        assert assert_self_serve_plan("starter") == "starter"
+        assert assert_self_serve_plan("team") == "team"
+        assert assert_self_serve_plan("pro") == "team"
+        assert assert_self_serve_plan("scale") == "scale"
+        assert assert_self_serve_plan("plus") == "scale"
+        assert assert_self_serve_plan("pilot") == "starter"
         with pytest.raises(PlanNotSelfServeError):
             assert_self_serve_plan("free")
         with pytest.raises(PlanNotSelfServeError):
@@ -325,7 +328,7 @@ class TestDeprecatedCheckoutRoute:
     def test_checkout_rejects_invalid_or_forbidden_plan(self, client: TestClient) -> None:
         assert client.post("/v1/billing/checkout", json={"plan_code": "ultra"}).status_code == 422
         assert client.post("/v1/billing/checkout", json={"plan_code": "free"}).status_code == 422
-        assert client.post("/v1/billing/checkout", json={"plan_code": "starter"}).status_code == 422
+        assert client.post("/v1/billing/checkout", json={"plan_code": "starter"}).status_code == 410
         assert client.post("/v1/billing/checkout", json={"plan_code": "enterprise"}).status_code == 422
 
     def test_checkout_requires_admin_role(self, client: TestClient) -> None:
@@ -343,19 +346,19 @@ class TestRazorpayCheckoutRoute:
 
         response = client.post(
             "/v1/billing/razorpay/order",
-            json={"plan_code": "pro", "customer_email": "billing@example.com"},
+            json={"plan_code": "team", "customer_email": "billing@example.com"},
         )
 
         assert response.status_code == 200
         body = response.json()
         assert body["order_id"] == "order_test_123"
-        assert body["amount"] == 3_192_000
+        assert body["amount"] == 1_592_000
         assert body["currency"] == "INR"
-        assert body["plan_code"] == "pro"
+        assert body["plan_code"] == "team"
         assert fake.order.last_payload is not None
         assert fake.order.last_payload["notes"] == {
             "org_id": "org-alpha",
-            "plan_code": "pro",
+            "plan_code": "team",
             "product": "zroky",
             "customer_email": "billing@example.com",
         }
@@ -366,7 +369,7 @@ class TestRazorpayCheckoutRoute:
                 select(Subscription).where(Subscription.org_id == "org-alpha")
             ).scalar_one()
             assert sub.payment_provider == "razorpay"
-            assert sub.payment_request_ref == "order_test_123:pro"
+            assert sub.payment_request_ref == "order_test_123:team"
             assert sub.payment_customer_ref == "billing@example.com"
             assert sub.plan_code == DEFAULT_PLAN_CODE
 
@@ -375,7 +378,7 @@ class TestRazorpayCheckoutRoute:
     ) -> None:
         self.test_create_order_tracks_pending_request(client, monkeypatch)
 
-    def test_create_order_rejects_grandfathered_starter(
+    def test_create_order_accepts_starter(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         fake = _FakeRazorpayClient()
@@ -383,8 +386,9 @@ class TestRazorpayCheckoutRoute:
 
         response = client.post("/v1/billing/razorpay/order", json={"plan_code": "starter"})
 
-        assert response.status_code == 422
-        assert fake.order.last_payload is None
+        assert response.status_code == 200
+        assert response.json()["plan_code"] == "starter"
+        assert fake.order.last_payload is not None
 
     def test_verify_payment_activates_plan_after_valid_signature(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -413,7 +417,7 @@ class TestRazorpayCheckoutRoute:
             assert sub.payment_provider == "razorpay"
             assert sub.payment_request_ref == "order_test_123"
             assert sub.payment_subscription_ref == payment_id
-            assert sub.plan_code == "pro"
+            assert sub.plan_code == "team"
             event = session.execute(
                 select(BillingEvent).where(
                     BillingEvent.provider == "razorpay",
@@ -425,7 +429,7 @@ class TestRazorpayCheckoutRoute:
         me_response = client.get("/v1/billing/me")
         assert me_response.status_code == 200
         me_body = me_response.json()
-        assert me_body["plan_code"] == "pro"
+        assert me_body["plan_code"] == "team"
         assert me_body["status"] == "active"
         assert me_body["payment_provider"] == "razorpay"
         assert me_body["payment_subscription_ref"] == payment_id
@@ -513,7 +517,7 @@ class TestRazorpayReconciliation:
             assert sub.payment_request_ref == "order_test_123"
             assert sub.payment_subscription_ref == "pay_reconciled"
             assert sub.status == "active"
-            assert sub.plan_code == "pro"
+            assert sub.plan_code == "team"
             assert entitlements_resolver.get(session, "org-alpha", "events.monthly_quota") == 250_000
 
             event = session.execute(
@@ -625,9 +629,124 @@ class TestBillingQuota:
         usage = client.get("/v1/billing/usage")
         assert usage.status_code == 200
         usage_body = usage.json()
-        assert usage_body["plan_code"] == "pro"
+        assert usage_body["plan_code"] == "team"
         assert usage_body["calls"]["used"] == 5_001
         assert usage_body["calls"]["limit"] == 250_000
+
+    def test_paid_ingest_quota_records_overage_without_blocking(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _MockTaskResult:
+            id = "task-billing-paid-overage-test"
+
+        monkeypatch.setenv("BILLING_ENFORCE_QUOTA", "true")
+        monkeypatch.setattr(
+            "app.api.routes.ingest.process_diagnosis.delay",
+            lambda *_args, **_kwargs: _MockTaskResult(),
+        )
+        get_settings.cache_clear()
+        entitlements_resolver.invalidate_all()
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            session.add(
+                Subscription(
+                    org_id="org-alpha",
+                    payment_provider="razorpay",
+                    plan_code="team",
+                    status="active",
+                    seats=3,
+                )
+            )
+            session.add(
+                EventCount(
+                    tenant_id="org-alpha",
+                    month=current_month(),
+                    event_count=250_000,
+                    last_event_at=datetime.now(timezone.utc),
+                )
+            )
+            session.commit()
+            entitlements_resolver.invalidate("org-alpha")
+
+        accepted = client.post(
+            "/api/v1/ingest",
+            json={"events": [_ingest_event("billing-paid-overage")]},
+        )
+        assert accepted.status_code == 202
+        assert accepted.json()["accepted"] == 1
+
+        usage = client.get("/v1/billing/usage")
+        assert usage.status_code == 200
+        usage_body = usage.json()
+        assert usage_body["plan_code"] == "team"
+        assert usage_body["calls"]["used"] == 250_001
+        assert usage_body["calls"]["limit"] == 250_000
+        assert usage_body["calls"]["overage"] == 1
+        assert usage_body["calls"]["state"] == "exceeded"
+
+    def test_free_protected_action_quota_still_blocks_when_enforced(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BILLING_ENFORCE_QUOTA", "true")
+        get_settings.cache_clear()
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            assert increment_usage_meter(
+                session,
+                "org-alpha",
+                METER_PROTECTED_ACTIONS,
+                amount=500,
+            ) is True
+            session.commit()
+
+            with pytest.raises(ProtectedActionQuotaExceeded) as exc_info:
+                reserve_usage_meter(session, "org-alpha", METER_PROTECTED_ACTIONS)
+
+            decision = exc_info.value.decision
+            assert decision.allowed is False
+            assert decision.reason == "monthly_quota_exceeded"
+            assert decision.plan_code == "free"
+            assert decision.overage == 1
+
+    def test_paid_protected_action_quota_records_overage_without_blocking(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BILLING_ENFORCE_QUOTA", "true")
+        get_settings.cache_clear()
+
+        factory = client._session_factory  # type: ignore[attr-defined]
+        with factory() as session:
+            session.add(
+                Subscription(
+                    org_id="org-alpha",
+                    payment_provider="razorpay",
+                    plan_code="team",
+                    status="active",
+                    seats=3,
+                )
+            )
+            session.commit()
+            entitlements_resolver.invalidate("org-alpha")
+            assert increment_usage_meter(
+                session,
+                "org-alpha",
+                METER_PROTECTED_ACTIONS,
+                amount=10_000,
+            ) is True
+
+            decision = reserve_usage_meter(session, "org-alpha", METER_PROTECTED_ACTIONS)
+            session.commit()
+
+            assert decision.allowed is True
+            assert decision.reason == "monthly_quota_overage"
+            assert decision.plan_code == "team"
+            assert decision.overage == 1
+            assert (
+                current_usage_count(session, "org-alpha", METER_PROTECTED_ACTIONS)
+                == 10_001
+            )
 
     def test_strict_quota_check_failure_denies_and_alerts(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -740,19 +859,19 @@ class TestBillingQuota:
         assert body["golden_sets"]["used"] == 1
         assert body["golden_sets"]["limit"] == 25
         assert body["protected_actions"]["used"] == 7
-        assert body["protected_actions"]["limit"] == 25_000
+        assert body["protected_actions"]["limit"] == 10_000
         assert body["policy_checks"]["used"] == 11
-        assert body["policy_checks"]["limit"] == 100_000
+        assert body["policy_checks"]["limit"] == 50_000
         assert body["runner_executions"]["used"] == 5
-        assert body["runner_executions"]["limit"] == 25_000
+        assert body["runner_executions"]["limit"] == 10_000
         assert body["action_receipts"]["used"] == 4
-        assert body["action_receipts"]["limit"] == 25_000
+        assert body["action_receipts"]["limit"] == 10_000
         assert body["verification_checks"]["used"] == 9
-        assert body["verification_checks"]["limit"] == 50_000
+        assert body["verification_checks"]["limit"] == 25_000
         assert body["source_mutations"]["used"] == 13
-        assert body["source_mutations"]["limit"] == 100_000
+        assert body["source_mutations"]["limit"] == 50_000
         assert body["active_connectors"]["used"] == 1
-        assert body["active_connectors"]["limit"] == 10
+        assert body["active_connectors"]["limit"] == 6
         assert body["metering_health"]["state"] == "ok"
 
     def test_named_usage_meter_increment_is_portable_and_accumulates_once(
@@ -789,7 +908,7 @@ class TestWebhookRoute:
             ).scalar_one()
             assert sub.payment_provider == "razorpay"
             assert sub.payment_subscription_ref == "pay_evt_paid"
-            assert sub.plan_code == "pro"
+            assert sub.plan_code == "team"
 
     def test_happy_path_payment_succeeded(self, client: TestClient) -> None:
         response = _post_signed_webhook(

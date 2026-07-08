@@ -38,6 +38,8 @@ import { SDK } from "@/lib/sdk";
 const defaultKeyName = "Production verified-action key";
 const jsSdkInstall = SDK.install;
 const pythonSdkInstall = "pip install zroky";
+const keyExpiryWarningDays = 14;
+const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 function configuredApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
@@ -63,6 +65,22 @@ function keyStatusLabel(key: ApiKeyResponse): string {
   return "Revoked";
 }
 
+function daysUntilExpiry(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const expires = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expires)) return null;
+  return Math.ceil((expires - Date.now()) / millisecondsPerDay);
+}
+
+function expiryWarningLabel(key: ApiKeyResponse): string | null {
+  if (key.revoked || key.expired) return null;
+  const days = daysUntilExpiry(key.expires_at);
+  if (days === null || days > keyExpiryWarningDays) return null;
+  if (days <= 0) return "Expires today. Rotate before the next agent run.";
+  if (days === 1) return "Expires in 1 day. Rotate before production agents lose auth.";
+  return `Expires in ${days} days. Rotate before production agents lose auth.`;
+}
+
 function ApiKeysContent() {
   const projectQuery = useProjectSettings();
   const projectId = projectQuery.data?.project_id ?? "";
@@ -75,6 +93,7 @@ function ApiKeysContent() {
   const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+  const [statusTone, setStatusTone] = useState<"success" | "danger" | null>(null);
   const [expiresInDays, setExpiresInDays] = useState("90");
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyResponse | null>(null);
   const [rotateTarget, setRotateTarget] = useState<ApiKeyResponse | null>(null);
@@ -92,6 +111,7 @@ function ApiKeysContent() {
   const onCreate = handleSubmit(async (data) => {
     if (!projectId) return;
     setStatusMsg("");
+    setStatusTone(null);
     setNewKey(null);
     try {
       const expiryValue = expiresInDays.trim();
@@ -100,6 +120,7 @@ function ApiKeysContent() {
         const numericExpiry = Number(expiryValue);
         if (!Number.isInteger(numericExpiry) || numericExpiry < 1 || numericExpiry > 3650) {
           setStatusMsg("Failed to create key: expiry must be blank or a whole number between 1 and 3650 days.");
+          setStatusTone("danger");
           return;
         }
         parsedExpiry = numericExpiry;
@@ -114,6 +135,7 @@ function ApiKeysContent() {
       reset({ name: defaultKeyName });
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Failed to create key.");
+      setStatusTone("danger");
     }
   });
 
@@ -122,8 +144,10 @@ function ApiKeysContent() {
     try {
       await revokeMutation.mutateAsync({ projectId, keyId: revokeTarget.key_id });
       setStatusMsg(`Key "${revokeTarget.name}" revoked.`);
+      setStatusTone("success");
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Revoke failed.");
+      setStatusTone("danger");
     } finally {
       setRevokeTarget(null);
     }
@@ -135,8 +159,10 @@ function ApiKeysContent() {
       const rotated = await rotateMutation.mutateAsync({ projectId, keyId: rotateTarget.key_id });
       setNewKey(rotated);
       setStatusMsg(`Key "${rotateTarget.name}" rotated. Copy the replacement key now.`);
+      setStatusTone("success");
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : "Rotation failed.");
+      setStatusTone("danger");
     } finally {
       setRotateTarget(null);
     }
@@ -149,6 +175,7 @@ function ApiKeysContent() {
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       setStatusMsg("Copy failed. Select the key and copy it manually.");
+      setStatusTone("danger");
     }
   }
 
@@ -158,17 +185,18 @@ function ApiKeysContent() {
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
   const revokedKeys = keys.filter((key) => key.revoked);
   const expiredKeys = keys.filter((key) => key.expired);
+  const expiringSoonKeys = activeKeys.filter((key) => expiryWarningLabel(key));
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
   const snippetProjectId = projectId || "proj_...";
   const apiBaseUrl = configuredApiBaseUrl();
   const jsSetupSnippet = `${jsSdkInstall}
 export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_ENDPOINT="${apiBaseUrl}"`;
+export ZROKY_API_URL="${apiBaseUrl}"`;
   const pythonSetupSnippet = `${pythonSdkInstall}
-export ZROKY_PROJECT="${snippetProjectId}"
+export ZROKY_PROJECT_ID="${snippetProjectId}"
 export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_INGEST_URL="${apiBaseUrl}"`;
+export ZROKY_API_URL="${apiBaseUrl}"`;
   const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
   const runtimePosture = error ? "Needs refresh" : hasActiveKey ? "Runtime ready" : "Setup required";
 
@@ -205,6 +233,12 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
                   <span>{key.scopes?.join(", ") || "project:member"}</span>
                   <span>Created {formatDateTime(key.created_at)}</span>
                 </div>
+                {expiryWarningLabel(key) ? (
+                  <p className="keys-expiry-warning">
+                    <AlertTriangle aria-hidden="true" />
+                    {expiryWarningLabel(key)}
+                  </p>
+                ) : null}
               </div>
 
               <div className="keys-card-facts" aria-label={`${key.name} timing`}>
@@ -301,15 +335,15 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
             <div>
               <Clock3 aria-hidden="true" />
               <span>
-                <small>Expired keys</small>
-                <strong>{expiredKeys.length}</strong>
+                <small>Expiring soon</small>
+                <strong>{expiringSoonKeys.length}</strong>
               </span>
             </div>
             <div>
               <AlertTriangle aria-hidden="true" />
               <span>
-                <small>Revoked keys</small>
-                <strong>{revokedKeys.length}</strong>
+                <small>Expired/revoked</small>
+                <strong>{expiredKeys.length + revokedKeys.length}</strong>
               </span>
             </div>
           </div>
@@ -370,7 +404,7 @@ export ZROKY_INGEST_URL="${apiBaseUrl}"`;
       )}
 
       {statusMsg && (
-        <p className={statusMsg.toLowerCase().includes("failed") ? "field-error keys-status-msg" : "field-success keys-status-msg"}>
+        <p className={`${statusTone === "danger" ? "field-error" : "field-success"} keys-status-msg`}>
           {statusMsg}
         </p>
       )}

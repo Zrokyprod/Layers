@@ -123,7 +123,7 @@ export async function guard(
 
   const env = nodeEnv();
   const apiKey = resolved.apiKey ?? env?.["ZROKY_API_KEY"];
-  const projectId = resolved.projectId ?? env?.["ZROKY_PROJECT_ID"];
+  const projectId = resolved.projectId ?? env?.["ZROKY_PROJECT_ID"] ?? env?.["ZROKY_PROJECT"];
   if (!apiKey || !projectId) {
     throw new ZrokyRuntimePolicyError(
       "[ZROKY] Runtime policy guard requires apiKey and projectId.",
@@ -205,7 +205,7 @@ export async function guard(
 
   let response: Response;
   try {
-    response = await fetch(runtimePolicyUrl(resolved.endpoint ?? env?.["ZROKY_ENDPOINT"]), {
+    response = await fetch(runtimePolicyUrl(resolved.endpoint ?? env?.["ZROKY_API_URL"] ?? env?.["ZROKY_ENDPOINT"]), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
