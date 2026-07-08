@@ -204,7 +204,6 @@ export default function ActionsPage() {
     held: 0,
     executing: 0,
     stalled: 0,
-    matched: 0,
     mismatched: 0,
     notVerified: 0,
     bypassed: 0,
@@ -252,7 +251,7 @@ export default function ActionsPage() {
     connectedBypassFeeds > 0
       ? `${formatCount(connectedBypassFeeds)} connected feed${connectedBypassFeeds === 1 ? "" : "s"} / ${formatCount(successfulBypassPollers)} active poller${successfulBypassPollers === 1 ? "" : "s"}`
       : "Webhook/API feed ready; no poller connected.";
-  const matched = outcomeSummary?.matched ?? outcomes.filter((item) => item.verdict === "matched").length;
+  const matched = outcomeSummary?.matched ?? 0;
   const mismatched = outcomeSummary?.mismatched ?? counts.mismatched;
   const notVerified = outcomeSummary?.not_verified ?? counts.notVerified;
   const hero = heroState({

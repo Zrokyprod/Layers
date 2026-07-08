@@ -19,6 +19,7 @@ import { loginWithPassword, verifyMfaLogin } from "@/lib/api";
 import { setPendingPostAuthRedirectPath, storeAuthSession } from "@/lib/auth";
 import { buildSignupHref, buildVerifyEmailHref, safeAppPath } from "@/lib/onboarding-intent";
 import { loginSchema, type LoginFormData } from "@/lib/schemas";
+import type { AuthLoginResponse, MfaLoginChallengeResponse } from "@/lib/types";
 
 function authErrorMessage(code: string | null): string {
   switch (code) {
@@ -31,6 +32,10 @@ function authErrorMessage(code: string | null): string {
     default:
       return "";
   }
+}
+
+function isMfaLoginChallenge(res: AuthLoginResponse): res is MfaLoginChallengeResponse {
+  return "mfa_required" in res && res.mfa_required;
 }
 
 function LoginForm() {
@@ -55,7 +60,7 @@ function LoginForm() {
     setError("");
     try {
       const res = await loginWithPassword(data.email, data.password);
-      if ("mfa_required" in res && res.mfa_required) {
+      if (isMfaLoginChallenge(res)) {
         setMfaChallenge({ token: res.challenge_token, email: data.email });
         setMfaCode("");
         return;
