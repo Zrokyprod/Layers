@@ -14,6 +14,7 @@ from app.api.routes.action_intents import router as action_intents_router
 from app.api.routes.actions import router as actions_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.budget import router as budget_router
 from app.api.routes.calls import router as calls_router
 from app.api.routes.capture import router as capture_router
 from app.api.routes.evidence import router as evidence_router
@@ -124,6 +125,8 @@ if _settings.FEATURE_LEGACY_OBSERVABILITY_API:
     api_router.include_router(ablation_router, tags=["ablation"])
     api_router.include_router(reliability_router, tags=["reliability"])
     api_router.include_router(recommendations_router, tags=["recommendations"])
+else:
+    api_router.include_router(budget_router, tags=["budget"])
 
 if _settings.FEATURE_LEGACY_DIAGNOSIS_API:
     from app.api.routes.diagnoses import router as diagnoses_router

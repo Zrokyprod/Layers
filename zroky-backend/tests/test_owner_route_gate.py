@@ -51,6 +51,7 @@ def test_launch_legacy_surfaces_are_hidden_but_control_dependencies_stay_mounted
         FEATURE_LEGACY_DIAGNOSIS_ALIAS="false",
     )
     tags = _router_tags(router_module)
+    paths = sorted({getattr(route, "path", "") for route in router_module.api_router.routes})
 
     hidden_tags = {
         "ablation",
@@ -78,7 +79,10 @@ def test_launch_legacy_surfaces_are_hidden_but_control_dependencies_stay_mounted
     }
     assert tags.isdisjoint(hidden_tags)
 
-    assert {"calls", "traces", "alerts", "notifications"}.issubset(tags)
+    assert "/v1/analytics/budget" in paths
+    assert "/v1/analytics/budget/status" in paths
+    assert "/v1/analytics/summary" not in paths
+    assert {"calls", "traces", "alerts", "notifications", "budget"}.issubset(tags)
     assert {"home", "outcomes", "verified-actions", "integrations"}.issubset(tags)
 
     sys.modules.pop("app.api.router", None)
