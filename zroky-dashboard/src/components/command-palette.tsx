@@ -50,7 +50,7 @@ const PRIMARY_COMMAND_COPY: Record<DashboardPrimaryRoute["id"], PrimaryCommandCo
   },
   settings: {
     href: "/settings/keys",
-    description: "Capture keys, members, billing, and workspace controls",
+    description: "API keys, members, billing, and workspace controls",
     shortcut: "Ctrl+S",
   },
 };
@@ -72,7 +72,7 @@ function useCommandItems(): CommandItem[] {
 
   return [
     ...primaryCommands,
-    { id: "settings-keys", label: "Settings → Capture keys", description: "Create and revoke capture keys", action: () => router.push("/settings/keys") },
+    { id: "settings-keys", label: "Settings → API keys", description: "Create and revoke API keys", action: () => router.push("/settings/keys") },
     { id: "settings-billing", label: "Settings → Plan & Billing", description: "Plan, usage, payments", action: () => router.push("/settings/billing") },
     { id: "settings-team", label: "Settings → Members", description: "Invite and remove members", action: () => router.push("/settings/team") },
     { id: "settings-workspace", label: "Settings → Workspace", description: "Project identity and workspace metadata", action: () => router.push("/settings/workspace") },

@@ -11,12 +11,6 @@ const api = vi.hoisted(() => ({
   verifyRazorpayPayment: vi.fn(),
 }));
 
-const hooks = vi.hoisted(() => ({
-  useBudget: vi.fn(),
-  useBudgetStatus: vi.fn(),
-  useUpdateBudget: vi.fn(),
-}));
-
 const navigation = vi.hoisted(() => ({
   query: "upgrade_hint=replay.monthly_runs",
 }));
@@ -36,8 +30,6 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigation.query),
 }));
 
-vi.mock("@/lib/hooks", () => hooks);
-
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
@@ -50,20 +42,6 @@ describe("BillingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     navigation.query = "upgrade_hint=replay.monthly_runs";
-    hooks.useBudget.mockReturnValue({
-      data: { monthly_limit_usd: 100, threshold_percentage: 80 },
-      isLoading: false,
-      error: null,
-    });
-    hooks.useBudgetStatus.mockReturnValue({
-      data: { spent_usd: 12.5, limit_usd: 100, percent_used: 12.5, days_remaining_in_period: 20, forecast_exhaust_in_days: null, status: "ok", forecast_risk_level: "low", forecast_recommendation: "Within budget." },
-      isLoading: false,
-      error: null,
-    });
-    hooks.useUpdateBudget.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    });
     api.getBillingMe.mockResolvedValue({
       org_id: "org_1",
       plan_code: "free",
@@ -122,20 +100,17 @@ describe("BillingPage", () => {
     expect(
       screen.getByText("That legacy quota is gated by your current plan. Billing now centers on protected actions, receipts, verification, and connectors."),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Upgrade path")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Subscription status" })).toBeInTheDocument();
-    expect(screen.getByText("Run protected agents on the FREE plan.")).toBeInTheDocument();
+    expect(await screen.findByText("Available plans")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Billing overview" })).toBeInTheDocument();
+    expect(screen.getByText("Usage this month")).toBeInTheDocument();
     expect(screen.queryByText("Capture events")).not.toBeInTheDocument();
     expect(screen.queryByText("Replay runs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Spend limits")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Protected action usage" })).toBeInTheDocument();
     expect(screen.getAllByText("7 / 500").length).toBeGreaterThan(0);
-    expect(screen.getByText("Policy checks")).toBeInTheDocument();
-    expect(screen.getByText("Runner executions")).toBeInTheDocument();
-    expect(screen.getAllByText("Source mutations").length).toBeGreaterThan(0);
-    expect(screen.getByText("Managed AgentProfile capacity")).toBeInTheDocument();
-    expect(screen.getByText("Evidence retention days")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Actions" }).getAttribute("href")).toBe("/actions");
-    expect(screen.getByRole("link", { name: "Open bypass risk" }).getAttribute("href")).toBe("/outcomes");
+    expect(screen.queryByText("Policy checks")).not.toBeInTheDocument();
+    expect(screen.queryByText("Runner executions")).not.toBeInTheDocument();
+    expect(screen.queryByText("Managed AgentProfile capacity")).not.toBeInTheDocument();
   });
 
   it("renders the launch self-serve plan catalog", async () => {
@@ -144,13 +119,15 @@ describe("BillingPage", () => {
     expect(await screen.findByText("Starter")).toBeInTheDocument();
     expect(screen.getByText("Team")).toBeInTheDocument();
     expect(screen.getByText("Scale")).toBeInTheDocument();
-    expect(screen.getByText("$199.00")).toBeInTheDocument();
+    expect(screen.getByText("$199")).toBeInTheDocument();
     const teamCard = screen.getByRole("article", { name: "Team plan" });
     expect(within(teamCard).getByText(/10K protected actions\/mo/)).toBeInTheDocument();
+    expect(within(teamCard).getByText(/10 managed agents/)).toBeInTheDocument();
     expect(within(teamCard).getByText(/6 connectors/)).toBeInTheDocument();
-    expect(within(teamCard).getByText(/Bypass detection/)).toBeInTheDocument();
-    expect(within(teamCard).getByText(/\$0.025\/action overage/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pay with Razorpay for Team" })).toBeInTheDocument();
+    expect(within(teamCard).getByText(/For teams running multiple agents/)).toBeInTheDocument();
+    expect(within(teamCard).queryByText(/Unlimited approver seats/)).not.toBeInTheDocument();
+    expect(within(teamCard).queryByText(/Bypass detection/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade to Team" })).toBeInTheDocument();
     expect(screen.queryByText("Plus")).not.toBeInTheDocument();
   });
 
@@ -231,7 +208,7 @@ describe("BillingPage", () => {
     expect(await screen.findByText("PILOT")).toBeInTheDocument();
     expect(screen.getByText("Legacy Pilot maps to grandfathered Starter entitlements. Team is the featured self-serve upgrade.")).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "Starter plan" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pay with Razorpay for Team" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade to Team" })).toBeInTheDocument();
   });
 
   it("polls billing while a Razorpay payment request is pending", async () => {

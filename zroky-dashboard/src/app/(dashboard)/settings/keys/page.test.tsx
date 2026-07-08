@@ -105,13 +105,13 @@ describe("ApiKeysPage", () => {
   it("renders a minimal API key management page and empty state", () => {
     render(<ApiKeysPage />);
 
-    expect(screen.getByRole("heading", { name: "Project API keys" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Create project key" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Keep it simple" })).toBeInTheDocument();
-    expect(screen.getByText("Runtime access only.")).toBeInTheDocument();
-    expect(screen.getByText("This key authenticates runtime requests; it does not change policies, verifiers, or model-provider access.")).toBeInTheDocument();
-    expect(screen.getByText("Full secrets are shown once.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "API keys" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create key" })).toBeInTheDocument();
+    expect(screen.getByText("Full secret is shown once. Store it in your agent runtime. Blank expiry means no automatic expiry.")).toBeInTheDocument();
     expect(screen.getByText("No project keys yet. Create one to run your first verified action.")).toBeInTheDocument();
+    expect(screen.queryByText("Runtime access command center")).not.toBeInTheDocument();
+    expect(screen.queryByText("Key posture")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Keep it simple" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Project key setup" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Configure agent" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
@@ -128,7 +128,7 @@ describe("ApiKeysPage", () => {
   it("keeps agent configuration out of API Keys even with setup query params", () => {
     render(<ApiKeysPage />);
 
-    expect(screen.getByRole("heading", { name: "Project API keys" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "API keys" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "First protected agent setup" })).not.toBeInTheDocument();
     expect(screen.queryByText("Pilot handoff readiness")).not.toBeInTheDocument();
     expect(screen.queryByText("Copy mandate")).not.toBeInTheDocument();
@@ -140,7 +140,7 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create project key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
 
     await waitFor(() =>
       expect(createMutateAsync).toHaveBeenCalledWith({
@@ -150,30 +150,24 @@ describe("ApiKeysPage", () => {
         scopes: ["project:member"],
       }),
     );
-    expect(await screen.findByRole("heading", { name: "Copy this project key now." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Key created" })).toBeInTheDocument();
     expect(screen.getByText("zk_live_created_secret")).toBeInTheDocument();
-    expect(screen.getByText("proj_1")).toBeInTheDocument();
-    expect(screen.getAllByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"')).length).toBe(2);
-    expect(screen.getAllByText((content) => content.includes('export ZROKY_PROJECT_ID="proj_1"')).length).toBe(2);
-    expect(screen.getAllByText((content) => content.includes('export ZROKY_API_URL="https://api.zroky.com"')).length).toBe(2);
-    expect(screen.getAllByText((content) => content.includes("npm install @zroky-ai/sdk")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText((content) => content.includes("pip install zroky")).length).toBeGreaterThan(0);
+    expect(screen.queryByText((content) => content.includes('export ZROKY_API_KEY="zk_live_created_secret"'))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("npm install @zroky-ai/sdk"))).not.toBeInTheDocument();
+    expect(screen.queryByText((content) => content.includes("pip install zroky"))).not.toBeInTheDocument();
     expect(screen.queryByText((content) => content.includes("ZROKY_ENDPOINT"))).not.toBeInTheDocument();
     expect(screen.queryByText((content) => content.includes("ZROKY_INGEST_URL"))).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open evidence" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("zk_live_created_secret"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy Node setup" }));
-    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith(expect.stringContaining("ZROKY_PROJECT_ID")));
   });
 
   it("blocks invalid expiry values before creating a key", async () => {
     render(<ApiKeysPage />);
 
     fireEvent.change(screen.getByLabelText("Expires in days"), { target: { value: "0" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create project key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(await screen.findByText("Failed to create key: expiry must be blank or a whole number between 1 and 3650 days.")).toBeInTheDocument();
     expect(createMutateAsync).not.toHaveBeenCalled();
@@ -207,7 +201,6 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    expect(screen.getByText("Expiring soon")).toBeInTheDocument();
     expect(screen.getByText("Expires in 7 days. Rotate before production agents lose auth.")).toBeInTheDocument();
   });
 

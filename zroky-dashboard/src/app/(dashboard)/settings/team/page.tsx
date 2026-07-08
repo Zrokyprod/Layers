@@ -1,33 +1,26 @@
 "use client";
 
-import { type CSSProperties, type FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  CheckCircle2,
   Clock3,
-  Crown,
-  MailCheck,
   RefreshCw,
-  ShieldCheck,
-  UserCog,
-  UserPlus,
   Users,
 } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
-import { SettingsHero, SettingsMetricStrip, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
+import { SettingsHero, SettingsScaffold, SettingsSection } from "@/components/settings-scaffold";
 import { StatusPill } from "@/components/status-pill";
 import { useDashboardStore } from "@/lib/store";
 import { useMyProjects, useProjectSettings, useTeamMembers } from "@/lib/hooks";
 import {
   createProjectInvitation,
-  getBillingMe,
   listProjectInvitations,
   revokeProjectInvitation,
 } from "@/lib/api";
 import { upsertProjectMember } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import type { BillingMeResponse, ProjectInvitationItem, ProjectMembershipResponse } from "@/lib/types";
+import type { ProjectInvitationItem, ProjectMembershipResponse } from "@/lib/types";
 
 const ROLE_OPTIONS = ["viewer", "member", "admin", "owner"] as const;
 
@@ -37,14 +30,6 @@ function roleLabel(role: string | null | undefined): string {
   if (normalized === "admin") return "Admin";
   if (normalized === "viewer") return "Viewer";
   return "Member";
-}
-
-function roleDescription(role: string | null | undefined): string {
-  const normalized = role?.trim().toLowerCase();
-  if (normalized === "owner") return "Full control, billing, access, and policy authority.";
-  if (normalized === "admin") return "Can manage workspace operations and most access settings.";
-  if (normalized === "viewer") return "Read-only visibility into workspace state and evidence.";
-  return "Can operate assigned project workflows without ownership controls.";
 }
 
 function canManageTeamAccess(role: string | null | undefined): boolean {
@@ -88,12 +73,6 @@ export default function TeamPage() {
     queryFn: () => listProjectInvitations(projectId as string),
     enabled: Boolean(projectId),
   });
-  const billingQuery = useQuery<BillingMeResponse | null, Error>({
-    queryKey: ["billing-me"],
-    queryFn: () => getBillingMe().catch(() => null),
-    staleTime: 60_000,
-  });
-
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
@@ -112,7 +91,6 @@ export default function TeamPage() {
     await Promise.all([
       membersQuery.refetch(),
       invitationsQuery.refetch(),
-      billingQuery.refetch(),
     ]);
   };
 
@@ -154,7 +132,6 @@ export default function TeamPage() {
 
   const members = membersQuery.data ?? [];
   const invitations = invitationsQuery.data ?? [];
-  const billing = billingQuery.data ?? null;
   const loading = membersQuery.isLoading || invitationsQuery.isLoading;
   const queryError = membersQuery.error?.message ?? invitationsQuery.error?.message ?? null;
   const error = localError ?? queryError;
@@ -272,15 +249,8 @@ export default function TeamPage() {
   }
 
   const activeMembers = members.filter((member) => member.is_active);
-  const inactiveMembers = members.filter((member) => !member.is_active);
-  const ownerCount = activeMembers.filter((member) => member.role === "owner").length;
-  const adminCount = activeMembers.filter((member) => member.role === "admin").length;
   const pendingInvitationItems = invitations.filter((invitation) => invitationStatus(invitation) === "pending");
   const pendingInvites = pendingInvitationItems.length;
-  const seatLimit = typeof billing?.seats === "number" && billing.seats > 0 ? billing.seats : null;
-  const seatPercent = seatLimit ? Math.min(100, Math.round((activeMembers.length / seatLimit) * 100)) : 0;
-  const seatMeterStyle = { "--team-seat-meter": `${seatPercent}%` } as CSSProperties;
-  const planLabel = billing?.plan_code ? `${billing.plan_code.charAt(0).toUpperCase()}${billing.plan_code.slice(1)} plan` : "Plan unavailable";
 
   return (
     <SettingsScaffold className="team-settings-page" aria-labelledby="team-settings-title">
@@ -288,8 +258,8 @@ export default function TeamPage() {
         ariaLabel="Members settings"
         eyebrow="Members"
         icon={<Users aria-hidden="true" />}
-        title="Workspace access"
-        copy="Control who can enter this project, what authority they carry, and which invitations can still become access."
+        title="Members"
+        copy="Invite teammates, change roles, and remove access from one place."
         tone={!projectId || error ? "danger" : "success"}
         pill={projectId ? `${activeMembers.length} active` : "Project missing"}
         updatedLabel={loading ? "Refreshing" : "Settings live"}
@@ -300,91 +270,11 @@ export default function TeamPage() {
         }
       />
 
-      <SettingsMetricStrip
-        ariaLabel="Members settings summary"
-        columns={4}
-        metrics={[
-          {
-            id: "active-members",
-            label: "Active members",
-            value: String(activeMembers.length),
-            helper: `${members.length} total memberships loaded`,
-            tone: activeMembers.length > 0 ? "success" : "warning",
-            icon: <Users aria-hidden="true" />,
-          },
-          {
-            id: "owners",
-            label: "Owners",
-            value: String(ownerCount),
-            helper: "Last owner is protected from demotion or removal",
-            tone: ownerCount > 0 ? "success" : "danger",
-            icon: <ShieldCheck aria-hidden="true" />,
-          },
-          {
-            id: "admins",
-            label: "Admins",
-            value: String(adminCount),
-            helper: "Operational managers below owner authority",
-            tone: adminCount > 0 ? "setup" : "success",
-            icon: <UserCog aria-hidden="true" />,
-          },
-          {
-            id: "pending-invites",
-            label: "Pending invites",
-            value: String(pendingInvites),
-            helper: "Invites can be revoked before acceptance",
-            tone: pendingInvites > 0 ? "warning" : "setup",
-            icon: <UserPlus aria-hidden="true" />,
-          },
-        ]}
-      />
-
-      <section className="team-access-command-card" aria-label="Workspace access command center">
-        <div className="team-access-command-main">
-          <span className="team-command-kicker">
-            <ShieldCheck aria-hidden="true" />
-            Access command center
-          </span>
-          <h2>Every workspace action starts with a known human boundary.</h2>
-          <p>
-            Keep owner authority protected, invite people into the right role, and revoke pending access before it turns into a live membership.
-          </p>
-          <div className="team-access-rail" aria-label="Access controls">
-            <span>
-              <Crown aria-hidden="true" />
-              Owner floor protected
-            </span>
-            <span>
-              <UserCog aria-hidden="true" />
-              Role scope explicit
-            </span>
-            <span>
-              <MailCheck aria-hidden="true" />
-              Invites remain revocable
-            </span>
-          </div>
-        </div>
-
-        <aside className="team-seat-card" aria-label="Seat usage">
-          <div className="team-seat-card-head">
-            <span>Seat usage</span>
-            <strong>{seatLimit ? `${activeMembers.length} / ${seatLimit}` : `${activeMembers.length} active`}</strong>
-          </div>
-          <div className="team-seat-meter" style={seatMeterStyle} aria-hidden="true" />
-          <div className="team-seat-facts">
-            <span>{planLabel}</span>
-            <span>{pendingInvites} pending invite{pendingInvites === 1 ? "" : "s"}</span>
-            <span>{inactiveMembers.length} inactive member{inactiveMembers.length === 1 ? "" : "s"}</span>
-          </div>
-        </aside>
-      </section>
-
-      {/* Invite form */}
       <SettingsSection
         id="invite-team-member"
         eyebrow="Access"
-        title="Invite a teammate"
-        copy="Create a pending access grant with a clear role before the person joins the project."
+        title="Invite member"
+        copy="Send an invitation with the right role."
         className="team-invite-section"
       >
 
@@ -397,16 +287,6 @@ export default function TeamPage() {
         {error && <p className="notif-error team-error">{error}</p>}
 
         <form onSubmit={onInvite} className="team-invite-form">
-          <div className="team-invite-panel">
-            <div className="team-invite-icon" aria-hidden="true">
-              <UserPlus />
-            </div>
-            <div>
-              <strong>New access invitation</strong>
-              <span>Pending invites appear below until they are accepted or revoked.</span>
-            </div>
-          </div>
-
           <div className="team-invite-fields">
             <div className="field team-field-email">
               <label htmlFor="invite-email" className="field-label">Email</label>
@@ -451,8 +331,8 @@ export default function TeamPage() {
       <SettingsSection
         id="project-members"
         eyebrow="Members"
-        title="Project Members"
-        copy={`${members.length} member${members.length !== 1 ? "s" : ""} in this project, with ${activeMembers.length} active right now.`}
+        title="Project members"
+        copy={`${activeMembers.length} active member${activeMembers.length === 1 ? "" : "s"} · ${pendingInvites} pending invite${pendingInvites === 1 ? "" : "s"}.`}
         className="team-list-section"
       >
 
@@ -472,7 +352,7 @@ export default function TeamPage() {
                     <span className={`team-role-badge is-${m.role}`}>{roleLabel(m.role)}</span>
                   </div>
                   <span className="provider-meta">
-                    {roleDescription(m.role)} Updated {formatDateTime(m.updated_at)}.
+                    Updated {formatDateTime(m.updated_at)}
                   </span>
                 </div>
 
@@ -527,8 +407,8 @@ export default function TeamPage() {
       <SettingsSection
         id="pending-invitations"
         eyebrow="Invitations"
-        title="Pending invitations"
-        copy={`${pendingInvites} pending invite${pendingInvites === 1 ? "" : "s"} can still become project access.`}
+        title="Pending invites"
+        copy="Revoke invites that should not become access."
         className="team-list-section"
       >
 

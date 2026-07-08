@@ -34,7 +34,6 @@ const navState = vi.hoisted(() => ({
     state: string;
     resets_at: string | null;
   },
-  budgetDataAvailable: true,
   issueCount: 0,
   projectData: { project_id: "proj_1", name: "Acme Corp" } as { project_id: string; name: string } | undefined,
   projectLoading: false,
@@ -149,23 +148,6 @@ vi.mock("@tanstack/react-query", () => ({
         isLoading: navState.billingUsageLoading,
       };
     }
-    if (key === "shell-budget-status") {
-      return {
-        data: navState.budgetDataAvailable
-          ? {
-              spent_usd: 12.5,
-              limit_usd: 100,
-              percent_used: 12.5,
-              days_remaining_in_period: 20,
-              forecast_exhaust_in_days: null,
-              status: "ok",
-              forecast_risk_level: "low",
-              forecast_recommendation: "Within budget.",
-            }
-          : undefined,
-        isLoading: false,
-      };
-    }
     if (key === "shell-issues-count") {
       return { data: { items: Array.from({ length: navState.issueCount }, (_, index) => ({ id: `issue_${index}` })) } };
     }
@@ -177,7 +159,6 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@/lib/api", () => ({
   getBillingMe: vi.fn(),
   getBillingUsage: vi.fn(),
-  getBudgetStatus: vi.fn(),
   listIssues: vi.fn(),
 }));
 
@@ -261,7 +242,6 @@ describe("DashboardShell primary navigation", () => {
       state: "ok",
       resets_at: null,
     };
-    navState.budgetDataAvailable = true;
     navState.issueCount = 0;
     navState.projectData = { project_id: "proj_1", name: "Acme Corp" };
     navState.projectLoading = false;
@@ -587,8 +567,6 @@ describe("DashboardShell primary navigation", () => {
       state: "ok",
       resets_at: null,
     };
-    navState.budgetDataAvailable = false;
-
     const { container } = render(<DashboardShell>content</DashboardShell>);
 
     expect(screen.getByText("Unlimited")).toBeInTheDocument();
