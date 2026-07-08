@@ -231,9 +231,6 @@ export default function AgentsPage() {
       ) : (
         <AgentsFleetWorkspace
           fleet={fleet}
-          runners={runnersQuery.data?.items ?? []}
-          attempts={attempts}
-          staleAttemptIds={staleAttemptIds}
           promoteLocked={fleet.meter.reached}
         />
       )}
