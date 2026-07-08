@@ -227,7 +227,7 @@ describe("OutcomesPage", () => {
     hookState.unreceiptedMutationsRefetch.mockClear();
   });
 
-  it("renders the verification cockpit with honest metrics and bypass signal", () => {
+  it("renders a simple outcome workspace with honest metrics and bypass signal", () => {
     renderOutcomesPage();
 
     expect(screen.getByRole("heading", { name: "Verified action mismatch" })).toBeInTheDocument();
@@ -237,14 +237,13 @@ describe("OutcomesPage", () => {
     expect(within(metric("Bypass risk")).getByText("3")).toBeInTheDocument();
     expect(within(metric("Verified rate")).getByText("33%")).toBeInTheDocument();
 
-    const bypass = screen.getByRole("region", { name: "Bypass risk" });
-    expect(within(bypass).getByRole("heading", { name: "3 system changes with no receipt" })).toBeInTheDocument();
+    const bypass = screen.getByRole("region", { name: "Bypass check" });
+    expect(within(bypass).getByRole("heading", { name: "3 unreceipted system changes" })).toBeInTheDocument();
     expect(within(bypass).getAllByText("stripe:rf_bypass").length).toBeGreaterThan(0);
-    expect(within(bypass).getByRole("button", { name: /stripe:rf_bypass/i })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Selected bypass mutation" })).toBeInTheDocument();
-
-    expect(screen.getByRole("region", { name: "Verified rate trend" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Connector health" })).toBeInTheDocument();
+    expect(within(bypass).getByRole("link", { name: /Investigate in Actions/ })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Selected bypass mutation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Verified rate trend" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Connector health" })).not.toBeInTheDocument();
 
     expect(screen.getByRole("region", { name: "Reconciliation feed" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Selected outcome check" })).toBeInTheDocument();

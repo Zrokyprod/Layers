@@ -5,11 +5,9 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  BarChart3,
   CheckCircle2,
   Clock3,
   ExternalLink,
-  GitBranch,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -26,11 +24,10 @@ import {
   type SavedConnectorReconciliationConnector,
   type SavedConnectorReconciliationPayload,
 } from "@/lib/api";
-import { compactJson, field, formatCount, formatDateTime, humanize, timeSince } from "@/lib/format";
+import { compactJson, field, formatCount, formatDateTime, timeSince } from "@/lib/format";
 import {
   buildClaimedActualDiff,
   buildOutcomeLedger,
-  type OutcomeBypassRow,
   type OutcomeDiffRow,
   type OutcomeLedger,
   type OutcomeLedgerFilter,
@@ -51,28 +48,6 @@ const FILTERS: Array<{ id: OutcomeLedgerFilter; label: string }> = [
 ];
 const RECONCILIATION_CHECK_LIMIT = 100;
 
-type VerificationTrendPoint = {
-  key: string;
-  label: string;
-  matched: number;
-  mismatched: number;
-  notVerified: number;
-  rate: number;
-  total: number;
-};
-
-type ConnectorHealthRow = {
-  connectorType: string;
-  label: string;
-  latestAt: string;
-  matched: number;
-  mismatched: number;
-  notVerified: number;
-  rate: number;
-  tone: StatusTone;
-  total: number;
-};
-
 type ReverifyNotice = {
   checkId: string;
   text: string;
@@ -82,81 +57,6 @@ type ReverifyNotice = {
 function initialCheckId(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("check_id");
-}
-
-function checkedAtMs(check: OutcomeReconciliationView): number {
-  const parsed = new Date(check.checked_at).getTime();
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function trendKey(check: OutcomeReconciliationView): string {
-  const date = new Date(check.checked_at);
-  if (Number.isNaN(date.getTime())) return "unknown";
-  return date.toISOString().slice(0, 10);
-}
-
-function trendLabel(key: string): string {
-  if (key === "unknown") return "Unknown";
-  const date = new Date(`${key}T00:00:00Z`);
-  return new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", timeZone: "UTC" }).format(date);
-}
-
-function buildVerificationTrend(checks: OutcomeReconciliationView[]): VerificationTrendPoint[] {
-  const groups = new Map<string, VerificationTrendPoint>();
-  for (const check of checks) {
-    const key = trendKey(check);
-    const current = groups.get(key) ?? {
-      key,
-      label: trendLabel(key),
-      matched: 0,
-      mismatched: 0,
-      notVerified: 0,
-      rate: 0,
-      total: 0,
-    };
-    current.total += 1;
-    if (check.verdict === "matched") current.matched += 1;
-    if (check.verdict === "mismatched") current.mismatched += 1;
-    if (check.verdict === "not_verified") current.notVerified += 1;
-    current.rate = current.total > 0 ? Math.round((current.matched / current.total) * 100) : 0;
-    groups.set(key, current);
-  }
-
-  return Array.from(groups.values())
-    .sort((a, b) => a.key.localeCompare(b.key))
-    .slice(-7);
-}
-
-function buildConnectorHealth(checks: OutcomeReconciliationView[]): ConnectorHealthRow[] {
-  const groups = new Map<string, ConnectorHealthRow>();
-  for (const check of checks) {
-    const connectorType = check.connector_type || "unknown_connector";
-    const current = groups.get(connectorType) ?? {
-      connectorType,
-      label: humanize(connectorType, "Unknown connector"),
-      latestAt: check.checked_at,
-      matched: 0,
-      mismatched: 0,
-      notVerified: 0,
-      rate: 0,
-      tone: "neutral" as StatusTone,
-      total: 0,
-    };
-    current.total += 1;
-    if (check.verdict === "matched") current.matched += 1;
-    if (check.verdict === "mismatched") current.mismatched += 1;
-    if (check.verdict === "not_verified") current.notVerified += 1;
-    if (checkedAtMs(check) > new Date(current.latestAt).getTime()) current.latestAt = check.checked_at;
-    current.rate = current.total > 0 ? Math.round((current.matched / current.total) * 100) : 0;
-    current.tone = current.mismatched > 0 ? "danger" : current.notVerified > 0 ? "warning" : "success";
-    groups.set(connectorType, current);
-  }
-
-  return Array.from(groups.values()).sort((a, b) => {
-    const risk = (b.mismatched + b.notVerified) - (a.mismatched + a.notVerified);
-    if (risk !== 0) return risk;
-    return b.total - a.total;
-  });
 }
 
 function matchFieldsFor(check: OutcomeReconciliationView): string[] | null {
@@ -320,135 +220,6 @@ function metricsFor(ledger: OutcomeLedger): DashboardMetric[] {
       value: `${ledger.counts.verifiedRate}%`,
     },
   ];
-}
-
-function VerificationTrendPanel({
-  points,
-  sampleCapped,
-  sampleSize,
-  verifiedRate,
-}: {
-  points: VerificationTrendPoint[];
-  sampleCapped: boolean;
-  sampleSize: number;
-  verifiedRate: number;
-}) {
-  const latest = points[points.length - 1] ?? null;
-  const previous = points[points.length - 2] ?? null;
-  const delta = latest && previous ? latest.rate - previous.rate : null;
-  const maxTotal = Math.max(1, ...points.map((point) => point.total));
-  const loadedCount = points.reduce((sum, point) => sum + point.total, 0);
-
-  return (
-    <section className="outcomes-trend-panel" aria-label="Verified rate trend">
-      <div className="outcomes-panel-head">
-        <div>
-          <span className="dashboard-eyebrow">Trend</span>
-          <h2>Recent verification trend</h2>
-        </div>
-        <span className="outcomes-live-chip">{verifiedRate}% now</span>
-      </div>
-      {points.length > 0 ? (
-        <>
-          <div className="outcomes-trend-summary">
-            <BarChart3 size={16} aria-hidden="true" />
-            <strong>
-              {latest ? `${latest.rate}% on ${latest.label}` : `${verifiedRate}% verified`}
-            </strong>
-            <span>
-              {delta == null
-                ? `${formatCount(loadedCount)} loaded checks`
-                : `${delta >= 0 ? "+" : ""}${delta} pts vs previous check day`}
-            </span>
-          </div>
-          {sampleCapped ? (
-            <p className="outcomes-panel-note">
-              Trend is drawn from the newest {formatCount(sampleSize)} loaded checks. KPI totals above use the backend
-              summary window.
-            </p>
-          ) : null}
-          <div className="outcomes-trend-bars" aria-label="Daily verified rate bars">
-            {points.map((point) => (
-              <div key={point.key} className="outcomes-trend-bar" title={`${point.label}: ${point.rate}% verified`}>
-                <span style={{ height: `${Math.max(8, (point.total / maxTotal) * 58)}px` }} data-rate={point.rate} />
-                <small>{point.label}</small>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="outcomes-empty-state">
-          <BarChart3 size={18} aria-hidden="true" />
-          <strong>No trend yet.</strong>
-          <p>Daily verification rate appears after saved connector checks run.</p>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ConnectorHealthPanel({ connectors }: { connectors: ConnectorHealthRow[] }) {
-  return (
-    <section className="outcomes-connector-panel" aria-label="Connector health">
-      <div className="outcomes-panel-head">
-        <div>
-          <span className="dashboard-eyebrow">Source of record</span>
-          <h2>Connector health</h2>
-        </div>
-        <DashboardButtonLink href="/integrations" variant="ghost" size="sm" icon={<ExternalLink size={14} />}>
-          Open connectors
-        </DashboardButtonLink>
-      </div>
-      {connectors.length > 0 ? (
-        <div className="outcomes-connector-list">
-          {connectors.slice(0, 4).map((connector) => (
-            <article key={connector.connectorType} className="outcomes-connector-row" data-tone={connector.tone}>
-              <span>
-                <strong>{connector.label}</strong>
-                <small>{formatCount(connector.total)} check{connector.total === 1 ? "" : "s"} / last {timeSince(connector.latestAt)}</small>
-              </span>
-              <span>
-                <StatusPill value={connector.tone === "success" ? "verified" : connector.tone === "danger" ? "mismatched" : "not_verified"} />
-                <small>{connector.rate}% matched</small>
-              </span>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="outcomes-empty-state">
-          <GitBranch size={18} aria-hidden="true" />
-          <strong>No connector checks yet.</strong>
-          <p>Saved source-of-record verifiers will show health by connector here.</p>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function OutcomeOpsPanel({
-  connectors,
-  sampleCapped,
-  sampleSize,
-  trend,
-  verifiedRate,
-}: {
-  connectors: ConnectorHealthRow[];
-  sampleCapped: boolean;
-  sampleSize: number;
-  trend: VerificationTrendPoint[];
-  verifiedRate: number;
-}) {
-  return (
-    <div className="outcomes-ops-grid">
-      <VerificationTrendPanel
-        points={trend}
-        sampleCapped={sampleCapped}
-        sampleSize={sampleSize}
-        verifiedRate={verifiedRate}
-      />
-      <ConnectorHealthPanel connectors={connectors} />
-    </div>
-  );
 }
 
 function OutcomeFeed({
@@ -729,63 +500,42 @@ function OutcomeInspector({
 }
 
 function BypassStrip({
+  bypassCount,
   ledger,
-  onSelect,
-  selectedRow,
 }: {
+  bypassCount: number;
   ledger: OutcomeLedger;
-  onSelect: (row: OutcomeBypassRow) => void;
-  selectedRow: OutcomeBypassRow | null;
 }) {
+  const hasBypass = bypassCount > 0;
+  const previewRows = ledger.bypassRows.slice(0, 3);
+
   return (
-    <section className="outcomes-bypass-strip" data-tone={ledger.counts.bypass > 0 ? "danger" : "success"} aria-label="Bypass risk">
+    <section className="outcomes-bypass-strip" data-tone={hasBypass ? "danger" : "success"} aria-label="Bypass check">
       <div className="outcomes-bypass-copy">
-        <span className="dashboard-eyebrow">Bypass detection</span>
-        <h2>{ledger.counts.bypass > 0 ? `${formatCount(ledger.counts.bypass)} system changes with no receipt` : "No unreceipted source mutations"}</h2>
-        <p>Source mutations must map back to a Zroky receipt. Anything else is a bypass risk or unmanaged path.</p>
-        {selectedRow ? (
-          <section className="outcomes-bypass-detail" aria-label="Selected bypass mutation">
-            <StatusPill value={selectedRow.classification} />
-            <strong>{selectedRow.title}</strong>
-            <span>{selectedRow.actorLabel} changed {selectedRow.detail} without a Zroky receipt.</span>
-            <small>
-              Mutation id <span className="mono">{selectedRow.mutation.mutation_id}</span> / {formatDateTime(selectedRow.occurredAt)}
-            </small>
-            <div>
-              {selectedRow.mutation.zroky_action_id ? (
-                <DashboardButtonLink
-                  href={`/actions?action_id=${encodeURIComponent(selectedRow.mutation.zroky_action_id)}`}
-                  variant="soft"
-                  size="sm"
-                  icon={<ExternalLink size={14} />}
-                >
-                  Open linked action
-                </DashboardButtonLink>
-              ) : (
-                <DashboardButtonLink href="/actions?filter=bypassed" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
-                  Investigate in Actions
-                </DashboardButtonLink>
-              )}
-            </div>
-          </section>
-        ) : null}
+        <StatusPill value={hasBypass ? "policy_bypass" : "clear"} />
+        <div>
+          <span className="dashboard-eyebrow">Receipt coverage</span>
+          <h2>{hasBypass ? `${formatCount(bypassCount)} unreceipted system change${bypassCount === 1 ? "" : "s"}` : "No bypass risk detected"}</h2>
+          <p>
+            {hasBypass
+              ? "These source-system changes do not have a Zroky receipt yet. Review them before trusting the agent path."
+              : "Every observed protected mutation is linked to a receipt or an authorized path."}
+          </p>
+        </div>
       </div>
-      {ledger.bypassRows.length > 0 ? (
+      {previewRows.length > 0 ? (
         <div className="outcomes-bypass-list">
-          {ledger.bypassRows.slice(0, 4).map((row) => (
-            <button
-              key={row.id}
-              className={`outcomes-bypass-row${selectedRow?.id === row.id ? " is-selected" : ""}`}
-              data-tone={row.tone}
-              type="button"
-              onClick={() => onSelect(row)}
-            >
+          {previewRows.map((row) => (
+            <article key={row.id} className="outcomes-bypass-row" data-tone={row.tone}>
               <StatusPill value={row.classification} />
               <strong>{row.title}</strong>
               <span>{row.actorLabel} / {row.detail}</span>
               <small>{timeSince(row.occurredAt)}</small>
-            </button>
+            </article>
           ))}
+          <DashboardButtonLink href="/actions?filter=bypassed" variant="soft" size="sm" icon={<ExternalLink size={14} />}>
+            Investigate in Actions
+          </DashboardButtonLink>
         </div>
       ) : (
         <div className="outcomes-bypass-clear">
@@ -802,7 +552,6 @@ export default function OutcomesPage() {
   const [reverifyLoadingId, setReverifyLoadingId] = useState<string | null>(null);
   const [reverifyNotice, setReverifyNotice] = useState<ReverifyNotice | null>(null);
   const [search, setSearch] = useState("");
-  const [selectedBypassId, setSelectedBypassId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(() => initialCheckId());
 
   const summaryQuery = useOutcomeReconciliationSummary(30);
@@ -824,16 +573,9 @@ export default function OutcomesPage() {
     }),
     [checks, filter, search, unreceiptedMutations],
   );
-  const trend = useMemo(() => buildVerificationTrend(checks), [checks]);
-  const trendSampleCapped = (checksQuery.data?.total_in_page ?? 0) >= RECONCILIATION_CHECK_LIMIT;
-  const connectorHealth = useMemo(() => buildConnectorHealth(checks), [checks]);
   const selectedRow = useMemo(
     () => ledger.rows.find((row) => row.id === selectedId) ?? ledger.rows[0] ?? null,
     [ledger.rows, selectedId],
-  );
-  const selectedBypassRow = useMemo(
-    () => ledger.bypassRows.find((row) => row.id === selectedBypassId) ?? ledger.bypassRows[0] ?? null,
-    [ledger.bypassRows, selectedBypassId],
   );
 
   useEffect(() => {
@@ -843,14 +585,6 @@ export default function OutcomesPage() {
     }
     if (!selectedRow) setSelectedId(ledger.rows[0]?.id ?? null);
   }, [ledger.rows, selectedRow]);
-
-  useEffect(() => {
-    if (ledger.bypassRows.length === 0) {
-      setSelectedBypassId(null);
-      return;
-    }
-    if (!selectedBypassRow) setSelectedBypassId(ledger.bypassRows[0]?.id ?? null);
-  }, [ledger.bypassRows, selectedBypassRow]);
 
   const summaryMismatch = summaryQuery.data?.mismatched ?? ledger.counts.mismatched;
   const summaryNotVerified = summaryQuery.data?.not_verified ?? ledger.counts.notVerified;
@@ -963,18 +697,9 @@ export default function OutcomesPage() {
         </div>
       ) : null}
 
-      <OutcomeOpsPanel
-        connectors={connectorHealth}
-        sampleCapped={trendSampleCapped}
-        sampleSize={RECONCILIATION_CHECK_LIMIT}
-        trend={trend}
-        verifiedRate={verifiedRate}
-      />
-
       <BypassStrip
+        bypassCount={bypassCount}
         ledger={{ ...ledger, counts: { ...ledger.counts, bypass: bypassCount } }}
-        onSelect={(row) => setSelectedBypassId(row.id)}
-        selectedRow={selectedBypassRow}
       />
 
       <DashboardWorkspace
