@@ -4,17 +4,11 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
-  Clock3,
   Copy,
-  Database,
   KeyRound,
-  LockKeyhole,
-  Plug,
   RotateCcw,
-  Terminal,
 } from "lucide-react";
 
 import { DashboardButton } from "@/components/dashboard-button";
@@ -33,17 +27,10 @@ import {
   useRotateProjectApiKey,
 } from "@/lib/hooks";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/schemas";
-import { SDK } from "@/lib/sdk";
 
 const defaultKeyName = "Production verified-action key";
-const jsSdkInstall = SDK.install;
-const pythonSdkInstall = "pip install zroky";
 const keyExpiryWarningDays = 14;
 const millisecondsPerDay = 24 * 60 * 60 * 1000;
-
-function configuredApiBaseUrl() {
-  return (process.env.NEXT_PUBLIC_ZROKY_API_BASE_URL ?? "https://api.zroky.com").replace(/\/+$/, "");
-}
 
 function keyStatus(key: ApiKeyResponse): "revoked" | "expired" | "active" {
   if (key.revoked) return "revoked";
@@ -183,22 +170,8 @@ function ApiKeysContent() {
   const loading = projectQuery.isLoading || keysQuery.isLoading;
   const error = projectQuery.error?.message ?? keysQuery.error?.message ?? null;
   const activeKeys = keys.filter((key) => !key.revoked && !key.expired);
-  const revokedKeys = keys.filter((key) => key.revoked);
-  const expiredKeys = keys.filter((key) => key.expired);
-  const expiringSoonKeys = activeKeys.filter((key) => expiryWarningLabel(key));
   const hasActiveKey = activeKeys.length > 0 || newKey !== null;
-  const snippetProjectId = projectId || "proj_...";
-  const apiBaseUrl = configuredApiBaseUrl();
-  const jsSetupSnippet = `${jsSdkInstall}
-export ZROKY_PROJECT_ID="${snippetProjectId}"
-export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_API_URL="${apiBaseUrl}"`;
-  const pythonSetupSnippet = `${pythonSdkInstall}
-export ZROKY_PROJECT_ID="${snippetProjectId}"
-export ZROKY_API_KEY="${newKey?.api_key ?? "zk_live_..."}"
-export ZROKY_API_URL="${apiBaseUrl}"`;
   const heroTone: "success" | "danger" | "setup" = error ? "danger" : hasActiveKey ? "success" : "setup";
-  const runtimePosture = error ? "Needs refresh" : hasActiveKey ? "Runtime ready" : "Setup required";
 
   const keyTableSection = (
     <section className="panel keys-table-panel">
@@ -282,141 +255,23 @@ export ZROKY_API_URL="${apiBaseUrl}"`;
         ariaLabel="API key setup"
         eyebrow="API Keys"
         icon={<KeyRound aria-hidden="true" />}
-        title={error ? "API key visibility unavailable" : "Project API keys"}
+        title={error ? "API keys unavailable" : "API keys"}
         copy={
           error
-            ? "Project key data did not refresh cleanly. Retry before rotating or revoking keys."
-            : "Create and manage project keys for SDK, Gateway, and verified-action calls. Keys do not grant model-provider access."
+            ? "Key data did not refresh. Retry before rotating or revoking keys."
+            : "Create one key for your agent runtime. Copy it once, then rotate or revoke when needed."
         }
         tone={heroTone}
         pill={hasActiveKey ? `${activeKeys.length || 1} active` : "No active key"}
         updatedLabel={loading ? "Loading" : "Settings live"}
       />
 
-      <section className="keys-command-card" aria-label="Runtime access command center">
-        <div className="keys-command-main">
-          <span className="keys-command-kicker">
-            <LockKeyhole aria-hidden="true" />
-            Runtime access command center
-          </span>
-          <h2>Project keys let agents reach Zroky without widening human authority.</h2>
-          <p>
-            Create short-lived runtime credentials, copy the secret once, and rotate or revoke active keys when a runner changes.
-          </p>
-          <div className="keys-command-rail" aria-label="Runtime key guarantees">
-            <span>
-              <Terminal aria-hidden="true" />
-              SDK runtime only
-            </span>
-            <span>
-              <Database aria-hidden="true" />
-              Prefix display only
-            </span>
-            <span>
-              <RotateCcw aria-hidden="true" />
-              Rotate without changing project ID
-            </span>
-          </div>
-        </div>
-
-        <aside className="keys-posture-card" aria-label="API key posture">
-          <div className="keys-posture-head">
-            <span>Key posture</span>
-            <strong>{runtimePosture}</strong>
-          </div>
-          <div className="keys-posture-grid">
-            <div>
-              <Activity aria-hidden="true" />
-              <span>
-                <small>Active keys</small>
-                <strong>{activeKeys.length}</strong>
-              </span>
-            </div>
-            <div>
-              <Clock3 aria-hidden="true" />
-              <span>
-                <small>Expiring soon</small>
-                <strong>{expiringSoonKeys.length}</strong>
-              </span>
-            </div>
-            <div>
-              <AlertTriangle aria-hidden="true" />
-              <span>
-                <small>Expired/revoked</small>
-                <strong>{expiredKeys.length + revokedKeys.length}</strong>
-              </span>
-            </div>
-          </div>
-        </aside>
-      </section>
-
-      {newKey && (
-        <section className="panel keys-newkey-banner" aria-label="One-time project key">
-          <div className="keys-copy-head">
-            <span className="keys-copy-icon">
-              <Copy aria-hidden="true" />
-            </span>
-            <div>
-              <h2>Copy this project key now.</h2>
-              <p>This secret is shown once. Save it in your runtime environment before closing this panel.</p>
-            </div>
-          </div>
-          <div className="share-url-row keys-newkey-row">
-            <span className="share-url settings-key-reveal">{newKey.api_key}</span>
-            <DashboardButton type="button" variant="primary" icon={<Copy />} onClick={() => void copyKey(newKey.api_key)}>
-              {copied ? "Copied" : "Copy key"}
-            </DashboardButton>
-          </div>
-          <div className="keys-next-grid">
-            <div>
-              <span>Project</span>
-              <strong>{newKey.project_id}</strong>
-            </div>
-            <div>
-              <span>Expires</span>
-              <strong>{newKey.expires_at ? formatDateTime(newKey.expires_at) : "Never"}</strong>
-            </div>
-            <div>
-              <span>Scope</span>
-              <strong>{newKey.scopes.join(", ")}</strong>
-            </div>
-          </div>
-          <div className="keys-command-grid" aria-label="One-time setup commands">
-            <pre aria-label="Node SDK environment setup">
-              <code>{jsSetupSnippet}</code>
-            </pre>
-            <pre aria-label="Python SDK environment setup">
-              <code>{pythonSetupSnippet}</code>
-            </pre>
-          </div>
-          <div className="keys-copy-actions">
-            <DashboardButton type="button" variant="soft" icon={<Copy />} onClick={() => void copyKey(jsSetupSnippet)}>
-              Copy Node setup
-            </DashboardButton>
-            <DashboardButton type="button" variant="soft" icon={<Copy />} onClick={() => void copyKey(pythonSetupSnippet)}>
-              Copy Python setup
-            </DashboardButton>
-            <DashboardButton type="button" variant="soft" onClick={() => setNewKey(null)}>
-              Done
-            </DashboardButton>
-          </div>
-        </section>
-      )}
-
-      {statusMsg && (
-        <p className={`${statusTone === "danger" ? "field-error" : "field-success"} keys-status-msg`}>
-          {statusMsg}
-        </p>
-      )}
-
-      {hasActiveKey ? keyTableSection : null}
-
-      <section className="keys-primary-grid">
+      <section className="keys-simple-stack">
         <article className="panel keys-create-panel" id="create-project-key">
           <header className="panel-header">
             <div>
-              <h2>Create project key</h2>
-              <p>Use it for the SDK, Gateway, and verified-action calls. It does not grant model-provider access.</p>
+              <h2>Create key</h2>
+              <p>Use it for SDK, Gateway, and verified-action calls.</p>
             </div>
           </header>
 
@@ -450,38 +305,51 @@ export ZROKY_API_URL="${apiBaseUrl}"`;
                 placeholder="90"
                 disabled={createMutation.isPending || !projectId}
               />
-              <span className="field-hint">Leave blank for no automatic expiry. Scope is project:member.</span>
             </div>
             <DashboardButton type="submit" variant="primary" loading={createMutation.isPending} disabled={!projectId}>
-              {createMutation.isPending ? "Creating..." : "Create project key"}
+              {createMutation.isPending ? "Creating..." : "Create key"}
             </DashboardButton>
           </form>
 
-          <div className="keys-provider-note">
-            <Plug aria-hidden="true" />
-            <div>
-              <strong>Runtime access only.</strong>
-              <span>This key authenticates runtime requests; it does not change policies, verifiers, or model-provider access.</span>
-            </div>
-          </div>
+          <p className="keys-simple-note">
+            <KeyRound aria-hidden="true" />
+            Full secret is shown once. Store it in your agent runtime. Blank expiry means no automatic expiry.
+          </p>
         </article>
 
-        <aside className="panel keys-setup-card">
-          <span className="settings-section-kicker">
-            <KeyRound aria-hidden="true" />
-            Key rules
-          </span>
-          <h2>Keep it simple</h2>
-          <p>Create a key, copy the secret once, then store it in the agent runtime environment.</p>
-          <ul className="keys-compact-list">
-            <li>Full secrets are shown once.</li>
-            <li>Only prefixes are stored for display.</li>
-            <li>Rotate or revoke active keys from the table.</li>
-          </ul>
-        </aside>
-      </section>
+        {newKey && (
+          <section className="panel keys-newkey-banner" aria-label="One-time project key">
+            <div className="keys-copy-head">
+              <span className="keys-copy-icon">
+                <Copy aria-hidden="true" />
+              </span>
+              <div>
+                <h2>Key created</h2>
+                <p>Copy it now. Zroky will not show this secret again.</p>
+              </div>
+            </div>
+            <div className="share-url-row keys-newkey-row">
+              <span className="share-url settings-key-reveal">{newKey.api_key}</span>
+              <DashboardButton type="button" variant="primary" icon={<Copy />} onClick={() => void copyKey(newKey.api_key)}>
+                {copied ? "Copied" : "Copy"}
+              </DashboardButton>
+            </div>
+            <div className="keys-copy-actions">
+              <DashboardButton type="button" variant="soft" onClick={() => setNewKey(null)}>
+                Done
+              </DashboardButton>
+            </div>
+          </section>
+        )}
 
-      {!hasActiveKey ? keyTableSection : null}
+        {statusMsg && (
+          <p className={`${statusTone === "danger" ? "field-error" : "field-success"} keys-status-msg`}>
+            {statusMsg}
+          </p>
+        )}
+
+        {keyTableSection}
+      </section>
 
       {revokeTarget && (
         <div

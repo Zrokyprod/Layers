@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 
 import { clearAccessToken } from "@/lib/auth";
-import { getBillingMe, getBillingUsage, getBudgetStatus, listIssues } from "@/lib/api";
+import { getBillingMe, getBillingUsage, listIssues } from "@/lib/api";
 import { isDashboardPrimaryPath } from "@/lib/dashboard-route-contract";
 import { useDashboardStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
@@ -153,7 +153,7 @@ const DATE_PRESETS = [
   { id: "24h", label: "Last 24 hours", days: 1, helper: "Action exceptions and cost from the last day." },
   { id: "7d", label: "Last 7 days", days: 7, helper: "Default production review window." },
   { id: "14d", label: "Last 14 days", days: 14, helper: "Useful for release-cycle checks." },
-  { id: "30d", label: "Last 30 days", days: 30, helper: "Monthly trend and budget review." },
+  { id: "30d", label: "Last 30 days", days: 30, helper: "Monthly trend review." },
 ] as const;
 
 type DatePresetId = (typeof DATE_PRESETS)[number]["id"];
@@ -618,14 +618,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  const budgetQuery = useQuery({
-    queryKey: ["shell-budget-status"],
-    queryFn: ({ signal }) => getBudgetStatus(signal),
-    enabled: projectContextReady,
-    staleTime: 60_000,
-    retry: false,
-  });
-
   const issuesCount = issuesQuery.data?.items?.length ?? 0;
   const planTemplate = billingQuery.data?.plan_template;
   const planCode = billingQuery.data?.plan_code;
@@ -660,11 +652,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         ? "Unlimited plan"
         : "Monthly quota"
       : periodCopy(billingQuery.data?.current_period_end, billingQuery.data?.trial_end);
-  const budgetStatus = budgetQuery.data;
-  const hasBudgetLimit = typeof budgetStatus?.limit_usd === "number" && budgetStatus.limit_usd > 0;
-  const budgetPercent = hasBudgetLimit
-    ? clampPercent(budgetStatus.percent_used ?? (budgetStatus.spent_usd / budgetStatus.limit_usd!) * 100)
-    : 0;
   const protectedActionsPercent = protectedActionsLimit != null && protectedActionsLimit > 0 && protectedActionsUsed != null
     ? clampPercent((protectedActionsUsed / protectedActionsLimit) * 100)
     : 0;
@@ -688,7 +675,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           ? "used this month"
           : "plan quota";
   const showPlanUsageTrack = protectedActionsLimit != null && protectedActionsLimit > 0;
-  const planUsagePercent = showPlanUsageTrack ? protectedActionsPercent : budgetPercent;
+  const planUsagePercent = showPlanUsageTrack ? protectedActionsPercent : 0;
   const protectedActionsUsageTone =
     protectedActionsMeter?.state === "exceeded" ||
     protectedActionsMeter?.state === "blocked" ||
@@ -698,9 +685,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         ? "warning"
         : "ok";
   const planCardStatusClass =
-    budgetStatus?.status === "critical" || protectedActionsUsageTone === "critical"
+    protectedActionsUsageTone === "critical"
       ? "is-critical"
-      : budgetStatus?.status === "warning" || protectedActionsUsageTone === "warning"
+      : protectedActionsUsageTone === "warning"
         ? "is-warning"
         : "is-ok";
   const selectedWindowLabel = dateRangeLabel(dateRange, activeDatePreset);

@@ -113,9 +113,12 @@ describe("TeamPage", () => {
     renderTeamPage();
 
     expect(await screen.findByText("owner@example.com")).toBeInTheDocument();
-    expect(screen.getByLabelText("Workspace access command center")).toBeInTheDocument();
-    expect(screen.getByLabelText("Seat usage")).toBeInTheDocument();
-    expect(screen.getByText("1 / 5")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Members" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Invite member" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project members" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Workspace access command center")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Seat usage")).not.toBeInTheDocument();
+    expect(screen.queryByText("1 / 5")).not.toBeInTheDocument();
     expect(screen.queryByText("No members found.")).not.toBeInTheDocument();
     expect(api.listProjectMembers).toHaveBeenCalledWith("proj_1");
   });
