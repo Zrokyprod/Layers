@@ -310,7 +310,7 @@ function RunnerPanel({ detail }: { detail: AgentDetailView }) {
         )) : (
           <div className="agents-empty-filter">
             <strong>No observed runner yet</strong>
-            <span>Project runners stay visible on the fleet page. This panel only shows runners tied to this agent action history.</span>
+            <span>This panel only shows runners tied to this agent action history.</span>
           </div>
         )}
         {detail.attempts.slice(0, 5).map((attempt) => {

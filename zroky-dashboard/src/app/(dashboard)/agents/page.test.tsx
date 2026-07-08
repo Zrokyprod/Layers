@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -358,7 +358,7 @@ describe("AgentsPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders a kernel-first fleet cockpit with proof and runner context", async () => {
+  it("renders a simple fleet view with proof and runner context", async () => {
     mockAgents();
 
     renderAgentsPage();
@@ -368,12 +368,12 @@ describe("AgentsPage", () => {
     expect(screen.getAllByText("Coverage").length).toBeGreaterThan(0);
     expect(screen.getByText("Runners online")).toBeInTheDocument();
 
-    const table = screen.getByLabelText("Agent fleet table");
-    expect(within(table).getByText("Inventory Agent")).toBeInTheDocument();
-    expect(within(table).getByText("Matched")).toBeInTheDocument();
-    expect(within(table).getByText("100% covered")).toBeInTheDocument();
-    expect(within(table).getByText("No risky drift")).toBeInTheDocument();
-    expect(within(table).getByText("observed compatible")).toBeInTheDocument();
+    const fleet = screen.getByLabelText("Agent fleet");
+    expect(within(fleet).getByText("Inventory Agent")).toBeInTheDocument();
+    expect(within(fleet).getByText("Matched")).toBeInTheDocument();
+    expect(within(fleet).getByText("100% covered")).toBeInTheDocument();
+    expect(within(fleet).getByText("No risky drift")).toBeInTheDocument();
+    expect(within(fleet).getByText("observed compatible")).toBeInTheDocument();
 
     const inspector = screen.getByLabelText("Selected agent control");
     expect(within(inspector).getByText("Managed profile")).toBeInTheDocument();
@@ -454,10 +454,10 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    const table = await screen.findByLabelText("Agent fleet table");
-    expect(within(table).getByText("Inventory Agent")).toBeInTheDocument();
-    expect(within(table).getByText("shadow-agent")).toBeInTheDocument();
-    expect(within(table).getByText("Telemetry-only / unmanaged")).toBeInTheDocument();
+    const fleet = await screen.findByLabelText("Agent fleet");
+    expect(within(fleet).getByText("Inventory Agent")).toBeInTheDocument();
+    expect(within(fleet).getByText("shadow-agent")).toBeInTheDocument();
+    expect(within(fleet).getByText("Telemetry-only / unmanaged")).toBeInTheDocument();
   });
 
   it("surfaces managed-agent bypass and sequence-risk signals in fleet governance", async () => {
@@ -480,12 +480,12 @@ describe("AgentsPage", () => {
     expect(await screen.findByRole("heading", { name: "Agent control bypass detected", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Risk signals")).toBeInTheDocument();
 
-    const table = screen.getByLabelText("Agent fleet table");
-    expect(within(table).getByText("Control bypass")).toBeInTheDocument();
-    expect(within(table).getByText("0% covered")).toBeInTheDocument();
-    expect(within(table).getAllByText("1 signal").length).toBeGreaterThan(0);
-    expect(within(table).getByText("1 bypass / 0 sequence")).toBeInTheDocument();
-    expect(within(table).getByText("0 bypass / 1 sequence")).toBeInTheDocument();
+    const fleet = screen.getByLabelText("Agent fleet");
+    expect(within(fleet).getByText("Control bypass")).toBeInTheDocument();
+    expect(within(fleet).getByText("0% covered")).toBeInTheDocument();
+    expect(within(fleet).getAllByText("1 signal").length).toBeGreaterThan(0);
+    expect(within(fleet).getByText("1 bypass / 0 sequence")).toBeInTheDocument();
+    expect(within(fleet).getByText("0 bypass / 1 sequence")).toBeInTheDocument();
 
     const inspector = screen.getByLabelText("Selected agent control");
     expect(within(inspector).getByText("Bypass")).toBeInTheDocument();
@@ -519,8 +519,8 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    const table = await screen.findByLabelText("Agent fleet table");
-    expect(within(table).getByRole("link", { name: "Promote" }).getAttribute("href")).toBe(
+    const inspector = await screen.findByLabelText("Selected agent control");
+    expect(within(inspector).getByRole("link", { name: "Promote to managed" }).getAttribute("href")).toBe(
       "/agents/setup?agentName=shadow-agent",
     );
   });
@@ -553,11 +553,11 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    const table = await screen.findByLabelText("Agent fleet table");
-    expect(within(table).getByRole("link", { name: "Promote" }).getAttribute("aria-disabled")).toBe("true");
+    const inspector = await screen.findByLabelText("Selected agent control");
+    expect(within(inspector).getByRole("link", { name: "Promote to managed" }).getAttribute("aria-disabled")).toBe("true");
   });
 
-  it("shows project runners and attempts in tabs", async () => {
+  it("keeps runner and attempt context summarized without secondary tabs", async () => {
     const runningAttempt = attempt({ attempt_id: "attempt_running", status: "running" });
     mockAgents({
       attempts: [attempt(), runningAttempt],
@@ -570,15 +570,12 @@ describe("AgentsPage", () => {
 
     renderAgentsPage();
 
-    fireEvent.click(await screen.findByRole("tab", { name: /Runners/i }));
-    const runnersPanel = screen.getByLabelText("Project runners");
-    expect(within(runnersPanel).getByText("Inventory runner")).toBeInTheDocument();
-    expect(within(runnersPanel).getByText("Degraded runner")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: /Attempts/i }));
-    const attemptsPanel = screen.getByLabelText("Execution attempts");
-    expect(within(attemptsPanel).getAllByText("act_inventory").length).toBeGreaterThan(0);
-    expect(within(attemptsPanel).getByText("Stalled")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Agents controlled", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Runners/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /Attempts/i })).toBeNull();
+    const fleet = screen.getByLabelText("Agent fleet");
+    expect(within(fleet).getByText("observed compatible")).toBeInTheDocument();
+    expect(screen.getByText("Runners online")).toBeInTheDocument();
   });
 
   it("routes first-run agent creation through the setup wizard", async () => {
