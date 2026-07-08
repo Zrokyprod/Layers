@@ -7,9 +7,9 @@ const COLS = [
     links: [
       { label: 'Product', href: '/product' },
       { label: 'Connectors', href: '/#connectors' },
-      { label: 'Agent fleet', href: '/#agents' },
-      { label: 'Control loop', href: '/#architecture' },
+      { label: 'Protected actions', href: '/#protected-actions' },
       { label: 'Receipts', href: '/#receipts' },
+      { label: 'Implementation', href: '/#implementation' },
       { label: 'Pricing', href: '/pricing' },
     ],
   },
@@ -17,9 +17,8 @@ const COLS = [
     title: 'Developers',
     links: [
       { label: 'Docs', href: '/docs' },
-      { label: 'Quickstart', href: '/#quickstart' },
-      { label: 'Claim diff', href: '/#claim-vs-reality' },
-      { label: 'Bypass detection', href: '/#bypass-detection' },
+      { label: 'Quickstart', href: '/docs#quickstart' },
+      { label: 'Source verification', href: '/#claim-vs-reality' },
       { label: 'Agent setup', href: '/docs' },
       { label: 'Changelog', href: '/changelog' },
     ],
@@ -27,8 +26,6 @@ const COLS = [
   {
     title: 'Company',
     links: [
-      { label: 'Trust posture', href: '/#trust' },
-      { label: 'FAQ', href: '/#faq' },
       { label: 'Privacy', href: '/privacy' },
       { label: 'Terms', href: '/terms' },
       { label: 'Contact', href: 'mailto:hello@zroky.com' },
