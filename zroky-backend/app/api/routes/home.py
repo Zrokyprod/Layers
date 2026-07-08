@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Sequence
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
@@ -160,7 +160,7 @@ def get_home_summary(
     )
     active_agent_count = count_active_agent_profiles(db, project_id=tenant_id)
     max_active_agents = resolve_agent_profile_limit(db, project_id=tenant_id)
-    key_rows = []
+    key_rows: Sequence[ApiKey] = []
     if ROLE_RANK.get(context.role, 0) >= ROLE_RANK["admin"]:
         key_rows = db.execute(
             select(ApiKey).where(ApiKey.project_id == tenant_id).order_by(ApiKey.created_at.desc())

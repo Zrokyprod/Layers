@@ -14,5 +14,6 @@
 # verified-action MVP slice and must be split before paid GA.
 zroky-backend/app/api/routes/regression_ci.py # ZROKY-MVP-SPLIT-ROUTES
 zroky-backend/app/api/routes/outcomes.py # ZROKY-MVP-SPLIT-ROUTES
+zroky-backend/app/api/routes/outcome_saved_reconciliation.py # ZROKY-MVP-SPLIT-ROUTES
 zroky-backend/app/api/routes/auth.py # ZROKY-MVP-SPLIT-ROUTES
 zroky-backend/app/api/routes/_internal/owner_launch_readiness_builder.py # ZROKY-MVP-SPLIT-ROUTES
