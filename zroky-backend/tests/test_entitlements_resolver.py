@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+import redis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -310,6 +311,38 @@ class TestResolveAll:
 
         assert resolve_all(db_session, "org-1") == PLAN_ENTITLEMENTS["pro"]
         invalidate("org-1")
+
+    def test_redis_failure_opens_short_circuit_breaker(
+        self,
+        db_session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class DownRedis:
+            calls = 0
+
+            def get(self, _key: str) -> str | None:
+                self.calls += 1
+                raise redis.ConnectionError("redis unavailable")
+
+            def setex(self, *_args) -> None:
+                pytest.fail("setex should be skipped while the circuit is open")
+
+        fake_redis = DownRedis()
+        monkeypatch.setenv("TESTING", "false")
+        monkeypatch.setattr(
+            entitlements_resolver,
+            "get_redis_client",
+            lambda: fake_redis,
+        )
+        _seed_subscription(db_session, org_id="org-1", plan_code="pro")
+        _seed_subscription(db_session, org_id="org-2", plan_code="free")
+
+        assert resolve_all(db_session, "org-1") == PLAN_ENTITLEMENTS["pro"]
+        assert fake_redis.calls == 1
+
+        assert resolve_all(db_session, "org-1") == PLAN_ENTITLEMENTS["pro"]
+        assert resolve_all(db_session, "org-2") == PLAN_ENTITLEMENTS["free"]
+        assert fake_redis.calls == 1
 
 
 class TestHasGet:
