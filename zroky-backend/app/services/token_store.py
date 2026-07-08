@@ -65,7 +65,7 @@ def delete(key: str) -> None:
 
 def revoke_all_user_tokens(user_id: str) -> None:
     """Blacklist marker for a user — downstream token validation checks this key."""
-    _cache.set(f"jwt_blacklisted_user:{user_id}", str(int(time.time())), ttl_seconds=86400 * 30)
+    _cache.set(f"jwt_blacklisted_user:{user_id}", str(time.time()), ttl_seconds=86400 * 30)
 
 
 def is_user_token_revoked(user_id: str, issued_at: object) -> bool:

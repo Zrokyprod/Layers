@@ -144,7 +144,7 @@ def _issue_session_token(
         "user_id": user_id,
         "token_use": token_use,
         "jti": secrets.token_hex(12),
-        "iat": now,
+        "iat": now.timestamp(),
         "exp": now + timedelta(hours=expire_hours),
     }
     if email:
