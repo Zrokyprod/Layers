@@ -86,16 +86,20 @@ describe("WorkspaceSettingsPage", () => {
   it("shows focused workspace metadata and project actions", async () => {
     render(<WorkspaceSettingsPage />);
 
-    expect(screen.getAllByText("Refund Operations").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Workspace access boundary")).toBeInTheDocument();
-    expect(screen.getByLabelText("Workspace routing")).toBeInTheDocument();
-    expect(screen.getByLabelText("Workspace authority")).toBeInTheDocument();
-    expect(screen.getByText("Stable dashboard project context")).toBeInTheDocument();
+    expect((screen.getByLabelText("Workspace name") as HTMLInputElement).value).toBe("Refund Operations");
+    expect(screen.getByRole("heading", { name: "Workspace" })).toBeInTheDocument();
+    expect(screen.getByText("Workspace details")).toBeInTheDocument();
+    expect(screen.getByText("Project details")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Workspace access boundary")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Workspace routing")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Workspace authority")).not.toBeInTheDocument();
     expect(screen.getAllByText("Owner").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "Open projects" }).getAttribute("href")).toBe("/projects");
-    expect(screen.getByRole("link", { name: "Manage members" }).getAttribute("href")).toBe("/settings/team");
+    expect(screen.getByText("Project ID")).toBeInTheDocument();
+    expect(screen.getByText("Environment")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open projects" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Manage members" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy project ID" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(clipboardWrite).toHaveBeenCalledWith("proj_1234567890abcdef"));
   });
 
@@ -105,7 +109,7 @@ describe("WorkspaceSettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Workspace name"), {
       target: { value: "Revenue Operations" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save workspace name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save name" }));
 
     await waitFor(() => expect(updateProject).toHaveBeenCalledWith({ name: "Revenue Operations" }));
     expect(await screen.findByText("Workspace name updated.")).toBeInTheDocument();

@@ -23,7 +23,7 @@ type SettingsTab = {
 const SETTINGS_PRIMARY_TABS: ReadonlyArray<SettingsTab> = [
   { href: "/settings/keys", label: "API Keys", description: "SDK and Gateway access", icon: KeyRound },
   { href: "/settings/team", label: "Members", description: "Project access", icon: Users },
-  { href: "/settings/billing", label: "Plan & Billing", description: "Plan, usage, and budget", icon: CreditCard },
+  { href: "/settings/billing", label: "Plan & Billing", description: "Plan and usage", icon: CreditCard },
   { href: "/settings/workspace", label: "Workspace", description: "Project metadata", icon: FolderOpen },
 ] as const;
 

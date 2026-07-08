@@ -6535,6 +6535,100 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   white-space: nowrap !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr) !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-name-card,
+.app-shell[data-dashboard-system="control-v1"] .workspace-details-card {
+  display: grid !important;
+  gap: 14px !important;
+  min-width: 0 !important;
+  border: 1px solid var(--mc-border, var(--dash-border)) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  padding: 16px !important;
+  box-shadow: 0 10px 28px rgba(23, 23, 19, 0.05) !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-card-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-card-head > span {
+  color: #2f5f66 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-card-head > svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: #2f5f66 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .settings-workspace-form {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .settings-workspace-form .dashboard-button {
+  width: fit-content !important;
+  min-width: 132px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .workspace-fact-list {
+  display: grid !important;
+  gap: 8px !important;
+  margin-top: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .workspace-fact-list > div {
+  display: grid !important;
+  grid-template-columns: minmax(120px, 0.44fr) minmax(0, 1fr) auto !important;
+  gap: 10px !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  border-top: 1px solid var(--mc-border, var(--dash-border)) !important;
+  padding-top: 9px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .workspace-fact-list > div:first-child {
+  border-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .workspace-fact-list span {
+  color: var(--mc-text-secondary, var(--dash-text-soft)) !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .workspace-fact-list strong {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: var(--mc-text, var(--dash-text)) !important;
+  font-size: 13px !important;
+  font-weight: 760 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .keys-command-card {
   display: grid !important;
   grid-template-columns: minmax(0, 1.35fr) minmax(310px, 0.65fr) !important;
@@ -6827,6 +6921,51 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   gap: 8px !important;
 }
 
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-simple-stack {
+  display: grid !important;
+  gap: 12px !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-simple-note {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  margin: 12px 0 0 !important;
+  border: 1px solid #d9e3dc !important;
+  border-radius: 8px !important;
+  background: #f8fbf9 !important;
+  padding: 10px 12px !important;
+  color: var(--dash-text-muted) !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-simple-note svg {
+  width: 15px !important;
+  height: 15px !important;
+  flex: 0 0 auto !important;
+  color: #2f6f73 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-newkey-banner {
+  border: 1px solid #b8dfcf !important;
+  border-radius: 8px !important;
+  background: #f3fbf7 !important;
+  box-shadow: none !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-newkey-banner .keys-copy-icon {
+  border-color: #b8dfcf !important;
+  background: #e7f6ee !important;
+  color: #2f6f73 !important;
+}
+
+.app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-newkey-banner .settings-key-reveal {
+  border-color: #cfe3d8 !important;
+  background: #ffffff !important;
+  color: var(--dash-text) !important;
+}
+
 .app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-primary-grid {
   display: grid !important;
   grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.45fr) !important;
@@ -6851,7 +6990,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
 .app-shell[data-dashboard-system="control-v1"] .keys-setup-page .keys-create-panel .keys-create-form .dashboard-button {
   min-height: 38px !important;
-  margin-bottom: 24px !important;
+  margin-bottom: 0 !important;
   white-space: nowrap !important;
 }
 
@@ -6909,6 +7048,7 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 @media (max-width: 760px) {
   .app-shell[data-dashboard-system="control-v1"] .workspace-command-card,
   .app-shell[data-dashboard-system="control-v1"] .workspace-identity-grid,
+  .app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid,
   .app-shell[data-dashboard-system="control-v1"] .keys-command-card,
   .app-shell[data-dashboard-system="control-v1"] .keys-card-row {
     grid-template-columns: 1fr !important;
@@ -6928,6 +7068,10 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
   .app-shell[data-dashboard-system="control-v1"] .workspace-fact-list .list-row {
     align-items: stretch !important;
     flex-direction: column !important;
+  }
+
+  .app-shell[data-dashboard-system="control-v1"] .workspace-simple-grid .workspace-fact-list > div {
+    grid-template-columns: 1fr !important;
   }
 
   .app-shell[data-dashboard-system="control-v1"] .keys-card-facts {
@@ -23359,5 +23503,292 @@ body:has(.app-shell[data-dashboard-system="control-v1"]) {
 
   .app-shell[data-dashboard-system="control-v1"] .connector-setup-details .connectors-generic-layout {
     grid-template-columns: 1fr !important;
+  }
+}
+
+.billing-settings-page .billing-overview-grid {
+  display: grid !important;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.14fr) !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+}
+
+.billing-settings-page .billing-current-card,
+.billing-settings-page .billing-usage-card,
+.billing-settings-page .billing-plan-card {
+  min-width: 0 !important;
+  border: 1px solid rgba(47, 95, 102, 0.14) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 28px rgba(23, 23, 19, 0.05) !important;
+}
+
+.billing-settings-page .billing-current-card,
+.billing-settings-page .billing-usage-card {
+  display: grid !important;
+  gap: 14px !important;
+  padding: 16px !important;
+}
+
+.billing-settings-page .billing-card-head,
+.billing-settings-page .billing-plan-topline {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+}
+
+.billing-settings-page .billing-card-head > span,
+.billing-settings-page .billing-plan-topline > span:first-child {
+  color: #2f5f66 !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+.billing-settings-page .billing-current-card h2 {
+  margin: 0 !important;
+  color: var(--text-primary) !important;
+  font-size: clamp(1.8rem, 4vw, 2.35rem) !important;
+  font-weight: 820 !important;
+  line-height: 1 !important;
+}
+
+.billing-settings-page .billing-current-card p {
+  margin: 0 !important;
+  max-width: 52ch !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.9rem !important;
+  line-height: 1.55 !important;
+}
+
+.billing-settings-page .billing-current-list,
+.billing-settings-page .billing-usage-list {
+  display: grid !important;
+  gap: 8px !important;
+}
+
+.billing-settings-page .billing-current-list > div {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 3px 12px !important;
+  align-items: baseline !important;
+  border-top: 1px solid var(--line-soft) !important;
+  padding-top: 9px !important;
+}
+
+.billing-settings-page .billing-current-list > div:first-child {
+  border-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.billing-settings-page .billing-current-list span,
+.billing-settings-page .billing-current-list small,
+.billing-settings-page .billing-usage-row small {
+  color: var(--text-secondary) !important;
+  font-size: 0.76rem !important;
+  line-height: 1.35 !important;
+}
+
+.billing-settings-page .billing-current-list strong {
+  color: var(--text-primary) !important;
+  font-size: 0.84rem !important;
+  font-weight: 760 !important;
+  text-align: right !important;
+}
+
+.billing-settings-page .billing-current-list small {
+  grid-column: 1 / -1 !important;
+}
+
+.billing-settings-page .billing-usage-row {
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr) auto !important;
+  gap: 8px 10px !important;
+  align-items: center !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 8px !important;
+  background: #fbfcfb !important;
+  padding: 10px !important;
+}
+
+.billing-settings-page .billing-usage-icon {
+  display: grid !important;
+  place-items: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border: 1px solid rgba(47, 95, 102, 0.16) !important;
+  border-radius: 8px !important;
+  background: rgba(47, 95, 102, 0.07) !important;
+  color: #2f5f66 !important;
+}
+
+.billing-settings-page .billing-usage-icon svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+.billing-settings-page .billing-usage-row strong {
+  display: block !important;
+  color: var(--text-primary) !important;
+  font-size: 0.86rem !important;
+  font-weight: 760 !important;
+}
+
+.billing-settings-page .billing-usage-value {
+  color: var(--text-primary) !important;
+  font-size: 0.86rem !important;
+  font-weight: 780 !important;
+  white-space: nowrap !important;
+}
+
+.billing-settings-page .billing-usage-row .billing-meter-track {
+  grid-column: 2 / -1 !important;
+}
+
+.billing-settings-page .billing-meter-track {
+  height: 6px !important;
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  background: rgba(47, 95, 102, 0.1) !important;
+}
+
+.billing-settings-page .billing-meter-track span {
+  display: block !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: #2f5f66 !important;
+}
+
+.billing-settings-page .billing-meter-warning .billing-meter-track span {
+  background: #a15c07 !important;
+}
+
+.billing-settings-page .billing-meter-danger .billing-meter-track span {
+  background: #b42318 !important;
+}
+
+.billing-settings-page .billing-plans-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.billing-settings-page .billing-plan-card {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 9px !important;
+  min-height: 286px !important;
+  padding: 16px !important;
+}
+
+.billing-settings-page .billing-plan-current {
+  border-color: rgba(47, 95, 102, 0.42) !important;
+  box-shadow: inset 0 0 0 1px rgba(47, 95, 102, 0.14), 0 12px 28px rgba(23, 23, 19, 0.07) !important;
+}
+
+.billing-settings-page .billing-plan-badge {
+  position: static !important;
+  font-size: 0.68rem !important;
+}
+
+.billing-settings-page .billing-plan-name {
+  color: var(--text-primary) !important;
+  font-size: 1rem !important;
+  font-weight: 820 !important;
+}
+
+.billing-settings-page .billing-plan-price {
+  color: #10201f !important;
+  font-size: 1.28rem !important;
+  font-weight: 820 !important;
+  line-height: 1.1 !important;
+}
+
+.billing-settings-page .billing-plan-period,
+.billing-settings-page .billing-plan-summary,
+.billing-settings-page .billing-plan-features {
+  color: var(--text-secondary) !important;
+  font-size: 0.8rem !important;
+  line-height: 1.42 !important;
+}
+
+.billing-settings-page .billing-plan-summary {
+  min-height: 38px !important;
+  margin: 0 !important;
+}
+
+.billing-settings-page .billing-plan-features {
+  display: grid !important;
+  flex: 1 !important;
+  align-content: start !important;
+  gap: 8px !important;
+  margin: 4px 0 8px !important;
+  padding: 0 !important;
+  list-style: none !important;
+}
+
+.billing-settings-page .billing-plan-features li {
+  display: grid !important;
+  grid-template-columns: 16px minmax(0, 1fr) !important;
+  gap: 7px !important;
+  align-items: start !important;
+}
+
+.billing-settings-page .billing-plan-features svg {
+  flex: 0 0 auto !important;
+  width: 14px !important;
+  height: 14px !important;
+  margin-top: 2px !important;
+  color: #2f5f66 !important;
+}
+
+.billing-settings-page .billing-plan-btn {
+  width: 100% !important;
+  justify-content: center !important;
+  margin-top: auto !important;
+}
+
+.billing-settings-page .billing-plan-current-label {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-height: 36px !important;
+  margin-top: auto !important;
+  border: 1px solid rgba(47, 95, 102, 0.22) !important;
+  border-radius: 8px !important;
+  background: rgba(47, 95, 102, 0.08) !important;
+  color: #2f5f66 !important;
+  font-size: 0.82rem !important;
+  font-weight: 760 !important;
+}
+
+@media (max-width: 980px) {
+  .billing-settings-page .billing-overview-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .billing-settings-page .billing-plans-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .billing-settings-page .billing-plans-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .billing-settings-page .billing-usage-row {
+    grid-template-columns: 32px minmax(0, 1fr) !important;
+  }
+
+  .billing-settings-page .billing-usage-value {
+    grid-column: 2 !important;
+  }
+
+  .billing-settings-page .billing-usage-row .billing-meter-track {
+    grid-column: 1 / -1 !important;
   }
 }

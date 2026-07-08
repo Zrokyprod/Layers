@@ -72,7 +72,7 @@ describe("CommandPalette", () => {
     for (const route of DASHBOARD_PRIMARY_ROUTES) {
       expect(screen.getByText(`Go to ${route.label}`)).toBeInTheDocument();
     }
-    expect(screen.getByText(/Settings.*Capture keys/)).toBeInTheDocument();
+    expect(screen.getByText(/Settings.*API keys/)).toBeInTheDocument();
     expect(screen.getByText(/Settings.*Workspace/)).toBeInTheDocument();
     expect(screen.getByText(/Connectors.*Slack/)).toBeInTheDocument();
     expect(screen.queryByText(/Settings.*Providers/)).not.toBeInTheDocument();
